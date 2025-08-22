@@ -188,7 +188,7 @@ public class OperatorHandler {
         put("systemCommand", "systemCommand", "org/perlonjava/operators/SystemOperator", "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeBase;");
         put("system", "system", "org/perlonjava/operators/SystemOperator", "(Lorg/perlonjava/runtime/RuntimeList;ZI)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("exec", "exec", "org/perlonjava/operators/SystemOperator", "(Lorg/perlonjava/runtime/RuntimeList;ZI)Lorg/perlonjava/runtime/RuntimeScalar;");
-        put("fork", "fork", "org/perlonjava/operators/SystemOperator", "(Lorg/perlonjava/runtime/RuntimeList;I)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("fork", "fork", "org/perlonjava/nativ/NativeUtils", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("kill", "kill", "org/perlonjava/operators/KillOperator", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("umask", "umask", "org/perlonjava/operators/UmaskOperator", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("waitpid", "waitpid", "org/perlonjava/operators/WaitpidOperator", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
