@@ -210,7 +210,6 @@ public class SubroutineParser {
 
         // Initialize a list to store any attributes the subroutine might have.
         List<String> attributes = new ArrayList<>();
-
         // While there are attributes (denoted by a colon ':'), we keep parsing them.
         while (peek(parser).text.equals(":")) {
             prototype = consumeAttributes(parser, attributes);
@@ -281,9 +280,17 @@ public class SubroutineParser {
         }
     }
 
-    private static String consumeAttributes(Parser parser, List<String> attributes) {
-        // Consume the colon operator.
+    static String consumeAttributes(Parser parser, List<String> attributes) {
+        // Consume the colon
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, ":");
+
+        if (parser.tokens.get(parser.tokenIndex).text.equals("=")) {
+            parser.throwError("Use of := for an empty attribute list is not allowed");
+        }
+        if (peek(parser).text.equals("=")) {
+            return null;
+        }
+
         String prototype = null;
 
         String attrString = TokenUtils.consume(parser, LexerTokenType.IDENTIFIER).text;

@@ -9,10 +9,15 @@ import org.perlonjava.runtime.GlobalVariable;
 import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.PerlCompilerException;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
 import static org.perlonjava.lexer.LexerTokenType.*;
 import static org.perlonjava.parser.NumberParser.parseNumber;
 import static org.perlonjava.parser.ParserNodeUtils.atUnderscore;
 import static org.perlonjava.parser.ParserNodeUtils.scalarUnderscore;
+import static org.perlonjava.parser.SubroutineParser.consumeAttributes;
 import static org.perlonjava.parser.TokenUtils.consume;
 import static org.perlonjava.parser.TokenUtils.peek;
 
@@ -263,7 +268,20 @@ public class OperatorParser {
             addVariableToScope(parser.ctx, operator, operandNode);
         }
 
-        return new OperatorNode(operator, operand, currentIndex);
+        OperatorNode decl = new OperatorNode(operator, operand, currentIndex);
+
+        // Initialize a list to store any attributes the declaration might have.
+        List<String> attributes = new ArrayList<>();
+        // While there are attributes (denoted by a colon ':'), we keep parsing them.
+        while (peek(parser).text.equals(":")) {
+            consumeAttributes(parser, attributes);
+        }
+        if (!attributes.isEmpty()) {
+            // Add the attributes to the operand
+            decl.annotations = Map.of("attributes", attributes);
+        }
+
+        return decl;
     }
 
     static OperatorNode parseOperatorWithOneOptionalArgument(Parser parser, LexerToken token) {
