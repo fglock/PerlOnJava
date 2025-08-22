@@ -470,7 +470,18 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 
 ## Perl Modules, Pragmas, Features
 
-- ❌  There is no Perl-side support for interaction with Java libraries or other JVM languages, such as `Inline::Java` or similar modules.
+- ❌ **No direct Perl-to-Java interoperability**: PerlOnJava does not provide Perl-side mechanisms like `Inline::Java` for directly calling Java methods or instantiating Java objects from Perl code. You cannot write Perl code that directly accesses arbitrary Java libraries or JVM languages.
+
+- ✅ **Java-implemented Perl modules via XSLoader**: However, Perl modules can load Java-implemented subroutines using the standard `XSLoader` mechanism. This allows you to:
+  - Write Perl module implementations in Java that expose a Perl API
+  - Use PerlOnJava's internal API to create Java classes that register themselves as Perl subroutines
+  - Load these Java implementations transparently from Perl code using `XSLoader`
+  
+  **Example**: The DBI module demonstrates this pattern:
+  - `DBI.pm` - Standard Perl module that uses `XSLoader::load('DBI')` 
+  - `DBI.java` - Java implementation that registers methods like `connect`, `prepare`, `execute` as Perl subroutines
+  - From Perl's perspective, it's using a normal XS module, but the implementation is actually Java code
+
 
 ### Pragmas
 
@@ -515,6 +526,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
   - ❌ Missing: `&`, `|`, `^`, `~`, `<<`, `>>`, `&.`, `|.`, `^.`, `~.`, `x`, `.`.
   - ❌ Missing: `+=`, `-=`, `*=`, `/=`, `%=`, `**=`, `<<=`, `>>=`, `x=`, `.=`, `&=`, `|=`, `^=`, `&.=`, `|.=`, `^.=`.
   - ❌ Missing: `-X`.
+  - ❌ Missing: `=` copy constructor for mutators.
 - ❌  **overloading** pragma
 
 
