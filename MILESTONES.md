@@ -316,6 +316,7 @@ The following areas are currently under active development to enhance the functi
   - Params::Check
   - locale pragma
   - utf8 pragma
+  - `fork` operator
   - Constant folding - in ConstantFoldingVisitor.java
   - `method` keyword
   - Regex extended character classes `(?[...])`
