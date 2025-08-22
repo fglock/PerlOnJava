@@ -24,6 +24,7 @@ public class Internals extends PerlModuleBase {
         Internals internals = new Internals();
         try {
             internals.registerMethod("SvREADONLY", "svReadonly", "$;$");
+            internals.registerMethod("SvREFCNT", "svRefcount", "$;$");
             internals.registerMethod("initialize_state_variable", "initializeStateVariable", "$$");
             internals.registerMethod("initialize_state_array", "initializeStateArray", "$$");
             internals.registerMethod("initialize_state_hash", "initializeStateHash", "$$");
@@ -52,6 +53,21 @@ public class Internals extends PerlModuleBase {
     public static RuntimeList V(RuntimeArray args, int ctx) {
 
         // XXX TODO
+
+        return new RuntimeList();
+    }
+
+    /**
+     * No-op, returns false.
+     *
+     * @param args The arguments passed to the method.
+     * @param ctx  The context in which the method is called.
+     * @return Empty list
+     */
+    public static RuntimeList svRefcount(RuntimeArray args, int ctx) {
+
+        // XXX TODO rewrite this to emit a RuntimeScalarReadOnly
+        // It needs to happen at the emitter, because the variable container needs to be replaced.
 
         return new RuntimeList();
     }
