@@ -154,9 +154,15 @@ public class Lexer {
 
     public LexerToken consumeIdentifier() {
         int start = position;
-        while (position < length
-                && (Character.isLetterOrDigit(input[position]) || input[position] == '_')) {
-            position++;
+        position++; // Move past the initial character we already validated
+
+        while (position < length) {
+            int current = input[position];
+            if (current == '_' || UCharacter.hasBinaryProperty(current, UProperty.XID_CONTINUE)) {
+                position++;
+            } else {
+                break;
+            }
         }
         return new LexerToken(LexerTokenType.IDENTIFIER, new String(input, start, position - start));
     }
