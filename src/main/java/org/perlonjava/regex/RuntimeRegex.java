@@ -118,7 +118,59 @@ public class RuntimeRegex implements RuntimeScalarReference {
      * @return A RuntimeScalar representing the compiled regex with replacement.
      */
     public static RuntimeScalar getReplacementRegex(RuntimeScalar patternString, RuntimeScalar replacement, RuntimeScalar modifiers) {
-        RuntimeRegex regex = compile(patternString.toString(), modifiers.toString());
+        // Use resolveRegex to properly handle qr objects and qr overloading
+        RuntimeRegex resolvedRegex = resolveRegex(patternString);
+
+        // Create a new regex instance with the replacement
+        RuntimeRegex regex = new RuntimeRegex();
+        regex.pattern = resolvedRegex.pattern;
+        regex.patternFlags = resolvedRegex.patternFlags;
+        regex.patternString = resolvedRegex.patternString;
+
+        // Handle flag merging
+        String newModifiers = modifiers.toString();
+        if (newModifiers.isEmpty()) {
+            // No new modifiers, just use the existing flags
+            regex.regexFlags = resolvedRegex.regexFlags;
+        } else {
+            // We have new modifiers to apply
+            if (resolvedRegex.regexFlags == null) {
+                // No existing flags, just parse the new ones
+                regex.regexFlags = fromModifiers(newModifiers, resolvedRegex.patternString);
+            } else {
+                // Need to merge existing flags with new ones
+                // First, get the existing flag string
+                String existingFlags = resolvedRegex.regexFlags.toFlagString();
+
+                // Combine the flag strings (new flags override)
+                // Remove duplicates by converting to a set-like structure
+                StringBuilder mergedFlags = new StringBuilder();
+
+                // Add all existing flags
+                for (char c : existingFlags.toCharArray()) {
+                    if (mergedFlags.indexOf(String.valueOf(c)) == -1) {
+                        mergedFlags.append(c);
+                    }
+                }
+
+                // Add new flags (these override if duplicate)
+                for (char c : newModifiers.toCharArray()) {
+                    int idx = mergedFlags.indexOf(String.valueOf(c));
+                    if (idx == -1) {
+                        // New flag, add it
+                        mergedFlags.append(c);
+                    }
+                    // If flag already exists, new modifier takes precedence (already there)
+                }
+
+                // Parse the merged flags
+                regex.regexFlags = fromModifiers(mergedFlags.toString(), resolvedRegex.patternString);
+            }
+
+            // Update pattern flags for Java Pattern compilation
+            regex.patternFlags = regex.regexFlags.toPatternFlags();
+        }
+
         regex.replacement = replacement;
         return new RuntimeScalar(regex);
     }
@@ -276,7 +328,8 @@ public class RuntimeRegex implements RuntimeScalarReference {
             String replacementStr;
             if (replacementIsCode) {
                 // Evaluate the replacement as code
-                replacementStr = RuntimeCode.apply(replacement, new RuntimeArray(), RuntimeContextType.SCALAR).toString();
+                RuntimeList result = RuntimeCode.apply(replacement, new RuntimeArray(), RuntimeContextType.SCALAR);
+                replacementStr = result.toString();
             } else {
                 // Replace the match with the replacement string
                 replacementStr = replacement.toString();
@@ -298,11 +351,13 @@ public class RuntimeRegex implements RuntimeScalarReference {
         matcher.appendTail(resultBuffer);
 
         if (found > 0) {
+            String finalResult = resultBuffer.toString();
+
             if (regex.regexFlags.isNonDestructive()) {
-                return new RuntimeScalar(resultBuffer.toString());
+                return new RuntimeScalar(finalResult);
             }
             // Save the modified string back to the original scalar
-            string.set(resultBuffer.toString());
+            string.set(finalResult);
             // Return the number of substitutions made
             return RuntimeScalarCache.getScalarInt(found);
         } else {
