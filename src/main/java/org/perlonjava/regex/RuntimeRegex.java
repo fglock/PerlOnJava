@@ -97,15 +97,110 @@ public class RuntimeRegex implements RuntimeScalarReference {
     }
 
     /**
+     * Helper method to merge regex flags
+     * @param baseFlags Existing flags (can be null)
+     * @param newModifiers New modifiers to add
+     * @param patternString The pattern string (for flag parsing)
+     * @return Merged RegexFlags
+     */
+    private static RegexFlags mergeRegexFlags(RegexFlags baseFlags, String newModifiers, String patternString) {
+        if (newModifiers.isEmpty()) {
+            // No new modifiers, return base flags
+            return baseFlags != null ? baseFlags : fromModifiers("", patternString);
+        }
+
+        if (baseFlags == null) {
+            // No base flags, just parse new ones
+            return fromModifiers(newModifiers, patternString);
+        }
+
+        // Merge existing flags with new ones
+        String existingFlags = baseFlags.toFlagString();
+        StringBuilder mergedFlags = new StringBuilder();
+
+        // Add all existing flags
+        for (char c : existingFlags.toCharArray()) {
+            if (mergedFlags.indexOf(String.valueOf(c)) == -1) {
+                mergedFlags.append(c);
+            }
+        }
+
+        // Add new flags (these override if duplicate)
+        for (char c : newModifiers.toCharArray()) {
+            if (mergedFlags.indexOf(String.valueOf(c)) == -1) {
+                mergedFlags.append(c);
+            }
+        }
+
+        return fromModifiers(mergedFlags.toString(), patternString);
+    }
+
+    /**
      * Creates a Perl "qr" object from a regex pattern string with optional modifiers.
      * `my $v = qr/abc/i;`
+     * Also handles cases where the pattern is already a regex or has qr overloading.
      *
-     * @param patternString The regex pattern string with optional modifiers.
+     * @param patternString The regex pattern string, regex object, or object with qr overloading
      * @param modifiers     Modifiers for the regex pattern (e.g., "i", "g").
      * @return A RuntimeScalar.
      */
     public static RuntimeScalar getQuotedRegex(RuntimeScalar patternString, RuntimeScalar modifiers) {
-        return new RuntimeScalar(compile(patternString.toString(), modifiers.toString()));
+        String modifierStr = modifiers.toString();
+
+        // Check if patternString is already a compiled regex
+        if (patternString.type == RuntimeScalarType.REGEX) {
+            RuntimeRegex originalRegex = (RuntimeRegex) patternString.value;
+
+            if (modifierStr.isEmpty()) {
+                // No new modifiers, return the original regex as-is
+                return patternString;
+            }
+
+            // Create a new regex with merged flags
+            RuntimeRegex regex = new RuntimeRegex();
+            regex.pattern = originalRegex.pattern;
+            regex.patternString = originalRegex.patternString;
+            regex.regexFlags = mergeRegexFlags(originalRegex.regexFlags, modifierStr, originalRegex.patternString);
+            regex.patternFlags = regex.regexFlags.toPatternFlags();
+
+            return new RuntimeScalar(regex);
+        }
+
+        // Check for qr overloading
+        int blessId = RuntimeScalarType.blessedId(patternString);
+        if (blessId != 0) {
+            OverloadContext overloadCtx = OverloadContext.prepare(blessId);
+            if (overloadCtx != null) {
+                // Try qr overload
+                RuntimeScalar overloadedResult = overloadCtx.tryOverload("(qr", new RuntimeArray(patternString));
+                if (overloadedResult != null && overloadedResult.type == RuntimeScalarType.REGEX) {
+                    RuntimeRegex originalRegex = (RuntimeRegex) overloadedResult.value;
+
+                    if (modifierStr.isEmpty()) {
+                        // No new modifiers, return the overloaded regex as-is
+                        return overloadedResult;
+                    }
+
+                    // Create a new regex with merged flags
+                    RuntimeRegex regex = new RuntimeRegex();
+                    regex.pattern = originalRegex.pattern;
+                    regex.patternString = originalRegex.patternString;
+                    regex.regexFlags = mergeRegexFlags(originalRegex.regexFlags, modifierStr, originalRegex.patternString);
+                    regex.patternFlags = regex.regexFlags.toPatternFlags();
+
+                    return new RuntimeScalar(regex);
+                }
+
+                // Try fallback to string conversion
+                RuntimeScalar fallbackResult = overloadCtx.tryOverloadFallback(patternString, "(\"\"");
+                if (fallbackResult != null) {
+                    return new RuntimeScalar(compile(fallbackResult.toString(), modifierStr));
+                }
+            }
+        }
+
+        // Default: compile as string
+        return new RuntimeScalar(compile(patternString.toString(), modifierStr));
     }
 
     /**
@@ -124,54 +219,11 @@ public class RuntimeRegex implements RuntimeScalarReference {
         // Create a new regex instance with the replacement
         RuntimeRegex regex = new RuntimeRegex();
         regex.pattern = resolvedRegex.pattern;
-        regex.patternFlags = resolvedRegex.patternFlags;
         regex.patternString = resolvedRegex.patternString;
-
-        // Handle flag merging
-        String newModifiers = modifiers.toString();
-        if (newModifiers.isEmpty()) {
-            // No new modifiers, just use the existing flags
-            regex.regexFlags = resolvedRegex.regexFlags;
-        } else {
-            // We have new modifiers to apply
-            if (resolvedRegex.regexFlags == null) {
-                // No existing flags, just parse the new ones
-                regex.regexFlags = fromModifiers(newModifiers, resolvedRegex.patternString);
-            } else {
-                // Need to merge existing flags with new ones
-                // First, get the existing flag string
-                String existingFlags = resolvedRegex.regexFlags.toFlagString();
-
-                // Combine the flag strings (new flags override)
-                // Remove duplicates by converting to a set-like structure
-                StringBuilder mergedFlags = new StringBuilder();
-
-                // Add all existing flags
-                for (char c : existingFlags.toCharArray()) {
-                    if (mergedFlags.indexOf(String.valueOf(c)) == -1) {
-                        mergedFlags.append(c);
-                    }
-                }
-
-                // Add new flags (these override if duplicate)
-                for (char c : newModifiers.toCharArray()) {
-                    int idx = mergedFlags.indexOf(String.valueOf(c));
-                    if (idx == -1) {
-                        // New flag, add it
-                        mergedFlags.append(c);
-                    }
-                    // If flag already exists, new modifier takes precedence (already there)
-                }
-
-                // Parse the merged flags
-                regex.regexFlags = fromModifiers(mergedFlags.toString(), resolvedRegex.patternString);
-            }
-
-            // Update pattern flags for Java Pattern compilation
-            regex.patternFlags = regex.regexFlags.toPatternFlags();
-        }
-
+        regex.regexFlags = mergeRegexFlags(resolvedRegex.regexFlags, modifiers.toString(), resolvedRegex.patternString);
+        regex.patternFlags = regex.regexFlags.toPatternFlags();
         regex.replacement = replacement;
+
         return new RuntimeScalar(regex);
     }
 

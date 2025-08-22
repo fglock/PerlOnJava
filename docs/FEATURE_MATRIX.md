@@ -270,6 +270,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **Possessive Quantifiers**: Quantifiers like `*+`, `++`, `?+`, or `{n,m}+`, which disable backtracking, are not supported.
 - ✅  **Atomic Grouping**: Use of `(?>...)` for atomic groups is supported.
 - ✅  **Preprocessor**: `\Q`, `\L`, `\U`, `\l`, `\u`, `\E` are preprocessed in regex.
+- ✅  **Overloading**: `qr` overloading is implemented.
 
 ### Missing Regular Expression Features
 
@@ -288,7 +289,6 @@ my @copy = @{$z};         # ERROR
 - ❌  **Regex Debugging**: Debugging patterns with `use re 'debug';` to inspect regex engine operations is not supported.
 - ❌  **Regex Optimizations**: Using `use re 'eval';` for runtime regex compilation is not supported.
 - ❌  **Regex Compilation Flags**: Setting default regex flags with `use re '/flags';` is not supported.
-- ❌  **Overloading**: `qr` overloading is not implemented.
 - ❌  **Duplicate named capture groups**: Java's regular expression engine does not support duplicate named capture groups. In Java, each named capturing group must have a unique name within a regular expression.
 
 
@@ -509,7 +509,8 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
   - ✅ Implemented: `!`, `+`, `-`, `*`, `/`, `%`, `int`, `neg`, `log`, `sqrt`, `cos`, `sin`, `exp`, `abs`, `atan2`, `**`.
   - ✅ Implemented: `@{}`, `%{}`, `${}`, `&{}`, `*{}`.
   - ✅ Implemented: `<=>`, `cmp`, `<`, `<=`, `>`, `>=`, `==`, `!=`, `lt`, `le`, `gt`, `ge`, `eq`, `ne`.
-  - ❌ Missing: `++`, `--`, `=`, `qr`, `<>`.
+  - ✅ Implemented: `qr`.
+  - ❌ Missing: `++`, `--`, `=`, `<>`.
   - ❌ Missing: `&`, `|`, `^`, `~`, `<<`, `>>`, `&.`, `|.`, `^.`, `~.`, `x`, `.`.
   - ❌ Missing: `+=`, `-=`, `*=`, `/=`, `%=`, `**=`, `<<=`, `>>=`, `x=`, `.=`, `&=`, `|=`, `^=`, `&.=`, `|.=`, `^.=`.
   - ❌ Missing: `-X`.
