@@ -4,8 +4,7 @@ import org.perlonjava.runtime.OverloadContext;
 import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.runtime.RuntimeScalarType;
 
-import static org.perlonjava.runtime.RuntimeScalarCache.getScalarBoolean;
-import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
+import static org.perlonjava.runtime.RuntimeScalarCache.*;
 import static org.perlonjava.runtime.RuntimeScalarType.blessedId;
 
 /**
@@ -268,6 +267,11 @@ public class CompareOperators {
         arg2 = arg2.getNumber();
         // Perform comparison based on type
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
+            var d1 = arg1.getDouble();
+            var d2 = arg2.getDouble();
+            if (Double.isNaN(d1) || Double.isNaN(d2)) {
+                return scalarUndef;
+            }
             return getScalarInt(Double.compare(arg1.getDouble(), arg2.getDouble()));
         } else {
             return getScalarInt(Integer.compare(arg1.getInt(), arg2.getInt()));
