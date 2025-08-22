@@ -80,45 +80,30 @@ public class ArgumentParser {
      */
     private static void processArgs(String[] args, CompilerOptions parsedArgs) {
         boolean readingArgv = false; // Flag to indicate if we are reading non-switch arguments
-        int startIndex = 0;
 
-        // First pass: process switches until we find a non-switch argument or code is set
+        // Iterate over each argument
         for (int i = 0; i < args.length; i++) {
-            String arg = args[i];
-
-            if (arg.equals("--")) {
-                startIndex = i + 1;
-                break;
-            }
-
-            if (!arg.startsWith("-")) {
-                startIndex = i;
-                break;
-            }
-
-            if (arg.startsWith("-") && !arg.startsWith("--")) {
-                // Process clustered single-character switches
-                i = processClusteredSwitches(args, parsedArgs, arg, i);
+            if (readingArgv || !args[i].startsWith("-")) {
+                // Process non-switch arguments (e.g., file names or positional arguments)
+                processNonSwitchArgument(args, parsedArgs, i);
+                readingArgv = true; // Once a non-switch argument is encountered, treat all subsequent arguments as such
             } else {
-                // Process long-form switches
-                i = processLongSwitches(args, parsedArgs, arg, i);
+                String arg = args[i];
+
+                if (arg.equals("--")) {
+                    // "--" indicates the end of switch arguments; subsequent arguments are treated as non-switch
+                    readingArgv = true;
+                    continue;
+                }
+
+                if (arg.startsWith("-") && !arg.startsWith("--")) {
+                    // Process clustered single-character switches (e.g., -e, -i)
+                    i = processClusteredSwitches(args, parsedArgs, arg, i);
+                } else {
+                    // Process long-form switches (e.g., --debug, --tokenize)
+                    i = processLongSwitches(args, parsedArgs, arg, i);
+                }
             }
-
-            // If code was set (e.g., by -e), stop processing switches
-            if (parsedArgs.code != null) {
-                startIndex = i + 1;
-                break;
-            }
-        }
-
-        // If -s is enabled and we haven't set code yet, process rudimentary switches
-        if (parsedArgs.rudimentarySwitchParsing && parsedArgs.code == null) {
-            startIndex = processRudimentarySwitches(args, parsedArgs, startIndex);
-        }
-
-        // Process remaining arguments (filename and @ARGV)
-        for (int i = startIndex; i < args.length; i++) {
-            processNonSwitchArgument(args, parsedArgs, i);
         }
     }
 
@@ -152,6 +137,26 @@ public class ArgumentParser {
                 String fileContent = FileUtils.readFileWithEncodingDetection(Paths.get(filePath), parsedArgs);
                 parsedArgs.code = fileContent;
                 processShebangLine(args, parsedArgs, fileContent, index);
+
+                // After processing shebang and setting code, handle -s switches if enabled
+                if (parsedArgs.rudimentarySwitchParsing) {
+                    // Process remaining arguments as potential switches
+                    for (int i = index + 1; i < args.length; i++) {
+                        String arg = args[i];
+
+                        // Stop processing on "--" or first non-switch argument
+                        if (arg.equals("--") || !arg.startsWith("-")) {
+                            // This is where we start adding to @ARGV
+                            for (int j = i; j < args.length; j++) {
+                                RuntimeArray.push(parsedArgs.argumentList, new RuntimeScalar(args[j]));
+                            }
+                            break;
+                        }
+
+                        // Process the rudimentary switch
+                        processRudimentarySwitch(arg, parsedArgs);
+                    }
+                }
             } catch (IOException e) {
                 System.err.println("Error: Unable to read file " + parsedArgs.fileName);
                 System.exit(1);
@@ -723,7 +728,7 @@ public class ArgumentParser {
             }
 
             if (!perlCodeStarted) {
-                System.err.println("Error: No Perl code found after discarding leading garbage.");
+                System.err.println("No Perl script found in input");
                 System.exit(1);
             }
             parsedArgs.code = perlCode.toString();
@@ -926,61 +931,46 @@ public class ArgumentParser {
         }
 
         /**
-         * Processes rudimentary switches when -s is enabled.
-         * Removes switches from the argument list and sets corresponding variables.
+         * Processes a single rudimentary switch and adds the corresponding variable assignment.
          *
-         * @param args       The command-line arguments.
+         * @param arg        The switch argument to process.
          * @param parsedArgs The CompilerOptions object to configure.
-         * @param startIndex The index to start processing from.
-         * @return The index of the first non-switch argument.
          */
-        private static int processRudimentarySwitches(String[] args, CompilerOptions parsedArgs, int startIndex) {
-            int i = startIndex;
+        private static void processRudimentarySwitch(String arg, CompilerOptions parsedArgs) {
+            String varName;
+            String varValue = "1"; // Default value
 
-            while (i < args.length) {
-                String arg = args[i];
-
-                // Stop processing on "--" or first non-switch argument
-                if (arg.equals("--") || !arg.startsWith("-")) {
-                    break;
-                }
-
-                // Process the switch
-                String varName;
-                String varValue = "1"; // Default value
-
-                if (arg.startsWith("--")) {
-                    // Handle --switch or --switch=value
-                    varName = "${" + arg.substring(1) + "}";
-                    int equalsIndex = varName.indexOf('=');
-                    if (equalsIndex != -1) {
-                        varValue = varName.substring(equalsIndex + 1, varName.length() - 1);
-                        varName = varName.substring(0, equalsIndex) + "}";
-                    }
+            if (arg.startsWith("--")) {
+                // Handle --switch or --switch=value
+                String switchPart = arg.substring(2);
+                int equalsIndex = switchPart.indexOf('=');
+                if (equalsIndex != -1) {
+                    varValue = switchPart.substring(equalsIndex + 1);
+                    varName = "${-" + switchPart.substring(0, equalsIndex) + "}";
                 } else {
-                    // Handle -switch or -switch=value
-                    varName = arg.substring(1);
-                    int equalsIndex = varName.indexOf('=');
-                    if (equalsIndex != -1) {
-                        varValue = varName.substring(equalsIndex + 1);
-                        varName = varName.substring(0, equalsIndex);
-                    }
+                    varName = "${-" + switchPart + "}";
                 }
-
-                // Add the variable assignment to be prepended to the code
-                if (parsedArgs.rudimentarySwitchAssignments == null) {
-                    parsedArgs.rudimentarySwitchAssignments = new StringBuilder();
+            } else {
+                // Handle -switch or -switch=value
+                String switchPart = arg.substring(1);
+                int equalsIndex = switchPart.indexOf('=');
+                if (equalsIndex != -1) {
+                    varValue = switchPart.substring(equalsIndex + 1);
+                    varName = switchPart.substring(0, equalsIndex);
+                } else {
+                    varName = switchPart;
                 }
-                parsedArgs.rudimentarySwitchAssignments
-                    .append("$main::")
-                    .append(varName)
-                    .append(" = '")
-                    .append(varValue.replace("'", "\\'"))
-                    .append("';\n");
-
-                i++;
             }
 
-            return i;
+            // Add the variable assignment to be prepended to the code
+            if (parsedArgs.rudimentarySwitchAssignments == null) {
+                parsedArgs.rudimentarySwitchAssignments = new StringBuilder();
+            }
+            parsedArgs.rudimentarySwitchAssignments
+                .append("$main::")
+                .append(varName)
+                .append(" = '")
+                .append(varValue.replace("'", "\\'"))
+                .append("';\n");
         }
 }
