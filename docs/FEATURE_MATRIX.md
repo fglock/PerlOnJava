@@ -69,9 +69,8 @@ PerlOnJava implements most core Perl features with some key differences:
 - ✅  UTF-16 is accepted in source code.
 
 - ✅  Accept command line switches from the shebang line.
-- ✅  Accept command line switches: `-c`, `-e`, `-E`, `-p`, `-n`, `-i`, `-I`, `-0`, `-a`, `-F`, `-m`, `-M`, `-g`, `-l`, `-h`, `-S`, `-x`, `-v`, `-V`, `-?`, `-w`, `-W`, `-X` are implemented.
+- ✅  Accept command line switches: `-c`, `-e`, `-E`, `-p`, `-n`, `-i`, `-I`, `-0`, `-a`, `-F`, `-m`, `-M`, `-g`, `-l`, `-h`, `-s`, `-S`, `-x`, `-v`, `-V`, `-?`, `-w`, `-W`, `-X` are implemented.
 - ❌  Missing command line switches include:
-  - `-s`: Rudimentary switch parsing.
   - `-T`: Taint checks.
   - `-t`: Taint checks with warnings.
   - `-u`: Dumps core after compiling.

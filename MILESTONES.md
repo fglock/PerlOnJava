@@ -301,6 +301,7 @@ The following areas are currently under active development to enhance the functi
 
   - Add operators: `getlogin`, `getpwnam`, `getpwuid`, `getgrnam`, `getgrgid`, `getpwent`, `getgrent`, `setpwent`, `setgrent`, `endpwent`, `endgrent`, `gethostbyname`, `gethostbyaddr`, `getservbyname`, `getservbyport`, `getprotobyname`, `getprotobynumber`.
   - Add overload operators: `<=>`, `cmp`, `<`, `<=`, `>`, `>=`, `==`, `!=`, `lt`, `le`, `gt`, `ge`, `eq`, `ne`.
+  - Add command line switch: `-s` rudimentary switch parsing.
   - Planned release date: 2025-12-10.
 
 - Work in Progress
@@ -320,7 +321,6 @@ The following areas are currently under active development to enhance the functi
   - Constant folding - in ConstantFoldingVisitor.java
   - `method` keyword
   - Regex extended character classes `(?[...])`
-  - `-s` command line switch
 
 ### v4.0.0 Milestone (Planned Release Date: 2026-05-10)
 
