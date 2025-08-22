@@ -504,6 +504,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **subs** pragma.
 - 🚧  **builtin** pragma:
   - ✅ Implemented: `true` `false` `is_bool` `inf` `nan` `weaken` `unweaken` `is_weak` `blessed` `refaddr` `reftype` `created_as_string` `created_as_number` `stringify` `ceil` `floor` `indexed` `trim` `is_tainted`.
+  - ❌ Missing: `export_lexically`, `load_module`
 - 🚧  **overload** pragma:
   - ✅ Implemented: `""`, `0+`, `bool`, `fallback`, `nomethod`.
   - ✅ Implemented: `!`, `+`, `-`, `*`, `/`, `%`, `int`, `neg`, `log`, `sqrt`, `cos`, `sin`, `exp`, `abs`, `atan2`, `**`.
@@ -548,6 +549,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **Symbol**: `qualify` and `qualify_to_ref` are implemented.
 - ✅  **Term::ANSIColor** module.
 - ✅  **Test** module.
+- ✅  **Test::More** module.
 - ✅  **Text::Balanced** use the same version as Perl.
 - ✅  **Tie::Array** module.
 - ✅  **Tie::Handle** module.
@@ -560,7 +562,6 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **XSLoader** module.
 - 🚧  **DynaLoader** placeholder module.
 - 🚧  **HTTP::Tiny** some features untested: proxy settings.
-- 🚧  **Test::More** some features missing: `BAIL_OUT`.
 - 🚧  **Unicode::Normalize** `normalize`, `NFC`, `NFD`, `NFKC`, `NFKD`.
 - ❌  **IO::Socket** module, and related modules or asynchronous I/O operations.
 - ❌  **POSIX** module.

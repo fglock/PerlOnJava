@@ -8,7 +8,8 @@ use Data::Dumper;
 our @EXPORT = qw(
     plan ok is isnt like unlike cmp_ok can_ok isa_ok
     pass fail diag done_testing is_deeply subtest
-    use_ok require_ok skip
+    use_ok require_ok BAIL_OUT
+    skip
     skip_internal
 );
 
@@ -262,6 +263,14 @@ sub use_ok {
         diag("Error loading $module: $error");
         return 0;
     }
+}
+
+sub BAIL_OUT {
+    my ($reason) = @_;
+    my $msg = "Bail out!";
+    $msg .= "  $reason" if defined $reason && length $reason;
+    print "$msg\n";
+    exit 255;
 }
 
 sub skip {
