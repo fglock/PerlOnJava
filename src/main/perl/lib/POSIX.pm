@@ -1,7 +1,5 @@
 package POSIX;
 
-# WORK IN PROGRESS - not ready for use yet
-
 use strict;
 use warnings;
 use Exporter 'import';
