@@ -2,8 +2,8 @@ package org.perlonjava.parser;
 
 import org.perlonjava.Configuration;
 import org.perlonjava.astnode.*;
-import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.astvisitor.ExtractValueVisitor;
+import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.operators.ModuleOperators;
@@ -22,7 +22,6 @@ import static org.perlonjava.perlmodule.Strict.useStrict;
 import static org.perlonjava.perlmodule.Universal.normalizeVersion;
 import static org.perlonjava.perlmodule.Warnings.useWarnings;
 import static org.perlonjava.runtime.GlobalVariable.packageExistsCache;
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
 /**
@@ -239,6 +238,7 @@ public class StatementParser {
      * @return A TryNode representing the try-catch-finally statement
      */
     public static Node parseTryStatement(Parser parser) {
+        int index = parser.tokenIndex;
         TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "try"
 
         // Parse the try block
@@ -264,7 +264,14 @@ public class StatementParser {
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
         }
 
-        return new TryNode(tryBlock, catchParameter, catchBlock, finallyBlock, parser.tokenIndex);
+        // return new TryNode(tryBlock, catchParameter, catchBlock, finallyBlock, parser.tokenIndex);
+        return new BinaryOperatorNode("->",
+                new SubroutineNode(null, null, null,
+                        new BlockNode(List.of(
+                                new TryNode(tryBlock, catchParameter, catchBlock, finallyBlock, index)), index),
+                        false, index),
+                new ListNode(index),
+                index);
     }
 
     /**

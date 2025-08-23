@@ -242,7 +242,7 @@ public class EmitStatement {
 
         // Start of try block
         mv.visitLabel(tryStart);
-        node.tryBlock.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        node.tryBlock.accept(emitterVisitor);
         mv.visitLabel(tryEnd);
 
         // Jump to finally block if try completes without exception
@@ -271,7 +271,7 @@ public class EmitStatement {
         mv.visitInsn(Opcodes.POP);
         // --------- end of store the catch parameter ---------
 
-        node.catchBlock.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        node.catchBlock.accept(emitterVisitor);
 
         // Finally block
         mv.visitLabel(finallyStart);
