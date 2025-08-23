@@ -442,7 +442,7 @@ public class PrototypeArgs {
         return prototypeIndex + 1;  // For groups, skip past the closing ']'
     }
 
-    private static boolean consumeCommaIfPresent(Parser parser, boolean isOptional) {
+    public static boolean consumeCommaIfPresent(Parser parser, boolean isOptional) {
         if (!isComma(TokenUtils.peek(parser))) {
             if (isOptional) {
                 return false;
