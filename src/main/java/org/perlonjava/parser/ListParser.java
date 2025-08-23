@@ -100,7 +100,7 @@ public class ListParser {
                     token = TokenUtils.peek(parser);
                     if (token.type != LexerTokenType.EOF && !ParserTables.LIST_TERMINATORS.contains(token.text)) {
                         // Consume comma
-                        TokenUtils.consume(parser, LexerTokenType.OPERATOR, ",");
+                        PrototypeArgs.consumeCommaIfPresent(parser, false);
                     }
                 }
             }
