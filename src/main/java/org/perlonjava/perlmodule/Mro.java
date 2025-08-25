@@ -147,7 +147,7 @@ public class Mro extends PerlModuleBase {
             result.push(new RuntimeScalar(cls));
         }
 
-        return new RuntimeScalar(new RuntimeArray(result)).getList();
+        return result.createReference().getList();
     }
 
     /**
