@@ -97,7 +97,7 @@ public class Mro extends PerlModuleBase {
         String callerPackage = callerInfo.elements.isEmpty() ? "main" : callerInfo.elements.get(0).toString();
 
         for (int i = 1; i < args.size(); i++) {
-            String mroType = args.get(i).toString();
+            String mroType = args.get(i).toString().toLowerCase();
 
             if (mroType.equals("dfs")) {
                 InheritanceResolver.setPackageMRO(callerPackage, MROAlgorithm.DFS);
@@ -139,7 +139,7 @@ public class Mro extends PerlModuleBase {
         }
 
         String className = args.get(0).toString();
-        String mroType = args.size() == 2 ? args.get(1).toString() : null;
+        String mroType = args.size() == 2 ? args.get(1).toString().toLowerCase() : null;
 
         List<String> linearized;
 
@@ -190,7 +190,7 @@ public class Mro extends PerlModuleBase {
         }
 
         String className = args.get(0).toString();
-        String mroType = args.get(1).toString();
+        String mroType = args.get(1).toString().toLowerCase();
 
         if (mroType.equals("dfs")) {
             InheritanceResolver.setPackageMRO(className, MROAlgorithm.DFS);
