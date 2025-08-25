@@ -1,7 +1,8 @@
 package org.perlonjava.runtime;
 
+import org.perlonjava.mro.InheritanceResolver;
+
 import java.util.Iterator;
-import java.util.TreeMap;
 
 import static org.perlonjava.runtime.RuntimeScalarType.*;
 

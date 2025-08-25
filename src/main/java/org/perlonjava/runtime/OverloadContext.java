@@ -1,5 +1,7 @@
 package org.perlonjava.runtime;
 
+import org.perlonjava.mro.InheritanceResolver;
+
 import java.util.function.Function;
 
 import static org.perlonjava.runtime.RuntimeContextType.SCALAR;

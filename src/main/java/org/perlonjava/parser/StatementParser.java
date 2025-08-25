@@ -6,6 +6,7 @@ import org.perlonjava.astvisitor.ExtractValueVisitor;
 import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
+import org.perlonjava.mro.InheritanceResolver;
 import org.perlonjava.operators.ModuleOperators;
 import org.perlonjava.perlmodule.Universal;
 import org.perlonjava.runtime.*;

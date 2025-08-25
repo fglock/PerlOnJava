@@ -1,5 +1,7 @@
 package org.perlonjava.perlmodule;
 
+import org.perlonjava.mro.C3;
+import org.perlonjava.mro.InheritanceResolver;
 import org.perlonjava.runtime.*;
 
 import java.util.List;
@@ -130,7 +132,7 @@ public class Universal extends PerlModuleBase {
         }
 
         // Get the linearized inheritance hierarchy using C3
-        List<String> linearizedClasses = InheritanceResolver.linearizeC3(perlClassName);
+        List<String> linearizedClasses = C3.linearizeC3(perlClassName);
 
         return new RuntimeScalar(linearizedClasses.contains(argString)).getList();
     }

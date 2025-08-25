@@ -1,5 +1,7 @@
 package org.perlonjava.runtime;
 
+import org.perlonjava.mro.InheritanceResolver;
+
 /**
  * TiedVariableBase provides a common base class for all tied variable types in Perl.
  * This includes tied scalars ($v), array elements ($a[10]), and hash elements ($h{a}).
