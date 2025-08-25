@@ -20,7 +20,11 @@ public class C3 {
             Set<String> visiting = new HashSet<>();
             result = linearizeC3Helper(className, isaMap, visiting);
 
-            result.add("UNIVERSAL");
+            // Add UNIVERSAL only if not already present and this is not UNIVERSAL itself
+            if (!result.contains("UNIVERSAL") && !className.equals("UNIVERSAL")) {
+                result.add("UNIVERSAL");
+            }
+
             InheritanceResolver.linearizedClassesCache.put(cacheKey, result);
         }
         return result;
@@ -43,17 +47,15 @@ public class C3 {
 
         visiting.add(className);
 
-        List<String> result = new ArrayList<>();
         List<String> parents = isaMap.getOrDefault(className, Collections.emptyList());
 
         // If the class has no parents, return the class itself
         if (parents.isEmpty()) {
             visiting.remove(className);
-            result.add(className);
-            return result;
+            return Arrays.asList(className);
         }
 
-        // List of linearizations of each parent
+        // Get linearizations of each parent
         List<List<String>> linearizations = new ArrayList<>();
         try {
             for (String parent : parents) {
@@ -63,40 +65,60 @@ public class C3 {
             visiting.remove(className);  // Ensure we remove even if exception occurs
         }
 
-        // Add the parents list itself to the linearizations
+        // Add the parents list itself to the linearizations for merging
         linearizations.add(new ArrayList<>(parents));
+
+        // Start with the current class
+        List<String> result = new ArrayList<>();
+        result.add(className);
 
         // Merge the linearizations using the C3 algorithm
         while (!linearizations.isEmpty()) {
             String candidate = null;
+            boolean found = false;
+
+            // Find a good candidate (appears at the head of some list and not in the tail of any)
             for (List<String> linearization : linearizations) {
-                if (linearization.isEmpty()) continue;
-                candidate = linearization.getFirst();
-                boolean isValidCandidate = true;
-                for (List<String> other : linearizations) {
-                    if (other.indexOf(candidate) > 0) {
-                        isValidCandidate = false;
+                if (!linearization.isEmpty()) {
+                    candidate = linearization.get(0);
+                    boolean isGoodCandidate = true;
+
+                    // Check if this candidate appears in the tail of any other linearization
+                    for (List<String> other : linearizations) {
+                        if (other.size() > 1 && other.subList(1, other.size()).contains(candidate)) {
+                            isGoodCandidate = false;
+                            break;
+                        }
+                    }
+
+                    if (isGoodCandidate) {
+                        found = true;
                         break;
                     }
                 }
-                if (isValidCandidate) break;
             }
 
-            if (candidate == null) {
-                throw new PerlCompilerException("Inconsistent hierarchy detected in C3 linearization");
+            if (!found || candidate == null) {
+                throw new PerlCompilerException("Inconsistent hierarchy detected in C3 linearization for " + className);
             }
 
+            // Add the candidate to result
             result.add(candidate);
-            for (List<String> linearization : linearizations) {
-                if (!linearization.isEmpty() && linearization.getFirst().equals(candidate)) {
-                    linearization.removeFirst();
+
+            // Remove the candidate from all linearizations where it appears at the head
+            Iterator<List<String>> iter = linearizations.iterator();
+            while (iter.hasNext()) {
+                List<String> linearization = iter.next();
+                if (!linearization.isEmpty() && linearization.get(0).equals(candidate)) {
+                    linearization.remove(0);
+                }
+                // Remove empty linearizations
+                if (linearization.isEmpty()) {
+                    iter.remove();
                 }
             }
-            linearizations.removeIf(List::isEmpty);
         }
 
-        // Ensure the current class is added at the beginning of the result
-        result.addFirst(className);
         return result;
     }
 }
