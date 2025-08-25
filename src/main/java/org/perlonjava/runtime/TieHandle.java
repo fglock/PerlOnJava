@@ -1,6 +1,6 @@
 package org.perlonjava.runtime;
 
-import org.perlonjava.operators.TieOperators;
+import org.perlonjava.mro.InheritanceResolver;
 
 /**
  * TieHandle provides support for Perl's tie mechanism for filehandle variables.

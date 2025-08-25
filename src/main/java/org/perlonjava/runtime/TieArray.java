@@ -1,11 +1,10 @@
 package org.perlonjava.runtime;
 
-import org.perlonjava.operators.TieOperators;
+import org.perlonjava.mro.InheritanceResolver;
 
 import java.util.ArrayList;
 
 import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
-import static org.perlonjava.runtime.RuntimeScalarType.TIED_SCALAR;
 
 /**
  * TieArray provides support for Perl's tie mechanism for array variables.

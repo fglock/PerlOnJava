@@ -1,5 +1,7 @@
 package org.perlonjava.runtime;
 
+import org.perlonjava.mro.InheritanceResolver;
+
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarFalse;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
 import static org.perlonjava.runtime.RuntimeScalarType.*;

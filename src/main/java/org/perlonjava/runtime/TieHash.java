@@ -1,8 +1,8 @@
 package org.perlonjava.runtime;
 
-import java.util.HashMap;
+import org.perlonjava.mro.InheritanceResolver;
 
-import static org.perlonjava.runtime.RuntimeIO.flushFileHandles;
+import java.util.HashMap;
 
 /**
  * TieHash provides support for Perl's tie mechanism for hash variables.

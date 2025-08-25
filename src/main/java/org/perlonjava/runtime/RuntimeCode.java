@@ -7,6 +7,7 @@ import org.perlonjava.codegen.EmitterMethodCreator;
 import org.perlonjava.codegen.JavaClassInfo;
 import org.perlonjava.lexer.Lexer;
 import org.perlonjava.lexer.LexerToken;
+import org.perlonjava.mro.InheritanceResolver;
 import org.perlonjava.parser.Parser;
 import org.perlonjava.symbols.ScopedSymbolTable;
 

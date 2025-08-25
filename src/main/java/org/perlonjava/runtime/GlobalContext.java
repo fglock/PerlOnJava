@@ -2,6 +2,7 @@ package org.perlonjava.runtime;
 
 import org.perlonjava.ArgumentParser;
 import org.perlonjava.Configuration;
+import org.perlonjava.mro.InheritanceResolver;
 import org.perlonjava.perlmodule.*;
 
 import java.util.List;
