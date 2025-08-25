@@ -46,12 +46,36 @@ public class Mro extends PerlModuleBase {
             mro.registerMethod("get_pkg_gen", "$");
             mro.registerMethod("import", "useMro", ";@");
             mro.registerMethod("unimport", "noMro", ";@");
+
+            // Register next::method, next::can, and maybe::next::method
+            mro.registerMethod("next::method", "nextMethod", "@");
+            mro.registerMethod("next::can", "nextCan", "@");
+            mro.registerMethod("maybe::next::method", "maybeNextMethod", "@");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing mro method: " + e.getMessage());
         }
 
-        // Also need to register next::method and related functions
-        // These will be implemented as special runtime functions
+    }
+
+    /**
+     * Implements next::method functionality - wrapper for NextMethod.nextMethod
+     */
+    public static RuntimeList nextMethod(RuntimeArray args, int ctx) {
+        return org.perlonjava.runtime.NextMethod.nextMethod(args, ctx);
+    }
+
+    /**
+     * Implements next::can functionality - wrapper for NextMethod.nextCan
+     */
+    public static RuntimeList nextCan(RuntimeArray args, int ctx) {
+        return org.perlonjava.runtime.NextMethod.nextCan(args, ctx);
+    }
+
+    /**
+     * Implements maybe::next::method functionality - wrapper for NextMethod.maybeNextMethod
+     */
+    public static RuntimeList maybeNextMethod(RuntimeArray args, int ctx) {
+        return org.perlonjava.runtime.NextMethod.maybeNextMethod(args, ctx);
     }
 
     /**
@@ -124,6 +148,9 @@ public class Mro extends PerlModuleBase {
             // Class doesn't exist, return just the classname
             linearized = Arrays.asList(className);
         } else {
+            // Invalidate cache to ensure we see any ISA changes
+            InheritanceResolver.invalidateCache();
+
             // Get linearized MRO based on type
             if (mroType == null) {
                 // Use current MRO for the class

@@ -22,9 +22,14 @@ public class DFS {
             return cached;
         }
 
-        // Populate ISA map
+        // Populate ISA map - this will detect circular inheritance during population
         Map<String, List<String>> isaMap = new HashMap<>();
-        InheritanceResolver.populateIsaMap(className, isaMap);
+        try {
+            InheritanceResolver.populateIsaMap(className, isaMap);
+        } catch (PerlCompilerException e) {
+            // Re-throw with more specific message for DFS
+            throw new PerlCompilerException("Recursive inheritance detected in hierarchy of class '" + className + "'");
+        }
 
         // Perform DFS linearization with cycle detection
         Set<String> visited = new LinkedHashSet<>();
@@ -50,9 +55,9 @@ public class DFS {
      * @param currentPath A set to track the current recursion path for cycle detection.
      */
     private static void linearizeDFSHelper(String className,
-                                         Map<String, List<String>> isaMap,
-                                         Set<String> visited,
-                                         Set<String> currentPath) {
+                                           Map<String, List<String>> isaMap,
+                                           Set<String> visited,
+                                           Set<String> currentPath) {
         // Check for circular inheritance
         if (currentPath.contains(className)) {
             throw new PerlCompilerException("Recursive inheritance detected in hierarchy of class '" + className + "'");
