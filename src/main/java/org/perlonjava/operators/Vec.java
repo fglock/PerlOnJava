@@ -7,6 +7,7 @@ import org.perlonjava.runtime.RuntimeVecLvalue;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
 
 /**
  * Provides operations similar to Perl's vec function, allowing manipulation of
@@ -128,7 +129,7 @@ public class Vec {
             }
         }
 
-        ((RuntimeScalar) args.elements.get(0)).set(new String(data));
+        ((RuntimeScalar) args.elements.getFirst()).set(new String(data, StandardCharsets.ISO_8859_1));
         return value;
     }
 }
