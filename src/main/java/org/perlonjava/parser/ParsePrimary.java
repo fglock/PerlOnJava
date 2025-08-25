@@ -96,10 +96,11 @@ public class ParsePrimary {
      * @throws PerlCompilerException if CORE:: is used with a non-keyword
      */
     private static Node parseIdentifier(Parser parser, int startIndex, LexerToken token, String operator) {
-        String nextTokenText = peek(parser).text;
+        String nextTokenText = parser.tokens.get(parser.tokenIndex).text;
+        String peekTokenText = peek(parser).text;
 
         // Check for autoquoting: bareword => is treated as "bareword"
-        if (nextTokenText.equals("=>")) {
+        if (peekTokenText.equals("=>")) {
             // Autoquote: convert identifier to string literal
             return new StringNode(token.text, parser.tokenIndex);
         }
@@ -141,7 +142,7 @@ public class ParsePrimary {
             // 2. By defining a subroutine in CORE::GLOBAL::
 
             // Special case: 'do' followed by '{' is a do-block, not a function call
-            if (operator.equals("do") && nextTokenText.equals("{")) {
+            if (operator.equals("do") && peekTokenText.equals("{")) {
                 // This is a do block, not a do function call - let CoreOperatorResolver handle it
             } else {
 
