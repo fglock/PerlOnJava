@@ -474,7 +474,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      *
      * @return A RuntimeList containing the next key-value pair, or an empty list if the iterator is exhausted.
      */
-    public RuntimeList each() {
+    public RuntimeList each(int ctx) {
 
         if (this.type == AUTOVIVIFY_HASH) {
             AutovivificationHash.vivify(this);
@@ -484,6 +484,11 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             hashIterator = iterator();
         }
         if (hashIterator.hasNext()) {
+            if (ctx == RuntimeContextType.SCALAR) {
+                RuntimeScalar key = hashIterator.next();
+                hashIterator.next();
+                return key.getList();
+            }
             return new RuntimeList(hashIterator.next(), hashIterator.next());
         }
         hashIterator = null;

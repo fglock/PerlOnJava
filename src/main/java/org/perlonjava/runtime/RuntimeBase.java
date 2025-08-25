@@ -171,7 +171,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
      *
      * @return a RuntimeList object representing the key-value pairs
      */
-    public abstract RuntimeList each();
+    public abstract RuntimeList each(int ctx);
 
     /**
      * Performs the chop operation on the object.

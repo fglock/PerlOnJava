@@ -1066,7 +1066,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         throw new PerlCompilerException("Type of arg 1 to values must be hash or array");
     }
 
-    public RuntimeList each() {
+    public RuntimeList each(int ctx) {
         throw new PerlCompilerException("Type of arg 1 to each must be hash or array");
     }
 

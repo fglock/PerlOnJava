@@ -610,7 +610,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      *
      * @return A RuntimeList containing the next index-value pair, or an empty list if the iterator is exhausted.
      */
-    public RuntimeList each() {
+    public RuntimeList each(int ctx) {
         if (this.type == AUTOVIVIFY_ARRAY) {
             AutovivificationArray.vivify(this);
         }
