@@ -56,8 +56,10 @@ public abstract class PerlModuleBase {
             RuntimeCode code = new RuntimeCode(methodHandle, this, signature);
             code.isStatic = true;
 
+            String fullMethodName = NameNormalizer.normalizeVariableName(perlMethodName, moduleName);
+
             // Set the method as a global code reference in the Perl namespace using the Perl method name
-            GlobalVariable.getGlobalCodeRef(moduleName + "::" + perlMethodName).set(new RuntimeScalar(code));
+            GlobalVariable.getGlobalCodeRef(fullMethodName).set(new RuntimeScalar(code));
         } catch (NoSuchMethodException | IllegalAccessException e) {
             throw new RuntimeException(e);
         }
