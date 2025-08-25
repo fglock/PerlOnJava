@@ -30,7 +30,7 @@ public class TieOperators {
         RuntimeScalar variable = scalars[0].getFirst();
         RuntimeScalar classArg = scalars[1].getFirst();
         String className = classArg.getBoolean() ? scalars[1].toString() : "main";
-        
+
         RuntimeArray args = new RuntimeArray(Arrays.copyOfRange(scalars, 2, scalars.length));
 
         String method = switch (variable.type) {
@@ -71,6 +71,7 @@ public class TieOperators {
                 RuntimeHash previousValue = RuntimeHash.createHash(hash);
                 hash.type = TIED_HASH;
                 hash.elements = new TieHash(className, previousValue, self);
+                hash.resetIterator();
             }
             case GLOBREFERENCE -> {
                 RuntimeGlob glob = variable.globDeref();
@@ -130,6 +131,7 @@ public class TieOperators {
                     RuntimeHash previousValue = ((TieHash) hash.elements).getPreviousValue();
                     hash.type = previousValue.type;
                     hash.elements = previousValue.elements;
+                    hash.resetIterator();
                 }
                 return scalarTrue;
             }

@@ -2,7 +2,6 @@ package org.perlonjava.runtime;
 
 import java.util.*;
 
-import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarFalse;
 import static org.perlonjava.runtime.RuntimeScalarType.HASHREFERENCE;
 import static org.perlonjava.runtime.RuntimeScalarType.TIED_SCALAR;
@@ -18,11 +17,10 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     public static final int PLAIN_HASH = 0;
     public static final int AUTOVIVIFY_HASH = 1;
     public static final int TIED_HASH = 2;
-    // Internal type of array - PLAIN_HASH, AUTOVIVIFY_HASH, or TIED_HASH
-    public int type;
-
     // Static stack to store saved "local" states of RuntimeHash instances
     private static final Stack<RuntimeHash> dynamicStateStack = new Stack<>();
+    // Internal type of array - PLAIN_HASH, AUTOVIVIFY_HASH, or TIED_HASH
+    public int type;
     // Map to store the elements of the hash
     public Map<String, RuntimeScalar> elements;
     // Iterator for traversing the hash elements
@@ -122,7 +120,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             }
             case AUTOVIVIFY_HASH -> {
                 AutovivificationHash.vivify(this);
-                yield  this.setFromList(value);
+                yield this.setFromList(value);
             }
             case TIED_HASH -> {
                 TieHash.tiedClear(this);
@@ -160,7 +158,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 TieHash.tiedStore(this, new RuntimeScalar(key), value);
             }
             default -> throw new IllegalStateException("Unknown array type: " + type);
-        };
+        }
     }
 
     /**
@@ -203,10 +201,10 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             }
 
             case TIED_HASH -> {
-                    RuntimeScalar v = new RuntimeScalar();
-                    v.type = TIED_SCALAR;
-                    v.value = new RuntimeTiedHashProxyEntry(this, keyScalar);
-                    yield  v;
+                RuntimeScalar v = new RuntimeScalar();
+                v.type = TIED_SCALAR;
+                v.value = new RuntimeTiedHashProxyEntry(this, keyScalar);
+                yield v;
             }
 
             default -> throw new IllegalStateException("Unknown hash type: " + this.type);
@@ -249,7 +247,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      */
     public RuntimeScalar delete(RuntimeScalar key) {
         return switch (type) {
-            case PLAIN_HASH ->  {
+            case PLAIN_HASH -> {
                 String k = key.toString();
                 var value = elements.remove(k);
                 if (value != null) {
@@ -268,7 +266,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
     public RuntimeScalar delete(String key) {
         return switch (type) {
-            case PLAIN_HASH ->  {
+            case PLAIN_HASH -> {
                 var value = elements.remove(key);
                 if (value != null) {
                     yield new RuntimeScalar(value);
@@ -493,6 +491,10 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         }
         hashIterator = null;
         return new RuntimeList();
+    }
+
+    public void resetIterator() {
+        hashIterator = null;
     }
 
     /**
@@ -762,11 +764,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             }
 
             // If we're about to return a key, check if nextKey is defined (not undef)
-            if (returnKey && nextKey != null && nextKey.getDefinedBoolean()) {
-                return true;
-            }
-
-            return false;
+            return returnKey && nextKey != null && nextKey.getDefinedBoolean();
         }
 
         /**
