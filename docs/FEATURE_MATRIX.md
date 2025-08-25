@@ -36,11 +36,11 @@ PerlOnJava implements most core Perl features with some key differences:
 - DBI with JDBC integration
 - Subroutine prototypes
 - Tied variables
+- Method Resolution Order
 
 🚧 Partially Supported:
 - Warnings and strict pragma
 - Some core modules and pragmas
-- Method Resolution Order (C3 only)
 - File operations and I/O
 
 ❌ Not Supported:
@@ -494,6 +494,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **constant** pragma
 - ✅  **if** pragma
 - ✅  **lib** pragma
+- ✅  **mro** (Method Resolution Order) pragma
 - ✅  **vars** pragma
 - ✅  **subs** pragma
 - 🚧  **utf8** pragma: utf8 is always on. Disabling utf8 might work in a future version.
@@ -503,7 +504,6 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - 🚧  **warnings** pragma
 - ❌  **version** pragma: version objects are not yet supported.
 - ❌  **experimental** pragma
-- 🚧  **mro** (Method Resolution Order) pragma. The compiler always use `C3` to linearize the inheritance hierarchy.
 - ❌  **attributes** pragma
 - ❌  **bignum, bigint, and bigrat** pragmas
 - ❌  **encoding** pragma
