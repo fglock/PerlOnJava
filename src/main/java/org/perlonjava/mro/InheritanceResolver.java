@@ -138,9 +138,22 @@ public class InheritanceResolver {
      * @param isaMap    The map to populate with @ISA arrays.
      */
     static void populateIsaMap(String className, Map<String, List<String>> isaMap) {
+        populateIsaMapHelper(className, isaMap, new HashSet<>());
+    }
+
+    private static void populateIsaMapHelper(String className,
+                                             Map<String, List<String>> isaMap,
+                                             Set<String> currentPath) {
         if (isaMap.containsKey(className)) {
             return; // Already populated
         }
+
+        // Check for circular inheritance
+        if (currentPath.contains(className)) {
+            throw new PerlCompilerException("Recursive inheritance detected involving class '" + className + "'");
+        }
+
+        currentPath.add(className);
 
         // Retrieve @ISA array for the given class
         RuntimeArray isaArray = GlobalVariable.getGlobalArray(className + "::ISA");
@@ -150,12 +163,13 @@ public class InheritanceResolver {
         }
 
         isaMap.put(className, parents);
-        // System.out.println("ISA for " + className + ": " + parents);
 
         // Recursively populate for parent classes
         for (String parent : parents) {
-            populateIsaMap(parent, isaMap);
+            populateIsaMapHelper(parent, isaMap, currentPath);
         }
+
+        currentPath.remove(className);
     }
 
     /**

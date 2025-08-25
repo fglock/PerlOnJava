@@ -1,5 +1,6 @@
 package org.perlonjava.mro;
 
+import org.perlonjava.runtime.PerlCompilerException;
 import java.util.*;
 
 public class C3 {
@@ -10,16 +11,18 @@ public class C3 {
      * @return A list of class names in the order of method resolution.
      */
     public static List<String> linearizeC3(String className) {
-        // System.out.println("linearizeC3: " + className);
-        List<String> result = InheritanceResolver.linearizedClassesCache.get(className);
+        String cacheKey = className + "::C3";
+        List<String> result = InheritanceResolver.linearizedClassesCache.get(cacheKey);
         if (result == null) {
             Map<String, List<String>> isaMap = new HashMap<>();
             InheritanceResolver.populateIsaMap(className, isaMap);
-            result = linearizeC3Helper(className, isaMap);
+
+            Set<String> visiting = new HashSet<>();
+            result = linearizeC3Helper(className, isaMap, visiting);
+
             result.add("UNIVERSAL");
-            InheritanceResolver.linearizedClassesCache.put(className, result);
+            InheritanceResolver.linearizedClassesCache.put(cacheKey, result);
         }
-        // System.out.println("Linearized hierarchy for " + className + ": " + result);
         return result;
     }
 
@@ -30,23 +33,38 @@ public class C3 {
      * @param isaMap    A map containing the @ISA arrays for each class.
      * @return A list of class names in the order of method resolution.
      */
-    private static List<String> linearizeC3Helper(String className, Map<String, List<String>> isaMap) {
+    private static List<String> linearizeC3Helper(String className,
+                                                  Map<String, List<String>> isaMap,
+                                                  Set<String> visiting) {
+        // Check for circular inheritance
+        if (visiting.contains(className)) {
+            throw new PerlCompilerException("Recursive inheritance detected in hierarchy involving class '" + className + "'");
+        }
+
+        visiting.add(className);
+
         List<String> result = new ArrayList<>();
         List<String> parents = isaMap.getOrDefault(className, Collections.emptyList());
 
         // If the class has no parents, return the class itself
         if (parents.isEmpty()) {
+            visiting.remove(className);
             result.add(className);
             return result;
         }
 
         // List of linearizations of each parent
         List<List<String>> linearizations = new ArrayList<>();
-        for (String parent : parents) {
-            linearizations.add(linearizeC3Helper(parent, isaMap));
+        try {
+            for (String parent : parents) {
+                linearizations.add(new ArrayList<>(linearizeC3Helper(parent, isaMap, visiting)));
+            }
+        } finally {
+            visiting.remove(className);  // Ensure we remove even if exception occurs
         }
+
         // Add the parents list itself to the linearizations
-        linearizations.add(parents);
+        linearizations.add(new ArrayList<>(parents));
 
         // Merge the linearizations using the C3 algorithm
         while (!linearizations.isEmpty()) {
@@ -65,11 +83,10 @@ public class C3 {
             }
 
             if (candidate == null) {
-                throw new IllegalStateException("Cyclic inheritance detected");
+                throw new PerlCompilerException("Inconsistent hierarchy detected in C3 linearization");
             }
 
             result.add(candidate);
-            // System.out.println("Selected candidate: " + candidate);
             for (List<String> linearization : linearizations) {
                 if (!linearization.isEmpty() && linearization.getFirst().equals(candidate)) {
                     linearization.removeFirst();
