@@ -111,6 +111,7 @@ $os_name =~ s/\s+/_/g;
     ptrsize => '8',
     doublesize => '8',
     uvsize => '4',
+    sizesize => '4',
     byteorder => _determine_byteorder(),
 
     ivsize => 4,

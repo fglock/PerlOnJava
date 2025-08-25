@@ -41,12 +41,20 @@ public class Vec {
             throw new PerlCompilerException("BITS must be between 1 and 32");
         }
 
-        int byteOffset = offset * bits / 8;
-        int bitOffset = (offset * bits) % 8;
-
-        if (byteOffset >= data.length) {
+        // Handle negative offset
+        if (offset < 0) {
             return new RuntimeVecLvalue(strScalar, offset, bits, 0);
         }
+
+        // Check for potential overflow in offset * bits calculation
+        // Use long arithmetic to detect overflow
+        long longByteOffset = ((long) offset * bits) / 8;
+        if (longByteOffset > Integer.MAX_VALUE || longByteOffset >= data.length) {
+            return new RuntimeVecLvalue(strScalar, offset, bits, 0);
+        }
+
+        int byteOffset = (int) longByteOffset;
+        int bitOffset = (offset * bits) % 8;
 
         ByteBuffer buffer = ByteBuffer.wrap(data).order(ByteOrder.BIG_ENDIAN);
         int value = 0;
@@ -55,7 +63,7 @@ public class Vec {
             value = buffer.getInt(byteOffset);
         } else if (bits == 16 && byteOffset + 1 < data.length) {
             value = buffer.getShort(byteOffset) & 0xFFFF;
-        } else if (bits == 8) {
+        } else if (bits == 8 && byteOffset < data.length) {
             value = buffer.get(byteOffset) & 0xFF;
         } else {
             for (int i = 0; i < bits; i++) {
@@ -96,7 +104,19 @@ public class Vec {
             throw new PerlCompilerException("BITS must be between 1 and 32");
         }
 
-        int byteOffset = offset * bits / 8;
+        // Handle negative offset - this should throw an error for lvalue context
+        if (offset < 0) {
+            throw new PerlCompilerException("Negative offset to vec in lvalue context");
+        }
+
+        // Check for potential overflow in offset * bits calculation
+        // Use long arithmetic to detect overflow
+        long longByteOffset = ((long) offset * bits) / 8;
+        if (longByteOffset > Integer.MAX_VALUE) {
+            throw new PerlCompilerException("Out of memory during vec in lvalue context");
+        }
+
+        int byteOffset = (int) longByteOffset;
         int bitOffset = (offset * bits) % 8;
 
         int bytesToWrite = (bits + bitOffset + 7) / 8;
