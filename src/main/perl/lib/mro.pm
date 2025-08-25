@@ -1,10 +1,6 @@
 package mro;
 
-# placeholder
-
-sub method_changed_in {
-    # placeholder
-}
+XSLoader::load( 'Mro' );
 
 1;
 
