@@ -460,6 +460,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **Special variables**: The special variables `%ENV`, `@ARGV`, `@INC`, `$0`, `$_`, `$.`, `$]`, `$"`, `$\\`, `$,`, `$/`, `$$`, `$a`, `$b`, `$^O`, `$^V`, `$^X` are implemented.
 - ✅  **I/O symbols**: `STDOUT`, `STDERR`, `STDIN`, `ARGV`, `ARGVOUT` are implemented.
 - ✅  **Stash manipulation**: Alternative ways to create constants like: `$constant::{_CAN_PCS} = \$const`.
+- ✅  **`reset("A-Z")`** resetting global variables is implemented.
 - ❌  **Thread-safe `@_`, `$_`, and regex variables**: Thread safety for global special variables is missing.
 - ❌  **Compiler flags**:  The special variables `$^H`, `%^H`, `${^WARNING_BITS}` are not implemented.
 - ✅  **`caller` operator**: `caller` returns `($package, $filename, $line)`.
@@ -614,7 +615,6 @@ The DBI module provides seamless integration with JDBC drivers:
 ## Non-strict and Obsolete Features
 - ❌  **`format` operator**: `format` and `write` functions for report generation are not implemented.
 - ❌  **DBM file support**: `dbmclose`, `dbmopen` are not implemented.
-- ❌  **`reset("A-Z")`** resetting global variables is not implemented.
 - ❌  **Calling a class name** `package Test; Test->()` gives `Undefined subroutine &Test::Test called`.
 
 ## Features Incompatible with JVM
