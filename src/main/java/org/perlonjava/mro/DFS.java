@@ -15,16 +15,6 @@ public class DFS {
             System.out.println("DEBUG DFS: Starting linearization for " + className);
         }
 
-        // FIXED: Don't use cache for now to ensure we see ISA changes
-        // Check cache first - but invalidate if we suspect changes
-        String cacheKey = className + "::DFS";
-
-        // Always recompute for now to catch ISA changes
-        // In the future, this should be improved with proper cache invalidation
-        if (DEBUG_DFS) {
-            System.out.println("DEBUG DFS: Recomputing (cache disabled for debugging)");
-        }
-
         // Populate ISA map with current state
         Map<String, List<String>> isaMap = new HashMap<>();
         try {
@@ -40,26 +30,30 @@ public class DFS {
             System.out.println("DEBUG DFS: ISA map: " + isaMap);
         }
 
-        // Perform DFS linearization
-        Set<String> visited = new LinkedHashSet<>();
+        // Perform DFS linearization using a list to maintain order
+        List<String> result = new ArrayList<>();
+        Set<String> visited = new HashSet<>();
         Set<String> currentPath = new HashSet<>();
 
-        linearizeDFSHelper(className, isaMap, visited, currentPath);
+        linearizeDFSHelper(className, isaMap, result, visited, currentPath);
 
-        List<String> result = new ArrayList<>(visited);
-        result.add("UNIVERSAL");
+        // Add UNIVERSAL only if not already present and this is not UNIVERSAL itself
+        if (!result.contains("UNIVERSAL") && !className.equals("UNIVERSAL")) {
+            result.add("UNIVERSAL");
+        }
 
         if (DEBUG_DFS) {
             System.out.println("DEBUG DFS: Final linearization: " + result);
         }
 
         // Cache the result
+        String cacheKey = className + "::DFS";
         InheritanceResolver.linearizedClassesCache.put(cacheKey, result);
         return result;
     }
 
     /**
-     * FIXED: New method to populate ISA map with proper cycle detection
+     * Populate ISA map with cycle detection
      */
     private static void populateIsaMapWithCycleDetection(String className,
                                                          Map<String, List<String>> isaMap,
@@ -85,7 +79,11 @@ public class DFS {
         RuntimeArray isaArray = GlobalVariable.getGlobalArray(className + "::ISA");
         List<String> parents = new ArrayList<>();
         for (RuntimeBase entity : isaArray.elements) {
-            parents.add(entity.toString());
+            String parentName = entity.toString();
+            // FIXED: Skip empty or null parent names
+            if (parentName != null && !parentName.isEmpty()) {
+                parents.add(parentName);
+            }
         }
 
         if (DEBUG_DFS) {
@@ -104,6 +102,7 @@ public class DFS {
 
     private static void linearizeDFSHelper(String className,
                                            Map<String, List<String>> isaMap,
+                                           List<String> result,
                                            Set<String> visited,
                                            Set<String> currentPath) {
         if (DEBUG_DFS) {
@@ -117,17 +116,26 @@ public class DFS {
             throw new PerlCompilerException("Recursive inheritance detected in hierarchy of class '" + className + "'");
         }
 
-        currentPath.add(className);
-
-        if (!visited.contains(className)) {
-            visited.add(className);
+        if (visited.contains(className)) {
+            return; // Already processed
         }
 
+        currentPath.add(className);
+        visited.add(className);
+        result.add(className);
+
+        if (DEBUG_DFS) {
+            System.out.println("DEBUG DFS: Added " + className + " to result, result so far: " + result);
+        }
+
+        // Process parents in order (depth-first)
         List<String> parents = isaMap.getOrDefault(className, Collections.emptyList());
+        if (DEBUG_DFS) {
+            System.out.println("DEBUG DFS: " + className + " parents: " + parents);
+        }
+
         for (String parent : parents) {
-            if (!visited.contains(parent)) {
-                linearizeDFSHelper(parent, isaMap, visited, currentPath);
-            }
+            linearizeDFSHelper(parent, isaMap, result, visited, currentPath);
         }
 
         currentPath.remove(className);

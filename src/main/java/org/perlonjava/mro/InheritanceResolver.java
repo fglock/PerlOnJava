@@ -159,7 +159,11 @@ public class InheritanceResolver {
         RuntimeArray isaArray = GlobalVariable.getGlobalArray(className + "::ISA");
         List<String> parents = new ArrayList<>();
         for (RuntimeBase entity : isaArray.elements) {
-            parents.add(entity.toString());
+            String parentName = entity.toString();
+            // FIXED: Skip empty or null parent names
+            if (parentName != null && !parentName.isEmpty()) {
+                parents.add(parentName);
+            }
         }
 
         isaMap.put(className, parents);
