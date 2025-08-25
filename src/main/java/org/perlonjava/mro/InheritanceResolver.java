@@ -31,6 +31,9 @@ public class InheritanceResolver {
     // Cache for OverloadContext instances by blessing ID
     private static final Map<Integer, OverloadContext> overloadContextCache = new HashMap<>();
 
+    // Track ISA array states for change detection
+    private static final Map<String, List<String>> isaStateCache = new HashMap<>();
+
     /**
      * Sets the default MRO algorithm.
      *
@@ -69,6 +72,11 @@ public class InheritanceResolver {
      * @return A list of class names in the order of method resolution.
      */
     public static List<String> linearizeHierarchy(String className) {
+        // Check if ISA has changed and invalidate cache if needed
+        if (hasIsaChanged(className)) {
+            invalidateCacheForClass(className);
+        }
+
         MROAlgorithm mro = getPackageMRO(className);
 
         switch (mro) {
@@ -82,6 +90,44 @@ public class InheritanceResolver {
     }
 
     /**
+     * Checks if the @ISA array for a class has changed since last cached.
+     */
+    private static boolean hasIsaChanged(String className) {
+        RuntimeArray isaArray = GlobalVariable.getGlobalArray(className + "::ISA");
+        List<String> currentIsa = new ArrayList<>();
+
+        for (RuntimeBase entity : isaArray.elements) {
+            String parentName = entity.toString();
+            if (parentName != null && !parentName.isEmpty()) {
+                currentIsa.add(parentName);
+            }
+        }
+
+        List<String> cachedIsa = isaStateCache.get(className);
+
+        // If ISA changed, update cache and return true
+        if (!currentIsa.equals(cachedIsa)) {
+            isaStateCache.put(className, new ArrayList<>(currentIsa));
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Invalidate cache for a specific class and its dependents.
+     */
+    private static void invalidateCacheForClass(String className) {
+        // Remove from linearization cache
+        linearizedClassesCache.entrySet().removeIf(entry -> entry.getKey().startsWith(className + "::"));
+
+        // Remove from method cache (entries that reference this class)
+        methodCache.entrySet().removeIf(entry -> entry.getKey().contains(className + "::"));
+
+        // Could also notify dependents here if we had that information
+    }
+
+    /**
      * Invalidates the caches for method resolution and linearized class hierarchies.
      * This should be called whenever the class hierarchy or method definitions change.
      */
@@ -89,6 +135,7 @@ public class InheritanceResolver {
         methodCache.clear();
         linearizedClassesCache.clear();
         overloadContextCache.clear();
+        isaStateCache.clear(); // Clear ISA state cache too
     }
 
     /**
@@ -160,8 +207,15 @@ public class InheritanceResolver {
         List<String> parents = new ArrayList<>();
         for (RuntimeBase entity : isaArray.elements) {
             String parentName = entity.toString();
-            // FIXED: Skip empty or null parent names
-            if (parentName != null && !parentName.isEmpty()) {
+            // Handle undef elements as "main" for Perl compatibility
+            if (parentName == null || parentName.equals("")) {
+                if (!entity.getDefinedBoolean()) {
+                    parentName = "main";
+                } else {
+                    continue; // Skip empty but defined strings
+                }
+            }
+            if (!parentName.isEmpty()) {
                 parents.add(parentName);
             }
         }
@@ -190,6 +244,11 @@ public class InheritanceResolver {
         if (cacheKey == null) {
             // Normalize the method name for consistent caching
             cacheKey = NameNormalizer.normalizeVariableName(methodName, perlClassName);
+        }
+
+        // Check if ISA changed for this class - if so, invalidate relevant caches
+        if (hasIsaChanged(perlClassName)) {
+            invalidateCacheForClass(perlClassName);
         }
 
         // Check the method cache - handles both found and not-found cases
