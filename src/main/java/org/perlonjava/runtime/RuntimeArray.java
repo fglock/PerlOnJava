@@ -126,6 +126,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         };
     }
 
+    public RuntimeScalar shift() {
+        return shift(this);
+    }
+
     /**
      * Gets the index of the last element in the array.
      *
@@ -159,6 +163,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             case TIED_ARRAY -> TieArray.tiedPush(runtimeArray, value);
             default -> throw new IllegalStateException("Unknown array type: " + runtimeArray.type);
         };
+    }
+    
+    public RuntimeScalar push(RuntimeBase value) {
+        return push(this, value);
     }
 
     /**

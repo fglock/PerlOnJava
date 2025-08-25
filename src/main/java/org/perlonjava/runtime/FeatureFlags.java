@@ -44,6 +44,9 @@ public class FeatureFlags {
         featureBundles.put("refaliasing", new String[]{"refaliasing"});
         featureBundles.put("declared_refs", new String[]{"declared_refs"});
         featureBundles.put("defer", new String[]{"defer"});
+
+        featureBundles.put("perlonjava::internal::mro_c3", new String[]{"perlonjava::internal::mro_c3"});
+        featureBundles.put("perlonjava::internal::next_method", new String[]{"perlonjava::internal::next_method"});
     }
 
     /**
