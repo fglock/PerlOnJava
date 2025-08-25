@@ -132,7 +132,7 @@ public class Universal extends PerlModuleBase {
         }
 
         // Get the linearized inheritance hierarchy using C3
-        List<String> linearizedClasses = C3.linearizeC3(perlClassName);
+        List<String> linearizedClasses = InheritanceResolver.linearizeHierarchy(perlClassName);
 
         return new RuntimeScalar(linearizedClasses.contains(argString)).getList();
     }

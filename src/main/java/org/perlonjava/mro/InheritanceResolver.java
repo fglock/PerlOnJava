@@ -12,12 +12,74 @@ import java.util.*;
 public class InheritanceResolver {
     public static boolean autoloadEnabled = true;
 
+    // MRO algorithm selection
+    public enum MROAlgorithm {
+        C3,
+        DFS
+    }
+
+    // Default MRO algorithm
+    private static MROAlgorithm currentMRO = MROAlgorithm.DFS;
+
+    // Per-package MRO settings
+    private static final Map<String, MROAlgorithm> packageMRO = new HashMap<>();
+
     // Method resolution cache
     private static final Map<String, RuntimeScalar> methodCache = new HashMap<>();
     // Cache for linearized class hierarchies
     static final Map<String, List<String>> linearizedClassesCache = new HashMap<>();
     // Cache for OverloadContext instances by blessing ID
     private static final Map<Integer, OverloadContext> overloadContextCache = new HashMap<>();
+
+    /**
+     * Sets the default MRO algorithm.
+     *
+     * @param algorithm The MRO algorithm to use as default.
+     */
+    public static void setDefaultMRO(MROAlgorithm algorithm) {
+        currentMRO = algorithm;
+        invalidateCache();
+    }
+
+    /**
+     * Sets the MRO algorithm for a specific package.
+     *
+     * @param packageName The name of the package.
+     * @param algorithm The MRO algorithm to use for this package.
+     */
+    public static void setPackageMRO(String packageName, MROAlgorithm algorithm) {
+        packageMRO.put(packageName, algorithm);
+        invalidateCache();
+    }
+
+    /**
+     * Gets the MRO algorithm for a specific package.
+     *
+     * @param packageName The name of the package.
+     * @return The MRO algorithm for the package, or the default if not set.
+     */
+    public static MROAlgorithm getPackageMRO(String packageName) {
+        return packageMRO.getOrDefault(packageName, currentMRO);
+    }
+
+    /**
+     * Linearizes the inheritance hierarchy for a class using the appropriate MRO algorithm.
+     *
+     * @param className The name of the class to linearize.
+     * @return A list of class names in the order of method resolution.
+     */
+    public static List<String> linearizeHierarchy(String className) {
+        MROAlgorithm mro = getPackageMRO(className);
+
+        switch (mro) {
+            case C3:
+                return C3.linearizeC3(className);
+            case DFS:
+                return DFS.linearizeDFS(className);
+            default:
+                throw new IllegalStateException("Unknown MRO algorithm: " + mro);
+        }
+    }
 
     /**
      * Invalidates the caches for method resolution and linearized class hierarchies.
@@ -117,8 +179,8 @@ public class InheritanceResolver {
             return methodCache.get(cacheKey);
         }
 
-        // Get the linearized inheritance hierarchy using C3
-        List<String> linearizedClasses = C3.linearizeC3(perlClassName);
+        // Get the linearized inheritance hierarchy using the appropriate MRO
+        List<String> linearizedClasses = linearizeHierarchy(perlClassName);
 
         // Search through the class hierarchy starting from the specified index
         for (int i = startFromIndex; i < linearizedClasses.size(); i++) {
