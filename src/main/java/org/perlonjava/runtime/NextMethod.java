@@ -5,6 +5,8 @@ import org.perlonjava.mro.InheritanceResolver;
 
 import java.util.List;
 
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarOne;
+
 /**
  * Implements the next::method, next::can, and maybe::next::method functionality.
  * These always use C3 MRO regardless of the current MRO setting.
@@ -24,30 +26,32 @@ public class NextMethod {
         // Get caller information using the existing caller() method
         RuntimeList callerInfo = RuntimeCode.caller(new RuntimeList(), RuntimeContextType.LIST);
 
-        if (callerInfo.elements.size() < 3) {
+        if (callerInfo.elements.size() < 1) {
             throw new PerlCompilerException("next::method called outside a method");
         }
 
         String callerPackage = callerInfo.elements.get(0).toString();
-        String fileName = callerInfo.elements.get(1).toString();
-        int lineNumber = callerInfo.elements.get(2).scalar().getInt();
 
         // Get the calling subroutine name from level 1
-        RuntimeArray level1Args = new RuntimeArray();
-        level1Args.push(new RuntimeScalar(1));
-        RuntimeList subInfo = RuntimeCode.caller(new RuntimeList(level1Args), RuntimeContextType.SCALAR);
+        RuntimeList level1Args = scalarOne.getList();
+        RuntimeList subInfo = RuntimeCode.caller(level1Args, RuntimeContextType.LIST);
 
         String subroutineName = "";
-        if (!subInfo.elements.isEmpty()) {
-            subroutineName = subInfo.elements.get(0).toString();
+        if (subInfo.elements.size() > 3) {
+            subroutineName = subInfo.elements.get(3).toString(); // subroutine name is at index 3
         }
 
         // Extract just the method name if it includes package
         String methodName = subroutineName;
+        if (methodName.isEmpty()) {
+            // Try to get from current context if available
+            throw new PerlCompilerException("Can't resolve method name for next::method");
+        }
+
         int lastDoubleColon = methodName.lastIndexOf("::");
         if (lastDoubleColon >= 0) {
+            callerPackage = methodName.substring(0, lastDoubleColon);
             methodName = methodName.substring(lastDoubleColon + 2);
-            callerPackage = subroutineName.substring(0, lastDoubleColon);
         }
 
         if (methodName.isEmpty()) {
@@ -86,7 +90,7 @@ public class NextMethod {
         // Find the calling class in the linearization
         int callerIndex = linearized.indexOf(callerPackage);
         if (callerIndex == -1) {
-            throw new PerlCompilerException("Can't find calling class in method resolution order");
+            throw new PerlCompilerException("Can't find calling class '" + callerPackage + "' in method resolution order for " + searchClass);
         }
 
         // Search for the next method starting after the calling class
@@ -98,9 +102,8 @@ public class NextMethod {
             throw new PerlCompilerException("No next::method '" + methodName + "' found for " + searchClass);
         }
 
-        // Call the next method
-        RuntimeScalar self = args.shift();
-        return RuntimeCode.call(self, nextMethod, null, args, ctx);
+        // Call the next method - don't shift the arguments since we need to pass them as-is
+        return RuntimeCode.call(firstArg, nextMethod, null, args, ctx);
     }
 
     /**
@@ -116,28 +119,31 @@ public class NextMethod {
             // Get caller information using the existing caller() method
             RuntimeList callerInfo = RuntimeCode.caller(new RuntimeList(), RuntimeContextType.LIST);
 
-            if (callerInfo.elements.size() < 3) {
+            if (callerInfo.elements.size() < 1) {
                 return RuntimeScalarCache.scalarUndef.getList();
             }
 
             String callerPackage = callerInfo.elements.get(0).toString();
 
             // Get the calling subroutine name from level 1
-            RuntimeArray level1Args = new RuntimeArray();
-            level1Args.push(new RuntimeScalar(1));
-            RuntimeList subInfo = RuntimeCode.caller(new RuntimeList(level1Args), RuntimeContextType.SCALAR);
+            RuntimeList level1Args = scalarOne.getList();
+            RuntimeList subInfo = RuntimeCode.caller(level1Args, RuntimeContextType.LIST);
 
             String subroutineName = "";
-            if (!subInfo.elements.isEmpty()) {
-                subroutineName = subInfo.elements.get(0).toString();
+            if (subInfo.elements.size() > 3) {
+                subroutineName = subInfo.elements.get(3).toString(); // subroutine name is at index 3
             }
 
             // Extract just the method name if it includes package
             String methodName = subroutineName;
+            if (methodName.isEmpty()) {
+                return RuntimeScalarCache.scalarUndef.getList();
+            }
+
             int lastDoubleColon = methodName.lastIndexOf("::");
             if (lastDoubleColon >= 0) {
+                callerPackage = methodName.substring(0, lastDoubleColon);
                 methodName = methodName.substring(lastDoubleColon + 2);
-                callerPackage = subroutineName.substring(0, lastDoubleColon);
             }
 
             if (methodName.isEmpty()) {

@@ -1,5 +1,6 @@
 package org.perlonjava.mro;
 
+import org.perlonjava.runtime.PerlCompilerException;
 import java.util.*;
 
 /**
@@ -25,9 +26,10 @@ public class DFS {
         Map<String, List<String>> isaMap = new HashMap<>();
         InheritanceResolver.populateIsaMap(className, isaMap);
 
-        // Perform DFS linearization
+        // Perform DFS linearization with cycle detection
         Set<String> visited = new LinkedHashSet<>();
-        linearizeDFSHelper(className, isaMap, visited);
+        Set<String> currentPath = new HashSet<>();  // Track current recursion path
+        linearizeDFSHelper(className, isaMap, visited, currentPath);
 
         // Convert to list and add UNIVERSAL
         List<String> result = new ArrayList<>(visited);
@@ -45,10 +47,20 @@ public class DFS {
      * @param className The current class being processed.
      * @param isaMap    A map containing the @ISA arrays for each class.
      * @param visited   A set to track visited classes and maintain order.
+     * @param currentPath A set to track the current recursion path for cycle detection.
      */
     private static void linearizeDFSHelper(String className,
                                          Map<String, List<String>> isaMap,
-                                         Set<String> visited) {
+                                         Set<String> visited,
+                                         Set<String> currentPath) {
+        // Check for circular inheritance
+        if (currentPath.contains(className)) {
+            throw new PerlCompilerException("Recursive inheritance detected in hierarchy of class '" + className + "'");
+        }
+
+        // Add to current path
+        currentPath.add(className);
+
         // Add current class first (pre-order traversal)
         visited.add(className);
 
@@ -58,8 +70,11 @@ public class DFS {
         // Visit each parent in order (depth-first)
         for (String parent : parents) {
             if (!visited.contains(parent)) {
-                linearizeDFSHelper(parent, isaMap, visited);
+                linearizeDFSHelper(parent, isaMap, visited, currentPath);
             }
         }
+
+        // Remove from current path when done
+        currentPath.remove(className);
     }
 }
