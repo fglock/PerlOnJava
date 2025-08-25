@@ -409,9 +409,47 @@ public class Operator {
         if (args.isEmpty()) {
             RuntimeRegex.reset();
         } else {
-            throw new PerlCompilerException("not implemented: reset(args)");
+            // Parse the character range expression
+            String expr = args.getFirst().toString();
+            Set<Character> resetChars = parseResetExpression(expr);
+
+            // Get current package from caller information
+            String currentPackage = RuntimeCode.getCurrentPackage();
+
+            // Reset global variables that start with matching characters
+            GlobalVariable.resetGlobalVariables(resetChars, currentPackage);
         }
         return getScalarInt(1).getList();
+    }
+
+    /**
+     * Parses a reset expression like "a-z" or "XYZ" into a set of characters
+     * @param expr The reset expression
+     * @return Set of characters that variables should start with to be reset
+     */
+    private static Set<Character> parseResetExpression(String expr) {
+        Set<Character> chars = new HashSet<>();
+
+        for (int i = 0; i < expr.length(); i++) {
+            char c = expr.charAt(i);
+
+            // Check for range pattern like "a-z"
+            if (i + 2 < expr.length() && expr.charAt(i + 1) == '-') {
+                char start = c;
+                char end = expr.charAt(i + 2);
+
+                // Add all characters in the range
+                for (char ch = start; ch <= end; ch++) {
+                    chars.add(ch);
+                }
+                i += 2; // Skip the '-' and end character
+            } else {
+                // Single character
+                chars.add(c);
+            }
+        }
+
+        return chars;
     }
 
     public static RuntimeScalar repeat(RuntimeScalar runtimeScalar, RuntimeScalar arg) {

@@ -1,10 +1,12 @@
 package org.perlonjava.runtime;
 
 import org.perlonjava.codegen.CustomClassLoader;
+import org.perlonjava.operators.Operator;
 import org.perlonjava.parser.DataSection;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -20,9 +22,9 @@ import static org.perlonjava.runtime.RuntimeScalarType.GLOBREFERENCE;
  */
 public class GlobalVariable {
     // Global variables and subroutines
-    static final Map<String, RuntimeScalar> globalVariables = new HashMap<>();
-    static final Map<String, RuntimeArray> globalArrays = new HashMap<>();
-    static final Map<String, RuntimeHash> globalHashes = new HashMap<>();
+    public static final Map<String, RuntimeScalar> globalVariables = new HashMap<>();
+    public static final Map<String, RuntimeArray> globalArrays = new HashMap<>();
+    public static final Map<String, RuntimeHash> globalHashes = new HashMap<>();
     static final Map<String, RuntimeScalar> globalCodeRefs = new HashMap<>();
     static final Map<String, RuntimeGlob> globalIORefs = new HashMap<>();
 
@@ -296,5 +298,77 @@ public class GlobalVariable {
      */
     public static boolean existsGlobalIO(String key) {
         return globalIORefs.containsKey(key);
+    }
+
+    /**
+     * Resets all global variables whose names start with any of the specified characters
+     * @param resetChars Set of characters to match variable names against
+     * @param currentPackage The current package name with "::" suffix
+     */
+    public static void resetGlobalVariables(Set<Character> resetChars, String currentPackage) {
+        // Reset scalar variables
+        for (Map.Entry<String, RuntimeScalar> entry : globalVariables.entrySet()) {
+            String key = entry.getKey();
+
+            if (key.startsWith(currentPackage) && shouldResetVariable(key, currentPackage, resetChars)) {
+                // Reset to undef instead of removing to maintain reference integrity
+                entry.getValue().set(RuntimeScalar.undef());
+            }
+        }
+
+        // Reset array variables
+        for (Map.Entry<String, RuntimeArray> entry : globalArrays.entrySet()) {
+            String key = entry.getKey();
+
+            if (key.startsWith(currentPackage) && shouldResetVariable(key, currentPackage, resetChars)) {
+                // Clear the array
+                entry.getValue().elements.clear();
+            }
+        }
+
+        // Reset hash variables
+        for (Map.Entry<String, RuntimeHash> entry : globalHashes.entrySet()) {
+            String key = entry.getKey();
+
+            if (key.startsWith(currentPackage) && shouldResetVariable(key, currentPackage, resetChars)) {
+                // Clear the hash
+                entry.getValue().elements.clear();
+            }
+        }
+
+        // Note: We don't reset code references or IO references as per Perl behavior
+    }
+
+    /**
+     * Determines if a variable should be reset based on its name and the reset characters
+     * @param fullKey The full variable key (e.g. "main::myvar")
+     * @param packagePrefix The current package prefix (e.g. "main::")
+     * @param resetChars The set of characters to match against
+     * @return true if the variable should be reset
+     */
+    private static boolean shouldResetVariable(String fullKey, String packagePrefix, Set<Character> resetChars) {
+        if (!fullKey.startsWith(packagePrefix)) {
+            return false;
+        }
+
+        // Extract the variable name without the package prefix
+        String varName = fullKey.substring(packagePrefix.length());
+
+        // Skip special variables like $_, @ARGV, %ENV, etc.
+        if (varName.length() == 1 && "_!@$".indexOf(varName.charAt(0)) >= 0) {
+            return false;
+        }
+
+        // Don't reset important arrays and hashes
+        if (varName.equals("ARGV") || varName.equals("INC") || varName.equals("ENV")) {
+            return false;
+        }
+
+        // Check if the first character of the variable name matches any reset character
+        if (varName.length() > 0) {
+            return resetChars.contains(varName.charAt(0));
+        }
+
+        return false;
     }
 }

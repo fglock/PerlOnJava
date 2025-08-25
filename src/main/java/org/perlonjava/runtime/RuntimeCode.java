@@ -494,6 +494,24 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return scalarUndef;
     }
 
+    /**
+     * Gets the current package name using caller() information
+     * @return The current package name with "::" suffix
+     */
+    public static String getCurrentPackage() {
+        // Use caller() to get the current package
+        RuntimeList callerInfo = caller(new RuntimeList(), RuntimeContextType.LIST);
+
+        if (!callerInfo.isEmpty()) {
+            String packageName = callerInfo.getFirst().toString();
+            // Ensure it ends with "::" for prefix matching
+            return packageName.endsWith("::") ? packageName : packageName + "::";
+        }
+
+        // Fallback to main package if caller info is not available
+        return "main::";
+    }
+
     public boolean defined() {
         return this.constantValue != null || this.compilerSupplier != null || this.methodHandle != null;
     }
