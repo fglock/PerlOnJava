@@ -240,7 +240,7 @@ public class OperatorHandler {
                 new OperatorHandler("org/perlonjava/runtime/RuntimeBase",
                         "each",
                         Opcodes.INVOKEVIRTUAL,
-                        "()Lorg/perlonjava/runtime/RuntimeList;"));
+                        "(I)Lorg/perlonjava/runtime/RuntimeList;"));
         operatorHandlers.put("keys",
                 new OperatorHandler("org/perlonjava/runtime/RuntimeBase",
                         "keys",

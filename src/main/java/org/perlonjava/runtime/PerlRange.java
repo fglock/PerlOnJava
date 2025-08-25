@@ -221,8 +221,8 @@ public class PerlRange extends RuntimeBase implements Iterable<RuntimeScalar> {
      * @return A RuntimeList representing each element of the range.
      */
     @Override
-    public RuntimeList each() {
-        return toList().each();
+    public RuntimeList each(int ctx) {
+        return toList().each(ctx);
     }
 
     /**

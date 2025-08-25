@@ -81,6 +81,13 @@ public class EmitOperator {
         emitOperator(node, emitterVisitor);
     }
 
+    static void handleEach(EmitterVisitor emitterVisitor, OperatorNode node) {
+        // Accept the operand in LIST context.
+        node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
+        emitterVisitor.pushCallContext();
+        emitOperator(node, emitterVisitor);
+    }
+
     /**
      * Handles the 'readline' operator for reading lines from a file handle.
      *
