@@ -322,6 +322,8 @@ public class SubroutineParser {
         RuntimeCode code = (RuntimeCode) codeRef.value;
         code.prototype = prototype;
         code.attributes = attributes;
+        code.subName = subName;
+        code.packageName = parser.ctx.symbolTable.getCurrentPackage();
 
         // Optimization - https://github.com/fglock/PerlOnJava/issues/8
         // Prepare capture variables
