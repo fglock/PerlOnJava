@@ -315,20 +315,33 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // - Class->Other::new() fully qualified method name
 
         // System.out.println("call perlClassName: " + perlClassName + " methodName: " + methodName);
-        if (methodName.startsWith("SUPER::")) {
-            String packageName = ((RuntimeCode) currentSub.value).packageName;
-            method = InheritanceResolver.findMethodInHierarchy(
-                    methodName.substring(7),    // method name without SUPER:: prefix
-                    packageName,
-                    packageName + "::" + methodName,  // cache key includes the SUPER:: prefix
-                    1   // start looking in the parent package
-            );
-        }
-        else if (methodName.contains("::")) {
-            // Fully qualified method name - call the exact subroutine
-            method = GlobalVariable.getGlobalCodeRef(methodName);
-            if (!method.getDefinedBoolean()) {
-                throw new PerlCompilerException("Undefined subroutine &" + methodName + " called");
+
+        if (methodName.contains("::")) {
+
+            // Handle next::method calls
+            if (methodName.equals("next::method")) {
+                return NextMethod.nextMethodWithContext(args, currentSub, callContext);
+            }
+
+            // Handle next::can calls
+            if (methodName.equals("next::can")) {
+                return NextMethod.nextCanWithContext(args, currentSub, callContext);
+            }
+
+            // Handle maybe::next::method calls
+            if (methodName.equals("maybe::next::method")) {
+                return NextMethod.maybeNextMethodWithContext(args, currentSub, callContext);
+            }
+
+            // Handle SUPER::method calls
+            if (methodName.startsWith("SUPER::")) {
+                method = NextMethod.superMethod(currentSub, methodName);
+            } else {
+                // Fully qualified method name - call the exact subroutine
+                method = GlobalVariable.getGlobalCodeRef(methodName);
+                if (!method.getDefinedBoolean()) {
+                    throw new PerlCompilerException("Undefined subroutine &" + methodName + " called");
+                }
             }
         } else {
             // Regular method lookup through inheritance
