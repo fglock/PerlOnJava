@@ -60,7 +60,7 @@ public class TieHandle extends RuntimeIO {
         return RuntimeCode.call(
                 self,
                 new RuntimeScalar(method),
-                tiedPackage,
+                null,
                 new RuntimeArray(args),
                 RuntimeContextType.SCALAR
         ).getFirst();
@@ -105,7 +105,7 @@ public class TieHandle extends RuntimeIO {
         RuntimeList result = RuntimeCode.call(
                 tieHandle.self,
                 new RuntimeScalar("READLINE"),
-                tieHandle.tiedPackage,
+                null,
                 new RuntimeArray(tieHandle.self),
                 ctx
         );

@@ -45,7 +45,7 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
         return RuntimeCode.call(
                 self,
                 new RuntimeScalar(method),
-                tiedPackage,
+                null,
                 new RuntimeArray(args),
                 RuntimeContextType.SCALAR
         ).getFirst();

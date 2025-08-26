@@ -78,7 +78,7 @@ public class TieArray extends ArrayList<RuntimeScalar> {
         return RuntimeCode.call(
                 self,
                 new RuntimeScalar(method),
-                className,
+                null,
                 new RuntimeArray(args),
                 RuntimeContextType.SCALAR
         );

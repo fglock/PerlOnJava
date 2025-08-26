@@ -247,14 +247,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      *
      * @param runtimeScalar  The object to call the method on.
      * @param method         The method to resolve.
-     * @param currentPackage The package to resolve SUPER::method in.
+     * @param currentSub     The subroutine to resolve SUPER::method in.
      * @param args           The arguments to pass to the method.
      * @param callContext    The call context.
      * @return The result of the method call.
      */
     public static RuntimeList call(RuntimeScalar runtimeScalar,
                                    RuntimeScalar method,
-                                   String currentPackage,
+                                   RuntimeScalar currentSub,
                                    RuntimeArray args,
                                    int callContext) {
         // insert `this` into the parameter list
@@ -316,10 +316,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         // System.out.println("call perlClassName: " + perlClassName + " methodName: " + methodName);
         if (methodName.startsWith("SUPER::")) {
+            String packageName = ((RuntimeCode) currentSub.value).packageName;
             method = InheritanceResolver.findMethodInHierarchy(
                     methodName.substring(7),    // method name without SUPER:: prefix
-                    currentPackage,
-                    currentPackage + "::" + methodName,  // cache key includes the SUPER:: prefix
+                    packageName,
+                    packageName + "::" + methodName,  // cache key includes the SUPER:: prefix
                     1   // start looking in the parent package
             );
         }
