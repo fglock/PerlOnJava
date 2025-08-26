@@ -114,6 +114,7 @@ public class OperatorHandler {
         put("sysread", "sysread", "org/perlonjava/operators/IOOperator", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("syswrite", "syswrite", "org/perlonjava/operators/IOOperator", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("sysopen", "sysopen", "org/perlonjava/operators/IOOperator", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("getc", "getc", "org/perlonjava/operators/IOOperator", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
 
         // Directory
         put("rmdir", "rmdir", "org/perlonjava/operators/Directory", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");

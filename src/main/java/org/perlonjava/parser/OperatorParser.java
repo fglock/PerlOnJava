@@ -496,7 +496,6 @@ public class OperatorParser {
                 case "readline" -> "main::ARGV";
                 case "eof" -> "main::STDIN";
                 case "tell" -> "main::^LAST_FH";
-                case "getc" -> "main::STDIN";
                 case "fileno" ->
                         throw new PerlCompilerException(parser.tokenIndex, "Not enough arguments for " + token.text, parser.ctx.errorUtil);
                 default ->
