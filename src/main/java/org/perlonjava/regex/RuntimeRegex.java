@@ -388,10 +388,19 @@ public class RuntimeRegex implements RuntimeScalarReference {
             }
 
             if (replacementStr != null) {
-                replacementStr = replacementStr.replaceAll("\\\\", "\\\\\\\\");
+                // In Java regex replacement strings:
+                //
+                // - $1, $2, etc. refer to capture groups from the pattern
+                // - $0 refers to the entire match
+                // - \ is used for escaping
+                //
+                // When you pass $x as the replacement string, Java interprets it as trying to reference capture group "x", which doesn't exist (capture groups are numbered, not named with letters in basic Java regex).
+
+                // replacementStr = replacementStr.replaceAll("\\\\", "\\\\\\\\");
 
                 // Append the text before the match and the replacement to the result buffer
-                matcher.appendReplacement(resultBuffer, replacementStr);
+                // matcher.appendReplacement(resultBuffer, replacementStr);
+                matcher.appendReplacement(resultBuffer, Matcher.quoteReplacement(replacementStr));
             }
 
             // If not a global match, break after the first replacement

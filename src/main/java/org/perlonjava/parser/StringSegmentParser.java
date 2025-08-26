@@ -47,6 +47,7 @@ public abstract class StringSegmentParser {
 
     /** Flag indicating if this is parsing a regex pattern (affects bracket handling) */
     protected final boolean isRegex;
+    protected final boolean isRegexReplacement;
 
     /** Buffer for accumulating literal text segments */
     protected final StringBuilder currentSegment;
@@ -65,7 +66,7 @@ public abstract class StringSegmentParser {
      * @param tokenIndex the token index in the original source for error reporting
      * @param isRegex flag indicating if this is parsing a regex pattern
      */
-    public StringSegmentParser(EmitterContext ctx, List<LexerToken> tokens, Parser parser, int tokenIndex, boolean isRegex, boolean interpolateVariable) {
+    public StringSegmentParser(EmitterContext ctx, List<LexerToken> tokens, Parser parser, int tokenIndex, boolean isRegex, boolean interpolateVariable, boolean isRegexReplacement) {
         this.ctx = ctx;
         this.tokens = tokens;
         this.parser = parser;
@@ -74,6 +75,7 @@ public abstract class StringSegmentParser {
         this.currentSegment = new StringBuilder();
         this.segments = new ArrayList<>();
         this.interpolateVariable = interpolateVariable;
+        this.isRegexReplacement = isRegexReplacement;
     }
 
     /**
