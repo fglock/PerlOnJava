@@ -52,7 +52,10 @@ public class C3 {
         // If the class has no parents, return the class itself
         if (parents.isEmpty()) {
             visiting.remove(className);
-            return Arrays.asList(className);
+            // Create a mutable list instead of using Arrays.asList
+            List<String> result = new ArrayList<>();
+            result.add(className);
+            return result;
         }
 
         // Get linearizations of each parent
