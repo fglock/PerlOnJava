@@ -10,15 +10,18 @@ import org.perlonjava.runtime.*;
 import java.io.File;
 import java.io.IOException;
 import java.nio.channels.FileChannel;
-import java.nio.file.*;
+import java.nio.file.FileSystems;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.PosixFilePermission;
 import java.util.Arrays;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.Set;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
-import static org.perlonjava.runtime.RuntimeScalarCache.*;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarFalse;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
 
 public class IOOperator {
     public static RuntimeScalar select(RuntimeList runtimeList, int ctx) {
@@ -89,7 +92,14 @@ public class IOOperator {
         }
     }
 
-    public static RuntimeScalar getc(RuntimeScalar fileHandle) {
+    public static RuntimeScalar getc(int ctx, RuntimeBase... args) {
+        RuntimeScalar fileHandle;
+        if (args.length < 1) {
+            fileHandle = new RuntimeScalar("main::STDIN");
+        } else {
+            fileHandle = args[0].scalar();
+        }
+
         RuntimeIO fh = fileHandle.getRuntimeIO();
 
         if (fh instanceof TieHandle tieHandle) {
@@ -168,11 +178,11 @@ public class IOOperator {
     /**
      * Opens a file and initialize a file handle.
      *
-     * @args  file handle, file mode, arg list.
      * @return A RuntimeScalar indicating the result of the open operation.
+     * @args file handle, file mode, arg list.
      */
     public static RuntimeScalar open(int ctx, RuntimeBase... args) {
-    //public static RuntimeScalar open(RuntimeList runtimeList, RuntimeScalar fileHandle) {
+        //public static RuntimeScalar open(RuntimeList runtimeList, RuntimeScalar fileHandle) {
 //        open FILEHANDLE,MODE,EXPR
 //        open FILEHANDLE,MODE,EXPR,LIST
 //        open FILEHANDLE,MODE,REFERENCE
@@ -682,11 +692,11 @@ public class IOOperator {
 
         RuntimeScalar fileHandle = runtimeList.elements.get(0).scalar();
         String fileName = runtimeList.elements.get(1).toString();
-        int mode = (int) runtimeList.elements.get(2).scalar().getInt();
+        int mode = runtimeList.elements.get(2).scalar().getInt();
         int perms = 0666; // Default permissions (octal)
 
         if (runtimeList.size() >= 4) {
-            perms = (int) runtimeList.elements.get(3).scalar().getInt();
+            perms = runtimeList.elements.get(3).scalar().getInt();
         }
 
         // Convert numeric flags to mode string for RuntimeIO
