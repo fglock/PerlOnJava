@@ -195,6 +195,6 @@ public class ParseHeredoc {
         ArrayList<String> buffers = new ArrayList<>();
         buffers.add(string);
         StringParser.ParsedString rawStr = new StringParser.ParsedString(newlineIndex, newlineIndex, buffers, ' ', ' ', ' ', ' ');
-        return parseDoubleQuotedString(parser.ctx, rawStr, true, true);
+        return parseDoubleQuotedString(parser.ctx, rawStr, true, true, false);
     }
 }

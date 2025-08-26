@@ -179,12 +179,15 @@ public class StringParser {
 
     static Node parseRegexString(EmitterContext ctx, ParsedString rawStr) {
         Node parsed;
+
+//        System.out.println(rawStr);
+
         if (rawStr.startDelim == '\'') {
             // single quote delimiter, use the string as-is
             parsed = new StringNode(rawStr.buffers.getFirst(), rawStr.index);
         } else {
-            // interpolate variables, but ignore the escapes
-            parsed = StringDoubleQuoted.parseDoubleQuotedString(ctx, rawStr, false, true);
+            // interpolate variables, but ignore the escapes, keep `\$` if present
+            parsed = StringDoubleQuoted.parseDoubleQuotedString(ctx, rawStr, false, true, true);
         }
         return parsed;
     }
@@ -215,7 +218,7 @@ public class StringParser {
         } else if (rawStr.secondBufferStartDelim != '\'') {
             // handle string interpolaton
             rawStr.buffers.removeFirst();   // consume the first buffer
-            replace = StringDoubleQuoted.parseDoubleQuotedString(ctx, rawStr, true, true);
+            replace = StringDoubleQuoted.parseDoubleQuotedString(ctx, rawStr, true, true, true);
         } else {
             // handle single quoted string
             rawStr.buffers.removeFirst();   // consume the first buffer
@@ -265,7 +268,7 @@ public class StringParser {
     public static OperatorNode parseSystemCommand(EmitterContext ctx, String operator, ParsedString rawStr) {
         operator = "qx";
         // Parse as interpolated string (like double quotes)
-        Node parsed = StringDoubleQuoted.parseDoubleQuotedString(ctx, rawStr, true, true);
+        Node parsed = StringDoubleQuoted.parseDoubleQuotedString(ctx, rawStr, true, true, false);
         List<Node> elements = new ArrayList<>();
         elements.add(parsed);
         ListNode list = new ListNode(elements, rawStr.index);
@@ -300,7 +303,7 @@ public class StringParser {
                     ' ', ' '
             );
             // searchNode = StringDoubleQuoted.parseDoubleQuotedString(ctx, searchParsed, true, false);
-            searchNode = StringDoubleQuoted.parseDoubleQuotedString(ctx, searchParsed, false, false);
+            searchNode = StringDoubleQuoted.parseDoubleQuotedString(ctx, searchParsed, false, false, false);
         }
 
         // Same logic for replacement list
@@ -317,7 +320,7 @@ public class StringParser {
                     ' ', ' '
             );
             // replacementNode = StringDoubleQuoted.parseDoubleQuotedString(ctx, replaceParsed, true, false);
-            replacementNode = StringDoubleQuoted.parseDoubleQuotedString(ctx, replaceParsed, false, false);
+            replacementNode = StringDoubleQuoted.parseDoubleQuotedString(ctx, replaceParsed, false, false, false);
         }
 
         Node modifierNode = new StringNode(modifiers, rawStr.index);
@@ -366,7 +369,7 @@ public class StringParser {
                 return parseRegexReplace(parser.ctx, rawStr);
             case "\"":
             case "qq":
-                return StringDoubleQuoted.parseDoubleQuotedString(parser.ctx, rawStr, true, true);
+                return StringDoubleQuoted.parseDoubleQuotedString(parser.ctx, rawStr, true, true, false);
             case "qw":
                 return parseWordsString(rawStr);
             case "tr":
