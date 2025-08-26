@@ -15,6 +15,16 @@ public class DFS {
             System.out.println("DEBUG DFS: Starting linearization for " + className);
         }
 
+        // Check cache first
+        String cacheKey = className + "::DFS";
+        List<String> cached = InheritanceResolver.linearizedClassesCache.get(cacheKey);
+        if (cached != null) {
+            if (DEBUG_DFS) {
+                System.out.println("DEBUG DFS: Using cached result for " + className + ": " + cached);
+            }
+            return new ArrayList<>(cached); // Return a copy to prevent modification of cached version
+        }
+
         // Populate ISA map with current state
         Map<String, List<String>> isaMap = new HashMap<>();
         try {
@@ -46,9 +56,8 @@ public class DFS {
             System.out.println("DEBUG DFS: Final linearization: " + result);
         }
 
-        // Cache the result
-        String cacheKey = className + "::DFS";
-        InheritanceResolver.linearizedClassesCache.put(cacheKey, result);
+        // Cache the result (store a copy to prevent external modifications)
+        InheritanceResolver.linearizedClassesCache.put(cacheKey, new ArrayList<>(result));
         return result;
     }
 
