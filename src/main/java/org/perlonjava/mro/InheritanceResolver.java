@@ -77,16 +77,30 @@ public class InheritanceResolver {
             invalidateCacheForClass(className);
         }
 
+        // Check cache first
+        List<String> cached = linearizedClassesCache.get(className);
+        if (cached != null) {
+            // Return a copy of the cached list to prevent modification of the cached version
+            return new ArrayList<>(cached);
+        }
+
         MROAlgorithm mro = getPackageMRO(className);
 
+        List<String> result;
         switch (mro) {
             case C3:
-                return C3.linearizeC3(className);
+                result = C3.linearizeC3(className);
+                break;
             case DFS:
-                return DFS.linearizeDFS(className);
+                result = DFS.linearizeDFS(className);
+                break;
             default:
                 throw new IllegalStateException("Unknown MRO algorithm: " + mro);
         }
+
+        // Cache the result (store a copy to prevent external modifications)
+        linearizedClassesCache.put(className, new ArrayList<>(result));
+        return result;
     }
 
     /**
