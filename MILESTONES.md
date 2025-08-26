@@ -303,10 +303,11 @@ The following areas are currently under active development to enhance the functi
   - Add overload operators: `<=>`, `cmp`, `<`, `<=`, `>`, `>=`, `==`, `!=`, `lt`, `le`, `gt`, `ge`, `eq`, `ne`, `qr`.
   - Add command line switches: `-s`, `-f`.
   - Add `__CLASS__` keyword.
-  - Add method: `mro`.
+  - Add module: `mro`.
   - Planned release date: 2025-12-10.
 
 - Work in Progress
+  - PerlIO
   - Term::ReadLine
   - Term::ReadKey
   - File::Temp
