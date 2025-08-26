@@ -2,7 +2,6 @@ package org.perlonjava.scriptengine;
 
 import org.perlonjava.ArgumentParser;
 import org.perlonjava.astnode.Node;
-import org.perlonjava.astvisitor.ConstantFoldingVisitor;
 import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.codegen.EmitterMethodCreator;
 import org.perlonjava.codegen.JavaClassInfo;
@@ -10,7 +9,6 @@ import org.perlonjava.lexer.Lexer;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.parser.Parser;
 import org.perlonjava.perlmodule.Strict;
-import org.perlonjava.perlmodule.Utf8;
 import org.perlonjava.runtime.*;
 import org.perlonjava.symbols.ScopedSymbolTable;
 
@@ -109,7 +107,21 @@ public class PerlLanguageProvider {
         ctx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
         Parser parser = new Parser(ctx, tokens); // Parse the tokens
         parser.isTopLevelScript = isTopLevelScript;
-        Node ast = parser.parse(); // Generate the abstract syntax tree (AST)
+
+        Node ast;
+        if (isTopLevelScript) {
+            CallerStack.push(
+                    "main",
+                    ctx.compilerOptions.fileName,
+                    ctx.errorUtil.getLineNumber(parser.tokenIndex));
+        }
+        try {
+            ast = parser.parse(); // Generate the abstract syntax tree (AST)
+        } finally {
+            if (isTopLevelScript) {
+                CallerStack.pop();
+            }
+        }
 
         // ast = ConstantFoldingVisitor.foldConstants(ast);
 
