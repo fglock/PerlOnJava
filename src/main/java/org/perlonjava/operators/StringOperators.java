@@ -252,9 +252,9 @@ public class StringOperators {
             runtimeScalar = NumberParser.parseNumber(runtimeScalar);
         }
 
-        int codePoint = runtimeScalar.getInt(); // Get the integer representing the code point
+        int codePoint = runtimeScalar.getInt();
 
-        // Check if it's a double (which could be Inf or NaN)
+        // Handle special double values
         if (runtimeScalar.type == RuntimeScalarType.DOUBLE) {
             double doubleValue = runtimeScalar.getDouble();
             if (Double.isInfinite(doubleValue) || Double.isNaN(doubleValue)) {
@@ -262,92 +262,25 @@ public class StringOperators {
                         (doubleValue > 0 ? "Inf" : "-Inf");
                 throw new PerlCompilerException("Cannot chr " + value);
             }
-            if (doubleValue < 0) {
-                codePoint = 0xFFFD;  // Unicode replacement character
-            }
-        } else {
-            if (codePoint < 0) {
-                codePoint = 0xFFFD;  // Unicode replacement character
-            }
         }
 
-        // For code points 0-255, create a single-byte string
-        if (codePoint <= 0xFF) {
-            RuntimeScalar res = new RuntimeScalar(String.valueOf((char) codePoint));
-            res.type = BYTE_STRING;
+        // Handle negative values
+        if (codePoint < 0) {
+            codePoint = 0xFFFD;  // Unicode replacement character
+        }
+
+        // For valid Unicode code points, use Java's built-in support
+        if (Character.isValidCodePoint(codePoint)) {
+            RuntimeScalar res = new RuntimeScalar(new String(Character.toChars(codePoint)));
+            // Only mark as BYTE_STRING for values 0-255
+            if (codePoint <= 0xFF) {
+                res.type = BYTE_STRING;
+            }
             return res;
         }
 
-        // For valid Unicode code points in BMP (excluding surrogates)
-        if (codePoint <= 0xFFFF && (codePoint < 0xD800 || codePoint > 0xDFFF)) {
-            return new RuntimeScalar(String.valueOf((char) codePoint));
-        }
-
-        // For valid Unicode code points outside BMP (use surrogate pairs)
-        if (codePoint >= 0x10000 && codePoint <= 0x10FFFF) {
-            return new RuntimeScalar(new String(Character.toChars(codePoint)));
-        }
-
-        // For surrogates and invalid Unicode, we need to create a byte string
-        // that represents what Perl would create (UTF-8 encoding)
-        // This is tricky in Java because we can't store invalid UTF-16 in a String
-
-        // For now, let's create a string that when unpacked with U0 (H2)*
-        // will produce the expected UTF-8 bytes
-        byte[] utf8Bytes;
-
-        if (codePoint <= 0x7FF) {
-            // 2-byte UTF-8
-            utf8Bytes = new byte[]{
-                    (byte)(0xC0 | (codePoint >> 6)),
-                    (byte)(0x80 | (codePoint & 0x3F))
-            };
-        } else if (codePoint <= 0xFFFF) {
-            // 3-byte UTF-8 (includes surrogates)
-            utf8Bytes = new byte[]{
-                    (byte)(0xE0 | (codePoint >> 12)),
-                    (byte)(0x80 | ((codePoint >> 6) & 0x3F)),
-                    (byte)(0x80 | (codePoint & 0x3F))
-            };
-        } else if (codePoint <= 0x1FFFFF) {
-            // 4-byte UTF-8
-            utf8Bytes = new byte[]{
-                    (byte)(0xF0 | (codePoint >> 18)),
-                    (byte)(0x80 | ((codePoint >> 12) & 0x3F)),
-                    (byte)(0x80 | ((codePoint >> 6) & 0x3F)),
-                    (byte)(0x80 | (codePoint & 0x3F))
-            };
-        } else if (codePoint <= 0x3FFFFFF) {
-            // 5-byte UTF-8
-            utf8Bytes = new byte[]{
-                    (byte)(0xF8 | (codePoint >> 24)),
-                    (byte)(0x80 | ((codePoint >> 18) & 0x3F)),
-                    (byte)(0x80 | ((codePoint >> 12) & 0x3F)),
-                    (byte)(0x80 | ((codePoint >> 6) & 0x3F)),
-                    (byte)(0x80 | (codePoint & 0x3F))
-            };
-        } else {
-            // 6-byte UTF-8
-            utf8Bytes = new byte[]{
-                    (byte)(0xFC | (codePoint >> 30)),
-                    (byte)(0x80 | ((codePoint >> 24) & 0x3F)),
-                    (byte)(0x80 | ((codePoint >> 18) & 0x3F)),
-                    (byte)(0x80 | ((codePoint >> 12) & 0x3F)),
-                    (byte)(0x80 | ((codePoint >> 6) & 0x3F)),
-                    (byte)(0x80 | (codePoint & 0x3F))
-            };
-        }
-
-        // Convert UTF-8 bytes to a string where each byte becomes a char
-        // This is what Perl does internally for invalid Unicode
-        char[] chars = new char[utf8Bytes.length];
-        for (int i = 0; i < utf8Bytes.length; i++) {
-            chars[i] = (char)(utf8Bytes[i] & 0xFF);
-        }
-
-        RuntimeScalar res = new RuntimeScalar(new String(chars));
-        res.type = BYTE_STRING;
-        return res;
+        // For invalid code points, use replacement character
+        return new RuntimeScalar(String.valueOf((char)0xFFFD));
     }
 
     public static RuntimeScalar join(RuntimeScalar runtimeScalar, RuntimeBase list) {
