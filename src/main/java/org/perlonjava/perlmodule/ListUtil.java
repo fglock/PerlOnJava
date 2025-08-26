@@ -33,44 +33,43 @@ public class ListUtil extends PerlModuleBase {
         ListUtil listUtil = new ListUtil();
         try {
             // List reduction functions
-            listUtil.registerMethod("reduce", null);
-            listUtil.registerMethod("reductions", null);
-            listUtil.registerMethod("any", null);
-            listUtil.registerMethod("all", null);
-            listUtil.registerMethod("none", null);
-            listUtil.registerMethod("notall", null);
-            listUtil.registerMethod("first", null);
+            listUtil.registerMethod("reduce", "reduce", "&@");
+            listUtil.registerMethod("reductions", "reductions", "&@");
+            listUtil.registerMethod("any", "any", "&@");
+            listUtil.registerMethod("all", "all", "&@");
+            listUtil.registerMethod("none", "none", "&@");
+            listUtil.registerMethod("notall", "notall", "&@");
+            listUtil.registerMethod("first", "first", "&@");
 
             // Min/max functions
-            listUtil.registerMethod("min", null);
-            listUtil.registerMethod("max", null);
-            listUtil.registerMethod("minstr", null);
-            listUtil.registerMethod("maxstr", null);
+            listUtil.registerMethod("min", "min", "@");
+            listUtil.registerMethod("max", "max", "@");
+            listUtil.registerMethod("minstr", "minstr", "@");
+            listUtil.registerMethod("maxstr", "maxstr", "@");
 
             // Arithmetic functions
-            listUtil.registerMethod("sum", null);
-            listUtil.registerMethod("sum0", null);
-            listUtil.registerMethod("product", null);
+            listUtil.registerMethod("sum", "sum", "@");
+            listUtil.registerMethod("sum0", "sum0", "@");
+            listUtil.registerMethod("product", "product", "@");
 
             // List manipulation
-            listUtil.registerMethod("shuffle", null);
-            listUtil.registerMethod("sample", null);
-            listUtil.registerMethod("uniq", null);
-            listUtil.registerMethod("uniqint", null);
-            listUtil.registerMethod("uniqnum", null);
-            listUtil.registerMethod("uniqstr", null);
-            listUtil.registerMethod("head", null);
-            listUtil.registerMethod("tail", null);
+            listUtil.registerMethod("shuffle", "shuffle", "@");
+            listUtil.registerMethod("sample", "sample", "$@");
+            listUtil.registerMethod("uniq", "uniq", "@");
+            listUtil.registerMethod("uniqint", "uniqint", "@");
+            listUtil.registerMethod("uniqnum", "uniqnum", "@");
+            listUtil.registerMethod("uniqstr", "uniqstr", "@");
+            listUtil.registerMethod("head", "head", "$@");
+            listUtil.registerMethod("tail", "tail", "$@");
 
             // Pair functions
-            listUtil.registerMethod("pairs", null);
-            listUtil.registerMethod("unpairs", null);
-            listUtil.registerMethod("pairkeys", null);
-            listUtil.registerMethod("pairvalues", null);
-            listUtil.registerMethod("pairmap", null);
-            listUtil.registerMethod("pairgrep", null);
-            listUtil.registerMethod("pairfirst", null);
-
+            listUtil.registerMethod("pairs", "pairs", "@");
+            listUtil.registerMethod("unpairs", "unpairs", "@");
+            listUtil.registerMethod("pairkeys", "pairkeys", "@");
+            listUtil.registerMethod("pairvalues", "pairvalues", "@");
+            listUtil.registerMethod("pairmap", "pairmap", "&@");
+            listUtil.registerMethod("pairgrep", "pairgrep", "&@");
+            listUtil.registerMethod("pairfirst", "pairfirst", "&@");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing List::Util method: " + e.getMessage());
         }
