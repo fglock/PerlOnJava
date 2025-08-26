@@ -63,6 +63,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public String prototype;
     // Attributes associated with the subroutine
     public List<String> attributes = new ArrayList<>();
+    // Method context information for next::method support
+    public String packageName;
+    public String subName;
     // State variables
     public Map<String, Boolean> stateVariableInitialized = new HashMap<>();
     public Map<String, RuntimeScalar> stateVariable = new HashMap<>();
