@@ -85,6 +85,14 @@ public class SprintfOperator {
             }
             RuntimeScalar value = (RuntimeScalar) list.elements.get(argIndex++);
 
+            // Handle %v format specifier separately
+            if (conversionChar == 'v') {
+                String formatted = formatVectorString(value, flags, width, precision,
+                        lengthModifier != null ? lengthModifier : "");
+                result.append(formatted);
+                continue;
+            }
+
             // Format the value
             String formatted = formatValue(value, flags, width, precision, conversionChar);
             result.append(formatted);
@@ -94,6 +102,42 @@ public class SprintfOperator {
         result.append(format.substring(pos));
 
         return new RuntimeScalar(result.toString());
+    }
+
+    private static String formatVectorString(RuntimeScalar value, String flags, int width,
+                                             int precision, String lengthModifier) {
+        String str = value.toString();
+        if (str.isEmpty()) {
+            return "";
+        }
+
+        StringBuilder result = new StringBuilder();
+        byte[] bytes = str.getBytes();
+
+        for (int i = 0; i < bytes.length; i++) {
+            if (i > 0) {
+                result.append(".");
+            }
+
+            // Convert byte to unsigned int (0-255)
+            int byteValue = bytes[i] & 0xFF;
+
+            // Default to decimal format for %v
+            result.append(byteValue);
+        }
+
+        // Apply width formatting if specified
+        String formatted = result.toString();
+        if (width > 0 && formatted.length() < width) {
+            boolean leftAlign = flags.contains("-");
+            if (leftAlign) {
+                formatted = String.format("%-" + width + "s", formatted);
+            } else {
+                formatted = String.format("%" + width + "s", formatted);
+            }
+        }
+
+        return formatted;
     }
 
     private static String formatValue(RuntimeScalar value, String flags, int width,
@@ -151,10 +195,6 @@ public class SprintfOperator {
 
             case 'n':
                 throw new PerlCompilerException("%n specifier not supported");
-
-            case 'v':
-                // %v is handled separately in the main loop
-                throw new PerlCompilerException("Internal error: %v should be handled separately");
 
             case 'D':  // Add support for D format
                 return formatFloatingPoint(value.getDouble(), flags, width, precision, "%f");
