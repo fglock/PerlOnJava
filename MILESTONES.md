@@ -308,6 +308,7 @@ The following areas are currently under active development to enhance the functi
   - Planned release date: 2025-12-10.
 
 - Work in Progress
+  - List::Util
   - PerlIO
   - Term::ReadLine
   - Term::ReadKey
