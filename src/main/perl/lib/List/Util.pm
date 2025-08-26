@@ -25,19 +25,6 @@ XSLoader::load('List::Util');
 # Used by shuffle()
 our $RAND;
 
-sub import
-{
-  my $pkg = caller;
-
-  # (RT88848) Touch the caller's $a and $b, to avoid the warning of
-  #   Name "main::a" used only once: possible typo" warning
-  no strict 'refs';
-  ${"${pkg}::a"} = ${"${pkg}::a"};
-  ${"${pkg}::b"} = ${"${pkg}::b"};
-
-  goto &Exporter::import;
-}
-
 # For objects returned by pairs()
 sub List::Util::_Pair::key   { shift->[0] }
 sub List::Util::_Pair::value { shift->[1] }
