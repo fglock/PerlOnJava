@@ -48,7 +48,7 @@ public class TieOperators {
         RuntimeScalar self = RuntimeCode.call(
                 new RuntimeScalar(className),
                 new RuntimeScalar(method),
-                className,
+                null,
                 args,
                 RuntimeContextType.SCALAR
         ).getFirst();

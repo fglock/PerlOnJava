@@ -61,7 +61,7 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
         return RuntimeCode.call(
                 self,
                 new RuntimeScalar(method),
-                className,
+                null,
                 new RuntimeArray(args),
                 RuntimeContextType.SCALAR
         ).getFirst();

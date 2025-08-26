@@ -7,6 +7,8 @@ import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
 
+import static org.perlonjava.codegen.EmitSubroutine.handleSelfCallOperator;
+
 public class Dereference {
     /**
      * Handles the postfix `[]` operator.
@@ -294,7 +296,9 @@ public class Dereference {
 
             object.accept(scalarVisitor);
             method.accept(scalarVisitor);
-            emitterVisitor.pushCurrentPackage();
+
+            // Push __SUB__
+            handleSelfCallOperator(emitterVisitor.with(RuntimeContextType.SCALAR), null);
 
             arguments.accept(emitterVisitor.with(RuntimeContextType.LIST)); // right parameter: parameter list
 
@@ -305,7 +309,7 @@ public class Dereference {
                     Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/RuntimeCode",
                     "call",
-                    "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;Lorg/perlonjava/runtime/RuntimeArray;I)Lorg/perlonjava/runtime/RuntimeList;",
+                    "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeArray;I)Lorg/perlonjava/runtime/RuntimeList;",
                     false); // generate an .call()
             if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
                 // Transform the value in the stack to RuntimeScalar
