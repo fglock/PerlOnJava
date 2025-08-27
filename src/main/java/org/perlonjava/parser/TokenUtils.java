@@ -36,6 +36,7 @@ public class TokenUtils {
 
     /**
      * Peeks at the next non-whitespace token in the parser's token list without consuming it.
+     * Whitespace is consumed.
      *
      * @param parser The parser containing the token list and current token index.
      * @return The next non-whitespace LexerToken, or an EOF token if the end of the list is reached.
