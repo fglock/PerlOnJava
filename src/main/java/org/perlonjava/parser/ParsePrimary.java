@@ -208,7 +208,7 @@ public class ParsePrimary {
      * @return A Node representing the parsed operator construct
      * @throws PerlCompilerException if the operator is not recognized or used incorrectly
      */
-    private static Node parseOperator(Parser parser, LexerToken token, String operator) {
+    static Node parseOperator(Parser parser, LexerToken token, String operator) {
         Node operand = null;
         switch (token.text) {
             case "(":
