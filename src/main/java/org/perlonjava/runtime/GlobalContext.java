@@ -59,7 +59,6 @@ public class GlobalContext {
         GlobalVariable.getGlobalVariable("main::,").set("");    // initialize $, to ""
         GlobalVariable.getGlobalVariable("main::|").set(0);     // initialize $| to 0
         GlobalVariable.getGlobalVariable("main::\\").set(compilerOptions.outputRecordSeparator);    // initialize $\
-        GlobalVariable.getGlobalVariable("main::/").set(compilerOptions.inputRecordSeparator); // initialize $/
         GlobalVariable.getGlobalVariable("main::$").set(ProcessHandle.current().pid()); // initialize `$$` to process id
         GlobalVariable.getGlobalVariable("main::?");
         GlobalVariable.getGlobalVariable("main::0").set(compilerOptions.fileName);
@@ -72,6 +71,8 @@ public class GlobalContext {
         GlobalVariable.getGlobalVariable("main::)");  // TODO
         GlobalVariable.getGlobalVariable("main::=");  // TODO
         GlobalVariable.getGlobalVariable("main::^");  // TODO
+
+        GlobalVariable.globalVariables.put("main::/", new InputRecordSeparator(compilerOptions.inputRecordSeparator)); // initialize $/
 
         GlobalVariable.globalVariables.put("main::`", new ScalarSpecialVariable(ScalarSpecialVariable.Id.PREMATCH));
         GlobalVariable.globalVariables.put("main::&", new ScalarSpecialVariable(ScalarSpecialVariable.Id.MATCH));
