@@ -11,6 +11,8 @@ import org.perlonjava.runtime.PerlCompilerException;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.perlonjava.parser.Variable.parseVariable;
+
 /**
  * Base class for parsing strings with segments and variable interpolation.
  *
@@ -147,15 +149,20 @@ public abstract class StringSegmentParser {
 
         if (TokenUtils.peek(parser).text.equals("{")) {
             // Handle block-like interpolation: ${...} or @{...}
-            var rawStr2 = StringParser.parseRawStrings(parser, ctx, parser.tokens, parser.tokenIndex, 1);
-            var blockStr = rawStr2.buffers.getFirst();
-            ctx.logDebug("str block-like: " + blockStr);
-            blockStr = sigil + "{" + blockStr + "}";
 
-            // Parse the expression inside the braces
-            var blockParser = new Parser(ctx, new Lexer(blockStr).tokenize());
-            operand = ParseBlock.parseBlock(blockParser);
-            parser.tokenIndex = rawStr2.next;
+            parser.parsingForLoopVariable = true;
+            operand = parseVariable(parser, sigil);
+            parser.parsingForLoopVariable = false;
+
+//            var rawStr2 = StringParser.parseRawStrings(parser, ctx, parser.tokens, parser.tokenIndex, 1);
+//            var blockStr = rawStr2.buffers.getFirst();
+//            ctx.logDebug("str block-like: " + blockStr);
+//            blockStr = sigil + "{" + blockStr + "}";
+//
+//            // Parse the expression inside the braces
+//            var blockParser = new Parser(ctx, new Lexer(blockStr).tokenize());
+//            operand = ParseBlock.parseBlock(blockParser);
+//            parser.tokenIndex = rawStr2.next;
             ctx.logDebug("str operand " + operand);
         } else {
             // Handle simple variable interpolation

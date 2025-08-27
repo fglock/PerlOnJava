@@ -77,7 +77,7 @@ public class Variable {
 
             // Variable name is valid.
             // Check for illegal characters after a variable
-            if (peek(parser).text.equals("(") && !sigil.equals("&") && !parser.parsingForLoopVariable) {
+            if (!parser.parsingForLoopVariable && peek(parser).text.equals("(") && !sigil.equals("&")) {
                 // Parentheses are only allowed after a variable in specific cases:
                 // - `for my $v (...`
                 // - `&name(...`
