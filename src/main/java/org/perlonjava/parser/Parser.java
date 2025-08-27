@@ -165,4 +165,10 @@ public class Parser {
         throw new PerlCompilerException(this.tokenIndex, message, this.ctx.errorUtil);
     }
 
+    // Add this method to Parser class
+    public void debugHeredocState(String location) {
+            this.ctx.logDebug("HEREDOC_STATE [" + location + "] tokenIndex=" + tokenIndex +
+                    " heredocCount=" + heredocNodes.size());
+    }
+
 }

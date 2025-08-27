@@ -74,6 +74,7 @@ public class ParseHeredoc {
     }
 
     public static void parseHeredocAfterNewline(Parser parser) {
+        parser.debugHeredocState("HEREDOC_PROCESSING_START");
         List<OperatorNode> heredocNodes = parser.getHeredocNodes();
         List<LexerToken> tokens = parser.tokens;
         int newlineIndex = parser.tokenIndex;
@@ -187,7 +188,9 @@ public class ParseHeredoc {
         }
 
         // Clear the list of heredoc nodes after processing
+        parser.debugHeredocState("HEREDOC_BEFORE_CLEAR");
         heredocNodes.clear();
+        parser.debugHeredocState("HEREDOC_AFTER_CLEAR");
         parser.tokenIndex = newlineIndex;
     }
 
@@ -196,5 +199,33 @@ public class ParseHeredoc {
         buffers.add(string);
         StringParser.ParsedString rawStr = new StringParser.ParsedString(newlineIndex, newlineIndex, buffers, ' ', ' ', ' ', ' ');
         return parseDoubleQuotedString(parser.ctx, rawStr, true, true, false);
+    }
+
+    /**
+     * Save the current heredoc state (deep copy of all heredoc nodes)
+     */
+    public static List<OperatorNode> saveHeredocState(Parser parser) {
+        List<OperatorNode> savedHeredocNodes = new ArrayList<>();
+        for (OperatorNode node : parser.getHeredocNodes()) {
+            // Create a deep copy of the OperatorNode with its annotations
+            OperatorNode copy = new OperatorNode(node.operator, node.operand, node.getIndex());
+            if (node.annotations != null) {
+                copy.annotations = new java.util.HashMap<>(node.annotations);
+            }
+            savedHeredocNodes.add(copy);
+        }
+        return savedHeredocNodes;
+    }
+
+    /**
+     * Restore heredoc state if backtracking consumed processed heredocs
+     */
+    public static void restoreHeredocStateIfNeeded(Parser parser, List<OperatorNode> savedHeredocNodes) {
+        if (savedHeredocNodes.size() > parser.getHeredocNodes().size()) {
+            // We had heredocs before but they got processed during look-ahead
+            // Restore them since we're backtracking
+            parser.getHeredocNodes().clear();
+            parser.getHeredocNodes().addAll(savedHeredocNodes);
+        }
     }
 }
