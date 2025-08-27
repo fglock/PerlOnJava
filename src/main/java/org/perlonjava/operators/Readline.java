@@ -45,66 +45,143 @@ public class Readline {
         }
 
         // Get the input record separator (equivalent to Perl's $/)
-        String sep = getGlobalVariable("main::/").toString();
+        RuntimeScalar rsScalar = getGlobalVariable("main::/");
 
-        // Handle paragraph mode when $/ = ''
-        if (sep.isEmpty()) {
-            StringBuilder paragraph = new StringBuilder();
-            boolean inParagraph = false;
-            boolean lastWasNewline = false;
+        // Check if we're dealing with an InputRecordSeparator instance
+        InputRecordSeparator rs = null;
+        if (rsScalar instanceof InputRecordSeparator) {
+            rs = (InputRecordSeparator) rsScalar;
+        }
 
+        // Handle different modes of $/
+        if (rs != null && rs.isSlurpMode()) {
+            // Handle slurp mode when $/ = undef
+            StringBuilder content = new StringBuilder();
             String readChar;
             while (!(readChar = runtimeIO.ioHandle.read(1).toString()).isEmpty()) {
-                char c = readChar.charAt(0);
-
-                if (c == '\n') {
-                    if (!inParagraph) {
-                        // Skip leading newlines
-                        continue;
-                    }
-                    paragraph.append(c);
-                    if (lastWasNewline) {
-                        // Found blank line (two consecutive newlines) - end of paragraph
-                        break;
-                    }
-                    lastWasNewline = true;
-                } else {
-                    inParagraph = true;
-                    lastWasNewline = false;
-                    paragraph.append(c);
-                }
+                content.append(readChar.charAt(0));
             }
 
-            // Return undef if we've reached EOF and no characters were read (excluding skipped newlines)
-            if (!inParagraph && runtimeIO.eof().getBoolean()) {
-                return scalarUndef;
-            }
-
-            // Increment the line number counter if a paragraph was read
-            if (inParagraph) {
-                // Count the number of lines in the paragraph
-                String paragraphStr = paragraph.toString();
-                for (int i = 0; i < paragraphStr.length(); i++) {
-                    if (paragraphStr.charAt(i) == '\n') {
+            if (content.length() > 0) {
+                // Count newlines for line number tracking
+                String contentStr = content.toString();
+                for (int i = 0; i < contentStr.length(); i++) {
+                    if (contentStr.charAt(i) == '\n') {
                         runtimeIO.currentLineNumber++;
                     }
                 }
+                return new RuntimeScalar(contentStr);
+            } else if (runtimeIO.eof().getBoolean()) {
+                return scalarUndef;
             }
-
-            // Return the read paragraph as a RuntimeScalar
-            return new RuntimeScalar(paragraph.toString());
+            return new RuntimeScalar(content.toString());
         }
 
-        // Normal mode (not paragraph mode)
-        int separator = sep.charAt(0);
+        if (rs != null && rs.isParagraphMode()) {
+            // Handle paragraph mode when $/ = ''
+            return readParagraphMode(runtimeIO);
+        }
 
+        if (rs != null && rs.isRecordLengthMode()) {
+            // Handle record length mode when $/ = \N
+            int recordLength = rs.getRecordLength();
+            return readFixedLength(runtimeIO, recordLength);
+        }
+
+        // Handle normal string separator mode
+        String sep = rsScalar.toString();
+
+        if (sep.isEmpty()) {
+            // Handle paragraph mode when $/ = '' (fallback if not InputRecordSeparator)
+            return readParagraphMode(runtimeIO);
+        }
+
+        // Handle multi-character or single character separators
+        if (sep.length() == 1) {
+            // Single character separator (optimized path)
+            return readUntilCharacter(runtimeIO, sep.charAt(0));
+        } else {
+            // Multi-character separator
+            return readUntilString(runtimeIO, sep);
+        }
+    }
+
+    private static RuntimeScalar readParagraphMode(RuntimeIO runtimeIO) {
+        StringBuilder paragraph = new StringBuilder();
+        boolean inParagraph = false;
+        boolean lastWasNewline = false;
+
+        String readChar;
+        while (!(readChar = runtimeIO.ioHandle.read(1).toString()).isEmpty()) {
+            char c = readChar.charAt(0);
+
+            if (c == '\n') {
+                if (!inParagraph) {
+                    // Skip leading newlines
+                    continue;
+                }
+                paragraph.append(c);
+                if (lastWasNewline) {
+                    // Found blank line (two consecutive newlines) - end of paragraph
+                    break;
+                }
+                lastWasNewline = true;
+            } else {
+                inParagraph = true;
+                lastWasNewline = false;
+                paragraph.append(c);
+            }
+        }
+
+        // Return undef if we've reached EOF and no characters were read (excluding skipped newlines)
+        if (!inParagraph && runtimeIO.eof().getBoolean()) {
+            return scalarUndef;
+        }
+
+        // Increment the line number counter if a paragraph was read
+        if (inParagraph) {
+            // Count the number of lines in the paragraph
+            String paragraphStr = paragraph.toString();
+            for (int i = 0; i < paragraphStr.length(); i++) {
+                if (paragraphStr.charAt(i) == '\n') {
+                    runtimeIO.currentLineNumber++;
+                }
+            }
+        }
+
+        return new RuntimeScalar(paragraph.toString());
+    }
+
+    private static RuntimeScalar readFixedLength(RuntimeIO runtimeIO, int length) {
+        StringBuilder result = new StringBuilder();
+
+        for (int i = 0; i < length; i++) {
+            String readChar = runtimeIO.ioHandle.read(1).toString();
+            if (readChar.isEmpty()) {
+                break; // EOF reached
+            }
+            result.append(readChar.charAt(0));
+        }
+
+        // Return undef if we've reached EOF and no characters were read
+        if (result.length() == 0 && runtimeIO.eof().getBoolean()) {
+            return scalarUndef;
+        }
+
+        // Don't increment line numbers for fixed-length reads
+        // (this matches Perl behavior for record-length mode)
+
+        return new RuntimeScalar(result.toString());
+    }
+
+    private static RuntimeScalar readUntilCharacter(RuntimeIO runtimeIO, char separator) {
         StringBuilder line = new StringBuilder();
 
         String readChar;
         while (!(readChar = runtimeIO.ioHandle.read(1).toString()).isEmpty()) {
             char c = readChar.charAt(0);
             line.append(c);
-            // Break if we've reached the separator (if defined)
+            // Break if we've reached the separator
             if (c == separator) {
                 break;
             }
@@ -120,7 +197,45 @@ public class Readline {
             return scalarUndef;
         }
 
-        // Return the read line as a RuntimeScalar
+        return new RuntimeScalar(line.toString());
+    }
+
+    private static RuntimeScalar readUntilString(RuntimeIO runtimeIO, String separator) {
+        StringBuilder line = new StringBuilder();
+        StringBuilder buffer = new StringBuilder();
+
+        String readChar;
+        while (!(readChar = runtimeIO.ioHandle.read(1).toString()).isEmpty()) {
+            char c = readChar.charAt(0);
+            line.append(c);
+            buffer.append(c);
+
+            // Keep only the last separator.length() characters in buffer
+            if (buffer.length() > separator.length()) {
+                buffer.deleteCharAt(0);
+            }
+
+            // Check if buffer ends with separator
+            if (buffer.toString().equals(separator)) {
+                break;
+            }
+        }
+
+        // Increment the line number counter if a line was read and contains newlines
+        if (!line.isEmpty()) {
+            String lineStr = line.toString();
+            for (int i = 0; i < lineStr.length(); i++) {
+                if (lineStr.charAt(i) == '\n') {
+                    runtimeIO.currentLineNumber++;
+                }
+            }
+        }
+
+        // Return undef if we've reached EOF and no characters were read
+        if (line.isEmpty() && runtimeIO.eof().getBoolean()) {
+            return scalarUndef;
+        }
+
         return new RuntimeScalar(line.toString());
     }
 
