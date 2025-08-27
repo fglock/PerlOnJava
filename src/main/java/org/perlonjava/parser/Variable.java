@@ -8,6 +8,8 @@ import org.perlonjava.runtime.GlobalVariable;
 import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.PerlCompilerException;
 
+import static org.perlonjava.parser.ParsePrimary.parseOperator;
+import static org.perlonjava.parser.ParsePrimary.parsePrimary;
 import static org.perlonjava.parser.ParserNodeUtils.atUnderscore;
 import static org.perlonjava.parser.TokenUtils.peek;
 
@@ -22,9 +24,10 @@ public class Variable {
      */
     public static Node parseVariable(Parser parser, String sigil) {
         Node operand;
+        var nextToken = peek(parser);
 
         // Special handling for $$ followed by {
-        if (peek(parser).text.equals("$")) {
+        if (nextToken.text.equals("$")) {
             // Check if we have $${...} pattern
             if (parser.tokens.get(parser.tokenIndex + 1).text.equals("{")) {
                 // This is $${...}, parse as dereference of ${...}
@@ -32,6 +35,13 @@ public class Variable {
                 operand = parser.parseExpression(parser.getPrecedence("$") + 1);
                 return new OperatorNode(sigil, operand, parser.tokenIndex);
             }
+        }
+
+        // Special handling for $#[...]
+        if (sigil.equals("$#") && nextToken.text.equals("[")) {
+            // This is $#[...] which is mentioned in t/base/lex.t and it returns an empty string
+            parsePrimary(parser);
+            return new StringNode("", parser.tokenIndex);
         }
 
         // Store the current position before parsing the identifier
