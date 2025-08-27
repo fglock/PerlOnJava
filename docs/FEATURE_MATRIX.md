@@ -390,8 +390,13 @@ my @copy = @{$z};         # ERROR
   - support for pipe input and output like: `-|`, `|-`, `ls|`, `|sort`.
   - ❌ file modes using `&=`, like `+<&=` (duplicate an existing file descriptor) is not supported.
 
-- ✅  **`sysopen`**: File opening.
 - ✅  **`readline`**: Reading lines from filehandles
+  - ✅  Paragraph mode ($/ = '' - empty string)
+  - ✅  Record length mode ($/ = \2, $/ = \$foo where $foo is a number)
+  - ✅  Slurp mode ($/ = undef)
+  - ✅  Multi-character string separators ($/ = "34")
+
+- ✅  **`sysopen`**: File opening.
 - ✅  **`eof`**: End-of-file detection
 - ✅  **`close`**: Closing filehandles
 - ✅  **`unlink`**: File deletion
