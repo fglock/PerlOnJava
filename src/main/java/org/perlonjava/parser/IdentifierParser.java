@@ -4,6 +4,7 @@ import com.ibm.icu.lang.UCharacter;
 import com.ibm.icu.lang.UProperty;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
+import org.perlonjava.perlmodule.Strict;
 import org.perlonjava.runtime.PerlCompilerException;
 
 /**
@@ -284,6 +285,32 @@ public class IdentifierParser {
             parser.tokenIndex++;
             token = parser.tokens.get(parser.tokenIndex);
             nextToken = parser.tokens.get(parser.tokenIndex + 1);
+        }
+    }
+
+    static void validateIdentifier(Parser parser, String varName, int startIndex) {
+        if (varName.startsWith("0") && varName.length() > 1) {
+            parser.throwError("Numeric variables with more than one digit may not start with '0'");
+        }
+
+        // Check for non-ASCII characters in variable names under 'no utf8'
+        if (!parser.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_UTF8)) {
+            // Under 'no utf8', check if this is a multi-character identifier with non-ASCII
+            boolean hasNonAscii = false;
+            for (int i = 0; i < varName.length(); i++) {
+                if (varName.charAt(i) > 127) {
+                    hasNonAscii = true;
+                    break;
+                }
+            }
+
+            if (hasNonAscii && varName.length() > 1) {
+                // Multi-character identifier with non-ASCII under 'no utf8' is an error
+                // Reset parser position and throw error
+                parser.tokenIndex = startIndex;
+                parser.throwError("Unrecognized character \\x{" +
+                    Integer.toHexString((int) varName.charAt(varName.length()-1)) + "}");
+            }
         }
     }
 }
