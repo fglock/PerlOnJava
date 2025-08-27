@@ -2,10 +2,13 @@ package org.perlonjava.parser;
 
 import org.perlonjava.astnode.ListNode;
 import org.perlonjava.astnode.Node;
+import org.perlonjava.astnode.OperatorNode;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.PerlCompilerException;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
 import static org.perlonjava.parser.TokenUtils.peek;
@@ -119,8 +122,10 @@ public class ListParser {
             expr.handle = FileHandle.parseFileHandle(parser);
             if (expr.handle == null || !isSpaceAfterPrintBlock(parser)) {
                 // Backtrack
+                parser.debugHeredocState("FILEHANDLE_BEFORE_BACKTRACK");
                 expr.handle = null;
                 parser.tokenIndex = currentIndex;
+                parser.debugHeredocState("FILEHANDLE_AFTER_BACKTRACK");
                 hasParen = false;
             }
         }
@@ -235,6 +240,10 @@ public class ListParser {
     public static boolean looksLikeEmptyList(Parser parser) {
         boolean isEmptyList = false;
         int previousIndex = parser.tokenIndex;
+
+        // Save heredoc state before testing
+        List<OperatorNode> savedHeredocNodes = ParseHeredoc.saveHeredocState(parser);
+
         LexerToken token = TokenUtils.consume(parser);
         LexerToken token1 = parser.tokens.get(parser.tokenIndex); // Next token including spaces
         LexerToken nextToken = TokenUtils.peek(parser);  // After spaces
@@ -275,7 +284,13 @@ public class ListParser {
                 isEmptyList = true;
             }
         }
+        parser.debugHeredocState("LOOKS_LIKE_EMPTY_BEFORE_BACKTRACK");
         parser.tokenIndex = previousIndex;
+
+        // Restore heredoc state if needed
+        ParseHeredoc.restoreHeredocStateIfNeeded(parser, savedHeredocNodes);
+
+        parser.debugHeredocState("LOOKS_LIKE_EMPTY_AFTER_BACKTRACK");
         return isEmptyList;
     }
 

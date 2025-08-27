@@ -167,12 +167,17 @@ public class OperatorParser {
     static BinaryOperatorNode parsePrint(Parser parser, LexerToken token, int currentIndex) {
         Node handle;
         ListNode operand;
+
+        parser.debugHeredocState("PRINT_START");
+
         try {
-            // Handle 'print' keyword as a Binary operator with a FileHandle and List operands
             operand = ListParser.parseZeroOrMoreList(parser, 0, false, true, true, false);
+            parser.debugHeredocState("PRINT_PARSE_SUCCESS");
         } catch (PerlCompilerException e) {
+            parser.debugHeredocState("PRINT_BEFORE_BACKTRACK");
             // print $fh (1,2,3)
             parser.tokenIndex = currentIndex;
+            parser.debugHeredocState("PRINT_AFTER_BACKTRACK");
 
             boolean paren = false;
             if (peek(parser).text.equals("(")) {
