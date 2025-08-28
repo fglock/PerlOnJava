@@ -216,7 +216,30 @@ public abstract class StringSegmentParser {
      * Uses shared logic from Variable class while maintaining string interpolation context.
      */
     private Node parseSimpleVariableInterpolation(String sigil) {
-        // Try to parse identifier using the shared logic
+        // Check for ${...} pattern which should be parsed as ${${...}}
+        // This handles cases like $var, $ $var, etc.
+        if ("$".equals(sigil) && TokenUtils.peek(parser).text.equals("$")) {
+            // Save position to check what comes after the second $
+            int savedIndex = parser.tokenIndex;
+            TokenUtils.consume(parser); // Consume the second $
+
+            // Check if what follows the second $ is immediately a braced expression
+            if (parser.tokens.get(parser.tokenIndex).text.equals("{")) {
+                // This is ${...} pattern - parse as ${${...}}
+                // Restore position and consume the second $ properly
+                parser.tokenIndex = savedIndex;
+                TokenUtils.consume(parser); // Consume the second $
+
+                // Now parse ${...} where the content is ${...}
+                Node innerVariable = Variable.parseBracedVariable(parser, "$", true);
+                return new OperatorNode("$", innerVariable, tokenIndex);
+            } else {
+                // Not ${...}, restore position and continue with normal parsing
+                parser.tokenIndex = savedIndex;
+            }
+        }
+
+        // Continue with existing logic for other cases...
         var identifier = IdentifierParser.parseComplexIdentifier(parser);
 
         if (identifier != null) {
@@ -224,9 +247,7 @@ public abstract class StringSegmentParser {
             return new OperatorNode(sigil, new IdentifierNode(identifier, tokenIndex), tokenIndex);
         }
 
-        // Handle dereferenced variables: $$var, $$$var, etc.
-        // This logic is shared with Variable.parseVariable() but we need to maintain
-        // the exact error handling for string interpolation
+        // Handle dereferenced variables: ${$var}, ${${$var}}, etc.
         int dollarCount = 0;
         while (TokenUtils.peek(parser).text.equals("$")) {
             dollarCount++;
