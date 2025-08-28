@@ -71,6 +71,7 @@ public class GlobalContext {
         GlobalVariable.getGlobalVariable("main::)");  // TODO
         GlobalVariable.getGlobalVariable("main::=");  // TODO
         GlobalVariable.getGlobalVariable("main::^");  // TODO
+        GlobalVariable.getGlobalVariable("main:::");  // TODO
 
         GlobalVariable.globalVariables.put("main::/", new InputRecordSeparator(compilerOptions.inputRecordSeparator)); // initialize $/
 
