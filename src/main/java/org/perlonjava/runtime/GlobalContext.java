@@ -158,7 +158,6 @@ public class GlobalContext {
         TermReadLine.initialize();
         TermReadKey.initialize();
         FileTemp.initialize();
-        IOHandleModule.initialize();
         Encode.initialize();
         JavaSystem.initialize();
         PerlIO.initialize();
