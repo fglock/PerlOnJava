@@ -144,58 +144,14 @@ public abstract class StringSegmentParser {
         flushCurrentSegment();
 
         ctx.logDebug("str sigil");
-        Node operand;
         var isArray = "@".equals(sigil);
 
-        if (TokenUtils.peek(parser).text.equals("{")) {
-            // Handle block-like interpolation: ${...} or @{...}
+        // Use the unified parseVariable method with array/hash access enabled
+        parser.parsingForLoopVariable = true;
+        Node operand = parseVariable(parser, sigil, true, true);
+        parser.parsingForLoopVariable = false;
 
-            parser.parsingForLoopVariable = true;
-            operand = parseVariable(parser, sigil);
-            parser.parsingForLoopVariable = false;
-
-//            var rawStr2 = StringParser.parseRawStrings(parser, ctx, parser.tokens, parser.tokenIndex, 1);
-//            var blockStr = rawStr2.buffers.getFirst();
-//            ctx.logDebug("str block-like: " + blockStr);
-//            blockStr = sigil + "{" + blockStr + "}";
-//
-//            // Parse the expression inside the braces
-//            var blockParser = new Parser(ctx, new Lexer(blockStr).tokenize());
-//            operand = ParseBlock.parseBlock(blockParser);
-//            parser.tokenIndex = rawStr2.next;
-            ctx.logDebug("str operand " + operand);
-        } else {
-            // Handle simple variable interpolation
-            var identifier = IdentifierParser.parseComplexIdentifier(parser);
-            if (identifier == null) {
-                // Handle dereferenced variables: $$var, $@var, etc.
-                int dollarCount = 0;
-                while (TokenUtils.peek(parser).text.equals("$")) {
-                    dollarCount++;
-                    parser.tokenIndex++;
-                }
-                if (dollarCount > 0) {
-                    identifier = IdentifierParser.parseComplexIdentifier(parser);
-                    if (identifier == null) {
-                        throw new PerlCompilerException(tokenIndex, "Unexpected value after $ in string", ctx.errorUtil);
-                    }
-                    operand = new IdentifierNode(identifier, tokenIndex);
-                    // Apply dereference operators
-                    for (int i = 0; i < dollarCount; i++) {
-                        operand = new OperatorNode("$", operand, tokenIndex);
-                    }
-                } else {
-                    throw new PerlCompilerException(tokenIndex, "Unexpected value after " + sigil + " in string", ctx.errorUtil);
-                }
-            } else {
-                operand = new IdentifierNode(identifier, tokenIndex);
-            }
-            ctx.logDebug("str Identifier: " + identifier);
-            operand = new OperatorNode(sigil, operand, tokenIndex);
-
-            // Handle array/hash access: $var[0], $var{key}, $var->[0], etc.
-            operand = parseArrayHashAccess(operand);
-        }
+        ctx.logDebug("str operand " + operand);
 
         // For arrays, join elements with the list separator ($")
         if (isArray) {
@@ -206,74 +162,6 @@ public abstract class StringSegmentParser {
         }
 
         addStringSegment(operand);
-    }
-
-    /**
-     * Parses array and hash access operations following a variable in interpolation.
-     *
-     * <p>This method handles chained access operations like:
-     * <ul>
-     *   <li>Array access: $var[0][1]</li>
-     *   <li>Hash access: $var{key}{subkey}</li>
-     *   <li>Method calls: $var->[0], $var->{key}</li>
-     *   <li>Mixed access: $var[0]{key}->[1]</li>
-     * </ul></p>
-     *
-     * <p>Special handling is provided for regex contexts where '[' might indicate
-     * a character class rather than array access.</p>
-     *
-     * @param operand the base variable node to which access operations are applied
-     * @return the modified operand with access operations applied
-     */
-    private Node parseArrayHashAccess(Node operand) {
-        outerLoop:
-        while (true) {
-            var text = tokens.get(parser.tokenIndex).text;
-            switch (text) {
-                case "[" -> {
-                    if (isRegex) {
-                        // In regex context, '[' might be a character class
-                        // Only treat as array access if followed by $ or number
-                        var tokenNext = tokens.get(parser.tokenIndex + 1);
-                        ctx.logDebug("str [ " + tokenNext);
-                        if (!tokenNext.text.equals("$") && !(tokenNext.type == LexerTokenType.NUMBER)) {
-                            break outerLoop;
-                        }
-                    }
-                    operand = ParseInfix.parseInfixOperation(parser, operand, 0);
-                    ctx.logDebug("str operand " + operand);
-                }
-                case "{" -> {
-                    // Hash access
-                    operand = ParseInfix.parseInfixOperation(parser, operand, 0);
-                    ctx.logDebug("str operand " + operand);
-                }
-                case "->" -> {
-                    // Method call or dereference
-                    var previousIndex = parser.tokenIndex;
-                    parser.tokenIndex++;
-                    text = tokens.get(parser.tokenIndex).text;
-                    switch (text) {
-                        case "[", "{" -> {
-                            // Dereference followed by access: $var->[0] or $var->{key}
-                            parser.tokenIndex = previousIndex;  // Re-parse "->"
-                            operand = ParseInfix.parseInfixOperation(parser, operand, 0);
-                            ctx.logDebug("str operand " + operand);
-                        }
-                        default -> {
-                            // Not a dereference we can handle
-                            parser.tokenIndex = previousIndex;
-                            break outerLoop;
-                        }
-                    }
-                }
-                default -> {
-                    // No more access operations
-                    break outerLoop;
-                }
-            }
-        }
-        return operand;
     }
 
     /**
