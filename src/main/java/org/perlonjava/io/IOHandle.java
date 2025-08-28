@@ -14,7 +14,7 @@ public interface IOHandle {
     int SEEK_CUR = 1;  // Seek from current position
     int SEEK_END = 2;  // Seek from end of file
 
-    // Buffer for pushed-back codepoints
+    // Buffer for pushed-back byte values
     ThreadLocal<Deque<Integer>> ungetBuffer = ThreadLocal.withInitial(ArrayDeque::new);
 
     RuntimeScalar write(String string);
@@ -23,24 +23,22 @@ public interface IOHandle {
 
     RuntimeScalar flush();
 
-    // Default ungetc implementation - takes a Unicode codepoint
-    default RuntimeScalar ungetc(int codepoint) {
-        if (codepoint == -1) {
+    // Default ungetc implementation - takes a byte value (0-255)
+    default RuntimeScalar ungetc(int byteValue) {
+        if (byteValue == -1) {
             return new RuntimeScalar(0); // Cannot push back EOF
         }
-        if (!Character.isValidCodePoint(codepoint)) {
-            return RuntimeIO.handleIOError("Invalid Unicode codepoint: " + codepoint);
-        }
-        ungetBuffer.get().addFirst(codepoint);
-        return new RuntimeScalar(codepoint);
+        // Store the byte value directly - no validation needed for 0-255 range
+        ungetBuffer.get().addFirst(byteValue);
+        return new RuntimeScalar(byteValue);
     }
 
-    // Helper method to check if there are buffered codepoints
+    // Helper method to check if there are buffered bytes
     default boolean hasBufferedChar() {
         return !ungetBuffer.get().isEmpty();
     }
 
-    // Helper method to get next buffered codepoint
+    // Helper method to get next buffered byte value
     default int getBufferedChar() {
         Deque<Integer> buffer = ungetBuffer.get();
         return buffer.isEmpty() ? -1 : buffer.removeFirst();
@@ -60,29 +58,20 @@ public interface IOHandle {
         Deque<Integer> buffer = ungetBuffer.get();
 
         if (buffer.isEmpty()) {
-            // No buffered codepoints, delegate to actual read implementation
+            // No buffered values, delegate to actual read implementation
             return doRead(maxBytes, charset);
         }
 
-        // We have buffered codepoints, combine them with new reads
+        // We have buffered values - return them as byte values
         StringBuilder result = new StringBuilder();
         int bytesUsed = 0;
 
-        // First, consume buffered codepoints
+        // First, consume buffered values
         while (!buffer.isEmpty() && bytesUsed < maxBytes) {
-            int codepoint = buffer.removeFirst();
-            String codepointStr = new String(Character.toChars(codepoint));
-            byte[] codepointBytes = codepointStr.getBytes(charset);
-
-            // Check if adding this codepoint would exceed maxBytes
-            if (bytesUsed + codepointBytes.length > maxBytes) {
-                // Put the codepoint back and break
-                buffer.addFirst(codepoint);
-                break;
-            }
-
-            result.append(codepointStr);
-            bytesUsed += codepointBytes.length;
+            int value = buffer.removeFirst();
+            // Treat stored values as byte values (0-255 range typically)
+            result.append((char) (value & 0xFF));
+            bytesUsed++;
         }
 
         // If we still have byte capacity, read from source

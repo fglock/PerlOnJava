@@ -101,7 +101,7 @@ sub format_write {
 
 sub getc {
     my $fh = shift;
-    getc($fh);
+    CORE::getc($fh);
 }
 
 sub ioctl {
