@@ -298,10 +298,9 @@ public class Variable {
             return new OperatorNode(sigil, new StringNode("", parser.tokenIndex), parser.tokenIndex);
         }
 
-        // For string interpolation, we need to preprocess ONLY \" escape sequences
+        // For string interpolation, preprocess \" sequences IN PLACE
         if (isStringInterpolation) {
-            // Collect and preprocess tokens between braces
-            StringBuilder preprocessedContent = new StringBuilder();
+            int startIndex = parser.tokenIndex;
             int braceLevel = 1;
 
             while (braceLevel > 0 && parser.tokenIndex < parser.tokens.size()) {
@@ -312,73 +311,55 @@ public class Variable {
 
                 if (token.text.equals("{")) {
                     braceLevel++;
-                    preprocessedContent.append(token.text);
                     parser.tokenIndex++;
                 } else if (token.text.equals("}")) {
                     braceLevel--;
-                    if (braceLevel > 0) {
-                        preprocessedContent.append(token.text);
+                    if (braceLevel == 0) {
+                        break; // Don't consume the closing brace yet
                     }
                     parser.tokenIndex++;
                 } else if (token.text.equals("\\") && parser.tokenIndex + 1 < parser.tokens.size()) {
-                    // Only process \" escape sequences, leave \\ alone
                     var nextToken = parser.tokens.get(parser.tokenIndex + 1);
-
                     if (nextToken.text.equals("\"")) {
-                        // \" becomes "
-                        preprocessedContent.append("\"");
-                        parser.tokenIndex += 2; // consume both \ and "
+                        // Just remove the backslash - the quote token will slide down to current position
+                        parser.tokens.remove(parser.tokenIndex);
+                        // DON'T increment tokenIndex - the quote is now at the current position
+                        // and we want to move past it in the next iteration
                     } else {
-                        // For all other sequences (including \\), preserve as-is
-                        preprocessedContent.append("\\");
-                        parser.tokenIndex++; // only consume the backslash, let next iteration handle the following token
+                        parser.tokenIndex++;
                     }
                 } else {
-                    preprocessedContent.append(token.text);
                     parser.tokenIndex++;
                 }
             }
 
-            // Create new parser with preprocessed content
-            var exprParser = new Parser(parser.ctx, new org.perlonjava.lexer.Lexer(preprocessedContent.toString()).tokenize());
-            Node operand = exprParser.parseExpression(0);
-
-            return new OperatorNode(sigil, operand, parser.tokenIndex);
+            // Reset to start position and continue with original parsing logic
+            parser.tokenIndex = startIndex;
         }
 
-        // Original logic for non-string interpolation contexts
-        // Save the current position to allow fallback
+        // Continue with original parsing logic - this preserves context for special variables
         int savedIndex = parser.tokenIndex;
-
-        // First, try to parse an identifier
         String bracedVarName = IdentifierParser.parseComplexIdentifier(parser);
 
         if (bracedVarName != null) {
-            // We have a variable name, create the base variable node
             Node operand = new OperatorNode(sigil, new IdentifierNode(bracedVarName, parser.tokenIndex), parser.tokenIndex);
 
-            // Now parse any array/hash access that follows within the braces
             try {
                 operand = parseArrayHashAccessInBraces(parser, operand, isStringInterpolation);
-
-                // Check if we successfully reached the closing brace
                 if (TokenUtils.peek(parser).text.equals("}")) {
-                    TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}"); // Consume the '}'
+                    TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
                     return operand;
                 } else {
-                    // We didn't reach the closing brace, fall back to expression parsing
                     parser.tokenIndex = savedIndex;
                 }
             } catch (Exception e) {
-                // Error during array/hash access parsing, fall back to expression parsing
                 parser.tokenIndex = savedIndex;
             }
         } else {
-            // No identifier found, continue with expression parsing
             parser.tokenIndex = savedIndex;
         }
 
-        // Fall back to parsing as a general expression
+        // Fall back to parsing as a general expression with original context
         Node operand = parser.parseExpression(0);
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
         return new OperatorNode(sigil, operand, parser.tokenIndex);
