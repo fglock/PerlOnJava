@@ -5,12 +5,6 @@ use Test::More;
 
 # Test string interpolation with various special cases
 
-subtest 'Nested references and complex structures' => sub {
-    # Test with code references
-    my $code = sub { return "dynamic" };
-    is("${\$code->()}", "dynamic", "Code reference execution in interpolation");
-};
-
 subtest 'Here-docs in interpolation' => sub {
     # Test here-doc within array reference (complex case)
     my $result = eval {

@@ -285,6 +285,10 @@ subtest 'Nested references and complex structures' => sub {
     
     is("$data->{users}->[0]->{name}", "Alice", "Deep hash/array access");
     is("$data->{users}->[1]->{age}", "25", "Another deep access pattern");
+
+    # Test with code references
+    my $code = sub { return "dynamic" };
+    is("${\$code->()}", "dynamic", "Code reference execution in interpolation");
 };
     
 done_testing();
