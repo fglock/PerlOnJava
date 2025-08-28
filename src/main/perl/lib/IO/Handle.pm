@@ -6,6 +6,9 @@ use Carp;
 use Symbol;
 use 5.38.0;
 
+# Load ungetc()
+XSLoader::load( 'IO::Handle' );
+
 our $VERSION = '1.52';
 
 use Exporter 'import';
@@ -300,16 +303,6 @@ sub getlines {
     my $fh = shift;
     wantarray or croak "IO::Handle::getlines called in scalar context";
     <$fh>;
-}
-
-sub ungetc {
-    my ($fh, $ord) = @_;
-    if ($has_java_backend) {
-        return _ungetc($fh, $ord);
-    }
-    # Fallback: can't implement ungetc in pure Perl
-    $! = "Function not implemented";
-    return undef;
 }
 
 sub write {

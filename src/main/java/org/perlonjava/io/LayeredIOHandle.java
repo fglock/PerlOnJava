@@ -138,14 +138,14 @@ public class LayeredIOHandle implements IOHandle {
      * @return a RuntimeScalar containing the read data
      */
     @Override
-    public RuntimeScalar read(int maxBytes, Charset charset) {
+    public RuntimeScalar doRead(int maxBytes, Charset charset) {
         StringBuilder result = new StringBuilder();
         int bytesRead = 0;
 
         // Keep reading until we have some complete characters or EOF
         while (bytesRead < maxBytes) {
             // Read from delegate - use smaller chunks to avoid over-reading
-            RuntimeScalar chunk = delegate.read(Math.min(maxBytes - bytesRead, 128), charset);
+            RuntimeScalar chunk = delegate.doRead(Math.min(maxBytes - bytesRead, 128), charset);
             if (chunk.toString().isEmpty()) {
                 break; // EOF reached
             }

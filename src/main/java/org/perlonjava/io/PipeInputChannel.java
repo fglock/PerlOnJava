@@ -94,7 +94,7 @@ public class PipeInputChannel implements IOHandle {
      * @return RuntimeScalar containing the read data
      */
     @Override
-    public RuntimeScalar read(int maxBytes, Charset charset) {
+    public RuntimeScalar doRead(int maxBytes, Charset charset) {
         if (isEOF) {
             return new RuntimeScalar("");
         }

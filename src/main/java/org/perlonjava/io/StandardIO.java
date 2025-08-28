@@ -177,7 +177,7 @@ public class StandardIO implements IOHandle {
     private CharsetDecoderHelper decoderHelper;
 
     @Override
-    public RuntimeScalar read(int maxBytes, Charset charset) {
+    public RuntimeScalar doRead(int maxBytes, Charset charset) {
         try {
             if (inputStream != null) {
                 if (decoderHelper == null) {

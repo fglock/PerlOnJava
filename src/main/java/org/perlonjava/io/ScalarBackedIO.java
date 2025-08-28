@@ -20,7 +20,7 @@ public class ScalarBackedIO implements IOHandle {
     }
 
     @Override
-    public RuntimeScalar read(int maxBytes, Charset charset) {
+    public RuntimeScalar doRead(int maxBytes, Charset charset) {
         if (isClosed) {
             return RuntimeScalarCache.scalarUndef;
         }
