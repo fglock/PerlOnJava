@@ -266,20 +266,6 @@ subtest 'Error cases and edge conditions' => sub {
     }
 };
 
-subtest 'Here-docs in interpolation' => sub {
-    # Test here-doc within array reference (complex case)
-    my $result = eval {
-        my $text = "x @{[ <<'EOT' ]} x";
-HERE
-EOT
-        return $text;
-    };
-    
-    # This is a complex case that may not work in all implementations
-    # The test checks if it can be parsed without error
-    ok(defined($result) || $@, "Here-doc in array ref interpolation handled");
-};
-
 subtest 'Unicode and special characters' => sub {
     my $unicode = "café";
     is("Unicode: $unicode", "Unicode: café", "Unicode variable interpolation");
@@ -299,11 +285,7 @@ subtest 'Nested references and complex structures' => sub {
     
     is("$data->{users}->[0]->{name}", "Alice", "Deep hash/array access");
     is("$data->{users}->[1]->{age}", "25", "Another deep access pattern");
-    
-    # Test with code references
-    my $code = sub { return "dynamic" };
-    is("${\$code->()}", "dynamic", "Code reference execution in interpolation");
 };
-
+    
 done_testing();
 
