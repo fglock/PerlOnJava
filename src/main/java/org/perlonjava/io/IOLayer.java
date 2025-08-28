@@ -41,6 +41,13 @@ package org.perlonjava.io;
  */
 public interface IOLayer {
     /**
+     * The layer name as known by Perl
+     *
+     * @return Layer name
+     */
+    String getLayerName();
+
+    /**
      * Processes input data during read operations.
      *
      * <p>This method is called when reading data from an underlying source

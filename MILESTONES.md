@@ -310,12 +310,15 @@ The following areas are currently under active development to enhance the functi
 
 - Work in Progress
   - PerlIO
+    - `get_layers`
   - Term::ReadLine
   - Term::ReadKey
   - File::Temp
   - File::Path
   - File::Copy
   - IO::Handle
+    - `ungetc`
+    - auto bless filehandles
   - Filter::Simple
   - Text::ParseWords
   - Text::Tabs

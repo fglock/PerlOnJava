@@ -30,6 +30,11 @@ package org.perlonjava.io;
  * @see IOLayer
  */
 public class CrlfLayer implements IOLayer {
+
+    public String getLayerName() {
+        return "crlf";
+    }
+
     /**
      * Tracks whether the last character processed was a carriage return (CR).
      *
