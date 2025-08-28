@@ -131,7 +131,7 @@ public abstract class StringSegmentParser {
      * <ul>
      *   <li>Simple variables: $var, @array</li>
      *   <li>Complex expressions: ${expr}, @{expr}</li>
-     *   <li>Dereferenced variables: $var, $$var</li>
+     *   <li>Dereferenced variables: $var, $var</li>
      *   <li>Array/hash access: $var[0], $var{key}, $var->[0], $var->{key}</li>
      * </ul></p>
      *
@@ -218,33 +218,8 @@ public abstract class StringSegmentParser {
                 ctx.logDebug("str operand " + operand);
             }
         } else {
-            // Use the original logic for simple variables
-            var identifier = IdentifierParser.parseComplexIdentifier(parser);
-            if (identifier == null) {
-                // Handle dereferenced variables: $$var, $$$var, etc.
-                int dollarCount = 0;
-                while (TokenUtils.peek(parser).text.equals("$")) {
-                    dollarCount++;
-                    parser.tokenIndex++;
-                }
-                if (dollarCount > 0) {
-                    identifier = IdentifierParser.parseComplexIdentifier(parser);
-                    if (identifier == null) {
-                        throw new PerlCompilerException(tokenIndex, "Unexpected value after $ in string", ctx.errorUtil);
-                    }
-                    operand = new IdentifierNode(identifier, tokenIndex);
-                    // Apply dereference operators
-                    for (int i = 0; i < dollarCount; i++) {
-                        operand = new OperatorNode("$", operand, tokenIndex);
-                    }
-                } else {
-                    throw new PerlCompilerException(tokenIndex, "Unexpected value after " + sigil + " in string", ctx.errorUtil);
-                }
-            } else {
-                operand = new IdentifierNode(identifier, tokenIndex);
-            }
-            ctx.logDebug("str Identifier: " + identifier);
-            operand = new OperatorNode(sigil, operand, tokenIndex);
+            // Extract the duplicated variable parsing logic to helper method
+            operand = parseSimpleVariableInterpolation(sigil);
 
             // Handle array/hash access: $var[0], $var{key}, $var->[0], etc.
             operand = parseArrayHashAccess(parser, operand, isRegex);
@@ -259,6 +234,40 @@ public abstract class StringSegmentParser {
         }
 
         addStringSegment(operand);
+    }
+
+    /**
+     * Helper method to parse simple variable interpolation (non-braced forms).
+     * This extracts the duplicated logic from parseVariableInterpolation.
+     */
+    private Node parseSimpleVariableInterpolation(String sigil) {
+        // Use the original logic for simple variables
+        var identifier = IdentifierParser.parseComplexIdentifier(parser);
+        if (identifier == null) {
+            // Handle dereferenced variables: $var, $$var, etc.
+            int dollarCount = 0;
+            while (TokenUtils.peek(parser).text.equals("$")) {
+                dollarCount++;
+                parser.tokenIndex++;
+            }
+            if (dollarCount > 0) {
+                identifier = IdentifierParser.parseComplexIdentifier(parser);
+                if (identifier == null) {
+                    throw new PerlCompilerException(tokenIndex, "Unexpected value after $ in string", ctx.errorUtil);
+                }
+                Node operand = new IdentifierNode(identifier, tokenIndex);
+                // Apply dereference operators
+                for (int i = 0; i < dollarCount; i++) {
+                    operand = new OperatorNode("$", operand, tokenIndex);
+                }
+                return new OperatorNode(sigil, operand, tokenIndex);
+            } else {
+                throw new PerlCompilerException(tokenIndex, "Unexpected value after " + sigil + " in string", ctx.errorUtil);
+            }
+        } else {
+            ctx.logDebug("str Identifier: " + identifier);
+            return new OperatorNode(sigil, new IdentifierNode(identifier, tokenIndex), tokenIndex);
+        }
     }
 
     /**
