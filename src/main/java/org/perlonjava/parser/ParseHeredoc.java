@@ -11,7 +11,6 @@ import org.perlonjava.runtime.PerlCompilerException;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.perlonjava.parser.StringDoubleQuoted.parseDoubleQuotedString;
 import static org.perlonjava.parser.StringParser.parseRawString;
 
 public class ParseHeredoc {
@@ -198,7 +197,9 @@ public class ParseHeredoc {
         ArrayList<String> buffers = new ArrayList<>();
         buffers.add(string);
         StringParser.ParsedString rawStr = new StringParser.ParsedString(newlineIndex, newlineIndex, buffers, ' ', ' ', ' ', ' ');
-        return parseDoubleQuotedString(parser.ctx, rawStr, true, true, false);
+
+        // Pass the main parser's heredoc nodes to the string parser
+        return StringDoubleQuoted.parseDoubleQuotedString(parser.ctx, rawStr, true, true, false, parser.getHeredocNodes());
     }
 
     /**
