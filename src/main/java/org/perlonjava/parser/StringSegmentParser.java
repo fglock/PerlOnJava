@@ -3,7 +3,6 @@ package org.perlonjava.parser;
 import com.ibm.icu.lang.UCharacter;
 import org.perlonjava.astnode.*;
 import org.perlonjava.codegen.EmitterContext;
-import org.perlonjava.lexer.Lexer;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.PerlCompilerException;
@@ -12,7 +11,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.perlonjava.parser.Variable.parseArrayHashAccess;
-import static org.perlonjava.parser.Variable.parseVariable;
 
 /**
  * Base class for parsing strings with segments and variable interpolation.
@@ -36,26 +34,40 @@ import static org.perlonjava.parser.Variable.parseVariable;
  */
 public abstract class StringSegmentParser {
 
-    /** The emitter context for logging and error handling */
+    /**
+     * The emitter context for logging and error handling
+     */
     protected final EmitterContext ctx;
 
-    /** The list of tokens representing the string content */
+    /**
+     * The list of tokens representing the string content
+     */
     protected final List<LexerToken> tokens;
 
-    /** The parser instance for parsing embedded expressions */
+    /**
+     * The parser instance for parsing embedded expressions
+     */
     protected final Parser parser;
 
-    /** The token index in the original source for error reporting */
+    /**
+     * The token index in the original source for error reporting
+     */
     protected final int tokenIndex;
 
-    /** Flag indicating if this is parsing a regex pattern (affects bracket handling) */
+    /**
+     * Flag indicating if this is parsing a regex pattern (affects bracket handling)
+     */
     protected final boolean isRegex;
     protected final boolean isRegexReplacement;
 
-    /** Buffer for accumulating literal text segments */
+    /**
+     * Buffer for accumulating literal text segments
+     */
     protected final StringBuilder currentSegment;
 
-    /** List of AST nodes representing string segments (literals and interpolated expressions) */
+    /**
+     * List of AST nodes representing string segments (literals and interpolated expressions)
+     */
     protected final List<Node> segments;
 
     protected final boolean interpolateVariable;
@@ -63,11 +75,11 @@ public abstract class StringSegmentParser {
     /**
      * Constructs a new StringSegmentParser with the specified parameters.
      *
-     * @param ctx the emitter context for logging and error handling
-     * @param tokens the list of tokens representing the string content
-     * @param parser the parser instance for parsing embedded expressions
+     * @param ctx        the emitter context for logging and error handling
+     * @param tokens     the list of tokens representing the string content
+     * @param parser     the parser instance for parsing embedded expressions
      * @param tokenIndex the token index in the original source for error reporting
-     * @param isRegex flag indicating if this is parsing a regex pattern
+     * @param isRegex    flag indicating if this is parsing a regex pattern
      */
     public StringSegmentParser(EmitterContext ctx, List<LexerToken> tokens, Parser parser, int tokenIndex, boolean isRegex, boolean interpolateVariable, boolean isRegexReplacement) {
         this.ctx = ctx;
@@ -145,80 +157,43 @@ public abstract class StringSegmentParser {
         flushCurrentSegment();
 
         ctx.logDebug("str sigil");
+
         Node operand;
         var isArray = "@".equals(sigil);
 
         if (TokenUtils.peek(parser).text.equals("{")) {
             // Handle block-like interpolation: ${...} or @{...}
 
-            TokenUtils.consume(parser); // Consume the '{'
-
             // Check if this is an @{[...]} construct (array reference interpolation)
-            if (isArray && TokenUtils.peek(parser).text.equals("[")) {
-                // This is @{[...]} - create anonymous array reference and dereference
+            if (isArray) {
+                int savedIndex = parser.tokenIndex;
+                TokenUtils.consume(parser); // Consume the '{'
 
-                // Parse the entire {...} content as a block
-                parser.tokenIndex--; // Back up to re-parse the '{'
-                TokenUtils.consume(parser); // Re-consume the '{'
+                if (TokenUtils.peek(parser).text.equals("[")) {
+                    // This is @{[...]} - create anonymous array reference and dereference
+                    // Parse the entire {...} content as a block
+                    parser.tokenIndex--; // Back up to re-parse the '{'
+                    TokenUtils.consume(parser); // Re-consume the '{'
 
-                Node block = ParseBlock.parseBlock(parser); // Parse the block inside the curly brackets
-                TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}"); // Consume the '}'
+                    Node block = ParseBlock.parseBlock(parser); // Parse the block inside the curly brackets
+                    TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}"); // Consume the '}'
 
-                // Apply @ to dereference the block result
-                operand = new OperatorNode("@", block, tokenIndex);
-                ctx.logDebug("str @{[...]} operand " + operand);
+                    // Apply @ to dereference the block result
+                    operand = new OperatorNode("@", block, tokenIndex);
+                    ctx.logDebug("str @{[...]} operand " + operand);
+                } else {
+                    // Not @{[...]}, restore position and use parseBracedVariable
+                    parser.tokenIndex = savedIndex;
+                    operand = Variable.parseBracedVariable(parser, sigil, true);
+                }
             } else {
-                // Regular ${...} or @{...} handling
-
-                // Parse content until we find the matching '}'
-                StringBuilder contentBuilder = new StringBuilder();
-                int braceLevel = 1;
-
-                while (braceLevel > 0 && parser.tokenIndex < tokens.size()) {
-                    var token = tokens.get(parser.tokenIndex++);
-                    if (token.type == LexerTokenType.EOF) {
-                        throw new PerlCompilerException(tokenIndex, "Unterminated ${} in string", ctx.errorUtil);
-                    }
-
-                    switch (token.text) {
-                        case "{" -> {
-                            braceLevel++;
-                            contentBuilder.append(token.text);
-                        }
-                        case "}" -> {
-                            braceLevel--;
-                            if (braceLevel > 0) {
-                                contentBuilder.append(token.text);
-                            }
-                        }
-                        default -> contentBuilder.append(token.text);
-                    }
-                }
-
-                if (braceLevel > 0) {
-                    throw new PerlCompilerException(tokenIndex, "Unterminated ${} in string", ctx.errorUtil);
-                }
-
-                String content = contentBuilder.toString();
-                ctx.logDebug("str block content: " + content);
-
-                // Parse the content as a variable expression by prepending the sigil
-                // This makes ${w{a}} equivalent to parsing $w{a}
-                String fullExpression = sigil + content;
-
-                try {
-                    var contentTokens = new Lexer(fullExpression).tokenize();
-                    var contentParser = new Parser(ctx, contentTokens);
-                    operand = contentParser.parseExpression(0);
-                } catch (Exception e) {
-                    // If parsing fails, treat as literal text
-                    operand = new OperatorNode(sigil, new StringNode(content, tokenIndex), tokenIndex);
-                }
-
-                ctx.logDebug("str operand " + operand);
+                // Regular ${...} handling - let parseBracedVariable consume the '{'
+                operand = Variable.parseBracedVariable(parser, sigil, true);
             }
+
+            ctx.logDebug("str operand " + operand);
         } else {
-            // Extract the duplicated variable parsing logic to helper method
+            // Parse simple variables using shared logic, but keep the exact same flow
             operand = parseSimpleVariableInterpolation(sigil);
 
             // Handle array/hash access: $var[0], $var{key}, $var->[0], etc.
@@ -238,35 +213,39 @@ public abstract class StringSegmentParser {
 
     /**
      * Helper method to parse simple variable interpolation (non-braced forms).
-     * This extracts the duplicated logic from parseVariableInterpolation.
+     * Uses shared logic from Variable class while maintaining string interpolation context.
      */
     private Node parseSimpleVariableInterpolation(String sigil) {
-        // Use the original logic for simple variables
+        // Try to parse identifier using the shared logic
         var identifier = IdentifierParser.parseComplexIdentifier(parser);
-        if (identifier == null) {
-            // Handle dereferenced variables: $var, $$var, etc.
-            int dollarCount = 0;
-            while (TokenUtils.peek(parser).text.equals("$")) {
-                dollarCount++;
-                parser.tokenIndex++;
-            }
-            if (dollarCount > 0) {
-                identifier = IdentifierParser.parseComplexIdentifier(parser);
-                if (identifier == null) {
-                    throw new PerlCompilerException(tokenIndex, "Unexpected value after $ in string", ctx.errorUtil);
-                }
-                Node operand = new IdentifierNode(identifier, tokenIndex);
-                // Apply dereference operators
-                for (int i = 0; i < dollarCount; i++) {
-                    operand = new OperatorNode("$", operand, tokenIndex);
-                }
-                return new OperatorNode(sigil, operand, tokenIndex);
-            } else {
-                throw new PerlCompilerException(tokenIndex, "Unexpected value after " + sigil + " in string", ctx.errorUtil);
-            }
-        } else {
+
+        if (identifier != null) {
             ctx.logDebug("str Identifier: " + identifier);
             return new OperatorNode(sigil, new IdentifierNode(identifier, tokenIndex), tokenIndex);
+        }
+
+        // Handle dereferenced variables: $$var, $$$var, etc.
+        // This logic is shared with Variable.parseVariable() but we need to maintain
+        // the exact error handling for string interpolation
+        int dollarCount = 0;
+        while (TokenUtils.peek(parser).text.equals("$")) {
+            dollarCount++;
+            parser.tokenIndex++;
+        }
+
+        if (dollarCount > 0) {
+            identifier = IdentifierParser.parseComplexIdentifier(parser);
+            if (identifier == null) {
+                throw new PerlCompilerException(tokenIndex, "Unexpected value after $ in string", ctx.errorUtil);
+            }
+            Node operand = new IdentifierNode(identifier, tokenIndex);
+            // Apply dereference operators
+            for (int i = 0; i < dollarCount; i++) {
+                operand = new OperatorNode("$", operand, tokenIndex);
+            }
+            return new OperatorNode(sigil, operand, tokenIndex);
+        } else {
+            throw new PerlCompilerException(tokenIndex, "Unexpected value after " + sigil + " in string", ctx.errorUtil);
         }
     }
 
@@ -292,7 +271,7 @@ public abstract class StringSegmentParser {
         return switch (segments.size()) {
             case 0 -> new StringNode("", tokenIndex);
             case 1 -> {
-                var result = segments.get(0);
+                var result = segments.getFirst();
                 if (result instanceof StringNode) {
                     yield result;
                 }
@@ -459,9 +438,9 @@ public abstract class StringSegmentParser {
             var c = controlChar.charAt(0);
             var result = (c >= 'A' && c <= 'Z') ? String.valueOf((char) (c - 'A' + 1))
                     : (c >= 'a' && c <= 'z') ? String.valueOf((char) (c - 'a' + 1))
-                    : c == '@' ?  String.valueOf((char) 0)
+                    : c == '@' ? String.valueOf((char) 0)
                     : (c >= '[' && c <= '_') ? String.valueOf((char) (c - '[' + 27))
-                    : c == '?' ?  String.valueOf((char) 127)
+                    : c == '?' ? String.valueOf((char) 127)
                     : String.valueOf(c);
             appendToCurrentSegment(result);
         }
@@ -535,16 +514,16 @@ public abstract class StringSegmentParser {
             try {
                 var hexValue = Integer.parseInt(hexStr.toString(), 16);
                 String result;
-                    if (hexValue <= 0xFFFF) {
-                        result = String.valueOf((char) hexValue);
-                    } else if (Character.isValidCodePoint(hexValue)) {
-                        result = new String(Character.toChars(hexValue));
-                    } else {
-                        // For invalid Unicode code points, create a representation using
-                        // surrogate characters that won't crash Java but will fail later
-                        // when used as identifiers (which is the expected Perl behavior)
-                        result = String.valueOf((char) 0xDC00) + String.valueOf((char) (hexValue & 0xFFFF));
-                    }
+                if (hexValue <= 0xFFFF) {
+                    result = String.valueOf((char) hexValue);
+                } else if (Character.isValidCodePoint(hexValue)) {
+                    result = new String(Character.toChars(hexValue));
+                } else {
+                    // For invalid Unicode code points, create a representation using
+                    // surrogate characters that won't crash Java but will fail later
+                    // when used as identifiers (which is the expected Perl behavior)
+                    result = String.valueOf((char) 0xDC00) + (char) (hexValue & 0xFFFF);
+                }
                 appendToCurrentSegment(result);
             } catch (NumberFormatException e) {
                 // Invalid hex sequence, treat as literal
