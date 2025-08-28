@@ -674,6 +674,11 @@ public class EmitOperator {
                     return "%".equals(opNode.operator) || "@".equals(opNode.operator);
                 }
             }
+
+            // Check if it is an apply `->()`
+            if (binOp.operator.equals("->") && binOp.right instanceof ListNode) {
+                return true;
+            }
         }
 
         return false;
