@@ -114,7 +114,7 @@ public class CustomFileChannel implements IOHandle {
      * @return RuntimeScalar containing the decoded string data
      */
     @Override
-    public RuntimeScalar read(int maxBytes, Charset charset) {
+    public RuntimeScalar doRead(int maxBytes, Charset charset) {
         try {
             byte[] buffer = new byte[maxBytes];
             ByteBuffer byteBuffer = ByteBuffer.wrap(buffer);
