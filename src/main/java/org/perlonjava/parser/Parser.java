@@ -7,7 +7,8 @@ import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.PerlCompilerException;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.perlonjava.parser.TokenUtils.peek;
 
@@ -21,8 +22,6 @@ public class Parser {
     public final EmitterContext ctx;
     // List of tokens to be parsed.
     public final List<LexerToken> tokens;
-    // List to store heredoc nodes encountered during parsing.
-    private final List<OperatorNode> heredocNodes = new ArrayList<>();
     // Current index in the token list.
     public int tokenIndex = 0;
     // Flags to indicate special parsing states.
@@ -30,6 +29,8 @@ public class Parser {
     public boolean parsingTakeReference = false;
     // Are we parsing the top level script?
     public boolean isTopLevelScript = false;
+    // List to store heredoc nodes encountered during parsing.
+    private List<OperatorNode> heredocNodes = new ArrayList<>();
 
     /**
      * Constructs a Parser with the given context and tokens.
@@ -40,6 +41,19 @@ public class Parser {
     public Parser(EmitterContext ctx, List<LexerToken> tokens) {
         this.ctx = ctx;
         this.tokens = tokens;
+    }
+
+    // Add this constructor to the Parser class
+    public Parser(EmitterContext ctx, List<LexerToken> tokens, List<OperatorNode> sharedHeredocNodes) {
+        this.ctx = ctx;
+        this.tokens = tokens;
+        this.tokenIndex = 0;
+        // Share the heredoc nodes list instead of creating a new one
+        this.heredocNodes = sharedHeredocNodes;
+    }
+
+    public static boolean isExpressionTerminator(LexerToken token) {
+        return token.type == LexerTokenType.EOF || ParserTables.TERMINATORS.contains(token.text);
     }
 
     /**
@@ -157,18 +171,13 @@ public class Parser {
         return left;
     }
 
-    public static boolean isExpressionTerminator(LexerToken token) {
-        return token.type == LexerTokenType.EOF || ParserTables.TERMINATORS.contains(token.text);
-    }
-
     public void throwError(String message) {
         throw new PerlCompilerException(this.tokenIndex, message, this.ctx.errorUtil);
     }
 
-    // Add this method to Parser class
     public void debugHeredocState(String location) {
-            this.ctx.logDebug("HEREDOC_STATE [" + location + "] tokenIndex=" + tokenIndex +
-                    " heredocCount=" + heredocNodes.size());
+        this.ctx.logDebug("HEREDOC_STATE [" + location + "] tokenIndex=" + tokenIndex +
+                " heredocCount=" + heredocNodes.size());
     }
 
 }

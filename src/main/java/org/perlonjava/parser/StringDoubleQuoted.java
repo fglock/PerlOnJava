@@ -101,9 +101,29 @@ public class StringDoubleQuoted extends StringSegmentParser {
      * @param ctx The emitter context for logging and error handling
      * @param rawStr The parsed string data containing the string content and position info
      * @param parseEscapes Whether to process escape sequences or preserve them literally
+     * @param interpolateVariable Whether to interpolate variables
+     * @param isRegexReplacement Whether this is in a regex replacement context
      * @return An AST node representing the parsed string (StringNode, BinaryOperatorNode for join, etc.)
      */
     static Node parseDoubleQuotedString(EmitterContext ctx, StringParser.ParsedString rawStr, boolean parseEscapes, boolean interpolateVariable, boolean isRegexReplacement) {
+        return parseDoubleQuotedString(ctx, rawStr, parseEscapes, interpolateVariable, isRegexReplacement, null);
+    }
+
+    /**
+     * Parses a double-quoted string with optional shared heredoc state.
+     *
+     * <p>This overloaded version allows sharing heredoc nodes with a parent parser,
+     * enabling proper handling of heredocs within string interpolation contexts.
+     *
+     * @param ctx The emitter context for logging and error handling
+     * @param rawStr The parsed string data containing the string content and position info
+     * @param parseEscapes Whether to process escape sequences or preserve them literally
+     * @param interpolateVariable Whether to interpolate variables
+     * @param isRegexReplacement Whether this is in a regex replacement context
+     * @param sharedHeredocNodes Optional list of heredoc nodes to share with parent parser
+     * @return An AST node representing the parsed string (StringNode, BinaryOperatorNode for join, etc.)
+     */
+    static Node parseDoubleQuotedString(EmitterContext ctx, StringParser.ParsedString rawStr, boolean parseEscapes, boolean interpolateVariable, boolean isRegexReplacement, List<OperatorNode> sharedHeredocNodes) {
         // Extract the first buffer (double-quoted strings don't have multiple parts like here-docs)
         var input = rawStr.buffers.getFirst();
         var tokenIndex = rawStr.next;
@@ -115,7 +135,11 @@ public class StringDoubleQuoted extends StringSegmentParser {
         // Tokenize the string content
         var lexer = new Lexer(input);
         var tokens = lexer.tokenize();
-        var parser = new Parser(ctx, tokens);
+
+        // Create parser with shared heredoc nodes if provided
+        var parser = sharedHeredocNodes != null ?
+            new Parser(ctx, tokens, sharedHeredocNodes) :
+            new Parser(ctx, tokens);
 
         // Create and run the double-quoted string parser
         var doubleQuotedParser = new StringDoubleQuoted(ctx, tokens, parser, tokenIndex, isRegex, parseEscapes, interpolateVariable, isRegexReplacement);

@@ -369,7 +369,7 @@ public class StringParser {
                 return parseRegexReplace(parser.ctx, rawStr);
             case "\"":
             case "qq":
-                return StringDoubleQuoted.parseDoubleQuotedString(parser.ctx, rawStr, true, true, false);
+                return StringDoubleQuoted.parseDoubleQuotedString(parser.ctx, rawStr, true, true, false, parser.getHeredocNodes());
             case "qw":
                 return parseWordsString(rawStr);
             case "tr":
