@@ -30,6 +30,13 @@ import java.nio.charset.*;
  * @see IOLayer
  */
 public class EncodingLayer implements IOLayer {
+
+    private final String layerName;
+
+    public String getLayerName() {
+        return layerName;
+    }
+
     /**
      * Default buffer size for input processing.
      * This size is chosen to balance memory usage with performance.
@@ -72,7 +79,7 @@ public class EncodingLayer implements IOLayer {
      * @param charset the character set to use for encoding/decoding operations
      * @throws NullPointerException if charset is null
      */
-    public EncodingLayer(Charset charset) {
+    public EncodingLayer(Charset charset, String layerName) {
         this.charset = charset;
         this.decoder = charset.newDecoder()
                 .onMalformedInput(CodingErrorAction.REPLACE)
@@ -81,6 +88,7 @@ public class EncodingLayer implements IOLayer {
                 .onMalformedInput(CodingErrorAction.REPLACE)
                 .onUnmappableCharacter(CodingErrorAction.REPLACE);
         this.inputBuffer = ByteBuffer.allocate(BUFFER_SIZE);
+        this.layerName = layerName;
     }
 
     /**

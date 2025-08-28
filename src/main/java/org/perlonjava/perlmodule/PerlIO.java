@@ -1,9 +1,8 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.runtime.RuntimeArray;
-import org.perlonjava.runtime.RuntimeList;
-import org.perlonjava.runtime.RuntimeScalar;
-import org.perlonjava.runtime.RuntimeScalarType;
+import org.perlonjava.io.IOLayer;
+import org.perlonjava.io.LayeredIOHandle;
+import org.perlonjava.runtime.*;
 
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
 
@@ -26,6 +25,7 @@ public class PerlIO extends PerlModuleBase {
         PerlIO perlio = new PerlIO();
         try {
             perlio.registerMethod("PerlIO::Layer::find", "find", "$");
+            perlio.registerMethod("get_layers", "$");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing PerlIO method: " + e.getMessage());
         }
@@ -40,5 +40,21 @@ public class PerlIO extends PerlModuleBase {
      */
     public static RuntimeList find(RuntimeArray args, int ctx) {
         return scalarTrue.getList();
+    }
+
+    // PerlIO::get_layers($fh) implementation
+    // Return the currently applied layers as a string
+    public static RuntimeList get_layers(RuntimeArray args, int ctx) {
+        RuntimeIO fh = args.get(0).getRuntimeIO();
+        if (fh instanceof TieHandle) {
+            throw new PerlCompilerException("can't get_layers on tied handle");
+        }
+        RuntimeArray layers = new RuntimeArray();
+        if (fh.ioHandle instanceof LayeredIOHandle layeredIOHandle) {
+            for (IOLayer layer : layeredIOHandle.activeLayers) {
+                RuntimeArray.push(layers, new RuntimeScalar(layer.getLayerName()));
+            }
+        }
+        return layers.getList();
     }
 }

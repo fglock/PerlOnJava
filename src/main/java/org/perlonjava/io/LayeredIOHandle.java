@@ -66,7 +66,7 @@ public class LayeredIOHandle implements IOHandle {
      * List of currently active layers.
      * Maintained for proper cleanup and reset operations.
      */
-    private final List<IOLayer> activeLayers = new ArrayList<>();
+    public final List<IOLayer> activeLayers = new ArrayList<>();
 
     /**
      * Constructs a new layered IO handle wrapping the given delegate.
@@ -330,7 +330,7 @@ public class LayeredIOHandle implements IOHandle {
             }
             case "utf8" -> {
                 // UTF-8 encoding layer - convenience alias for :encoding(UTF-8)
-                EncodingLayer layer = new EncodingLayer(StandardCharsets.UTF_8);
+                EncodingLayer layer = new EncodingLayer(StandardCharsets.UTF_8, "utf8");
                 activeLayers.add(layer);
                 Function<String, String> inputTransform = s -> layer.processInput(s);
                 Function<String, String> outputTransform = s -> layer.processOutput(s);
@@ -344,7 +344,7 @@ public class LayeredIOHandle implements IOHandle {
                     String charsetName = layerSpec.substring(9, layerSpec.length() - 1);
                     try {
                         Charset charset = Charset.forName(charsetName);
-                        EncodingLayer layer = new EncodingLayer(charset);
+                        EncodingLayer layer = new EncodingLayer(charset, layerSpec);
                         activeLayers.add(layer);
                         Function<String, String> inputTransform = s -> layer.processInput(s);
                         Function<String, String> outputTransform = s -> layer.processOutput(s);
