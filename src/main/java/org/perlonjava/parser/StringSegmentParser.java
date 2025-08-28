@@ -150,7 +150,7 @@ public abstract class StringSegmentParser {
      * <p>For array variables (@var), the result is automatically joined with the
      * current list separator ($").</p>
      *
-     * @param sigil the variable sigil ("$" for scalars, "@" for arrays)
+     * @param sigil the variable sigil ("$" for scalars, "@" for arrays, "$#" for array length)
      * @throws PerlCompilerException if the interpolation syntax is invalid
      */
     protected void parseVariableInterpolation(String sigil) {
@@ -364,6 +364,7 @@ public abstract class StringSegmentParser {
      *   <li>Backslash (\): Introduces escape sequences</li>
      *   <li>Dollar sign ($): Introduces scalar variable interpolation</li>
      *   <li>At sign (@): Introduces array variable interpolation</li>
+     *   <li>Array length ($#): Introduces array length interpolation</li>
      * </ul></p>
      *
      * @param text the token text to process
@@ -375,7 +376,7 @@ public abstract class StringSegmentParser {
                 parseEscapeSequence();
                 yield true;
             }
-            case "$", "@" -> {
+            case "$", "@", "$#" -> {
                 if (shouldInterpolateVariable(text)) {
                     parseVariableInterpolation(text);
                     yield true;
@@ -399,7 +400,7 @@ public abstract class StringSegmentParser {
      * <p>This prevents false interpolation of literal $ and @ characters that
      * aren't intended as variable references.</p>
      *
-     * @param sigil the variable sigil ("$" or "@")
+     * @param sigil the variable sigil ("$", "@", or "$#")
      * @return true if the sigil should trigger variable interpolation
      */
     private boolean shouldInterpolateVariable(String sigil) {
@@ -414,7 +415,8 @@ public abstract class StringSegmentParser {
 
         // Regex: don't interpolate "$" if followed by whitespace or newlines
         // "@" sigil: never interpolate if immediately followed by whitespace or newlines
-        if ((isRegex || "@".equals(sigil)) && (nextToken.type == LexerTokenType.WHITESPACE || nextToken.type == LexerTokenType.NEWLINE)) {
+        // "$#" sigil: don't interpolate if followed by whitespace or newlines
+        if ((isRegex || "@".equals(sigil) || "$#".equals(sigil)) && (nextToken.type == LexerTokenType.WHITESPACE || nextToken.type == LexerTokenType.NEWLINE)) {
             return false;
         }
 
