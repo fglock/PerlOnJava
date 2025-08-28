@@ -21,14 +21,28 @@ public class Variable {
      * @throws PerlCompilerException If there is a syntax error.
      */
     public static Node parseVariable(Parser parser, String sigil) {
+        return parseVariable(parser, sigil, false, false);
+    }
+
+    /**
+     * Parses a variable from the given lexer token with additional options.
+     *
+     * @param parser
+     * @param sigil  The sigil that starts the variable.
+     * @param allowArrayHashAccess Whether to parse array/hash access after the variable
+     * @param isStringInterpolation Whether this is being called from string interpolation
+     * @return The parsed variable node.
+     * @throws PerlCompilerException If there is a syntax error.
+     */
+    public static Node parseVariable(Parser parser, String sigil, boolean allowArrayHashAccess, boolean isStringInterpolation) {
         Node operand;
         var nextToken = peek(parser);
 
-        // Special handling for $$ followed by {
+        // Special handling for $ followed by {
         if (nextToken.text.equals("$")) {
-            // Check if we have $${...} pattern
+            // Check if we have ${...} pattern
             if (parser.tokens.get(parser.tokenIndex + 1).text.equals("{")) {
-                // This is $${...}, parse as dereference of ${...}
+                // This is ${...}, parse as dereference of ${...}
                 // Don't consume the $ token, let it be parsed as part of the variable
                 operand = parser.parseExpression(parser.getPrecedence("$") + 1);
                 return new OperatorNode(sigil, operand, parser.tokenIndex);
@@ -47,7 +61,7 @@ public class Variable {
 
         String varName = IdentifierParser.parseComplexIdentifier(parser);
         parser.ctx.logDebug("Parsing variable: " + varName);
-        
+
         if (varName != null) {
             IdentifierParser.validateIdentifier(parser, varName, startIndex);
 
@@ -69,19 +83,116 @@ public class Variable {
             }
 
             // Create a Variable node
-            return new OperatorNode(sigil, new IdentifierNode(varName, parser.tokenIndex), parser.tokenIndex);
+            operand = new OperatorNode(sigil, new IdentifierNode(varName, parser.tokenIndex), parser.tokenIndex);
         } else if (peek(parser).text.equals("{")) {
             // Handle curly brackets to parse a nested expression `${v}`
             TokenUtils.consume(parser); // Consume the '{'
             Node block = ParseBlock.parseBlock(parser); // Parse the block inside the curly brackets
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}"); // Consume the '}'
-            return new OperatorNode(sigil, ParserNodeUtils.toScalarContext(block), parser.tokenIndex);
+            operand = new OperatorNode(sigil, ParserNodeUtils.toScalarContext(block), parser.tokenIndex);
+        } else {
+            // Handle dereferenced variables: $$var, $$$var, etc.
+            int dollarCount = 0;
+            while (peek(parser).text.equals("$")) {
+                dollarCount++;
+                parser.tokenIndex++;
+            }
+
+            if (dollarCount > 0) {
+                varName = IdentifierParser.parseComplexIdentifier(parser);
+                if (varName == null) {
+                    if (isStringInterpolation) {
+                        throw new PerlCompilerException(parser.tokenIndex, "Unexpected value after $ in string", parser.ctx.errorUtil);
+                    } else {
+                        // Not a variable name, not a block. This could be a dereference like @$a
+                        // Parse the expression with the appropriate precedence
+                        operand = parser.parseExpression(parser.getPrecedence("$") + 1);
+                        return new OperatorNode(sigil, operand, parser.tokenIndex);
+                    }
+                }
+                operand = new IdentifierNode(varName, parser.tokenIndex);
+                // Apply dereference operators
+                for (int i = 0; i < dollarCount; i++) {
+                    operand = new OperatorNode("$", operand, parser.tokenIndex);
+                }
+                operand = new OperatorNode(sigil, operand, parser.tokenIndex);
+            } else {
+                if (isStringInterpolation) {
+                    throw new PerlCompilerException(parser.tokenIndex, "Unexpected value after " + sigil + " in string", parser.ctx.errorUtil);
+                } else {
+                    // Not a variable name, not a block. This could be a dereference like @$a
+                    // Parse the expression with the appropriate precedence
+                    operand = parser.parseExpression(parser.getPrecedence("$") + 1);
+                    return new OperatorNode(sigil, operand, parser.tokenIndex);
+                }
+            }
         }
 
-        // Not a variable name, not a block. This could be a dereference like @$a
-        // Parse the expression with the appropriate precedence
-        operand = parser.parseExpression(parser.getPrecedence("$") + 1);
-        return new OperatorNode(sigil, operand, parser.tokenIndex);
+        // Handle array/hash access if requested (for string interpolation)
+        if (allowArrayHashAccess) {
+            operand = parseArrayHashAccess(parser, operand, isStringInterpolation);
+        }
+
+        return operand;
+    }
+
+    /**
+     * Parses array and hash access operations following a variable.
+     *
+     * @param parser the parser instance
+     * @param operand the base variable node to which access operations are applied
+     * @param isRegex whether this is in a regex context (affects bracket handling)
+     * @return the modified operand with access operations applied
+     */
+    private static Node parseArrayHashAccess(Parser parser, Node operand, boolean isRegex) {
+        outerLoop:
+        while (true) {
+            var text = parser.tokens.get(parser.tokenIndex).text;
+            switch (text) {
+                case "[" -> {
+                    if (isRegex) {
+                        // In regex context, '[' might be a character class
+                        // Only treat as array access if followed by $ or number
+                        var tokenNext = parser.tokens.get(parser.tokenIndex + 1);
+                        parser.ctx.logDebug("str [ " + tokenNext);
+                        if (!tokenNext.text.equals("$") && !(tokenNext.type == LexerTokenType.NUMBER)) {
+                            break outerLoop;
+                        }
+                    }
+                    operand = ParseInfix.parseInfixOperation(parser, operand, 0);
+                    parser.ctx.logDebug("str operand " + operand);
+                }
+                case "{" -> {
+                    // Hash access
+                    operand = ParseInfix.parseInfixOperation(parser, operand, 0);
+                    parser.ctx.logDebug("str operand " + operand);
+                }
+                case "->" -> {
+                    // Method call or dereference
+                    var previousIndex = parser.tokenIndex;
+                    parser.tokenIndex++;
+                    text = parser.tokens.get(parser.tokenIndex).text;
+                    switch (text) {
+                        case "[", "{" -> {
+                            // Dereference followed by access: $var->[0] or $var->{key}
+                            parser.tokenIndex = previousIndex;  // Re-parse "->"
+                            operand = ParseInfix.parseInfixOperation(parser, operand, 0);
+                            parser.ctx.logDebug("str operand " + operand);
+                        }
+                        default -> {
+                            // Not a dereference we can handle
+                            parser.tokenIndex = previousIndex;
+                            break outerLoop;
+                        }
+                    }
+                }
+                default -> {
+                    // No more access operations
+                    break outerLoop;
+                }
+            }
+        }
+        return operand;
     }
 
     /**
