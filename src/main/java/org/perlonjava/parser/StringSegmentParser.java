@@ -413,15 +413,19 @@ public abstract class StringSegmentParser {
             return false;
         }
 
-        var token1 = tokens.get(parser.tokenIndex);
-        if (token1.type == LexerTokenType.EOF) {
+        var nextToken = tokens.get(parser.tokenIndex);
+        if (nextToken.type == LexerTokenType.EOF) {
             return false;
         }
 
-        // Don't interpolate if followed by whitespace or certain characters
-        return !(token1.type == LexerTokenType.WHITESPACE
-                || token1.type == LexerTokenType.NEWLINE
-                || isNonInterpolatingCharacter(token1.text));
+        // Regex: don't interpolate "$" if followed by whitespace or newlines
+        // "@" sigil: never interpolate if immediately followed by whitespace or newlines
+        if ((isRegex || "@".equals(sigil)) && (nextToken.type == LexerTokenType.WHITESPACE || nextToken.type == LexerTokenType.NEWLINE)) {
+            return false;
+        }
+
+        // Don't interpolate if followed by certain characters
+        return !isNonInterpolatingCharacter(nextToken.text);
     }
 
     /**
