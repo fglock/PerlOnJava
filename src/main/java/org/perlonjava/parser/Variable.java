@@ -298,6 +298,55 @@ public class Variable {
             return new OperatorNode(sigil, new StringNode("", parser.tokenIndex), parser.tokenIndex);
         }
 
+        // For string interpolation, we need to preprocess ONLY \" escape sequences
+        if (isStringInterpolation) {
+            // Collect and preprocess tokens between braces
+            StringBuilder preprocessedContent = new StringBuilder();
+            int braceLevel = 1;
+
+            while (braceLevel > 0 && parser.tokenIndex < parser.tokens.size()) {
+                var token = parser.tokens.get(parser.tokenIndex);
+                if (token.type == LexerTokenType.EOF) {
+                    break;
+                }
+
+                if (token.text.equals("{")) {
+                    braceLevel++;
+                    preprocessedContent.append(token.text);
+                    parser.tokenIndex++;
+                } else if (token.text.equals("}")) {
+                    braceLevel--;
+                    if (braceLevel > 0) {
+                        preprocessedContent.append(token.text);
+                    }
+                    parser.tokenIndex++;
+                } else if (token.text.equals("\\") && parser.tokenIndex + 1 < parser.tokens.size()) {
+                    // Only process \" escape sequences, leave \\ alone
+                    var nextToken = parser.tokens.get(parser.tokenIndex + 1);
+
+                    if (nextToken.text.equals("\"")) {
+                        // \" becomes "
+                        preprocessedContent.append("\"");
+                        parser.tokenIndex += 2; // consume both \ and "
+                    } else {
+                        // For all other sequences (including \\), preserve as-is
+                        preprocessedContent.append("\\");
+                        parser.tokenIndex++; // only consume the backslash, let next iteration handle the following token
+                    }
+                } else {
+                    preprocessedContent.append(token.text);
+                    parser.tokenIndex++;
+                }
+            }
+
+            // Create new parser with preprocessed content
+            var exprParser = new Parser(parser.ctx, new org.perlonjava.lexer.Lexer(preprocessedContent.toString()).tokenize());
+            Node operand = exprParser.parseExpression(0);
+
+            return new OperatorNode(sigil, operand, parser.tokenIndex);
+        }
+
+        // Original logic for non-string interpolation contexts
         // Save the current position to allow fallback
         int savedIndex = parser.tokenIndex;
 
@@ -331,7 +380,6 @@ public class Variable {
 
         // Fall back to parsing as a general expression
         Node operand = parser.parseExpression(0);
-
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
         return new OperatorNode(sigil, operand, parser.tokenIndex);
     }
