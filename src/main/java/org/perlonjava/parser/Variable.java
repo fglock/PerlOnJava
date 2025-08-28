@@ -15,7 +15,7 @@ public class Variable {
     /**
      * Parses a variable from the given lexer token.
      *
-     * @param parser
+     * @param parser the parser instance
      * @param sigil  The sigil that starts the variable.
      * @return The parsed variable node.
      * @throws PerlCompilerException If there is a syntax error.
@@ -85,148 +85,15 @@ public class Variable {
     }
 
     /**
-     * Parses a variable from the given lexer token with additional options.
-     *
-     * @param parser
-     * @param sigil  The sigil that starts the variable.
-     * @param allowArrayHashAccess Whether to parse array/hash access after the variable
-     * @param isStringInterpolation Whether this is being called from string interpolation
-     * @return The parsed variable node.
-     * @throws PerlCompilerException If there is a syntax error.
-     */
-    public static Node parseVariable(Parser parser, String sigil, boolean allowArrayHashAccess, boolean isStringInterpolation) {
-        Node operand;
-        var nextToken = peek(parser);
-
-        // Special handling for $ followed by {
-        if (nextToken.text.equals("$")) {
-            // Check if we have ${...} pattern
-            if (parser.tokens.get(parser.tokenIndex + 1).text.equals("{")) {
-                // This is ${...}, parse as dereference of ${...}
-                // Don't consume the $ token, let it be parsed as part of the variable
-                operand = parser.parseExpression(parser.getPrecedence("$") + 1);
-                return new OperatorNode(sigil, operand, parser.tokenIndex);
-            }
-        }
-
-        // Special handling for $#[...]
-        if (sigil.equals("$#") && nextToken.text.equals("[")) {
-            // This is $#[...] which is mentioned in t/base/lex.t and it returns an empty string
-            parsePrimary(parser);
-            return new StringNode("", parser.tokenIndex);
-        }
-
-        // Check if this is a ${...} construct BEFORE attempting to parse identifier
-        // This must be checked before parseComplexIdentifier() to avoid consuming tokens
-        if (nextToken.text.equals("{")) {
-            // Handle curly brackets to parse a nested expression `${expr}`
-            // In string interpolation, ${w{a}} should be parsed the same as $w{a}
-            TokenUtils.consume(parser); // Consume the '{'
-
-            // First, try to parse an identifier for the variable name
-            String bracedVarName = IdentifierParser.parseComplexIdentifier(parser);
-            if (bracedVarName != null) {
-                // We have a variable name, create the base variable node
-                operand = new OperatorNode(sigil, new IdentifierNode(bracedVarName, parser.tokenIndex), parser.tokenIndex);
-
-                // Now parse any array/hash access that follows within the braces
-                // This handles cases like ${w{a}} where we need to parse {a} as hash access on $w
-                operand = parseArrayHashAccessInBraces(parser, operand, false);
-
-                TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}"); // Consume the '}'
-                return operand;
-            } else {
-                // No identifier found, parse as a general expression
-                operand = parser.parseExpression(0);
-                TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}"); // Consume the '}'
-                return new OperatorNode(sigil, operand, parser.tokenIndex);
-            }
-        }
-
-        // Store the current position before parsing the identifier
-        int startIndex = parser.tokenIndex;
-
-        String varName = IdentifierParser.parseComplexIdentifier(parser);
-        parser.ctx.logDebug("Parsing variable: " + varName);
-
-        if (varName != null) {
-            IdentifierParser.validateIdentifier(parser, varName, startIndex);
-
-            // Variable name is valid.
-            // Check for illegal characters after a variable
-            if (!parser.parsingForLoopVariable && peek(parser).text.equals("(") && !sigil.equals("&")) {
-                // Parentheses are only allowed after a variable in specific cases:
-                // - `for my $v (...`
-                // - `&name(...`
-                // - `obj->$name(...`
-                parser.throwError("syntax error");
-            }
-
-            if (sigil.equals("*")) {
-                // Vivify the GLOB if it doesn't exist yet
-                // This helps distinguish between file handles and other barewords
-                String fullName = NameNormalizer.normalizeVariableName(varName, parser.ctx.symbolTable.getCurrentPackage());
-                GlobalVariable.getGlobalIO(fullName);
-            }
-
-            // Create a Variable node
-            operand = new OperatorNode(sigil, new IdentifierNode(varName, parser.tokenIndex), parser.tokenIndex);
-        } else {
-            // Handle dereferenced variables: $var, $$var, etc.
-            int dollarCount = 0;
-            while (peek(parser).text.equals("$")) {
-                dollarCount++;
-                parser.tokenIndex++;
-            }
-
-            if (dollarCount > 0) {
-                varName = IdentifierParser.parseComplexIdentifier(parser);
-                if (varName == null) {
-                    if (isStringInterpolation) {
-                        throw new PerlCompilerException(parser.tokenIndex, "Unexpected value after $ in string", parser.ctx.errorUtil);
-                    } else {
-                        // Not a variable name, not a block. This could be a dereference like @$a
-                        // Parse the expression with the appropriate precedence
-                        operand = parser.parseExpression(parser.getPrecedence("$") + 1);
-                        return new OperatorNode(sigil, operand, parser.tokenIndex);
-                    }
-                }
-                operand = new IdentifierNode(varName, parser.tokenIndex);
-                // Apply dereference operators
-                for (int i = 0; i < dollarCount; i++) {
-                    operand = new OperatorNode("$", operand, parser.tokenIndex);
-                }
-                operand = new OperatorNode(sigil, operand, parser.tokenIndex);
-            } else {
-                if (isStringInterpolation) {
-                    throw new PerlCompilerException(parser.tokenIndex, "Unexpected value after " + sigil + " in string", parser.ctx.errorUtil);
-                } else {
-                    // Not a variable name, not a block. This could be a dereference like @$a
-                    // Parse the expression with the appropriate precedence
-                    operand = parser.parseExpression(parser.getPrecedence("$") + 1);
-                    return new OperatorNode(sigil, operand, parser.tokenIndex);
-                }
-            }
-        }
-
-        // Handle array/hash access if requested (for string interpolation)
-        if (allowArrayHashAccess) {
-            operand = parseArrayHashAccess(parser, operand, isStringInterpolation);
-        }
-
-        return operand;
-    }
-
-    /**
      * Parses array and hash access operations within braces (for ${...} constructs).
      * This is similar to parseArrayHashAccess but stops at the closing brace.
      *
-     * @param parser the parser instance
+     * @param parser  the parser instance
      * @param operand the base variable node to which access operations are applied
      * @param isRegex whether this is in a regex context (affects bracket handling)
      * @return the modified operand with access operations applied
      */
-    private static Node parseArrayHashAccessInBraces(Parser parser, Node operand, boolean isRegex) {
+    static Node parseArrayHashAccessInBraces(Parser parser, Node operand, boolean isRegex) {
         while (true) {
             var token = parser.tokens.get(parser.tokenIndex);
             if (token.text.equals("}")) {
@@ -290,7 +157,7 @@ public class Variable {
     /**
      * Parses array and hash access operations following a variable.
      *
-     * @param parser the parser instance
+     * @param parser  the parser instance
      * @param operand the base variable node to which access operations are applied
      * @param isRegex whether this is in a regex context (affects bracket handling)
      * @return the modified operand with access operations applied
@@ -351,7 +218,7 @@ public class Variable {
      * This method is responsible for parsing expressions that start with `&`, which in Perl
      * can be used to refer to subroutines or to call them.
      *
-     * @param parser
+     * @param parser the parser instance
      * @param token  The lexer token representing the `&` operator.
      * @return A Node representing the parsed code reference or subroutine call.
      */
@@ -416,5 +283,38 @@ public class Variable {
 
         // Return a new BinaryOperatorNode representing the function call with arguments
         return new BinaryOperatorNode("(", node, list, parser.tokenIndex);
+    }
+
+    /**
+     * Parses a braced variable expression like ${var} or ${expr}.
+     * This method is shared between regular variable parsing and string interpolation.
+     */
+    public static Node parseBracedVariable(Parser parser, String sigil, boolean isStringInterpolation) {
+        TokenUtils.consume(parser); // Consume the '{'
+
+        // Check if this is an empty ${} construct
+        if (TokenUtils.peek(parser).text.equals("}")) {
+            TokenUtils.consume(parser); // Consume the '}'
+        }
+
+        // First, try to parse an identifier
+        String bracedVarName = IdentifierParser.parseComplexIdentifier(parser);
+
+        if (bracedVarName != null) {
+            // We have a variable name, create the base variable node
+            Node operand = new OperatorNode(sigil, new IdentifierNode(bracedVarName, parser.tokenIndex), parser.tokenIndex);
+
+            // Now parse any array/hash access that follows within the braces
+            operand = parseArrayHashAccessInBraces(parser, operand, isStringInterpolation);
+
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}"); // Consume the '}'
+            return operand;
+        } else {
+            // No identifier found, parse as a general expression
+            Node operand = parser.parseExpression(0);
+
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+            return new OperatorNode(sigil, operand, parser.tokenIndex);
+        }
     }
 }
