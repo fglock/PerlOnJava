@@ -197,7 +197,13 @@ public abstract class StringSegmentParser {
             operand = parseSimpleVariableInterpolation(sigil);
 
             // Handle array/hash access: $var[0], $var{key}, $var->[0], etc.
-            operand = parseArrayHashAccess(parser, operand, isRegex);
+            // Wrap in try-catch to handle malformed access gracefully
+            try {
+                operand = parseArrayHashAccess(parser, operand, isRegex);
+            } catch (Exception e) {
+                // If array/hash access parsing fails, throw a more descriptive error
+                throw new PerlCompilerException(tokenIndex, "syntax error: Unterminated array or hash access", ctx.errorUtil);
+            }
         }
 
         // For arrays, join elements with the list separator ($")
@@ -216,6 +222,9 @@ public abstract class StringSegmentParser {
      * Uses shared logic from Variable class while maintaining string interpolation context.
      */
     private Node parseSimpleVariableInterpolation(String sigil) {
+        // Store the current position before parsing the identifier
+        int startIndex = parser.tokenIndex;
+
         // Check for ${...} pattern which should be parsed as ${${...}}
         // This handles cases like $var, $ $var, etc.
         if ("$".equals(sigil) && TokenUtils.peek(parser).text.equals("$")) {
@@ -243,6 +252,9 @@ public abstract class StringSegmentParser {
         var identifier = IdentifierParser.parseComplexIdentifier(parser);
 
         if (identifier != null) {
+            // Add validation that was missing - this fixes $01, $02 issues
+            IdentifierParser.validateIdentifier(parser, identifier, startIndex);
+
             ctx.logDebug("str Identifier: " + identifier);
             return new OperatorNode(sigil, new IdentifierNode(identifier, tokenIndex), tokenIndex);
         }
@@ -259,6 +271,9 @@ public abstract class StringSegmentParser {
             if (identifier == null) {
                 throw new PerlCompilerException(tokenIndex, "Unexpected value after $ in string", ctx.errorUtil);
             }
+            // Add validation for dereferenced variables too
+            IdentifierParser.validateIdentifier(parser, identifier, startIndex);
+
             Node operand = new IdentifierNode(identifier, tokenIndex);
             // Apply dereference operators
             for (int i = 0; i < dollarCount; i++) {

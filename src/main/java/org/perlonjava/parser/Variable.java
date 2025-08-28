@@ -102,53 +102,67 @@ public class Variable {
             }
 
             var text = token.text;
-            switch (text) {
-                case "[" -> {
-                    if (isRegex) {
-                        // In regex context, '[' might be a character class
-                        // Only treat as array access if followed by $ or number
-                        var tokenNext = parser.tokens.get(parser.tokenIndex + 1);
-                        parser.ctx.logDebug("str [ " + tokenNext);
-                        if (!tokenNext.text.equals("$") && !(tokenNext.type == LexerTokenType.NUMBER)) {
-                            return operand; // Stop parsing, let caller handle
+            try {
+                switch (text) {
+                    case "[" -> {
+                        if (isRegex) {
+                            // In regex context, '[' might be a character class
+                            // Only treat as array access if followed by $ or number
+                            var tokenNext = parser.tokens.get(parser.tokenIndex + 1);
+                            parser.ctx.logDebug("str [ " + tokenNext);
+                            if (!tokenNext.text.equals("$") && !(tokenNext.type == LexerTokenType.NUMBER)) {
+                                return operand; // Stop parsing, let caller handle
+                            }
+                        }
+                        operand = ParseInfix.parseInfixOperation(parser, operand, 0);
+                        if (operand == null) {
+                            throw new PerlCompilerException(parser.tokenIndex, "syntax error: Missing closing bracket", parser.ctx.errorUtil);
+                        }
+                        parser.ctx.logDebug("str operand " + operand);
+                    }
+                    case "{" -> {
+                        // Hash access
+                        operand = ParseInfix.parseInfixOperation(parser, operand, 0);
+                        if (operand == null) {
+                            throw new PerlCompilerException(parser.tokenIndex, "syntax error: Missing closing brace", parser.ctx.errorUtil);
+                        }
+                        parser.ctx.logDebug("str operand " + operand);
+                    }
+                    case "->" -> {
+                        // Method call or dereference
+                        var previousIndex = parser.tokenIndex;
+                        parser.tokenIndex++;
+                        if (parser.tokenIndex < parser.tokens.size()) {
+                            text = parser.tokens.get(parser.tokenIndex).text;
+                            switch (text) {
+                                case "[", "{" -> {
+                                    // Dereference followed by access: $var->[0] or $var->{key}
+                                    parser.tokenIndex = previousIndex;  // Re-parse "->"
+                                    operand = ParseInfix.parseInfixOperation(parser, operand, 0);
+                                    if (operand == null) {
+                                        throw new PerlCompilerException(parser.tokenIndex, "syntax error: Unterminated dereference", parser.ctx.errorUtil);
+                                    }
+                                    parser.ctx.logDebug("str operand " + operand);
+                                }
+                                default -> {
+                                    // Not a dereference we can handle
+                                    parser.tokenIndex = previousIndex;
+                                    return operand; // Stop parsing
+                                }
+                            }
+                        } else {
+                            parser.tokenIndex = previousIndex;
+                            return operand;
                         }
                     }
-                    operand = ParseInfix.parseInfixOperation(parser, operand, 0);
-                    parser.ctx.logDebug("str operand " + operand);
-                }
-                case "{" -> {
-                    // Hash access
-                    operand = ParseInfix.parseInfixOperation(parser, operand, 0);
-                    parser.ctx.logDebug("str operand " + operand);
-                }
-                case "->" -> {
-                    // Method call or dereference
-                    var previousIndex = parser.tokenIndex;
-                    parser.tokenIndex++;
-                    if (parser.tokenIndex < parser.tokens.size()) {
-                        text = parser.tokens.get(parser.tokenIndex).text;
-                        switch (text) {
-                            case "[", "{" -> {
-                                // Dereference followed by access: $var->[0] or $var->{key}
-                                parser.tokenIndex = previousIndex;  // Re-parse "->"
-                                operand = ParseInfix.parseInfixOperation(parser, operand, 0);
-                                parser.ctx.logDebug("str operand " + operand);
-                            }
-                            default -> {
-                                // Not a dereference we can handle
-                                parser.tokenIndex = previousIndex;
-                                return operand; // Stop parsing
-                            }
-                        }
-                    } else {
-                        parser.tokenIndex = previousIndex;
+                    default -> {
+                        // No more access operations we recognize
                         return operand;
                     }
                 }
-                default -> {
-                    // No more access operations we recognize
-                    return operand;
-                }
+            } catch (Exception e) {
+                // If parsing fails, throw a more informative error
+                throw new PerlCompilerException(parser.tokenIndex, "syntax error: Unterminated array or hash access", parser.ctx.errorUtil);
             }
         }
         return operand;
@@ -165,49 +179,104 @@ public class Variable {
     static Node parseArrayHashAccess(Parser parser, Node operand, boolean isRegex) {
         outerLoop:
         while (true) {
-            var text = parser.tokens.get(parser.tokenIndex).text;
-            switch (text) {
-                case "[" -> {
-                    if (isRegex) {
-                        // In regex context, '[' might be a character class
-                        // Only treat as array access if followed by $ or number
-                        var tokenNext = parser.tokens.get(parser.tokenIndex + 1);
-                        parser.ctx.logDebug("str [ " + tokenNext);
-                        if (!tokenNext.text.equals("$") && !(tokenNext.type == LexerTokenType.NUMBER)) {
-                            break outerLoop;
+            if (parser.tokenIndex >= parser.tokens.size()) {
+                break;
+            }
+
+            var token = parser.tokens.get(parser.tokenIndex);
+            if (token.type == LexerTokenType.EOF) {
+                break;
+            }
+
+            var text = token.text;
+            try {
+                switch (text) {
+                    case "[" -> {
+                        if (isRegex) {
+                            // In regex context, '[' might be a character class
+                            // Only treat as array access if followed by $ or number
+                            if (parser.tokenIndex + 1 >= parser.tokens.size()) {
+                                break outerLoop;
+                            }
+                            var tokenNext = parser.tokens.get(parser.tokenIndex + 1);
+                            parser.ctx.logDebug("str [ " + tokenNext);
+                            if (!tokenNext.text.equals("$") && !(tokenNext.type == LexerTokenType.NUMBER)) {
+                                break outerLoop;
+                            }
                         }
+
+                        // Check for malformed array access (unclosed bracket)
+                        int savedIndex = parser.tokenIndex;
+                        Node result = null;
+                        try {
+                            result = ParseInfix.parseInfixOperation(parser, operand, 0);
+                        } catch (Exception e) {
+                            parser.tokenIndex = savedIndex;
+                            throw new PerlCompilerException(parser.tokenIndex, "syntax error: Unterminated array access", parser.ctx.errorUtil);
+                        }
+
+                        if (result == null) {
+                            throw new PerlCompilerException(parser.tokenIndex, "syntax error: Missing closing bracket", parser.ctx.errorUtil);
+                        }
+                        operand = result;
+                        parser.ctx.logDebug("str operand " + operand);
                     }
-                    operand = ParseInfix.parseInfixOperation(parser, operand, 0);
-                    parser.ctx.logDebug("str operand " + operand);
-                }
-                case "{" -> {
-                    // Hash access
-                    operand = ParseInfix.parseInfixOperation(parser, operand, 0);
-                    parser.ctx.logDebug("str operand " + operand);
-                }
-                case "->" -> {
-                    // Method call or dereference
-                    var previousIndex = parser.tokenIndex;
-                    parser.tokenIndex++;
-                    text = parser.tokens.get(parser.tokenIndex).text;
-                    switch (text) {
-                        case "[", "{" -> {
-                            // Dereference followed by access: $var->[0] or $var->{key}
-                            parser.tokenIndex = previousIndex;  // Re-parse "->"
-                            operand = ParseInfix.parseInfixOperation(parser, operand, 0);
-                            parser.ctx.logDebug("str operand " + operand);
+                    case "{" -> {
+                        // Hash access
+                        int savedIndex = parser.tokenIndex;
+                        Node result = null;
+                        try {
+                            result = ParseInfix.parseInfixOperation(parser, operand, 0);
+                        } catch (Exception e) {
+                            parser.tokenIndex = savedIndex;
+                            throw new PerlCompilerException(parser.tokenIndex, "syntax error: Unterminated hash access", parser.ctx.errorUtil);
                         }
-                        default -> {
-                            // Not a dereference we can handle
+
+                        if (result == null) {
+                            throw new PerlCompilerException(parser.tokenIndex, "syntax error: Missing closing brace", parser.ctx.errorUtil);
+                        }
+                        operand = result;
+                        parser.ctx.logDebug("str operand " + operand);
+                    }
+                    case "->" -> {
+                        // Method call or dereference
+                        var previousIndex = parser.tokenIndex;
+                        parser.tokenIndex++;
+                        if (parser.tokenIndex < parser.tokens.size()) {
+                            text = parser.tokens.get(parser.tokenIndex).text;
+                            switch (text) {
+                                case "[", "{" -> {
+                                    // Dereference followed by access: $var->[0] or $var->{key}
+                                    parser.tokenIndex = previousIndex;  // Re-parse "->"
+                                    Node result = ParseInfix.parseInfixOperation(parser, operand, 0);
+                                    if (result == null) {
+                                        throw new PerlCompilerException(parser.tokenIndex, "syntax error: Unterminated dereference", parser.ctx.errorUtil);
+                                    }
+                                    operand = result;
+                                    parser.ctx.logDebug("str operand " + operand);
+                                }
+                                default -> {
+                                    // Not a dereference we can handle
+                                    parser.tokenIndex = previousIndex;
+                                    break outerLoop;
+                                }
+                            }
+                        } else {
                             parser.tokenIndex = previousIndex;
                             break outerLoop;
                         }
                     }
+                    default -> {
+                        // No more access operations
+                        break outerLoop;
+                    }
                 }
-                default -> {
-                    // No more access operations
-                    break outerLoop;
-                }
+            } catch (PerlCompilerException e) {
+                // Re-throw PerlCompilerExceptions as-is
+                throw e;
+            } catch (Exception e) {
+                // Convert other exceptions to PerlCompilerException
+                throw new PerlCompilerException(parser.tokenIndex, "syntax error: " + e.getMessage(), parser.ctx.errorUtil);
             }
         }
         return operand;
@@ -360,8 +429,15 @@ public class Variable {
         }
 
         // Fall back to parsing as a general expression with original context
-        Node operand = parser.parseExpression(0);
-        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
-        return new OperatorNode(sigil, operand, parser.tokenIndex);
+        try {
+            Node operand = parser.parseExpression(0);
+            if (!TokenUtils.peek(parser).text.equals("}")) {
+                throw new PerlCompilerException(parser.tokenIndex, "Missing closing brace in variable interpolation", parser.ctx.errorUtil);
+            }
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+            return new OperatorNode(sigil, operand, parser.tokenIndex);
+        } catch (Exception e) {
+            throw new PerlCompilerException(parser.tokenIndex, "Syntax error in braced variable: " + e.getMessage(), parser.ctx.errorUtil);
+        }
     }
 }
