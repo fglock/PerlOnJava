@@ -8,6 +8,7 @@ import org.perlonjava.codegen.JavaClassInfo;
 import org.perlonjava.lexer.Lexer;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.mro.InheritanceResolver;
+import org.perlonjava.operators.ModuleOperators;
 import org.perlonjava.parser.Parser;
 import org.perlonjava.symbols.ScopedSymbolTable;
 
@@ -276,9 +277,20 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Handle all reference types (REFERENCE, ARRAYREFERENCE, HASHREFERENCE, etc.)
             int blessId = ((RuntimeBase) runtimeScalar.value).blessId;
             if (blessId == 0) {
-                throw new PerlCompilerException("Can't call method \"" + methodName + "\" on unblessed reference");
+                if (runtimeScalar.type == GLOBREFERENCE) {
+                    // Auto-bless file handler to IO::File or appropriate class
+                    // TODO - find the appropriate subclass
+                    perlClassName = "IO::Handle";
+                    // Load the module if needed
+                    // TODO - optimize by creating a flag in RuntimeIO
+                    ModuleOperators.require(new RuntimeScalar("IO/Handle.pm"), false);
+                } else {
+                    // Not auto-blessed
+                    throw new PerlCompilerException("Can't call method \"" + methodName + "\" on unblessed reference");
+                }
+            } else {
+                perlClassName = NameNormalizer.getBlessStr(blessId);
             }
-            perlClassName = NameNormalizer.getBlessStr(blessId);
         } else if (runtimeScalar.type == UNDEF) {
             throw new PerlCompilerException("Can't call method \"" + methodName + "\" on an undefined value");
         } else {
