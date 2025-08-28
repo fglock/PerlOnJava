@@ -39,8 +39,9 @@ public class IOHandle extends PerlModuleBase {
         if (fh instanceof TieHandle) {
             throw new PerlCompilerException("can't ungetc on tied handle");
         }
-        int c = args.get(1).toString().codePointAt(0);
+        RuntimeScalar arg1 = args.get(1);
+        int c = arg1.toString().codePointAt(0);
         fh.ioHandle.ungetc(c);
-        return scalarTrue.getList();
+        return arg1.getList();
     }
 }
