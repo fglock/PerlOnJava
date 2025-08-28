@@ -295,7 +295,11 @@ public class Variable {
         // Check if this is an empty ${} construct
         if (TokenUtils.peek(parser).text.equals("}")) {
             TokenUtils.consume(parser); // Consume the '}'
+            return new OperatorNode(sigil, new StringNode("", parser.tokenIndex), parser.tokenIndex);
         }
+
+        // Save the current position to allow fallback
+        int savedIndex = parser.tokenIndex;
 
         // First, try to parse an identifier
         String bracedVarName = IdentifierParser.parseComplexIdentifier(parser);
@@ -305,16 +309,30 @@ public class Variable {
             Node operand = new OperatorNode(sigil, new IdentifierNode(bracedVarName, parser.tokenIndex), parser.tokenIndex);
 
             // Now parse any array/hash access that follows within the braces
-            operand = parseArrayHashAccessInBraces(parser, operand, isStringInterpolation);
+            try {
+                operand = parseArrayHashAccessInBraces(parser, operand, isStringInterpolation);
 
-            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}"); // Consume the '}'
-            return operand;
+                // Check if we successfully reached the closing brace
+                if (TokenUtils.peek(parser).text.equals("}")) {
+                    TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}"); // Consume the '}'
+                    return operand;
+                } else {
+                    // We didn't reach the closing brace, fall back to expression parsing
+                    parser.tokenIndex = savedIndex;
+                }
+            } catch (Exception e) {
+                // Error during array/hash access parsing, fall back to expression parsing
+                parser.tokenIndex = savedIndex;
+            }
         } else {
-            // No identifier found, parse as a general expression
-            Node operand = parser.parseExpression(0);
-
-            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
-            return new OperatorNode(sigil, operand, parser.tokenIndex);
+            // No identifier found, continue with expression parsing
+            parser.tokenIndex = savedIndex;
         }
+
+        // Fall back to parsing as a general expression
+        Node operand = parser.parseExpression(0);
+
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+        return new OperatorNode(sigil, operand, parser.tokenIndex);
     }
 }
