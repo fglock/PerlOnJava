@@ -11,6 +11,7 @@ import org.perlonjava.runtime.PerlCompilerException;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.perlonjava.parser.Variable.parseArrayHashAccess;
 import static org.perlonjava.parser.Variable.parseVariable;
 
 /**
@@ -130,7 +131,7 @@ public abstract class StringSegmentParser {
      * <ul>
      *   <li>Simple variables: $var, @array</li>
      *   <li>Complex expressions: ${expr}, @{expr}</li>
-     *   <li>Dereferenced variables: $$var, $@var</li>
+     *   <li>Dereferenced variables: $var, $$var</li>
      *   <li>Array/hash access: $var[0], $var{key}, $var->[0], $var->{key}</li>
      * </ul></p>
      *
@@ -144,14 +145,110 @@ public abstract class StringSegmentParser {
         flushCurrentSegment();
 
         ctx.logDebug("str sigil");
+        Node operand;
         var isArray = "@".equals(sigil);
 
-        // Use the unified parseVariable method with array/hash access enabled
-        parser.parsingForLoopVariable = true;
-        Node operand = parseVariable(parser, sigil, true, true);
-        parser.parsingForLoopVariable = false;
+        if (TokenUtils.peek(parser).text.equals("{")) {
+            // Handle block-like interpolation: ${...} or @{...}
 
-        ctx.logDebug("str operand " + operand);
+            TokenUtils.consume(parser); // Consume the '{'
+
+            // Check if this is an @{[...]} construct (array reference interpolation)
+            if (isArray && TokenUtils.peek(parser).text.equals("[")) {
+                // This is @{[...]} - create anonymous array reference and dereference
+
+                // Parse the entire {...} content as a block
+                parser.tokenIndex--; // Back up to re-parse the '{'
+                TokenUtils.consume(parser); // Re-consume the '{'
+
+                Node block = ParseBlock.parseBlock(parser); // Parse the block inside the curly brackets
+                TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}"); // Consume the '}'
+
+                // Apply @ to dereference the block result
+                operand = new OperatorNode("@", block, tokenIndex);
+                ctx.logDebug("str @{[...]} operand " + operand);
+            } else {
+                // Regular ${...} or @{...} handling
+
+                // Parse content until we find the matching '}'
+                StringBuilder contentBuilder = new StringBuilder();
+                int braceLevel = 1;
+
+                while (braceLevel > 0 && parser.tokenIndex < tokens.size()) {
+                    var token = tokens.get(parser.tokenIndex++);
+                    if (token.type == LexerTokenType.EOF) {
+                        throw new PerlCompilerException(tokenIndex, "Unterminated ${} in string", ctx.errorUtil);
+                    }
+
+                    switch (token.text) {
+                        case "{" -> {
+                            braceLevel++;
+                            contentBuilder.append(token.text);
+                        }
+                        case "}" -> {
+                            braceLevel--;
+                            if (braceLevel > 0) {
+                                contentBuilder.append(token.text);
+                            }
+                        }
+                        default -> contentBuilder.append(token.text);
+                    }
+                }
+
+                if (braceLevel > 0) {
+                    throw new PerlCompilerException(tokenIndex, "Unterminated ${} in string", ctx.errorUtil);
+                }
+
+                String content = contentBuilder.toString();
+                ctx.logDebug("str block content: " + content);
+
+                // Parse the content as a variable expression by prepending the sigil
+                // This makes ${w{a}} equivalent to parsing $w{a}
+                String fullExpression = sigil + content;
+
+                try {
+                    var contentTokens = new Lexer(fullExpression).tokenize();
+                    var contentParser = new Parser(ctx, contentTokens);
+                    operand = contentParser.parseExpression(0);
+                } catch (Exception e) {
+                    // If parsing fails, treat as literal text
+                    operand = new OperatorNode(sigil, new StringNode(content, tokenIndex), tokenIndex);
+                }
+
+                ctx.logDebug("str operand " + operand);
+            }
+        } else {
+            // Use the original logic for simple variables
+            var identifier = IdentifierParser.parseComplexIdentifier(parser);
+            if (identifier == null) {
+                // Handle dereferenced variables: $$var, $$$var, etc.
+                int dollarCount = 0;
+                while (TokenUtils.peek(parser).text.equals("$")) {
+                    dollarCount++;
+                    parser.tokenIndex++;
+                }
+                if (dollarCount > 0) {
+                    identifier = IdentifierParser.parseComplexIdentifier(parser);
+                    if (identifier == null) {
+                        throw new PerlCompilerException(tokenIndex, "Unexpected value after $ in string", ctx.errorUtil);
+                    }
+                    operand = new IdentifierNode(identifier, tokenIndex);
+                    // Apply dereference operators
+                    for (int i = 0; i < dollarCount; i++) {
+                        operand = new OperatorNode("$", operand, tokenIndex);
+                    }
+                } else {
+                    throw new PerlCompilerException(tokenIndex, "Unexpected value after " + sigil + " in string", ctx.errorUtil);
+                }
+            } else {
+                operand = new IdentifierNode(identifier, tokenIndex);
+            }
+            ctx.logDebug("str Identifier: " + identifier);
+            operand = new OperatorNode(sigil, operand, tokenIndex);
+
+            // Handle array/hash access: $var[0], $var{key}, $var->[0], etc.
+            operand = parseArrayHashAccess(parser, operand, isRegex);
+        }
 
         // For arrays, join elements with the list separator ($")
         if (isArray) {
