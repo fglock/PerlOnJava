@@ -25,15 +25,19 @@ import static org.perlonjava.Configuration.perlVersion;
 public class ArgumentParser {
 
     /**
-     * Parses the command-line arguments and returns a CompilerOptions object
-     * configured based on the provided arguments.
-     *
-     * @param args The command-line arguments to parse.
-     * @return A CompilerOptions object with settings derived from the arguments.
-     */
+    /**
+      * Parses the command-line arguments and returns a CompilerOptions object
+      * configured based on the provided arguments.
+      *
+      * @param args The command-line arguments to parse.
+      * @return A CompilerOptions object with settings derived from the arguments.
+      */
     public static CompilerOptions parseArguments(String[] args) {
         CompilerOptions parsedArgs = new CompilerOptions();
         parsedArgs.code = null; // Initialize code to null
+
+        // Process PERL5OPT environment variable first
+        processPerl5Opt(parsedArgs);
 
         processArgs(args, parsedArgs);
 
@@ -72,6 +76,100 @@ public class ArgumentParser {
         return parsedArgs;
     }
 
+    /**
+      * Processes the PERL5OPT environment variable to preset command-line options.
+      * Supported options: -D, -I, -M, -T, -U, -W, -d, -m, -t, and -w.
+      *
+      * @param parsedArgs The CompilerOptions object to configure.
+      */
+    private static void processPerl5Opt(CompilerOptions parsedArgs) {
+        String perl5opt = System.getenv("PERL5OPT");
+        if (perl5opt == null || perl5opt.trim().isEmpty()) {
+            return;
+        }
+
+        // Split the PERL5OPT string into individual arguments
+        // Handle quoted arguments and respect shell-like parsing
+        List<String> optionsList = parsePerl5OptString(perl5opt.trim());
+        String[] options = optionsList.toArray(new String[0]);
+
+        // Process the PERL5OPT arguments using existing argument processing logic
+        processArgs(options, parsedArgs);
+    }
+
+    /**
+      * Parses the PERL5OPT string into individual arguments, handling quotes and escapes.
+      *
+      * @param perl5opt The PERL5OPT environment variable value.
+      * @return A list of individual arguments.
+      */
+    private static List<String> parsePerl5OptString(String perl5opt) {
+        List<String> args = new ArrayList<>();
+        StringBuilder currentArg = new StringBuilder();
+        boolean inQuotes = false;
+        boolean inSingleQuotes = false;
+        boolean escapeNext = false;
+
+        for (int i = 0; i < perl5opt.length(); i++) {
+            char c = perl5opt.charAt(i);
+
+            if (escapeNext) {
+                currentArg.append(c);
+                escapeNext = false;
+            } else if (c == '\\') {
+                escapeNext = true;
+            } else if (c == '"' && !inSingleQuotes) {
+                inQuotes = !inQuotes;
+            } else if (c == '\'' && !inQuotes) {
+                inSingleQuotes = !inSingleQuotes;
+            } else if (Character.isWhitespace(c) && !inQuotes && !inSingleQuotes) {
+                if (currentArg.length() > 0) {
+                    String arg = currentArg.toString();
+                    // Only process supported PERL5OPT options
+                    if (isSupportedPerl5OptOption(arg)) {
+                        args.add(arg);
+                    }
+                    currentArg.setLength(0);
+                }
+            } else {
+                currentArg.append(c);
+            }
+        }
+
+        // Add the last argument if there is one
+        if (currentArg.length() > 0) {
+            String arg = currentArg.toString();
+            if (isSupportedPerl5OptOption(arg)) {
+                args.add(arg);
+            }
+        }
+
+        return args;
+    }
+
+    /**
+      * Checks if an option is supported in PERL5OPT.
+      * Supported options: -D, -I, -M, -T, -U, -W, -d, -m, -t, and -w.
+      *
+      * @param arg The argument to check.
+      * @return true if the option is supported in PERL5OPT, false otherwise.
+      */
+    private static boolean isSupportedPerl5OptOption(String arg) {
+        if (!arg.startsWith("-")) {
+            return false;
+        }
+
+        // Check for single character options that might be clustered
+        if (arg.length() >= 2 && !arg.startsWith("--")) {
+            char firstChar = arg.charAt(1);
+            return firstChar == 'D' || firstChar == 'I' || firstChar == 'M' ||
+                    firstChar == 'T' || firstChar == 'U' || firstChar == 'W' ||
+                    firstChar == 'd' || firstChar == 'm' || firstChar == 't' ||
+                    firstChar == 'w';
+        }
+
+        return false;
+    }
     /**
      * Processes the command-line arguments, distinguishing between switch and non-switch arguments.
      *
@@ -225,7 +323,26 @@ public class ArgumentParser {
                     // disable all warnings
                     parsedArgs.moduleUseStatements.add(new ModuleUseStatement(switchChar, "warnings", null, true));
                     break;
-
+                case 'D':
+                    // Enable debugging flags (currently a no-op for compatibility)
+                    index = handleDebugFlags(args, parsedArgs, index, j, arg);
+                    return index;
+                case 'T':
+                    // Enable taint mode
+                    parsedArgs.taintMode = true;
+                    break;
+                case 'U':
+                    // Allow unsafe operations
+                    parsedArgs.allowUnsafeOperations = true;
+                    break;
+                case 'd':
+                    // Run under debugger (currently a no-op for compatibility)
+                    parsedArgs.runUnderDebugger = true;
+                    break;
+                case 't':
+                    // Enable taint warnings
+                    parsedArgs.taintWarnings = true;
+                    break;
                 case 'a':
                     // Enable autosplit mode
                     parsedArgs.autoSplit = true;
@@ -891,6 +1008,11 @@ public class ArgumentParser {
         public boolean discardLeadingGarbage = false; // For -x
         List<ModuleUseStatement> moduleUseStatements = new ArrayList<>(); // For -m -M
         public boolean isUnicodeSource = false; // Set to true for UTF-16/UTF-32 source files
+        public boolean taintMode = false; // For -T
+        public boolean allowUnsafeOperations = false; // For -U
+        public boolean runUnderDebugger = false; // For -d
+        public boolean taintWarnings = false; // For -t
+        public String debugFlags = ""; // For -D
 
         @Override
         public CompilerOptions clone() {
@@ -914,6 +1036,11 @@ public class ArgumentParser {
                         "    processOnly=" + processOnly + ",\n" +
                         "    processAndPrint=" + processAndPrint + ",\n" +
                         "    inPlaceEdit=" + inPlaceEdit + ",\n" +
+                        "    taintMode=" + taintMode + ",\n" +
+                        "    allowUnsafeOperations=" + allowUnsafeOperations + ",\n" +
+                        "    runUnderDebugger=" + runUnderDebugger + ",\n" +
+                        "    taintWarnings=" + taintWarnings + ",\n" +
+                        "    debugFlags=" + ScalarUtils.printable(debugFlags) + ",\n" +
                         "    code='" + (code != null ? code : "null") + "',\n" +
                         "    codeHasEncoding=" + codeHasEncoding + ",\n" +
                         "    fileName=" + ScalarUtils.printable(fileName) + ",\n" +
@@ -976,5 +1103,30 @@ public class ArgumentParser {
                 .append(" = '")
                 .append(varValue.replace("'", "\\'"))
                 .append("';\n");
+        }
+
+        /**
+         * Handles debug flags specified with the -D switch.
+         *
+         * @param args       The command-line arguments.
+         * @param parsedArgs The CompilerOptions object to configure.
+         * @param index      The current index in the arguments array.
+         * @param j          The current position in the clustered switch string.
+         * @param arg        The current argument being processed.
+         * @return The updated index after processing the debug flags.
+         */
+        private static int handleDebugFlags(String[] args, CompilerOptions parsedArgs, int index, int j, String arg) {
+            String debugFlags = "";
+            if (j < arg.length() - 1) {
+                debugFlags = arg.substring(j + 1);
+            } else if (index + 1 < args.length && !args[index + 1].startsWith("-")) {
+                debugFlags = args[++index];
+            }
+
+            // Store debug flags for potential future use
+            parsedArgs.debugFlags = debugFlags;
+            parsedArgs.debugEnabled = true;
+
+            return index;
         }
 }
