@@ -87,6 +87,15 @@ public class IdentifierParser {
             return variableName.toString(); // Returns "|" for the special variable $|
         }
 
+        // FIXED: Explicitly reject WHITESPACE tokens as invalid identifier starts
+        if (token.type == LexerTokenType.WHITESPACE) {
+            int cp = token.text.codePointAt(0);
+            String hex = cp > 255
+                    ? "\\x{" + Integer.toHexString(cp) + "}"
+                    : String.format("\\x%02x", cp);
+            throw new PerlCompilerException("Unrecognized character " + hex + ";");
+        }
+
         if (token.type == LexerTokenType.STRING) {
             // Assert valid Unicode start of identifier - \p{XID_Start}
             String id = token.text;

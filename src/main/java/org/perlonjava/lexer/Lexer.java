@@ -103,6 +103,14 @@ public class Lexer {
         return tokens;
     }
 
+    /**
+     * Helper method to check if a character is ASCII whitespace only.
+     * This excludes Unicode whitespace characters that should be treated as invalid identifier characters.
+     */
+    private static boolean isAsciiWhitespace(char c) {
+        return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f';
+    }
+
     public LexerToken nextToken() {
         if (position >= length) {
             return null;
@@ -110,7 +118,7 @@ public class Lexer {
 
         char current = input[position];
 
-        if (Character.isWhitespace(current)) {
+        if (isAsciiWhitespace(current)) {
             if (current == '\n') {
                 position++;
                 return new LexerToken(LexerTokenType.NEWLINE, "\n");
