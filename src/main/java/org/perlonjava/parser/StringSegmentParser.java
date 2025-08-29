@@ -452,7 +452,7 @@ public abstract class StringSegmentParser {
     private boolean isNonInterpolatingCharacter(String text) {
         return switch (text) {
             case ")", "%", "|", "#", "\"", "\\",
-                 "?", "-", "+", "(" -> true;
+                 "?", "(" -> true;
             default -> false;
         };
     }
