@@ -1,6 +1,7 @@
 package org.perlonjava.regex;
 
 import com.ibm.icu.lang.UCharacter;
+import com.ibm.icu.lang.UProperty;
 import com.ibm.icu.text.UnicodeSet;
 
 public class UnicodeResolver {
@@ -33,7 +34,8 @@ public class UnicodeResolver {
             // Special cases - Perl XPosix properties not natively supported in Java
             switch (property) {
                 case "XPosixSpace": case "XPerlSpace": case "SpacePerl":
-                    return wrapProperty("IsWhite_Space", negated);
+                    // Use ICU4J UnicodeSet for accurate XPosixSpace
+                    return getXPosixSpacePattern(negated);
                 case "XPosixAlnum":
                     return wrapCharClass("\\p{IsAlphabetic}\\p{IsDigit}", negated);
                 case "XPosixAlpha": case "Alpha": case "Alphabetic":
@@ -58,8 +60,15 @@ public class UnicodeResolver {
                     return wrapCharClass("\\p{IsAlphabetic}\\p{gc=Mn}\\p{gc=Me}\\p{gc=Mc}\\p{IsDigit}\\p{gc=Pc}", negated);
                 case "XPosixXDigit": case "Hex": case "Hex_Digit": case "XDigit":
                     return wrapProperty("IsHex_Digit", negated);
+                case "XIDS": case "XIDStart": case "XID_Start":
+                    // Use ICU4J UnicodeSet for accurate XID_Start
+                    return getXIDStartPattern(negated);
+                case "XIDC": case "XIDCont": case "XID_Continue":
+                    // Use ICU4J UnicodeSet for accurate XID_Continue
+                    return getXIDContinuePattern(negated);
                 case "_Perl_IDStart":
-                    return wrapCharClass("\\p{L}\\p{Nl}_", negated);
+                    // Perl's definition: XID_Start + underscore
+                    return getPerlIDStartPattern(negated);
                 case "_Perl_IDCont":
                     return wrapCharClass("\\p{L}\\p{Nl}\\p{Nd}\\p{Mn}\\p{Mc}\\p{Pc}", negated);
                 default:
@@ -102,6 +111,59 @@ public class UnicodeResolver {
         } catch (IllegalArgumentException e) {
             throw new IllegalArgumentException("Invalid or unsupported Unicode property: " + property, e);
         }
+    }
+
+    // Helper method to get XID_Start pattern using ICU4J
+    private static String getXIDStartPattern(boolean negated) {
+        UnicodeSet xidStartSet = new UnicodeSet();
+        xidStartSet.applyPropertyAlias("XID_Start", "True");
+        String pattern = xidStartSet.toPattern(false);
+        return wrapCharClass(pattern, negated);
+    }
+
+    // Helper method to get XID_Continue pattern using ICU4J
+    private static String getXIDContinuePattern(boolean negated) {
+        UnicodeSet xidContSet = new UnicodeSet();
+        xidContSet.applyPropertyAlias("XID_Continue", "True");
+        String pattern = xidContSet.toPattern(false);
+        return wrapCharClass(pattern, negated);
+    }
+
+    // Helper method to get XPosixSpace pattern using ICU4J
+    private static String getXPosixSpacePattern(boolean negated) {
+        UnicodeSet spaceSet = new UnicodeSet();
+        spaceSet.applyPropertyAlias("White_Space", "True");
+        String pattern = spaceSet.toPattern(false);
+        return wrapCharClass(pattern, negated);
+    }
+
+    // Helper method to get Perl's _IDStart pattern (XID_Start + underscore)
+    private static String getPerlIDStartPattern(boolean negated) {
+        UnicodeSet perlIDStartSet = new UnicodeSet();
+        perlIDStartSet.applyPropertyAlias("XID_Start", "True");
+        perlIDStartSet.add('_'); // Add underscore
+        String pattern = perlIDStartSet.toPattern(false);
+        return wrapCharClass(pattern, negated);
+    }
+
+    // Helper method to check if a character has XID_Start property
+    public static boolean isXIDStart(int codePoint) {
+        return UCharacter.hasBinaryProperty(codePoint, UProperty.XID_START);
+    }
+
+    // Helper method to check if a character has XID_Continue property
+    public static boolean isXIDContinue(int codePoint) {
+        return UCharacter.hasBinaryProperty(codePoint, UProperty.XID_CONTINUE);
+    }
+
+    // Helper method to check XPosixSpace (Unicode whitespace)
+    public static boolean isXPosixSpace(int codePoint) {
+        return UCharacter.hasBinaryProperty(codePoint, UProperty.WHITE_SPACE);
+    }
+
+    // Helper method to check _Perl_IDStart (XID_Start + underscore)
+    public static boolean isPerlIDStart(int codePoint) {
+        return codePoint == '_' || UCharacter.hasBinaryProperty(codePoint, UProperty.XID_START);
     }
 
     // Helper methods for negation
