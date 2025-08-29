@@ -68,7 +68,17 @@ public class ParseHeredoc {
     }
 
     static void heredocError(Parser parser) {
-        OperatorNode heredoc = parser.getHeredocNodes().getLast();
+        // Try to get heredoc info if available, otherwise use generic message
+        if (!parser.getHeredocNodes().isEmpty()) {
+            OperatorNode heredoc = parser.getHeredocNodes().getLast();
+            heredocError(parser, heredoc);
+        } else {
+            // Generic error when we don't have heredoc info
+            throw new PerlCompilerException(parser.tokenIndex, "Can't find string terminator anywhere before EOF", parser.ctx.errorUtil);
+        }
+    }
+
+    static void heredocError(Parser parser, OperatorNode heredoc) {
         throw new PerlCompilerException(parser.tokenIndex, "Can't find string terminator \"" + heredoc.getAnnotation("identifier") + "\" anywhere before EOF", parser.ctx.errorUtil);
     }
 
@@ -78,7 +88,9 @@ public class ParseHeredoc {
         List<LexerToken> tokens = parser.tokens;
         int newlineIndex = parser.tokenIndex;
 
-        for (OperatorNode heredocNode : heredocNodes) {
+        while (!heredocNodes.isEmpty()) {
+            OperatorNode heredocNode = heredocNodes.removeFirst(); // Remove immediately
+
             String delimiter = (String) heredocNode.getAnnotation("delimiter");
             String identifier = (String) heredocNode.getAnnotation("identifier");
             boolean indent = heredocNode.getBooleanAnnotation("indent");
@@ -132,7 +144,7 @@ public class ParseHeredoc {
 
             // Check if we found the terminator
             if (!foundTerminator) {
-                heredocError(parser);
+                heredocError(parser, heredocNode);
             }
 
             // Handle indentation
@@ -186,9 +198,6 @@ public class ParseHeredoc {
             newlineIndex = currentIndex;
         }
 
-        // Clear the list of heredoc nodes after processing
-        parser.debugHeredocState("HEREDOC_BEFORE_CLEAR");
-        heredocNodes.clear();
         parser.debugHeredocState("HEREDOC_AFTER_CLEAR");
         parser.tokenIndex = newlineIndex;
     }
