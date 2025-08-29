@@ -78,9 +78,9 @@ dependencies {
     implementation 'net.java.dev.jna:jna-platform:5.17.0'          // Native access
 
     // Testing dependencies
-    testImplementation 'org.junit.jupiter:junit-jupiter-api:6.0.0-M2'
-    testImplementation 'org.junit.jupiter:junit-jupiter-engine:6.0.0-M2'
-    testImplementation 'org.junit.jupiter:junit-jupiter-params:6.0.0-M2'
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:6.0.0-RC2'
+    testImplementation 'org.junit.jupiter:junit-jupiter-engine:6.0.0-RC2'
+    testImplementation 'org.junit.jupiter:junit-jupiter-params:6.0.0-RC2'
 }
 
 // JUnit configuration
