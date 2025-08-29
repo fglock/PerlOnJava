@@ -404,19 +404,30 @@ public class OperatorParser {
 
     static BinaryOperatorNode parseBless(Parser parser, int currentIndex) {
         // Handle 'bless' operator with special handling for class name
-        ListNode operand1 = ListParser.parseZeroOrMoreList(parser, 1, false, true, false, false);
-        Node ref = operand1.elements.get(0);
+        Node ref;
         Node className;
+
+        // Parse the first argument (the reference to bless)
+        ListNode operand1 = ListParser.parseZeroOrMoreList(parser, 1, false, true, false, false);
+        ref = operand1.elements.get(0);
+
         if (operand1.elements.size() > 1) {
+            // Second argument provided
             className = operand1.elements.get(1);
-            if (className instanceof StringNode && ((StringNode) className).value.isEmpty()) {
+
+            // Handle bareword class names
+            if (className instanceof IdentifierNode identifierNode) {
+                // Convert bareword to string (like "Moo" -> StringNode("Moo"))
+                className = new StringNode(identifierNode.name, currentIndex);
+            } else if (className instanceof StringNode stringNode && stringNode.value.isEmpty()) {
                 // default to main package if empty class name is provided
                 className = new StringNode("main", currentIndex);
             }
         } else {
-            // default to current package if no class name is provided
+            // No class name provided - default to current package
             className = new StringNode(parser.ctx.symbolTable.getCurrentPackage(), currentIndex);
         }
+
         return new BinaryOperatorNode("bless", ref, className, currentIndex);
     }
 
