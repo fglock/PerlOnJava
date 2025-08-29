@@ -49,6 +49,12 @@ public class Stat {
         return permissions;
     }
 
+    // Helper method to check if a string looks like a filehandle name
+    private static boolean looksLikeFilehandle(String name) {
+        // Check if it's a typical filehandle name (all caps, starts with letter, no path separators)
+        return name.matches("^[A-Z_][A-Z0-9_]*$") && !name.contains("/") && !name.contains("\\");
+    }
+
     public static RuntimeList statLastHandle() {
         return stat(lastFileHandle);
     }
@@ -86,9 +92,31 @@ public class Stat {
             return res;
         }
 
-        // Handle string filenames
+        // Handle string arguments
+        String filename = arg.toString();
+
+        // Check if it looks like a filehandle name but isn't actually a filehandle
+        if (looksLikeFilehandle(filename)) {
+            // Try to get it as a global variable (filehandle)
+            RuntimeScalar globVar = null;
+            try {
+                globVar = getGlobalVariable("main::" + filename);
+                if (globVar != null && (globVar.type == RuntimeScalarType.GLOB || globVar.type == RuntimeScalarType.GLOBREFERENCE)) {
+                    // It's actually a filehandle, recursively call stat with it
+                    return stat(globVar);
+                }
+            } catch (Exception e) {
+                // Ignore, treat as filename
+            }
+
+            // It looks like a filehandle but isn't one, return EBADF
+            getGlobalVariable("main::!").set(9);
+            return res;
+        }
+
+        // Handle regular filenames
         try {
-            Path path = resolvePath(arg.toString());
+            Path path = resolvePath(filename);
 
             // Basic file attributes (similar to some Perl stat fields)
             BasicFileAttributes basicAttr = Files.readAttributes(path, BasicFileAttributes.class);
@@ -139,9 +167,31 @@ public class Stat {
             return res;
         }
 
-        // Handle string filenames
+        // Handle string arguments
+        String filename = arg.toString();
+
+        // Check if it looks like a filehandle name but isn't actually a filehandle
+        if (looksLikeFilehandle(filename)) {
+            // Try to get it as a global variable (filehandle)
+            RuntimeScalar globVar = null;
+            try {
+                globVar = getGlobalVariable("main::" + filename);
+                if (globVar != null && (globVar.type == RuntimeScalarType.GLOB || globVar.type == RuntimeScalarType.GLOBREFERENCE)) {
+                    // It's actually a filehandle, recursively call lstat with it
+                    return lstat(globVar);
+                }
+            } catch (Exception e) {
+                // Ignore, treat as filename
+            }
+
+            // It looks like a filehandle but isn't one, return EBADF
+            getGlobalVariable("main::!").set(9);
+            return res;
+        }
+
+        // Handle regular filenames
         try {
-            Path path = resolvePath(arg.toString());
+            Path path = resolvePath(filename);
 
             // Basic attributes without following symlink
             BasicFileAttributes basicAttr = Files.readAttributes(path,
