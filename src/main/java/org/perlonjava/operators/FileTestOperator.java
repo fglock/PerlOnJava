@@ -46,6 +46,12 @@ public class FileTestOperator {
 
     static RuntimeScalar lastFileHandle = new RuntimeScalar();
 
+    // Helper method to check if a string looks like a filehandle name
+    private static boolean looksLikeFilehandle(String name) {
+        // Check if it's a typical filehandle name (all caps, starts with letter, no path separators)
+        return name.matches("^[A-Z_][A-Z0-9_]*$") && !name.contains("/") && !name.contains("\\");
+    }
+
     public static RuntimeScalar fileTestLastHandle(String operator) {
         return fileTest(operator, lastFileHandle);
     }
@@ -91,93 +97,240 @@ public class FileTestOperator {
             return operator.equals("-l") ? scalarFalse : scalarUndef;
         }
 
+        // Handle string arguments
+        String filename = fileHandle.toString();
+
+        // Check if it looks like a filehandle name but isn't actually a filehandle
+        if (looksLikeFilehandle(filename)) {
+            // Try to get it as a global variable (filehandle)
+            RuntimeScalar globVar = null;
+            try {
+                globVar = getGlobalVariable("main::" + filename);
+                if (globVar != null && (globVar.type == RuntimeScalarType.GLOB || globVar.type == RuntimeScalarType.GLOBREFERENCE)) {
+                    // It's actually a filehandle, recursively call fileTest with it
+                    return fileTest(operator, globVar);
+                }
+            } catch (Exception e) {
+                // Ignore, treat as non-existent filehandle
+            }
+
+            // It looks like a filehandle but isn't one, return EBADF and appropriate result
+            getGlobalVariable("main::!").set(9);
+            return operator.equals("-l") ? scalarFalse : scalarUndef;
+        }
+
         // Handle string filenames
-        String filePath = fileHandle.toString();
-        Path path = resolvePath(filePath);
+        Path path = resolvePath(filename);
 
         try {
             return switch (operator) {
-                case "-r" ->
+                case "-r" -> {
                     // Check if file is readable
-                        getScalarBoolean(Files.isReadable(path));
-                case "-w" ->
+                    if (!Files.exists(path)) {
+                        getGlobalVariable("main::!").set(2); // ENOENT
+                        yield scalarUndef;
+                    }
+                    getGlobalVariable("main::!").set(0); // Clear error
+                    yield getScalarBoolean(Files.isReadable(path));
+                }
+                case "-w" -> {
                     // Check if file is writable
-                        getScalarBoolean(Files.isWritable(path));
-                case "-x" ->
+                    if (!Files.exists(path)) {
+                        getGlobalVariable("main::!").set(2); // ENOENT
+                        yield scalarUndef;
+                    }
+                    getGlobalVariable("main::!").set(0); // Clear error
+                    yield getScalarBoolean(Files.isWritable(path));
+                }
+                case "-x" -> {
                     // Check if file is executable
-                        getScalarBoolean(Files.isExecutable(path));
-                case "-e" ->
+                    if (!Files.exists(path)) {
+                        getGlobalVariable("main::!").set(2); // ENOENT
+                        yield scalarUndef;
+                    }
+                    getGlobalVariable("main::!").set(0); // Clear error
+                    yield getScalarBoolean(Files.isExecutable(path));
+                }
+                case "-e" -> {
                     // Check if file exists
-                        getScalarBoolean(Files.exists(path));
-                case "-z" ->
+                    boolean exists = Files.exists(path);
+                    getGlobalVariable("main::!").set(exists ? 0 : 2); // Clear error or set ENOENT
+                    yield getScalarBoolean(exists);
+                }
+                case "-z" -> {
                     // Check if file is empty (zero size)
-                        getScalarBoolean(Files.size(path) == 0);
+                    if (!Files.exists(path)) {
+                        getGlobalVariable("main::!").set(2); // ENOENT
+                        yield scalarUndef;
+                    }
+                    getGlobalVariable("main::!").set(0); // Clear error
+                    yield getScalarBoolean(Files.size(path) == 0);
+                }
                 case "-s" -> {
                     // Return file size if non-zero, otherwise return false
+                    if (!Files.exists(path)) {
+                        getGlobalVariable("main::!").set(2); // ENOENT
+                        yield scalarUndef;
+                    }
+                    getGlobalVariable("main::!").set(0); // Clear error
                     long size = Files.size(path);
                     yield size > 0 ? new RuntimeScalar(size) : scalarFalse;
                 }
-                case "-f" ->
+                case "-f" -> {
                     // Check if path is a regular file
-                        getScalarBoolean(Files.isRegularFile(path));
-                case "-d" ->
+                    if (!Files.exists(path)) {
+                        getGlobalVariable("main::!").set(2); // ENOENT
+                        yield scalarUndef;
+                    }
+                    getGlobalVariable("main::!").set(0); // Clear error
+                    yield getScalarBoolean(Files.isRegularFile(path));
+                }
+                case "-d" -> {
                     // Check if path is a directory
-                        getScalarBoolean(Files.isDirectory(path));
-                case "-l" ->
+                    if (!Files.exists(path)) {
+                        getGlobalVariable("main::!").set(2); // ENOENT
+                        yield scalarUndef;
+                    }
+                    getGlobalVariable("main::!").set(0); // Clear error
+                    yield getScalarBoolean(Files.isDirectory(path));
+                }
+                case "-l" -> {
                     // Check if path is a symbolic link
-                        getScalarBoolean(Files.isSymbolicLink(path));
-                case "-p" ->
+                    boolean isSymLink = Files.isSymbolicLink(path);
+                    getGlobalVariable("main::!").set(isSymLink || Files.exists(path) ? 0 : 2);
+                    yield getScalarBoolean(isSymLink);
+                }
+                case "-p" -> {
                     // Approximate check for named pipe (FIFO)
-                        getScalarBoolean(Files.isRegularFile(path) && filePath.endsWith(".fifo"));
-                case "-S" ->
+                    if (!Files.exists(path)) {
+                        getGlobalVariable("main::!").set(2); // ENOENT
+                        yield scalarUndef;
+                    }
+                    getGlobalVariable("main::!").set(0); // Clear error
+                    yield getScalarBoolean(Files.isRegularFile(path) && filename.endsWith(".fifo"));
+                }
+                case "-S" -> {
                     // Approximate check for socket
-                        getScalarBoolean(Files.isRegularFile(path) && filePath.endsWith(".sock"));
-                case "-b" ->
+                    if (!Files.exists(path)) {
+                        getGlobalVariable("main::!").set(2); // ENOENT
+                        yield scalarUndef;
+                    }
+                    getGlobalVariable("main::!").set(0); // Clear error
+                    yield getScalarBoolean(Files.isRegularFile(path) && filename.endsWith(".sock"));
+                }
+                case "-b" -> {
                     // Approximate check for block special file
-                        getScalarBoolean(Files.isRegularFile(path) && filePath.startsWith("/dev/"));
-                case "-c" ->
+                    if (!Files.exists(path)) {
+                        getGlobalVariable("main::!").set(2); // ENOENT
+                        yield scalarUndef;
+                    }
+                    getGlobalVariable("main::!").set(0); // Clear error
+                    yield getScalarBoolean(Files.isRegularFile(path) && filename.startsWith("/dev/"));
+                }
+                case "-c" -> {
                     // Approximate check for character special file
-                        getScalarBoolean(Files.isRegularFile(path) && filePath.startsWith("/dev/"));
-                case "-u" ->
+                    if (!Files.exists(path)) {
+                        getGlobalVariable("main::!").set(2); // ENOENT
+                        yield scalarUndef;
+                    }
+                    getGlobalVariable("main::!").set(0); // Clear error
+                    yield getScalarBoolean(Files.isRegularFile(path) && filename.startsWith("/dev/"));
+                }
+                case "-u" -> {
                     // Check if setuid bit is set
-                        getScalarBoolean((Files.getPosixFilePermissions(path).contains(PosixFilePermission.OWNER_EXECUTE)));
-                case "-g" ->
+                    if (!Files.exists(path)) {
+                        getGlobalVariable("main::!").set(2); // ENOENT
+                        yield scalarUndef;
+                    }
+                    getGlobalVariable("main::!").set(0); // Clear error
+                    yield getScalarBoolean((Files.getPosixFilePermissions(path).contains(PosixFilePermission.OWNER_EXECUTE)));
+                }
+                case "-g" -> {
                     // Check if setgid bit is set
-                        getScalarBoolean((Files.getPosixFilePermissions(path).contains(PosixFilePermission.GROUP_EXECUTE)));
-                case "-k" ->
+                    if (!Files.exists(path)) {
+                        getGlobalVariable("main::!").set(2); // ENOENT
+                        yield scalarUndef;
+                    }
+                    getGlobalVariable("main::!").set(0); // Clear error
+                    yield getScalarBoolean((Files.getPosixFilePermissions(path).contains(PosixFilePermission.GROUP_EXECUTE)));
+                }
+                case "-k" -> {
                     // Approximate check for sticky bit (using others execute permission)
-                        getScalarBoolean((Files.getPosixFilePermissions(path).contains(PosixFilePermission.OTHERS_EXECUTE)));
-                case "-T", "-B" ->
+                    if (!Files.exists(path)) {
+                        getGlobalVariable("main::!").set(2); // ENOENT
+                        yield scalarUndef;
+                    }
+                    getGlobalVariable("main::!").set(0); // Clear error
+                    yield getScalarBoolean((Files.getPosixFilePermissions(path).contains(PosixFilePermission.OTHERS_EXECUTE)));
+                }
+                case "-T", "-B" -> {
                     // Check if file is text (-T) or binary (-B)
-                        isTextOrBinary(path, operator.equals("-T"));
-                case "-M", "-A", "-C" ->
+                    if (!Files.exists(path)) {
+                        getGlobalVariable("main::!").set(2); // ENOENT
+                        yield scalarUndef;
+                    }
+                    getGlobalVariable("main::!").set(0); // Clear error
+                    yield isTextOrBinary(path, operator.equals("-T"));
+                }
+                case "-M", "-A", "-C" -> {
                     // Get file time difference for modification (-M), access (-A), or creation (-C) time
-                        getFileTimeDifference(path, operator);
-                case "-R" ->
+                    if (!Files.exists(path)) {
+                        getGlobalVariable("main::!").set(2); // ENOENT
+                        yield scalarUndef;
+                    }
+                    getGlobalVariable("main::!").set(0); // Clear error
+                    yield getFileTimeDifference(path, operator);
+                }
+                case "-R" -> {
                     // Check if file is readable by the real user ID
-                        getScalarBoolean(Files.isReadable(path));
-                case "-W" ->
+                    if (!Files.exists(path)) {
+                        getGlobalVariable("main::!").set(2); // ENOENT
+                        yield scalarUndef;
+                    }
+                    getGlobalVariable("main::!").set(0); // Clear error
+                    yield getScalarBoolean(Files.isReadable(path));
+                }
+                case "-W" -> {
                     // Check if file is writable by the real user ID
-                        getScalarBoolean(Files.isWritable(path));
-                case "-X" ->
+                    if (!Files.exists(path)) {
+                        getGlobalVariable("main::!").set(2); // ENOENT
+                        yield scalarUndef;
+                    }
+                    getGlobalVariable("main::!").set(0); // Clear error
+                    yield getScalarBoolean(Files.isWritable(path));
+                }
+                case "-X" -> {
                     // Check if file is executable by the real user ID
-                        getScalarBoolean(Files.isExecutable(path));
+                    if (!Files.exists(path)) {
+                        getGlobalVariable("main::!").set(2); // ENOENT
+                        yield scalarUndef;
+                    }
+                    getGlobalVariable("main::!").set(0); // Clear error
+                    yield getScalarBoolean(Files.isExecutable(path));
+                }
                 case "-O" -> {
                     // Check if file is owned by the current user
+                    if (!Files.exists(path)) {
+                        getGlobalVariable("main::!").set(2); // ENOENT
+                        yield scalarUndef;
+                    }
+                    getGlobalVariable("main::!").set(0); // Clear error
                     UserPrincipal owner = Files.getOwner(path);
                     UserPrincipal currentUser = path.getFileSystem().getUserPrincipalLookupService()
                             .lookupPrincipalByName(System.getProperty("user.name"));
                     yield getScalarBoolean(owner.equals(currentUser));
                 }
-                case "-t" ->
+                case "-t" -> {
                     // Check if the standard input is a TTY
-                        getScalarBoolean(System.console() != null);
+                    getGlobalVariable("main::!").set(0); // Clear error
+                    yield getScalarBoolean(System.console() != null);
+                }
                 default -> throw new UnsupportedOperationException("Unsupported file test operator: " + operator);
             };
         } catch (IOException e) {
-            // Set error message in global variable and return false
-            getGlobalVariable("main::!").set(e.getMessage());
-            return scalarFalse;
+            // Set error message in global variable and return false/undef
+            getGlobalVariable("main::!").set(2); // ENOENT for most file operations
+            return operator.equals("-l") ? scalarFalse : scalarUndef;
         }
     }
 
