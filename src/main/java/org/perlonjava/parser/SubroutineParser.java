@@ -83,7 +83,12 @@ public class SubroutineParser {
                 if (!(token.text.equals("->") || token.text.equals("=>") || INFIX_OP.contains(token.text))) {
                     // System.out.println("  package loaded: " + packageName + "->" + subName);
 
-                    ListNode arguments = consumeArgsWithPrototype(parser, "@");
+                    ListNode arguments;
+                    if (token.text.equals(",")) {
+                        arguments = new ListNode(currentIndex);
+                    } else {
+                        arguments = consumeArgsWithPrototype(parser, "@");
+                    }
                     return new BinaryOperatorNode(
                             "->",
                             new IdentifierNode(packageName, currentIndex2),
