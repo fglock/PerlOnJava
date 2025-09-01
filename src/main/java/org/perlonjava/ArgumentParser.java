@@ -120,7 +120,7 @@ public class ArgumentParser {
             } else if (c == '\'' && !inQuotes) {
                 inSingleQuotes = !inSingleQuotes;
             } else if (Character.isWhitespace(c) && !inQuotes && !inSingleQuotes) {
-                if (currentArg.length() > 0) {
+                if (!currentArg.isEmpty()) {
                     String arg = currentArg.toString();
                     // Only process supported PERL5OPT options
                     if (isSupportedPerl5OptOption(arg)) {
@@ -134,7 +134,7 @@ public class ArgumentParser {
         }
 
         // Add the last argument if there is one
-        if (currentArg.length() > 0) {
+        if (!currentArg.isEmpty()) {
             String arg = currentArg.toString();
             if (isSupportedPerl5OptOption(arg)) {
                 args.add(arg);
