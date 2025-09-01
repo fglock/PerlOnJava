@@ -196,19 +196,19 @@ public class Operator {
      * Extracts a substring from a given RuntimeScalar based on the provided offset and length.
      * This method mimics Perl's substr function, handling negative offsets and lengths.
      *
-     * @param runtimeScalar The RuntimeScalar containing the original string.
-     * @param list          A RuntimeList containing the offset and optionally the length.
+     * @param ctx The context of the operation.
+     * @param args The original string, the offset and optionally the length.
      * @return A RuntimeSubstrLvalue representing the extracted substring, which can be used for further operations.
      */
-    public static RuntimeScalar substr(RuntimeScalar runtimeScalar, RuntimeList list) {
-        String str = runtimeScalar.toString();
+    public static RuntimeScalar substr(int ctx, RuntimeBase... args) {
+        String str = args[0].toString();
         int strLength = str.length();
 
-        int size = list.elements.size();
-        int offset = Integer.parseInt(list.getFirst().toString());
+        int size = args.length;
+        int offset = ((RuntimeScalar) args[1]).getInt();
         // If length is not provided, use the rest of the string
-        int length = (size > 1) ? Integer.parseInt(list.elements.get(1).toString()) : strLength - offset;
-        String replacement = (size > 2) ? list.elements.get(2).toString() : null;
+        int length = (size > 2) ? ((RuntimeScalar) args[2]).getInt() : strLength - offset;
+        String replacement = (size > 3) ? args[3].toString() : null;
 
         // Store original offset and length for LValue creation
         int originalOffset = offset;
@@ -235,7 +235,7 @@ public class Operator {
 
         // Return an LValue "RuntimeSubstrLvalue" that can be used to assign to the original string
         // This allows for in-place modification of the original string if needed
-        var lvalue = new RuntimeSubstrLvalue(runtimeScalar, result, originalOffset, originalLength);
+        var lvalue = new RuntimeSubstrLvalue((RuntimeScalar) args[0], result, originalOffset, originalLength);
 
         if (replacement != null) {
             lvalue.set(replacement);

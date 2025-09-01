@@ -183,7 +183,7 @@ public class OperatorHandler {
 
         put("..", "createRange", "org/perlonjava/runtime/PerlRange", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/PerlRange;");
 
-        put("substr", "substr", "org/perlonjava/operators/Operator", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("substr", "substr", "org/perlonjava/operators/Operator", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("sprintf", "sprintf", "org/perlonjava/operators/SprintfOperator", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;");
 
         put("systemCommand", "systemCommand", "org/perlonjava/operators/SystemOperator", "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeBase;");
