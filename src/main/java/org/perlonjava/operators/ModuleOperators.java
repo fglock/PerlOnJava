@@ -32,7 +32,7 @@ public class ModuleOperators {
         // Check if the filename is an absolute path or starts with ./ or ../
         Path filePath = Paths.get(fileName);
         if (filePath.isAbsolute() || fileName.startsWith("./") || fileName.startsWith("../")) {
-            // For absolute or explicit relative paths, resolve using RuntimeIO.resolvePath
+            // For absolute or explicit relative paths, resolve using RuntimeIO.getPath
             filePath = RuntimeIO.resolvePath(fileName);
             fullName = Files.exists(filePath) ? filePath : null;
         } else {
@@ -57,25 +57,33 @@ public class ModuleOperators {
                     // Try to find in jar at "src/main/perl/lib"
                     String resourcePath = "/lib/" + fileName;
                     URL resource = RuntimeScalar.class.getResource(resourcePath);
+                    // System.out.println("Found resource " + resource);
                     if (resource != null) {
+
+                        String path = resource.getPath();
+                        // Remove leading slash if on Windows
+                        if (SystemUtils.osIsWindows() && path.startsWith("/")) {
+                            path = path.substring(1);
+                        }
+                        fullName = Paths.get(path);
+
                         try (InputStream is = resource.openStream();
                              BufferedReader reader = new BufferedReader(new InputStreamReader(is))) {
                             StringBuilder content = new StringBuilder();
-                            String line;
+                            String line = null;
                             while ((line = reader.readLine()) != null) {
                                 content.append(line).append("\n");
                             }
+                            // System.out.println("Content of " + resourcePath + ": " + content.toString());
                             code = content.toString();
-                            // Use the resource path as the "filename" for JAR resources
-                            // This avoids Windows path issues with JAR URLs
-                            fullName = Paths.get("jar:" + resourcePath);
                             break;
                         } catch (IOException e1) {
-                            // Continue to next directory
+                            //GlobalVariable.setGlobalVariable("main::!", "No such file or directory");
+                            //return new RuntimeScalar();
                         }
                     }
                 } else {
-                    // Use RuntimeIO.resolvePath to properly resolve the directory path first
+                    // Use RuntimeIO.getPath to properly resolve the directory path first
                     Path dirPath = RuntimeIO.resolvePath(dirName);
                     if (fileName.endsWith(".pm")) {
                         // Try to find a .pmc file
@@ -93,7 +101,6 @@ public class ModuleOperators {
                 }
             }
         }
-
         if (fullName == null) {
             GlobalVariable.setGlobalVariable("main::!", "No such file or directory");
             return new RuntimeScalar();
@@ -103,7 +110,7 @@ public class ModuleOperators {
         parsedArgs.fileName = fullName.toString();
         if (code == null) {
             try {
-                code = FileUtils.readFileWithEncodingDetection(fullName, parsedArgs);
+                code = FileUtils.readFileWithEncodingDetection(Paths.get(parsedArgs.fileName), parsedArgs);
             } catch (IOException e) {
                 GlobalVariable.setGlobalVariable("main::!", "Unable to read file " + parsedArgs.fileName);
                 return new RuntimeScalar();
