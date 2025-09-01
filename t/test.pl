@@ -621,15 +621,17 @@ sub skip_internal {
 }
 
 sub skip_if_miniperl {
-    skip(@_) if is_miniperl();
+    ## PerlOnJava is not miniperl
+    # skip(@_) if is_miniperl();
 }
 
 sub skip_without_dynamic_extension {
-    my $extension = shift;
-    skip("no dynamic loading on miniperl, no extension $extension", @_)
-	if is_miniperl();
-    return if &_have_dynamic_extension($extension);
-    skip("extension $extension was not built", @_);
+    ## PerlOnJava has dynamic extension
+    # my $extension = shift;
+    # skip("no dynamic loading on miniperl, no extension $extension", @_)
+	# if is_miniperl();
+    # return if &_have_dynamic_extension($extension);
+    # skip("extension $extension was not built", @_);
 }
 
 sub todo_skip {

@@ -45,9 +45,7 @@ sub OVERLOAD {
                 unless exists $ops_seen{$_};
             $sub = $arg{$_};
             if (not ref $sub) {
-                my $sym_ref = Symbol::qualify_to_ref("($_", $package);
-                *$sym_ref = $sub;
-                $sub = \&nil;
+                $sub = Symbol::qualify_to_ref($sub, $package);
             }
             my $sym_ref = Symbol::qualify_to_ref("($_", $package);
             *$sym_ref = $sub;
