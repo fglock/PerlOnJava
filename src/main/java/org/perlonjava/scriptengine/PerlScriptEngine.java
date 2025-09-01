@@ -1,6 +1,6 @@
 package org.perlonjava.scriptengine;
 
-import org.perlonjava.ArgumentParser;
+import org.perlonjava.CompilerOptions;
 import org.perlonjava.runtime.RuntimeList;
 
 import javax.script.*;
@@ -33,7 +33,7 @@ public class PerlScriptEngine extends AbstractScriptEngine {
     @Override
     public Object eval(String script, ScriptContext context) throws ScriptException {
         try {
-            ArgumentParser.CompilerOptions options = new ArgumentParser.CompilerOptions();
+            CompilerOptions options = new CompilerOptions();
             options.fileName = "<STDIN>";
             options.code = script;
 

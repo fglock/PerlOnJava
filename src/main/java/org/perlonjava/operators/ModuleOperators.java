@@ -1,6 +1,6 @@
 package org.perlonjava.operators;
 
-import org.perlonjava.ArgumentParser;
+import org.perlonjava.CompilerOptions;
 import org.perlonjava.Configuration;
 import org.perlonjava.perlmodule.Universal;
 import org.perlonjava.runtime.*;
@@ -106,7 +106,7 @@ public class ModuleOperators {
             return new RuntimeScalar();
         }
 
-        ArgumentParser.CompilerOptions parsedArgs = new ArgumentParser.CompilerOptions();
+        CompilerOptions parsedArgs = new CompilerOptions();
         parsedArgs.fileName = fullName.toString();
         if (code == null) {
             try {

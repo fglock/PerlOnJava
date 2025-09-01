@@ -1,6 +1,6 @@
 package org.perlonjava.runtime;
 
-import org.perlonjava.ArgumentParser;
+import org.perlonjava.CompilerOptions;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -22,7 +22,7 @@ public class FileUtils {
      * @return The decoded string content of the file
      * @throws IOException if the file cannot be read
      */
-    public static String readFileWithEncodingDetection(Path filePath, ArgumentParser.CompilerOptions parsedArgs) throws IOException {
+    public static String readFileWithEncodingDetection(Path filePath, CompilerOptions parsedArgs) throws IOException {
         byte[] bytes = Files.readAllBytes(filePath);
         return detectEncodingAndDecode(bytes, parsedArgs);
     }
@@ -33,7 +33,7 @@ public class FileUtils {
      * @param bytes The file content as bytes
      * @return The decoded string content
      */
-    private static String detectEncodingAndDecode(byte[] bytes, ArgumentParser.CompilerOptions parsedArgs) {
+    private static String detectEncodingAndDecode(byte[] bytes, CompilerOptions parsedArgs) {
         if (bytes.length == 0) {
             return "";
         }

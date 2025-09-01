@@ -1,6 +1,6 @@
 package org.perlonjava.scriptengine;
 
-import org.perlonjava.ArgumentParser;
+import org.perlonjava.CompilerOptions;
 import org.perlonjava.astnode.Node;
 import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.codegen.EmitterMethodCreator;
@@ -54,7 +54,7 @@ public class PerlLanguageProvider {
      * @param compilerOptions Compiler flags, file name and source code
      * @return The result of the Perl code execution.
      */
-    public static RuntimeList executePerlCode(ArgumentParser.CompilerOptions compilerOptions,
+    public static RuntimeList executePerlCode(CompilerOptions compilerOptions,
                                               boolean isTopLevelScript) throws Exception {
 
         ScopedSymbolTable globalSymbolTable = new ScopedSymbolTable();
@@ -156,7 +156,7 @@ public class PerlLanguageProvider {
      */
     public static RuntimeList executePerlAST(Node ast,
                                              List<LexerToken> tokens,
-                                             ArgumentParser.CompilerOptions compilerOptions) throws Exception {
+                                             CompilerOptions compilerOptions) throws Exception {
 
         ScopedSymbolTable globalSymbolTable = new ScopedSymbolTable();
         globalSymbolTable.enterScope();

@@ -334,6 +334,7 @@ The following areas are currently under active development to enhance the functi
   - Overload operators: `++`, `--`.
   - String interpolation fixes.
   - Auto-bless filehandle into IO::Handle subclass
+  - Command line option `-C`
 
 ### v4.0.0 Milestone (Planned Release Date: 2026-05-10)
 

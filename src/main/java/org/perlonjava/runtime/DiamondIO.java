@@ -1,6 +1,6 @@
 package org.perlonjava.runtime;
 
-import org.perlonjava.ArgumentParser;
+import org.perlonjava.CompilerOptions;
 import org.perlonjava.operators.Readline;
 
 import java.io.IOException;
@@ -39,7 +39,7 @@ public class DiamondIO {
     // Path to the temporary file to be deleted on exit
     static Path tempFilePath = null;
 
-    public static void initialize(ArgumentParser.CompilerOptions compilerOptions) {
+    public static void initialize(CompilerOptions compilerOptions) {
         inPlaceExtension = compilerOptions.inPlaceExtension;
         inPlaceEdit = compilerOptions.inPlaceEdit;
     }

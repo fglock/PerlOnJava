@@ -130,7 +130,7 @@ public class PerlScriptExecutionTest {
 
             // Read the content of the Perl script with UTF-8 encoding
             String content = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
-            ArgumentParser.CompilerOptions options = new ArgumentParser.CompilerOptions();
+            CompilerOptions options = new CompilerOptions();
             options.code = content; // Set the code to be executed
             options.fileName = filename; // Set the filename for reference
 
