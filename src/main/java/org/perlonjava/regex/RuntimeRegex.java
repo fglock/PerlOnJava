@@ -1,5 +1,6 @@
 package org.perlonjava.regex;
 
+import org.perlonjava.operators.WarnDie;
 import org.perlonjava.runtime.*;
 
 import java.util.LinkedHashMap;
@@ -80,12 +81,17 @@ public class RuntimeRegex implements RuntimeScalarReference {
 
             String javaPattern = preProcessRegex(patternString, regex.regexFlags);
 
+            regex.patternString = patternString;
+
             try {
                 // Compile the regex pattern
                 regex.pattern = Pattern.compile(javaPattern, regex.patternFlags);
-                regex.patternString = patternString;
             } catch (Exception e) {
-                throw new PerlCompilerException("Regex compilation failed: " + e.getMessage());
+                // throw new PerlCompilerException("Regex compilation failed: " + e.getMessage());
+
+                // XXX TODO - temporarily warn instead of die, and return an invalid pattern so we can run Perl tests
+                WarnDie.warn(new RuntimeScalar("Regex compilation failed: " + e.getMessage()), new RuntimeScalar());
+                regex.pattern = Pattern.compile(Character.toString(0) + "ERROR" + Character.toString(0), Pattern.DOTALL);
             }
 
             // Cache the result if the cache is not full
