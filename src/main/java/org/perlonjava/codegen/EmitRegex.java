@@ -24,28 +24,19 @@ public class EmitRegex {
      * @param node           The binary operator node representing the binding regex operation.
      */
     static void handleBindRegex(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
-        // AST Structure for reference:
-        //  BinaryOperatorNode: =~
-        //    OperatorNode: $
-        //      IdentifierNode: a
-        //    OperatorNode: matchRegex (or `qr` object)
-        //      ListNode:
-        //        StringNode: 'abc'
-        //        StringNode: 'i'
-
-        // Execute operands in scalar context
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
 
         if (node.right instanceof OperatorNode right
-                && right.operand instanceof ListNode listNode) {
-            // Regex operator: $v =~ /regex/;
+                && right.operand instanceof ListNode listNode
+                && !right.operator.equals("quoteRegex")) {
+            // Regex operator: $v =~ /regex/; (but NOT qr//)
             // Bind the variable to the regex operation
             listNode.elements.add(node.left);
             right.accept(emitterVisitor);
             return;
         }
 
-        // Handle non-regex operator case (e.g., $v =~ $qr)
+        // Handle non-regex operator case (e.g., $v =~ $qr OR $v =~ qr//)
         node.right.accept(scalarVisitor);
         node.left.accept(scalarVisitor);
         emitMatchRegex(emitterVisitor);
