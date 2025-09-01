@@ -64,22 +64,47 @@ public class WarnDie {
     }
 
     public static RuntimeBase warn(RuntimeBase message, RuntimeScalar where, String fileName, int lineNumber) {
-        String out = message.toString();
-        if (out.isEmpty()) {
+        RuntimeScalar sig = getGlobalHash("main::SIG").get("__WARN__");
+
+        // If message is empty or just whitespace, handle special cases
+        String messageStr = message.toString();
+        RuntimeScalar finalMessage;
+
+        if (messageStr.isEmpty()) {
             RuntimeScalar err = getGlobalVariable("main::@");
             if (err.getDefinedBoolean()) {
-                out = err + "\t...caught";
+                // If $@ is a reference, pass it directly to the signal handler
+                if (RuntimeScalarType.isReference(err)) {
+                    finalMessage = new RuntimeScalar(err);
+                } else {
+                    // String in $@, append "...caught" with location
+                    String errStr = err.toString();
+                    if (!errStr.endsWith("\n")) {
+                        errStr += "\n";
+                    }
+                    finalMessage = new RuntimeScalar(errStr + "\t...caught" + where.toString());
+                }
             } else {
-                out = "Warning: something's wrong";
+                finalMessage = new RuntimeScalar("Warning: something's wrong" + where.toString());
+            }
+        } else {
+            // Handle non-empty message
+            if (RuntimeScalarType.isReference(message.getFirst())) {
+                // Message is a reference, pass it as-is
+                finalMessage = new RuntimeScalar(message.getFirst());
+            } else {
+                // String message
+                String out = messageStr;
+                if (!out.endsWith("\n")) {
+                    out += where.toString();
+                }
+                finalMessage = new RuntimeScalar(out);
             }
         }
-        if (!out.endsWith("\n")) {
-            out += where.toString();
-        }
 
-        RuntimeScalar sig = getGlobalHash("main::SIG").get("__WARN__");
         if (sig.getDefinedBoolean()) {
-            RuntimeArray args = new RuntimeScalar(out).getArrayOfAlias();
+            RuntimeArray args = new RuntimeArray();
+            RuntimeArray.push(args, finalMessage);
 
             RuntimeScalar sigHandler = new RuntimeScalar(sig);
 
@@ -97,7 +122,7 @@ public class WarnDie {
 
         // Get the RuntimeIO for STDERR and write the message
         RuntimeIO stderrIO = getGlobalIO("main::STDERR").getRuntimeIO();
-        stderrIO.write(out);
+        stderrIO.write(finalMessage.toString());
 
         return new RuntimeScalar();
     }
@@ -152,9 +177,6 @@ public class WarnDie {
             DynamicVariableManager.popToLocalLevel(level);
 
             return res;
-        }
-        if (sig.getDefinedBoolean()) {
-            return RuntimeCode.apply(sig, message.getArrayOfAlias(), RuntimeContextType.SCALAR);
         }
 
         throw new PerlCompilerException(errVariable.toString());
