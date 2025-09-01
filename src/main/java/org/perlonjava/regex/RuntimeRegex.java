@@ -215,15 +215,44 @@ public class RuntimeRegex implements RuntimeScalarReference {
     public static RuntimeScalar getReplacementRegex(RuntimeScalar patternString, RuntimeScalar replacement, RuntimeScalar modifiers) {
         // Use resolveRegex to properly handle qr objects and qr overloading
         RuntimeRegex resolvedRegex = resolveRegex(patternString);
+        String modifierStr = modifiers.toString();
 
         // Create a new regex instance with the replacement
         RuntimeRegex regex = new RuntimeRegex();
+
+        // Always start with the resolved regex properties
         regex.pattern = resolvedRegex.pattern;
         regex.patternString = resolvedRegex.patternString;
-        regex.regexFlags = mergeRegexFlags(resolvedRegex.regexFlags, modifiers.toString(), resolvedRegex.patternString);
-        regex.patternFlags = regex.regexFlags.toPatternFlags();
-        regex.replacement = replacement;
+        regex.regexFlags = resolvedRegex.regexFlags;
+        regex.patternFlags = resolvedRegex.patternFlags;
 
+        // Only recompile if we have new modifiers that actually change the flags
+        if (!modifierStr.isEmpty()) {
+            RegexFlags newFlags = mergeRegexFlags(resolvedRegex.regexFlags, modifierStr, resolvedRegex.patternString);
+
+            // Check if the merged flags are actually different
+            boolean flagsChanged = false;
+            if (resolvedRegex.regexFlags == null) {
+                flagsChanged = !newFlags.toFlagString().isEmpty();
+            } else {
+                flagsChanged = !resolvedRegex.regexFlags.toFlagString().equals(newFlags.toFlagString());
+            }
+
+            // Only recompile if flags actually changed (this is needed for /x preprocessing)
+            if (flagsChanged) {
+                RuntimeRegex recompiledRegex = compile(resolvedRegex.patternString, newFlags.toFlagString());
+                regex.pattern = recompiledRegex.pattern;
+                regex.patternString = recompiledRegex.patternString;
+                regex.regexFlags = recompiledRegex.regexFlags;
+                regex.patternFlags = recompiledRegex.patternFlags;
+            } else {
+                // Just update the flags without recompiling
+                regex.regexFlags = newFlags;
+                regex.patternFlags = newFlags.toPatternFlags();
+            }
+        }
+
+        regex.replacement = replacement;
         return new RuntimeScalar(regex);
     }
 
