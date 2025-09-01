@@ -56,6 +56,35 @@ public class PrototypeArgs {
     }
 
     /**
+     * Check if the current token is an expression terminator or assignment operator
+     * that should end argument parsing.
+     */
+    private static boolean isArgumentTerminator(Parser parser) {
+        var next = TokenUtils.peek(parser);
+        return next.type == LexerTokenType.EOF ||
+                ParserTables.LIST_TERMINATORS.contains(next.text) ||
+                Parser.isExpressionTerminator(next) ||
+                // Assignment operators should terminate argument parsing
+                next.text.equals("=") ||
+                next.text.equals("+=") ||
+                next.text.equals("-=") ||
+                next.text.equals("*=") ||
+                next.text.equals("/=") ||
+                next.text.equals("%=") ||
+                next.text.equals("**=") ||
+                next.text.equals("&=") ||
+                next.text.equals("|=") ||
+                next.text.equals("^=") ||
+                next.text.equals("<<=") ||
+                next.text.equals(">>=") ||
+                next.text.equals("&&=") ||
+                next.text.equals("||=") ||
+                next.text.equals("//=") ||
+                next.text.equals("x=") ||
+                next.text.equals(".=");
+    }
+
+    /**
      * Consumes arguments from the parser according to a specified prototype.
      * If the prototype is null, parses a list of zero or more elements.
      * Handles optional parentheses around arguments.
@@ -230,6 +259,10 @@ public class PrototypeArgs {
                     i = handleBackslashArgument(parser, args, prototype, i + 1, isOptional, needComma);
                     needComma = true;
                 }
+                case ',' -> {
+                    // Comma in prototype makes following arguments optional
+                    isOptional = true;
+                }
                 default -> parser.throwError("syntax error, unexpected prototype character '" + prototypeChar + "'");
             }
         }
@@ -246,8 +279,7 @@ public class PrototypeArgs {
      */
     private static Node parseArgumentWithComma(Parser parser, boolean isOptional, boolean needComma, String expectedType) {
         // Check if we're at the end of arguments before checking for comma
-        var next = TokenUtils.peek(parser);
-        if (next.type == LexerTokenType.EOF || ParserTables.LIST_TERMINATORS.contains(next.text)) {
+        if (isArgumentTerminator(parser)) {
             if (!isOptional) {
                 throwNotEnoughArgumentsError(parser);
             }
@@ -288,7 +320,7 @@ public class PrototypeArgs {
         }
 
         // Check if we're at the end of arguments
-        if (Parser.isExpressionTerminator(TokenUtils.peek(parser))) {
+        if (isArgumentTerminator(parser)) {
             if (!isOptional) {
                 throwNotEnoughArgumentsError(parser);
             }
@@ -448,7 +480,7 @@ public class PrototypeArgs {
                 return false;
             }
             // Check if we're at the end of arguments before requiring a comma
-            if (Parser.isExpressionTerminator(TokenUtils.peek(parser))) {
+            if (isArgumentTerminator(parser)) {
                 throwNotEnoughArgumentsError(parser);
             }
             parser.throwError("syntax error, expected comma");
@@ -458,7 +490,7 @@ public class PrototypeArgs {
     }
 
     private static Node parseRequiredArgument(Parser parser, boolean isOptional, String expectedType) {
-        if (Parser.isExpressionTerminator(TokenUtils.peek(parser))) {
+        if (isArgumentTerminator(parser)) {
             if (isOptional) {
                 return null;
             }
