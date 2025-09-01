@@ -1,6 +1,6 @@
 package org.perlonjava.runtime;
 
-import org.perlonjava.ArgumentParser;
+import org.perlonjava.CompilerOptions;
 import org.perlonjava.Configuration;
 import org.perlonjava.mro.InheritanceResolver;
 import org.perlonjava.perlmodule.*;
@@ -28,7 +28,7 @@ public class GlobalContext {
      *
      * @param compilerOptions The compiler options used for initialization.
      */
-    public static void initializeGlobals(ArgumentParser.CompilerOptions compilerOptions) {
+    public static void initializeGlobals(CompilerOptions compilerOptions) {
 
         // Initialize scalar variables
         for (char c = 'A'; c <= 'Z'; c++) {

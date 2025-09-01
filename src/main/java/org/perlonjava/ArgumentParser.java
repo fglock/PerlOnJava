@@ -6,15 +6,12 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
 import static org.perlonjava.Configuration.getPerlVersionBundle;
-import static org.perlonjava.Configuration.perlVersion;
 
 /**
  * The ArgumentParser class is responsible for parsing command-line arguments
@@ -25,13 +22,13 @@ import static org.perlonjava.Configuration.perlVersion;
 public class ArgumentParser {
 
     /**
-    /**
-      * Parses the command-line arguments and returns a CompilerOptions object
-      * configured based on the provided arguments.
-      *
-      * @param args The command-line arguments to parse.
-      * @return A CompilerOptions object with settings derived from the arguments.
-      */
+     * /**
+     * Parses the command-line arguments and returns a CompilerOptions object
+     * configured based on the provided arguments.
+     *
+     * @param args The command-line arguments to parse.
+     * @return A CompilerOptions object with settings derived from the arguments.
+     */
     public static CompilerOptions parseArguments(String[] args) {
         CompilerOptions parsedArgs = new CompilerOptions();
         parsedArgs.code = null; // Initialize code to null
@@ -77,11 +74,11 @@ public class ArgumentParser {
     }
 
     /**
-      * Processes the PERL5OPT environment variable to preset command-line options.
-      * Supported options: -D, -I, -M, -T, -U, -W, -d, -m, -t, and -w.
-      *
-      * @param parsedArgs The CompilerOptions object to configure.
-      */
+     * Processes the PERL5OPT environment variable to preset command-line options.
+     * Supported options: -D, -I, -M, -T, -U, -W, -d, -m, -t, and -w.
+     *
+     * @param parsedArgs The CompilerOptions object to configure.
+     */
     private static void processPerl5Opt(CompilerOptions parsedArgs) {
         String perl5opt = System.getenv("PERL5OPT");
         if (perl5opt == null || perl5opt.trim().isEmpty()) {
@@ -98,11 +95,11 @@ public class ArgumentParser {
     }
 
     /**
-      * Parses the PERL5OPT string into individual arguments, handling quotes and escapes.
-      *
-      * @param perl5opt The PERL5OPT environment variable value.
-      * @return A list of individual arguments.
-      */
+     * Parses the PERL5OPT string into individual arguments, handling quotes and escapes.
+     *
+     * @param perl5opt The PERL5OPT environment variable value.
+     * @return A list of individual arguments.
+     */
     private static List<String> parsePerl5OptString(String perl5opt) {
         List<String> args = new ArrayList<>();
         StringBuilder currentArg = new StringBuilder();
@@ -148,12 +145,12 @@ public class ArgumentParser {
     }
 
     /**
-      * Checks if an option is supported in PERL5OPT.
-      * Supported options: -D, -I, -M, -T, -U, -W, -d, -m, -t, and -w.
-      *
-      * @param arg The argument to check.
-      * @return true if the option is supported in PERL5OPT, false otherwise.
-      */
+     * Checks if an option is supported in PERL5OPT.
+     * Supported options: -C, -D, -I, -M, -T, -U, -W, -d, -m, -t, and -w.
+     *
+     * @param arg The argument to check.
+     * @return true if the option is supported in PERL5OPT, false otherwise.
+     */
     private static boolean isSupportedPerl5OptOption(String arg) {
         if (!arg.startsWith("-")) {
             return false;
@@ -162,7 +159,7 @@ public class ArgumentParser {
         // Check for single character options that might be clustered
         if (arg.length() >= 2 && !arg.startsWith("--")) {
             char firstChar = arg.charAt(1);
-            return firstChar == 'D' || firstChar == 'I' || firstChar == 'M' ||
+            return firstChar == 'C' || firstChar == 'D' || firstChar == 'I' || firstChar == 'M' ||
                     firstChar == 'T' || firstChar == 'U' || firstChar == 'W' ||
                     firstChar == 'd' || firstChar == 'm' || firstChar == 't' ||
                     firstChar == 'w';
@@ -170,6 +167,7 @@ public class ArgumentParser {
 
         return false;
     }
+
     /**
      * Processes the command-line arguments, distinguishing between switch and non-switch arguments.
      *
@@ -306,6 +304,11 @@ public class ArgumentParser {
             char switchChar = arg.charAt(j);
 
             switch (switchChar) {
+                case 'C':
+                    // Handle Unicode/character encoding switches
+                    index = handleUnicodeSwitch(args, parsedArgs, index, j, arg);
+                    return index;
+
                 case 'm':
                 case 'M':
                     index = handleModuleSwitch(args, parsedArgs, index, j, arg, switchChar);
@@ -437,6 +440,121 @@ public class ArgumentParser {
             }
         }
         return index;
+    }
+
+    /**
+     * Handles Unicode/character encoding switches specified with the -C option.
+     *
+     * @param args       The command-line arguments.
+     * @param parsedArgs The CompilerOptions object to configure.
+     * @param index      The current index in the arguments array.
+     * @param j          The current position in the clustered switch string.
+     * @param arg        The current argument being processed.
+     * @return The updated index after processing the Unicode switch.
+     */
+    private static int handleUnicodeSwitch(String[] args, CompilerOptions parsedArgs, int index, int j, String arg) {
+        String unicodeFlags = "";
+
+        if (j < arg.length() - 1) {
+            // Flags specified immediately after -C
+            unicodeFlags = arg.substring(j + 1);
+        } else if (index + 1 < args.length && !args[index + 1].startsWith("-")) {
+            // Flags specified as next argument
+            unicodeFlags = args[++index];
+        }
+
+        // If no flags specified, default to "D" (equivalent to SOLA)
+        if (unicodeFlags.isEmpty()) {
+            unicodeFlags = "D";
+        }
+
+        // Parse the Unicode flags
+        parseUnicodeFlags(unicodeFlags, parsedArgs);
+
+        return index;
+    }
+
+    /**
+     * Parses Unicode flags for the -C switch.
+     *
+     * @param flags      The Unicode flags string.
+     * @param parsedArgs The CompilerOptions object to configure.
+     */
+    private static void parseUnicodeFlags(String flags, CompilerOptions parsedArgs) {
+        // Handle numeric flags (like -C0)
+        if (flags.matches("\\d+")) {
+            int numericFlag = Integer.parseInt(flags);
+            if (numericFlag == 0) {
+                // -C0: Disable all Unicode I/O features
+                parsedArgs.unicodeStdin = false;
+                parsedArgs.unicodeStdout = false;
+                parsedArgs.unicodeStderr = false;
+                parsedArgs.unicodeInput = false;
+                parsedArgs.unicodeOutput = false;
+                parsedArgs.unicodeArgs = false;
+                parsedArgs.unicodeLocale = false;
+            } else {
+                // Other numeric values can be implemented as needed
+                // For now, treat them as enabling all Unicode features
+                parsedArgs.unicodeStdin = true;
+                parsedArgs.unicodeStdout = true;
+                parsedArgs.unicodeStderr = true;
+                parsedArgs.unicodeInput = true;
+                parsedArgs.unicodeOutput = true;
+                parsedArgs.unicodeArgs = true;
+                parsedArgs.unicodeLocale = true;
+            }
+            return;
+        }
+
+        // Handle letter flags
+        for (char flag : flags.toCharArray()) {
+            switch (flag) {
+                case 'S':
+                    // STDIN
+                    parsedArgs.unicodeStdin = true;
+                    break;
+                case 'O':
+                    // STDOUT
+                    parsedArgs.unicodeStdout = true;
+                    break;
+                case 'E':
+                    // STDERR
+                    parsedArgs.unicodeStderr = true;
+                    break;
+                case 'I':
+                    // Input (same as S)
+                    parsedArgs.unicodeInput = true;
+                    parsedArgs.unicodeStdin = true;
+                    break;
+                case 'A':
+                    // All (STDIN, STDOUT, STDERR)
+                    parsedArgs.unicodeStdin = true;
+                    parsedArgs.unicodeStdout = true;
+                    parsedArgs.unicodeStderr = true;
+                    parsedArgs.unicodeInput = true;
+                    parsedArgs.unicodeOutput = true;
+                    parsedArgs.unicodeArgs = true;
+                    break;
+                case 'L':
+                    // Locale
+                    parsedArgs.unicodeLocale = true;
+                    break;
+                case 'D':
+                    // Default (equivalent to SOLA)
+                    parsedArgs.unicodeStdin = true;
+                    parsedArgs.unicodeStdout = true;
+                    parsedArgs.unicodeStderr = false; // Note: D doesn't include E
+                    parsedArgs.unicodeInput = true;
+                    parsedArgs.unicodeOutput = true;
+                    parsedArgs.unicodeArgs = true;
+                    parsedArgs.unicodeLocale = true;
+                    break;
+                default:
+                    System.err.println("Unrecognized Unicode flag: " + flag);
+                    break;
+            }
+        }
     }
 
     private static void printVersionInfo() {
@@ -879,15 +997,15 @@ public class ArgumentParser {
         }
         // Perl tests require DynaLoader
         useStatements.append("use DynaLoader;\n");
-            // Prepend the use statements to the code
-            if (!useStatements.isEmpty()) {
-                parsedArgs.code = useStatements + parsedArgs.code;
-            }
+        // Prepend the use statements to the code
+        if (!useStatements.isEmpty()) {
+            parsedArgs.code = useStatements + parsedArgs.code;
+        }
 
-            // Prepend rudimentary switch assignments if any
-            if (parsedArgs.rudimentarySwitchAssignments != null) {
-                parsedArgs.code = parsedArgs.rudimentarySwitchAssignments.toString() + parsedArgs.code;
-            }
+        // Prepend rudimentary switch assignments if any
+        if (parsedArgs.rudimentarySwitchAssignments != null) {
+            parsedArgs.code = parsedArgs.rudimentarySwitchAssignments + parsedArgs.code;
+        }
     }
 
     /**
@@ -899,6 +1017,7 @@ public class ArgumentParser {
         System.out.println("  -0[octal/hexadecimal] specify record separator (\\0, if no argument)");
         System.out.println("  -a                    autosplit mode with -n or -p (splits $_ into @F)");
         System.out.println("  -c                    check syntax only (runs BEGIN and CHECK blocks)");
+        System.out.println("  -C[flags]             control Unicode/encoding features");
         System.out.println("  -e commandline        one line of program (several -e's allowed, omit programfile)");
         System.out.println("  -E commandline        like -e, but enables all optional features");
         System.out.println("  -f                    don't do $sitelib/sitecustomize.pl at startup");
@@ -922,11 +1041,90 @@ public class ArgumentParser {
         System.out.println("  --disassemble         disassemble the generated code");
         System.out.println("  -h, --help            displays this help message");
         System.out.println();
+//        System.out.println("Unicode/encoding flags for -C:");
+//        System.out.println("  S  - enable UTF-8 for STDIN");
+//        System.out.println("  O  - enable UTF-8 for STDOUT");
+//        System.out.println("  E  - enable UTF-8 for STDERR");
+//        System.out.println("  I  - enable UTF-8 for input (same as S)");
+//        System.out.println("  A  - enable UTF-8 for all (STDIN, STDOUT, STDERR)");
+//        System.out.println("  L  - enable UTF-8 based on locale");
+//        System.out.println("  D  - default (equivalent to SOLA)");
+//        System.out.println("  0  - disable all Unicode features");
+//        System.out.println();
         System.out.println("Run 'perldoc perl' for more help with Perl.");
     }
 
+    /**
+     * Processes a single rudimentary switch and adds the corresponding variable assignment.
+     *
+     * @param arg        The switch argument to process.
+     * @param parsedArgs The CompilerOptions object to configure.
+     */
+    private static void processRudimentarySwitch(String arg, CompilerOptions parsedArgs) {
+        String varName;
+        String varValue = "1"; // Default value
+
+        if (arg.startsWith("--")) {
+            // Handle --switch or --switch=value
+            String switchPart = arg.substring(2);
+            int equalsIndex = switchPart.indexOf('=');
+            if (equalsIndex != -1) {
+                varValue = switchPart.substring(equalsIndex + 1);
+                varName = "${-" + switchPart.substring(0, equalsIndex) + "}";
+            } else {
+                varName = "${-" + switchPart + "}";
+            }
+        } else {
+            // Handle -switch or -switch=value
+            String switchPart = arg.substring(1);
+            int equalsIndex = switchPart.indexOf('=');
+            if (equalsIndex != -1) {
+                varValue = switchPart.substring(equalsIndex + 1);
+                varName = switchPart.substring(0, equalsIndex);
+            } else {
+                varName = switchPart;
+            }
+        }
+
+        // Add the variable assignment to be prepended to the code
+        if (parsedArgs.rudimentarySwitchAssignments == null) {
+            parsedArgs.rudimentarySwitchAssignments = new StringBuilder();
+        }
+        parsedArgs.rudimentarySwitchAssignments
+                .append("$main::")
+                .append(varName)
+                .append(" = '")
+                .append(varValue.replace("'", "\\'"))
+                .append("';\n");
+    }
+
+    /**
+     * Handles debug flags specified with the -D switch.
+     *
+     * @param args       The command-line arguments.
+     * @param parsedArgs The CompilerOptions object to configure.
+     * @param index      The current index in the arguments array.
+     * @param j          The current position in the clustered switch string.
+     * @param arg        The current argument being processed.
+     * @return The updated index after processing the debug flags.
+     */
+    private static int handleDebugFlags(String[] args, CompilerOptions parsedArgs, int index, int j, String arg) {
+        String debugFlags = "";
+        if (j < arg.length() - 1) {
+            debugFlags = arg.substring(j + 1);
+        } else if (index + 1 < args.length && !args[index + 1].startsWith("-")) {
+            debugFlags = args[++index];
+        }
+
+        // Store debug flags for potential future use
+        parsedArgs.debugFlags = debugFlags;
+        parsedArgs.debugEnabled = true;
+
+        return index;
+    }
+
     // Define a structured data type for module use statements
-    private static class ModuleUseStatement {
+    static class ModuleUseStatement {
         char type; // 'm' or 'M'
         String moduleName;
         String args;
@@ -957,176 +1155,4 @@ public class ArgumentParser {
             return useOrNo + " " + moduleName + (type == 'm' ? " ();" : ";");
         }
     }
-
-    /**
-     * CompilerOptions is a configuration class that holds various settings and flags
-     * used by the compiler during the compilation process. These settings determine
-     * how the compiler behaves, including whether to enable debugging, disassembly,
-     * or whether to stop the process at specific stages like tokenization, parsing,
-     * or compiling. It also stores the source code and the filename, if provided.
-     * <p>
-     * Fields:
-     * - debugEnabled: Enables debug mode, providing detailed logging during compilation.
-     * - disassembleEnabled: If true, the compiler will disassemble the generated bytecode.
-     * - tokenizeOnly: If true, the compiler will only tokenize the input and stop.
-     * - parseOnly: If true, the compiler will only parse the input and stop.
-     * - compileOnly: If true, the compiler will compile the input but won't execute it.
-     * - processOnly: If true, the compiler will process input files without printing lines.
-     * - processAndPrint: If true, the compiler will process input files and print each line.
-     * - inPlaceEdit: Indicates if in-place editing is enabled.
-     * - code: The source code to be compiled.
-     * - fileName: The name of the file containing the source code, if any.
-     * - inPlaceExtension: The extension used for in-place editing backups.
-     * - argumentList: A list of arguments to be passed to the program.
-     * - inc: A list of include directories for the compiler.
-     */
-    public static class CompilerOptions implements Cloneable {
-        public boolean debugEnabled = false;
-        public boolean disassembleEnabled = false;
-        public boolean tokenizeOnly = false;
-        public boolean parseOnly = false;
-        public boolean compileOnly = false;
-        public boolean processOnly = false; // For -n
-        public boolean processAndPrint = false; // For -p
-        public boolean inPlaceEdit = false; // New field for in-place editing
-        public String code = null;
-        public boolean codeHasEncoding = false;
-        public String fileName = null;
-        public String inPlaceExtension = null; // For -i
-        public String inputRecordSeparator = "\n";
-        public String outputRecordSeparator = null;
-        public boolean autoSplit = false; // For -a
-        public boolean useVersion = false; // For -E
-        // Initialize @ARGV
-        public RuntimeArray argumentList = GlobalVariable.getGlobalArray("main::ARGV");
-        public RuntimeArray inc = new RuntimeArray();
-        public String splitPattern = "' '"; // Default split pattern for -a
-        public boolean lineEndingProcessing = false; // For -l
-        public boolean usePathEnv = false; // For -S
-        public boolean rudimentarySwitchParsing = false; // For -s
-        public StringBuilder rudimentarySwitchAssignments = null; // Variable assignments from -s
-        public boolean discardLeadingGarbage = false; // For -x
-        List<ModuleUseStatement> moduleUseStatements = new ArrayList<>(); // For -m -M
-        public boolean isUnicodeSource = false; // Set to true for UTF-16/UTF-32 source files
-        public boolean taintMode = false; // For -T
-        public boolean allowUnsafeOperations = false; // For -U
-        public boolean runUnderDebugger = false; // For -d
-        public boolean taintWarnings = false; // For -t
-        public String debugFlags = ""; // For -D
-
-        @Override
-        public CompilerOptions clone() {
-            try {
-                // Use super.clone() to create a shallow copy
-                return (CompilerOptions) super.clone();
-            } catch (CloneNotSupportedException e) {
-                // This shouldn't happen, since we're implementing Cloneable
-                throw new AssertionError();
-            }
-        }
-
-        @Override
-            public String toString() {
-                return "CompilerOptions{\n" +
-                        "    debugEnabled=" + debugEnabled + ",\n" +
-                        "    disassembleEnabled=" + disassembleEnabled + ",\n" +
-                        "    tokenizeOnly=" + tokenizeOnly + ",\n" +
-                        "    parseOnly=" + parseOnly + ",\n" +
-                        "    compileOnly=" + compileOnly + ",\n" +
-                        "    processOnly=" + processOnly + ",\n" +
-                        "    processAndPrint=" + processAndPrint + ",\n" +
-                        "    inPlaceEdit=" + inPlaceEdit + ",\n" +
-                        "    taintMode=" + taintMode + ",\n" +
-                        "    allowUnsafeOperations=" + allowUnsafeOperations + ",\n" +
-                        "    runUnderDebugger=" + runUnderDebugger + ",\n" +
-                        "    taintWarnings=" + taintWarnings + ",\n" +
-                        "    debugFlags=" + ScalarUtils.printable(debugFlags) + ",\n" +
-                        "    code='" + (code != null ? code : "null") + "',\n" +
-                        "    codeHasEncoding=" + codeHasEncoding + ",\n" +
-                        "    fileName=" + ScalarUtils.printable(fileName) + ",\n" +
-                        "    inPlaceExtension=" + ScalarUtils.printable(inPlaceExtension) + ",\n" +
-                        "    inputRecordSeparator=" + ScalarUtils.printable(inputRecordSeparator) + ",\n" +
-                        "    outputRecordSeparator=" + ScalarUtils.printable(outputRecordSeparator) + ",\n" +
-                        "    autoSplit=" + autoSplit + ",\n" +
-                        "    useVersion=" + useVersion + ",\n" +
-                        "    lineEndingProcessing=" + lineEndingProcessing + ",\n" +
-                        "    discardLeadingGarbage=" + discardLeadingGarbage + ",\n" +
-                        "    splitPattern=" + ScalarUtils.printable(splitPattern) + ",\n" +
-                        "    argumentList=" + argumentList + ",\n" +
-                        "    inc=" + inc + ",\n" +
-                        "    moduleUseStatements=" + moduleUseStatements + ",\n" +
-                        "    isUnicodeSource=" + isUnicodeSource + ",\n" +
-                        "    rudimentarySwitchParsing=" + rudimentarySwitchParsing + "\n" +
-                        "}";
-            }
-        }
-
-        /**
-         * Processes a single rudimentary switch and adds the corresponding variable assignment.
-         *
-         * @param arg        The switch argument to process.
-         * @param parsedArgs The CompilerOptions object to configure.
-         */
-        private static void processRudimentarySwitch(String arg, CompilerOptions parsedArgs) {
-            String varName;
-            String varValue = "1"; // Default value
-
-            if (arg.startsWith("--")) {
-                // Handle --switch or --switch=value
-                String switchPart = arg.substring(2);
-                int equalsIndex = switchPart.indexOf('=');
-                if (equalsIndex != -1) {
-                    varValue = switchPart.substring(equalsIndex + 1);
-                    varName = "${-" + switchPart.substring(0, equalsIndex) + "}";
-                } else {
-                    varName = "${-" + switchPart + "}";
-                }
-            } else {
-                // Handle -switch or -switch=value
-                String switchPart = arg.substring(1);
-                int equalsIndex = switchPart.indexOf('=');
-                if (equalsIndex != -1) {
-                    varValue = switchPart.substring(equalsIndex + 1);
-                    varName = switchPart.substring(0, equalsIndex);
-                } else {
-                    varName = switchPart;
-                }
-            }
-
-            // Add the variable assignment to be prepended to the code
-            if (parsedArgs.rudimentarySwitchAssignments == null) {
-                parsedArgs.rudimentarySwitchAssignments = new StringBuilder();
-            }
-            parsedArgs.rudimentarySwitchAssignments
-                .append("$main::")
-                .append(varName)
-                .append(" = '")
-                .append(varValue.replace("'", "\\'"))
-                .append("';\n");
-        }
-
-        /**
-         * Handles debug flags specified with the -D switch.
-         *
-         * @param args       The command-line arguments.
-         * @param parsedArgs The CompilerOptions object to configure.
-         * @param index      The current index in the arguments array.
-         * @param j          The current position in the clustered switch string.
-         * @param arg        The current argument being processed.
-         * @return The updated index after processing the debug flags.
-         */
-        private static int handleDebugFlags(String[] args, CompilerOptions parsedArgs, int index, int j, String arg) {
-            String debugFlags = "";
-            if (j < arg.length() - 1) {
-                debugFlags = arg.substring(j + 1);
-            } else if (index + 1 < args.length && !args[index + 1].startsWith("-")) {
-                debugFlags = args[++index];
-            }
-
-            // Store debug flags for potential future use
-            parsedArgs.debugFlags = debugFlags;
-            parsedArgs.debugEnabled = true;
-
-            return index;
-        }
 }

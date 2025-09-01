@@ -3,7 +3,7 @@ package org.perlonjava.codegen;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
-import org.perlonjava.ArgumentParser;
+import org.perlonjava.CompilerOptions;
 import org.perlonjava.runtime.ErrorMessageUtil;
 import org.perlonjava.runtime.RuntimeArray;
 import org.perlonjava.runtime.RuntimeContextType;
@@ -28,7 +28,7 @@ public class EmitterContext {
      * CompilerOptions is a configuration class that holds various settings and flags
      * used by the compiler during the compilation process.
      */
-    public ArgumentParser.CompilerOptions compilerOptions;
+    public CompilerOptions compilerOptions;
 
     /**
      * The information on the Java class being generated.
@@ -91,7 +91,7 @@ public class EmitterContext {
             int contextType,
             boolean isBoxed,
             ErrorMessageUtil errorUtil,
-            ArgumentParser.CompilerOptions compilerOptions,
+            CompilerOptions compilerOptions,
             RuntimeArray unitcheckBlocks) {
         this.javaClassInfo = javaClassInfo;
         this.symbolTable = symbolTable;

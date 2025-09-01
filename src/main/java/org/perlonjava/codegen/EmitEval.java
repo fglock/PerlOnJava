@@ -3,7 +3,7 @@ package org.perlonjava.codegen;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
-import org.perlonjava.ArgumentParser;
+import org.perlonjava.CompilerOptions;
 import org.perlonjava.astnode.EvalOperatorNode;
 import org.perlonjava.astnode.OperatorNode;
 import org.perlonjava.astvisitor.EmitterVisitor;
@@ -109,7 +109,7 @@ public class EmitEval {
 
         // Create compiler options specific to this eval
         // The filename becomes "(eval N)" for better error messages
-        ArgumentParser.CompilerOptions compilerOptions = emitterVisitor.ctx.compilerOptions.clone();
+        CompilerOptions compilerOptions = emitterVisitor.ctx.compilerOptions.clone();
         compilerOptions.fileName = "(eval " + counter + ")";
 
         // The evalTag is crucial - it links the runtime eval to this compile-time context

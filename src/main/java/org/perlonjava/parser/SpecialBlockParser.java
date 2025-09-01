@@ -1,6 +1,6 @@
 package org.perlonjava.parser;
 
-import org.perlonjava.ArgumentParser;
+import org.perlonjava.CompilerOptions;
 import org.perlonjava.astnode.*;
 import org.perlonjava.codegen.EmitterMethodCreator;
 import org.perlonjava.lexer.LexerTokenType;
@@ -149,7 +149,7 @@ public class SpecialBlockParser {
             nodes.add(anonSub);
         }
 
-        ArgumentParser.CompilerOptions parsedArgs = parser.ctx.compilerOptions.clone();
+        CompilerOptions parsedArgs = parser.ctx.compilerOptions.clone();
         parsedArgs.compileOnly = false; // Special blocks are always run
         parser.ctx.logDebug("Special block captures " + parser.ctx.symbolTable.getAllVisibleVariables());
         RuntimeList result;
