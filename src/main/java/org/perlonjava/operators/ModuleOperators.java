@@ -25,10 +25,15 @@ import static org.perlonjava.runtime.RuntimeScalarType.*;
 
 public class ModuleOperators {
     public static RuntimeScalar doFile(RuntimeScalar runtimeScalar) {
+        return doFile(runtimeScalar, true, false); // do FILE always sets %INC and keeps it
+    }
+
+    private static RuntimeScalar doFile(RuntimeScalar runtimeScalar, boolean setINC, boolean isRequire) {
         // `do` file
         String fileName = runtimeScalar.toString();
         Path fullName = null;
         String code = null;
+        String actualFileName = null;
 
         // Check if the filename is an absolute path or starts with ./ or ../
         Path filePath = Paths.get(fileName);
@@ -36,6 +41,7 @@ public class ModuleOperators {
             // For absolute or explicit relative paths, resolve using RuntimeIO.getPath
             filePath = RuntimeIO.resolvePath(fileName);
             fullName = Files.exists(filePath) ? filePath : null;
+            actualFileName = fullName != null ? fullName.toString() : null;
         } else {
             // Otherwise, search in INC directories
             List<RuntimeScalar> inc = GlobalVariable.getGlobalArray("main::INC").elements;
@@ -58,15 +64,14 @@ public class ModuleOperators {
                     // Try to find in jar at "src/main/perl/lib"
                     String resourcePath = "/lib/" + fileName;
                     URL resource = RuntimeScalar.class.getResource(resourcePath);
-                    // System.out.println("Found resource " + resource);
                     if (resource != null) {
-
                         String path = resource.getPath();
                         // Remove leading slash if on Windows
                         if (SystemUtils.osIsWindows() && path.startsWith("/")) {
                             path = path.substring(1);
                         }
                         fullName = Paths.get(path);
+                        actualFileName = fullName.toString();
 
                         try (InputStream is = resource.openStream();
                              BufferedReader reader = new BufferedReader(new InputStreamReader(is))) {
@@ -75,12 +80,10 @@ public class ModuleOperators {
                             while ((line = reader.readLine()) != null) {
                                 content.append(line).append("\n");
                             }
-                            // System.out.println("Content of " + resourcePath + ": " + content.toString());
                             code = content.toString();
                             break;
                         } catch (IOException e1) {
-                            //GlobalVariable.setGlobalVariable("main::!", "No such file or directory");
-                            //return new RuntimeScalar();
+                            // Continue to next directory
                         }
                     }
                 } else {
@@ -91,36 +94,41 @@ public class ModuleOperators {
                         Path fullPath = dirPath.resolve(fileName + "c");
                         if (Files.exists(fullPath)) {
                             fullName = fullPath;
+                            actualFileName = fullName.toString();
                             break;
                         }
                     }
                     Path fullPath = dirPath.resolve(fileName);
                     if (Files.exists(fullPath)) {
                         fullName = fullPath;
+                        actualFileName = fullName.toString();
                         break;
                     }
                 }
             }
         }
+
         if (fullName == null) {
             GlobalVariable.setGlobalVariable("main::!", "No such file or directory");
-            return new RuntimeScalar();
+            return new RuntimeScalar(); // return undef
         }
 
         CompilerOptions parsedArgs = new CompilerOptions();
-        parsedArgs.fileName = fullName.toString();
+        parsedArgs.fileName = actualFileName;
         if (code == null) {
             try {
                 code = FileUtils.readFileWithEncodingDetection(Paths.get(parsedArgs.fileName), parsedArgs);
             } catch (IOException e) {
                 GlobalVariable.setGlobalVariable("main::!", "Unable to read file " + parsedArgs.fileName);
-                return new RuntimeScalar();
+                return new RuntimeScalar(); // return undef
             }
         }
         parsedArgs.code = code;
 
-        // set %INC
-        getGlobalHash("main::INC").put(fileName, new RuntimeScalar(parsedArgs.fileName));
+        // Set %INC if requested (before execution)
+        if (setINC) {
+            getGlobalHash("main::INC").put(fileName, new RuntimeScalar(parsedArgs.fileName));
+        }
 
         RuntimeList result;
         try {
@@ -128,10 +136,17 @@ public class ModuleOperators {
         } catch (Throwable t) {
             GlobalVariable.setGlobalVariable("main::@", "Error in file " + parsedArgs.fileName +
                     "\n" + findInnermostCause(t).getMessage());
-            return new RuntimeScalar();
+            return new RuntimeScalar(); // return undef
         }
 
-        return result == null ? scalarUndef : result.scalar();
+        RuntimeScalar finalResult = result == null ? scalarUndef : result.scalar();
+
+        // For require, remove from %INC if result is false (but not if undef or error)
+        if (isRequire && setINC && finalResult.defined().getBoolean() && !finalResult.getBoolean()) {
+            getGlobalHash("main::INC").elements.remove(fileName);
+        }
+
+        return finalResult;
     }
 
     public static RuntimeScalar require(RuntimeScalar runtimeScalar, boolean moduleTrue) {
@@ -156,11 +171,11 @@ public class ModuleOperators {
             return getScalarInt(1);
         }
 
-        // Call `do` operator
-        RuntimeScalar result = doFile(runtimeScalar); // `do "fileName"`
-        // Check if `do` returned a true value
+        // Call doFile with require-specific behavior
+        RuntimeScalar result = doFile(runtimeScalar, true, true);
+
+        // Check if `do` returned undef (file not found or I/O error)
         if (!result.defined().getBoolean()) {
-            // `do FILE` returned undef
             String err = getGlobalVariable("main::@").toString();
             String ioErr = getGlobalVariable("main::!").toString();
 
@@ -169,7 +184,9 @@ public class ModuleOperators {
                 if (!moduleTrue) {
                     message = fileName + " did not return a true value";
                 } else {
-                    return getScalarInt(1); // Skip throwing exception when moduleTrue is enabled
+                    // For moduleTrue, set %INC and return 1
+                    getGlobalHash("main::INC").put(fileName, new RuntimeScalar(fileName));
+                    return getScalarInt(1);
                 }
             } else if (err.isEmpty()) {
                 message = "Can't locate " + fileName + ": " + ioErr;
@@ -186,7 +203,8 @@ public class ModuleOperators {
                 String message = fileName + " did not return a true value";
                 throw new PerlCompilerException(message);
             } else {
-                // When moduleTrue is enabled, always return 1
+                // For moduleTrue, restore %INC entry and return 1
+                getGlobalHash("main::INC").put(fileName, new RuntimeScalar(fileName));
                 return getScalarInt(1);
             }
         }
