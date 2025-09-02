@@ -208,6 +208,7 @@ public class ModuleOperators {
                 if (!moduleTrue) {
                     message = fileName + " did not return a true value";
                     // DON'T set %INC for undef return values
+                    throw new PerlCompilerException(message);
                 } else {
                     // For moduleTrue, set %INC and return 1
                     incHash.put(fileName, new RuntimeScalar(fileName));
@@ -216,13 +217,13 @@ public class ModuleOperators {
             } else if (err.isEmpty()) {
                 message = "Can't locate " + fileName + ": " + ioErr;
                 // Don't set %INC for file not found errors
+                throw new PerlCompilerException(message);
             } else {
                 message = "Compilation failed in require: " + err;
                 // Set %INC as undef to mark compilation failure
                 incHash.put(fileName, new RuntimeScalar());
+                throw new PerlCompilerException(message);
             }
-
-            throw new PerlCompilerException(message);
         }
 
         // Check if the result is false (0 or empty string but not undef)

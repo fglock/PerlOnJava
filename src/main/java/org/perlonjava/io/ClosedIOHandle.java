@@ -3,6 +3,8 @@ package org.perlonjava.io;
 import org.perlonjava.runtime.RuntimeIO;
 import org.perlonjava.runtime.RuntimeScalar;
 
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarFalse;
+
 public class ClosedIOHandle implements IOHandle {
 
     @Override
@@ -17,7 +19,9 @@ public class ClosedIOHandle implements IOHandle {
 
     @Override
     public RuntimeScalar flush() {
-        return RuntimeIO.handleIOError("Cannot flush a closed handle.");
+        // return RuntimeIO.handleIOError("Cannot flush a closed handle.");
+        return scalarFalse;
+
     }
 
     @Override
