@@ -5,6 +5,7 @@ import org.perlonjava.runtime.RuntimeScalar;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.function.Function;
 
@@ -139,33 +140,42 @@ public class LayeredIOHandle implements IOHandle {
      */
     @Override
     public RuntimeScalar doRead(int maxBytes, Charset charset) {
-        StringBuilder result = new StringBuilder();
-        int bytesRead = 0;
+        // If no active layers, delegate directly (byte-based reading)
+        if (activeLayers.isEmpty()) {
+            return delegate.doRead(maxBytes, charset);
+        }
 
-        // Keep reading until we have some complete characters or EOF
-        while (bytesRead < maxBytes) {
-            // Read from delegate - use smaller chunks to avoid over-reading
-            RuntimeScalar chunk = delegate.doRead(Math.min(maxBytes - bytesRead, 128), charset);
-            if (chunk.toString().isEmpty()) {
+        // For encoding layers, use precise character-based reading
+        StringBuilder result = new StringBuilder();
+        int charactersNeeded = maxBytes;
+        int safetyLimit = maxBytes * 4; // Prevent infinite loops
+
+        while (charactersNeeded > 0 && safetyLimit > 0) {
+            // Read only what we need, don't over-consume
+            int bytesToRead = Math.min(128, charactersNeeded);
+            RuntimeScalar chunk = delegate.doRead(bytesToRead, charset);
+            String chunkStr = chunk.toString();
+
+            if (chunkStr.isEmpty()) {
                 break; // EOF reached
             }
 
-            // Apply input pipeline
-            String processed = inputPipeline.apply(chunk.toString());
+            safetyLimit -= chunkStr.length();
 
-            // If we got something, add it to result
+            // Apply input pipeline to transform bytes to characters
+            String processed = inputPipeline.apply(chunkStr);
+
+            // Add the processed characters to the result
             if (!processed.isEmpty()) {
-                result.append(processed);
-                bytesRead += processed.length();
-            } else if (result.length() == 0) {
-                // We got nothing and have no previous data
-                // This means we have incomplete sequence - read more
-                continue;
-            }
+                int charsToTake = Math.min(processed.length(), charactersNeeded);
+                result.append(processed.substring(0, charsToTake));
+                charactersNeeded -= charsToTake;
 
-            // If we have some result, return it
-            if (result.length() > 0) {
-                break;
+                // If we have extra characters, let the layer buffer them
+                if (processed.length() > charsToTake) {
+                    // This should be handled by the layer's internal buffering
+                    break;
+                }
             }
         }
 
