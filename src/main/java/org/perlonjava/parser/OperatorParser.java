@@ -662,10 +662,16 @@ public class OperatorParser {
         } else {
             // Check for the specific pattern: :: followed by identifier (which is invalid for require)
             if (token.type == LexerTokenType.OPERATOR && token.text.equals("::")) {
-                consume(parser);
+                // Look ahead to see if there's an identifier after ::
+                int savedIndex = parser.tokenIndex;
+                consume(parser); // consume ::
                 LexerToken nextToken = peek(parser);
+                if (nextToken.type == IDENTIFIER) {
                     // This is ::bareword which is not allowed in require
                     throw new PerlCompilerException(parser.tokenIndex, "Bareword in require must not start with a double-colon: \"" + token.text + nextToken.text + "\"", parser.ctx.errorUtil);
+                }
+                // Restore position if not ::identifier pattern
+                parser.tokenIndex = savedIndex;
             }
 
             ListNode op = ListParser.parseZeroOrOneList(parser, 0);
@@ -683,6 +689,12 @@ public class OperatorParser {
                     if (moduleName == null) {
                         throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
                     }
+
+                    // Check if module name starts with ::
+                    if (moduleName.startsWith("::")) {
+                        throw new PerlCompilerException(parser.tokenIndex, "Bareword in require must not start with a double-colon: \"" + moduleName + "\"", parser.ctx.errorUtil);
+                    }
+
                     String fileName = NameNormalizer.moduleToFilename(moduleName);
                     operand = ListNode.makeList(new StringNode(fileName, parser.tokenIndex));
                 } else {
