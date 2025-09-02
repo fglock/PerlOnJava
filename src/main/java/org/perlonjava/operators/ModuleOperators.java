@@ -190,7 +190,7 @@ public class ModuleOperators {
                 // This was a compilation failure, throw the cached error
                 throw new PerlCompilerException("Compilation failed in require at " + fileName);
             }
-            // module was already loaded successfully
+            // module was already loaded successfully - always return exactly 1
             return getScalarInt(1);
         }
 
@@ -204,15 +204,15 @@ public class ModuleOperators {
 
             String message;
             if (err.isEmpty() && ioErr.isEmpty()) {
-                // File executed but returned undef - this should not set %INC
-                if (!moduleTrue) {
-                    message = fileName + " did not return a true value";
-                    // DON'T set %INC for undef return values
-                    throw new PerlCompilerException(message);
-                } else {
-                    // For moduleTrue, set %INC and return 1
+                // File executed but returned undef
+                if (moduleTrue) {
+                    // For moduleTrue, treat undef as success - set %INC and return 1
                     incHash.put(fileName, new RuntimeScalar(fileName));
                     return getScalarInt(1);
+                } else {
+                    // For non-moduleTrue, undef means failure
+                    message = fileName + " did not return a true value";
+                    throw new PerlCompilerException(message);
                 }
             } else if (err.isEmpty()) {
                 message = "Can't locate " + fileName + ": " + ioErr;
@@ -228,26 +228,23 @@ public class ModuleOperators {
 
         // Check if the result is false (0 or empty string but not undef)
         if (!result.getBoolean()) {
-            if (!moduleTrue) {
-                String message = fileName + " did not return a true value";
-                // DON'T set %INC for false return values - this is the key fix for test 20
-                throw new PerlCompilerException(message);
-            } else {
-                // For moduleTrue, set %INC and return 1
+            if (moduleTrue) {
+                // For moduleTrue, false values are OK - set %INC and return 1
                 incHash.put(fileName, new RuntimeScalar(fileName));
                 return getScalarInt(1);
+            } else {
+                // For non-moduleTrue, false values cause failure
+                String message = fileName + " did not return a true value";
+                throw new PerlCompilerException(message);
             }
         }
 
         // Success - set %INC with the actual file path
         incHash.put(fileName, new RuntimeScalar(fileName));
 
-        // If moduleTrue is enabled, always return 1
-        if (moduleTrue) {
-            return getScalarInt(1);
-        }
-
-        return result;
+        // Always return exactly 1 for require, regardless of what the module returned
+        // This matches Perl's behavior where require always returns 1 on success
+        return getScalarInt(1);
     }
 
     // Helper method to normalize version to a comparable decimal format for require
