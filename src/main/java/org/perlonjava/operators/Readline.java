@@ -278,12 +278,29 @@ public class Readline {
         int lengthValue = length.getInt();
         int offsetValue = offset.getInt();
 
-        // Read data using the new API
-        String readData = fh.ioHandle.read(lengthValue).toString();
-        int bytesRead = readData.length();
+        // Handle zero-length read
+        if (lengthValue == 0) {
+            String currentValue = scalar.toString();
+            StringBuilder scalarValue = new StringBuilder(currentValue);
 
-        if (bytesRead == 0) {
-            // EOF or error - clear the scalar when reading 0 bytes
+            // Truncate the buffer at the offset
+            if (offsetValue < 0) {
+                offsetValue = scalarValue.length() + offsetValue;
+                if (offsetValue < 0) {
+                    offsetValue = 0;
+                }
+            }
+            scalarValue.setLength(offsetValue);
+            scalar.set(scalarValue.toString());
+            return new RuntimeScalar(0);
+        }
+
+        // Read data using the new API - read characters, not bytes
+        String readData = fh.ioHandle.read(lengthValue).toString();
+        int charsRead = readData.length();
+
+        if (charsRead == 0) {
+            // EOF or error - clear the scalar when reading 0 characters
             scalar.set("");
             return new RuntimeScalar(0);
         }
@@ -291,37 +308,34 @@ public class Readline {
         // Handle offset
         StringBuilder scalarValue = new StringBuilder(scalar.toString());
 
-        // Special case: if offset is 0 and no offset was explicitly provided,
-        // replace the entire scalar content
-        if (offsetValue == 0 && args.elements.size() <= 3) {
-            scalar.set(readData);
-            return new RuntimeScalar(bytesRead);
-        }
-
         if (offsetValue < 0) {
             offsetValue = scalarValue.length() + offsetValue;
-        }
-        if (offsetValue > scalarValue.length()) {
-            // Pad with null characters if offset is greater than current length
-            while (scalarValue.length() < offsetValue) {
-                scalarValue.append('\0');
+            if (offsetValue < 0) {
+                offsetValue = 0;
             }
         }
 
-        // Insert the read data at the specified offset
-        if (offsetValue + readData.length() <= scalarValue.length()) {
-            // Replace within existing string
-            scalarValue.replace(offsetValue, offsetValue + readData.length(), readData);
-        } else {
-            // Extend the string
-            scalarValue.setLength(offsetValue);
-            scalarValue.append(readData);
+        int newLength = offsetValue + charsRead;
+
+        // Ensure the buffer is the correct length
+        if (newLength > scalarValue.length()) {
+            // Pad with null characters
+            while (scalarValue.length() < newLength) {
+                scalarValue.append('\0');
+            }
+        } else if (newLength < scalarValue.length()) {
+            // Truncate the buffer
+            scalarValue.setLength(newLength);
         }
+
+        // Replace the data from offsetValue to newLength
+        scalarValue.replace(offsetValue, newLength, readData);
 
         // Update the scalar with the new value
         scalar.set(scalarValue.toString());
 
         // Return the number of characters read
-        return new RuntimeScalar(bytesRead);
+        return new RuntimeScalar(charsRead);
+
     }
 }
