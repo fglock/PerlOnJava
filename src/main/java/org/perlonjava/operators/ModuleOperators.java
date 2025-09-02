@@ -165,7 +165,8 @@ public class ModuleOperators {
                 if (!moduleTrue) {
                     message = fileName + " did not return a true value";
                 } else {
-                    return result; // Skip throwing exception when moduleTrue is enabled
+                    // When moduleTrue is enabled, return 1 instead of the actual result
+                    return getScalarInt(1);
                 }
             } else if (err.isEmpty()) {
                 message = "Can't locate " + fileName + ": " + ioErr;
@@ -175,6 +176,23 @@ public class ModuleOperators {
 
             throw new PerlCompilerException(message);
         }
+
+        // Check if the result is false (0 or empty string)
+        if (!result.getBoolean()) {
+            if (!moduleTrue) {
+                String message = fileName + " did not return a true value";
+                throw new PerlCompilerException(message);
+            } else {
+                // When moduleTrue is enabled, return 1 instead of the actual result
+                return getScalarInt(1);
+            }
+        }
+
+        // If moduleTrue is enabled, always return 1
+        if (moduleTrue) {
+            return getScalarInt(1);
+        }
+
         return result;
     }
 }
