@@ -660,23 +660,35 @@ public class OperatorParser {
             consume(parser);
             operand = StringParser.parseVstring(parser, token.text, parser.tokenIndex);
         } else {
+            // Check for the specific pattern: :: followed by identifier (which is invalid for require)
+            if (token.type == LexerTokenType.OPERATOR && token.text.equals("::")) {
+                consume(parser);
+                LexerToken nextToken = peek(parser);
+                    // This is ::bareword which is not allowed in require
+                    throw new PerlCompilerException(parser.tokenIndex, "Bareword in require must not start with a double-colon: \"" + token.text + nextToken.text + "\"", parser.ctx.errorUtil);
+            }
+
             ListNode op = ListParser.parseZeroOrOneList(parser, 0);
             if (op.elements.isEmpty()) {
                 // `require $_`
                 op.elements.add(scalarUnderscore(parser));
                 operand = op;
-            } else if (op.elements.getFirst() instanceof IdentifierNode identifierNode) {
-                // `require` module
-                String moduleName = identifierNode.name;
-                parser.ctx.logDebug("name `" + moduleName + "`");
-                if (moduleName == null) {
-                    throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
-                }
-                String fileName = NameNormalizer.moduleToFilename(moduleName);
-                operand = ListNode.makeList(new StringNode(fileName, parser.tokenIndex));
             } else {
-                // `require` file
-                operand = op;
+                Node firstElement = op.elements.getFirst();
+
+                if (firstElement instanceof IdentifierNode identifierNode) {
+                    // `require` module
+                    String moduleName = identifierNode.name;
+                    parser.ctx.logDebug("name `" + moduleName + "`");
+                    if (moduleName == null) {
+                        throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
+                    }
+                    String fileName = NameNormalizer.moduleToFilename(moduleName);
+                    operand = ListNode.makeList(new StringNode(fileName, parser.tokenIndex));
+                } else {
+                    // `require` file
+                    operand = op;
+                }
             }
         }
         OperatorNode node = new OperatorNode("require", operand, parser.tokenIndex);
