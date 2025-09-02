@@ -40,8 +40,15 @@ public class ModuleOperators {
         if (filePath.isAbsolute() || fileName.startsWith("./") || fileName.startsWith("../")) {
             // For absolute or explicit relative paths, resolve using RuntimeIO.getPath
             filePath = RuntimeIO.resolvePath(fileName);
-            fullName = Files.exists(filePath) ? filePath : null;
-            actualFileName = fullName != null ? fullName.toString() : null;
+            if (Files.exists(filePath)) {
+                // Check if it's a directory
+                if (Files.isDirectory(filePath)) {
+                    GlobalVariable.setGlobalVariable("main::!", "Is a directory");
+                    return new RuntimeScalar(); // return undef
+                }
+                fullName = filePath;
+                actualFileName = fullName.toString();
+            }
         } else {
             // Otherwise, search in INC directories
             List<RuntimeScalar> inc = GlobalVariable.getGlobalArray("main::INC").elements;
@@ -92,7 +99,7 @@ public class ModuleOperators {
                     if (fileName.endsWith(".pm")) {
                         // Try to find a .pmc file
                         Path fullPath = dirPath.resolve(fileName + "c");
-                        if (Files.exists(fullPath)) {
+                        if (Files.exists(fullPath) && !Files.isDirectory(fullPath)) {
                             fullName = fullPath;
                             actualFileName = fullName.toString();
                             break;
@@ -100,6 +107,11 @@ public class ModuleOperators {
                     }
                     Path fullPath = dirPath.resolve(fileName);
                     if (Files.exists(fullPath)) {
+                        // Check if it's a directory
+                        if (Files.isDirectory(fullPath)) {
+                            // Continue searching in other @INC directories
+                            continue;
+                        }
                         fullName = fullPath;
                         actualFileName = fullName.toString();
                         break;
@@ -134,8 +146,12 @@ public class ModuleOperators {
         try {
             result = PerlLanguageProvider.executePerlCode(parsedArgs, false);
         } catch (Throwable t) {
-            GlobalVariable.setGlobalVariable("main::@", "Error in file " + parsedArgs.fileName +
-                    "\n" + findInnermostCause(t).getMessage());
+            // For require, if there was a compilation failure, we need to handle %INC specially
+            if (isRequire && setINC) {
+                // Remove the entry we just added, we'll handle this in require() method
+                getGlobalHash("main::INC").elements.remove(fileName);
+            }
+            GlobalVariable.setGlobalVariable("main::@", findInnermostCause(t).getMessage());
             return new RuntimeScalar(); // return undef
         }
 
@@ -166,8 +182,15 @@ public class ModuleOperators {
 
         // Look up the file name in %INC
         String fileName = runtimeScalar.toString();
-        if (getGlobalHash("main::INC").elements.containsKey(fileName)) {
-            // module was already loaded
+        RuntimeHash incHash = getGlobalHash("main::INC");
+        if (incHash.elements.containsKey(fileName)) {
+            // Check if this was a compilation failure (stored as undef)
+            RuntimeScalar incEntry = (RuntimeScalar) incHash.elements.get(fileName);
+            if (!incEntry.defined().getBoolean()) {
+                // This was a compilation failure, throw the cached error
+                throw new PerlCompilerException("Compilation failed in require at " + fileName);
+            }
+            // module was already loaded successfully
             return getScalarInt(1);
         }
 
@@ -183,15 +206,20 @@ public class ModuleOperators {
             if (err.isEmpty() && ioErr.isEmpty()) {
                 if (!moduleTrue) {
                     message = fileName + " did not return a true value";
+                    // Set %INC for false return values
+                    incHash.put(fileName, new RuntimeScalar(fileName));
                 } else {
                     // For moduleTrue, set %INC and return 1
-                    getGlobalHash("main::INC").put(fileName, new RuntimeScalar(fileName));
+                    incHash.put(fileName, new RuntimeScalar(fileName));
                     return getScalarInt(1);
                 }
             } else if (err.isEmpty()) {
                 message = "Can't locate " + fileName + ": " + ioErr;
+                // Don't set %INC for file not found errors
             } else {
                 message = "Compilation failed in require: " + err;
+                // Set %INC as undef to mark compilation failure
+                incHash.put(fileName, new RuntimeScalar());
             }
 
             throw new PerlCompilerException(message);
@@ -201,14 +229,15 @@ public class ModuleOperators {
         if (!result.getBoolean()) {
             if (!moduleTrue) {
                 String message = fileName + " did not return a true value";
+                // %INC was already set by doFile, keep it
                 throw new PerlCompilerException(message);
             } else {
-                // For moduleTrue, restore %INC entry and return 1
-                getGlobalHash("main::INC").put(fileName, new RuntimeScalar(fileName));
+                // For moduleTrue, %INC was already set, return 1
                 return getScalarInt(1);
             }
         }
 
+        // Success - %INC was already set by doFile
         // If moduleTrue is enabled, always return 1
         if (moduleTrue) {
             return getScalarInt(1);
