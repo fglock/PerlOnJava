@@ -63,16 +63,10 @@ public class Feature extends PerlModuleBase {
     public static RuntimeList noFeature(RuntimeArray args, int ctx) {
         for (int i = 1; i < args.size(); i++) {
             String bundle = args.get(i).toString();
-            if (!":all".equals(bundle) && !featureExists(bundle)) {
+            if (!FeatureFlags.bundleExists(bundle) && !featureExists(bundle)) {
                 throw new PerlCompilerException("Unknown feature category '" + bundle + "'");
             }
-            if (":all".equals(bundle)) {
-                for (String feature : getFeatureList()) {
-                    featureManager.disableFeatureBundle(feature);
-                }
-            } else {
-                featureManager.disableFeatureBundle(bundle);
-            }
+            featureManager.disableFeatureBundle(bundle);
         }
         return new RuntimeScalar().getList();
     }
