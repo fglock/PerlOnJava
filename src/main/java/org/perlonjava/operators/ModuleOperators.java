@@ -195,7 +195,7 @@ public class ModuleOperators {
         }
 
         // Call doFile with require-specific behavior
-        RuntimeScalar result = doFile(runtimeScalar, true, true);
+        RuntimeScalar result = doFile(runtimeScalar, false, true);  // Don't set %INC yet
 
         // Check if `do` returned undef (file not found or I/O error)
         if (!result.defined().getBoolean()) {
@@ -204,10 +204,10 @@ public class ModuleOperators {
 
             String message;
             if (err.isEmpty() && ioErr.isEmpty()) {
+                // File executed but returned undef - this should not set %INC
                 if (!moduleTrue) {
                     message = fileName + " did not return a true value";
-                    // Set %INC for false return values
-                    incHash.put(fileName, new RuntimeScalar(fileName));
+                    // DON'T set %INC for undef return values
                 } else {
                     // For moduleTrue, set %INC and return 1
                     incHash.put(fileName, new RuntimeScalar(fileName));
@@ -225,19 +225,22 @@ public class ModuleOperators {
             throw new PerlCompilerException(message);
         }
 
-        // Check if the result is false (0 or empty string)
+        // Check if the result is false (0 or empty string but not undef)
         if (!result.getBoolean()) {
             if (!moduleTrue) {
                 String message = fileName + " did not return a true value";
-                // %INC was already set by doFile, keep it
+                // DON'T set %INC for false return values - this is the key fix for test 20
                 throw new PerlCompilerException(message);
             } else {
-                // For moduleTrue, %INC was already set, return 1
+                // For moduleTrue, set %INC and return 1
+                incHash.put(fileName, new RuntimeScalar(fileName));
                 return getScalarInt(1);
             }
         }
 
-        // Success - %INC was already set by doFile
+        // Success - set %INC with the actual file path
+        incHash.put(fileName, new RuntimeScalar(fileName));
+
         // If moduleTrue is enabled, always return 1
         if (moduleTrue) {
             return getScalarInt(1);
