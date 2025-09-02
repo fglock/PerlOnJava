@@ -286,8 +286,31 @@ public class ModuleOperators {
                 }
                 return versionScalar.toString();
             case DOUBLE:
-                // For decimal versions like 10.0.2, convert to proper display format
+                // For decimal versions, we need special handling for underscore versions
                 String version = versionScalar.toString();
+
+                // Check if this looks like a converted underscore version (e.g., 10.00002 from 10.000_02)
+                if (version.matches("\\d+\\.\\d{5,}")) {
+                    String[] parts = version.split("\\.");
+                    if (parts.length == 2) {
+                        String decimal = parts[1];
+                        // For versions like 10.00002, we want 10.0.20
+                        String minor = decimal.substring(0, 3);
+                        String patch = decimal.substring(3);
+                        // Remove leading zeros but keep at least one digit
+                        minor = minor.replaceFirst("^0+", "");
+                        if (minor.isEmpty()) minor = "0";
+                        // For patch, if it's "02", we want "20", not "2"
+                        if (patch.length() == 2 && patch.startsWith("0") && !patch.equals("00")) {
+                            patch = patch.substring(1) + "0";  // "02" -> "20"
+                        } else {
+                            patch = patch.replaceFirst("^0+", "");
+                            if (patch.isEmpty()) patch = "0";
+                        }
+                        return parts[0] + "." + minor + "." + patch;
+                    }
+                }
+
                 if (version.contains(".")) {
                     String[] parts = version.split("\\.");
                     if (parts.length >= 2) {
@@ -324,17 +347,23 @@ public class ModuleOperators {
                 if (ver.contains("_")) {
                     ver = ver.replace("_", "");
                     // Convert 10.00002 to 10.0.20 for display
-                    if (ver.matches("\\d+\\.\\d{5}")) {
+                    if (ver.matches("\\d+\\.\\d{5,}")) {
                         String[] parts = ver.split("\\.");
-                        if (parts.length == 2 && parts[1].length() == 5) {
+                        if (parts.length == 2) {
                             String decimal = parts[1];
+                            // For versions like 10.00002, we want 10.0.20
                             String minor = decimal.substring(0, 3);
                             String patch = decimal.substring(3);
                             // Remove leading zeros but keep at least one digit
                             minor = minor.replaceFirst("^0+", "");
                             if (minor.isEmpty()) minor = "0";
-                            patch = patch.replaceFirst("^0+", "");
-                            if (patch.isEmpty()) patch = "0";
+                            // For patch, if it's "02", we want "20", not "2"
+                            if (patch.length() == 2 && patch.startsWith("0") && !patch.equals("00")) {
+                                patch = patch.substring(1) + "0";  // "02" -> "20"
+                            } else {
+                                patch = patch.replaceFirst("^0+", "");
+                                if (patch.isEmpty()) patch = "0";
+                            }
                             return parts[0] + "." + minor + "." + patch;
                         }
                     }
