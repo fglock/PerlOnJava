@@ -36,6 +36,18 @@ public class FeatureFlags {
         featureBundles.put(":5.38", new String[]{"bitwise", "current_sub", "evalbytes", "fc", "isa", "module_true", "postderef_qq", "say", "signatures", "state", "unicode_eval", "unicode_strings"});
         featureBundles.put(":5.40", new String[]{"bitwise", "current_sub", "evalbytes", "fc", "isa", "module_true", "postderef_qq", "say", "signatures", "state", "try", "unicode_eval", "unicode_strings"});
         featureBundles.put(":5.42", new String[]{"bitwise", "current_sub", "evalbytes", "fc", "isa", "module_true", "postderef_qq", "say", "signatures", "state", "try", "unicode_eval", "unicode_strings"});
+
+        // Add :all bundle that includes all available features
+        Set<String> allFeatures = new HashSet<>();
+        for (String[] features : featureBundles.values()) {
+            allFeatures.addAll(Arrays.asList(features));
+        }
+        // Add individual features not in bundles
+        allFeatures.addAll(Arrays.asList("postderef", "keyword_all", "keyword_any", "lexical_subs", "refaliasing", "declared_refs", "defer", "class"));
+        allFeatures.addAll(Arrays.asList("perlonjava::internal::mro_c3", "perlonjava::internal::next_method"));
+
+        featureBundles.put(":all", allFeatures.toArray(new String[0]));
+
         // Not bundled:
         featureBundles.put("postderef", new String[]{"postderef"});
         featureBundles.put("keyword_all", new String[]{"keyword_all"});
