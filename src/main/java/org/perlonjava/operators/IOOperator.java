@@ -525,10 +525,10 @@ public class IOOperator {
         RuntimeIO fh = fileHandle.getRuntimeIO();
 
         // Check if fh is null (invalid filehandle)
-        if (fh == null) {
+        if (fh == null || fh.ioHandle == null || fh.ioHandle instanceof ClosedIOHandle) {
             getGlobalVariable("main::!").set("Bad file descriptor");
             WarnDie.warn(
-                    new RuntimeScalar("syswrite() on unopened filehandle"),
+                    new RuntimeScalar("syswrite() on closed filehandle"),
                     new RuntimeScalar("\n")
             );
             return new RuntimeScalar(); // undef
@@ -538,16 +538,16 @@ public class IOOperator {
             throw new PerlCompilerException("syswrite() is not supported on tied handles");
         }
 
-        // Check for closed handle - but based on the debug output,
-        // closed handles still have their original ioHandle, not ClosedIOHandle
-        if (fh.ioHandle == null) {
-            getGlobalVariable("main::!").set("Bad file descriptor");
-            WarnDie.warn(
-                    new RuntimeScalar("syswrite() on closed filehandle"),
-                    new RuntimeScalar("\n")
-            );
-            return new RuntimeScalar(); // undef
-        }
+//        // Check for closed handle - but based on the debug output,
+//        // closed handles still have their original ioHandle, not ClosedIOHandle
+//        if (fh.ioHandle == null) {
+//            getGlobalVariable("main::!").set("Bad file descriptor");
+//            WarnDie.warn(
+//                    new RuntimeScalar("syswrite() on closed filehandle"),
+//                    new RuntimeScalar("\n")
+//            );
+//            return new RuntimeScalar(); // undef
+//        }
 
         // Check for :utf8 layer
         if (hasUtf8Layer(fh)) {
