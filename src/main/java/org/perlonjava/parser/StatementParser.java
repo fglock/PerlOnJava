@@ -217,7 +217,7 @@ public class StatementParser {
         Node condition = parser.parseExpression(0);
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
-        Node thenBranch = ParseBlock.parseBlock(parser);
+        BlockNode thenBranch = ParseBlock.parseBlock(parser);
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
         Node elseBranch = null;
         LexerToken token = TokenUtils.peek(parser);
@@ -229,6 +229,10 @@ public class StatementParser {
         } else if (token.text.equals("elsif")) {
             elseBranch = parseIfStatement(parser);
         }
+
+        // Use a macro to emulate Test::More SKIP blocks
+        TestMoreHelper.handleSkipTest(parser, thenBranch);
+
         return new IfNode(operator.text, condition, thenBranch, elseBranch, parser.tokenIndex);
     }
 
