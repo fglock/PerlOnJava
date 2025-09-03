@@ -155,7 +155,7 @@ public class RegexPreprocessor {
 
         // Ensure the closing parenthesis is consumed
         if (offset >= length || s.codePointAt(offset) != ')') {
-            regexError(s, offset, "Unterminated ( in regex");
+            regexError(s, offset, "Missing right curly or square bracket" );
         }
         sb.append(')');
         return offset;
