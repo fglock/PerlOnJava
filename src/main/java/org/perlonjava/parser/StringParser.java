@@ -395,7 +395,7 @@ public class StringParser {
         try {
             // Convert the initial part to a character and append it
             int charCode = Integer.parseInt(vStringPart);
-            vStringBuilder.append((char) charCode);
+            vStringBuilder.appendCodePoint(charCode);
         } catch (NumberFormatException e) {
             throw new PerlCompilerException(currentIndex, "Invalid v-string format: " + vStringPart, parser.ctx.errorUtil);
         }
@@ -417,7 +417,7 @@ public class StringParser {
                     // Consume the number, convert it to a character, and append it
                     String num = TokenUtils.consume(parser).text.replace("_", "");
                     int charCode = Integer.parseInt(num);
-                    vStringBuilder.append((char) charCode);
+                    vStringBuilder.appendCodePoint(charCode);
                 } else {
                     break; // Exit the loop if the next token is not a number
                 }
