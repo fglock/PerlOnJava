@@ -2,7 +2,7 @@ package org.perlonjava.operators;
 
 import org.perlonjava.CompilerOptions;
 import org.perlonjava.Configuration;
-import org.perlonjava.perlmodule.Universal;
+import org.perlonjava.perlmodule.Feature;
 import org.perlonjava.runtime.*;
 import org.perlonjava.scriptengine.PerlLanguageProvider;
 
@@ -16,11 +16,11 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
 
+import static org.perlonjava.perlmodule.Feature.featureManager;
 import static org.perlonjava.runtime.ExceptionFormatter.findInnermostCause;
 import static org.perlonjava.runtime.GlobalVariable.getGlobalHash;
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
-import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
+import static org.perlonjava.runtime.RuntimeScalarCache.*;
 import static org.perlonjava.runtime.RuntimeScalarType.*;
 
 public class ModuleOperators {
@@ -143,8 +143,16 @@ public class ModuleOperators {
         }
 
         RuntimeList result;
+        FeatureFlags outerFeature = Feature.featureManager;
         try {
+            Feature.featureManager = new FeatureFlags();
+
             result = PerlLanguageProvider.executePerlCode(parsedArgs, false);
+
+            boolean moduleTrue = featureManager.isFeatureEnabled("module_true");
+            if (moduleTrue) {
+                result = scalarTrue.getList();
+            }
         } catch (Throwable t) {
             // For require, if there was a compilation failure, we need to handle %INC specially
             if (isRequire && setINC) {
@@ -153,6 +161,8 @@ public class ModuleOperators {
             }
             GlobalVariable.setGlobalVariable("main::@", findInnermostCause(t).getMessage());
             return new RuntimeScalar(); // return undef
+        } finally {
+            Feature.featureManager = outerFeature;
         }
 
         RuntimeScalar finalResult = result == null ? scalarUndef : result.scalar();
@@ -165,7 +175,7 @@ public class ModuleOperators {
         return finalResult;
     }
 
-    public static RuntimeScalar require(RuntimeScalar runtimeScalar, boolean moduleTrue) {
+    public static RuntimeScalar require(RuntimeScalar runtimeScalar) {
         // https://perldoc.perl.org/functions/require
 
         if (runtimeScalar.type == RuntimeScalarType.INTEGER || runtimeScalar.type == RuntimeScalarType.DOUBLE || runtimeScalar.type == RuntimeScalarType.VSTRING || runtimeScalar.type == RuntimeScalarType.BOOLEAN) {
@@ -185,7 +195,7 @@ public class ModuleOperators {
         RuntimeHash incHash = getGlobalHash("main::INC");
         if (incHash.elements.containsKey(fileName)) {
             // Check if this was a compilation failure (stored as undef)
-            RuntimeScalar incEntry = (RuntimeScalar) incHash.elements.get(fileName);
+            RuntimeScalar incEntry = incHash.elements.get(fileName);
             if (!incEntry.defined().getBoolean()) {
                 // This was a compilation failure, throw the cached error
                 throw new PerlCompilerException("Compilation failed in require at " + fileName);
@@ -205,15 +215,9 @@ public class ModuleOperators {
             String message;
             if (err.isEmpty() && ioErr.isEmpty()) {
                 // File executed but returned undef
-                if (moduleTrue) {
-                    // For moduleTrue, treat undef as success - set %INC and return 1
-                    incHash.put(fileName, new RuntimeScalar(fileName));
-                    return getScalarInt(1);
-                } else {
-                    // For non-moduleTrue, undef means failure
-                    message = fileName + " did not return a true value";
-                    throw new PerlCompilerException(message);
-                }
+                // For non-moduleTrue, undef means failure
+                message = fileName + " did not return a true value";
+                throw new PerlCompilerException(message);
             } else if (err.isEmpty()) {
                 message = "Can't locate " + fileName + ": " + ioErr;
                 // Don't set %INC for file not found errors
@@ -228,15 +232,9 @@ public class ModuleOperators {
 
         // Check if the result is false (0 or empty string but not undef)
         if (!result.getBoolean()) {
-            if (moduleTrue) {
-                // For moduleTrue, false values are OK - set %INC and return 1
-                incHash.put(fileName, new RuntimeScalar(fileName));
-                return getScalarInt(1);
-            } else {
-                // For non-moduleTrue, false values cause failure
-                String message = fileName + " did not return a true value";
-                throw new PerlCompilerException(message);
-            }
+            // For non-moduleTrue, false values cause failure
+            String message = fileName + " did not return a true value";
+            throw new PerlCompilerException(message);
         }
 
         // Success - set %INC with the actual file path
@@ -280,14 +278,13 @@ public class ModuleOperators {
         switch (versionScalar.type) {
             case VSTRING:
                 // For VSTRING, extract the version components
-                if (versionScalar.value instanceof String) {
-                    String vstr = (String) versionScalar.value;
+                if (versionScalar.value instanceof String vstr) {
                     StringBuilder normalized = new StringBuilder();
                     for (int i = 0; i < vstr.length(); i++) {
                         if (i > 0) normalized.append(".");
                         normalized.append((int) vstr.charAt(i));
                     }
-                    return normalizeVersionToDecimalForRequire("v" + normalized.toString());
+                    return normalizeVersionToDecimalForRequire("v" + normalized);
                 }
                 return normalizeVersionToDecimalForRequire(versionScalar.toString());
             case DOUBLE:
@@ -317,8 +314,7 @@ public class ModuleOperators {
         switch (versionScalar.type) {
             case VSTRING:
                 // For VSTRING like v5.42, display as "5.42.0"
-                if (versionScalar.value instanceof String) {
-                    String vstr = (String) versionScalar.value;
+                if (versionScalar.value instanceof String vstr) {
                     StringBuilder display = new StringBuilder();
                     for (int i = 0; i < vstr.length(); i++) {
                         if (i > 0) display.append(".");
@@ -388,7 +384,7 @@ public class ModuleOperators {
                 }
                 return version;
             case INTEGER:
-                return versionScalar.toString() + ".0.0";
+                return versionScalar + ".0.0";
             default:
                 String ver = versionScalar.toString();
                 // Handle underscore versions like 10.000_02 -> 10.0.20 for display

@@ -9,7 +9,7 @@ import static org.perlonjava.runtime.FeatureFlags.*;
  */
 public class Feature extends PerlModuleBase {
 
-    public static final FeatureFlags featureManager = new FeatureFlags();
+    public static FeatureFlags featureManager = new FeatureFlags();
 
     /**
      * Constructor for FeatureFlags.
@@ -33,6 +33,8 @@ public class Feature extends PerlModuleBase {
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Feature method: " + e.getMessage());
         }
+
+        featureManager = new FeatureFlags();
     }
 
     /**

@@ -551,7 +551,6 @@ public class EmitOperator {
 
     static void handleRequireOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        emitterVisitor.ctx.mv.visitLdcInsn(node.getBooleanAnnotation("module_true"));
         emitOperator(node, emitterVisitor);
     }
 

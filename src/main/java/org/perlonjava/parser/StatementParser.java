@@ -389,10 +389,8 @@ public class StatementParser {
 
                 ctx.logDebug("Use statement: " + fullName + " called from " + CallerStack.peek(0));
 
-                boolean moduleTrue = parser.ctx.symbolTable.isFeatureCategoryEnabled("module_true");
-
                 // execute 'require(fullName)'
-                RuntimeScalar ret = ModuleOperators.require(new RuntimeScalar(fullName), moduleTrue);
+                RuntimeScalar ret = ModuleOperators.require(new RuntimeScalar(fullName));
                 ctx.logDebug("Use statement return: " + ret);
 
                 if (versionNode != null) {
