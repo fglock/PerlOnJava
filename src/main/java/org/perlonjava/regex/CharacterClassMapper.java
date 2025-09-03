@@ -1,5 +1,7 @@
 package org.perlonjava.regex;
 
+import org.perlonjava.runtime.PerlCompilerException;
+
 import java.util.HashMap;
 import java.util.Map;
 
@@ -43,6 +45,10 @@ public class CharacterClassMapper {
     }
 
     public static String getMappedClass(String className) {
-        return CHARACTER_CLASSES.get(className);
+        String replacement = CHARACTER_CLASSES.get(className);
+        if (replacement == null) {
+            throw new PerlCompilerException("POSIX class " + className + " unknown");
+        }
+        return replacement;
     }
 }
