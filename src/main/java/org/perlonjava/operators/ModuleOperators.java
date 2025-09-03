@@ -29,6 +29,10 @@ public class ModuleOperators {
     }
 
     private static RuntimeScalar doFile(RuntimeScalar runtimeScalar, boolean setINC, boolean isRequire) {
+        // Clear error variables at start
+        GlobalVariable.setGlobalVariable("main::@", "");
+        GlobalVariable.setGlobalVariable("main::!", "");
+
         // `do` file
         String fileName = runtimeScalar.toString();
         Path fullName = null;
