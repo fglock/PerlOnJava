@@ -335,9 +335,9 @@ public class StatementParser {
                     int majorVersion = Integer.parseInt(parts[0]);
                     int minorVersion = Integer.parseInt(parts[1]);
 
-                    // If the minor version is odd, decrement it to make it even
+                    // If the minor version is odd, increment it to make it the next even version
                     if (minorVersion % 2 != 0) {
-                        minorVersion--;
+                        minorVersion++;
                     }
 
                     String closestVersion = minorVersion < 10

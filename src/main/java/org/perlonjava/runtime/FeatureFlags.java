@@ -3,6 +3,8 @@ package org.perlonjava.runtime;
 import org.perlonjava.symbols.ScopedSymbolTable;
 
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.perlonjava.parser.SpecialBlockParser.getCurrentScope;
 
@@ -15,6 +17,9 @@ public class FeatureFlags {
 
     // Instance-level enabled features tracking
     private final Set<String> enabledFeatures = new HashSet<>();
+
+    // Pattern to match version bundles like :5.37
+    private static final Pattern VERSION_PATTERN = Pattern.compile("^:(\\d+)\\.(\\d+)$");
 
     static {
         // Initialize the hierarchy of feature bundles
@@ -130,6 +135,66 @@ public class FeatureFlags {
     }
 
     /**
+     * Finds the next available version bundle for a given version.
+     * For example, if ":5.37" doesn't exist, it will return ":5.38".
+     *
+     * @param requestedBundle The requested version bundle (e.g., ":5.37").
+     * @return The next available version bundle, or null if none found.
+     */
+    private static String findNextAvailableVersionBundle(String requestedBundle) {
+        Matcher matcher = VERSION_PATTERN.matcher(requestedBundle);
+        if (!matcher.matches()) {
+            return null; // Not a version bundle
+        }
+
+        int requestedMajor = Integer.parseInt(matcher.group(1));
+        int requestedMinor = Integer.parseInt(matcher.group(2));
+
+        // Find all version bundles and sort them
+        List<String> versionBundles = new ArrayList<>();
+        for (String bundle : featureBundles.keySet()) {
+            if (VERSION_PATTERN.matcher(bundle).matches()) {
+                versionBundles.add(bundle);
+            }
+        }
+
+        // Sort version bundles numerically
+        versionBundles.sort((a, b) -> {
+            Matcher matcherA = VERSION_PATTERN.matcher(a);
+            Matcher matcherB = VERSION_PATTERN.matcher(b);
+
+            if (matcherA.matches() && matcherB.matches()) {
+                int majorA = Integer.parseInt(matcherA.group(1));
+                int minorA = Integer.parseInt(matcherA.group(2));
+                int majorB = Integer.parseInt(matcherB.group(1));
+                int minorB = Integer.parseInt(matcherB.group(2));
+
+                if (majorA != majorB) {
+                    return Integer.compare(majorA, majorB);
+                }
+                return Integer.compare(minorA, minorB);
+            }
+            return a.compareTo(b);
+        });
+
+        // Find the next higher version
+        for (String bundle : versionBundles) {
+            Matcher bundleMatcher = VERSION_PATTERN.matcher(bundle);
+            if (bundleMatcher.matches()) {
+                int bundleMajor = Integer.parseInt(bundleMatcher.group(1));
+                int bundleMinor = Integer.parseInt(bundleMatcher.group(2));
+
+                if (bundleMajor > requestedMajor ||
+                        (bundleMajor == requestedMajor && bundleMinor > requestedMinor)) {
+                    return bundle;
+                }
+            }
+        }
+
+        return null; // No higher version found
+    }
+
+    /**
      * Initialize with default features enabled.
      */
     public void initializeEnabledFeatures() {
@@ -199,6 +264,7 @@ public class FeatureFlags {
 
     /**
      * Sets the state of a feature bundle and its features.
+     * If a version bundle doesn't exist, it will try to use the next available version.
      *
      * @param bundle The name of the feature bundle.
      * @param state  The state to set (true for enabled, false for disabled).
@@ -227,6 +293,14 @@ public class FeatureFlags {
             } else {
                 disableFeature(trimmedBundle);
             }
+        } else {
+            // Bundle/feature doesn't exist - try fallback for version bundles
+            String fallbackBundle = findNextAvailableVersionBundle(trimmedBundle);
+            if (fallbackBundle != null) {
+                System.out.println("Warning: Feature bundle '" + trimmedBundle + "' not found, using '" + fallbackBundle + "' instead");
+                setFeatureState(fallbackBundle, state);
+            }
+            // If no fallback found, silently do nothing (existing behavior for non-version bundles)
         }
     }
 
