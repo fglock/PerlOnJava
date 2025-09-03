@@ -283,7 +283,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     perlClassName = "IO::Handle";
                     // Load the module if needed
                     // TODO - optimize by creating a flag in RuntimeIO
-                    ModuleOperators.require(new RuntimeScalar("IO/Handle.pm"), false);
+                    ModuleOperators.require(new RuntimeScalar("IO/Handle.pm"));
                 } else {
                     // Not auto-blessed
                     throw new PerlCompilerException("Can't call method \"" + methodName + "\" on unblessed reference");

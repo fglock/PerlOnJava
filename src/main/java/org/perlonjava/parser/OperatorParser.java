@@ -703,11 +703,6 @@ public class OperatorParser {
                 }
             }
         }
-        OperatorNode node = new OperatorNode("require", operand, parser.tokenIndex);
-        // Is `module_true` feature enabled?
-        if (parser.ctx.symbolTable.isFeatureCategoryEnabled("module_true")) {
-            node.setAnnotation("module_true", true);
-        }
-        return node;
+        return new OperatorNode("require", operand, parser.tokenIndex);
     }
 }
