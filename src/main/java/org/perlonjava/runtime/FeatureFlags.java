@@ -109,39 +109,13 @@ public class FeatureFlags {
     }
 
     /**
-     * Checks if a bundle exists.
-     *
-     * @param bundle The name of the bundle to check.
-     * @return True if the bundle exists, false otherwise.
-     */
-    public static boolean bundleExists(String bundle) {
-        if (bundle == null) {
-            return false;
-        }
-        return featureBundles.containsKey(bundle.trim());
-    }
-
-    /**
-     * Gets the features in a specific bundle.
-     *
-     * @param bundle The name of the bundle.
-     * @return Array of feature names in the bundle, or null if bundle doesn't exist.
-     */
-    public static String[] getBundleFeatures(String bundle) {
-        if (bundle == null) {
-            return null;
-        }
-        return featureBundles.get(bundle.trim());
-    }
-
-    /**
      * Finds the next available version bundle for a given version.
      * For example, if ":5.37" doesn't exist, it will return ":5.38".
      *
      * @param requestedBundle The requested version bundle (e.g., ":5.37").
      * @return The next available version bundle, or null if none found.
      */
-    private static String findNextAvailableVersionBundle(String requestedBundle) {
+    public static String findNextAvailableVersionBundle(String requestedBundle) {
         Matcher matcher = VERSION_PATTERN.matcher(requestedBundle);
         if (!matcher.matches()) {
             return null; // Not a version bundle
@@ -185,13 +159,103 @@ public class FeatureFlags {
                 int bundleMinor = Integer.parseInt(bundleMatcher.group(2));
 
                 if (bundleMajor > requestedMajor ||
-                        (bundleMajor == requestedMajor && bundleMinor > requestedMinor)) {
+                    (bundleMajor == requestedMajor && bundleMinor > requestedMinor)) {
                     return bundle;
                 }
             }
         }
 
         return null; // No higher version found
+    }
+
+    /**
+     * Checks if a bundle exists or if a fallback version is available.
+     *
+     * @param bundle The name of the bundle to check.
+     * @return True if the bundle exists or a fallback version is available, false otherwise.
+     */
+    public static boolean bundleExists(String bundle) {
+        if (bundle == null) {
+            return false;
+        }
+
+        String trimmedBundle = bundle.trim();
+
+        // Check if bundle exists directly
+        if (featureBundles.containsKey(trimmedBundle)) {
+            return true;
+        }
+
+        // Check if it's a version bundle with available fallback
+        String fallbackBundle = findNextAvailableVersionBundle(trimmedBundle);
+        return fallbackBundle != null;
+    }
+
+    /**
+     * Checks if a bundle exists exactly (without fallback).
+     *
+     * @param bundle The name of the bundle to check.
+     * @return True if the bundle exists exactly, false otherwise.
+     */
+    public static boolean bundleExistsExactly(String bundle) {
+        if (bundle == null) {
+            return false;
+        }
+        return featureBundles.containsKey(bundle.trim());
+    }
+
+    /**
+     * Gets the actual bundle name to use, considering fallbacks.
+     * For example, if ":5.37" doesn't exist, it will return ":5.38".
+     *
+     * @param bundle The requested bundle name.
+     * @return The actual bundle name to use, or the original if no fallback needed.
+     */
+    public static String resolveBundle(String bundle) {
+        if (bundle == null) {
+            return null;
+        }
+
+        String trimmedBundle = bundle.trim();
+
+        // If bundle exists directly, return it
+        if (featureBundles.containsKey(trimmedBundle)) {
+            return trimmedBundle;
+        }
+
+        // Try to find fallback for version bundles
+        String fallbackBundle = findNextAvailableVersionBundle(trimmedBundle);
+        if (fallbackBundle != null) {
+            return fallbackBundle;
+        }
+
+        // Return original if no fallback available
+        return trimmedBundle;
+    }
+
+    /**
+     * Gets the features in a specific bundle, considering fallbacks.
+     *
+     * @param bundle The name of the bundle.
+     * @return Array of feature names in the bundle, or null if bundle doesn't exist.
+     */
+    public static String[] getBundleFeatures(String bundle) {
+        if (bundle == null) {
+            return null;
+        }
+
+        String resolvedBundle = resolveBundle(bundle);
+        return featureBundles.get(resolvedBundle);
+    }
+
+    /**
+     * Checks if a bundle or feature exists or has a fallback available.
+     *
+     * @param name The name of the bundle or feature to check.
+     * @return True if the bundle/feature exists or a fallback is available, false otherwise.
+     */
+    public static boolean bundleOrFeatureExists(String name) {
+        return bundleExists(name) || featureExists(name);
     }
 
     /**
@@ -297,7 +361,7 @@ public class FeatureFlags {
             // Bundle/feature doesn't exist - try fallback for version bundles
             String fallbackBundle = findNextAvailableVersionBundle(trimmedBundle);
             if (fallbackBundle != null) {
-                System.out.println("Warning: Feature bundle '" + trimmedBundle + "' not found, using '" + fallbackBundle + "' instead");
+                // System.out.println("Warning: Feature bundle '" + trimmedBundle + "' not found, using '" + fallbackBundle + "' instead");
                 setFeatureState(fallbackBundle, state);
             }
             // If no fallback found, silently do nothing (existing behavior for non-version bundles)
