@@ -208,8 +208,8 @@ public class ModuleOperators {
             return getScalarInt(1);
         }
 
-        // Call doFile with require-specific behavior
-        RuntimeScalar result = doFile(runtimeScalar, false, true);  // Don't set %INC yet
+        // Call doFile with require-specific behavior - set %INC optimistically
+        RuntimeScalar result = doFile(runtimeScalar, true, true);
 
         // Check if `do` returned undef (file not found or I/O error)
         if (!result.defined().getBoolean()) {
@@ -236,17 +236,18 @@ public class ModuleOperators {
 
         // Check if the result is false (0 or empty string but not undef)
         if (!result.getBoolean()) {
-            // For non-moduleTrue, false values cause failure
+            // False values cause failure in require
             String message = fileName + " did not return a true value";
+            // Remove from %INC since it didn't return true
+            incHash.elements.remove(fileName);
             throw new PerlCompilerException(message);
         }
 
-        // Success - set %INC with the actual file path
-        incHash.put(fileName, new RuntimeScalar(fileName));
-
-        // Always return exactly 1 for require, regardless of what the module returned
-        // This matches Perl's behavior where require always returns 1 on success
-        return getScalarInt(1);
+        // Success - %INC was already set by doFile
+        // Return the actual result - doFile already applied module_true logic if needed
+        // If module_true was enabled, result will be 1
+        // If module_true was disabled, result will be the module's actual return value
+        return result;
     }
 
     // Helper method to normalize version to a comparable decimal format for require
