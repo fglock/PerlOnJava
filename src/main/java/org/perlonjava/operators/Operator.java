@@ -402,7 +402,7 @@ public class Operator {
     }
 
     public static RuntimeScalar wantarray(int ctx) {
-        return ctx == RuntimeContextType.VOID ? scalarUndef : new RuntimeScalar(ctx == RuntimeContextType.LIST ? scalarOne : scalarZero);
+        return ctx == RuntimeContextType.VOID ? scalarUndef : new RuntimeScalar(ctx == RuntimeContextType.LIST ? scalarTrue : scalarFalse);
     }
 
     public static RuntimeList reset(RuntimeList args, int ctx) {
