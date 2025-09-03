@@ -223,7 +223,7 @@ public class ModuleOperators {
                 message = fileName + " did not return a true value";
                 throw new PerlCompilerException(message);
             } else if (err.isEmpty()) {
-                message = "Can't locate " + fileName + ": " + ioErr;
+                message = "Can't locate " + fileName + " in @INC";
                 // Don't set %INC for file not found errors
                 throw new PerlCompilerException(message);
             } else {
