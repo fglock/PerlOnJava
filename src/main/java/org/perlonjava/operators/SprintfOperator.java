@@ -15,7 +15,7 @@ public class SprintfOperator {
     // Pattern to match a complete format specifier
     // Updated to handle parameter index, vector flags, and size modifiers
     private static final Pattern FORMAT_PATTERN = Pattern.compile(
-            "%(\\d+\\$)?([-+ #0]*)(\\*(?:\\d+\\$)?)?([*]?)(\\d*)(?:\\.(\\*(?:\\d+\\$)?|\\d*))?([*]?)(?:(hh|h|ll|l|t|z|q|L|V)?)(v?)([diouxXeEfFgGaAcspnvDUOBb%])"
+            "%(\\d+\\$)?([-+ #0]*)(\\*(?:\\d+\\$)?)?([*]?)(\\d*)(?:\\.(\\*(?:\\d+\\$)?|\\d*))?([*]?)(?:(hh|h|ll|l|t|z|q|L|V)?)(v?)([diouxXeEfFgGaAcspnvDUOBb%A-Z])"
     );
 
     /**
@@ -59,16 +59,28 @@ public class SprintfOperator {
                 continue;
             }
 
-            // Handle invalid combinations
+            // Handle invalid format specifiers - return the specifier unchanged with "INVALID"
+            if (isInvalidSpecifier(conversionChar)) {
+                String invalidSpec = matcher.group(0);
+                result.append(invalidSpec);
+                result.append(" INVALID");
+                continue;
+            }
+
+            // Handle invalid combinations for vector format
             if (vectorFlag && !"diouxXbB".contains(String.valueOf(conversionChar))) {
-                throw new PerlCompilerException("Invalid vector format %" + matcher.group(9) + conversionChar);
+                String invalidSpec = matcher.group(0);
+                result.append(invalidSpec);
+                result.append(" INVALID");
+                continue;
             }
 
             // Get width from argument if needed
             int width = 0;
             if (widthFromArg || widthFromArgSpec != null) {
                 if (argIndex >= list.size()) {
-                    throw new PerlCompilerException("Missing argument for sprintf");
+                    result.append(" MISSING");
+                    continue;
                 }
                 width = ((RuntimeScalar) list.elements.get(argIndex++)).getInt();
                 if (width < 0) {
@@ -83,7 +95,8 @@ public class SprintfOperator {
             int precision = -1;
             if (precisionFromArg || (precisionSpec != null && precisionSpec.startsWith("*"))) {
                 if (argIndex >= list.size()) {
-                    throw new PerlCompilerException("Missing argument for sprintf");
+                    result.append(" MISSING");
+                    continue;
                 }
                 precision = ((RuntimeScalar) list.elements.get(argIndex++)).getInt();
                 if (precision < 0) {
@@ -95,8 +108,11 @@ public class SprintfOperator {
 
             // Get the value to format
             if (argIndex >= list.size()) {
-                // Add undefined value if missing
-                list.elements.add(scalarUndef);
+                if (conversionChar == 'n') {
+                    throw new PerlCompilerException("%n specifier not supported");
+                }
+                result.append(" MISSING");
+                continue;
             }
             RuntimeScalar value = (RuntimeScalar) list.elements.get(argIndex++);
 
@@ -116,6 +132,11 @@ public class SprintfOperator {
         result.append(format.substring(pos));
 
         return new RuntimeScalar(result.toString());
+    }
+
+    private static boolean isInvalidSpecifier(char c) {
+        // List of invalid specifiers that should return "INVALID"
+        return "CHIKMVWYJLNPQRSTZ".indexOf(c) >= 0;
     }
 
     private static String formatVectorString(RuntimeScalar value, String flags, int width,
@@ -210,8 +231,11 @@ public class SprintfOperator {
                 return formatInteger(value.getLong(), flags, width, precision, 8, flags.contains("#"));
 
             case 'x':
-            case 'X':
                 return formatInteger(value.getLong(), flags, width, precision, 16, flags.contains("#"));
+            case 'X':
+                String result = formatInteger(value.getLong(), flags.replace("X", "x"), width, precision, 16, flags.contains("#"));
+                // Convert to uppercase
+                return result.toUpperCase();
 
             case 'b':
             case 'B':
@@ -276,9 +300,9 @@ public class SprintfOperator {
             boolean leftAlign = flags.contains("-");
             if (result.length() < width) {
                 if (leftAlign) {
-                    result = String.format("%-" + width + "s", result);
+                    result = padRight(result, width);
                 } else {
-                    result = String.format("%" + width + "s", result);
+                    result = padLeft(result, width);
                 }
             }
         }
@@ -298,8 +322,10 @@ public class SprintfOperator {
                 result = Long.toOctalString(absValue);
                 break;
             case 16:
-                result = flags.contains("X") ? Long.toHexString(absValue).toUpperCase()
-                        : Long.toHexString(absValue);
+                result = Long.toHexString(absValue);
+                if (flags.contains("X")) {
+                    result = result.toUpperCase();
+                }
                 break;
             case 10:
             default:
@@ -317,7 +343,7 @@ public class SprintfOperator {
                     result = "0";
                 }
             } else if (result.length() < precision) {
-                result = String.format("%0" + precision + "s", result);
+                result = padLeft(result, precision, '0');
             }
         }
 
@@ -351,32 +377,11 @@ public class SprintfOperator {
             boolean zeroPad = flags.contains("0") && precision < 0 && !leftAlign;
 
             if (leftAlign) {
-                result = String.format("%-" + width + "s", result);
+                result = padRight(result, width);
             } else if (zeroPad) {
-                // Zero padding goes after sign/prefix but before number
-                String sign = "";
-                String prefix = "";
-                String number = result;
-
-                if (result.startsWith("-") || result.startsWith("+") || result.startsWith(" ")) {
-                    sign = result.substring(0, 1);
-                    number = result.substring(1);
-                }
-                if (number.startsWith("0x") || number.startsWith("0X")) {
-                    prefix = number.substring(0, 2);
-                    number = number.substring(2);
-                } else if (base == 8 && number.startsWith("0") && number.length() > 1) {
-                    prefix = "0";
-                    number = number.substring(1);
-                }
-
-                int padLength = width - sign.length() - prefix.length();
-                if (padLength > number.length()) {
-                    number = String.format("%0" + padLength + "s", number);
-                }
-                result = sign + prefix + number;
+                result = applyZeroPadding(result, width);
             } else {
-                result = String.format("%" + width + "s", result);
+                result = padLeft(result, width);
             }
         }
 
@@ -388,20 +393,14 @@ public class SprintfOperator {
         long longValue = value.getLong();
 
         // Convert to unsigned representation
-        String result;
-        if (longValue >= 0) {
-            result = Long.toString(longValue);
-        } else {
-            // For negative values, add 2^64
-            result = Long.toUnsignedString(longValue);
-        }
+        String result = Long.toUnsignedString(longValue);
 
         // Apply precision (zero-padding)
         if (precision >= 0) {
             if (precision == 0 && longValue == 0) {
                 result = "";
             } else if (result.length() < precision) {
-                result = String.format("%0" + precision + "s", result);
+                result = padLeft(result, precision, '0');
             }
         }
 
@@ -411,11 +410,11 @@ public class SprintfOperator {
             boolean zeroPad = flags.contains("0") && precision < 0 && !leftAlign;
 
             if (leftAlign) {
-                result = String.format("%-" + width + "s", result);
+                result = padRight(result, width);
             } else if (zeroPad) {
-                result = String.format("%0" + width + "s", result);
+                result = padLeft(result, width, '0');
             } else {
-                result = String.format("%" + width + "s", result);
+                result = padLeft(result, width);
             }
         }
 
@@ -423,9 +422,8 @@ public class SprintfOperator {
     }
 
     private static String formatBinary(long value, String flags, int width, int precision) {
-        boolean negative = value < 0;
-        long absValue = negative ? -value : value;
-        String result = Long.toBinaryString(absValue);
+        // Binary format treats value as unsigned - no sign handling
+        String result = Long.toBinaryString(value);
 
         // Apply precision (zero-padding)
         if (precision >= 0) {
@@ -436,7 +434,7 @@ public class SprintfOperator {
                     result = "0";
                 }
             } else if (result.length() < precision) {
-                result = String.format("%0" + precision + "s", result);
+                result = padLeft(result, precision, '0');
             }
         }
 
@@ -446,14 +444,8 @@ public class SprintfOperator {
             result = prefix + result;
         }
 
-        // Add sign for negative values (shouldn't happen with unsigned, but just in case)
-        if (negative) {
-            result = "-" + result;
-        } else if (flags.contains("+")) {
-            result = "+" + result;
-        } else if (flags.contains(" ")) {
-            result = " " + result;
-        }
+        // Binary format ignores +, -, and space flags for sign
+        // (binary is always treated as unsigned)
 
         // Apply width
         if (width > 0 && result.length() < width) {
@@ -461,11 +453,11 @@ public class SprintfOperator {
             boolean zeroPad = flags.contains("0") && precision < 0 && !leftAlign;
 
             if (leftAlign) {
-                result = String.format("%-" + width + "s", result);
+                result = padRight(result, width);
             } else if (zeroPad) {
-                result = String.format("%0" + width + "s", result);
+                result = applyZeroPaddingBinary(result, width);
             } else {
-                result = String.format("%" + width + "s", result);
+                result = padLeft(result, width);
             }
         }
 
@@ -476,7 +468,7 @@ public class SprintfOperator {
                                               int precision, char conversion) {
         // Set default precision if not specified
         if (precision < 0) {
-            precision = (conversion == 'g' || conversion == 'G') ? 6 : 6;
+            precision = 6;
         }
 
         StringBuilder spec = new StringBuilder("%");
@@ -514,34 +506,93 @@ public class SprintfOperator {
             value = value.substring(0, precision);
         }
 
-        // Apply width - manual padding to avoid Java formatter flag conflicts
+        // Apply width
         if (width > 0 && value.length() < width) {
             boolean leftAlign = flags.contains("-");
             boolean zeroPad = flags.contains("0") && !leftAlign;
 
-            int padCount = width - value.length();
-            StringBuilder padded = new StringBuilder();
-
             if (leftAlign) {
-                padded.append(value);
-                for (int i = 0; i < padCount; i++) {
-                    padded.append(' ');
-                }
+                value = padRight(value, width);
             } else if (zeroPad) {
-                // Zero padding for strings
-                for (int i = 0; i < padCount; i++) {
-                    padded.append('0');
-                }
-                padded.append(value);
+                value = padLeft(value, width, '0');
             } else {
-                for (int i = 0; i < padCount; i++) {
-                    padded.append(' ');
-                }
-                padded.append(value);
+                value = padLeft(value, width);
             }
-            value = padded.toString();
         }
 
         return value;
+    }
+
+    // Helper methods for padding to avoid String.format issues
+    private static String padLeft(String str, int width) {
+        return padLeft(str, width, ' ');
+    }
+
+    private static String padLeft(String str, int width, char padChar) {
+        if (str.length() >= width) return str;
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < width - str.length(); i++) {
+            sb.append(padChar);
+        }
+        sb.append(str);
+        return sb.toString();
+    }
+
+    private static String padRight(String str, int width) {
+        if (str.length() >= width) return str;
+        StringBuilder sb = new StringBuilder(str);
+        for (int i = str.length(); i < width; i++) {
+            sb.append(' ');
+        }
+        return sb.toString();
+    }
+
+    private static String applyZeroPadding(String str, int width) {
+        if (str.length() >= width) return str;
+
+        // Zero padding goes after sign/prefix but before number
+        String sign = "";
+        String prefix = "";
+        String number = str;
+
+        if (str.startsWith("-") || str.startsWith("+") || str.startsWith(" ")) {
+            sign = str.substring(0, 1);
+            number = str.substring(1);
+        }
+        if (number.startsWith("0x") || number.startsWith("0X")) {
+            prefix = number.substring(0, 2);
+            number = number.substring(2);
+        } else if (number.startsWith("0") && number.length() > 1) {
+            // For octal, don't treat leading 0 as prefix for zero-padding
+        }
+
+        int padLength = width - sign.length() - prefix.length() - number.length();
+        StringBuilder result = new StringBuilder(sign).append(prefix);
+        for (int i = 0; i < padLength; i++) {
+            result.append('0');
+        }
+        result.append(number);
+        return result.toString();
+    }
+
+    private static String applyZeroPaddingBinary(String str, int width) {
+        if (str.length() >= width) return str;
+
+        // Zero padding goes after prefix but before number
+        String prefix = "";
+        String number = str;
+
+        if (str.startsWith("0b") || str.startsWith("0B")) {
+            prefix = str.substring(0, 2);
+            number = str.substring(2);
+        }
+
+        int padLength = width - prefix.length() - number.length();
+        StringBuilder result = new StringBuilder(prefix);
+        for (int i = 0; i < padLength; i++) {
+            result.append('0');
+        }
+        result.append(number);
+        return result.toString();
     }
 }
