@@ -1,5 +1,7 @@
 package org.perlonjava.regex;
 
+import org.perlonjava.runtime.PerlCompilerException;
+
 import static java.util.regex.Pattern.*;
 
 public class RegexFlags {
@@ -52,6 +54,25 @@ public class RegexFlags {
                 modifiers.contains("x"),
                 modifiers.contains("p")
         );
+    }
+
+    public static void validateModifiers(String modifiers) {
+        // Valid modifiers based on what's actually handled in fromModifiers
+        String validModifiers = "gcr?noimsxpade"; // Add 'xx' handling separately
+
+        for (int i = 0; i < modifiers.length(); i++) {
+            char modifier = modifiers.charAt(i);
+
+            // Handle 'xx' as a special case (two characters)
+            if (modifier == 'x' && i + 1 < modifiers.length() && modifiers.charAt(i + 1) == 'x') {
+                i++; // Skip the second 'x'
+                continue;
+            }
+
+            if (validModifiers.indexOf(modifier) == -1) {
+                throw new PerlCompilerException("Unknown regexp modifier \"/" + modifier + "\"");
+            }
+        }
     }
 
     public int toPatternFlags() {

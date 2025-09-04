@@ -109,7 +109,6 @@ public class ParsePrimary {
         boolean calledWithCore = false;
 
         // Check for quote-like operators that should always be parsed as operators
-        boolean isQuoteLikeOperator = isIsQuoteLikeOperator(operator);
 
         // Check if this is an explicit CORE:: call (e.g., CORE::print)
         if (token.text.equals("CORE") && nextTokenText.equals("::")) {
@@ -118,7 +117,9 @@ public class ParsePrimary {
             TokenUtils.consume(parser);  // consume "::"
             token = TokenUtils.consume(parser); // consume the actual operator
             operator = token.text;
-        } else if (isQuoteLikeOperator || !nextTokenText.equals("::")) {
+        } else if (isIsQuoteLikeOperator(operator)) {
+            operatorEnabled = true;
+        } else if (!nextTokenText.equals("::")) {
             // Check if the operator is enabled in the current scope
             // Some operators require specific features to be enabled
             operatorEnabled = switch (operator) {
