@@ -144,7 +144,7 @@ public class RegexPreprocessor {
                 offset = handleNamedCapture(c3, s, offset, length, sb, regexFlags);
             } else if (c2 == '?' && c3 == '[') {
                 // Handle extended bracketed character class (?[...])
-                return RegexPreprocessorHelper.handleExtendedCharacterClass(s, offset, sb, regexFlags);
+                return ExtendedCharClass.handleExtendedCharacterClass(s, offset, sb, regexFlags);
             } else {
                 offset = handleRegularParentheses(s, offset, length, sb, regexFlags);
             }
