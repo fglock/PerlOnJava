@@ -108,6 +108,12 @@ public class ParsePrimary {
         boolean operatorEnabled = false;
         boolean calledWithCore = false;
 
+        // Check for quote-like operators that should always be parsed as operators
+        boolean isQuoteLikeOperator = operator.equals("q") || operator.equals("qq") ||
+                operator.equals("qw") || operator.equals("qx") ||
+                operator.equals("m") || operator.equals("s") ||
+                operator.equals("tr") || operator.equals("y");
+
         // Check if this is an explicit CORE:: call (e.g., CORE::print)
         if (token.text.equals("CORE") && nextTokenText.equals("::")) {
             calledWithCore = true;
@@ -115,22 +121,16 @@ public class ParsePrimary {
             TokenUtils.consume(parser);  // consume "::"
             token = TokenUtils.consume(parser); // consume the actual operator
             operator = token.text;
-        } else if (!nextTokenText.equals("::")) {
+        } else if (isQuoteLikeOperator || !nextTokenText.equals("::")) {
             // Check if the operator is enabled in the current scope
             // Some operators require specific features to be enabled
             operatorEnabled = switch (operator) {
-                case "all" ->
-                        parser.ctx.symbolTable.isFeatureCategoryEnabled("keyword_all");
-                case "any" ->
-                        parser.ctx.symbolTable.isFeatureCategoryEnabled("keyword_any");
-                case "say", "fc", "state", "evalbytes" ->
-                        parser.ctx.symbolTable.isFeatureCategoryEnabled(operator);
-                case "__SUB__" ->
-                        parser.ctx.symbolTable.isFeatureCategoryEnabled("current_sub");
-                case "__CLASS__" ->
-                        parser.ctx.symbolTable.isFeatureCategoryEnabled("class");
-                case "method" ->
-                        parser.ctx.symbolTable.isFeatureCategoryEnabled("class");
+                case "all" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("keyword_all");
+                case "any" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("keyword_any");
+                case "say", "fc", "state", "evalbytes" -> parser.ctx.symbolTable.isFeatureCategoryEnabled(operator);
+                case "__SUB__" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("current_sub");
+                case "__CLASS__" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("class");
+                case "method" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("class");
                 default -> true; // Most operators are always enabled
             };
         }
