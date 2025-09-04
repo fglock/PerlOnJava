@@ -16,6 +16,7 @@ public class SprintfOperator {
     // Updated to handle parameter index, vector flags, and size modifiers
     private static final Pattern FORMAT_PATTERN = Pattern.compile(
             "%(\\d+\\$)?([-+ #0]*)(\\*(?:\\d+\\$)?)?([*]?)(\\d*)(?:\\.(\\*(?:\\d+\\$)?|\\d*))?([*]?)(?:(hh|h|ll|l|t|z|q|L|V)?)(v?)([diouxXeEfFgGaAcspnvDUOBb%A-Z])"
+            // "%(\\d+\\$)?([-+ #0]*)(\\*(?:\\d+\\$)?)?(\\d*)(?:\\.(\\*(?:\\d+\\$)?|\\d*))?([hlLtqzV])?([v])?([a-zA-Z])"
     );
 
     /**
@@ -143,13 +144,12 @@ public class SprintfOperator {
                                              int precision, char conversionChar) {
         String str = value.toString();
 
-        // Handle version objects - they should have their internal string representation used
-        if (str.isEmpty() || isVersionObject(value)) {
-            // For version objects, we need to get their string representation
-            // and treat it as a sequence of version numbers separated by dots
-            if (isVersionObject(value)) {
-                return formatVersionVector(value, flags, width, precision, conversionChar);
-            }
+        // Handle version objects specifically
+        if (isVersionObject(value)) {
+            return formatVersionVector(value, flags, width, precision, conversionChar);
+        }
+
+        if (str.isEmpty()) {
             return "";
         }
 
@@ -161,15 +161,12 @@ public class SprintfOperator {
                 result.append(".");
             }
 
-            // Convert byte to unsigned int (0-255)
             int byteValue = bytes[i] & 0xFF;
-
-            // Format according to conversion character
             String formatted = formatVectorValue(byteValue, flags, precision, conversionChar);
             result.append(formatted);
         }
 
-        // Apply width formatting if specified
+        // Apply width formatting
         String formatted = result.toString();
         if (width > 0 && formatted.length() < width) {
             boolean leftAlign = flags.contains("-");
@@ -196,7 +193,6 @@ public class SprintfOperator {
         String[] parts = versionStr.split("\\.");
 
         StringBuilder result = new StringBuilder();
-
         for (int i = 0; i < parts.length; i++) {
             if (i > 0) {
                 result.append(".");
@@ -207,12 +203,10 @@ public class SprintfOperator {
                 String formatted = formatVectorValue(intValue, flags, precision, conversionChar);
                 result.append(formatted);
             } catch (NumberFormatException e) {
-                // If we can't parse as integer, just use the string as-is
                 result.append(parts[i]);
             }
         }
 
-        // Apply width formatting if specified
         String formatted = result.toString();
         if (width > 0 && formatted.length() < width) {
             boolean leftAlign = flags.contains("-");
@@ -227,13 +221,11 @@ public class SprintfOperator {
     }
 
     private static String formatVectorValue(int byteValue, String flags, int precision, char conversionChar) {
-        // Format according to conversion character
         String formatted;
         switch (conversionChar) {
             case 'd':
             case 'i':
                 formatted = String.valueOf(byteValue);
-                // Apply sign flags for vector decimal format
                 if (flags.contains("+") && byteValue >= 0) {
                     formatted = "+" + formatted;
                 } else if (flags.contains(" ") && byteValue >= 0) {
@@ -242,32 +234,45 @@ public class SprintfOperator {
                 break;
             case 'o':
                 formatted = Integer.toOctalString(byteValue);
+                if (flags.contains("#") && byteValue != 0) {
+                    formatted = "0" + formatted;
+                }
                 break;
             case 'x':
                 formatted = Integer.toHexString(byteValue);
+                if (flags.contains("#") && byteValue != 0) {
+                    formatted = "0x" + formatted;
+                }
                 break;
             case 'X':
                 formatted = Integer.toHexString(byteValue).toUpperCase();
+                if (flags.contains("#") && byteValue != 0) {
+                    formatted = "0X" + formatted;
+                }
                 break;
             case 'b':
-                formatted = Integer.toBinaryString(byteValue);
-                break;
             case 'B':
                 formatted = Integer.toBinaryString(byteValue);
+                if (flags.contains("#") && byteValue != 0) {
+                    formatted = (conversionChar == 'B' ? "0B" : "0b") + formatted;
+                }
                 break;
             default:
                 formatted = String.valueOf(byteValue);
         }
 
-        // Apply precision (zero-padding)
+        // Apply precision padding
         if (precision > 0 && formatted.length() < precision) {
-            // For signed values, preserve the sign
-            if (formatted.startsWith("+") || formatted.startsWith(" ")) {
-                String sign = formatted.substring(0, 1);
-                String number = formatted.substring(1);
-                formatted = sign + String.format("%0" + (precision - 1) + "s", number);
+            if (formatted.startsWith("+") || formatted.startsWith(" ") ||
+                    formatted.startsWith("0x") || formatted.startsWith("0X") ||
+                    formatted.startsWith("0b") || formatted.startsWith("0B")) {
+                // Preserve prefixes
+                String prefix = formatted.replaceFirst("^(.[xXbB]?)?.*", "$1");
+                String number = formatted.substring(prefix.length());
+                formatted = prefix + String.format("%0" + (precision - prefix.length()) + "d",
+                        Integer.parseInt(number.isEmpty() ? "0" : number));
             } else {
-                formatted = String.format("%0" + precision + "s", formatted);
+                formatted = String.format("%0" + precision + "d", Integer.parseInt(formatted));
             }
         }
 
@@ -323,7 +328,7 @@ public class SprintfOperator {
                 return formatFloatingPoint(value.getDouble(), flags, width, precision, 'f');
 
             case 'c':
-                return formatCharacter(value);
+                return formatCharacter(value, flags, width);
 
             case 's':
                 return formatString(value.toString(), flags, width, precision);
@@ -540,37 +545,62 @@ public class SprintfOperator {
 
     private static String formatFloatingPoint(double value, String flags, int width,
                                               int precision, char conversion) {
-        // Set default precision if not specified
         if (precision < 0) {
             precision = 6;
         }
 
-        StringBuilder spec = new StringBuilder("%");
-        spec.append(flags);
-        if (width > 0) spec.append(width);
-        spec.append(".").append(precision);
-        spec.append(conversion);
+        // Handle # flag for g/G conversions
+        if ((conversion == 'g' || conversion == 'G') && flags.contains("#")) {
+            String result = formatFloatingPoint(value, flags.replace("#", ""),
+                    width, precision, conversion);
+            // Ensure trailing decimal point if no fractional part
+            if (!result.contains(".") && !result.matches(".*[eE][-+]?\\d+")) {
+                int eIndex = result.indexOf('e');
+                if (eIndex == -1) eIndex = result.indexOf('E');
+                if (eIndex != -1) {
+                    result = result.substring(0, eIndex) + "." + result.substring(eIndex);
+                } else {
+                    result += ".";
+                }
+            }
+            return result;
+        }
 
-        String result = String.format(spec.toString(), value);
+        StringBuilder format = new StringBuilder("%");
+        if (flags.contains("-")) format.append("-");
+        if (flags.contains("+")) format.append("+");
+        if (flags.contains(" ")) format.append(" ");
+        if (flags.contains("0")) format.append("0");
+        if (flags.contains("#")) format.append("#");
 
-        // Convert Java's "Infinity" to Perl's "Inf"
+        if (width > 0) format.append(width);
+        format.append(".").append(precision).append(conversion);
+
+        String result = String.format(format.toString(), value);
         result = result.replace("Infinity", "Inf");
-        result = result.replace("INFINITY", "INF");
-
         return result;
     }
 
-    private static String formatCharacter(RuntimeScalar value) {
-        double dValue = value.getDouble();
+    private static String formatCharacter(RuntimeScalar value, String flags, int width) {
+        long longValue = value.getLong();
+        char c = (char) longValue;
+        String result = String.valueOf(c);
 
-        // Check for special values
-        if (Double.isInfinite(dValue) || Double.isNaN(dValue)) {
-            String special = Double.isNaN(dValue) ? "NaN" :
-                    (dValue > 0 ? "Inf" : "-Inf");
-            throw new PerlCompilerException("Cannot printf " + special + " with 'c'");
+        // Apply width
+        if (width > 0) {
+            boolean leftAlign = flags.contains("-");
+            boolean zeroPad = flags.contains("0") && !leftAlign;
+
+            if (leftAlign) {
+                result = String.format("%-" + width + "s", result);
+            } else if (zeroPad) {
+                result = String.format("%0" + width + "d", (int) c);
+            } else {
+                result = String.format("%" + width + "s", result);
+            }
         }
 
-        return String.valueOf((char)value.getLong());
+        return result;
     }
 
     private static String formatString(String value, String flags, int width,
