@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
 /**
  * The {@code DirectoryIO} class provides methods for directory operations such as opening,
@@ -118,7 +119,7 @@ public class DirectoryIO {
         if (ctx == RuntimeContextType.SCALAR) {
             // Check if we're at a valid position
             if (currentPosition < 0 || currentPosition >= allEntries.size()) {
-                return RuntimeScalarCache.scalarFalse;
+                return scalarUndef;
             }
 
             // Get the entry at current position and advance
