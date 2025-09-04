@@ -10,6 +10,7 @@ import org.perlonjava.lexer.LexerTokenType;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.perlonjava.parser.ParsePrimary.isIsQuoteLikeOperator;
 import static org.perlonjava.parser.TokenUtils.peek;
 
 /**
@@ -97,7 +98,12 @@ public class ParseBlock {
 
     private static String parseLabel(Parser parser, List<Node> statements, List<String> blockLabels) {
         int currentIndexLabel = parser.tokenIndex;
-        String id = TokenUtils.consume(parser).text;
+        String id = TokenUtils.peek(parser).text;
+        if (isIsQuoteLikeOperator(id)) {
+            // `m:` not a label, but a quote-like operator
+            return null;
+        }
+        TokenUtils.consume(parser);
         if (peek(parser).text.equals(":")) {
             statements.add(new LabelNode(id, currentIndexLabel));
             blockLabels.add(id); // Add each found label to our list
