@@ -408,7 +408,7 @@ public class Variable {
 
         // Continue with original parsing logic - this preserves context for special variables
         int savedIndex = parser.tokenIndex;
-        String bracedVarName = IdentifierParser.parseComplexIdentifier(parser);
+        String bracedVarName = IdentifierParser.parseComplexIdentifierInner(parser, true);
 
         if (bracedVarName != null) {
             Node operand = new OperatorNode(sigil, new IdentifierNode(bracedVarName, parser.tokenIndex), parser.tokenIndex);
