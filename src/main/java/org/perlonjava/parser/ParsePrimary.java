@@ -109,10 +109,7 @@ public class ParsePrimary {
         boolean calledWithCore = false;
 
         // Check for quote-like operators that should always be parsed as operators
-        boolean isQuoteLikeOperator = operator.equals("q") || operator.equals("qq") ||
-                operator.equals("qw") || operator.equals("qx") ||
-                operator.equals("m") || operator.equals("s") ||
-                operator.equals("tr") || operator.equals("y");
+        boolean isQuoteLikeOperator = isIsQuoteLikeOperator(operator);
 
         // Check if this is an explicit CORE:: call (e.g., CORE::print)
         if (token.text.equals("CORE") && nextTokenText.equals("::")) {
@@ -186,6 +183,13 @@ public class ParsePrimary {
         // Default: treat as a subroutine call or bareword
         parser.tokenIndex = startIndex;   // backtrack
         return SubroutineParser.parseSubroutineCall(parser, false);
+    }
+
+    static boolean isIsQuoteLikeOperator(String operator) {
+        return operator.equals("q") || operator.equals("qq") ||
+                operator.equals("qw") || operator.equals("qx") ||
+                operator.equals("m") || operator.equals("s") ||
+                operator.equals("tr") || operator.equals("y");
     }
 
     /**
