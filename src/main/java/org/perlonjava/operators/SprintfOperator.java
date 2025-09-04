@@ -13,9 +13,9 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 public class SprintfOperator {
 
     // Pattern to match a complete format specifier
-    // Updated to handle size modifiers like hh, ll, t, z
+    // Updated to handle parameter index, vector flags, and size modifiers
     private static final Pattern FORMAT_PATTERN = Pattern.compile(
-            "%([-+ #0]*)([*]?)(\\d*)(?:\\.(\\d*))?([*]?)(?:(hh|h|ll|l|t|z|q|L|V)?)([diouxXeEfFgGaAcspnvDUOBb%])"
+            "%(\\d+\\$)?([-+ #0]*)(\\*(?:\\d+\\$)?)?([*]?)(\\d*)(?:\\.(\\*(?:\\d+\\$)?|\\d*))?([*]?)(?:(hh|h|ll|l|t|z|q|L|V)?)(v?)([diouxXeEfFgGaAcspnvDUOBb%])"
     );
 
     /**
@@ -42,13 +42,16 @@ public class SprintfOperator {
             pos = matcher.end();
 
             // Parse the format specifier
-            String flags = matcher.group(1);
-            boolean widthFromArg = !matcher.group(2).isEmpty();
-            String widthStr = matcher.group(3);
-            String precisionStr = matcher.group(4);
-            boolean precisionFromArg = !matcher.group(5).isEmpty();
-            String lengthModifier = matcher.group(6);
-            char conversionChar = matcher.group(7).charAt(0);
+            String paramIndex = matcher.group(1);
+            String flags = matcher.group(2);
+            String widthFromArgSpec = matcher.group(3);
+            boolean widthFromArg = !matcher.group(4).isEmpty() && matcher.group(3).isEmpty();
+            String widthStr = matcher.group(5);
+            String precisionSpec = matcher.group(6);
+            boolean precisionFromArg = !matcher.group(7).isEmpty() && matcher.group(6) == null;
+            String lengthModifier = matcher.group(8);
+            boolean vectorFlag = !matcher.group(9).isEmpty();
+            char conversionChar = matcher.group(10).charAt(0);
 
             // Handle %% - literal percent
             if (conversionChar == '%') {
@@ -56,39 +59,50 @@ public class SprintfOperator {
                 continue;
             }
 
+            // Handle invalid combinations
+            if (vectorFlag && !"diouxXbB".contains(String.valueOf(conversionChar))) {
+                throw new PerlCompilerException("Invalid vector format %" + matcher.group(9) + conversionChar);
+            }
+
             // Get width from argument if needed
             int width = 0;
-            if (widthFromArg) {
+            if (widthFromArg || widthFromArgSpec != null) {
                 if (argIndex >= list.size()) {
                     throw new PerlCompilerException("Missing argument for sprintf");
                 }
                 width = ((RuntimeScalar) list.elements.get(argIndex++)).getInt();
+                if (width < 0) {
+                    flags += "-";
+                    width = -width;
+                }
             } else if (!widthStr.isEmpty()) {
                 width = Integer.parseInt(widthStr);
             }
 
             // Get precision from argument if needed
             int precision = -1;
-            if (precisionFromArg) {
+            if (precisionFromArg || (precisionSpec != null && precisionSpec.startsWith("*"))) {
                 if (argIndex >= list.size()) {
                     throw new PerlCompilerException("Missing argument for sprintf");
                 }
                 precision = ((RuntimeScalar) list.elements.get(argIndex++)).getInt();
-            } else if (precisionStr != null && !precisionStr.isEmpty()) {
-                precision = Integer.parseInt(precisionStr);
+                if (precision < 0) {
+                    precision = -1; // Negative precision is ignored
+                }
+            } else if (precisionSpec != null && !precisionSpec.startsWith("*")) {
+                precision = precisionSpec.isEmpty() ? 0 : Integer.parseInt(precisionSpec);
             }
 
             // Get the value to format
             if (argIndex >= list.size()) {
-                // throw new PerlCompilerException("Missing argument for sprintf");
+                // Add undefined value if missing
                 list.elements.add(scalarUndef);
             }
             RuntimeScalar value = (RuntimeScalar) list.elements.get(argIndex++);
 
-            // Handle %v format specifier separately
-            if (conversionChar == 'v') {
-                String formatted = formatVectorString(value, flags, width, precision,
-                        lengthModifier != null ? lengthModifier : "");
+            // Handle vector format specifier
+            if (vectorFlag) {
+                String formatted = formatVectorString(value, flags, width, precision, conversionChar);
                 result.append(formatted);
                 continue;
             }
@@ -105,7 +119,7 @@ public class SprintfOperator {
     }
 
     private static String formatVectorString(RuntimeScalar value, String flags, int width,
-                                             int precision, String lengthModifier) {
+                                             int precision, char conversionChar) {
         String str = value.toString();
         if (str.isEmpty()) {
             return "";
@@ -122,8 +136,38 @@ public class SprintfOperator {
             // Convert byte to unsigned int (0-255)
             int byteValue = bytes[i] & 0xFF;
 
-            // Default to decimal format for %v
-            result.append(byteValue);
+            // Format according to conversion character
+            String formatted;
+            switch (conversionChar) {
+                case 'd':
+                case 'i':
+                    formatted = String.valueOf(byteValue);
+                    break;
+                case 'o':
+                    formatted = Integer.toOctalString(byteValue);
+                    break;
+                case 'x':
+                    formatted = Integer.toHexString(byteValue);
+                    break;
+                case 'X':
+                    formatted = Integer.toHexString(byteValue).toUpperCase();
+                    break;
+                case 'b':
+                    formatted = Integer.toBinaryString(byteValue);
+                    break;
+                case 'B':
+                    formatted = Integer.toBinaryString(byteValue);
+                    break;
+                default:
+                    formatted = String.valueOf(byteValue);
+            }
+
+            // Apply precision (zero-padding)
+            if (precision > 0 && formatted.length() < precision) {
+                formatted = String.format("%0" + precision + "s", formatted);
+            }
+
+            result.append(formatted);
         }
 
         // Apply width formatting if specified
@@ -155,34 +199,35 @@ public class SprintfOperator {
         switch (conversion) {
             case 'd':
             case 'i':
-                return formatInteger(value.getLong(), flags, width, precision, "%d");
+                return formatInteger(value.getLong(), flags, width, precision, 10, false);
 
             case 'u':
+            case 'U':  // Synonym for %u
                 return formatUnsigned(value, flags, width, precision);
 
             case 'o':
-            case 'O':  // Add support for uppercase O
-                return formatInteger(value.getLong(), flags, width, precision, "%o");
+            case 'O':  // Synonym for %o
+                return formatInteger(value.getLong(), flags, width, precision, 8, flags.contains("#"));
 
             case 'x':
             case 'X':
-                String hexFormat = conversion == 'x' ? "%x" : "%X";
-                return formatInteger(value.getLong(), flags, width, precision, hexFormat);
+                return formatInteger(value.getLong(), flags, width, precision, 16, flags.contains("#"));
 
             case 'b':
-            case 'B':  // Add support for uppercase B
-                return formatBinary(value.getLong(), width);
+            case 'B':
+                return formatBinary(value.getLong(), flags, width, precision);
 
             case 'e':
             case 'E':
-            case 'f':
-            case 'F':
             case 'g':
             case 'G':
             case 'a':
             case 'A':
-                return formatFloatingPoint(value.getDouble(), flags, width, precision,
-                        "%" + conversion);
+                return formatFloatingPoint(value.getDouble(), flags, width, precision, conversion);
+
+            case 'f':
+            case 'F':  // F is synonym for f
+                return formatFloatingPoint(value.getDouble(), flags, width, precision, 'f');
 
             case 'c':
                 return formatCharacter(value);
@@ -196,11 +241,8 @@ public class SprintfOperator {
             case 'n':
                 throw new PerlCompilerException("%n specifier not supported");
 
-            case 'D':  // Add support for D format
-                return formatFloatingPoint(value.getDouble(), flags, width, precision, "%f");
-
-            case 'U':  // Add support for U format
-                return formatUnsigned(value, flags, width, precision);
+            case 'D':  // Synonym for %ld
+                return formatInteger(value.getLong(), flags, width, precision, 10, false);
 
             default:
                 throw new PerlCompilerException("Unknown format specifier: %" + conversion);
@@ -244,66 +286,204 @@ public class SprintfOperator {
         return result;
     }
 
-    private static String formatInteger(long value, String flags, int width,
-                                        int precision, String format) {
-        StringBuilder spec = new StringBuilder("%");
-        spec.append(flags);
-        if (width > 0) spec.append(width);
-        if (precision >= 0) spec.append(".").append(precision);
-        spec.append(format.charAt(format.length() - 1));
+    private static String formatInteger(long value, String flags, int width, int precision,
+                                        int base, boolean usePrefix) {
+        String result;
+        boolean negative = value < 0;
+        long absValue = negative ? -value : value;
 
-        return String.format(spec.toString(), value);
+        // Convert to string in the specified base
+        switch (base) {
+            case 8:
+                result = Long.toOctalString(absValue);
+                break;
+            case 16:
+                result = flags.contains("X") ? Long.toHexString(absValue).toUpperCase()
+                        : Long.toHexString(absValue);
+                break;
+            case 10:
+            default:
+                result = Long.toString(absValue);
+                break;
+        }
+
+        // Apply precision (zero-padding)
+        if (precision >= 0) {
+            // Special case: precision 0 with value 0 produces empty string
+            if (precision == 0 && value == 0) {
+                result = "";
+                // But # flag with octal still shows "0"
+                if (usePrefix && base == 8) {
+                    result = "0";
+                }
+            } else if (result.length() < precision) {
+                result = String.format("%0" + precision + "s", result);
+            }
+        }
+
+        // Add prefix if needed
+        if (usePrefix && value != 0 && !result.isEmpty()) {
+            switch (base) {
+                case 8:
+                    if (!result.startsWith("0")) {
+                        result = "0" + result;
+                    }
+                    break;
+                case 16:
+                    String prefix = flags.contains("X") ? "0X" : "0x";
+                    result = prefix + result;
+                    break;
+            }
+        }
+
+        // Add sign
+        if (negative) {
+            result = "-" + result;
+        } else if (flags.contains("+")) {
+            result = "+" + result;
+        } else if (flags.contains(" ")) {
+            result = " " + result;
+        }
+
+        // Apply width
+        if (width > 0 && result.length() < width) {
+            boolean leftAlign = flags.contains("-");
+            boolean zeroPad = flags.contains("0") && precision < 0 && !leftAlign;
+
+            if (leftAlign) {
+                result = String.format("%-" + width + "s", result);
+            } else if (zeroPad) {
+                // Zero padding goes after sign/prefix but before number
+                String sign = "";
+                String prefix = "";
+                String number = result;
+
+                if (result.startsWith("-") || result.startsWith("+") || result.startsWith(" ")) {
+                    sign = result.substring(0, 1);
+                    number = result.substring(1);
+                }
+                if (number.startsWith("0x") || number.startsWith("0X")) {
+                    prefix = number.substring(0, 2);
+                    number = number.substring(2);
+                } else if (base == 8 && number.startsWith("0") && number.length() > 1) {
+                    prefix = "0";
+                    number = number.substring(1);
+                }
+
+                int padLength = width - sign.length() - prefix.length();
+                if (padLength > number.length()) {
+                    number = String.format("%0" + padLength + "s", number);
+                }
+                result = sign + prefix + number;
+            } else {
+                result = String.format("%" + width + "s", result);
+            }
+        }
+
+        return result;
     }
 
     private static String formatUnsigned(RuntimeScalar value, String flags, int width,
                                          int precision) {
-        double dValue = value.getDouble();
+        long longValue = value.getLong();
 
-        // Handle 64-bit unsigned conversion
-        if (dValue < 0) {
-            // Convert negative to unsigned by adding 2^64
-            dValue = 18446744073709551616.0 + dValue;
+        // Convert to unsigned representation
+        String result;
+        if (longValue >= 0) {
+            result = Long.toString(longValue);
+        } else {
+            // For negative values, add 2^64
+            result = Long.toUnsignedString(longValue);
         }
 
-        // Clamp to max uint64 if overflow
-        if (dValue >= 18446744073709551616.0) {
-            dValue = 18446744073709551615.0; // 2^64 - 1
+        // Apply precision (zero-padding)
+        if (precision >= 0) {
+            if (precision == 0 && longValue == 0) {
+                result = "";
+            } else if (result.length() < precision) {
+                result = String.format("%0" + precision + "s", result);
+            }
         }
 
-        // Build format specifier
-        StringBuilder spec = new StringBuilder("%");
-        spec.append(flags);
-        if (width > 0) spec.append(width);
-        if (precision >= 0) spec.append(".").append(precision);
-        spec.append("d");
+        // Apply width
+        if (width > 0 && result.length() < width) {
+            boolean leftAlign = flags.contains("-");
+            boolean zeroPad = flags.contains("0") && precision < 0 && !leftAlign;
 
-        // Format as long (Java long is 64-bit signed, which can represent uint64 values)
-        return String.format(spec.toString(), (long)dValue);
+            if (leftAlign) {
+                result = String.format("%-" + width + "s", result);
+            } else if (zeroPad) {
+                result = String.format("%0" + width + "s", result);
+            } else {
+                result = String.format("%" + width + "s", result);
+            }
+        }
+
+        return result;
     }
 
-    private static String formatBinary(long value, int width) {
-        String binary = Long.toBinaryString(value);
+    private static String formatBinary(long value, String flags, int width, int precision) {
+        boolean negative = value < 0;
+        long absValue = negative ? -value : value;
+        String result = Long.toBinaryString(absValue);
 
-        // Apply default width if not specified
-        if (width == 0) {
-            width = (value >= 0 && value <= 255) ? 8 : 32;
+        // Apply precision (zero-padding)
+        if (precision >= 0) {
+            if (precision == 0 && value == 0) {
+                result = "";
+                // But # flag still shows prefix
+                if (flags.contains("#")) {
+                    result = "0";
+                }
+            } else if (result.length() < precision) {
+                result = String.format("%0" + precision + "s", result);
+            }
         }
 
-        // Pad with zeros
-        if (binary.length() < width) {
-            binary = String.format("%" + width + "s", binary).replace(' ', '0');
+        // Add prefix if needed
+        if (flags.contains("#") && value != 0 && !result.isEmpty()) {
+            String prefix = flags.contains("B") ? "0B" : "0b";
+            result = prefix + result;
         }
 
-        return binary;
+        // Add sign for negative values (shouldn't happen with unsigned, but just in case)
+        if (negative) {
+            result = "-" + result;
+        } else if (flags.contains("+")) {
+            result = "+" + result;
+        } else if (flags.contains(" ")) {
+            result = " " + result;
+        }
+
+        // Apply width
+        if (width > 0 && result.length() < width) {
+            boolean leftAlign = flags.contains("-");
+            boolean zeroPad = flags.contains("0") && precision < 0 && !leftAlign;
+
+            if (leftAlign) {
+                result = String.format("%-" + width + "s", result);
+            } else if (zeroPad) {
+                result = String.format("%0" + width + "s", result);
+            } else {
+                result = String.format("%" + width + "s", result);
+            }
+        }
+
+        return result;
     }
 
     private static String formatFloatingPoint(double value, String flags, int width,
-                                              int precision, String format) {
+                                              int precision, char conversion) {
+        // Set default precision if not specified
+        if (precision < 0) {
+            precision = (conversion == 'g' || conversion == 'G') ? 6 : 6;
+        }
+
         StringBuilder spec = new StringBuilder("%");
         spec.append(flags);
         if (width > 0) spec.append(width);
-        if (precision >= 0) spec.append(".").append(precision);
-        spec.append(format.charAt(format.length() - 1));
+        spec.append(".").append(precision);
+        spec.append(conversion);
 
         String result = String.format(spec.toString(), value);
 
@@ -334,14 +514,32 @@ public class SprintfOperator {
             value = value.substring(0, precision);
         }
 
-        // Apply width
+        // Apply width - manual padding to avoid Java formatter flag conflicts
         if (width > 0 && value.length() < width) {
             boolean leftAlign = flags.contains("-");
+            boolean zeroPad = flags.contains("0") && !leftAlign;
+
+            int padCount = width - value.length();
+            StringBuilder padded = new StringBuilder();
+
             if (leftAlign) {
-                value = String.format("%-" + width + "s", value);
+                padded.append(value);
+                for (int i = 0; i < padCount; i++) {
+                    padded.append(' ');
+                }
+            } else if (zeroPad) {
+                // Zero padding for strings
+                for (int i = 0; i < padCount; i++) {
+                    padded.append('0');
+                }
+                padded.append(value);
             } else {
-                value = String.format("%" + width + "s", value);
+                for (int i = 0; i < padCount; i++) {
+                    padded.append(' ');
+                }
+                padded.append(value);
             }
+            value = padded.toString();
         }
 
         return value;
