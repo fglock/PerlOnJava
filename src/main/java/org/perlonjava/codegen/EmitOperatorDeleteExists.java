@@ -36,12 +36,12 @@ public class EmitOperatorDeleteExists {
                         emitterVisitor.ctx.logDebug("exists & " + operatorNode.operand);
                         if (operatorNode.operand instanceof IdentifierNode identifierNode) {
                             // exists &sub
-                            handleExistsSubroutine(emitterVisitor, identifierNode);
+                            handleExistsSubroutine(emitterVisitor, operator, identifierNode);
                             return;
                         }
                         if (operatorNode.operand instanceof OperatorNode operatorNode1) {
                             // exists &{"sub"}
-                            handleExistsSubroutine(emitterVisitor, operatorNode1);
+                            handleExistsSubroutine(emitterVisitor, operator, operatorNode1);
                             return;
                         }
                     }
@@ -139,12 +139,12 @@ public class EmitOperatorDeleteExists {
                         emitterVisitor.ctx.logDebug("defined & " + operatorNode.operand);
                         if (operatorNode.operand instanceof IdentifierNode identifierNode) {
                             // exists &sub
-                            handleExistsSubroutine(emitterVisitor, identifierNode);
+                            handleExistsSubroutine(emitterVisitor, operator, identifierNode);
                             return;
                         }
                         if (operatorNode.operand instanceof OperatorNode operatorNode1) {
                             // exists &{"sub"}
-                            handleExistsSubroutine(emitterVisitor, operatorNode1);
+                            handleExistsSubroutine(emitterVisitor, operator, operatorNode1);
                             return;
                         }
                     }
@@ -166,7 +166,7 @@ public class EmitOperatorDeleteExists {
         }
     }
 
-    private static void handleExistsSubroutine(EmitterVisitor emitterVisitor, IdentifierNode identifierNode) {
+    private static void handleExistsSubroutine(EmitterVisitor emitterVisitor, String operator, IdentifierNode identifierNode) {
         // exists &sub
         String name = identifierNode.name;
         String fullName = NameNormalizer.normalizeVariableName(name, emitterVisitor.ctx.symbolTable.getCurrentPackage());
@@ -174,19 +174,19 @@ public class EmitOperatorDeleteExists {
         emitterVisitor.ctx.mv.visitMethodInsn(
                 Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/GlobalVariable",
-                "existsGlobalCodeRefAsScalar",
+                operator + "GlobalCodeRefAsScalar",
                 "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
                 false);
         EmitOperator.handleVoidContext(emitterVisitor);
     }
 
-    private static void handleExistsSubroutine(EmitterVisitor emitterVisitor, OperatorNode operatorNode) {
+    private static void handleExistsSubroutine(EmitterVisitor emitterVisitor, String operator, OperatorNode operatorNode) {
         // exists &{"sub"}
         operatorNode.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         emitterVisitor.ctx.mv.visitMethodInsn(
                 Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/GlobalVariable",
-                "existsGlobalCodeRefAsScalar",
+                operator + "GlobalCodeRefAsScalar",
                 "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
                 false);
         EmitOperator.handleVoidContext(emitterVisitor);
