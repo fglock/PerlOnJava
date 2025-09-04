@@ -6,6 +6,7 @@ import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.PerlCompilerException;
+import org.perlonjava.runtime.ScalarUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -199,7 +200,12 @@ public abstract class StringSegmentParser {
             // Handle array/hash access: $var[0], $var{key}, $var->[0], etc.
             // Wrap in try-catch to handle malformed access gracefully
             try {
-                operand = parseArrayHashAccess(parser, operand, isRegex);
+                // In regex replacement context, check if $var{N} or $var{N,M} should be treated as quantifier
+                if ("$".equals(sigil) && isRegexReplacement && parser.tokens.get(parser.tokenIndex).text.equals("{") && shouldTreatAsQuantifier()) {
+                    // Skip parsing as hash access - leave for regex engine to handle as quantifier
+                } else {
+                    operand = parseArrayHashAccess(parser, operand, isRegex);
+                }
             } catch (Exception e) {
                 // If array/hash access parsing fails, throw a more descriptive error
                 throw new PerlCompilerException(tokenIndex, "syntax error: Unterminated array or hash access", ctx.errorUtil);
@@ -215,6 +221,63 @@ public abstract class StringSegmentParser {
         }
 
         addStringSegment(operand);
+    }
+
+    /**
+     * Determines if the current position should be treated as a regex quantifier rather than hash access.
+     * This applies only in regex replacement context and when we see patterns like {3} or {2,5}.
+     *
+     * @return true if this should be treated as a regex quantifier
+     */
+    private boolean shouldTreatAsQuantifier() {
+        // Save current position to look ahead
+        int savedIndex = parser.tokenIndex;
+
+        try {
+            TokenUtils.consume(parser); // consume '{'
+
+            String firstToken = TokenUtils.peek(parser).text;
+
+            // Check for {,N} pattern
+            if (",".equals(firstToken)) {
+                TokenUtils.consume(parser);
+                if (ScalarUtils.isInteger(TokenUtils.peek(parser).text)) {
+                    TokenUtils.consume(parser);
+                    return "}".equals(TokenUtils.peek(parser).text);
+                }
+                return false;
+            }
+
+            // Check for {N}, {N,}, {N,M} patterns
+            if (ScalarUtils.isInteger(firstToken)) {
+                TokenUtils.consume(parser);
+                String nextToken = TokenUtils.peek(parser).text;
+
+                if ("}".equals(nextToken)) {
+                    return true; // {N}
+                }
+
+                if (",".equals(nextToken)) {
+                    TokenUtils.consume(parser);
+                    String afterComma = TokenUtils.peek(parser).text;
+
+                    if ("}".equals(afterComma)) {
+                        return true; // {N,}
+                    }
+
+                    if (ScalarUtils.isInteger(afterComma)) {
+                        TokenUtils.consume(parser);
+                        return "}".equals(TokenUtils.peek(parser).text); // {N,M}
+                    }
+                }
+            }
+
+            return false;
+
+        } finally {
+            // Always restore position - we're just looking ahead
+            parser.tokenIndex = savedIndex;
+        }
     }
 
     /**
