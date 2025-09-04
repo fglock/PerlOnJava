@@ -1,7 +1,7 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.mro.C3;
 import org.perlonjava.mro.InheritanceResolver;
+import org.perlonjava.operators.VersionHelper;
 import org.perlonjava.runtime.*;
 
 import java.util.List;
@@ -159,7 +159,7 @@ public class Universal extends PerlModuleBase {
      * @throws PerlCompilerException if the version comparison fails.
      */
     public static RuntimeList VERSION(RuntimeArray args, int ctx) {
-        if (args.size() < 1 || args.size() > 2) {
+        if (args.isEmpty() || args.size() > 2) {
             throw new IllegalStateException("Bad number of arguments for VERSION() method");
         }
         RuntimeScalar object = args.get(0);
@@ -200,97 +200,7 @@ public class Universal extends PerlModuleBase {
             return hasVersion.getList();
         }
 
-        RuntimeScalar packageVersion = compareVersion(hasVersion, wantVersion, perlClassName);
+        RuntimeScalar packageVersion = VersionHelper.compareVersion(hasVersion, wantVersion, perlClassName);
         return new RuntimeScalar(packageVersion).getList();
-    }
-
-    public static RuntimeScalar compareVersion(RuntimeScalar hasVersion, RuntimeScalar wantVersion, String perlClassName) {
-        String hasStr = normalizeVersion(hasVersion);
-        // If REQUIRE is provided, compare versions
-        if (wantVersion.getDefinedBoolean()) {
-            String wantStr = normalizeVersion(wantVersion);
-            if (!isLaxVersion(hasStr) || !isLaxVersion(wantStr)) {
-                throw new PerlCompilerException("Either package version or REQUIRE is not a lax version number");
-            }
-            if (compareVersions(hasStr, wantStr) < 0) {
-                throw new PerlCompilerException(perlClassName + " version " + wantStr + " required--this is only version " + hasVersion);
-            }
-        }
-        return hasVersion;
-    }
-
-    public static String normalizeVersion(RuntimeScalar wantVersion) {
-        String normalizedVersion = wantVersion.toString();
-        if (normalizedVersion.startsWith("v")) {
-            normalizedVersion = normalizedVersion.substring(1);
-        }
-        if (wantVersion.type == RuntimeScalarType.VSTRING) {
-            normalizedVersion = toDottedString(normalizedVersion);
-        } else {
-            normalizedVersion = normalizedVersion.replaceAll("_", "");
-            String[] parts = normalizedVersion.split("\\.");
-            if (parts.length < 3) {
-                String major = parts[0];
-                String minor = parts.length > 1 ? parts[1] : "0";
-                String patch = minor.length() > 3 ? minor.substring(3) : "0";
-                if (minor.length() > 3) {
-                    minor = minor.substring(0, 3);
-                }
-                if (patch.length() > 3) {
-                    patch = patch.substring(0, 3);
-                }
-                int majorNumber = Integer.parseInt(major);
-                int minorNumber = Integer.parseInt(minor);
-                int patchNumber = Integer.parseInt(patch);
-                normalizedVersion = String.format("%d.%d.%d", majorNumber, minorNumber, patchNumber);
-            }
-        }
-        return normalizedVersion;
-    }
-
-    public static String toDottedString(String input) {
-        StringBuilder result = new StringBuilder();
-
-        for (int i = 0; i < input.length(); i++) {
-            int value = input.charAt(i);
-            if (i > 0) {
-                result.append(".");
-            }
-            result.append(value);
-        }
-
-        return result.toString();
-    }
-
-    /**
-     * Checks if a version string is a lax version number.
-     *
-     * @param version The version string to check.
-     * @return True if the version is a lax version number, false otherwise.
-     */
-    private static boolean isLaxVersion(String version) {
-        // Implement a simple check for lax version numbers
-        return version.matches("\\d+(\\.\\d+)*");
-    }
-
-    /**
-     * Compares two version strings.
-     *
-     * @param v1 The first version string.
-     * @param v2 The second version string.
-     * @return A negative integer, zero, or a positive integer as the first version is less than, equal to, or greater than the second.
-     */
-    private static int compareVersions(String v1, String v2) {
-        String[] v1Parts = v1.split("\\.");
-        String[] v2Parts = v2.split("\\.");
-        int length = Math.max(v1Parts.length, v2Parts.length);
-        for (int i = 0; i < length; i++) {
-            int v1Part = i < v1Parts.length ? Integer.parseInt(v1Parts[i]) : 0;
-            int v2Part = i < v2Parts.length ? Integer.parseInt(v2Parts[i]) : 0;
-            if (v1Part != v2Part) {
-                return v1Part - v2Part;
-            }
-        }
-        return 0;
     }
 }

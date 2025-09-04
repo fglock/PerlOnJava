@@ -8,6 +8,7 @@ import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.mro.InheritanceResolver;
 import org.perlonjava.operators.ModuleOperators;
+import org.perlonjava.operators.VersionHelper;
 import org.perlonjava.perlmodule.Universal;
 import org.perlonjava.runtime.*;
 
@@ -20,7 +21,7 @@ import static org.perlonjava.parser.SpecialBlockParser.setCurrentScope;
 import static org.perlonjava.parser.StringParser.parseVstring;
 import static org.perlonjava.perlmodule.Feature.featureManager;
 import static org.perlonjava.perlmodule.Strict.useStrict;
-import static org.perlonjava.perlmodule.Universal.normalizeVersion;
+import static org.perlonjava.operators.VersionHelper.normalizeVersion;
 import static org.perlonjava.perlmodule.Warnings.useWarnings;
 import static org.perlonjava.runtime.GlobalVariable.packageExistsCache;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
@@ -327,7 +328,7 @@ public class StatementParser {
                 versionScalar = versionValues.getFirst();
                 if (packageName == null) {
                     parser.ctx.logDebug("use version: check Perl version");
-                    Universal.compareVersion(
+                    VersionHelper.compareVersion(
                             new RuntimeScalar(Configuration.perlVersion),
                             versionScalar,
                             "Perl");
@@ -413,7 +414,7 @@ public class StatementParser {
                 RuntimeList args = runSpecialBlock(parser, "BEGIN", list);
 
                 ctx.logDebug("Use statement list: " + args);
-                if (hasParentheses && args.size() == 0) {
+                if (hasParentheses && args.isEmpty()) {
                     // do not import
                 } else {
                     // fetch the method using `can` operator
