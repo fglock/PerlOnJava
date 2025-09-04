@@ -58,7 +58,7 @@ public class RegexFlags {
 
     public static void validateModifiers(String modifiers) {
         // Valid modifiers based on what's actually handled in fromModifiers
-        String validModifiers = "gcr?noimsxpade"; // Add 'xx' handling separately
+        String validModifiers = "gcr?noimsxpadeu"; // Add 'xx' handling separately
 
         for (int i = 0; i < modifiers.length(); i++) {
             char modifier = modifiers.charAt(i);
