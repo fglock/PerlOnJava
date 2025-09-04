@@ -123,8 +123,6 @@ public class EmitOperatorDeleteExists {
     static void handleDefined(OperatorNode node, String operator,
                                        EmitterVisitor emitterVisitor) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
-        node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        OperatorHandler operatorHandler = OperatorHandler.get(node.operator);
 
         if (node.operand instanceof ListNode listNode && listNode.elements.size() == 1) {
             Node operand2 = listNode.elements.getFirst();
@@ -134,26 +132,28 @@ public class EmitOperatorDeleteExists {
             }
         }
 
-//        if (node.operand instanceof ListNode operand) {
-//            if (operand.elements.size() == 1) {
-//                if (operand.elements.getFirst() instanceof OperatorNode operatorNode) {
-//                    if (operator.equals("defined") && operatorNode.operator.equals("&")) {
-//                        emitterVisitor.ctx.logDebug("defined & " + operatorNode.operand);
-//                        if (operatorNode.operand instanceof IdentifierNode identifierNode) {
-//                            // exists &sub
-//                            handleExistsSubroutine(emitterVisitor, identifierNode);
-//                            return;
-//                        }
-//                        if (operatorNode.operand instanceof OperatorNode operatorNode1) {
-//                            // exists &{"sub"}
-//                            handleExistsSubroutine(emitterVisitor, operatorNode1);
-//                            return;
-//                        }
-//                    }
-//                }
-//            }
-//        }
+        if (node.operand instanceof ListNode operand) {
+            if (operand.elements.size() == 1) {
+                if (operand.elements.getFirst() instanceof OperatorNode operatorNode) {
+                    if (operator.equals("defined") && operatorNode.operator.equals("&")) {
+                        emitterVisitor.ctx.logDebug("defined & " + operatorNode.operand);
+                        if (operatorNode.operand instanceof IdentifierNode identifierNode) {
+                            // exists &sub
+                            handleExistsSubroutine(emitterVisitor, identifierNode);
+                            return;
+                        }
+                        if (operatorNode.operand instanceof OperatorNode operatorNode1) {
+                            // exists &{"sub"}
+                            handleExistsSubroutine(emitterVisitor, operatorNode1);
+                            return;
+                        }
+                    }
+                }
+            }
+        }
 
+        node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        OperatorHandler operatorHandler = OperatorHandler.get(node.operator);
         if (operatorHandler != null) {
             EmitOperator.emitOperator(node, emitterVisitor);
         } else {
