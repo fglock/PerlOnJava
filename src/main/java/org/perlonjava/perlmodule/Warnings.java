@@ -14,7 +14,7 @@ public class Warnings extends PerlModuleBase {
      * Initializes the module with the name "warnings".
      */
     public Warnings() {
-        super("warnings");
+        super("warnings", false);
     }
 
     /**
