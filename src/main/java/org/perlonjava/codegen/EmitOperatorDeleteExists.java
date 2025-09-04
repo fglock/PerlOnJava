@@ -21,7 +21,7 @@ public class EmitOperatorDeleteExists {
         //          NumberNode: 10
 
         if (node.operand instanceof ListNode listNode && listNode.elements.size() == 1) {
-            Node operand2 = listNode.elements.get(0);
+            Node operand2 = listNode.elements.getFirst();
             if (operand2 instanceof OperatorNode operatorNode && operatorNode.operator.equals("+")) {
                 // Unwrap the `+` operation
                 listNode.elements.set(0, operatorNode.operand);
@@ -63,7 +63,7 @@ public class EmitOperatorDeleteExists {
                                 // Now emit the index
                                 if (binop.right instanceof ArrayLiteralNode arrayLiteral &&
                                         arrayLiteral.elements.size() == 1) {
-                                    arrayLiteral.elements.get(0).accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                                    arrayLiteral.elements.getFirst().accept(emitterVisitor.with(RuntimeContextType.SCALAR));
                                 } else {
                                     throw new PerlCompilerException(node.tokenIndex,
                                             "Invalid array index in " + operator + " operator",
@@ -127,7 +127,7 @@ public class EmitOperatorDeleteExists {
         OperatorHandler operatorHandler = OperatorHandler.get(node.operator);
 
         if (node.operand instanceof ListNode listNode && listNode.elements.size() == 1) {
-            Node operand2 = listNode.elements.get(0);
+            Node operand2 = listNode.elements.getFirst();
             if (operand2 instanceof OperatorNode operatorNode && operatorNode.operator.equals("+")) {
                 // Unwrap the `+` operation
                 listNode.elements.set(0, operatorNode.operand);
