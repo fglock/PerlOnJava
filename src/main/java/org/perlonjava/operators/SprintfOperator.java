@@ -68,6 +68,23 @@ public class SprintfOperator {
                 continue;
             }
 
+            // Check for invalid format like space between % and specifier
+            String originalSpec = matcher.group(0);
+            if (originalSpec.contains(" ") && !originalSpec.matches("%[-+ #0]*\\d*\\.?\\d*[a-zA-Z%]")) {
+                result.append(originalSpec);
+                result.append(" INVALID");
+                continue;
+            }
+
+            // Handle length modifiers that should be invalid for certain formats
+            if (lengthModifier != null && ("hf".equals(lengthModifier + conversionChar) ||
+                    "hg".equals(lengthModifier + conversionChar) ||
+                    "he".equals(lengthModifier + conversionChar))) {
+                result.append(originalSpec);
+                result.append(" INVALID");
+                continue;
+            }
+
             // Handle invalid combinations for vector format
             if (vectorFlag && !"diouxXbB".contains(String.valueOf(conversionChar))) {
                 String invalidSpec = matcher.group(0);
@@ -76,14 +93,33 @@ public class SprintfOperator {
                 continue;
             }
 
+            // Handle parameter index for width/precision
+            int actualArgIndex = argIndex;
+            if (paramIndex != null) {
+                // Parameter indexing is 1-based
+                int paramNum = Integer.parseInt(paramIndex.substring(0, paramIndex.length() - 1));
+                actualArgIndex = paramNum - 1;
+            }
+
             // Get width from argument if needed
             int width = 0;
             if (widthFromArg || widthFromArgSpec != null) {
-                if (argIndex >= list.size()) {
+                int widthArgIndex = argIndex;
+                if (widthFromArgSpec != null && widthFromArgSpec.contains("$")) {
+                    // Extract parameter index from width spec
+                    String widthParamStr = widthFromArgSpec.replaceAll("[^0-9]", "");
+                    if (!widthParamStr.isEmpty()) {
+                        widthArgIndex = Integer.parseInt(widthParamStr) - 1;
+                    }
+                } else {
+                    argIndex++; // Consume next argument for width
+                }
+
+                if (widthArgIndex >= list.size()) {
                     result.append(" MISSING");
                     continue;
                 }
-                width = ((RuntimeScalar) list.elements.get(argIndex++)).getInt();
+                width = ((RuntimeScalar) list.elements.get(widthArgIndex)).getInt();
                 if (width < 0) {
                     flags += "-";
                     width = -width;
@@ -95,11 +131,22 @@ public class SprintfOperator {
             // Get precision from argument if needed
             int precision = -1;
             if (precisionFromArg || (precisionSpec != null && precisionSpec.startsWith("*"))) {
-                if (argIndex >= list.size()) {
+                int precisionArgIndex = argIndex;
+                if (precisionSpec != null && precisionSpec.contains("$")) {
+                    // Extract parameter index from precision spec
+                    String precParamStr = precisionSpec.replaceAll("[^0-9]", "");
+                    if (!precParamStr.isEmpty()) {
+                        precisionArgIndex = Integer.parseInt(precParamStr) - 1;
+                    }
+                } else {
+                    argIndex++; // Consume next argument for precision
+                }
+
+                if (precisionArgIndex >= list.size()) {
                     result.append(" MISSING");
                     continue;
                 }
-                precision = ((RuntimeScalar) list.elements.get(argIndex++)).getInt();
+                precision = ((RuntimeScalar) list.elements.get(precisionArgIndex)).getInt();
                 if (precision < 0) {
                     precision = -1; // Negative precision is ignored
                 }
@@ -108,14 +155,21 @@ public class SprintfOperator {
             }
 
             // Get the value to format
-            if (argIndex >= list.size()) {
+            if (actualArgIndex >= list.size()) {
                 if (conversionChar == 'n') {
                     throw new PerlCompilerException("%n specifier not supported");
                 }
                 result.append(" MISSING");
                 continue;
             }
-            RuntimeScalar value = (RuntimeScalar) list.elements.get(argIndex++);
+            RuntimeScalar value = actualArgIndex >= 0 && actualArgIndex < list.elements.size()
+                    ? (RuntimeScalar) list.elements.get(actualArgIndex)
+                    : scalarUndef;
+
+            // Only increment argIndex if we're not using parameter indexing
+            if (paramIndex == null) {
+                argIndex++;
+            }
 
             // Handle vector format specifier
             if (vectorFlag) {
@@ -166,7 +220,7 @@ public class SprintfOperator {
             result.append(formatted);
         }
 
-        // Apply width formatting
+        // Apply width formatting to the entire vector string
         String formatted = result.toString();
         if (width > 0 && formatted.length() < width) {
             boolean leftAlign = flags.contains("-");
@@ -501,8 +555,16 @@ public class SprintfOperator {
     }
 
     private static String formatBinary(long value, String flags, int width, int precision) {
-        // Binary format treats value as unsigned - no sign handling
-        String result = Long.toBinaryString(value);
+        String result;
+        boolean negative = value < 0;
+
+        // For binary format, treat as unsigned
+        if (negative) {
+            // Convert to unsigned representation
+            result = Long.toBinaryString(value);
+        } else {
+            result = Long.toBinaryString(value);
+        }
 
         // Apply precision (zero-padding)
         if (precision >= 0) {
@@ -519,7 +581,7 @@ public class SprintfOperator {
 
         // Add prefix if needed
         if (flags.contains("#") && value != 0 && !result.isEmpty()) {
-            String prefix = flags.contains("B") ? "0B" : "0b";
+            String prefix = (flags.contains("B") || Character.toUpperCase(flags.charAt(flags.length()-1)) == 'B') ? "0B" : "0b";
             result = prefix + result;
         }
 
@@ -549,9 +611,15 @@ public class SprintfOperator {
             precision = 6;
         }
 
+        // Handle special case of -0 flag combination which is invalid in Java
+        String cleanFlags = flags.replace("-0", "-").replace("0-", "-");
+        if (cleanFlags.contains("-") && cleanFlags.contains("0")) {
+            cleanFlags = cleanFlags.replace("0", "");
+        }
+
         // Handle # flag for g/G conversions
-        if ((conversion == 'g' || conversion == 'G') && flags.contains("#")) {
-            String result = formatFloatingPoint(value, flags.replace("#", ""),
+        if ((conversion == 'g' || conversion == 'G') && cleanFlags.contains("#")) {
+            String result = formatFloatingPoint(value, cleanFlags.replace("#", ""),
                     width, precision, conversion);
             // Ensure trailing decimal point if no fractional part
             if (!result.contains(".") && !result.matches(".*[eE][-+]?\\d+")) {
@@ -567,11 +635,11 @@ public class SprintfOperator {
         }
 
         StringBuilder format = new StringBuilder("%");
-        if (flags.contains("-")) format.append("-");
-        if (flags.contains("+")) format.append("+");
-        if (flags.contains(" ")) format.append(" ");
-        if (flags.contains("0")) format.append("0");
-        if (flags.contains("#")) format.append("#");
+        if (cleanFlags.contains("-")) format.append("-");
+        if (cleanFlags.contains("+")) format.append("+");
+        if (cleanFlags.contains(" ")) format.append(" ");
+        if (cleanFlags.contains("0")) format.append("0");
+        if (cleanFlags.contains("#")) format.append("#");
 
         if (width > 0) format.append(width);
         format.append(".").append(precision).append(conversion);
@@ -586,7 +654,7 @@ public class SprintfOperator {
         char c = (char) longValue;
         String result = String.valueOf(c);
 
-        // Apply width
+        // Apply width - for %c, zero padding means padding with '0' characters, not numeric zero
         if (width > 0) {
             boolean leftAlign = flags.contains("-");
             boolean zeroPad = flags.contains("0") && !leftAlign;
@@ -594,7 +662,8 @@ public class SprintfOperator {
             if (leftAlign) {
                 result = String.format("%-" + width + "s", result);
             } else if (zeroPad) {
-                result = String.format("%0" + width + "d", (int) c);
+                // For %c with zero flag, pad with '0' characters
+                result = padLeft(result, width, '0');
             } else {
                 result = String.format("%" + width + "s", result);
             }
