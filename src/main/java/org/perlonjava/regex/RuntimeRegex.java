@@ -10,6 +10,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.perlonjava.regex.RegexFlags.fromModifiers;
+import static org.perlonjava.regex.RegexFlags.validateModifiers;
 import static org.perlonjava.regex.RegexPreprocessor.preProcessRegex;
 import static org.perlonjava.regex.RegexQuoteMeta.escapeQ;
 import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
@@ -76,6 +77,9 @@ public class RuntimeRegex implements RuntimeScalarReference {
             }
 
             // Note: flags /e /ee are processed at parse time, in parseRegexReplace()
+
+            validateModifiers(modifiers);
+
             regex.regexFlags = fromModifiers(modifiers, patternString);
             regex.patternFlags = regex.regexFlags.toPatternFlags();
 
