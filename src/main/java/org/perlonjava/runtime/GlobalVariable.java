@@ -243,7 +243,15 @@ public class GlobalVariable {
     }
 
     public static RuntimeScalar existsGlobalCodeRefAsScalar(RuntimeScalar key) {
-        return globalCodeRefs.containsKey(key.toString()) ? scalarTrue : scalarFalse;
+        return existsGlobalCodeRefAsScalar(key.toString());
+    }
+
+    public static RuntimeScalar definedGlobalCodeRefAsScalar(String key) {
+        return globalCodeRefs.containsKey(key) ? globalCodeRefs.get(key).defined() : scalarFalse;
+    }
+
+    public static RuntimeScalar definedGlobalCodeRefAsScalar(RuntimeScalar key) {
+        return definedGlobalCodeRefAsScalar(key.toString());
     }
 
     /**
