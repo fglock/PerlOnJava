@@ -242,6 +242,10 @@ public class GlobalVariable {
         return globalCodeRefs.containsKey(key) ? scalarTrue : scalarFalse;
     }
 
+    public static RuntimeScalar existsGlobalCodeRefAsScalar(RuntimeScalar key) {
+        return globalCodeRefs.containsKey(key.toString()) ? scalarTrue : scalarFalse;
+    }
+
     /**
      * Clears the package existence cache.
      * Should be called when new packages are loaded or code refs are modified.
