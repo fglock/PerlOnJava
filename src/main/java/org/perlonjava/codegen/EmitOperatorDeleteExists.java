@@ -1,8 +1,10 @@
 package org.perlonjava.codegen;
 
+import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
 import org.perlonjava.astvisitor.EmitterVisitor;
+import org.perlonjava.operators.OperatorHandler;
 import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
@@ -35,6 +37,11 @@ public class EmitOperatorDeleteExists {
                         if (operatorNode.operand instanceof IdentifierNode identifierNode) {
                             // exists &sub
                             handleExistsSubroutine(emitterVisitor, identifierNode);
+                            return;
+                        }
+                        if (operatorNode.operand instanceof OperatorNode operatorNode1) {
+                            // exists &{"sub"}
+                            handleExistsSubroutine(emitterVisitor, operatorNode1);
                             return;
                         }
                     }
@@ -106,6 +113,59 @@ public class EmitOperatorDeleteExists {
         throw new PerlCompilerException(node.tokenIndex, "Not implemented: operator: " + operator, emitterVisitor.ctx.errorUtil);
     }
 
+    /**
+     * Handles defined()
+     *
+     * @param node           The operator node
+     * @param operator       The operator string
+     * @param emitterVisitor The visitor walking the AST
+     */
+    static void handleDefined(OperatorNode node, String operator,
+                                       EmitterVisitor emitterVisitor) {
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        OperatorHandler operatorHandler = OperatorHandler.get(node.operator);
+
+        if (node.operand instanceof ListNode listNode && listNode.elements.size() == 1) {
+            Node operand2 = listNode.elements.get(0);
+            if (operand2 instanceof OperatorNode operatorNode && operatorNode.operator.equals("+")) {
+                // Unwrap the `+` operation
+                listNode.elements.set(0, operatorNode.operand);
+            }
+        }
+
+//        if (node.operand instanceof ListNode operand) {
+//            if (operand.elements.size() == 1) {
+//                if (operand.elements.getFirst() instanceof OperatorNode operatorNode) {
+//                    if (operator.equals("defined") && operatorNode.operator.equals("&")) {
+//                        emitterVisitor.ctx.logDebug("defined & " + operatorNode.operand);
+//                        if (operatorNode.operand instanceof IdentifierNode identifierNode) {
+//                            // exists &sub
+//                            handleExistsSubroutine(emitterVisitor, identifierNode);
+//                            return;
+//                        }
+//                        if (operatorNode.operand instanceof OperatorNode operatorNode1) {
+//                            // exists &{"sub"}
+//                            handleExistsSubroutine(emitterVisitor, operatorNode1);
+//                            return;
+//                        }
+//                    }
+//                }
+//            }
+//        }
+
+        if (operatorHandler != null) {
+            EmitOperator.emitOperator(node, emitterVisitor);
+        } else {
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/RuntimeScalar",
+                    operator,
+                    "()Lorg/perlonjava/runtime/RuntimeScalar;",
+                    false);
+            EmitOperator.handleVoidContext(emitterVisitor);
+        }
+    }
+
     private static void handleExistsSubroutine(EmitterVisitor emitterVisitor, IdentifierNode identifierNode) {
         // exists &sub
         String name = identifierNode.name;
@@ -116,6 +176,18 @@ public class EmitOperatorDeleteExists {
                 "org/perlonjava/runtime/GlobalVariable",
                 "existsGlobalCodeRefAsScalar",
                 "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                false);
+        EmitOperator.handleVoidContext(emitterVisitor);
+    }
+
+    private static void handleExistsSubroutine(EmitterVisitor emitterVisitor, OperatorNode operatorNode) {
+        // exists &{"sub"}
+        operatorNode.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        emitterVisitor.ctx.mv.visitMethodInsn(
+                Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/GlobalVariable",
+                "existsGlobalCodeRefAsScalar",
+                "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
                 false);
         EmitOperator.handleVoidContext(emitterVisitor);
     }

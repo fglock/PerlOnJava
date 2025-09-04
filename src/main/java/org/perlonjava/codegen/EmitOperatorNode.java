@@ -61,8 +61,7 @@ public class EmitOperatorNode {
             case "--postfix" -> EmitOperator.handleUnaryDefaultCase(node, "postAutoDecrement", emitterVisitor);
 
             // Standard unary functions
-            case "abs", "chdir", "chr", "closedir", "cos",
-                 "defined", "doFile", "exit", "exp", "fc",
+            case "abs", "chdir", "chr", "closedir", "cos", "doFile", "exit", "exp", "fc",
                  "hex", "lc", "lcfirst", "length", "log",
                  "oct", "ord", "pos", "quotemeta", "rand", "ref",
                  "rewinddir", "rmdir", "sin", "sleep", "sqrt",
@@ -86,6 +85,7 @@ public class EmitOperatorNode {
             case "atan2" -> EmitOperator.handleAtan2(emitterVisitor, node);
             case "scalar" -> EmitOperator.handleScalar(emitterVisitor, node);
             case "delete", "exists" -> EmitOperatorDeleteExists.handleDeleteExists(emitterVisitor, node);
+            case "defined" -> EmitOperatorDeleteExists.handleDefined(node, node.operator, emitterVisitor);
             case "local" -> EmitOperatorLocal.handleLocal(emitterVisitor, node);
             case "\\" -> EmitOperator.handleCreateReference(emitterVisitor, node);
             case "$#" -> EmitOperator.handleArrayUnaryBuiltin(emitterVisitor,
