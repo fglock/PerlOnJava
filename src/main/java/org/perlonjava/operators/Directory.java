@@ -60,13 +60,22 @@ public class Directory {
     }
 
     public static RuntimeScalar opendir(RuntimeList args) {
-        // Note: DirectoryIO.openDir should also use resolvePath internally
         RuntimeScalar dirHandle = (RuntimeScalar) args.elements.get(0);
         String dirPath = args.elements.get(1).toString();
 
         try {
-            Path fullDirPath = RuntimeIO.resolvePath(dirPath);
+            // Close existing directory stream if present
+            if ((dirHandle.type == RuntimeScalarType.GLOB || dirHandle.type == RuntimeScalarType.GLOBREFERENCE)
+                && dirHandle.value instanceof RuntimeGlob glob) {
+                RuntimeIO existingIO = glob.getRuntimeIO();
+                if (existingIO != null && existingIO.directoryIO != null) {
+                    if (existingIO.directoryIO.directoryStream != null) {
+                        existingIO.directoryIO.directoryStream.close();
+                    }
+                }
+            }
 
+            Path fullDirPath = RuntimeIO.resolvePath(dirPath);
             DirectoryStream<Path> stream = Files.newDirectoryStream(fullDirPath);
             DirectoryIO dirIO = new DirectoryIO(stream, dirPath);
 
@@ -157,11 +166,12 @@ public class Directory {
         RuntimeIO dirIO = dirHandle.getRuntimeIO();
         int position1 = position.getInt();
         if (dirIO.directoryIO == null) {
-            RuntimeIO.handleIOError("seekdir is not supported for non-directory streams");
+            RuntimeIO.handleIOError("seekdir() attempted on handle opened with open");
+            return scalarFalse;  // Return false, not true
         } else {
             dirIO.directoryIO.seekdir(position1);
+            return scalarTrue;
         }
-        return scalarTrue;
     }
 
     public static RuntimeScalar mkdir(RuntimeList args) {
