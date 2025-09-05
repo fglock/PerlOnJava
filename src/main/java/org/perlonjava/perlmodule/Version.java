@@ -36,7 +36,7 @@ public class Version extends PerlModuleBase {
             version.registerMethod("qv", "$");
             version.registerMethod("_VERSION", "VERSION", "$$");
             version.registerMethod("vcmp", "VCMP", "$$");
-            version.registerMethod("new", "$");
+            // version.registerMethod("new", "$");
             version.registerMethod("numify", "$");
             version.registerMethod("normal", "$");
             version.registerMethod("to_decimal", "$");
@@ -46,25 +46,25 @@ public class Version extends PerlModuleBase {
             version.registerMethod("stringify", "$");
             version.registerMethod("parse", "$");
 
-            // Register overloaded operators
-            version.registerMethod("(\"\"", "stringify", "$");
-            version.registerMethod("(<=>", "VCMP", "$$");
-            version.registerMethod("(cmp", "VCMP", "$$");
+//            // Register overloaded operators
+//            version.registerMethod("(\"\"", "stringify", "$");
+//            version.registerMethod("(<=>", "VCMP", "$$");
+//            version.registerMethod("(cmp", "VCMP", "$$");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Version method: " + e.getMessage());
         }
     }
 
-    /**
-     * Creates a new version object from a string.
-     */
-    public static RuntimeList new_(RuntimeArray args, int ctx) {
-        if (args.size() < 2) {
-            throw new IllegalStateException("version->new() requires an argument");
-        }
-        RuntimeScalar versionStr = args.get(1);
-        return parse(args, ctx);
-    }
+//    /**
+//     * Creates a new version object from a string.
+//     */
+//    public static RuntimeList new_(RuntimeArray args, int ctx) {
+//        if (args.size() < 2) {
+//            throw new IllegalStateException("version->new() requires an argument");
+//        }
+//        RuntimeScalar versionStr = args.get(1);
+//        return parse(args, ctx);
+//    }
 
     /**
      * Parses a version string into a version object.
