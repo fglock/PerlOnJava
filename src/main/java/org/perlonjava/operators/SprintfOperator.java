@@ -30,6 +30,8 @@ public class SprintfOperator {
                 result.append((String) element);
             } else if (element instanceof SprintfFormatParser.FormatSpecifier spec) {
 
+            //  System.err.println("DEBUG Operator: spec.raw=" + spec.raw + ", isValid=" + spec.isValid + ", errorMessage=" + spec.errorMessage);
+
                 // Handle %%
                 if (spec.conversionChar == '%') {
                     result.append('%');
@@ -38,10 +40,11 @@ public class SprintfOperator {
 
                 // Check if invalid
                 if (!spec.isValid) {
-                    // System.err.println("DEBUG: Invalid spec detected: " + spec.raw + ", errorMessage: " + spec.errorMessage);
+                //  System.err.println("DEBUG: Handling invalid spec: " + spec.raw);
 
                     // Always append the raw format
                     result.append(spec.raw);
+                //  System.err.println("DEBUG: Appended raw format, result so far: " + result.toString());
 
                     // Generate a warning
                     if (spec.errorMessage != null) {
@@ -53,13 +56,24 @@ public class SprintfOperator {
                         }
 
                         String warningMessage = "Invalid conversion in sprintf: \"" + formatForWarning + "\"";
-                        // System.err.println("DEBUG: About to warn for invalid format: " + formatForWarning);
                         WarnDie.warn(new RuntimeScalar(warningMessage), new RuntimeScalar(""));
+                    //  System.err.println("DEBUG: Generated warning for: " + spec.raw);
                     }
 
-                    continue;
+                //  System.err.println("DEBUG: About to continue, skipping further processing");
+                    continue;  // Make sure we skip further processing
                 }
 
+                // Check for warnings about invalid length modifiers
+// This happens for formats that are "valid enough" to process
+// but have issues we need to warn about
+                if (spec.invalidLengthModifierWarning != null) {
+                    WarnDie.warn(new RuntimeScalar(spec.invalidLengthModifierWarning), new RuntimeScalar(""));
+                }
+
+            //  System.err.println("DEBUG: Processing valid spec: " + spec.raw);
+
+                // The rest of the valid format processing continues here...
                 int savedArgIndex = argIndex;
 
                 try {

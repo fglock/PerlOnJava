@@ -26,6 +26,7 @@ public class SprintfFormatParser {
 
         // Parsed components
         public boolean invalidDueToSpace = false;
+        public String invalidLengthModifierWarning;
         public Integer parameterIndex;      // null or 1-based index
         public String flags = "";           // combination of -, +, space, #, 0
         public Integer width;               // null if not specified
@@ -219,7 +220,7 @@ public class SprintfFormatParser {
                 } else if ("hlLqzjtV".indexOf(current()) >= 0) {
                     spec.lengthModifier = String.valueOf(current());
                     advance();
-                    System.err.println("DEBUG: Found length modifier: " + spec.lengthModifier);
+                //  System.err.println("DEBUG: Found length modifier: " + spec.lengthModifier);
                 }
             }
 
@@ -270,6 +271,8 @@ public class SprintfFormatParser {
         }
 
         void validateSpecifier(FormatSpecifier spec) {
+        //  System.err.println("DEBUG: Validating spec: " + spec.raw + ", lengthModifier: " + spec.lengthModifier);
+
             // Check if we have no conversion character (e.g., %L, %V, %h, %l, %q, %z, %t)
             if (spec.conversionChar == '\0') {
                 spec.isValid = false;
@@ -277,16 +280,15 @@ public class SprintfFormatParser {
                 return;
             }
 
+            if ("V".equals(spec.lengthModifier)) {
+                // V is silently ignored in Perl
+                spec.lengthModifier = null; // Clear it so it's processed as %d
+                // Don't set invalidLengthModifierWarning
+            }
+
             // Check for invalid conversion characters
             String invalidChars = "CHIJKLMNPQRSTWYZhjklmnqrtwyz";
             if (invalidChars.indexOf(spec.conversionChar) >= 0) {
-                spec.isValid = false;
-                spec.errorMessage = "INVALID";
-                return;
-            }
-
-            // Special case: %Vd - V is not a valid length modifier
-            if ("V".equals(spec.lengthModifier)) {
                 spec.isValid = false;
                 spec.errorMessage = "INVALID";
                 return;
@@ -380,12 +382,12 @@ public class SprintfFormatParser {
             // + and space flags are ignored for unsigned conversions
             boolean isUnsigned = "uUoOxXbB".indexOf(spec.conversionChar) >= 0;
 
-            // For %c, # flag is invalid
-            if (spec.conversionChar == 'c' && spec.flags.contains("#")) {
-                spec.isValid = false;
-                spec.errorMessage = "INVALID";
-                return;
-            }
+//            // For %c, # flag is invalid
+//            if (spec.conversionChar == 'c' && spec.flags.contains("#")) {
+//                spec.isValid = false;
+//                spec.errorMessage = "INVALID";
+//                return;
+//            }
 
             // Space flag with certain conversions
             if (spec.flags.contains(" ")) {
