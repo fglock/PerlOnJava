@@ -290,17 +290,6 @@ public class SprintfFormatParser {
                 return;
             }
 
-            // Add validation for # flag with invalid conversions
-            if (spec.flags.contains("#")) {
-                // # flag is only truly invalid with %s and %c
-                // For other conversions, Perl allows it even if it has no effect
-                if (spec.conversionChar == 's' || spec.conversionChar == 'c') {
-                    spec.isValid = false;
-                    spec.errorMessage = "INVALID";
-                    return;
-                }
-            }
-
             // Special case: uppercase letters that might look like length modifiers
             if (spec.lengthModifier != null) {
                 // V is not a valid length modifier
@@ -395,16 +384,6 @@ public class SprintfFormatParser {
                 spec.errorMessage = "INVALID";
                 return;
             }
-
-//            // # flag is only valid for o, x, X, b, B, e, E, f, F, g, G, a, A
-//            if (spec.flags.contains("#")) {
-//                String validHashConversions = "oxXbBeEfFgGaA";
-//                if (validHashConversions.indexOf(spec.conversionChar) < 0) {
-//                    spec.isValid = false;
-//                    spec.errorMessage = "INVALID";
-//                    return;
-//                }
-//            }
 
             // Space flag with certain conversions
             if (spec.flags.contains(" ")) {
