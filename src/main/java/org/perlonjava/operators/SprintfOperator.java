@@ -39,7 +39,12 @@ public class SprintfOperator {
                 // Check if invalid
                 if (!spec.isValid) {
                     result.append(spec.raw);
-                    result.append(" ").append(spec.errorMessage);
+                    // Don't append error message for space-containing formats
+                    if (!spec.raw.matches("%\\d+\\.\\s+\\d+[a-zA-Z]") &&
+                            !spec.raw.matches("%\\d+\\s+\\.\\d+[a-zA-Z]") &&
+                            !spec.raw.matches("%\\d+\\.\\d+\\s+[a-zA-Z]")) {
+                        result.append(" ").append(spec.errorMessage);
+                    }
                     continue;
                 }
 
@@ -296,15 +301,17 @@ public class SprintfOperator {
             case 'u', 'U' ->  // Synonym for %u
                     formatUnsigned(value, flags, width, precision);
             case 'o', 'O' ->  // Synonym for %o
-                    formatInteger(value.getLong(), flags, width, precision, 8, flags.contains("#"));
-            case 'x' -> formatInteger(value.getLong(), flags, width, precision, 16, flags.contains("#"));
+                    formatInteger(value.getLong(), flags.replace("+", "").replace(" ", ""),
+                            width, precision, 8, flags.contains("#"));
+            case 'x' -> formatInteger(value.getLong(), flags.replace("+", "").replace(" ", ""),
+                    width, precision, 16, flags.contains("#"));
             case 'X' -> {
-                String result = formatInteger(value.getLong(), flags.replace("X", "x"), width, precision, 16, flags.contains("#"));
+                String result = formatInteger(value.getLong(), flags.replace("X", "x").replace("+", "").replace(" ", ""),
+                        width, precision, 16, flags.contains("#"));
                 // Convert to uppercase
                 yield result.toUpperCase();
-                // Convert to uppercase
             }
-            case 'b', 'B' -> formatBinary(value.getLong(), flags, width, precision);
+            case 'b', 'B' -> formatBinary(value.getLong(), flags, width, precision, conversion);
             case 'e', 'E', 'g', 'G', 'a', 'A' ->
                     formatFloatingPoint(value.getDouble(), flags, width, precision, conversion);
             case 'f', 'F' ->  // F is synonym for f
@@ -471,7 +478,7 @@ public class SprintfOperator {
         return result;
     }
 
-    private static String formatBinary(long value, String flags, int width, int precision) {
+    private static String formatBinary(long value, String flags, int width, int precision, char conversion) {
         String result;
         boolean negative = value < 0;
 
@@ -487,7 +494,7 @@ public class SprintfOperator {
         if (precision >= 0) {
             if (precision == 0 && value == 0) {
                 result = "";
-                // But # flag still shows prefix
+                // But # flag still shows "0" (not prefix)
                 if (flags.contains("#")) {
                     result = "0";
                 }
@@ -498,7 +505,7 @@ public class SprintfOperator {
 
         // Add prefix if needed
         if (flags.contains("#") && value != 0 && !result.isEmpty()) {
-            String prefix = (flags.contains("B") || Character.toUpperCase(flags.charAt(flags.length() - 1)) == 'B') ? "0B" : "0b";
+            String prefix = (conversion == 'B') ? "0B" : "0b";
             result = prefix + result;
         }
 
