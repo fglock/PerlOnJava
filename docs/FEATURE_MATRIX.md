@@ -252,7 +252,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **lvalue `pos`**: lvalue `pos` operator is implemented.
 - ✅  **`m?pat?`** one-time match is implemented.
 - ✅  **`reset`** resetting one-time match is implemented
-- ✅  **`@-`, `@+`, `%+`, `%-` variables**: regex special variables are implemented
+- ✅  **`@-`, `@+`, `%+`, `%-`, `@{^CAPTURE}` variables**: regex special variables are implemented
 - ✅  **`$&` variables**: `` $` ``, `$&`, `$'`, `$+` special variables are implemented, and aliases: `${^PREMATCH}`, `${^MATCH}`, `${^POSTMATCH}`.
 - ✅  **`[[:pattern:]]`**: `[[:ascii:]]`, `[[:print:]]` are implemented.
 - ✅  **Matching plain strings**: `$var =~ "Test"` is implemented.
