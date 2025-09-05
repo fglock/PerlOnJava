@@ -43,6 +43,10 @@ public class ArraySpecialVariable extends AbstractList<RuntimeScalar> {
         } else if (mode == Id.LAST_MATCH_START) {
             // Retrieve the start position of the group at the specified index
             return RuntimeRegex.matcherStart(index);
+        } else if (mode == Id.CAPTURE) {
+            // Retrieve the buffer at the specified index
+            return new RuntimeScalar(RuntimeRegex.captureString(index + 1));
+
         } else {
             return scalarUndef;
         }
@@ -56,7 +60,7 @@ public class ArraySpecialVariable extends AbstractList<RuntimeScalar> {
      */
     @Override
     public int size() {
-        if (mode == Id.LAST_MATCH_END || mode == Id.LAST_MATCH_START) {
+        if (mode == Id.LAST_MATCH_END || mode == Id.LAST_MATCH_START || mode == Id.CAPTURE) {
             // Retrieve the number of capturing groups in the Matcher
             return RuntimeRegex.matcherSize();
         } else {
@@ -69,7 +73,8 @@ public class ArraySpecialVariable extends AbstractList<RuntimeScalar> {
      * LAST_MATCH_END corresponds to "@+" (end positions), and LAST_MATCH_START corresponds to "@-" (start positions).
      */
     public enum Id {
-        LAST_MATCH_END,  // Represents the end positions of capturing groups
-        LAST_MATCH_START // Represents the start positions of capturing groups
+        LAST_MATCH_END,   // Represents the end positions of capturing groups
+        LAST_MATCH_START, // Represents the start positions of capturing groups
+        CAPTURE           // Represents the contents of the capture buffers
     }
 }
