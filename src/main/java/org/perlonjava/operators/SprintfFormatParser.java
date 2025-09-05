@@ -248,8 +248,7 @@ public class SprintfFormatParser {
             // Mark as invalid if we found spaces in the format
             if (hasInvalidSpace) {
                 spec.isValid = false;
-                spec.invalidDueToSpace = true;  // Add this line
-                // Don't set errorMessage - space formats should output as-is without " INVALID"
+                spec.errorMessage = "INVALID";  // Set errorMessage so warning is generated
             } else {
                 // Validate the specifier
                 validateSpecifier(spec);
