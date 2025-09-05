@@ -370,24 +370,39 @@ public class SprintfOperator {
     private static String formatInteger(long value, String flags, int width, int precision,
                                         int base, boolean usePrefix) {
         String result;
-        boolean negative = value < 0;
+        boolean negative = value < 0 && base == 10; // Only apply sign for decimal
         long absValue = negative ? -value : value;
 
-        // Convert to string in the specified base
-        switch (base) {
-            case 8:
-                result = Long.toOctalString(absValue);
-                break;
-            case 16:
-                result = Long.toHexString(absValue);
+        // For non-decimal bases, treat as unsigned
+        if (base != 10 && value < 0) {
+            // Convert to unsigned representation
+            if (base == 8) {
+                result = Long.toOctalString(value);
+            } else if (base == 16) {
+                result = Long.toHexString(value);
                 if (flags.contains("X")) {
                     result = result.toUpperCase();
                 }
-                break;
-            case 10:
-            default:
-                result = Long.toString(absValue);
-                break;
+            } else {
+                result = Long.toBinaryString(value);
+            }
+        } else {
+            // Convert to string in the specified base
+            switch (base) {
+                case 8:
+                    result = Long.toOctalString(absValue);
+                    break;
+                case 16:
+                    result = Long.toHexString(absValue);
+                    if (flags.contains("X")) {
+                        result = result.toUpperCase();
+                    }
+                    break;
+                case 10:
+                default:
+                    result = Long.toString(absValue);
+                    break;
+            }
         }
 
         // Apply precision (zero-padding)
@@ -419,13 +434,15 @@ public class SprintfOperator {
             }
         }
 
-        // Add sign
-        if (negative) {
-            result = "-" + result;
-        } else if (flags.contains("+")) {
-            result = "+" + result;
-        } else if (flags.contains(" ")) {
-            result = " " + result;
+        // Add sign only for base 10
+        if (base == 10) {
+            if (negative) {
+                result = "-" + result;
+            } else if (flags.contains("+")) {
+                result = "+" + result;
+            } else if (flags.contains(" ")) {
+                result = " " + result;
+            }
         }
 
         // Apply width
@@ -494,10 +511,7 @@ public class SprintfOperator {
         if (precision >= 0) {
             if (precision == 0 && value == 0) {
                 result = "";
-                // But # flag still shows "0" (not prefix)
-                if (flags.contains("#")) {
-                    result = "0";
-                }
+                // # flag with binary does NOT show "0" (unlike octal)
             } else if (result.length() < precision) {
                 result = padLeft(result, precision, '0');
             }
@@ -508,9 +522,6 @@ public class SprintfOperator {
             String prefix = (conversion == 'B') ? "0B" : "0b";
             result = prefix + result;
         }
-
-        // Binary format ignores +, -, and space flags for sign
-        // (binary is always treated as unsigned)
 
         // Apply width
         if (width > 0 && result.length() < width) {
