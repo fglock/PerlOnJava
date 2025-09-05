@@ -106,11 +106,18 @@ public class Version extends PerlModuleBase {
         RuntimeScalar versionStr = args.get(1);
         String version = versionStr.toString();
 
-        // Ensure it's in dotted-decimal format
-        if (!version.startsWith("v") && !version.contains(".")) {
-            version = "v" + version + ".0.0";
-        } else if (!version.startsWith("v")) {
-            version = "v" + version;
+        version = version.trim();
+        if (version.isEmpty()) {
+            throw new PerlCompilerException("Invalid version format (version required)");
+        }
+        if (!version.startsWith("v")) {
+            // Count the number of dots
+            long dotCount = version.chars().filter(ch -> ch == '.').count();
+
+            // If exactly one dot, prepend "v"
+            if (dotCount == 1) {
+                version = "v" + version;
+            }
         }
 
         // Create a new RuntimeArray with the modified version
@@ -133,19 +140,12 @@ public class Version extends PerlModuleBase {
         RuntimeScalar versionStr = RuntimeArray.pop(args);
         String version = versionStr.toString();
 
-        // Ensure it's in dotted-decimal format
-        if (!version.startsWith("v") && !version.contains(".")) {
-            version = "v" + version + ".0.0";
-        } else if (!version.startsWith("v")) {
-            version = "v" + version;
-        }
-
         // Create version object via parse
         RuntimeArray parseArgs = new RuntimeArray();
         parseArgs.push(args.get(0));  // class name
         parseArgs.push(new RuntimeScalar(version));
 
-        return parse(parseArgs, ctx);
+        return declare(parseArgs, ctx);
     }
 
     /**
