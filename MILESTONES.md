@@ -304,7 +304,7 @@ The following areas are currently under active development to enhance the functi
   - Add command line switches: `-s`, `-f`.
   - Add `__CLASS__` keyword.
   - Add modules: `mro`, `version`, `List::Util`.
-  - Add sprintf formatter: `%vd`.
+  - Add more `sprintf` formatters.
   - Add readline modes depending on `$/` special variable.
   - Add `PERL5OPT` environment variable.
   - Add regex extended character classes `(?[...])`
@@ -321,7 +321,7 @@ The following areas are currently under active development to enhance the functi
   - File::Copy
   - IO::Handle
     - `ungetc`
-    - auto bless filehandles
+    - Auto-bless filehandle into IO::Handle subclass
   - Filter::Simple
   - Text::ParseWords
   - Text::Tabs
@@ -335,7 +335,6 @@ The following areas are currently under active development to enhance the functi
   - `method` keyword
   - Overload operators: `++`, `--`.
   - String interpolation fixes.
-  - Auto-bless filehandle into IO::Handle subclass
   - Command line option `-C`
 
 ### v4.0.0 Milestone (Planned Release Date: 2026-05-10)
