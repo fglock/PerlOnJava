@@ -254,7 +254,7 @@ public class VersionHelper {
      * @param v2 The second version string.
      * @return A negative integer, zero, or a positive integer as the first version is less than, equal to, or greater than the second.
      */
-    private static int compareVersions(String v1, String v2) {
+    public static int compareVersions(String v1, String v2) {
         String[] v1Parts = v1.split("\\.");
         String[] v2Parts = v2.split("\\.");
         int length = Math.max(v1Parts.length, v2Parts.length);
