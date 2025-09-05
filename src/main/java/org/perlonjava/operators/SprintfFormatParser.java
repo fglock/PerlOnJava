@@ -224,6 +224,12 @@ public class SprintfFormatParser {
             // 6. Parse vector flag
             if (match('v')) {
                 spec.vectorFlag = true;
+
+                // For vector formats, we need to handle the complex syntax
+                // Skip any combination of spaces, dots, digits, and * until we find a letter
+                while (!isAtEnd() && !Character.isLetter(current())) {
+                    advance();
+                }
             }
 
             // 7. Parse conversion character
