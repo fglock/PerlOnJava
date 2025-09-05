@@ -7,6 +7,7 @@ import org.perlonjava.perlmodule.*;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Spliterator;
 
 import static org.perlonjava.runtime.RuntimeIO.initStdHandles;
 
@@ -80,6 +81,7 @@ public class GlobalContext {
         GlobalVariable.globalVariables.put("main::'", new ScalarSpecialVariable(ScalarSpecialVariable.Id.POSTMATCH));
         GlobalVariable.globalVariables.put("main::.", new ScalarSpecialVariable(ScalarSpecialVariable.Id.INPUT_LINE_NUMBER)); // $.
         GlobalVariable.globalVariables.put("main::+", new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_PAREN_MATCH));
+        GlobalVariable.globalVariables.put(encodeSpecialVar("LAST_SUCCESSFUL_PATTERN"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_SUCCESSFUL_PATTERN));
         GlobalVariable.globalVariables.put(encodeSpecialVar("LAST_FH"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_FH)); // $^LAST_FH
 
         // Aliases
