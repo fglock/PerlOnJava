@@ -38,12 +38,22 @@ public class SprintfOperator {
 
                 // Check if invalid
                 if (!spec.isValid) {
+                    // System.err.println("DEBUG: Invalid spec detected: " + spec.raw + ", errorMessage: " + spec.errorMessage);
+
                     // Always append the raw format
                     result.append(spec.raw);
 
-                    // Generate a warning instead of appending to output
+                    // Generate a warning
                     if (spec.errorMessage != null) {
-                        String warningMessage = "Invalid conversion in sprintf: \"" + spec.raw + "\"";
+                        // For space-related errors, truncate at the space
+                        String formatForWarning = spec.raw;
+                        if (spec.raw.contains(" ")) {
+                            int spaceIndex = spec.raw.indexOf(" ");
+                            formatForWarning = spec.raw.substring(0, spaceIndex + 1);
+                        }
+
+                        String warningMessage = "Invalid conversion in sprintf: \"" + formatForWarning + "\"";
+                        // System.err.println("DEBUG: About to warn for invalid format: " + formatForWarning);
                         WarnDie.warn(new RuntimeScalar(warningMessage), new RuntimeScalar(""));
                     }
 
