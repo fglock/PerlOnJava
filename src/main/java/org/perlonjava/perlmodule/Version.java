@@ -36,7 +36,6 @@ public class Version extends PerlModuleBase {
             version.registerMethod("qv", "$");
             version.registerMethod("_VERSION", "VERSION", "$$");
             version.registerMethod("vcmp", "VCMP", "$$");
-            // version.registerMethod("new", "$");
             version.registerMethod("numify", "$");
             version.registerMethod("normal", "$");
             version.registerMethod("to_decimal", "$");
@@ -45,26 +44,10 @@ public class Version extends PerlModuleBase {
             version.registerMethod("from_tuple", "@");
             version.registerMethod("stringify", "$");
             version.registerMethod("parse", "$");
-
-//            // Register overloaded operators
-//            version.registerMethod("(\"\"", "stringify", "$");
-//            version.registerMethod("(<=>", "VCMP", "$$");
-//            version.registerMethod("(cmp", "VCMP", "$$");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Version method: " + e.getMessage());
         }
     }
-
-//    /**
-//     * Creates a new version object from a string.
-//     */
-//    public static RuntimeList new_(RuntimeArray args, int ctx) {
-//        if (args.size() < 2) {
-//            throw new IllegalStateException("version->new() requires an argument");
-//        }
-//        RuntimeScalar versionStr = args.get(1);
-//        return parse(args, ctx);
-//    }
 
     /**
      * Parses a version string into a version object.
@@ -143,7 +126,7 @@ public class Version extends PerlModuleBase {
      * Always receives class name as first argument due to how it's exported.
      */
     public static RuntimeList qv(RuntimeArray args, int ctx) {
-        if (args.size() < 1) {
+        if (args.isEmpty()) {
             throw new IllegalStateException("qv() requires an argument");
         }
 
@@ -169,7 +152,7 @@ public class Version extends PerlModuleBase {
      * Returns the numified representation of the version.
      */
     public static RuntimeList numify(RuntimeArray args, int ctx) {
-        if (args.size() < 1) {
+        if (args.isEmpty()) {
             throw new IllegalStateException("numify requires an argument");
         }
 
@@ -197,7 +180,7 @@ public class Version extends PerlModuleBase {
      * Returns the normalized dotted-decimal form with leading v.
      */
     public static RuntimeList normal(RuntimeArray args, int ctx) {
-        if (args.size() < 1) {
+        if (args.isEmpty()) {
             throw new IllegalStateException("normal requires an argument");
         }
 
@@ -225,7 +208,7 @@ public class Version extends PerlModuleBase {
      * Converts to decimal version object.
      */
     public static RuntimeList to_decimal(RuntimeArray args, int ctx) {
-        if (args.size() < 1) {
+        if (args.isEmpty()) {
             throw new IllegalStateException("to_decimal requires an argument");
         }
 
@@ -235,7 +218,7 @@ public class Version extends PerlModuleBase {
         // Parse it as a new version object
         RuntimeArray parseArgs = new RuntimeArray();
         parseArgs.push(new RuntimeScalar("version"));
-        parseArgs.push(numified.elements.get(0));
+        parseArgs.push(numified.elements.getFirst());
 
         return parse(parseArgs, ctx);
     }
@@ -244,7 +227,7 @@ public class Version extends PerlModuleBase {
      * Converts to dotted decimal version object.
      */
     public static RuntimeList to_dotted_decimal(RuntimeArray args, int ctx) {
-        if (args.size() < 1) {
+        if (args.isEmpty()) {
             throw new IllegalStateException("to_dotted_decimal requires an argument");
         }
 
@@ -254,7 +237,7 @@ public class Version extends PerlModuleBase {
         // Parse it as a new version object
         RuntimeArray parseArgs = new RuntimeArray();
         parseArgs.push(new RuntimeScalar("version"));
-        parseArgs.push(normalized.elements.get(0));
+        parseArgs.push(normalized.elements.getFirst());
 
         return parse(parseArgs, ctx);
     }
@@ -263,7 +246,7 @@ public class Version extends PerlModuleBase {
      * Returns version components as a list.
      */
     public static RuntimeList tuple(RuntimeArray args, int ctx) {
-        if (args.size() < 1) {
+        if (args.isEmpty()) {
             throw new IllegalStateException("tuple requires an argument");
         }
 
@@ -306,7 +289,7 @@ public class Version extends PerlModuleBase {
      * Returns string representation of the version.
      */
     public static RuntimeList stringify(RuntimeArray args, int ctx) {
-        if (args.size() < 1) {
+        if (args.isEmpty()) {
             throw new IllegalStateException("stringify requires an argument");
         }
 
@@ -371,7 +354,7 @@ public class Version extends PerlModuleBase {
      * Implementation of UNIVERSAL::VERSION.
      */
     public static RuntimeList VERSION(RuntimeArray args, int ctx) {
-        if (args.size() < 1) {
+        if (args.isEmpty()) {
             throw new IllegalStateException("VERSION requires at least one argument");
         }
 
@@ -388,11 +371,7 @@ public class Version extends PerlModuleBase {
 
         // Check version requirement
         RuntimeScalar wantVersion = args.get(1);
-        try {
-            RuntimeScalar result = VersionHelper.compareVersion(hasVersion, wantVersion, packageName);
-            return result.getList();
-        } catch (PerlCompilerException e) {
-            throw e;
-        }
+        RuntimeScalar result = VersionHelper.compareVersion(hasVersion, wantVersion, packageName);
+        return result.getList();
     }
 }

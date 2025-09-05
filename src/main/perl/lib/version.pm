@@ -12,8 +12,10 @@ our $VERSION = '0.9933';
 our $CLASS = 'version';
 our (@ISA, $STRICT, $LAX);
 
-# Load the XS implementation
-XSLoader::load( 'Version' );
+BEGIN {
+    # Load the XS implementation
+    XSLoader::load('Version');
+}
 
 # Set up operator overloading
 use overload (
