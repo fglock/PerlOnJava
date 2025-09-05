@@ -965,6 +965,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return this;
     }
 
+    public boolean isBlessed() {
+        return blessedId(this) != 0;
+    }
+
     public RuntimeScalar postAutoDecrement() {
         RuntimeScalar old = new RuntimeScalar(this);
 
