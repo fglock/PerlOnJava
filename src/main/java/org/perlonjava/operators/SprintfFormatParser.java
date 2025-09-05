@@ -277,6 +277,24 @@ public class SprintfFormatParser {
                 return;
             }
 
+            // Special case: %Vd - V is not a valid length modifier
+            if ("V".equals(spec.lengthModifier)) {
+                spec.isValid = false;
+                spec.errorMessage = "INVALID";
+                return;
+            }
+
+            // Add validation for # flag with invalid conversions
+            if (spec.flags.contains("#")) {
+                // # flag is only valid for o, x, X, b, B, e, E, f, F, g, G, a, A
+                String validHashConversions = "oxXbBeEfFgGaA";
+                if (validHashConversions.indexOf(spec.conversionChar) < 0) {
+                    spec.isValid = false;
+                    spec.errorMessage = "INVALID";
+                    return;
+                }
+            }
+
             // Special case: uppercase letters that might look like length modifiers
             if (spec.lengthModifier != null) {
                 // V is not a valid length modifier
@@ -323,8 +341,12 @@ public class SprintfFormatParser {
                     return;
                 }
 
-                // %vd, %vf, etc. without actual string argument are invalid
-                // This will be checked at runtime
+                // Special handling for vector formats with spaces
+                if (spec.raw.contains(" ")) {
+                    spec.isValid = false;
+                    spec.errorMessage = "INVALID";
+                    return;
+                }
             }
 
             // Validate flag combinations

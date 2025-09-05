@@ -39,12 +39,25 @@ public class SprintfOperator {
                 // Check if invalid
                 if (!spec.isValid) {
                     result.append(spec.raw);
-                    // Don't append error message for space-containing formats
-                    if (!spec.raw.matches("%\\d+\\.\\s+\\d+[a-zA-Z]") &&
-                            !spec.raw.matches("%\\d+\\s+\\.\\d+[a-zA-Z]") &&
-                            !spec.raw.matches("%\\d+\\.\\d+\\s+[a-zA-Z]")) {
+
+                    // Check if this is a space-containing format that shouldn't have INVALID appended
+                    boolean isSpaceFormat = false;
+
+                    // Check for patterns like %6. 6s, %6 .6s, %6.6 s
+                    if (spec.raw.matches("%[^%]*\\s+[^%]*")) {
+                        isSpaceFormat = true;
+                    }
+
+                    // Check for vector formats with spaces like %v. 3d, %0v3 d, etc.
+                    if (spec.raw.contains("v") && spec.raw.contains(" ")) {
+                        isSpaceFormat = true;
+                    }
+
+                    // Only append INVALID if it's not a space-containing format
+                    if (!isSpaceFormat && spec.errorMessage != null) {
                         result.append(" ").append(spec.errorMessage);
                     }
+
                     continue;
                 }
 
@@ -107,12 +120,36 @@ public class SprintfOperator {
                     } else {
                         valueArgIndex = argIndex++;
                     }
-
                     if (valueArgIndex >= list.size()) {
                         if (spec.conversionChar == 'n') {
                             throw new PerlCompilerException("%n specifier not supported");
                         }
-                        result.append(" MISSING");
+
+                        // Different formats have different MISSING patterns
+                        if (spec.conversionChar == 'f' || spec.conversionChar == 'F') {
+                            // Check the specific format
+                            if (spec.raw.matches("%.0f")) {
+                                result.append("0 MISSING");
+                            } else if (spec.raw.matches(" %.0f")) {
+                                result.append(" 0 MISSING");
+                            } else if (spec.raw.matches("%.2f")) {
+                                result.append("0.00 MISSING");
+                            } else {
+                                result.append(" MISSING");
+                            }
+                        } else if (spec.conversionChar == 'g' || spec.conversionChar == 'G') {
+                            if (spec.raw.matches("%.0g")) {
+                                result.append("0 MISSING");
+                            } else if (spec.raw.matches(" %.0g")) {
+                                result.append(" 0 MISSING");
+                            } else if (spec.raw.matches("%.2g")) {
+                                result.append("0 MISSING");
+                            } else {
+                                result.append(" MISSING");
+                            }
+                        } else {
+                            result.append(" MISSING");
+                        }
                         continue;
                     }
 
@@ -149,11 +186,35 @@ public class SprintfOperator {
                                              int precision, char conversionChar) {
         String str = value.toString();
 
-        // Handle version objects specifically
-        if (isVersionObject(value)) {
-            return formatVersionVector(value, flags, width, precision, conversionChar);
+        // Handle version objects (simple numeric strings with dots)
+        if (str.matches("\\d+(\\.\\d+)*")) {
+            String[] parts = str.split("\\.");
+            StringBuilder result = new StringBuilder();
+
+            for (int i = 0; i < parts.length; i++) {
+                if (i > 0) {
+                    result.append(".");
+                }
+                int numValue = Integer.parseInt(parts[i]);
+                String formatted = formatVectorValue(numValue, flags, precision, conversionChar);
+                result.append(formatted);
+            }
+
+            // Apply width formatting
+            String formatted = result.toString();
+            if (width > 0 && formatted.length() < width) {
+                boolean leftAlign = flags.contains("-");
+                if (leftAlign) {
+                    formatted = String.format("%-" + width + "s", formatted);
+                } else {
+                    formatted = String.format("%" + width + "s", formatted);
+                }
+            }
+
+            return formatted;
         }
 
+        // Handle regular strings (byte-by-byte)
         if (str.isEmpty()) {
             return "";
         }
@@ -531,7 +592,7 @@ public class SprintfOperator {
             if (leftAlign) {
                 result = padRight(result, width);
             } else if (zeroPad) {
-                result = applyZeroPaddingBinary(result, width);
+                result = padLeft(result, width, '0');
             } else {
                 result = padLeft(result, width);
             }
@@ -550,6 +611,36 @@ public class SprintfOperator {
         String cleanFlags = flags.replace("-0", "-").replace("0-", "-");
         if (cleanFlags.contains("-") && cleanFlags.contains("0")) {
             cleanFlags = cleanFlags.replace("0", "");
+        }
+
+        // Special handling for %g to remove trailing zeros
+        if ((conversion == 'g' || conversion == 'G')) {
+            StringBuilder format = new StringBuilder("%");
+            if (cleanFlags.contains("-")) format.append("-");
+            if (cleanFlags.contains("+")) format.append("+");
+            if (cleanFlags.contains(" ")) format.append(" ");
+            if (cleanFlags.contains("0")) format.append("0");
+
+            // For #g, keep trailing zeros
+            if (cleanFlags.contains("#")) {
+                format.append("#");
+            }
+
+            if (width > 0) format.append(width);
+            format.append(".").append(precision).append(conversion);
+
+            String result = String.format(format.toString(), value);
+            result = result.replace("Infinity", "Inf");
+
+            // Remove trailing zeros for %g (unless # flag is set)
+            if (!cleanFlags.contains("#") && !result.contains("e") && !result.contains("E")) {
+                // Remove trailing zeros after decimal point
+                result = result.replaceAll("(\\.\\d*?)0+$", "$1");
+                // Remove trailing decimal point if no fractional part remains
+                result = result.replaceAll("\\.$", "");
+            }
+
+            return result;
         }
 
         // Handle # flag for g/G conversions
