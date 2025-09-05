@@ -41,17 +41,7 @@ public class SprintfOperator {
                     result.append(spec.raw);
 
                     // Check if this is a space-containing format that shouldn't have INVALID appended
-                    boolean isSpaceFormat = false;
-
-                    // Check for patterns like %6. 6s, %6 .6s, %6.6 s
-                    if (spec.raw.matches("%[^%]*\\s+[^%]*")) {
-                        isSpaceFormat = true;
-                    }
-
-                    // Check for vector formats with spaces like %v. 3d, %0v3 d, etc.
-                    if (spec.raw.contains("v") && spec.raw.contains(" ")) {
-                        isSpaceFormat = true;
-                    }
+                    boolean isSpaceFormat = spec.raw.contains(" ");
 
                     // Only append INVALID if it's not a space-containing format
                     if (!isSpaceFormat && spec.errorMessage != null) {
