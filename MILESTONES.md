@@ -303,7 +303,7 @@ The following areas are currently under active development to enhance the functi
   - Add overload operators: `<=>`, `cmp`, `<`, `<=`, `>`, `>=`, `==`, `!=`, `lt`, `le`, `gt`, `ge`, `eq`, `ne`, `qr`.
   - Add command line switches: `-s`, `-f`.
   - Add `__CLASS__` keyword.
-  - Add modules: `mro`, `List::Util`.
+  - Add modules: `mro`, `version`, `List::Util`.
   - Add sprintf formatter: `%vd`.
   - Add readline modes depending on `$/` special variable.
   - Add `PERL5OPT` environment variable.
@@ -330,7 +330,6 @@ The following areas are currently under active development to enhance the functi
   - locale pragma
   - utf8 pragma
   - threads pragma
-  - version pragma
   - warnings pragma
   - Constant folding - in ConstantFoldingVisitor.java
   - `method` keyword
