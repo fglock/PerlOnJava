@@ -9,6 +9,20 @@
 
 ## Completed Milestones
 
+- **v5.42.1**: 150k Tests, Extended Operators, and More Perl 5 Features
+
+  - Add operators: `getlogin`, `getpwnam`, `getpwuid`, `getgrnam`, `getgrgid`, `getpwent`, `getgrent`, `setpwent`, `setgrent`, `endpwent`, `endgrent`, `gethostbyname`, `gethostbyaddr`, `getservbyname`, `getservbyport`, `getprotobyname`, `getprotobynumber`, `reset`.
+  - Add overload operators: `<=>`, `cmp`, `<`, `<=`, `>`, `>=`, `==`, `!=`, `lt`, `le`, `gt`, `ge`, `eq`, `ne`, `qr`.
+  - Add command line switches: `-s`, `-f`.
+  - Add `__CLASS__` keyword.
+  - Add modules: `mro`, `version`, `List::Util`.
+  - Add more `sprintf` formatters.
+  - Add readline modes depending on `$/` special variable.
+  - Add `PERL5OPT` environment variable.
+  - Add regex extended character classes `(?[...])`
+  - Bugfix: fixed vstring with codepoints above 65535.
+
+
 - **v5.42.0**: 100k Tests Passed, Tie Support, and Total Compatibility
   - Add `tie`, `tied`, `untie` operators.
   - Add all `tie` types: scalar, array, hash, and handle.
@@ -297,18 +311,8 @@ The following areas are currently under active development to enhance the functi
 
 ## Upcoming Milestones
 
-- **v5.42.1**: Next minor version
+- **v5.42.2**: Next minor version
 
-  - Add operators: `getlogin`, `getpwnam`, `getpwuid`, `getgrnam`, `getgrgid`, `getpwent`, `getgrent`, `setpwent`, `setgrent`, `endpwent`, `endgrent`, `gethostbyname`, `gethostbyaddr`, `getservbyname`, `getservbyport`, `getprotobyname`, `getprotobynumber`, `reset`.
-  - Add overload operators: `<=>`, `cmp`, `<`, `<=`, `>`, `>=`, `==`, `!=`, `lt`, `le`, `gt`, `ge`, `eq`, `ne`, `qr`.
-  - Add command line switches: `-s`, `-f`.
-  - Add `__CLASS__` keyword.
-  - Add modules: `mro`, `version`, `List::Util`.
-  - Add more `sprintf` formatters.
-  - Add readline modes depending on `$/` special variable.
-  - Add `PERL5OPT` environment variable.
-  - Add regex extended character classes `(?[...])`
-  - Bugfix: fixed vstring with codepoints above 65535.
   - Planned release date: 2025-12-10.
 
 - Work in Progress
