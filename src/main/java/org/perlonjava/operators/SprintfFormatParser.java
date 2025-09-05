@@ -25,6 +25,7 @@ public class SprintfFormatParser {
         public String raw = "";
 
         // Parsed components
+        public boolean invalidDueToSpace = false;
         public Integer parameterIndex;      // null or 1-based index
         public String flags = "";           // combination of -, +, space, #, 0
         public Integer width;               // null if not specified
@@ -247,7 +248,8 @@ public class SprintfFormatParser {
             // Mark as invalid if we found spaces in the format
             if (hasInvalidSpace) {
                 spec.isValid = false;
-                spec.errorMessage = "INVALID";
+                spec.invalidDueToSpace = true;  // Add this line
+                // Don't set errorMessage - space formats should output as-is without " INVALID"
             } else {
                 // Validate the specifier
                 validateSpecifier(spec);

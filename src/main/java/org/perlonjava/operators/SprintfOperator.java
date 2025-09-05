@@ -38,14 +38,13 @@ public class SprintfOperator {
 
                 // Check if invalid
                 if (!spec.isValid) {
+                    // Always append the raw format
                     result.append(spec.raw);
 
-                    // Check if this is a space-containing format that shouldn't have INVALID appended
-                    boolean isSpaceFormat = spec.raw.contains(" ");
-
-                    // Only append INVALID if it's not a space-containing format
-                    if (!isSpaceFormat && spec.errorMessage != null) {
-                        result.append(" ").append(spec.errorMessage);
+                    // Generate a warning instead of appending to output
+                    if (spec.errorMessage != null) {
+                        String warningMessage = "Invalid conversion in sprintf: \"" + spec.raw + "\"";
+                        WarnDie.warn(new RuntimeScalar(warningMessage), new RuntimeScalar(""));
                     }
 
                     continue;
