@@ -11,6 +11,20 @@ import java.util.regex.Pattern;
 
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
+import static org.perlonjava.runtime.RuntimeScalarType.DOUBLE;
+
+// TODO - create test cases
+// $ perl -E ' use version; say version->declare("v1.2.3"); say version->declare("1.2.3"); say version->declare("1.2"); say version->declare("1.2.3.4"); say version->declare("1"); say version->declare(" 1.2.4 ")->normal; say version->new(1.2); say version->new(1.2)->normal; say version->new("1.200000"); say version->new("1.2"); '
+// v1.2.3
+// 1.2.3
+// v1.2
+// 1.2.3.4
+// 1
+// v1.2.4
+// 1.2
+// v1.200.0
+// 1.200000
+// 1.2
 
 /**
  * The {@code Version} class provides methods for handling version objects
@@ -44,6 +58,7 @@ public class Version extends PerlModuleBase {
             version.registerMethod("from_tuple", "@");
             version.registerMethod("stringify", "$");
             version.registerMethod("parse", "$");
+            version.registerMethod("new", "declare", "$");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Version method: " + e.getMessage());
         }
@@ -60,25 +75,40 @@ public class Version extends PerlModuleBase {
         RuntimeScalar versionStr = args.get(1);
         String version = versionStr.toString();
 
+        version = version.trim();
+        if (version.isEmpty()) {
+            throw new PerlCompilerException("Invalid version format (version required)");
+        }
+        if (versionStr.type == DOUBLE) {
+            version = String.format("%.6f", versionStr.getDouble());
+        } else if (!version.startsWith("v")) {
+            // Count the number of dots
+            long dotCount = version.chars().filter(ch -> ch == '.').count();
+
+            // If exactly one dot, prepend "v"
+            if (dotCount == 1 && version.length() < 4) {
+                version = "v" + version;
+                versionStr = new RuntimeScalar(version);
+            }
+        }
+
         // Create a blessed version object
         RuntimeHash versionObj = new RuntimeHash();
 
         // Parse the version string
         if (version.startsWith("v")) {
             // v-string format
-            versionObj.put("original", new RuntimeScalar(version));
             versionObj.put("alpha", scalarFalse);
             versionObj.put("qv", scalarTrue);
 
             // Parse components
-            String normalized = VersionHelper.normalizeVersion(versionStr);
+            String normalized = VersionHelper.normalizeVersion(new RuntimeScalar(version));
             versionObj.put("version", new RuntimeScalar(normalized));
         } else {
             // Decimal format
             boolean isAlpha = version.contains("_");
             String cleanVersion = version.replace("_", "");
 
-            versionObj.put("original", new RuntimeScalar(version));
             versionObj.put("alpha", getScalarBoolean(isAlpha));
             versionObj.put("qv", scalarFalse);
 
@@ -86,6 +116,8 @@ public class Version extends PerlModuleBase {
             String normalized = VersionHelper.normalizeVersion(new RuntimeScalar(cleanVersion));
             versionObj.put("version", new RuntimeScalar(normalized));
         }
+
+        versionObj.put("original", versionStr);
 
         // Bless the object
         RuntimeScalar blessed = versionObj.createReference();
@@ -103,29 +135,11 @@ public class Version extends PerlModuleBase {
             throw new IllegalStateException("version->declare() requires an argument");
         }
 
-        RuntimeScalar versionStr = args.get(1);
-        String version = versionStr.toString();
-
-        version = version.trim();
-        if (version.isEmpty()) {
-            throw new PerlCompilerException("Invalid version format (version required)");
-        }
-        if (!version.startsWith("v")) {
-            // Count the number of dots
-            long dotCount = version.chars().filter(ch -> ch == '.').count();
-
-            // If exactly one dot, prepend "v"
-            if (dotCount == 1) {
-                version = "v" + version;
-            }
-        }
-
-        // Create a new RuntimeArray with the modified version
-        RuntimeArray newArgs = new RuntimeArray();
-        newArgs.push(args.get(0));  // class name
-        newArgs.push(new RuntimeScalar(version));
-
-        return parse(newArgs, ctx);
+        // Create version object via parse
+        RuntimeArray parseArgs = new RuntimeArray();
+        parseArgs.push(args.get(0));  // class name
+        parseArgs.push(RuntimeArray.pop(args));
+        return parse(parseArgs, ctx);
     }
 
     /**
@@ -137,15 +151,11 @@ public class Version extends PerlModuleBase {
             throw new IllegalStateException("qv() requires an argument");
         }
 
-        RuntimeScalar versionStr = RuntimeArray.pop(args);
-        String version = versionStr.toString();
-
         // Create version object via parse
         RuntimeArray parseArgs = new RuntimeArray();
-        parseArgs.push(args.get(0));  // class name
-        parseArgs.push(new RuntimeScalar(version));
-
-        return declare(parseArgs, ctx);
+        parseArgs.push(new RuntimeScalar("version"));  // class name
+        parseArgs.push(RuntimeArray.pop(args));
+        return parse(parseArgs, ctx);
     }
 
     /**
