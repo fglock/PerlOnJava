@@ -140,6 +140,10 @@ public class SprintfFormatParser {
                 }
             }
 
+            // Check for spaces in the format (invalid)
+            int savePos = pos;
+            boolean hasInvalidSpace = false;
+
             // 3. Parse width
             if (match('*')) {
                 spec.widthFromArg = true;
@@ -155,8 +159,28 @@ public class SprintfFormatParser {
                 spec.width = parseNumber();
             }
 
+            // Check for space after width
+            if (!isAtEnd() && current() == ' ' && peek(1) != '\0') {
+                hasInvalidSpace = true;
+            }
+
+            // Skip any spaces (they make the format invalid)
+            while (!isAtEnd() && current() == ' ') {
+                advance();
+            }
+
             // 4. Parse precision
             if (match('.')) {
+                // Check for space after dot
+                if (!isAtEnd() && current() == ' ') {
+                    hasInvalidSpace = true;
+                }
+
+                // Skip any spaces
+                while (!isAtEnd() && current() == ' ') {
+                    advance();
+                }
+
                 if (match('*')) {
                     spec.precisionFromArg = true;
                     // Check for parameter index
@@ -171,6 +195,16 @@ public class SprintfFormatParser {
                     Integer prec = parseNumber();
                     spec.precision = (prec != null) ? prec : 0; // . alone means 0
                 }
+
+                // Check for space after precision
+                if (!isAtEnd() && current() == ' ') {
+                    hasInvalidSpace = true;
+                }
+            }
+
+            // Skip any trailing spaces
+            while (!isAtEnd() && current() == ' ') {
+                advance();
             }
 
             // 5. Parse length modifier
@@ -181,7 +215,7 @@ public class SprintfFormatParser {
                 } else if (peek(0) == 'l' && peek(1) == 'l') {
                     spec.lengthModifier = "ll";
                     advance(); advance();
-                } else if ("hlLtqzV".indexOf(current()) >= 0) {
+                } else if ("hlLqzjtV".indexOf(current()) >= 0) {
                     spec.lengthModifier = String.valueOf(current());
                     advance();
                 }
@@ -195,7 +229,7 @@ public class SprintfFormatParser {
             // 7. Parse conversion character
             if (isAtEnd()) {
                 spec.isValid = false;
-                spec.errorMessage = "missing conversion character";
+                spec.errorMessage = "MISSING";
             } else {
                 spec.conversionChar = current();
                 advance();
@@ -204,8 +238,14 @@ public class SprintfFormatParser {
             spec.endPos = pos;
             spec.raw = input.substring(spec.startPos, spec.endPos);
 
-            // Validate the specifier
-            validateSpecifier(spec);
+            // Mark as invalid if we found spaces in the format
+            if (hasInvalidSpace) {
+                spec.isValid = false;
+                spec.errorMessage = "INVALID";
+            } else {
+                // Validate the specifier
+                validateSpecifier(spec);
+            }
 
             return spec;
         }
@@ -223,24 +263,33 @@ public class SprintfFormatParser {
 
         void validateSpecifier(FormatSpecifier spec) {
             // Check for invalid conversion characters
-            if ("CHIJKLMNPQRSTVWYZhjklmqrtvwyz".indexOf(spec.conversionChar) >= 0) {
+            String invalidChars = "CHIJKLMNPQRSTWYZhjklmnqrtwyz";
+            if (invalidChars.indexOf(spec.conversionChar) >= 0) {
                 spec.isValid = false;
                 spec.errorMessage = "INVALID";
                 return;
             }
 
-            // Check for spaces in format (not as flag)
-            if (spec.raw.matches("%[^%]*\\s+[^%]*[a-zA-Z]") &&
-                    !spec.flags.contains(" ")) {
+            // Special case: standalone %v is invalid
+            if (spec.conversionChar == 'v' && !spec.vectorFlag) {
                 spec.isValid = false;
                 spec.errorMessage = "INVALID";
+                return;
+            }
+
+            // Validate %n
+            if (spec.conversionChar == 'n') {
+                // %n is technically valid but we'll handle it specially in the operator
                 return;
             }
 
             // Validate length modifier combinations
             if (spec.lengthModifier != null) {
                 String combo = spec.lengthModifier + spec.conversionChar;
-                if ("hf".equals(combo) || "hg".equals(combo) || "he".equals(combo)) {
+                // h with floating point is invalid
+                if ("hf".equals(combo) || "hF".equals(combo) || "hg".equals(combo) ||
+                        "hG".equals(combo) || "he".equals(combo) || "hE".equals(combo) ||
+                        "ha".equals(combo) || "hA".equals(combo)) {
                     spec.isValid = false;
                     spec.errorMessage = "INVALID";
                     return;
@@ -248,10 +297,70 @@ public class SprintfFormatParser {
             }
 
             // Validate vector flag combinations
-            if (spec.vectorFlag && "diouxXbB".indexOf(spec.conversionChar) < 0) {
+            if (spec.vectorFlag) {
+                // Vector flag is only valid with certain conversions
+                String validVectorConversions = "diouxXbBcsaAeEfFgG";
+                if (validVectorConversions.indexOf(spec.conversionChar) < 0) {
+                    spec.isValid = false;
+                    spec.errorMessage = "INVALID";
+                    return;
+                }
+
+                // %vd, %vf, etc. without actual string argument are invalid
+                // This will be checked at runtime
+            }
+
+            // Validate flag combinations
+            validateFlags(spec);
+
+            // Check for parameter index issues
+            if (spec.parameterIndex != null && spec.parameterIndex == 0) {
                 spec.isValid = false;
                 spec.errorMessage = "INVALID";
                 return;
+            }
+
+            // Check for invalid width/precision parameter indices
+            if ((spec.widthArgIndex != null && spec.widthArgIndex == 0) ||
+                    (spec.precisionArgIndex != null && spec.precisionArgIndex == 0)) {
+                spec.isValid = false;
+                spec.errorMessage = "INVALID";
+                return;
+            }
+        }
+
+        void validateFlags(FormatSpecifier spec) {
+            // + and space flags are ignored for unsigned conversions
+            boolean isUnsigned = "uUoOxXbB".indexOf(spec.conversionChar) >= 0;
+
+            // For %c, # flag is invalid
+            if (spec.conversionChar == 'c' && spec.flags.contains("#")) {
+                spec.isValid = false;
+                spec.errorMessage = "INVALID";
+                return;
+            }
+
+            // # flag is only valid for o, x, X, b, B, e, E, f, F, g, G, a, A
+            if (spec.flags.contains("#")) {
+                String validHashConversions = "oxXbBeEfFgGaA";
+                if (validHashConversions.indexOf(spec.conversionChar) < 0) {
+                    spec.isValid = false;
+                    spec.errorMessage = "INVALID";
+                    return;
+                }
+            }
+
+            // Space flag with certain conversions
+            if (spec.flags.contains(" ")) {
+                // Space flag is invalid with %c
+                if (spec.conversionChar == 'c') {
+                    spec.isValid = false;
+                    spec.errorMessage = "INVALID";
+                    return;
+                }
+
+                // For some formats like "% .*d", it creates specific error patterns
+                // This is handled in the operator
             }
         }
     }
