@@ -5,19 +5,7 @@ import org.perlonjava.runtime.RuntimeBase;
 import org.perlonjava.runtime.RuntimeList;
 import org.perlonjava.runtime.RuntimeScalar;
 
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
-
 public class SprintfOperator {
-
-    // Pattern to match a complete format specifier
-    // Updated to handle parameter index, vector flags, and size modifiers
-    private static final Pattern FORMAT_PATTERN = Pattern.compile(
-            "%(\\d+\\$)?([-+ #0]*)(\\*(?:\\d+\\$)?)?([*]?)(\\d*)(?:\\.(\\*(?:\\d+\\$)?|\\d*))?([*]?)(?:(hh|h|ll|l|t|z|q|L|V)?)(v?)([diouxXeEfFgGaAcspnvDUOBb%A-Z])"
-            // "%(\\d+\\$)?([-+ #0]*)(\\*(?:\\d+\\$)?)?(\\d*)(?:\\.(\\*(?:\\d+\\$)?|\\d*))?([hlLtqzV])?([v])?([a-zA-Z])"
-    );
 
     /**
      * Formats the elements according to the specified format string.
@@ -33,158 +21,116 @@ public class SprintfOperator {
 
         StringBuilder result = new StringBuilder();
         int argIndex = 0;
-        int pos = 0;
 
-        Matcher matcher = FORMAT_PATTERN.matcher(format);
+        SprintfFormatParser.ParseResult parsed = SprintfFormatParser.parse(format);
 
-        while (matcher.find()) {
-            // Append text before the format specifier
-            result.append(format, pos, matcher.start());
-            pos = matcher.end();
+        for (Object element : parsed.elements) {
+            if (element instanceof String) {
+                // Literal text
+                result.append((String) element);
+            } else if (element instanceof SprintfFormatParser.FormatSpecifier spec) {
 
-            // Parse the format specifier
-            String paramIndex = matcher.group(1);
-            String flags = matcher.group(2);
-            String widthFromArgSpec = matcher.group(3);
-            boolean widthFromArg = !matcher.group(4).isEmpty() && matcher.group(3).isEmpty();
-            String widthStr = matcher.group(5);
-            String precisionSpec = matcher.group(6);
-            boolean precisionFromArg = !matcher.group(7).isEmpty() && matcher.group(6) == null;
-            String lengthModifier = matcher.group(8);
-            boolean vectorFlag = !matcher.group(9).isEmpty();
-            char conversionChar = matcher.group(10).charAt(0);
-
-            // Handle %% - literal percent
-            if (conversionChar == '%') {
-                result.append('%');
-                continue;
-            }
-
-            // Handle invalid format specifiers - return the specifier unchanged with "INVALID"
-            if (isInvalidSpecifier(conversionChar)) {
-                String invalidSpec = matcher.group(0);
-                result.append(invalidSpec);
-                result.append(" INVALID");
-                continue;
-            }
-
-            // Check for invalid format like space between % and specifier
-            String originalSpec = matcher.group(0);
-            if (originalSpec.contains(" ") && !originalSpec.matches("%[-+ #0]*\\d*\\.?\\d*[a-zA-Z%]")) {
-                result.append(originalSpec);
-                result.append(" INVALID");
-                continue;
-            }
-
-            // Handle length modifiers that should be invalid for certain formats
-            if (lengthModifier != null && ("hf".equals(lengthModifier + conversionChar) ||
-                    "hg".equals(lengthModifier + conversionChar) ||
-                    "he".equals(lengthModifier + conversionChar))) {
-                result.append(originalSpec);
-                result.append(" INVALID");
-                continue;
-            }
-
-            // Handle invalid combinations for vector format
-            if (vectorFlag && !"diouxXbB".contains(String.valueOf(conversionChar))) {
-                String invalidSpec = matcher.group(0);
-                result.append(invalidSpec);
-                result.append(" INVALID");
-                continue;
-            }
-
-            // Handle parameter index for width/precision
-            int actualArgIndex = argIndex;
-            if (paramIndex != null) {
-                // Parameter indexing is 1-based
-                int paramNum = Integer.parseInt(paramIndex.substring(0, paramIndex.length() - 1));
-                actualArgIndex = paramNum - 1;
-            }
-
-            // Get width from argument if needed
-            int width = 0;
-            if (widthFromArg || widthFromArgSpec != null) {
-                int widthArgIndex = argIndex;
-                if (widthFromArgSpec != null && widthFromArgSpec.contains("$")) {
-                    // Extract parameter index from width spec
-                    String widthParamStr = widthFromArgSpec.replaceAll("[^0-9]", "");
-                    if (!widthParamStr.isEmpty()) {
-                        widthArgIndex = Integer.parseInt(widthParamStr) - 1;
-                    }
-                } else {
-                    argIndex++; // Consume next argument for width
-                }
-
-                if (widthArgIndex >= list.size()) {
-                    result.append(" MISSING");
+                // Handle %%
+                if (spec.conversionChar == '%') {
+                    result.append('%');
                     continue;
                 }
-                width = ((RuntimeScalar) list.elements.get(widthArgIndex)).getInt();
-                if (width < 0) {
-                    flags += "-";
-                    width = -width;
-                }
-            } else if (!widthStr.isEmpty()) {
-                width = Integer.parseInt(widthStr);
-            }
 
-            // Get precision from argument if needed
-            int precision = -1;
-            if (precisionFromArg || (precisionSpec != null && precisionSpec.startsWith("*"))) {
-                int precisionArgIndex = argIndex;
-                if (precisionSpec != null && precisionSpec.contains("$")) {
-                    // Extract parameter index from precision spec
-                    String precParamStr = precisionSpec.replaceAll("[^0-9]", "");
-                    if (!precParamStr.isEmpty()) {
-                        precisionArgIndex = Integer.parseInt(precParamStr) - 1;
-                    }
-                } else {
-                    argIndex++; // Consume next argument for precision
-                }
-
-                if (precisionArgIndex >= list.size()) {
-                    result.append(" MISSING");
+                // Check if invalid
+                if (!spec.isValid) {
+                    result.append(spec.raw);
+                    result.append(" ").append(spec.errorMessage);
                     continue;
                 }
-                precision = ((RuntimeScalar) list.elements.get(precisionArgIndex)).getInt();
-                if (precision < 0) {
-                    precision = -1; // Negative precision is ignored
+
+                int savedArgIndex = argIndex;
+
+                try {
+                    // Process width
+                    int width = 0;
+                    if (spec.widthFromArg) {
+                        int widthArgIndex;
+                        if (spec.widthArgIndex != null) {
+                            widthArgIndex = spec.widthArgIndex - 1;
+                        } else if (spec.parameterIndex != null) {
+                            widthArgIndex = argIndex++;
+                        } else {
+                            widthArgIndex = argIndex++;
+                        }
+
+                        if (widthArgIndex >= list.size()) {
+                            result.append(" MISSING");
+                            continue;
+                        }
+                        width = ((RuntimeScalar) list.elements.get(widthArgIndex)).getInt();
+                        if (width < 0) {
+                            spec.flags += "-";
+                            width = -width;
+                        }
+                    } else if (spec.width != null) {
+                        width = spec.width;
+                    }
+
+                    // Process precision
+                    int precision = -1;
+                    if (spec.precisionFromArg) {
+                        int precArgIndex;
+                        if (spec.precisionArgIndex != null) {
+                            precArgIndex = spec.precisionArgIndex - 1;
+                        } else if (spec.parameterIndex != null) {
+                            precArgIndex = argIndex++;
+                        } else {
+                            precArgIndex = argIndex++;
+                        }
+
+                        if (precArgIndex >= list.size()) {
+                            result.append(" MISSING");
+                            continue;
+                        }
+                        precision = ((RuntimeScalar) list.elements.get(precArgIndex)).getInt();
+                        if (precision < 0) {
+                            precision = -1;
+                        }
+                    } else if (spec.precision != null) {
+                        precision = spec.precision;
+                    }
+
+                    // Get main value
+                    int valueArgIndex;
+                    if (spec.parameterIndex != null) {
+                        valueArgIndex = spec.parameterIndex - 1;
+                    } else {
+                        valueArgIndex = argIndex++;
+                    }
+
+                    if (valueArgIndex >= list.size()) {
+                        if (spec.conversionChar == 'n') {
+                            throw new PerlCompilerException("%n specifier not supported");
+                        }
+                        result.append(" MISSING");
+                        continue;
+                    }
+
+                    RuntimeScalar value = (RuntimeScalar) list.elements.get(valueArgIndex);
+
+                    // Format the value
+                    String formatted;
+                    if (spec.vectorFlag) {
+                        formatted = formatVectorString(value, spec.flags, width,
+                                precision, spec.conversionChar);
+                    } else {
+                        formatted = formatValue(value, spec.flags, width,
+                                precision, spec.conversionChar);
+                    }
+                    result.append(formatted);
+
+                } catch (Exception e) {
+                    // Reset arg index and append error
+                    argIndex = savedArgIndex;
+                    result.append(" MISSING");
                 }
-            } else if (precisionSpec != null && !precisionSpec.startsWith("*")) {
-                precision = precisionSpec.isEmpty() ? 0 : Integer.parseInt(precisionSpec);
             }
-
-            // Get the value to format
-            if (actualArgIndex >= list.size()) {
-                if (conversionChar == 'n') {
-                    throw new PerlCompilerException("%n specifier not supported");
-                }
-                result.append(" MISSING");
-                continue;
-            }
-            RuntimeScalar value = actualArgIndex >= 0 && actualArgIndex < list.elements.size()
-                    ? (RuntimeScalar) list.elements.get(actualArgIndex)
-                    : scalarUndef;
-
-            // Only increment argIndex if we're not using parameter indexing
-            if (paramIndex == null) {
-                argIndex++;
-            }
-
-            // Handle vector format specifier
-            if (vectorFlag) {
-                String formatted = formatVectorString(value, flags, width, precision, conversionChar);
-                result.append(formatted);
-                continue;
-            }
-
-            // Format the value
-            String formatted = formatValue(value, flags, width, precision, conversionChar);
-            result.append(formatted);
         }
-
-        // Append any remaining text
-        result.append(format.substring(pos));
 
         return new RuntimeScalar(result.toString());
     }
@@ -345,65 +291,36 @@ public class SprintfOperator {
         }
 
         // Handle normal values
-        switch (conversion) {
-            case 'd':
-            case 'i':
-                return formatInteger(value.getLong(), flags, width, precision, 10, false);
-
-            case 'u':
-            case 'U':  // Synonym for %u
-                return formatUnsigned(value, flags, width, precision);
-
-            case 'o':
-            case 'O':  // Synonym for %o
-                return formatInteger(value.getLong(), flags, width, precision, 8, flags.contains("#"));
-
-            case 'x':
-                return formatInteger(value.getLong(), flags, width, precision, 16, flags.contains("#"));
-            case 'X':
+        return switch (conversion) {
+            case 'd', 'i' -> formatInteger(value.getLong(), flags, width, precision, 10, false);
+            case 'u', 'U' ->  // Synonym for %u
+                    formatUnsigned(value, flags, width, precision);
+            case 'o', 'O' ->  // Synonym for %o
+                    formatInteger(value.getLong(), flags, width, precision, 8, flags.contains("#"));
+            case 'x' -> formatInteger(value.getLong(), flags, width, precision, 16, flags.contains("#"));
+            case 'X' -> {
                 String result = formatInteger(value.getLong(), flags.replace("X", "x"), width, precision, 16, flags.contains("#"));
                 // Convert to uppercase
-                return result.toUpperCase();
-
-            case 'b':
-            case 'B':
-                return formatBinary(value.getLong(), flags, width, precision);
-
-            case 'e':
-            case 'E':
-            case 'g':
-            case 'G':
-            case 'a':
-            case 'A':
-                return formatFloatingPoint(value.getDouble(), flags, width, precision, conversion);
-
-            case 'f':
-            case 'F':  // F is synonym for f
-                return formatFloatingPoint(value.getDouble(), flags, width, precision, 'f');
-
-            case 'c':
-                return formatCharacter(value, flags, width);
-
-            case 's':
-                return formatString(value.toString(), flags, width, precision);
-
-            case 'p':
-                return String.format("%x", value.getLong());
-
-            case 'n':
-                throw new PerlCompilerException("%n specifier not supported");
-
-            case 'D':  // Synonym for %ld
-                return formatInteger(value.getLong(), flags, width, precision, 10, false);
-
-            case 'v':
+                yield result.toUpperCase();
+                // Convert to uppercase
+            }
+            case 'b', 'B' -> formatBinary(value.getLong(), flags, width, precision);
+            case 'e', 'E', 'g', 'G', 'a', 'A' ->
+                    formatFloatingPoint(value.getDouble(), flags, width, precision, conversion);
+            case 'f', 'F' ->  // F is synonym for f
+                    formatFloatingPoint(value.getDouble(), flags, width, precision, 'f');
+            case 'c' -> formatCharacter(value, flags, width);
+            case 's' -> formatString(value.toString(), flags, width, precision);
+            case 'p' -> String.format("%x", value.getLong());
+            case 'n' -> throw new PerlCompilerException("%n specifier not supported");
+            case 'D' ->  // Synonym for %ld
+                    formatInteger(value.getLong(), flags, width, precision, 10, false);
+            case 'v' ->
                 // Handle standalone %v as invalid
                 // throw new PerlCompilerException("Unknown format specifier: %v");
-                return "";
-
-            default:
-                throw new PerlCompilerException("Unknown format specifier: %" + conversion);
-        }
+                    "";
+            default -> throw new PerlCompilerException("Unknown format specifier: %" + conversion);
+        };
     }
 
     private static String formatSpecialValue(double value, String flags, int width,
@@ -581,7 +498,7 @@ public class SprintfOperator {
 
         // Add prefix if needed
         if (flags.contains("#") && value != 0 && !result.isEmpty()) {
-            String prefix = (flags.contains("B") || Character.toUpperCase(flags.charAt(flags.length()-1)) == 'B') ? "0B" : "0b";
+            String prefix = (flags.contains("B") || Character.toUpperCase(flags.charAt(flags.length() - 1)) == 'B') ? "0B" : "0b";
             result = prefix + result;
         }
 
@@ -703,21 +620,13 @@ public class SprintfOperator {
 
     private static String padLeft(String str, int width, char padChar) {
         if (str.length() >= width) return str;
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < width - str.length(); i++) {
-            sb.append(padChar);
-        }
-        sb.append(str);
-        return sb.toString();
+        return String.valueOf(padChar).repeat(width - str.length()) +
+                str;
     }
 
     private static String padRight(String str, int width) {
         if (str.length() >= width) return str;
-        StringBuilder sb = new StringBuilder(str);
-        for (int i = str.length(); i < width; i++) {
-            sb.append(' ');
-        }
-        return sb.toString();
+        return str + " ".repeat(width - str.length());
     }
 
     private static String applyZeroPadding(String str, int width) {
@@ -740,12 +649,9 @@ public class SprintfOperator {
         }
 
         int padLength = width - sign.length() - prefix.length() - number.length();
-        StringBuilder result = new StringBuilder(sign).append(prefix);
-        for (int i = 0; i < padLength; i++) {
-            result.append('0');
-        }
-        result.append(number);
-        return result.toString();
+        return sign + prefix +
+                "0".repeat(Math.max(0, padLength)) +
+                number;
     }
 
     private static String applyZeroPaddingBinary(String str, int width) {
@@ -761,11 +667,7 @@ public class SprintfOperator {
         }
 
         int padLength = width - prefix.length() - number.length();
-        StringBuilder result = new StringBuilder(prefix);
-        for (int i = 0; i < padLength; i++) {
-            result.append('0');
-        }
-        result.append(number);
-        return result.toString();
+        return prefix + "0".repeat(Math.max(0, padLength)) +
+                number;
     }
 }
