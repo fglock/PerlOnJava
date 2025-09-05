@@ -219,6 +219,7 @@ public class SprintfFormatParser {
                 } else if ("hlLqzjtV".indexOf(current()) >= 0) {
                     spec.lengthModifier = String.valueOf(current());
                     advance();
+                    System.err.println("DEBUG: Found length modifier: " + spec.lengthModifier);
                 }
             }
 
