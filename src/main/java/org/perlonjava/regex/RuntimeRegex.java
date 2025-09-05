@@ -40,6 +40,8 @@ public class RuntimeRegex implements RuntimeScalarReference {
     // Global matcher used for regex operations
     public static Matcher globalMatcher;    // Provides Perl regex variables like %+, %-
     public static String globalMatchString; // Provides Perl regex variables like $&
+    // ${^LAST_SUCCESSFUL_PATTERN}
+    public static RuntimeRegex lastSuccessfulPattern = null;
     // Indicates if \G assertion is used
     private final boolean useGAssertion = false;
     // Compiled regex pattern
@@ -108,8 +110,9 @@ public class RuntimeRegex implements RuntimeScalarReference {
 
     /**
      * Helper method to merge regex flags
-     * @param baseFlags Existing flags (can be null)
-     * @param newModifiers New modifiers to add
+     *
+     * @param baseFlags     Existing flags (can be null)
+     * @param newModifiers  New modifiers to add
      * @param patternString The pattern string (for flag parsing)
      * @return Merged RegexFlags
      */
@@ -369,6 +372,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
 
         if (found) {
             regex.matched = true; // Counter for m?PAT?
+            lastSuccessfulPattern = regex;
         }
 
         if (ctx == RuntimeContextType.LIST) {
@@ -536,6 +540,45 @@ public class RuntimeRegex implements RuntimeScalarReference {
         return globalMatcher.groupCount() + 1;
     }
 
+    /**
+     * Resolves a scalar to a RuntimeRegex, handling qr overloading if necessary.
+     *
+     * @param quotedRegex The scalar that might be a regex or have qr overloading
+     * @return The resolved RuntimeRegex
+     * @throws PerlCompilerException if qr overload doesn't return proper regex
+     */
+    private static RuntimeRegex resolveRegex(RuntimeScalar quotedRegex) {
+        if (quotedRegex.type == RuntimeScalarType.REGEX) {
+            return (RuntimeRegex) quotedRegex.value;
+        }
+
+        // Check if the object has qr overloading
+        int blessId = RuntimeScalarType.blessedId(quotedRegex);
+        if (blessId != 0) {
+            OverloadContext overloadCtx = OverloadContext.prepare(blessId);
+            if (overloadCtx != null) {
+                // Try qr overload
+                RuntimeScalar overloadedResult = overloadCtx.tryOverload("(qr", new RuntimeArray(quotedRegex));
+                if (overloadedResult != null) {
+                    // The result must be a compiled regex
+                    if (overloadedResult.type == RuntimeScalarType.REGEX) {
+                        return (RuntimeRegex) overloadedResult.value;
+                    }
+                    throw new PerlCompilerException("Overloaded qr did not return a REGEXP");
+                }
+
+                // Try fallback to string conversion
+                RuntimeScalar fallbackResult = overloadCtx.tryOverloadFallback(quotedRegex, "(\"\"");
+                if (fallbackResult != null) {
+                    return compile(fallbackResult.toString(), "");
+                }
+            }
+        }
+
+        // Default: compile as string
+        return compile(quotedRegex.toString(), "");
+    }
+
     @Override
     public String toString() {
         // Construct the Perl-like regex string with flags
@@ -576,44 +619,5 @@ public class RuntimeRegex implements RuntimeScalarReference {
      */
     public boolean getBooleanRef() {
         return true;
-    }
-
-    /**
-     * Resolves a scalar to a RuntimeRegex, handling qr overloading if necessary.
-     *
-     * @param quotedRegex The scalar that might be a regex or have qr overloading
-     * @return The resolved RuntimeRegex
-     * @throws PerlCompilerException if qr overload doesn't return proper regex
-     */
-    private static RuntimeRegex resolveRegex(RuntimeScalar quotedRegex) {
-        if (quotedRegex.type == RuntimeScalarType.REGEX) {
-            return (RuntimeRegex) quotedRegex.value;
-        }
-
-        // Check if the object has qr overloading
-        int blessId = RuntimeScalarType.blessedId(quotedRegex);
-        if (blessId != 0) {
-            OverloadContext overloadCtx = OverloadContext.prepare(blessId);
-            if (overloadCtx != null) {
-                // Try qr overload
-                RuntimeScalar overloadedResult = overloadCtx.tryOverload("(qr", new RuntimeArray(quotedRegex));
-                if (overloadedResult != null) {
-                    // The result must be a compiled regex
-                    if (overloadedResult.type == RuntimeScalarType.REGEX) {
-                        return (RuntimeRegex) overloadedResult.value;
-                    }
-                    throw new PerlCompilerException("Overloaded qr did not return a REGEXP");
-                }
-
-                // Try fallback to string conversion
-                RuntimeScalar fallbackResult = overloadCtx.tryOverloadFallback(quotedRegex, "(\"\"");
-                if (fallbackResult != null) {
-                    return compile(fallbackResult.toString(), "");
-                }
-            }
-        }
-
-        // Default: compile as string
-        return compile(quotedRegex.toString(), "");
     }
 }

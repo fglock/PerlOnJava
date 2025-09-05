@@ -90,7 +90,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                         ? scalarUndef
                         : getScalarInt(RuntimeIO.lastAccesseddHandle.currentLineNumber);
                 case LAST_PAREN_MATCH -> new RuntimeScalar(RuntimeRegex.lastCaptureString());
-                default -> scalarUndef;
+                case LAST_SUCCESSFUL_PATTERN -> new RuntimeScalar(RuntimeRegex.lastSuccessfulPattern);
             };
         } catch (IllegalStateException e) {
             return scalarUndef;
@@ -186,5 +186,6 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
         LAST_FH,    // Represents the last filehandle used in an input operation.
         INPUT_LINE_NUMBER, // Represents the current line number in an input operation.
         LAST_PAREN_MATCH, // The highest capture variable ($1, $2, ...) which has a defined value.
+        LAST_SUCCESSFUL_PATTERN, // ${^LAST_SUCCESSFUL_PATTERN}
     }
 }
