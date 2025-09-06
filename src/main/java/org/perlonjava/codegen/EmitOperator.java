@@ -386,6 +386,15 @@ public class EmitOperator {
         emitOperator(node, emitterVisitor);
     }
 
+    // Handles the 'split' operator
+    static void handleSplit(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
+        // Accept the left operand in SCALAR context and the right operand in LIST context.
+        node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
+        emitterVisitor.pushCallContext();
+        emitOperator(node, emitterVisitor);
+    }
+
     // Handles the 'repeat' operator, which repeats a string or list a specified number of times.
     static void handleRepeat(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         // Determine the context for the left operand.

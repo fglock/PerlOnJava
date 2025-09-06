@@ -17,6 +17,7 @@ import java.util.regex.Pattern;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeArray.*;
+import static org.perlonjava.runtime.RuntimeContextType.SCALAR;
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
 
 public class Operator {
@@ -84,7 +85,7 @@ public class Operator {
      * @param args        Argument list.
      * @return A RuntimeList containing the split parts of the string.
      */
-    public static RuntimeList split(RuntimeScalar quotedRegex, RuntimeList args) {
+    public static RuntimeList split(RuntimeScalar quotedRegex, RuntimeList args, int ctx) {
         Iterator<RuntimeScalar> iterator = args.iterator();
         RuntimeScalar string = iterator.hasNext() ? iterator.next() : getGlobalVariable("main::_");
         RuntimeScalar limitArg = iterator.hasNext() ? iterator.next() : new RuntimeScalar(0);
@@ -189,6 +190,10 @@ public class Operator {
             }
         }
 
+        if (ctx == SCALAR) {
+            int size = result.elements.size();
+            return getScalarInt(size).getList();
+        }
         return result;
     }
 
@@ -327,7 +332,7 @@ public class Operator {
     }
 
     public static RuntimeBase reverse(RuntimeBase value, int ctx) {
-        if (ctx == RuntimeContextType.SCALAR) {
+        if (ctx == SCALAR) {
             StringBuilder sb = new StringBuilder();
 
             RuntimeList list = value.getList();
@@ -368,7 +373,7 @@ public class Operator {
             double d = timesScalar.getDouble();
             if (Double.isInfinite(d) || Double.isNaN(d)) {
                 // Return empty string in scalar context or empty list in list context
-                if (ctx == RuntimeContextType.SCALAR || value instanceof RuntimeScalar) {
+                if (ctx == SCALAR || value instanceof RuntimeScalar) {
                     return new RuntimeScalar("");
                 } else {
                     return new RuntimeList();
@@ -377,7 +382,7 @@ public class Operator {
         }
 
         int times = timesScalar.getInt();
-        if (ctx == RuntimeContextType.SCALAR || value instanceof RuntimeScalar) {
+        if (ctx == SCALAR || value instanceof RuntimeScalar) {
             StringBuilder sb = new StringBuilder();
             Iterator<RuntimeScalar> iterator = value.iterator();
             while (iterator.hasNext()) {
@@ -453,7 +458,7 @@ public class Operator {
     }
 
     public static RuntimeScalar repeat(RuntimeScalar runtimeScalar, RuntimeScalar arg) {
-        return (RuntimeScalar) repeat(runtimeScalar, arg, RuntimeContextType.SCALAR);
+        return (RuntimeScalar) repeat(runtimeScalar, arg, SCALAR);
     }
 
     /**
