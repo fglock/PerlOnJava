@@ -2,14 +2,17 @@ package org.perlonjava.codegen;
 
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
-import org.perlonjava.astnode.BlockNode;
-import org.perlonjava.astnode.Node;
+import org.perlonjava.astnode.*;
 import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.runtime.RuntimeContextType;
 
 import java.util.List;
 
 public class EmitBlock {
+    // Blocks with too many statements are emitted as a separate subroutine
+    // in order to avoid "Method too large" error test: in t/re/pat.t
+    final static int LARGE_BLOCK = 16;
+
     /**
      * Emits bytecode for a block of statements.
      *
@@ -18,6 +21,28 @@ public class EmitBlock {
      */
     public static void emitBlock(EmitterVisitor emitterVisitor, BlockNode node) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
+
+        // Check if we can emit this as a subroutine, to avoid "Method too large" error.
+        // TODO: Check for possible goto's, then don't move the block to subroutine
+        if (node.elements.size() > LARGE_BLOCK
+                 && !emitterVisitor.ctx.javaClassInfo.gotoLabelStack.isEmpty()
+                 && !node.getBooleanAnnotation("blockIsSubroutine")) {
+            // Create sub {...}->()
+            int index = node.tokenIndex;
+            BinaryOperatorNode subr = new BinaryOperatorNode(
+                    "->",
+                    new SubroutineNode(
+                            null, null, null,
+                            new BlockNode(List.of(node), index),
+                            false,
+                            index
+                    ),
+                    new ListNode(index),
+                    index
+            );
+            subr.accept(emitterVisitor);
+            return;
+        }
 
         emitterVisitor.ctx.logDebug("generateCodeBlock start context:" + emitterVisitor.ctx.contextType);
         int scopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
