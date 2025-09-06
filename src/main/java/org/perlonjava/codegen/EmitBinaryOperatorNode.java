@@ -64,8 +64,10 @@ public class EmitBinaryOperatorNode {
                     EmitOperator.handleBinmodeOperator(emitterVisitor, node);
 
             // String operations
-            case "join", "split", "sprintf" ->
+            case "join", "sprintf" ->
                     EmitOperator.handleSubstr(emitterVisitor, node);
+            case "split"->
+                    EmitOperator.handleSplit(emitterVisitor, node);
 
             case "x" -> EmitOperator.handleRepeat(emitterVisitor, node);
 
