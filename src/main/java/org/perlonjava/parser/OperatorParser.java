@@ -39,7 +39,10 @@ public class OperatorParser {
         token = TokenUtils.peek(parser);
         if (token.type == LexerTokenType.OPERATOR && token.text.equals("{")) {
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
+            boolean parsingTakeReference = parser.parsingTakeReference;
+            parser.parsingTakeReference = false;
             block = ParseBlock.parseBlock(parser);
+            parser.parsingTakeReference = parsingTakeReference;
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
             return block;
         }
@@ -438,9 +441,10 @@ public class OperatorParser {
     static OperatorNode parseDefined(Parser parser, LexerToken token, int currentIndex) {
         Node operand;
         // Handle 'defined' operator with special parsing context
+        boolean parsingTakeReference = parser.parsingTakeReference;
         parser.parsingTakeReference = true;    // don't call `&subr` while parsing "Take reference"
         operand = ListParser.parseZeroOrOneList(parser, 0);
-        parser.parsingTakeReference = false;
+        parser.parsingTakeReference = parsingTakeReference;
         if (((ListNode) operand).elements.isEmpty()) {
             // `defined` without arguments means `defined $_`
             ((ListNode) operand).elements.add(
