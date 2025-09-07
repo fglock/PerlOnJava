@@ -363,11 +363,15 @@ public class OperatorParser {
     }
 
     static OperatorNode parseKeys(Parser parser, LexerToken token, int currentIndex) {
+        String operator = token.text;
         Node operand;
         // Handle operators with a single operand
         operand = ParsePrimary.parsePrimary(parser);
-        operand = ensureOneOperand(parser, token, operand);
-        return new OperatorNode(token.text, operand, currentIndex);
+        // scalar() can have more operands if they are inside parenthesis
+        if (!operator.equals("scalar")) {
+            operand = ensureOneOperand(parser, token, operand);
+        }
+        return new OperatorNode(operator, operand, currentIndex);
     }
 
     public static Node ensureOneOperand(Parser parser, LexerToken token, Node operand) {
