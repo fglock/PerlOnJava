@@ -323,7 +323,7 @@ public class SprintfFormatParser {
             // Check for vector formats FIRST (before %n check)
             if (spec.vectorFlag) {
                 // Vector flag is only valid with certain conversions
-                String validVectorConversions = "diouxXbBs";
+                String validVectorConversions = "diouxXbB";  // Remove 's'
                 System.err.println("DEBUG: Checking vector conversion '" + spec.conversionChar +
                       "' in '" + validVectorConversions + "'");
                 if (validVectorConversions.indexOf(spec.conversionChar) < 0) {
