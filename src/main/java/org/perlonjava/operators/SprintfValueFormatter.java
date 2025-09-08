@@ -86,19 +86,14 @@ public class SprintfValueFormatter {
     }
 
     /**
-     * Format a vector string (used with %v flag).
-     *
-     * <p>Vector formatting treats the input as a sequence of values (bytes or numbers)
-     * and formats each one according to the conversion specifier, joining them
-     * with dots. This method delegates to the SprintfVectorFormatter.
-     *
-     * @param value      The value to format as a vector
-     * @param flags      Format flags
-     * @param width      Field width
-     * @param precision  Precision for each vector element
-     * @param conversionChar Conversion character
-     * @return The formatted vector string
+     * Format a vector string with custom separator.
      */
+    public String formatVectorString(RuntimeScalar value, String flags, int width,
+                                     int precision, char conversionChar, String separator) {
+        return vectorFormatter.formatVectorString(value, flags, width, precision, conversionChar, separator);
+    }
+
+    // Keep original method for default separator
     public String formatVectorString(RuntimeScalar value, String flags, int width,
                                      int precision, char conversionChar) {
         return vectorFormatter.formatVectorString(value, flags, width, precision, conversionChar);

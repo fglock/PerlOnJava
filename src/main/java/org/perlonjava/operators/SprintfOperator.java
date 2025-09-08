@@ -51,8 +51,18 @@ public class SprintfOperator {
                 charsWritten += literal.length();
             } else if (element instanceof SprintfFormatParser.FormatSpecifier spec) {
                 if (spec.conversionChar == 'n') {
-                    // Handle %n specially - store chars written in the target variable
+                    // %n doesn't produce output, but does consume an argument
                     handlePercentN(spec, list, argIndex);
+
+                    // Update argument index
+                    if (spec.parameterIndex == null) {
+                        argIndex++;  // %n does consume an argument
+                        if (spec.widthFromArg && spec.widthArgIndex == null) argIndex++;
+                        if (spec.precisionFromArg && spec.precisionArgIndex == null) argIndex++;
+                    }
+
+                    // Don't add anything to result or charsWritten
+                    continue;  // Skip to next format element
                 } else {
                     String formatted = processFormatSpecifier(spec, list, argIndex, formatter);
                     result.append(formatted);
@@ -96,12 +106,15 @@ public class SprintfOperator {
 
         // Handle %% - literal percent sign
         if (spec.conversionChar == '%') {
+            if (spec.widthFromArg) {
+                FormatArguments args = extractFormatArguments(spec, list, argIndex);
+                // Consume the width argument but still return %
+            }
             return "%";
         }
 
-        // Check if conversion character is missing (e.g., "%2" without 'd' or 's')
+        // Check if conversion character is missing
         if (spec.conversionChar == '\0') {
-            // Treat as invalid format
             return handleInvalidSpecifier(spec);
         }
 
@@ -120,6 +133,44 @@ public class SprintfOperator {
 
         // Get the value to format
         RuntimeScalar value = (RuntimeScalar) list.elements.get(args.valueArgIndex);
+
+        // For vector formats with %*v, we need special handling
+        if (spec.vectorFlag && spec.widthFromArg) {
+            // In %*vd, the * is the separator, not width!
+            String separator = ".";
+            int sepArgIndex;
+
+            if (spec.widthArgIndex != null) {
+                sepArgIndex = spec.widthArgIndex - 1;
+            } else {
+                sepArgIndex = argIndex;
+                // Note: argIndex will be updated by the caller based on consumed args
+            }
+
+            if (sepArgIndex < list.size()) {
+                separator = ((RuntimeScalar) list.elements.get(sepArgIndex)).toString();
+            }
+
+            // For %*v formats, we need to get the value from the correct position
+            int actualValueIndex;
+            if (spec.parameterIndex != null) {
+                actualValueIndex = spec.parameterIndex - 1;
+            } else {
+                // Skip past the separator argument
+                actualValueIndex = argIndex + 1;
+            }
+
+            if (actualValueIndex >= list.size()) {
+                return handleMissingArgument(spec, args);
+            }
+
+            // Update value to the correct argument
+            value = (RuntimeScalar) list.elements.get(actualValueIndex);
+
+            // Format with custom separator (width is 0 for %*v formats)
+            return formatter.formatVectorString(value, spec.flags, 0,
+                    args.precision, spec.conversionChar, separator);
+        }
 
         // Format the value using the appropriate formatter
         if (spec.vectorFlag) {
@@ -307,7 +358,7 @@ public class SprintfOperator {
                 int prec = args.precision >= 0 ? args.precision : 6;
                 yield String.format("%." + prec + "f", 0.0);
             }
-            case 'g', 'G' -> args.precision == 0 ? "0" : "0";
+            case 'g', 'G' -> "0";
             case 'd', 'i', 'u', 'o', 'x', 'X' -> "0";
             case 's' -> "";
             case 'c' -> "\0";
