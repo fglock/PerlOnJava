@@ -56,8 +56,8 @@ public class SprintfValueFormatter {
         return switch (conversion) {
             // Numeric conversions - delegate to numeric formatter
             case 'd', 'i' -> numericFormatter.formatInteger(value.getLong(), flags, width, precision, 10, false);
-            case 'u', 'U' -> numericFormatter.formatUnsigned(value, flags, width, precision);
-            case 'o', 'O' -> numericFormatter.formatOctal(value.getLong(), flags, width, precision);
+            case 'u' -> numericFormatter.formatUnsigned(value, flags, width, precision);
+            case 'o' -> numericFormatter.formatOctal(value.getLong(), flags, width, precision);
             case 'x' -> numericFormatter.formatHex(value.getLong(), flags, width, precision, false);
             case 'X' -> numericFormatter.formatHex(value.getLong(), flags, width, precision, true);
             case 'b', 'B' -> numericFormatter.formatBinary(value.getLong(), flags, width, precision, conversion);
@@ -71,8 +71,10 @@ public class SprintfValueFormatter {
             case 'p' -> formatPointer(value);
             case 'n' -> throw new PerlCompilerException("%n specifier not supported");
 
-            // Legacy uppercase D (same as %ld in Perl)
+            // Uppercase variants (synonyms)
             case 'D' -> numericFormatter.formatInteger(value.getLong(), flags, width, precision, 10, false);
+            case 'O' -> numericFormatter.formatOctal(value.getLong(), flags, width, precision);
+            case 'U' -> numericFormatter.formatUnsigned(value, flags, width, precision);
 
             default -> {
                 // For any other character, it's an invalid conversion

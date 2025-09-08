@@ -27,7 +27,10 @@ public class SprintfOperator {
      * @param list          The list of elements to be formatted
      * @return A RuntimeScalar containing the formatted string
      */
+    private static int charsWritten = 0;
+
     public static RuntimeScalar sprintf(RuntimeScalar runtimeScalar, RuntimeList list) {
+        charsWritten = 0;  // Reset counter
         // Expand the list to ensure all elements are available
         list = new RuntimeList((RuntimeBase) list);
         String format = runtimeScalar.toString();
@@ -43,21 +46,37 @@ public class SprintfOperator {
 
         for (Object element : parsed.elements) {
             if (element instanceof String) {
-                // Literal text - append directly
-                result.append((String) element);
+                String literal = (String) element;
+                result.append(literal);
+                charsWritten += literal.length();
             } else if (element instanceof SprintfFormatParser.FormatSpecifier spec) {
-                // Process format specifier
-                String formatted = processFormatSpecifier(spec, list, argIndex, formatter);
-                result.append(formatted);
+                if (spec.conversionChar == 'n') {
+                    // Handle %n specially - store chars written in the target variable
+                    handlePercentN(spec, list, argIndex);
+                } else {
+                    String formatted = processFormatSpecifier(spec, list, argIndex, formatter);
+                    result.append(formatted);
+                    charsWritten += formatted.length();
 
-                // Update argument index if not using positional parameters
-                if (spec.parameterIndex == null && spec.conversionChar != '%') {
-                    argIndex = updateArgIndex(spec, argIndex);
+                    // Update argument index if not using positional parameters
+                    if (spec.parameterIndex == null && spec.conversionChar != '%') {
+                        argIndex = updateArgIndex(spec, argIndex);
+                    }
                 }
             }
         }
 
         return new RuntimeScalar(result.toString());
+    }
+
+    private static void handlePercentN(SprintfFormatParser.FormatSpecifier spec,
+                                       RuntimeList list, int argIndex) {
+        int targetIndex = spec.parameterIndex != null ? spec.parameterIndex - 1 : argIndex;
+        if (targetIndex < list.size()) {
+            RuntimeScalar target = (RuntimeScalar) list.elements.get(targetIndex);
+            // In Perl, %n modifies the original variable, not a copy
+            target.set(new RuntimeScalar(charsWritten));
+        }
     }
 
     /**
@@ -135,11 +154,18 @@ public class SprintfOperator {
 
         // Process width
         if (spec.widthFromArg) {
-            int widthArgIndex = determineArgIndex(spec.widthArgIndex,
-                    spec.parameterIndex, currentArgIndex);
-
-            // Only increment if we're not using positional parameters
-            if (spec.parameterIndex == null || !spec.parameterIndex.equals(widthArgIndex + 1)) {
+            int widthArgIndex;
+            if (spec.widthArgIndex != null) {
+                // Explicit index like %*2$d
+                widthArgIndex = spec.widthArgIndex - 1;
+            } else if (spec.parameterIndex != null) {
+                // When we have %2$*d, the width comes from the current position
+                widthArgIndex = currentArgIndex;
+                currentArgIndex++;
+                args.consumedArgs++;
+            } else {
+                // Regular %*d - width comes from current position
+                widthArgIndex = currentArgIndex;
                 currentArgIndex++;
                 args.consumedArgs++;
             }
@@ -147,7 +173,7 @@ public class SprintfOperator {
             if (widthArgIndex < list.size()) {
                 args.width = ((RuntimeScalar) list.elements.get(widthArgIndex)).getInt();
                 if (args.width < 0) {
-                    spec.flags += "-";  // Negative width means left-align
+                    spec.flags += "-";
                     args.width = -args.width;
                 }
             } else {
@@ -160,11 +186,18 @@ public class SprintfOperator {
 
         // Process precision
         if (spec.precisionFromArg) {
-            int precArgIndex = determineArgIndex(spec.precisionArgIndex,
-                    spec.parameterIndex, currentArgIndex);
-
-            // Only increment if we're not using positional parameters
-            if (spec.parameterIndex == null || !spec.parameterIndex.equals(precArgIndex + 1)) {
+            int precArgIndex;
+            if (spec.precisionArgIndex != null) {
+                // Explicit index like %.*2$d
+                precArgIndex = spec.precisionArgIndex - 1;
+            } else if (spec.parameterIndex != null) {
+                // When we have %2$.*d, precision comes from current position
+                precArgIndex = currentArgIndex;
+                currentArgIndex++;
+                args.consumedArgs++;
+            } else {
+                // Regular %.*d - precision comes from current position
+                precArgIndex = currentArgIndex;
                 currentArgIndex++;
                 args.consumedArgs++;
             }
@@ -183,8 +216,11 @@ public class SprintfOperator {
         }
 
         // Determine value argument index
-        args.valueArgIndex = spec.parameterIndex != null ?
-                spec.parameterIndex - 1 : currentArgIndex + args.consumedArgs;
+        if (spec.parameterIndex != null) {
+            args.valueArgIndex = spec.parameterIndex - 1;
+        } else {
+            args.valueArgIndex = argIndex + args.consumedArgs;
+        }
 
         return args;
     }

@@ -1,5 +1,7 @@
 package org.perlonjava.operators;
 
+import org.perlonjava.runtime.NameNormalizer;
+import org.perlonjava.runtime.RuntimeHash;
 import org.perlonjava.runtime.RuntimeScalar;
 
 /**
@@ -39,6 +41,14 @@ public class SprintfVectorFormatter {
      */
     public String formatVectorString(RuntimeScalar value, String flags, int width,
                                    int precision, char conversionChar) {
+        // Handle version objects specially
+        if (value.blessId != 0 && NameNormalizer.getBlessStr(value.blessId).equals("version")) {
+            // Convert version object to string representation
+            RuntimeHash versionObj = value.hashDeref();
+            String versionStr = versionObj.get("version").toString();
+            return formatVersionVector(versionStr, flags, width, precision, conversionChar);
+        }
+
         String str = value.toString();
 
         // Handle version objects or dotted numeric strings

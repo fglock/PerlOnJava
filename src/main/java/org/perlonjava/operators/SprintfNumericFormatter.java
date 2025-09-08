@@ -72,7 +72,7 @@ public class SprintfNumericFormatter {
     public String formatInteger(long value, String flags, int width, int precision,
                                int base, boolean usePrefix) {
         String result;
-        boolean negative = value < 0 && base == 10; // Only apply sign for decimal
+        boolean negative = value < 0 && base == 10;
         long absValue = negative ? -value : value;
 
         // For non-decimal bases, treat as unsigned
@@ -127,7 +127,12 @@ public class SprintfNumericFormatter {
         }
 
         // Apply width with appropriate padding
-        return SprintfPaddingHelper.applyWidth(result, width, flags);
+        // IMPORTANT: If precision was specified, remove '0' flag
+        String widthFlags = flags;
+        if (precision >= 0 && widthFlags.contains("0")) {
+            widthFlags = widthFlags.replace("0", "");
+        }
+        return SprintfPaddingHelper.applyWidth(result, width, widthFlags);
     }
 
     /**
