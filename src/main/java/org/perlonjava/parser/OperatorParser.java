@@ -397,12 +397,12 @@ public class OperatorParser {
     }
 
     static OperatorNode parseUnpack(Parser parser, LexerToken token) {
-        Node operand;
+        ListNode operand;
         // Handle 'unpack' operator with one mandatory and one optional argument
         operand = ListParser.parseZeroOrMoreList(parser, 1, false, true, false, false);
-        if (((ListNode) operand).elements.size() == 1) {
+        if (operand.elements.size() == 1) {
             // Create `$_` variable if only one argument is provided
-            ((ListNode) operand).elements.add(
+            operand.elements.add(
                     ParserNodeUtils.scalarUnderscore(parser)
             );
         }
@@ -439,15 +439,15 @@ public class OperatorParser {
     }
 
     static OperatorNode parseDefined(Parser parser, LexerToken token, int currentIndex) {
-        Node operand;
+        ListNode operand;
         // Handle 'defined' operator with special parsing context
         boolean parsingTakeReference = parser.parsingTakeReference;
         parser.parsingTakeReference = true;    // don't call `&subr` while parsing "Take reference"
         operand = ListParser.parseZeroOrOneList(parser, 0);
         parser.parsingTakeReference = parsingTakeReference;
-        if (((ListNode) operand).elements.isEmpty()) {
+        if (operand.elements.isEmpty()) {
             // `defined` without arguments means `defined $_`
-            ((ListNode) operand).elements.add(
+            operand.elements.add(
                     ParserNodeUtils.scalarUnderscore(parser)
             );
         }
@@ -533,13 +533,13 @@ public class OperatorParser {
     }
 
     static BinaryOperatorNode parseSplit(Parser parser, LexerToken token, int currentIndex) {
-        Node operand;
+        ListNode operand;
         // Handle 'split' operator with special handling for separator
         operand = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, true);
         Node separator =
-                ((ListNode) operand).elements.isEmpty()
+                operand.elements.isEmpty()
                         ? new StringNode(" ", currentIndex)
-                        : ((ListNode) operand).elements.removeFirst();
+                        : operand.elements.removeFirst();
         if (separator instanceof OperatorNode) {
             if (((OperatorNode) separator).operator.equals("matchRegex")) {
                 ((OperatorNode) separator).operator = "quoteRegex";
@@ -550,10 +550,10 @@ public class OperatorParser {
 
     static BinaryOperatorNode parseJoin(Parser parser, LexerToken token, String operatorName, int currentIndex) {
         Node separator;
-        Node operand;
+        ListNode operand;
         // Handle operators with a RuntimeList operand
         operand = ListParser.parseZeroOrMoreList(parser, 1, false, true, false, false);
-        separator = ((ListNode) operand).elements.removeFirst();
+        separator = operand.elements.removeFirst();
 
         if (token.text.equals("push") || token.text.equals("unshift")) {
             // assert that separator is an array
@@ -618,20 +618,20 @@ public class OperatorParser {
     }
 
     static BinaryOperatorNode parseBinmodeOperator(Parser parser, LexerToken token, int currentIndex) {
-        Node operand;
+        ListNode operand;
         // Handle 'binmode' operator with a FileHandle and List operands
         Node handle;
         operand = ListParser.parseZeroOrMoreList(parser, 1, false, true, false, false);
-        handle = ((ListNode) operand).elements.removeFirst();
+        handle = operand.elements.removeFirst();
         return new BinaryOperatorNode(token.text, handle, operand, currentIndex);
     }
 
     static BinaryOperatorNode parseSeek(Parser parser, LexerToken token, int currentIndex) {
-        Node operand;
+        ListNode operand;
         Node handle;
         // Handle 'seek' operator with a FileHandle and List operands
         operand = ListParser.parseZeroOrMoreList(parser, 3, false, true, false, false);
-        handle = ((ListNode) operand).elements.removeFirst();
+        handle = operand.elements.removeFirst();
         return new BinaryOperatorNode(token.text, handle, operand, currentIndex);
     }
 

@@ -18,6 +18,8 @@ import org.perlonjava.runtime.RuntimeScalar;
  */
 public class SprintfOperator {
 
+    private static int charsWritten = 0;
+
     /**
      * Formats the elements according to the specified format string.
      * <p>
@@ -32,8 +34,6 @@ public class SprintfOperator {
      * @param list          The list of elements to be formatted
      * @return A RuntimeScalar containing the formatted string
      */
-    private static int charsWritten = 0;
-
     public static RuntimeScalar sprintf(RuntimeScalar runtimeScalar, RuntimeList list) {
         charsWritten = 0;  // Reset counter
         // Expand the list to ensure all elements are available
@@ -116,14 +116,14 @@ public class SprintfOperator {
      *
      * @param spec      The parsed format specifier
      * @param list      The argument list
-     * @param argIndex  Current argument index
+     * @param sepArgIndex  Current argument index
      * @param formatter The value formatter instance
      * @return The formatted string
      */
     private static String processFormatSpecifier(
             FormatSpecifier spec,
             RuntimeList list,
-            int argIndex,
+            int sepArgIndex,
             SprintfValueFormatter formatter) {
 
         // System.err.println("DEBUG processFormatSpecifier: raw='" + spec.raw + "', isValid=" + spec.isValid + ", errorMessage=" + spec.errorMessage);
@@ -136,7 +136,7 @@ public class SprintfOperator {
         // Handle %% - literal percent sign
         if (spec.conversionChar == '%') {
             if (spec.widthFromArg) {
-                FormatArguments args = extractFormatArguments(spec, list, argIndex);
+                FormatArguments args = extractFormatArguments(spec, list, sepArgIndex);
                 // Consume the width argument but still return %
             }
             return "%";
@@ -148,7 +148,7 @@ public class SprintfOperator {
         }
 
         // Process width, precision, and value arguments
-        FormatArguments args = extractFormatArguments(spec, list, argIndex);
+        FormatArguments args = extractFormatArguments(spec, list, sepArgIndex);
 
         // Check for missing value argument
         if (args.valueArgIndex >= list.size()) {
@@ -164,7 +164,6 @@ public class SprintfOperator {
             if (spec.widthFromArg && spec.raw.matches(".*\\*v.*")) {
                 // %*v format - * is for separator
                 String separator = ".";
-                int sepArgIndex = argIndex;
 
                 if (sepArgIndex < list.size()) {
                     separator = list.elements.get(sepArgIndex).toString();
