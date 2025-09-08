@@ -103,7 +103,8 @@ public class SprintfOperator {
                         }
 
                         if (widthArgIndex >= list.size()) {
-                            result.append(" MISSING");
+                            WarnDie.warn(new RuntimeScalar("Missing argument in sprintf"), new RuntimeScalar(""));
+                            width = 0;  // Use default width
                             continue;
                         }
                         width = ((RuntimeScalar) list.elements.get(widthArgIndex)).getInt();
@@ -128,7 +129,8 @@ public class SprintfOperator {
                         }
 
                         if (precArgIndex >= list.size()) {
-                            result.append(" MISSING");
+                            WarnDie.warn(new RuntimeScalar("Missing argument in sprintf"), new RuntimeScalar(""));
+                            precision = -1;  // Use default precision
                             continue;
                         }
                         precision = ((RuntimeScalar) list.elements.get(precArgIndex)).getInt();
@@ -150,16 +152,13 @@ public class SprintfOperator {
                     if (valueArgIndex >= list.size()) {
                         // Generate warning
                         WarnDie.warn(new RuntimeScalar("Missing argument in sprintf"), new RuntimeScalar(""));
-                        
+
                         // Append appropriate default value directly to result
                         if (spec.conversionChar == 'f' || spec.conversionChar == 'F') {
-                            if (spec.precision >= 0) {
-                                result.append(String.format("%." + spec.precision + "f", 0.0));
-                            } else {
-                                result.append("0.000000");  // Default precision is 6
-                            }
+                            int prec = (spec.precision != null) ? spec.precision : 6;  // Default precision is 6
+                            result.append(String.format("%." + prec + "f", 0.0));
                         } else if (spec.conversionChar == 'g' || spec.conversionChar == 'G') {
-                            if (spec.precision == 0) {
+                            if (spec.precision != null && spec.precision == 0) {
                                 result.append("0");
                             } else {
                                 result.append("0");  // %g removes trailing zeros
@@ -200,11 +199,32 @@ public class SprintfOperator {
                                 precision, spec.conversionChar);
                     }
                     result.append(formatted);
-
                 } catch (Exception e) {
-                    // Reset arg index and append error
+                    // Reset arg index and generate warning
                     argIndex = savedArgIndex;
-                    result.append(" MISSING");
+                    WarnDie.warn(new RuntimeScalar("Missing argument in sprintf"), new RuntimeScalar(""));
+
+                    // Append appropriate default value based on spec.conversionChar
+                    if (spec.conversionChar == 'f' || spec.conversionChar == 'F') {
+                        int prec = (spec.precision != null) ? spec.precision : 6;  // Default 6
+                        result.append(String.format("%." + prec + "f", 0.0));
+                    } else if (spec.conversionChar == 'g' || spec.conversionChar == 'G') {
+                        if (spec.precision != null && spec.precision == 0) {
+                            result.append("0");
+                        } else {
+                            result.append("0");  // %g removes trailing zeros
+                        }
+                    } else if (spec.conversionChar == 'd' || spec.conversionChar == 'i' ||
+                               spec.conversionChar == 'u' || spec.conversionChar == 'o' ||
+                               spec.conversionChar == 'x' || spec.conversionChar == 'X') {
+                        result.append("0");
+                    } else if (spec.conversionChar == 's') {
+                        result.append("");  // Empty string for %s
+                    } else if (spec.conversionChar == 'c') {
+                        result.append("\0");  // Null character for %c
+                    } else {
+                        result.append("");  // Default empty
+                    }
                 }
             }
         }
