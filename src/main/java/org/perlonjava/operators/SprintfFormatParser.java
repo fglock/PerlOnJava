@@ -143,44 +143,62 @@ public class SprintfFormatParser {
             }
 
             // 2.5 Parse vector flag if it appears after flags
+            boolean vectorParsedWithWidth = false;
             if (!isAtEnd() && current() == 'v') {
                 spec.vectorFlag = true;
                 advance();
-            }
 
-            // 3. Parse width (and handle %*v formats)
-            if (!spec.vectorFlag && match('*')) {
-                // Could be regular width or %*v format
-                if (!isAtEnd() && current() == 'v') {
-                    // This is %*v format - * is for custom separator
-                    spec.vectorFlag = true;
-                    spec.widthFromArg = true;  // Means "has custom separator"
-                    advance(); // consume 'v'
-
-                    // Now check for width after %*v
-                    if (match('*')) {
-                        // %*v*d format
-                        spec.precisionFromArg = true; // HACK: means second *
-                    } else {
+                // After 'v', parse any width specification
+                if (!isAtEnd()) {
+                    if (current() == '0' && Character.isDigit(peek(1))) {
+                        // Zero-padded width like %v02d
+                        spec.flags += '0';
+                        advance();
                         spec.width = parseNumber();
-                    }
-                } else {
-                    // Regular * for width
-                    spec.widthFromArg = true;
-                    checkpoint = pos;
-                    Integer widthParam = parseNumber();
-                    if (widthParam != null && match('$')) {
-                        spec.widthArgIndex = widthParam;
-                    } else {
-                        pos = checkpoint;
+                        vectorParsedWithWidth = true;
+                    } else if (Character.isDigit(current())) {
+                        // Regular width like %v3d
+                        spec.width = parseNumber();
+                        vectorParsedWithWidth = true;
                     }
                 }
-            } else if (spec.vectorFlag && match('*')) {
-                // %v*d format - * is for width
-                spec.widthFromArg = true;
-                // Don't set precisionFromArg here
-            } else {
-                spec.width = parseNumber();
+            }
+
+            // 3. Parse width (skip if already parsed with vector flag)
+            if (!vectorParsedWithWidth) {
+                if (!spec.vectorFlag && match('*')) {
+                    // Could be regular width or %*v format
+                    if (!isAtEnd() && current() == 'v') {
+                        // This is %*v format - * is for custom separator
+                        spec.vectorFlag = true;
+                        spec.widthFromArg = true;  // Means "has custom separator"
+                        advance(); // consume 'v'
+
+                        // Now check for width after %*v
+                        if (match('*')) {
+                            // %*v*d format
+                            spec.precisionFromArg = true; // HACK: means second *
+                        } else {
+                            spec.width = parseNumber();
+                        }
+                    } else {
+                        // Regular * for width
+                        spec.widthFromArg = true;
+                        checkpoint = pos;
+                        Integer widthParam = parseNumber();
+                        if (widthParam != null && match('$')) {
+                            spec.widthArgIndex = widthParam;
+                        } else {
+                            pos = checkpoint;
+                        }
+                    }
+                } else if (spec.vectorFlag && match('*')) {
+                    // %v*d format - * is for width
+                    spec.widthFromArg = true;
+                } else if (!spec.vectorFlag) {
+                    // Only parse numeric width if we haven't parsed vector flag yet
+                    spec.width = parseNumber();
+                }
             }
 
             // Check for spaces in the format (invalid)
@@ -198,6 +216,7 @@ public class SprintfFormatParser {
             }
 
             // 4. Parse precision
+
             if (match('.')) {
                 // Check for space after dot
                 if (!isAtEnd() && current() == ' ') {

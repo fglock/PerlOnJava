@@ -146,9 +146,13 @@ public class SprintfVectorFormatter {
             // For vector formats, + and space flags only apply to first element
             String elementFlags = flags;
             if (i > 0) {
-                // Remove + and space flags for non-first elements
                 elementFlags = flags.replace("+", "").replace(" ", "");
             }
+
+            // Debug: print what we're passing to formatVectorValue
+            System.err.println("DEBUG formatByteVector: value=" + value +
+                         ", flags='" + elementFlags + "', width=" + width +
+                         ", precision=" + precision + ", conv=" + conversionChar);
 
             String formatted = formatVectorValue(value, elementFlags, width, precision, conversionChar);
             result.append(formatted);
@@ -172,26 +176,96 @@ public class SprintfVectorFormatter {
      */
     private String formatVectorValue(int byteValue, String flags, int width, int precision,
                                char conversionChar) {
+        // First format the base value
         String formatted = switch (conversionChar) {
-            case 'd', 'i' -> formatVectorDecimal(byteValue, flags);
-            case 'o' -> formatVectorOctal(byteValue, flags);
-            case 'x' -> formatVectorHex(byteValue, flags, false);
-            case 'X' -> formatVectorHex(byteValue, flags, true);
-            case 'b', 'B' -> formatVectorBinary(byteValue, flags, conversionChar);
+            case 'd', 'i' -> String.valueOf(byteValue);
+            case 'o' -> Integer.toOctalString(byteValue);
+            case 'x' -> Integer.toHexString(byteValue);
+            case 'X' -> Integer.toHexString(byteValue).toUpperCase();
+            case 'b', 'B' -> Integer.toBinaryString(byteValue);
             default -> String.valueOf(byteValue);
         };
 
-        // Apply precision first
-        formatted = SprintfPaddingHelper.applyVectorPrecision(formatted, precision, flags);
-
-        // For vector formats, if precision is specified, ignore the '0' flag
-        String widthFlags = flags;
-        if (precision >= 0 && flags.contains("0")) {
-            widthFlags = flags.replace("0", "");
+        // Handle precision 0 with value 0
+        if (precision == 0 && byteValue == 0 && "diouxXbB".indexOf(conversionChar) >= 0) {
+            formatted = "";
+            // But for octal with # flag, it's "0"
+            if (conversionChar == 'o' && flags.contains("#")) {
+                formatted = "0";
+            }
+        } else if (precision > 0) {
+            // Apply precision (minimum digits)
+            if (formatted.length() < precision) {
+                formatted = "0".repeat(precision - formatted.length()) + formatted;
+            }
         }
 
-        // Then apply width to the individual element
-        return SprintfPaddingHelper.applyWidth(formatted, width, widthFlags);
+        // Apply prefixes ONLY for non-zero values
+        if (flags.contains("#") && byteValue != 0) {  // Check original value, not formatted string
+            switch (conversionChar) {
+                case 'o':
+                    if (!formatted.startsWith("0")) {
+                        formatted = "0" + formatted;
+                    }
+                    break;
+                case 'x':
+                    formatted = "0x" + formatted;
+                    break;
+                case 'X':
+                    formatted = "0X" + formatted;
+                    break;
+                case 'b':
+                    formatted = "0b" + formatted;
+                    break;
+                case 'B':
+                    formatted = "0B" + formatted;
+                    break;
+            }
+        }
+        // Note: NO prefix for zero values even with # flag (except octal special case above)
+
+        // Apply sign flags for decimal
+        if ((conversionChar == 'd' || conversionChar == 'i') && byteValue >= 0) {
+            if (flags.contains("+")) {
+                formatted = "+" + formatted;
+            } else if (flags.contains(" ")) {
+                formatted = " " + formatted;
+            }
+        }
+
+        // Apply width with appropriate padding
+        if (width > 0 && formatted.length() < width) {
+            if (flags.contains("-")) {
+                // Left align
+                formatted = formatted + " ".repeat(width - formatted.length());
+            } else if (flags.contains("0") && precision < 0) {
+                // Zero pad (only if no precision specified)
+                // Need to handle signs and prefixes
+                String prefix = "";
+                String number = formatted;
+
+                // Extract prefix
+                if (formatted.startsWith("+") || formatted.startsWith("-") || formatted.startsWith(" ")) {
+                    prefix = formatted.substring(0, 1);
+                    number = formatted.substring(1);
+                } else if (formatted.startsWith("0x") || formatted.startsWith("0X") ||
+                           formatted.startsWith("0b") || formatted.startsWith("0B")) {
+                    prefix = formatted.substring(0, 2);
+                    number = formatted.substring(2);
+                }
+
+                // Apply zero padding
+                int padWidth = width - prefix.length() - number.length();
+                if (padWidth > 0) {
+                    formatted = prefix + "0".repeat(padWidth) + number;
+                }
+            } else {
+                // Space pad
+                formatted = " ".repeat(width - formatted.length()) + formatted;
+            }
+        }
+
+        return formatted;
     }
 
     /**
