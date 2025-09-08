@@ -1,8 +1,7 @@
 package org.perlonjava.operators;
 
-import org.perlonjava.runtime.NameNormalizer;
-import org.perlonjava.runtime.RuntimeHash;
-import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.perlmodule.Version;
+import org.perlonjava.runtime.*;
 
 /**
  * Handles vector string formatting for sprintf operations.
@@ -41,15 +40,16 @@ public class SprintfVectorFormatter {
             RuntimeScalar originalScalar = versionObj.get("original");
             if (originalScalar.getDefinedBoolean()) {
                 String originalStr = originalScalar.toString();
-                // System.err.println("DEBUG: Version object detected, using original: " + originalStr);
 
-                // If original starts with 'v', it's a v-string format
-                if (originalStr.startsWith("v")) {
-                    // Remove the 'v' and format as version vector
-                    return formatVersionVector(originalStr.substring(1), flags, width, precision, conversionChar, separator);
-                } else {
-                    // It's a decimal version string
+                // For version objects created with version->new(), use the original
+                // This preserves the exact format (e.g., "1.2" not "1.2.0")
+                if (originalStr.matches("\\d+(\\.\\d+)*")) {
                     return formatVersionVector(originalStr, flags, width, precision, conversionChar, separator);
+                }
+
+                // For v-strings (e.g., "v1.2.3"), remove the 'v'
+                if (originalStr.startsWith("v")) {
+                    return formatVersionVector(originalStr.substring(1), flags, width, precision, conversionChar, separator);
                 }
             }
         }
