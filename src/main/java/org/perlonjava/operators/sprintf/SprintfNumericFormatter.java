@@ -1,7 +1,7 @@
-package org.perlonjava.operators;
+package org.perlonjava.operators.sprintf;
 
-import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.runtime.PerlCompilerException;
+import org.perlonjava.runtime.RuntimeScalar;
 
 /**
  * Handles numeric formatting for sprintf operations.
@@ -30,9 +30,9 @@ public class SprintfNumericFormatter {
      *   <li>-Inf for negative infinity</li>
      * </ul>
      *
-     * @param value The double value to check and format
-     * @param flags Format flags (may include + for sign)
-     * @param width Field width for padding
+     * @param value      The double value to check and format
+     * @param flags      Format flags (may include + for sign)
+     * @param width      Field width for padding
      * @param conversion The conversion character (throws error for 'c')
      * @return The formatted special value string
      * @throws PerlCompilerException if trying to format special value with %c
@@ -70,7 +70,7 @@ public class SprintfNumericFormatter {
      * @return The formatted string
      */
     public String formatInteger(long value, String flags, int width, int precision,
-                               int base, boolean usePrefix) {
+                                int base, boolean usePrefix) {
         String result;
         boolean negative = value < 0 && base == 10;
         long absValue = negative ? -value : value;
@@ -141,9 +141,9 @@ public class SprintfNumericFormatter {
      * <p>Treats the value as unsigned, using Long.toUnsignedString for conversion.
      * This is used for %u and %U format specifiers.
      *
-     * @param value The value to format as unsigned
-     * @param flags Format flags
-     * @param width Field width
+     * @param value     The value to format as unsigned
+     * @param flags     Format flags
+     * @param width     Field width
      * @param precision Minimum digits
      * @return The formatted unsigned integer string
      */
@@ -175,9 +175,9 @@ public class SprintfNumericFormatter {
      * <p>Formats the value in base 8. The + and space flags are removed
      * as they don't apply to octal formatting.
      *
-     * @param value The value to format as octal
-     * @param flags Format flags (+ and space are ignored)
-     * @param width Field width
+     * @param value     The value to format as octal
+     * @param flags     Format flags (+ and space are ignored)
+     * @param width     Field width
      * @param precision Minimum digits
      * @return The formatted octal string
      */
@@ -194,9 +194,9 @@ public class SprintfNumericFormatter {
      * as they don't apply to hexadecimal formatting. The uppercase parameter
      * determines whether to use uppercase letters (A-F) or lowercase (a-f).
      *
-     * @param value The value to format as hexadecimal
-     * @param flags Format flags (+ and space are ignored)
-     * @param width Field width
+     * @param value     The value to format as hexadecimal
+     * @param flags     Format flags (+ and space are ignored)
+     * @param width     Field width
      * @param precision Minimum digits
      * @param uppercase Whether to use uppercase letters
      * @return The formatted hexadecimal string
@@ -219,10 +219,10 @@ public class SprintfNumericFormatter {
      *
      * <p>Formats the value in base 2. The # flag adds a 0b or 0B prefix.
      *
-     * @param value The value to format as binary
-     * @param flags Format flags
-     * @param width Field width
-     * @param precision Minimum digits
+     * @param value      The value to format as binary
+     * @param flags      Format flags
+     * @param width      Field width
+     * @param precision  Minimum digits
      * @param conversion 'b' for lowercase prefix, 'B' for uppercase
      * @return The formatted binary string
      */
@@ -271,15 +271,15 @@ public class SprintfNumericFormatter {
      *   <li>%a, %A - Hexadecimal floating-point</li>
      * </ul>
      *
-     * @param value The floating-point value to format
-     * @param flags Format flags
-     * @param width Field width
-     * @param precision Decimal places (default 6 if not specified)
+     * @param value      The floating-point value to format
+     * @param flags      Format flags
+     * @param width      Field width
+     * @param precision  Decimal places (default 6 if not specified)
      * @param conversion The conversion character
      * @return The formatted floating-point string
      */
     public String formatFloatingPoint(double value, String flags, int width,
-                                     int precision, char conversion) {
+                                      int precision, char conversion) {
         if (precision < 0) {
             precision = 6;  // Default precision for floating point
         }
@@ -320,15 +320,15 @@ public class SprintfNumericFormatter {
      * # flag is specified. With the # flag, trailing zeros are kept and a
      * decimal point is always included.
      *
-     * @param value The value to format
-     * @param flags Format flags (# flag handled specially)
-     * @param width Field width
-     * @param precision Significant digits
+     * @param value      The value to format
+     * @param flags      Format flags (# flag handled specially)
+     * @param width      Field width
+     * @param precision  Significant digits
      * @param conversion 'g' or 'G'
      * @return The formatted string
      */
     private String formatGFloatingPoint(double value, String flags, int width,
-                                      int precision, char conversion) {
+                                        int precision, char conversion) {
         boolean useAlternateForm = flags.contains("#");
         String cleanFlags = flags.replace("#", ""); // Remove # flag for Java's formatter
 
@@ -366,7 +366,7 @@ public class SprintfNumericFormatter {
      *   <li>Trailing zeros are added to match the precision</li>
      * </ul>
      *
-     * @param result The initial formatted string
+     * @param result    The initial formatted string
      * @param precision The desired precision
      * @return The string with alternate form applied
      */

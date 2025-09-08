@@ -127,7 +127,7 @@ public class StringParser {
 
             // Then treat each UTF-8 byte as a separate character/octet
             for (byte b : utf8Bytes) {
-                octetString.append((char)(b & 0xFF));
+                octetString.append((char) (b & 0xFF));
             }
 
             buffers.add(octetString.toString());

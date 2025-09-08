@@ -280,7 +280,7 @@ public class StringOperators {
         }
 
         // For invalid code points, use replacement character
-        return new RuntimeScalar(String.valueOf((char)0xFFFD));
+        return new RuntimeScalar(String.valueOf((char) 0xFFFD));
     }
 
     public static RuntimeScalar join(RuntimeScalar runtimeScalar, RuntimeBase list) {

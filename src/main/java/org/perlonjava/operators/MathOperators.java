@@ -1,6 +1,5 @@
 package org.perlonjava.operators;
 
-import org.perlonjava.parser.NumberParser;
 import org.perlonjava.runtime.*;
 
 import static org.perlonjava.runtime.RuntimeScalarCache.*;

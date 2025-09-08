@@ -14,19 +14,29 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
  */
 public class ScalarGlobOperator {
 
-    /** Map storing glob operator instances by their unique ID for state management */
+    /**
+     * Map storing glob operator instances by their unique ID for state management
+     */
     private static final Map<Integer, ScalarGlobOperator> globOperators = new HashMap<>();
 
-    /** Counter for generating unique operator IDs */
+    /**
+     * Counter for generating unique operator IDs
+     */
     public static Integer currentId = 0;
 
-    /** Iterator over the current glob results */
+    /**
+     * Iterator over the current glob results
+     */
     private Iterator<String> iterator;
 
-    /** The current pattern being processed */
+    /**
+     * The current pattern being processed
+     */
     private String currentPattern;
 
-    /** Flag indicating if the iterator has been exhausted */
+    /**
+     * Flag indicating if the iterator has been exhausted
+     */
     private boolean isExhausted = false;
 
     /**
@@ -45,9 +55,9 @@ public class ScalarGlobOperator {
      * <p>In scalar context, returns one result at a time, maintaining state
      * between calls. In list context, returns all matching results at once.</p>
      *
-     * @param id the unique identifier for this glob operator instance
+     * @param id         the unique identifier for this glob operator instance
      * @param patternArg the glob pattern as a RuntimeScalar
-     * @param ctx the runtime context (scalar or list)
+     * @param ctx        the runtime context (scalar or list)
      * @return RuntimeBase containing the results
      */
     public static RuntimeBase evaluate(int id, RuntimeScalar patternArg, int ctx) {
@@ -106,7 +116,7 @@ public class ScalarGlobOperator {
      * Performs glob matching for a single pattern.
      *
      * @param scalarGlobOperator
-     * @param pattern the glob pattern to match
+     * @param pattern            the glob pattern to match
      * @return list of matching file paths
      */
     static List<String> globSinglePattern(ScalarGlobOperator scalarGlobOperator, String pattern) {
@@ -171,23 +181,6 @@ public class ScalarGlobOperator {
         // Sort results and remove duplicates
         results = new ArrayList<>(new TreeSet<>(results));
         this.iterator = results.iterator();
-    }
-
-    /**
-     * Holds path components after parsing.
-     */
-    private static class PathComponents {
-        final File baseDir;
-        final String filePattern;
-        final boolean hasDirectory;
-        final String directoryPart;
-
-        PathComponents(File baseDir, String filePattern, boolean hasDirectory, String directoryPart) {
-            this.baseDir = baseDir;
-            this.filePattern = filePattern;
-            this.hasDirectory = hasDirectory;
-            this.directoryPart = directoryPart;
-        }
     }
 
     /**
@@ -290,6 +283,12 @@ public class ScalarGlobOperator {
             // Pattern has no directory separators - return just filename
             return fileName;
         }
+    }
+
+    /**
+         * Holds path components after parsing.
+         */
+        private record PathComponents(File baseDir, String filePattern, boolean hasDirectory, String directoryPart) {
     }
 
 }

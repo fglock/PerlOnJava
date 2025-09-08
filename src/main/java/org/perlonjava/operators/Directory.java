@@ -5,7 +5,10 @@ import org.perlonjava.runtime.*;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.*;
+import java.nio.file.DirectoryStream;
+import java.nio.file.FileSystems;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermission;
 import java.util.HashSet;
 import java.util.Set;
@@ -66,7 +69,7 @@ public class Directory {
         try {
             // Close existing directory stream if present
             if ((dirHandle.type == RuntimeScalarType.GLOB || dirHandle.type == RuntimeScalarType.GLOBREFERENCE)
-                && dirHandle.value instanceof RuntimeGlob glob) {
+                    && dirHandle.value instanceof RuntimeGlob glob) {
                 RuntimeIO existingIO = glob.getRuntimeIO();
                 if (existingIO != null && existingIO.directoryIO != null) {
                     if (existingIO.directoryIO.directoryStream != null) {

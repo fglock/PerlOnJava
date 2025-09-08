@@ -2,11 +2,14 @@ package org.perlonjava.operators;
 
 import com.sun.jna.Platform;
 import org.perlonjava.nativ.PosixLibrary;
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.PerlCompilerException;
+import org.perlonjava.runtime.RuntimeBase;
+import org.perlonjava.runtime.RuntimeList;
+import org.perlonjava.runtime.RuntimeScalar;
 
 /**
  * Native implementation of Perl's umask operator using JNA
- *
+ * <p>
  * This implementation provides direct access to the system umask:
  * - On POSIX systems: Uses native umask() system call
  * - On Windows: Simulates umask behavior (Windows has no umask concept)
@@ -17,11 +20,9 @@ public class UmaskOperator {
 
     // Default umask value (022 = no write permission for group/others)
     private static final int DEFAULT_UMASK = 022;
-
+    private static final boolean IS_WINDOWS = Platform.isWindows();
     // Windows simulation of umask (thread-safe)
     private static volatile int windowsSimulatedUmask = DEFAULT_UMASK;
-
-    private static final boolean IS_WINDOWS = Platform.isWindows();
 
     /**
      * Implements Perl's umask operator
@@ -93,7 +94,7 @@ public class UmaskOperator {
 
     /**
      * Windows implementation (simulation since Windows has no umask)
-     *
+     * <p>
      * Windows uses ACLs instead of Unix permissions, so umask doesn't
      * directly apply. We simulate it for compatibility.
      */
@@ -180,29 +181,29 @@ public class UmaskOperator {
      * Convert permissions to symbolic notation considering umask
      *
      * @param permissions The full permissions
-     * @param umask The umask to apply
+     * @param umask       The umask to apply
      * @return String like "rwxr-xr-x"
      */
     public static String permissionsToString(int permissions, int umask) {
         int effective = permissions & ~umask;
-        StringBuilder sb = new StringBuilder(9);
 
         // Owner permissions
-        sb.append((effective & 0400) != 0 ? 'r' : '-');
-        sb.append((effective & 0200) != 0 ? 'w' : '-');
-        sb.append((effective & 0100) != 0 ? 'x' : '-');
 
-        // Group permissions
-        sb.append((effective & 040) != 0 ? 'r' : '-');
-        sb.append((effective & 020) != 0 ? 'w' : '-');
-        sb.append((effective & 010) != 0 ? 'x' : '-');
+        String sb = String.valueOf((effective & 0400) != 0 ? 'r' : '-') +
+                ((effective & 0200) != 0 ? 'w' : '-') +
+                ((effective & 0100) != 0 ? 'x' : '-') +
 
-        // Other permissions
-        sb.append((effective & 04) != 0 ? 'r' : '-');
-        sb.append((effective & 02) != 0 ? 'w' : '-');
-        sb.append((effective & 01) != 0 ? 'x' : '-');
+                // Group permissions
+                ((effective & 040) != 0 ? 'r' : '-') +
+                ((effective & 020) != 0 ? 'w' : '-') +
+                ((effective & 010) != 0 ? 'x' : '-') +
 
-        return sb.toString();
+                // Other permissions
+                ((effective & 04) != 0 ? 'r' : '-') +
+                ((effective & 02) != 0 ? 'w' : '-') +
+                ((effective & 01) != 0 ? 'x' : '-');
+
+        return sb;
     }
 
     /**

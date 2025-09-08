@@ -4,7 +4,6 @@ import org.perlonjava.astnode.*;
 import org.perlonjava.codegen.ByteCodeSourceMapper;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
-import org.perlonjava.runtime.NameNormalizer;
 
 import java.util.List;
 
@@ -35,8 +34,7 @@ public class StatementResolver {
 
         if (token.type == LexerTokenType.IDENTIFIER) {
             Node result = switch (token.text) {
-                case "CHECK", "INIT", "UNITCHECK", "BEGIN", "END" ->
-                        SpecialBlockParser.parseSpecialBlock(parser);
+                case "CHECK", "INIT", "UNITCHECK", "BEGIN", "END" -> SpecialBlockParser.parseSpecialBlock(parser);
 
                 case "AUTOLOAD", "DESTROY" -> {
                     parser.tokenIndex++;
@@ -49,28 +47,23 @@ public class StatementResolver {
                     yield null;
                 }
 
-                case "if", "unless" ->
-                        StatementParser.parseIfStatement(parser);
+                case "if", "unless" -> StatementParser.parseIfStatement(parser);
 
-                case "for", "foreach" ->
-                        StatementParser.parseForStatement(parser, label);
+                case "for", "foreach" -> StatementParser.parseForStatement(parser, label);
 
-                case "while", "until" ->
-                        StatementParser.parseWhileStatement(parser, label);
+                case "while", "until" -> StatementParser.parseWhileStatement(parser, label);
 
                 case "try" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("try")
                         ? StatementParser.parseTryStatement(parser)
                         : null;
 
-                case "package" ->
-                        StatementParser.parsePackageDeclaration(parser, token);
+                case "package" -> StatementParser.parsePackageDeclaration(parser, token);
 
                 case "class" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("class")
                         ? StatementParser.parsePackageDeclaration(parser, token)
                         : null;
 
-                case "use", "no" ->
-                        StatementParser.parseUseDeclaration(parser, token);
+                case "use", "no" -> StatementParser.parseUseDeclaration(parser, token);
 
                 case "sub" -> {
                     parser.tokenIndex++;
@@ -195,10 +188,10 @@ public class StatementResolver {
                     Node modifierExpression = parser.parseExpression(0);
                     parseStatementTerminator(parser);
                     yield new BlockNode(
-                                        List.of(
-                                                new OperatorNode("local", scalarUnderscore(parser), parser.tokenIndex),
-                                                new For1Node(null, false, scalarUnderscore(parser), modifierExpression, expression, null, parser.tokenIndex)
-                                        ), parser.tokenIndex);
+                            List.of(
+                                    new OperatorNode("local", scalarUnderscore(parser), parser.tokenIndex),
+                                    new For1Node(null, false, scalarUnderscore(parser), modifierExpression, expression, null, parser.tokenIndex)
+                            ), parser.tokenIndex);
                 }
 
                 case "while", "until" -> {

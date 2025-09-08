@@ -6,7 +6,8 @@ import com.sun.jna.platform.win32.WinNT;
 import com.sun.jna.platform.win32.Wincon;
 import org.perlonjava.nativ.NativeUtils;
 import org.perlonjava.nativ.PosixLibrary;
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.RuntimeBase;
+import org.perlonjava.runtime.RuntimeScalar;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 
@@ -17,6 +18,7 @@ public class KillOperator {
 
     /**
      * Send a signal to a process (following Perl's kill operator)
+     *
      * @param args RuntimeBase array: [signal, pid1, pid2, ...]
      * @return RuntimeScalar with count of successfully signaled processes
      */
@@ -151,39 +153,71 @@ public class KillOperator {
         }
 
         switch (name) {
-            case "HUP":    return 1;
-            case "INT":    return 2;
-            case "QUIT":   return 3;
-            case "ILL":    return 4;
-            case "TRAP":   return 5;
-            case "ABRT":   return 6;
-            case "BUS":    return 7;
-            case "FPE":    return 8;
-            case "KILL":   return 9;
-            case "USR1":   return 10;
-            case "SEGV":   return 11;
-            case "USR2":   return 12;
-            case "PIPE":   return 13;
-            case "ALRM":   return 14;
-            case "TERM":   return 15;
-            case "STKFLT": return 16;
-            case "CHLD":   return 17;
-            case "CONT":   return 18;
-            case "STOP":   return 19;
-            case "TSTP":   return 20;
-            case "TTIN":   return 21;
-            case "TTOU":   return 22;
-            case "URG":    return 23;
-            case "XCPU":   return 24;
-            case "XFSZ":   return 25;
-            case "VTALRM": return 26;
-            case "PROF":   return 27;
-            case "WINCH":  return 28;
+            case "HUP":
+                return 1;
+            case "INT":
+                return 2;
+            case "QUIT":
+                return 3;
+            case "ILL":
+                return 4;
+            case "TRAP":
+                return 5;
+            case "ABRT":
+                return 6;
+            case "BUS":
+                return 7;
+            case "FPE":
+                return 8;
+            case "KILL":
+                return 9;
+            case "USR1":
+                return 10;
+            case "SEGV":
+                return 11;
+            case "USR2":
+                return 12;
+            case "PIPE":
+                return 13;
+            case "ALRM":
+                return 14;
+            case "TERM":
+                return 15;
+            case "STKFLT":
+                return 16;
+            case "CHLD":
+                return 17;
+            case "CONT":
+                return 18;
+            case "STOP":
+                return 19;
+            case "TSTP":
+                return 20;
+            case "TTIN":
+                return 21;
+            case "TTOU":
+                return 22;
+            case "URG":
+                return 23;
+            case "XCPU":
+                return 24;
+            case "XFSZ":
+                return 25;
+            case "VTALRM":
+                return 26;
+            case "PROF":
+                return 27;
+            case "WINCH":
+                return 28;
             case "IO":
-            case "POLL":   return 29;
-            case "PWR":    return 30;
-            case "SYS":    return 31;
-            default:       return -1;
+            case "POLL":
+                return 29;
+            case "PWR":
+                return 30;
+            case "SYS":
+                return 31;
+            default:
+                return -1;
         }
     }
 

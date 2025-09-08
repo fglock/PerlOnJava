@@ -6,9 +6,9 @@ import org.perlonjava.runtime.GlobalVariable;
 import org.perlonjava.runtime.RuntimeIO;
 import org.perlonjava.runtime.RuntimeScalar;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.HashSet;
 
 public class DataSection {
 
@@ -20,7 +20,7 @@ public class DataSection {
     /**
      * Creates or updates a DATA filehandle for a package.
      *
-     * @param parser the parser instance
+     * @param parser  the parser instance
      * @param content the content after __DATA__ or __END__
      */
     public static void createDataHandle(Parser parser, String content) {

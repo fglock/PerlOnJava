@@ -9,8 +9,10 @@ import java.util.Map;
  * Handles the mapping of operators to their corresponding method implementations.
  * This class provides a mechanism to associate operators with specific methods
  * in designated classes, allowing for dynamic operator handling.
+ *
+ * @param methodType Opcodes.INVOKESTATIC
  */
-public class OperatorHandler {
+public record OperatorHandler(String className, String methodName, int methodType, String descriptor) {
     static Map<String, OperatorHandler> operatorHandlers = new HashMap<>();
 
     // Static block to initialize operator handlers
@@ -256,11 +258,6 @@ public class OperatorHandler {
 
     }
 
-    private final String className;
-    private final String methodName;
-    private final int methodType; // Opcodes.INVOKESTATIC
-    private final String descriptor;
-
     /**
      * Constructs an OperatorHandler with the specified class name, method name, method type, and descriptor.
      *
@@ -269,11 +266,7 @@ public class OperatorHandler {
      * @param methodType The type of method invocation (e.g., INVOKESTATIC).
      * @param descriptor The method descriptor indicating the method signature.
      */
-    public OperatorHandler(String className, String methodName, int methodType, String descriptor) {
-        this.className = className;
-        this.methodName = methodName;
-        this.methodType = methodType;
-        this.descriptor = descriptor;
+    public OperatorHandler {
     }
 
     /**
@@ -322,7 +315,8 @@ public class OperatorHandler {
      *
      * @return The class name.
      */
-    public String getClassName() {
+    @Override
+    public String className() {
         return className;
     }
 
@@ -331,7 +325,8 @@ public class OperatorHandler {
      *
      * @return The method name.
      */
-    public String getMethodName() {
+    @Override
+    public String methodName() {
         return methodName;
     }
 
@@ -340,7 +335,8 @@ public class OperatorHandler {
      *
      * @return The method type.
      */
-    public int getMethodType() {
+    @Override
+    public int methodType() {
         return methodType;
     }
 
@@ -349,7 +345,8 @@ public class OperatorHandler {
      *
      * @return The method descriptor.
      */
-    public String getDescriptor() {
+    @Override
+    public String descriptor() {
         return descriptor;
     }
 
@@ -368,7 +365,7 @@ public class OperatorHandler {
      * Gets the return type descriptor from this handler's method descriptor.
      *
      * @return The return type class name with semicolon (e.g., "RuntimeScalar;"),
-     *         or null if return type cannot be determined
+     * or null if return type cannot be determined
      */
     public String getReturnTypeDescriptor() {
         if (descriptor == null) {

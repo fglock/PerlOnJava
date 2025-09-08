@@ -1,7 +1,9 @@
 package org.perlonjava.operators.unpack;
 
 import org.perlonjava.operators.UnpackState;
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.RuntimeBase;
+import org.perlonjava.runtime.RuntimeScalar;
+
 import java.nio.ByteBuffer;
 import java.util.List;
 
@@ -220,7 +222,7 @@ public abstract class NumericFormatHandler implements FormatHandler {
                 }
                 long value = 0;
                 for (int j = 0; j < 4; j++) {
-                    value |= (long)(buffer.get() & 0xFF) << (j * 8);
+                    value |= (long) (buffer.get() & 0xFF) << (j * 8);
                 }
                 output.add(new RuntimeScalar(value));
             }

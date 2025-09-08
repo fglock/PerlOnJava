@@ -212,7 +212,7 @@ public class Pack {
         if (valueIndex >= values.size()) {
             throw new PerlCompilerException("pack: not enough arguments");
         }
-        RuntimeScalar value = (RuntimeScalar) values.get(valueIndex++);
+        RuntimeScalar value = values.get(valueIndex++);
         String str = value.toString();
         if (hasStar) {
             // For string formats with *, use the string length as count

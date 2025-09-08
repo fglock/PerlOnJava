@@ -1,10 +1,11 @@
-package org.perlonjava.operators;
+package org.perlonjava.operators.sprintf;
 
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.PerlCompilerException;
+import org.perlonjava.runtime.RuntimeScalar;
 
 /**
  * Main formatter for sprintf operations.
- *
+ * <p>
  * This class serves as the primary dispatcher for formatting values according to
  * sprintf format specifiers. It delegates numeric formatting to SprintfNumericFormatter
  * and vector formatting to SprintfVectorFormatter.
@@ -22,10 +23,14 @@ import org.perlonjava.runtime.*;
  */
 public class SprintfValueFormatter {
 
-    /** Formatter instance for numeric conversions */
+    /**
+     * Formatter instance for numeric conversions
+     */
     private final SprintfNumericFormatter numericFormatter = new SprintfNumericFormatter();
 
-    /** Formatter instance for vector conversions */
+    /**
+     * Formatter instance for vector conversions
+     */
     private final SprintfVectorFormatter vectorFormatter = new SprintfVectorFormatter();
 
     /**
@@ -139,9 +144,9 @@ public class SprintfValueFormatter {
      * <p>Applies precision (truncation) and width formatting to the string.
      * Precision specifies the maximum number of characters to include.
      *
-     * @param value The string value to format
-     * @param flags Format flags
-     * @param width Field width
+     * @param value     The string value to format
+     * @param flags     Format flags
+     * @param width     Field width
      * @param precision Maximum characters to include (-1 for no limit)
      * @return The formatted string
      */

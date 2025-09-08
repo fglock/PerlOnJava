@@ -430,16 +430,12 @@ public class NumberParser {
                     if (specialEnd < end) {
                         // Check for valid NaN extensions
                         String remaining = str.substring(specialEnd, end);
-                        if (remaining.matches("^[qQsS]?$") ||
-                            remaining.matches("^[qQsS]?\\(\\d+\\)$") ||
-                            remaining.matches("^[qQsS]?\\(0x[0-9a-fA-F]+\\)$") ||
-                            remaining.matches("^\\(\\d+\\)$") ||
-                            remaining.matches("^\\(0x[0-9a-fA-F]+\\)$")) {
-                            // Valid NaN extensions, no warning
-                            shouldWarn = false;
-                        } else {
-                            shouldWarn = true;
-                        }
+                        // Valid NaN extensions, no warning
+                        shouldWarn = !remaining.matches("^[qQsS]?$") &&
+                                !remaining.matches("^[qQsS]?\\(\\d+\\)$") &&
+                                !remaining.matches("^[qQsS]?\\(0x[0-9a-fA-F]+\\)$") &&
+                                !remaining.matches("^\\(\\d+\\)$") &&
+                                !remaining.matches("^\\(0x[0-9a-fA-F]+\\)$");
                     }
                 }
                 // Check for Inf
@@ -462,7 +458,7 @@ public class NumberParser {
             if (result == null && end - start >= 4) {
                 String upperStr = str.substring(start, Math.min(end, start + 5)).toUpperCase();
                 if (upperStr.startsWith("QNAN") || upperStr.startsWith("SNAN") ||
-                    upperStr.startsWith("NANQ") || upperStr.startsWith("NANS")) {
+                        upperStr.startsWith("NANQ") || upperStr.startsWith("NANS")) {
                     result = new RuntimeScalar(Double.NaN);
                     specialEnd = start + 4;
                     if (specialEnd < end) {
@@ -569,7 +565,7 @@ public class NumberParser {
                     warnStr = warnStr.substring(1);
                 }
                 WarnDie.warn(new RuntimeScalar("Argument \"" + warnStr + "\" isn't numeric"),
-                           RuntimeScalarCache.scalarEmptyString);
+                        RuntimeScalarCache.scalarEmptyString);
             }
         }
 
@@ -579,25 +575,10 @@ public class NumberParser {
 
     /**
      * Represents a number format with its specific parsing rules
+     *
+     * @param usesBinaryExponent true for binary/octal, false for hex
      */
-    private static class NumberFormat {
-        final int radix;
-        final Predicate<String> digitValidator;
-        final Function<String, Long> integerParser;
-        final Function<String, Double> fractionalParser;
-        final boolean usesBinaryExponent; // true for binary/octal, false for hex
-        final String name;
-
-        NumberFormat(int radix, Predicate<String> digitValidator,
-                     Function<String, Long> integerParser,
-                     Function<String, Double> fractionalParser,
-                     boolean usesBinaryExponent, String name) {
-            this.radix = radix;
-            this.digitValidator = digitValidator;
-            this.integerParser = integerParser;
-            this.fractionalParser = fractionalParser;
-            this.usesBinaryExponent = usesBinaryExponent;
-            this.name = name;
-        }
+        private record NumberFormat(int radix, Predicate<String> digitValidator, Function<String, Long> integerParser,
+                                    Function<String, Double> fractionalParser, boolean usesBinaryExponent, String name) {
     }
 }

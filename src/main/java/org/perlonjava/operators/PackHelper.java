@@ -259,10 +259,10 @@ public class PackHelper {
     /**
      * Writes a string to the output stream based on the specified format and count.
      *
-     * @param output        The ByteArrayOutputStream to write to.
-     * @param str           The string to write.
-     * @param count         The number of characters to write.
-     * @param format        The format character indicating the string type.
+     * @param output   The ByteArrayOutputStream to write to.
+     * @param str      The string to write.
+     * @param count    The number of characters to write.
+     * @param format   The format character indicating the string type.
      * @param byteMode Whether we're in character mode (C0) or byte mode (U0)
      */
     static void writeString(ByteArrayOutputStream output, String str, int count, char format, boolean byteMode) {

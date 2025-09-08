@@ -31,7 +31,7 @@ public class WarnDie {
     }
 
     /**
-     *  Catches the exception in an eval-block
+     * Catches the exception in an eval-block
      */
     public static RuntimeScalar catchEval(Exception e) {
         e = unwrapException(e);
@@ -132,8 +132,8 @@ public class WarnDie {
      * in the global %SIG hash under the "__DIE__" key, it will be invoked with the
      * error message. Otherwise, a PerlCompilerException is thrown.
      *
-     * @param message   The error message to be issued.
-     * @param where     Additional context or location information to append to the message.
+     * @param message The error message to be issued.
+     * @param where   Additional context or location information to append to the message.
      * @return A RuntimeBase representing the result of the die operation.
      * @throws PerlCompilerException if no custom die handler is defined.
      */

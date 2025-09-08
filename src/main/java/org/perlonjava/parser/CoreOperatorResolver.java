@@ -5,7 +5,6 @@ import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.PerlCompilerException;
 
-import static org.perlonjava.parser.NumberParser.parseNumber;
 import static org.perlonjava.parser.ParserTables.CORE_PROTOTYPES;
 import static org.perlonjava.parser.PrototypeArgs.consumeArgsWithPrototype;
 import static org.perlonjava.parser.TokenUtils.consume;
@@ -68,13 +67,16 @@ public class CoreOperatorResolver {
             case "unpack" -> OperatorParser.parseUnpack(parser, token);
             case "bless" -> OperatorParser.parseBless(parser, currentIndex);
             case "split" -> OperatorParser.parseSplit(parser, token, currentIndex);
-            case "push", "unshift", "join", "sprintf" -> OperatorParser.parseJoin(parser, token, operatorName, currentIndex);
+            case "push", "unshift", "join", "sprintf" ->
+                    OperatorParser.parseJoin(parser, token, operatorName, currentIndex);
             case "sort" -> ParseMapGrepSort.parseSort(parser, token);
             case "map", "grep", "all", "any" -> ParseMapGrepSort.parseMapGrep(parser, token);
             case "pack" -> OperatorParser.parsePack(parser, token, currentIndex);
-            case "chomp", "chop", "reverse", "splice", "unlink", "mkdir", "die", "warn" -> OperatorParser.parseReverse(parser, token, currentIndex);
+            case "chomp", "chop", "reverse", "splice", "unlink", "mkdir", "die", "warn" ->
+                    OperatorParser.parseReverse(parser, token, currentIndex);
             case "system", "exec" -> OperatorParser.parseSystem(parser, token, currentIndex);
-            case "readline", "eof", "tell", "fileno", "truncate" -> OperatorParser.parseReadline(parser, token, currentIndex);
+            case "readline", "eof", "tell", "fileno", "truncate" ->
+                    OperatorParser.parseReadline(parser, token, currentIndex);
             case "binmode" -> OperatorParser.parseBinmodeOperator(parser, token, currentIndex);
             case "seek" -> OperatorParser.parseSeek(parser, token, currentIndex);
             case "printf", "print", "say" -> OperatorParser.parsePrint(parser, token, currentIndex);
@@ -91,11 +93,12 @@ public class CoreOperatorResolver {
             case "require" -> OperatorParser.parseRequire(parser);
             case "sub" -> SubroutineParser.parseSubroutineDefinition(parser, false, null);
             case "method" -> {
-                    Node node = SubroutineParser.parseSubroutineDefinition(parser, false, null);
-                    node.setAnnotation("isMethod", true);
-                    yield node;
+                Node node = SubroutineParser.parseSubroutineDefinition(parser, false, null);
+                node.setAnnotation("isMethod", true);
+                yield node;
             }
-            case "q", "qq", "qx", "qw", "qr", "tr", "y", "s", "m" -> OperatorParser.parseSpecialQuoted(parser, token, startIndex);
+            case "q", "qq", "qx", "qw", "qr", "tr", "y", "s", "m" ->
+                    OperatorParser.parseSpecialQuoted(parser, token, startIndex);
             case "dump", "format", "dbmclose", "dbmopen" ->
                     throw new PerlCompilerException(parser.tokenIndex, "Not implemented: operator: " + token.text, parser.ctx.errorUtil);
             case "accept", "bind", "connect", "getpeername", "getsockname", "getsockopt",

@@ -88,10 +88,10 @@ public class ParsePrimary {
      *   <li>Subroutine calls: defaults to parsing as a subroutine call</li>
      * </ul>
      *
-     * @param parser The parser instance
+     * @param parser     The parser instance
      * @param startIndex The token index where this identifier started
-     * @param token The identifier token being parsed
-     * @param operator The text of the identifier (same as token.text)
+     * @param token      The identifier token being parsed
+     * @param operator   The text of the identifier (same as token.text)
      * @return A Node representing the parsed identifier construct
      * @throws PerlCompilerException if CORE:: is used with a non-keyword
      */
@@ -207,8 +207,8 @@ public class ParsePrimary {
      *   <li>Special constructs: <<heredoc, diamond operator <></li>
      * </ul>
      *
-     * @param parser The parser instance
-     * @param token The operator token being parsed
+     * @param parser   The parser instance
+     * @param token    The operator token being parsed
      * @param operator The operator text (same as token.text)
      * @return A Node representing the parsed operator construct
      * @throws PerlCompilerException if the operator is not recognized or used incorrectly
@@ -356,7 +356,7 @@ public class ParsePrimary {
         }
 
         if (hasParenthesis) {
-            TokenUtils.consume(parser, LexerTokenType.OPERATOR,")");
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
         }
 
         return new OperatorNode(operator, operand, parser.tokenIndex);

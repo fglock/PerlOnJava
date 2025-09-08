@@ -75,11 +75,11 @@ public class StringDoubleQuoted extends StringSegmentParser {
      *
      * <p>Use {@link #parseDoubleQuotedString} factory method to create instances.
      *
-     * @param ctx The emitter context for error reporting
-     * @param tokens The tokenized string content
-     * @param parser The parser instance for complex expressions
-     * @param tokenIndex The starting token position
-     * @param isRegex True if parsing regex pattern (affects interpolation)
+     * @param ctx          The emitter context for error reporting
+     * @param tokens       The tokenized string content
+     * @param parser       The parser instance for complex expressions
+     * @param tokenIndex   The starting token position
+     * @param isRegex      True if parsing regex pattern (affects interpolation)
      * @param parseEscapes True to process escape sequences, false to preserve them
      */
     private StringDoubleQuoted(EmitterContext ctx, List<LexerToken> tokens, Parser parser, int tokenIndex, boolean isRegex, boolean parseEscapes, boolean interpolateVariable, boolean isRegexReplacement) {
@@ -98,11 +98,11 @@ public class StringDoubleQuoted extends StringSegmentParser {
      *   <li>Delegating to the StringDoubleQuoted parser</li>
      * </ul>
      *
-     * @param ctx The emitter context for logging and error handling
-     * @param rawStr The parsed string data containing the string content and position info
-     * @param parseEscapes Whether to process escape sequences or preserve them literally
+     * @param ctx                 The emitter context for logging and error handling
+     * @param rawStr              The parsed string data containing the string content and position info
+     * @param parseEscapes        Whether to process escape sequences or preserve them literally
      * @param interpolateVariable Whether to interpolate variables
-     * @param isRegexReplacement Whether this is in a regex replacement context
+     * @param isRegexReplacement  Whether this is in a regex replacement context
      * @return An AST node representing the parsed string (StringNode, BinaryOperatorNode for join, etc.)
      */
     static Node parseDoubleQuotedString(EmitterContext ctx, StringParser.ParsedString rawStr, boolean parseEscapes, boolean interpolateVariable, boolean isRegexReplacement) {
@@ -115,12 +115,12 @@ public class StringDoubleQuoted extends StringSegmentParser {
      * <p>This overloaded version allows sharing heredoc nodes with a parent parser,
      * enabling proper handling of heredocs within string interpolation contexts.
      *
-     * @param ctx The emitter context for logging and error handling
-     * @param rawStr The parsed string data containing the string content and position info
-     * @param parseEscapes Whether to process escape sequences or preserve them literally
+     * @param ctx                 The emitter context for logging and error handling
+     * @param rawStr              The parsed string data containing the string content and position info
+     * @param parseEscapes        Whether to process escape sequences or preserve them literally
      * @param interpolateVariable Whether to interpolate variables
-     * @param isRegexReplacement Whether this is in a regex replacement context
-     * @param sharedHeredocNodes Optional list of heredoc nodes to share with parent parser
+     * @param isRegexReplacement  Whether this is in a regex replacement context
+     * @param sharedHeredocNodes  Optional list of heredoc nodes to share with parent parser
      * @return An AST node representing the parsed string (StringNode, BinaryOperatorNode for join, etc.)
      */
     static Node parseDoubleQuotedString(EmitterContext ctx, StringParser.ParsedString rawStr, boolean parseEscapes, boolean interpolateVariable, boolean isRegexReplacement, List<OperatorNode> sharedHeredocNodes) {
@@ -138,8 +138,8 @@ public class StringDoubleQuoted extends StringSegmentParser {
 
         // Create parser with shared heredoc nodes if provided
         var parser = sharedHeredocNodes != null ?
-            new Parser(ctx, tokens, sharedHeredocNodes) :
-            new Parser(ctx, tokens);
+                new Parser(ctx, tokens, sharedHeredocNodes) :
+                new Parser(ctx, tokens);
 
         // Create and run the double-quoted string parser
         var doubleQuotedParser = new StringDoubleQuoted(ctx, tokens, parser, tokenIndex, isRegex, parseEscapes, interpolateVariable, isRegexReplacement);
@@ -489,7 +489,7 @@ public class StringDoubleQuoted extends StringSegmentParser {
      *   <li>Validates that conflicting modifiers have content between them</li>
      * </ul>
      *
-     * @param type The modifier type ("U", "L", "u", or "l")
+     * @param type         The modifier type ("U", "L", "u", or "l")
      * @param isSingleChar True for \\u and \l (affect only next character)
      */
     private void startCaseModifier(String type, boolean isSingleChar) {
@@ -528,22 +528,30 @@ public class StringDoubleQuoted extends StringSegmentParser {
      * </ul>
      */
     private static class CaseModifier {
-        /** The modifier type: "U", "L", "u", "l", or "Q" */
+        /**
+         * The modifier type: "U", "L", "u", "l", or "Q"
+         */
         final String type;
 
-        /** True for \\u and \l (single character), false for \U, \L, and \Q (ranges) */
+        /**
+         * True for \\u and \l (single character), false for \U, \L, and \Q (ranges)
+         */
         final boolean isSingleChar;
 
-        /** List of segments affected by this modifier */
+        /**
+         * List of segments affected by this modifier
+         */
         final List<Node> segments = new ArrayList<>();
 
-        /** For single-char modifiers, tracks if they've modified anything yet */
+        /**
+         * For single-char modifiers, tracks if they've modified anything yet
+         */
         boolean hasAffectedContent = false;
 
         /**
          * Creates a new case modifier.
          *
-         * @param type The modifier type
+         * @param type         The modifier type
          * @param isSingleChar Whether this is a single-character modifier
          */
         CaseModifier(String type, boolean isSingleChar) {

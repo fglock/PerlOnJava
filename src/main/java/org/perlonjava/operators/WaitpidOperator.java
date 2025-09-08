@@ -1,10 +1,16 @@
 package org.perlonjava.operators;
 
-import com.sun.jna.*;
-import com.sun.jna.platform.win32.*;
+import com.sun.jna.LastErrorException;
+import com.sun.jna.Native;
+import com.sun.jna.Platform;
+import com.sun.jna.platform.win32.Kernel32;
+import com.sun.jna.platform.win32.WinBase;
+import com.sun.jna.platform.win32.WinNT;
 import com.sun.jna.ptr.IntByReference;
 import org.perlonjava.nativ.PosixLibrary;
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.RuntimeArray;
+import org.perlonjava.runtime.RuntimeBase;
+import org.perlonjava.runtime.RuntimeScalar;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -14,7 +20,7 @@ import static org.perlonjava.runtime.RuntimeContextType.SCALAR;
 
 /**
  * Native implementation of Perl's waitpid operator using JNA
- *
+ * <p>
  * - On POSIX systems: Uses native waitpid() system call
  * - On Windows: Uses Windows process APIs for equivalent functionality
  * - Properly retrieves exit codes and signal information
@@ -39,13 +45,30 @@ public class WaitpidOperator {
     private static final boolean IS_WINDOWS = Platform.isWindows();
 
     /**
+     * Clean up any remaining Windows handles on shutdown
+     */
+    static {
+        if (IS_WINDOWS) {
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                for (WinNT.HANDLE handle : windowsChildProcesses.values()) {
+                    try {
+                        Kernel32.INSTANCE.CloseHandle(handle);
+                    } catch (Exception ignored) {
+                    }
+                }
+                windowsChildProcesses.clear();
+            }));
+        }
+    }
+
+    /**
      * Implements Perl's waitpid operator using native system calls
      *
      * @param args RuntimeBase containing the PID to wait for; RuntimeBase containing wait flags
      * @return RuntimeScalar with:
-     *         - PID: if the specified process has terminated
-     *         - 0: if WNOHANG is set and process is still running
-     *         - -1: for error conditions
+     * - PID: if the specified process has terminated
+     * - 0: if WNOHANG is set and process is still running
+     * - -1: for error conditions
      */
     public static RuntimeScalar waitpid(int ctx, RuntimeBase... args) {
         var list = new RuntimeArray(args);
@@ -246,22 +269,5 @@ public class WaitpidOperator {
      */
     public static int getStopSignal(int status) {
         return (status >> 8) & 0xFF;
-    }
-
-    /**
-     * Clean up any remaining Windows handles on shutdown
-     */
-    static {
-        if (IS_WINDOWS) {
-            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                for (WinNT.HANDLE handle : windowsChildProcesses.values()) {
-                    try {
-                        Kernel32.INSTANCE.CloseHandle(handle);
-                    } catch (Exception ignored) {
-                    }
-                }
-                windowsChildProcesses.clear();
-            }));
-        }
     }
 }
