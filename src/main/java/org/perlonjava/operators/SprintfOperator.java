@@ -50,6 +50,14 @@ public class SprintfOperator {
                 result.append(literal);
                 charsWritten += literal.length();
             } else if (element instanceof SprintfFormatParser.FormatSpecifier spec) {
+                // Check if spec is invalid FIRST
+                if (!spec.isValid) {
+                    String formatted = processFormatSpecifier(spec, list, argIndex, formatter);
+                    result.append(formatted);
+                    charsWritten += formatted.length();
+                    continue;
+                }
+
                 if (spec.conversionChar == 'n') {
                     // %n doesn't produce output, but does consume an argument
                     handlePercentN(spec, list, argIndex);
@@ -70,7 +78,7 @@ public class SprintfOperator {
 
                     // Update argument index if not using positional parameters
                     // BUT don't update if the specifier was invalid
-                    if (spec.parameterIndex == null && spec.conversionChar != '%' && spec.isValid) {
+                    if (spec.parameterIndex == null && spec.conversionChar != '%') {
                         argIndex = updateArgIndex(spec, argIndex);
                     }
                 }
@@ -330,6 +338,8 @@ public class SprintfOperator {
      * Handle invalid format specifiers.
      */
     private static String handleInvalidSpecifier(SprintfFormatParser.FormatSpecifier spec) {
+        System.err.println("DEBUG handleInvalidSpecifier: raw='" + spec.raw +
+            "', errorMessage='" + spec.errorMessage + "'");
         String formatOnly = spec.raw;
         String trailing = "";
 
