@@ -68,7 +68,7 @@ public class SprintfValueFormatter {
             // String and character conversions - handle directly
             case 'c' -> formatCharacter(value, flags, width);
             case 's' -> formatString(value.toString(), flags, width, precision);
-            case 'p' -> formatPointer(value);
+            case 'p' -> formatPointer(value, flags);  // Add flags parameter
             case 'n' -> throw new PerlCompilerException("%n specifier not supported");
 
             // Uppercase variants (synonyms)
@@ -164,7 +164,11 @@ public class SprintfValueFormatter {
      * @param value The value to format as a pointer
      * @return The hexadecimal representation
      */
-    private String formatPointer(RuntimeScalar value) {
-        return String.format("%x", value.getLong());
+    private String formatPointer(RuntimeScalar value, String flags) {
+        String hex = String.format("%x", value.getLong());
+        if (flags.contains("#")) {
+            hex = "0x" + hex;
+        }
+        return hex;
     }
 }
