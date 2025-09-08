@@ -141,23 +141,29 @@ public class SprintfFormatParser {
                     break;
                 }
             }
+            // ADD THIS DEBUG LINE:
+            System.err.println("DEBUG: After flags: pos=" + pos + ", flags='" + spec.flags + "', next char='" + current() + "'");
 
-            // 2.5 Parse vector flag (MOVE IT HERE - right after flags!)
+            // 2.5 Parse vector flag (THIS IS CORRECT POSITION)
             if (!isAtEnd() && current() == 'v') {
                 spec.vectorFlag = true;
                 advance();
+                // ADD THIS DEBUG LINE:
+                System.err.println("DEBUG: Vector flag found, pos=" + pos + ", next char='" + current() + "'");
             }
 
-    // Check for spaces in the format (invalid)
-    int savePos = pos;
-    boolean hasInvalidSpace = false;
+            // 3. Parse width - SPECIAL HANDLING FOR VECTOR
+            if (spec.vectorFlag && match('*')) {
+                // For vector format, * means custom separator, not width!
+                spec.widthFromArg = true;  // Repurpose this to mean "custom separator"
 
-    // 3. Parse width
-    if (match('*')) {
-        spec.widthFromArg = true;
-        // Check for parameter index
-        checkpoint = pos;
-        Integer widthParam = parseNumber();
+                // Now parse the actual width if present
+                spec.width = parseNumber();  // This will parse the "2" in %*v2d
+            } else if (match('*')) {
+                spec.widthFromArg = true;
+                // Check for parameter index
+                checkpoint = pos;
+                Integer widthParam = parseNumber();
                 if (widthParam != null && match('$')) {
                     spec.widthArgIndex = widthParam;
                 } else {
@@ -165,7 +171,29 @@ public class SprintfFormatParser {
                 }
             } else {
                 spec.width = parseNumber();
+                // ADD THIS DEBUG LINE:
+                System.err.println("DEBUG: Width parsed: " + spec.width + ", pos=" + pos + ", next char='" + current() + "'");
             }
+
+            if (!isAtEnd() && current() == 'v') {
+                spec.vectorFlag = true;
+                advance();
+                System.err.println("DEBUG: Vector flag found after width, pos=" + pos);
+
+                // ADD THIS: For %*v formats, parse additional width
+                if (spec.widthFromArg) {
+                    // The * was for separator, now parse the actual width
+                    Integer width2 = parseNumber();
+                    if (width2 != null) {
+                        spec.width = width2;
+                        System.err.println("DEBUG: Parsed width after vector: " + spec.width);
+                    }
+                }
+            }
+
+            // Check for spaces in the format (invalid)
+            int savePos = pos;
+            boolean hasInvalidSpace = false;
 
             // Check for space after width
             if (!isAtEnd() && current() == ' ' && peek(1) != '\0') {
@@ -242,6 +270,8 @@ public class SprintfFormatParser {
 
             spec.endPos = pos;
             spec.raw = input.substring(spec.startPos, spec.endPos);
+            // ADD THIS DEBUG LINE:
+            System.err.println("DEBUG: spec.raw='" + spec.raw + "', vectorFlag=" + spec.vectorFlag + ", widthFromArg=" + spec.widthFromArg + ", conversionChar='" + spec.conversionChar + "'");
 
             // Mark as invalid if we found spaces in the format
             if (hasInvalidSpace) {
@@ -266,8 +296,15 @@ public class SprintfFormatParser {
             return null;
         }
 
-        void validateSpecifier(FormatSpecifier spec) {
-            //  System.err.println("DEBUG: Validating spec: " + spec.raw + ", lengthModifier: " + spec.lengthModifier);
+            void validateSpecifier(FormatSpecifier spec) {
+                // ADD THIS DEBUG LINE:
+                System.err.println("DEBUG: Validating spec: raw='" + spec.raw + "', vectorFlag=" + spec.vectorFlag + ", widthFromArg=" + spec.widthFromArg);
+            // Special case: %*v formats are valid
+            if (spec.vectorFlag && spec.widthFromArg) {
+                // This is a valid vector format with custom separator
+                // Don't run normal validations
+                return;
+            }
 
             // Check if we have no conversion character (e.g., %L, %V, %h, %l, %q, %z, %t)
             if (spec.conversionChar == '\0') {
@@ -276,11 +313,15 @@ public class SprintfFormatParser {
                 return;
             }
 
-            // Allow * with vector flag (it's for custom separator)
-            if (spec.vectorFlag && spec.widthFromArg) {
-                // This is valid - * provides the separator
-                // Don't mark as invalid
-                return;
+            // Check for vector formats BEFORE other validations
+            if (spec.vectorFlag) {
+                // Vector flag is only valid with certain conversions
+                String validVectorConversions = "diouxXbBs";
+                if (validVectorConversions.indexOf(spec.conversionChar) < 0) {
+                    spec.isValid = false;
+                    spec.errorMessage = "INVALID";
+                    return;
+                }
             }
 
             if ("V".equals(spec.lengthModifier)) {
@@ -386,15 +427,13 @@ public class SprintfFormatParser {
         }
 
         void validateFlags(FormatSpecifier spec) {
+            // Skip flag validation for vector formats with custom separator
+            if (spec.vectorFlag && spec.widthFromArg) {
+                return;  // %*v formats are special - don't validate flags
+            }
+
             // + and space flags are ignored for unsigned conversions
             boolean isUnsigned = "uUoOxXbB".indexOf(spec.conversionChar) >= 0;
-
-//            // For %c, # flag is invalid
-//            if (spec.conversionChar == 'c' && spec.flags.contains("#")) {
-//                spec.isValid = false;
-//                spec.errorMessage = "INVALID";
-//                return;
-//            }
 
             // Space flag with certain conversions
             if (spec.flags.contains(" ")) {

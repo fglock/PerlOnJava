@@ -34,7 +34,6 @@ public class SprintfVectorFormatter {
         // Handle version objects specially
         if (value.blessId != 0 && NameNormalizer.getBlessStr(value.blessId).equals("version")) {
             RuntimeHash versionObj = value.hashDeref();
-            // Get the internal version string, not the stringified form
             String versionStr = versionObj.get("version").toString();
             return formatVersionVector(versionStr, flags, width, precision, conversionChar, separator);
         }
@@ -43,11 +42,11 @@ public class SprintfVectorFormatter {
 
         // Handle version objects or dotted numeric strings
         if (str.matches("\\d+(\\.\\d+)*")) {
-            return formatVersionVector(str, flags, width, precision, conversionChar);
+            return formatVersionVector(str, flags, width, precision, conversionChar, separator);
         }
 
         // Handle regular strings (byte-by-byte)
-        return formatByteVector(str, flags, width, precision, conversionChar);
+        return formatByteVector(str, flags, width, precision, conversionChar, separator);
     }
 
     // Keep the original method for backward compatibility
@@ -109,18 +108,16 @@ public class SprintfVectorFormatter {
      * @return The formatted byte vector
      */
     private String formatByteVector(String str, String flags, int width,
-                                  int precision, char conversionChar) {
+                                  int precision, char conversionChar, String separator) {
         if (str.isEmpty()) return "";
 
         StringBuilder result = new StringBuilder();
 
-        // CHANGE: Use code points instead of bytes
         int[] codePoints = str.codePoints().toArray();
 
         for (int i = 0; i < codePoints.length; i++) {
-            if (i > 0) result.append(".");
+            if (i > 0) result.append(separator);
 
-            // Use the code point value directly
             int value = codePoints[i];
             String formatted = formatVectorValue(value, flags, width, precision, conversionChar);
             result.append(formatted);
@@ -173,11 +170,11 @@ public class SprintfVectorFormatter {
     private String formatVectorDecimal(int byteValue, String flags) {
         String formatted = String.valueOf(byteValue);
 
-        // Apply sign flags for positive numbers
-        if (flags.contains("+") && byteValue >= 0) {
-            formatted = "+" + formatted;
-        } else if (flags.contains(" ") && byteValue >= 0) {
-            formatted = " " + formatted;
+        // Apply sign flags for ALL numbers (not just positive)
+        if (flags.contains("+")) {
+            formatted = "+" + formatted;  // Always add + for positive numbers
+        } else if (flags.contains(" ")) {
+            formatted = " " + formatted;  // Always add space for positive numbers
         }
 
         return formatted;
