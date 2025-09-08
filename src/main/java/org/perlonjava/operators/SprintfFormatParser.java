@@ -272,8 +272,8 @@ public class SprintfFormatParser {
             spec.raw = input.substring(spec.startPos, spec.endPos);
 
             // Add debug here to check the state before returning
-            System.err.println("DEBUG: Before return - isValid=" + spec.isValid +
-                          ", errorMessage='" + spec.errorMessage + "'");
+            // System.err.println("DEBUG: Before return - isValid=" + spec.isValid +
+            //                   ", errorMessage='" + spec.errorMessage + "'");
 
             // Mark as invalid if we found spaces in the format
             if (hasInvalidSpace) {
@@ -285,8 +285,8 @@ public class SprintfFormatParser {
             }
 
             // Add debug after validation
-            System.err.println("DEBUG: After validation - isValid=" + spec.isValid +
-                          ", errorMessage='" + spec.errorMessage + "'");
+            // System.err.println("DEBUG handleInvalidSpecifier: raw='" + spec.raw +
+            //     "', errorMessage='" + spec.errorMessage + "'");
 
             return spec;
         }
@@ -303,9 +303,9 @@ public class SprintfFormatParser {
         }
 
             void validateSpecifier(FormatSpecifier spec) {
-                System.err.println("DEBUG validateSpecifier: raw='" + spec.raw +
-                    "', vectorFlag=" + spec.vectorFlag +
-                    ", conversionChar='" + spec.conversionChar + "'");
+    // System.err.println("DEBUG validateSpecifier: raw='" + spec.raw +
+    //     "', vectorFlag=" + spec.vectorFlag +
+    //     ", conversionChar='" + spec.conversionChar + "'");
             // Special case: %*v formats are valid
             if (spec.vectorFlag && spec.widthFromArg) {
                 // This is a valid vector format with custom separator
@@ -324,10 +324,10 @@ public class SprintfFormatParser {
             if (spec.vectorFlag) {
                 // Vector flag is only valid with certain conversions
                 String validVectorConversions = "diouxXbB";  // Remove 's'
-                System.err.println("DEBUG: Checking vector conversion '" + spec.conversionChar +
-                      "' in '" + validVectorConversions + "'");
-                if (validVectorConversions.indexOf(spec.conversionChar) < 0) {
-                    System.err.println("DEBUG: Setting invalid for vector format");
+      // System.err.println("DEBUG: Checking vector conversion '" + spec.conversionChar +
+      //       "' in '" + validVectorConversions + "'");
+      if (validVectorConversions.indexOf(spec.conversionChar) < 0) {
+          // System.err.println("DEBUG: Setting invalid for vector format");
                     spec.isValid = false;
                     spec.errorMessage = "INVALID";
                     return;
