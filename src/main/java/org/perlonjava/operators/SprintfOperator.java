@@ -144,7 +144,7 @@ public class SprintfOperator {
 
             if (starPos < vPos) {
                 // This is %*v format - * is separator
-                System.err.println("DEBUG: Processing %*v format (separator)");
+                // System.err.println("DEBUG: Processing %*v format (separator)");
 
                 String separator = ".";
                 int sepArgIndex;
@@ -155,11 +155,11 @@ public class SprintfOperator {
                     sepArgIndex = argIndex;
                 }
 
-                System.err.println("DEBUG: sepArgIndex=" + sepArgIndex);
+                // System.err.println("DEBUG: sepArgIndex=" + sepArgIndex);
 
                 if (sepArgIndex < list.size()) {
                     separator = ((RuntimeScalar) list.elements.get(sepArgIndex)).toString();
-                    System.err.println("DEBUG: Got separator: '" + separator + "'");
+                    // System.err.println("DEBUG: Got separator: '" + separator + "'");
                 }
 
                 // For %*v formats, we need to get the value from the correct position
@@ -178,21 +178,21 @@ public class SprintfOperator {
                 // Update value to the correct argument
                 value = (RuntimeScalar) list.elements.get(actualValueIndex);
 
-                System.err.println("DEBUG: Calling formatVectorString with width=" + spec.width + ", separator='" + separator + "'");
+                // System.err.println("DEBUG: Calling formatVectorString with width=" + spec.width + ", separator='" + separator + "'");
 
                 // Format with custom separator - use spec.width which has the actual width
                 return formatter.formatVectorString(value, spec.flags, spec.width != null ? spec.width : 0,
                         args.precision, spec.conversionChar, separator);
             } else {
                 // This is %v*d format - * is width, handle normally
-                System.err.println("DEBUG: Processing %v*d format (width from arg)");
+                // System.err.println("DEBUG: Processing %v*d format (width from arg)");
                 // Fall through to normal formatting
             }
         }
 
         // Format the value using the appropriate formatter
         if (spec.vectorFlag) {
-            System.err.println("DEBUG: Processing vector format: " + spec.raw);
+            // System.err.println("DEBUG: Processing vector format: " + spec.raw);
             return formatter.formatVectorString(value, spec.flags, args.width,
                     args.precision, spec.conversionChar);
         } else {
