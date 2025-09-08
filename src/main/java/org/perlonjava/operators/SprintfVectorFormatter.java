@@ -171,10 +171,7 @@ public class SprintfVectorFormatter {
      * @return The formatted element
      */
     private String formatVectorValue(int byteValue, String flags, int width, int precision,
-                                   char conversionChar) {
-        // System.err.println("DEBUG: formatVectorValue called with byteValue=" + byteValue +
-        //                  ", flags='" + flags + "', width=" + width + ", precision=" + precision);
-
+                               char conversionChar) {
         String formatted = switch (conversionChar) {
             case 'd', 'i' -> formatVectorDecimal(byteValue, flags);
             case 'o' -> formatVectorOctal(byteValue, flags);
@@ -184,16 +181,17 @@ public class SprintfVectorFormatter {
             default -> String.valueOf(byteValue);
         };
 
-        // System.err.println("DEBUG: After formatting: '" + formatted + "'");
-
         // Apply precision first
         formatted = SprintfPaddingHelper.applyVectorPrecision(formatted, precision, flags);
-        // System.err.println("DEBUG: After precision: '" + formatted + "'");
+
+        // For vector formats, if precision is specified, ignore the '0' flag
+        String widthFlags = flags;
+        if (precision >= 0 && flags.contains("0")) {
+            widthFlags = flags.replace("0", "");
+        }
 
         // Then apply width to the individual element
-        String result = SprintfPaddingHelper.applyWidth(formatted, width, flags);
-        // System.err.println("DEBUG: After width: '" + formatted + "' -> '" + result + "'");
-        return result;
+        return SprintfPaddingHelper.applyWidth(formatted, width, widthFlags);
     }
 
     /**
