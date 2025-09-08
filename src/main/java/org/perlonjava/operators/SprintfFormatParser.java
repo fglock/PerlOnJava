@@ -270,8 +270,10 @@ public class SprintfFormatParser {
 
             spec.endPos = pos;
             spec.raw = input.substring(spec.startPos, spec.endPos);
-            // // ADD THIS DEBUG LINE:
-            // System.err.println("DEBUG: spec.raw='" + spec.raw + "', vectorFlag=" + spec.vectorFlag + ", widthFromArg=" + spec.widthFromArg + ", conversionChar='" + spec.conversionChar + "'");
+
+            // Add debug here to check the state before returning
+            System.err.println("DEBUG: Before return - isValid=" + spec.isValid +
+                          ", errorMessage='" + spec.errorMessage + "'");
 
             // Mark as invalid if we found spaces in the format
             if (hasInvalidSpace) {
@@ -281,6 +283,10 @@ public class SprintfFormatParser {
                 // Validate the specifier
                 validateSpecifier(spec);
             }
+
+            // Add debug after validation
+            System.err.println("DEBUG: After validation - isValid=" + spec.isValid +
+                          ", errorMessage='" + spec.errorMessage + "'");
 
             return spec;
         }
@@ -297,8 +303,9 @@ public class SprintfFormatParser {
         }
 
             void validateSpecifier(FormatSpecifier spec) {
-                // // ADD THIS DEBUG LINE:
-                // System.err.println("DEBUG: Validating spec: raw='" + spec.raw + "', vectorFlag=" + spec.vectorFlag + ", widthFromArg=" + spec.widthFromArg);
+                System.err.println("DEBUG validateSpecifier: raw='" + spec.raw +
+                    "', vectorFlag=" + spec.vectorFlag +
+                    ", conversionChar='" + spec.conversionChar + "'");
             // Special case: %*v formats are valid
             if (spec.vectorFlag && spec.widthFromArg) {
                 // This is a valid vector format with custom separator
@@ -313,11 +320,14 @@ public class SprintfFormatParser {
                 return;
             }
 
-            // Check for vector formats BEFORE other validations
+            // Check for vector formats FIRST (before %n check)
             if (spec.vectorFlag) {
                 // Vector flag is only valid with certain conversions
                 String validVectorConversions = "diouxXbBs";
+                System.err.println("DEBUG: Checking vector conversion '" + spec.conversionChar +
+                      "' in '" + validVectorConversions + "'");
                 if (validVectorConversions.indexOf(spec.conversionChar) < 0) {
+                    System.err.println("DEBUG: Setting invalid for vector format");
                     spec.isValid = false;
                     spec.errorMessage = "INVALID";
                     return;
@@ -369,17 +379,6 @@ public class SprintfFormatParser {
                 if ("hf".equals(combo) || "hF".equals(combo) || "hg".equals(combo) ||
                         "hG".equals(combo) || "he".equals(combo) || "hE".equals(combo) ||
                         "ha".equals(combo) || "hA".equals(combo)) {
-                    spec.isValid = false;
-                    spec.errorMessage = "INVALID";
-                    return;
-                }
-            }
-
-            // Validate vector flag combinations
-            if (spec.vectorFlag) {
-                // Vector flag is only valid with certain conversions
-                String validVectorConversions = "diouxXbBs";
-                if (validVectorConversions.indexOf(spec.conversionChar) < 0) {
                     spec.isValid = false;
                     spec.errorMessage = "INVALID";
                     return;
