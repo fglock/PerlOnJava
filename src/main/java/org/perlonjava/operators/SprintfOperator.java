@@ -174,6 +174,7 @@ public class SprintfOperator {
 
         // Format the value using the appropriate formatter
         if (spec.vectorFlag) {
+            System.err.println("DEBUG: Processing vector format: " + spec.raw);
             return formatter.formatVectorString(value, spec.flags, args.width,
                     args.precision, spec.conversionChar);
         } else {
