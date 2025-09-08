@@ -41,7 +41,7 @@ public class SprintfVectorFormatter {
             RuntimeScalar originalScalar = versionObj.get("original");
             if (originalScalar.getDefinedBoolean()) {
                 String originalStr = originalScalar.toString();
-                System.err.println("DEBUG: Version object detected, using original: " + originalStr);
+                // System.err.println("DEBUG: Version object detected, using original: " + originalStr);
 
                 // If original starts with 'v', it's a v-string format
                 if (originalStr.startsWith("v")) {
@@ -172,8 +172,8 @@ public class SprintfVectorFormatter {
      */
     private String formatVectorValue(int byteValue, String flags, int width, int precision,
                                    char conversionChar) {
-        System.err.println("DEBUG: formatVectorValue called with byteValue=" + byteValue +
-                          ", flags='" + flags + "', width=" + width + ", precision=" + precision);
+        // System.err.println("DEBUG: formatVectorValue called with byteValue=" + byteValue +
+        //                  ", flags='" + flags + "', width=" + width + ", precision=" + precision);
 
         String formatted = switch (conversionChar) {
             case 'd', 'i' -> formatVectorDecimal(byteValue, flags);
@@ -184,15 +184,15 @@ public class SprintfVectorFormatter {
             default -> String.valueOf(byteValue);
         };
 
-        System.err.println("DEBUG: After formatting: '" + formatted + "'");
+        // System.err.println("DEBUG: After formatting: '" + formatted + "'");
 
         // Apply precision first
         formatted = SprintfPaddingHelper.applyVectorPrecision(formatted, precision, flags);
-        System.err.println("DEBUG: After precision: '" + formatted + "'");
+        // System.err.println("DEBUG: After precision: '" + formatted + "'");
 
         // Then apply width to the individual element
         String result = SprintfPaddingHelper.applyWidth(formatted, width, flags);
-        System.err.println("DEBUG: After width: '" + formatted + "' -> '" + result + "'");
+        // System.err.println("DEBUG: After width: '" + formatted + "' -> '" + result + "'");
         return result;
     }
 

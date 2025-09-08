@@ -141,15 +141,15 @@ public class SprintfFormatParser {
                     break;
                 }
             }
-            // ADD THIS DEBUG LINE:
-            System.err.println("DEBUG: After flags: pos=" + pos + ", flags='" + spec.flags + "', next char='" + current() + "'");
+            // // ADD THIS DEBUG LINE:
+            // System.err.println("DEBUG: After flags: pos=" + pos + ", flags='" + spec.flags + "', next char='" + current() + "'");
 
             // 2.5 Parse vector flag (THIS IS CORRECT POSITION)
             if (!isAtEnd() && current() == 'v') {
                 spec.vectorFlag = true;
                 advance();
-                // ADD THIS DEBUG LINE:
-                System.err.println("DEBUG: Vector flag found, pos=" + pos + ", next char='" + current() + "'");
+                // // ADD THIS DEBUG LINE:
+                // System.err.println("DEBUG: Vector flag found, pos=" + pos + ", next char='" + current() + "'");
             }
 
             // 3. Parse width - SPECIAL HANDLING FOR VECTOR
@@ -171,22 +171,22 @@ public class SprintfFormatParser {
                 }
             } else {
                 spec.width = parseNumber();
-                // ADD THIS DEBUG LINE:
-                System.err.println("DEBUG: Width parsed: " + spec.width + ", pos=" + pos + ", next char='" + current() + "'");
+                // // ADD THIS DEBUG LINE:
+                // System.err.println("DEBUG: Width parsed: " + spec.width + ", pos=" + pos + ", next char='" + current() + "'");
             }
 
             if (!isAtEnd() && current() == 'v') {
                 spec.vectorFlag = true;
                 advance();
-                System.err.println("DEBUG: Vector flag found after width, pos=" + pos);
+                // System.err.println("DEBUG: Vector flag found after width, pos=" + pos);
 
-                // ADD THIS: For %*v formats, parse additional width
+                // // ADD THIS: For %*v formats, parse additional width
                 if (spec.widthFromArg) {
                     // The * was for separator, now parse the actual width
                     Integer width2 = parseNumber();
                     if (width2 != null) {
                         spec.width = width2;
-                        System.err.println("DEBUG: Parsed width after vector: " + spec.width);
+                        // System.err.println("DEBUG: Parsed width after vector: " + spec.width);
                     }
                 }
             }
@@ -270,8 +270,8 @@ public class SprintfFormatParser {
 
             spec.endPos = pos;
             spec.raw = input.substring(spec.startPos, spec.endPos);
-            // ADD THIS DEBUG LINE:
-            System.err.println("DEBUG: spec.raw='" + spec.raw + "', vectorFlag=" + spec.vectorFlag + ", widthFromArg=" + spec.widthFromArg + ", conversionChar='" + spec.conversionChar + "'");
+            // // ADD THIS DEBUG LINE:
+            // System.err.println("DEBUG: spec.raw='" + spec.raw + "', vectorFlag=" + spec.vectorFlag + ", widthFromArg=" + spec.widthFromArg + ", conversionChar='" + spec.conversionChar + "'");
 
             // Mark as invalid if we found spaces in the format
             if (hasInvalidSpace) {
@@ -297,8 +297,8 @@ public class SprintfFormatParser {
         }
 
             void validateSpecifier(FormatSpecifier spec) {
-                // ADD THIS DEBUG LINE:
-                System.err.println("DEBUG: Validating spec: raw='" + spec.raw + "', vectorFlag=" + spec.vectorFlag + ", widthFromArg=" + spec.widthFromArg);
+                // // ADD THIS DEBUG LINE:
+                // System.err.println("DEBUG: Validating spec: raw='" + spec.raw + "', vectorFlag=" + spec.vectorFlag + ", widthFromArg=" + spec.widthFromArg);
             // Special case: %*v formats are valid
             if (spec.vectorFlag && spec.widthFromArg) {
                 // This is a valid vector format with custom separator
