@@ -142,6 +142,12 @@ public class SprintfFormatParser {
                 }
             }
 
+            // 2.5 Parse vector flag (MOVE IT HERE - right after flags!)
+            if (!isAtEnd() && current() == 'v') {
+                spec.vectorFlag = true;
+                advance();
+            }
+
     // Check for spaces in the format (invalid)
     int savePos = pos;
     boolean hasInvalidSpace = false;
@@ -223,12 +229,6 @@ public class SprintfFormatParser {
                     spec.lengthModifier = String.valueOf(current());
                     advance();
                 }
-            }
-
-            // 6. Parse vector flag
-            if (!isAtEnd() && current() == 'v') {
-                spec.vectorFlag = true;
-                advance();
             }
 
             // 7. Parse conversion character
