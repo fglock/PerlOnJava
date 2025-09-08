@@ -338,8 +338,6 @@ public class SprintfOperator {
      * Handle invalid format specifiers.
      */
     private static String handleInvalidSpecifier(SprintfFormatParser.FormatSpecifier spec) {
-        System.err.println("DEBUG handleInvalidSpecifier: raw='" + spec.raw +
-            "', errorMessage='" + spec.errorMessage + "'");
         String formatOnly = spec.raw;
         String trailing = "";
 
@@ -371,8 +369,6 @@ public class SprintfOperator {
         }
 
         // Don't consume any arguments for invalid specifiers
-        // The caller should NOT update argIndex for invalid formats
-
         return formatOnly + trailing;
     }
 
