@@ -112,14 +112,16 @@ public class SprintfVectorFormatter {
         if (str.isEmpty()) return "";
 
         StringBuilder result = new StringBuilder();
-        byte[] bytes = str.getBytes();
 
-        for (int i = 0; i < bytes.length; i++) {
+        // CHANGE: Use code points instead of bytes
+        int[] codePoints = str.codePoints().toArray();
+
+        for (int i = 0; i < codePoints.length; i++) {
             if (i > 0) result.append(".");
 
-            // Convert byte to unsigned int (0-255)
-            int byteValue = bytes[i] & 0xFF;
-            String formatted = formatVectorValue(byteValue, flags, precision, conversionChar);
+            // Use the code point value directly
+            int value = codePoints[i];
+            String formatted = formatVectorValue(value, flags, precision, conversionChar);
             result.append(formatted);
         }
 
