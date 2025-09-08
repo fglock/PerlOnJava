@@ -148,37 +148,35 @@ public class SprintfOperator {
                     }
                     // System.err.println("DEBUG sprintf: before MISSING check - valueArgIndex=" + valueArgIndex + ", list.size=" + list.size() + ", vectorFlag=" + spec.vectorFlag);
                     if (valueArgIndex >= list.size()) {
-                        if (spec.conversionChar == 'n') {
-                            // %n is a no-op for now - just continue without throwing
-                            continue;
-                        }
-
-                        // Different formats have different MISSING patterns
+                        // Generate warning
+                        WarnDie.warn(new RuntimeScalar("Missing argument in sprintf"), new RuntimeScalar(""));
+                        
+                        // Append appropriate default value directly to result
                         if (spec.conversionChar == 'f' || spec.conversionChar == 'F') {
-                            // Check the specific format
-                            if (spec.raw.matches("%.0f")) {
-                                result.append("0 MISSING");
-                            } else if (spec.raw.matches(" %.0f")) {
-                                result.append(" 0 MISSING");
-                            } else if (spec.raw.matches("%.2f")) {
-                                result.append("0.00 MISSING");
+                            if (spec.precision >= 0) {
+                                result.append(String.format("%." + spec.precision + "f", 0.0));
                             } else {
-                                result.append(" MISSING");
+                                result.append("0.000000");  // Default precision is 6
                             }
                         } else if (spec.conversionChar == 'g' || spec.conversionChar == 'G') {
-                            if (spec.raw.matches("%.0g")) {
-                                result.append("0 MISSING");
-                            } else if (spec.raw.matches(" %.0g")) {
-                                result.append(" 0 MISSING");
-                            } else if (spec.raw.matches("%.2g")) {
-                                result.append("0 MISSING");
+                            if (spec.precision == 0) {
+                                result.append("0");
                             } else {
-                                result.append(" MISSING");
+                                result.append("0");  // %g removes trailing zeros
                             }
+                        } else if (spec.conversionChar == 'd' || spec.conversionChar == 'i' ||
+                                   spec.conversionChar == 'u' || spec.conversionChar == 'o' ||
+                                   spec.conversionChar == 'x' || spec.conversionChar == 'X') {
+                            result.append("0");
+                        } else if (spec.conversionChar == 's') {
+                            result.append("");  // Empty string for %s
+                        } else if (spec.conversionChar == 'c') {
+                            result.append("\0");  // Null character for %c
                         } else {
-                            result.append(" MISSING");
+                            result.append("");  // Default empty
                         }
-                        continue;
+
+                        continue;  // Skip to next format specifier
                     }
 
                     RuntimeScalar value = (RuntimeScalar) list.elements.get(valueArgIndex);
