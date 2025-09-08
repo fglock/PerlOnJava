@@ -275,6 +275,14 @@ public class SprintfFormatParser {
                 spec.errorMessage = "INVALID";
                 return;
             }
+
+            // Allow * with vector flag (it's for custom separator)
+            if (spec.vectorFlag && spec.widthFromArg) {
+                // This is valid - * provides the separator
+                // Don't mark as invalid
+                return;
+            }
+
             if ("V".equals(spec.lengthModifier)) {
                 // V is silently ignored in Perl
                 spec.lengthModifier = null; // Clear it so it's processed as %d
@@ -331,13 +339,6 @@ public class SprintfFormatParser {
                 // Vector flag is only valid with certain conversions
                 String validVectorConversions = "diouxXbBs";
                 if (validVectorConversions.indexOf(spec.conversionChar) < 0) {
-                    spec.isValid = false;
-                    spec.errorMessage = "INVALID";
-                    return;
-                }
-
-                // Special handling for vector formats with spaces
-                if (spec.raw.contains(" ")) {
                     spec.isValid = false;
                     spec.errorMessage = "INVALID";
                     return;
