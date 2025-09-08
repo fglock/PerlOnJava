@@ -34,6 +34,7 @@ public class SprintfVectorFormatter {
         // Handle version objects specially
         if (value.blessId != 0 && NameNormalizer.getBlessStr(value.blessId).equals("version")) {
             RuntimeHash versionObj = value.hashDeref();
+            // Get the internal version string, not the stringified form
             String versionStr = versionObj.get("version").toString();
             return formatVersionVector(versionStr, flags, width, precision, conversionChar, separator);
         }
@@ -84,14 +85,14 @@ public class SprintfVectorFormatter {
 
             try {
                 int intValue = Integer.parseInt(parts[i]);
-                String formatted = formatVectorValue(intValue, flags, precision, conversionChar);
+                String formatted = formatVectorValue(intValue, flags, width, precision, conversionChar);
                 result.append(formatted);
             } catch (NumberFormatException e) {
                 result.append(parts[i]);
             }
         }
 
-        return SprintfPaddingHelper.applyWidth(result.toString(), width, flags);
+        return result.toString();
     }
     /**
       * Format a byte vector (string treated as sequence of bytes).
@@ -121,12 +122,11 @@ public class SprintfVectorFormatter {
 
             // Use the code point value directly
             int value = codePoints[i];
-            String formatted = formatVectorValue(value, flags, precision, conversionChar);
+            String formatted = formatVectorValue(value, flags, width, precision, conversionChar);
             result.append(formatted);
         }
 
-        // Apply width to the entire result
-        return SprintfPaddingHelper.applyWidth(result.toString(), width, flags);
+        return result.toString();
     }
 
     /**
@@ -142,7 +142,7 @@ public class SprintfVectorFormatter {
      * @param conversionChar Conversion character
      * @return The formatted element
      */
-    private String formatVectorValue(int byteValue, String flags, int precision,
+    private String formatVectorValue(int byteValue, String flags, int width, int precision,
                                    char conversionChar) {
         String formatted = switch (conversionChar) {
             case 'd', 'i' -> formatVectorDecimal(byteValue, flags);
@@ -153,9 +153,11 @@ public class SprintfVectorFormatter {
             default -> String.valueOf(byteValue);
         };
 
-        // Apply precision padding for vector elements
-        // Vector precision works by zero-padding the numeric value
-        return SprintfPaddingHelper.applyVectorPrecision(formatted, precision, flags);
+        // Apply precision first
+        formatted = SprintfPaddingHelper.applyVectorPrecision(formatted, precision, flags);
+
+        // CHANGE: Then apply width to the individual element
+        return SprintfPaddingHelper.applyWidth(formatted, width, flags);
     }
 
     /**
