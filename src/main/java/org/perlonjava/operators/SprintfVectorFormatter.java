@@ -30,24 +30,41 @@ public class SprintfVectorFormatter {
       * Format a vector string with custom separator support.
       */
     public String formatVectorString(RuntimeScalar value, String flags, int width,
-                                    int precision, char conversionChar, String separator) {
-        // Handle version objects specially
-        if (value.blessId != 0 && NameNormalizer.getBlessStr(value.blessId).equals("version")) {
+                                int precision, char conversionChar, String separator) {
+    // Handle version objects specially
+    if (value.isBlessed()) {
+        String className = ReferenceOperators.ref(value).toString();
+
+        if (className.equals("version")) {
             RuntimeHash versionObj = value.hashDeref();
-            String versionStr = versionObj.get("version").toString();
-            return formatVersionVector(versionStr, flags, width, precision, conversionChar, separator);
+            // Use the original representation for sprintf
+            RuntimeScalar originalScalar = versionObj.get("original");
+            if (originalScalar.getDefinedBoolean()) {
+                String originalStr = originalScalar.toString();
+                System.err.println("DEBUG: Version object detected, using original: " + originalStr);
+
+                // If original starts with 'v', it's a v-string format
+                if (originalStr.startsWith("v")) {
+                    // Remove the 'v' and format as version vector
+                    return formatVersionVector(originalStr.substring(1), flags, width, precision, conversionChar, separator);
+                } else {
+                    // It's a decimal version string
+                    return formatVersionVector(originalStr, flags, width, precision, conversionChar, separator);
+                }
+            }
         }
-
-        String str = value.toString();
-
-        // Handle version objects or dotted numeric strings
-        if (str.matches("\\d+(\\.\\d+)*")) {
-            return formatVersionVector(str, flags, width, precision, conversionChar, separator);
-        }
-
-        // Handle regular strings (byte-by-byte)
-        return formatByteVector(str, flags, width, precision, conversionChar, separator);
     }
+
+    String str = value.toString();
+
+    // Handle version objects or dotted numeric strings
+    if (str.matches("\\d+(\\.\\d+)*")) {
+        return formatVersionVector(str, flags, width, precision, conversionChar, separator);
+    }
+
+    // Handle regular strings (byte-by-byte)
+    return formatByteVector(str, flags, width, precision, conversionChar, separator);
+}
 
     // Keep the original method for backward compatibility
     public String formatVectorString(RuntimeScalar value, String flags, int width,
@@ -55,44 +72,50 @@ public class SprintfVectorFormatter {
         return formatVectorString(value, flags, width, precision, conversionChar, ".");
     }
 
-    /**
-      * Format a version-style vector (dotted numeric string).
-      *
-      * <p>Version strings like "5.10.1" are split on dots and each numeric
-      * component is formatted individually. This is commonly used for
-      * version number display.
-      *
-      * @param versionStr The version string to format
-      * @param flags Format flags
-      * @param width Field width for the entire result
-      * @param precision Precision for each element
-      * @param conversionChar Conversion character
-      * @return The formatted version vector
-      */
-    private String formatVersionVector(String versionStr, String flags, int width,
-                                     int precision, char conversionChar) {
-        return formatVersionVector(versionStr, flags, width, precision, conversionChar, ".");
-    }
+  /**
+    * Format a version-style vector (dotted numeric string).
+    *
+    * <p>Version strings like "5.10.1" are split on dots and each numeric
+    * component is formatted individually. This is commonly used for
+    * version number display.
+    *
+    * @param versionStr The version string to format
+    * @param flags Format flags
+    * @param width Field width for the entire result
+    * @param precision Precision for each element
+    * @param conversionChar Conversion character
+    * @return The formatted version vector
+    */
+  private String formatVersionVector(String versionStr, String flags, int width,
+                                   int precision, char conversionChar) {
+      return formatVersionVector(versionStr, flags, width, precision, conversionChar, ".");
+  }
 
-    private String formatVersionVector(String versionStr, String flags, int width,
-                                     int precision, char conversionChar, String separator) {
-        String[] parts = versionStr.split("\\.");
-        StringBuilder result = new StringBuilder();
+  private String formatVersionVector(String versionStr, String flags, int width,
+                                   int precision, char conversionChar, String separator) {
+      String[] parts = versionStr.split("\\.");
+      StringBuilder result = new StringBuilder();
 
-        for (int i = 0; i < parts.length; i++) {
-            if (i > 0) result.append(separator);
+      for (int i = 0; i < parts.length; i++) {
+          if (i > 0) result.append(separator);
 
-            try {
-                int intValue = Integer.parseInt(parts[i]);
-                String formatted = formatVectorValue(intValue, flags, width, precision, conversionChar);
-                result.append(formatted);
-            } catch (NumberFormatException e) {
-                result.append(parts[i]);
-            }
-        }
+          // For vector formats, + and space flags only apply to first element
+          String elementFlags = flags;
+          if (i > 0) {
+              elementFlags = flags.replace("+", "").replace(" ", "");
+          }
 
-        return result.toString();
-    }
+          try {
+              int intValue = Integer.parseInt(parts[i]);
+              String formatted = formatVectorValue(intValue, elementFlags, width, precision, conversionChar);
+              result.append(formatted);
+          } catch (NumberFormatException e) {
+              result.append(parts[i]);
+          }
+      }
+
+      return result.toString();
+  }
     /**
       * Format a byte vector (string treated as sequence of bytes).
       *
@@ -141,6 +164,9 @@ public class SprintfVectorFormatter {
      */
     private String formatVectorValue(int byteValue, String flags, int width, int precision,
                                    char conversionChar) {
+        System.err.println("DEBUG: formatVectorValue called with byteValue=" + byteValue +
+                          ", flags='" + flags + "', width=" + width + ", precision=" + precision);
+
         String formatted = switch (conversionChar) {
             case 'd', 'i' -> formatVectorDecimal(byteValue, flags);
             case 'o' -> formatVectorOctal(byteValue, flags);
@@ -150,11 +176,16 @@ public class SprintfVectorFormatter {
             default -> String.valueOf(byteValue);
         };
 
+        System.err.println("DEBUG: After formatting: '" + formatted + "'");
+
         // Apply precision first
         formatted = SprintfPaddingHelper.applyVectorPrecision(formatted, precision, flags);
+        System.err.println("DEBUG: After precision: '" + formatted + "'");
 
-        // CHANGE: Then apply width to the individual element
-        return SprintfPaddingHelper.applyWidth(formatted, width, flags);
+        // Then apply width to the individual element
+        String result = SprintfPaddingHelper.applyWidth(formatted, width, flags);
+        System.err.println("DEBUG: After width: '" + formatted + "' -> '" + result + "'");
+        return result;
     }
 
     /**
