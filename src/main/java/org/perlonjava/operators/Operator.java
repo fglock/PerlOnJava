@@ -339,9 +339,8 @@ public class Operator {
                 list.elements.add(GlobalVariable.getGlobalVariable("main::_"));
             }
 
-            Iterator<RuntimeScalar> iterator = list.iterator();
-            while (iterator.hasNext()) {
-                sb.append(iterator.next().toString());
+            for (RuntimeScalar runtimeScalar : list) {
+                sb.append(runtimeScalar.toString());
             }
             return new RuntimeScalar(sb.reverse().toString());
         } else {
@@ -354,9 +353,8 @@ public class Operator {
             RuntimeList result = new RuntimeList();
 
             // Collect all elements into the result list
-            Iterator<RuntimeScalar> iterator = inputList.iterator();
-            while (iterator.hasNext()) {
-                result.elements.add(iterator.next());
+            for (RuntimeScalar runtimeScalar : inputList) {
+                result.elements.add(runtimeScalar);
             }
 
             // Use Java's built-in reverse
@@ -383,18 +381,16 @@ public class Operator {
         int times = timesScalar.getInt();
         if (ctx == SCALAR || value instanceof RuntimeScalar) {
             StringBuilder sb = new StringBuilder();
-            Iterator<RuntimeScalar> iterator = value.iterator();
-            while (iterator.hasNext()) {
-                sb.append(iterator.next().toString());
+            for (RuntimeScalar runtimeScalar : value) {
+                sb.append(runtimeScalar.toString());
             }
             return new RuntimeScalar(sb.toString().repeat(Math.max(0, times)));
         } else {
             RuntimeList result = new RuntimeList();
             List<RuntimeBase> outElements = result.elements;
             for (int i = 0; i < times; i++) {
-                Iterator<RuntimeScalar> iterator = value.iterator();
-                while (iterator.hasNext()) {
-                    outElements.add(iterator.next());
+                for (RuntimeScalar runtimeScalar : value) {
+                    outElements.add(runtimeScalar);
                 }
             }
             return result;
@@ -436,11 +432,10 @@ public class Operator {
         Set<Character> chars = new HashSet<>();
 
         for (int i = 0; i < expr.length(); i++) {
-            char c = expr.charAt(i);
+            char start = expr.charAt(i);
 
             // Check for range pattern like "a-z"
             if (i + 2 < expr.length() && expr.charAt(i + 1) == '-') {
-                char start = c;
                 char end = expr.charAt(i + 2);
 
                 // Add all characters in the range
@@ -450,7 +445,7 @@ public class Operator {
                 i += 2; // Skip the '-' and end character
             } else {
                 // Single character
-                chars.add(c);
+                chars.add(start);
             }
         }
 
