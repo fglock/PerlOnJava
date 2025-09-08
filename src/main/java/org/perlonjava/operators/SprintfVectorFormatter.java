@@ -91,31 +91,32 @@ public class SprintfVectorFormatter {
       return formatVersionVector(versionStr, flags, width, precision, conversionChar, ".");
   }
 
-  private String formatVersionVector(String versionStr, String flags, int width,
-                                   int precision, char conversionChar, String separator) {
-      String[] parts = versionStr.split("\\.");
-      StringBuilder result = new StringBuilder();
+    private String formatVersionVector(String versionStr, String flags, int width,
+                                       int precision, char conversionChar, String separator) {
+        String[] parts = versionStr.split("\\.");
+        StringBuilder result = new StringBuilder();
 
-      for (int i = 0; i < parts.length; i++) {
-          if (i > 0) result.append(separator);
+        for (int i = 0; i < parts.length; i++) {
+            if (i > 0) result.append(separator);
 
-          // For vector formats, + and space flags only apply to first element
-          String elementFlags = flags;
-          if (i > 0) {
-              elementFlags = flags.replace("+", "").replace(" ", "");
-          }
+            // For vector formats, + and space flags only apply to first element
+            String elementFlags = flags;
+            if (i > 0) {
+                elementFlags = flags.replace("+", "").replace(" ", "");
+            }
 
-          try {
-              int intValue = Integer.parseInt(parts[i]);
-              String formatted = formatVectorValue(intValue, elementFlags, width, precision, conversionChar);
-              result.append(formatted);
-          } catch (NumberFormatException e) {
-              result.append(parts[i]);
-          }
-      }
+            try {
+                int intValue = Integer.parseInt(parts[i]);
+                String formatted = formatVectorValue(intValue, elementFlags, width, precision, conversionChar);
+                result.append(formatted);
+            } catch (NumberFormatException e) {
+                result.append(parts[i]);
+            }
+        }
 
-      return result.toString();
-  }
+        return result.toString();
+    }
+
     /**
       * Format a byte vector (string treated as sequence of bytes).
       *
@@ -131,18 +132,25 @@ public class SprintfVectorFormatter {
      * @return The formatted byte vector
      */
     private String formatByteVector(String str, String flags, int width,
-                                  int precision, char conversionChar, String separator) {
+                                    int precision, char conversionChar, String separator) {
         if (str.isEmpty()) return "";
 
         StringBuilder result = new StringBuilder();
-
         int[] codePoints = str.codePoints().toArray();
 
         for (int i = 0; i < codePoints.length; i++) {
             if (i > 0) result.append(separator);
 
             int value = codePoints[i];
-            String formatted = formatVectorValue(value, flags, width, precision, conversionChar);
+
+            // For vector formats, + and space flags only apply to first element
+            String elementFlags = flags;
+            if (i > 0) {
+                // Remove + and space flags for non-first elements
+                elementFlags = flags.replace("+", "").replace(" ", "");
+            }
+
+            String formatted = formatVectorValue(value, elementFlags, width, precision, conversionChar);
             result.append(formatted);
         }
 
