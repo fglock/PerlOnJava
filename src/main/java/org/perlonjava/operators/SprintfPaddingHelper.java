@@ -10,11 +10,6 @@ public class SprintfPaddingHelper {
 
     /**
      * Apply width formatting to a string.
-     *
-     * @param str   The string to format
-     * @param width The desired width
-     * @param flags Format flags (contains '-' for left-align, '0' for zero-pad)
-     * @return The padded string
      */
     public static String applyWidth(String str, int width, String flags) {
         if (width <= 0 || str.length() >= width) {
@@ -25,11 +20,23 @@ public class SprintfPaddingHelper {
         boolean zeroPad = flags.contains("0") && !leftAlign;
 
         if (leftAlign) {
-            return padRight(str, width);
+            // Left align - pad with spaces on the right
+            StringBuilder result = new StringBuilder(str);
+            while (result.length() < width) {
+                result.append(' ');
+            }
+            return result.toString();
         } else if (zeroPad) {
-            return applyZeroPadding(str, width);
+            // For numeric values with sign/prefix, handle specially
+            if (str.startsWith("-") || str.startsWith("+") || str.startsWith(" ")) {
+                return str.charAt(0) + padLeft(str.substring(1), width - 1, '0');
+            } else if (str.startsWith("0x") || str.startsWith("0X")) {
+                return str.substring(0, 2) + padLeft(str.substring(2), width - 2, '0');
+            } else {
+                return padLeft(str, width, '0');
+            }
         } else {
-            return padLeft(str, width);
+            return padLeft(str, width, ' ');
         }
     }
 

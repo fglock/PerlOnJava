@@ -142,21 +142,16 @@ public class SprintfFormatParser {
                 }
             }
 
-            // Check for spaces in the format (invalid)
-            int savePos = pos;
-            boolean hasInvalidSpace = false;
+    // Check for spaces in the format (invalid)
+    int savePos = pos;
+    boolean hasInvalidSpace = false;
 
-            // Check for vector flag 'v' here (after width, before precision)
-            if (match('v')) {
-                spec.vectorFlag = true;
-            }
-
-            // 3. Parse width
-            if (match('*')) {
-                spec.widthFromArg = true;
-                // Check for parameter index
-                checkpoint = pos;
-                Integer widthParam = parseNumber();
+    // 3. Parse width
+    if (match('*')) {
+        spec.widthFromArg = true;
+        // Check for parameter index
+        checkpoint = pos;
+        Integer widthParam = parseNumber();
                 if (widthParam != null && match('$')) {
                     spec.widthArgIndex = widthParam;
                 } else {
@@ -283,8 +278,8 @@ public class SprintfFormatParser {
             }
 
     // Check for invalid conversion characters
-    // Valid conversion characters are: diouxXeEfFgGaAbBcspn%vDU
-    String validChars = "diouxXeEfFgGaAbBcspn%vDU";
+    // Valid conversion characters are: diouxXeEfFgGaAbBcspn%vDUO
+    String validChars = "diouxXeEfFgGaAbBcspn%vDUO";  // Added O
     if (validChars.indexOf(spec.conversionChar) < 0) {
         spec.isValid = false;
         spec.errorMessage = "INVALID";
