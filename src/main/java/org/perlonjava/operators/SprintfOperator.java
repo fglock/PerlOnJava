@@ -1,9 +1,6 @@
 package org.perlonjava.operators;
 
-import org.perlonjava.runtime.PerlCompilerException;
-import org.perlonjava.runtime.RuntimeBase;
-import org.perlonjava.runtime.RuntimeList;
-import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.*;
 
 public class SprintfOperator {
 
@@ -30,7 +27,7 @@ public class SprintfOperator {
                 result.append((String) element);
             } else if (element instanceof SprintfFormatParser.FormatSpecifier spec) {
 
-            //  System.err.println("DEBUG Operator: spec.raw=" + spec.raw + ", isValid=" + spec.isValid + ", errorMessage=" + spec.errorMessage);
+                //  System.err.println("DEBUG Operator: spec.raw=" + spec.raw + ", isValid=" + spec.isValid + ", errorMessage=" + spec.errorMessage);
 
                 // Handle %%
                 if (spec.conversionChar == '%') {
@@ -40,11 +37,30 @@ public class SprintfOperator {
 
                 // Check if invalid
                 if (!spec.isValid) {
-                //  System.err.println("DEBUG: Handling invalid spec: " + spec.raw);
+                    // For formats with trailing characters (like %.2fC), only append the format part
+                    String formatOnly = spec.raw;
+                    String trailing = "";
 
-                    // Always append the raw format
-                    result.append(spec.raw);
-                //  System.err.println("DEBUG: Appended raw format, result so far: " + result.toString());
+                    // Check if there are non-format characters at the end
+                    if (spec.errorMessage != null && spec.errorMessage.equals("INVALID")) {
+                        // Find where the actual format ends
+                        int formatEnd = spec.raw.length();
+                        for (int i = 1; i < spec.raw.length(); i++) {
+                            char c = spec.raw.charAt(i);
+                            if (Character.isLetter(c) && "diouxXeEfFgGaAbBcspn%".indexOf(c) == -1) {
+                                // This is a trailing character after a valid format
+                                formatEnd = i;
+                                formatOnly = spec.raw.substring(0, formatEnd);
+                                trailing = spec.raw.substring(formatEnd);
+                                break;
+                            }
+                        }
+                    }
+
+                    result.append(formatOnly);
+                    if (!trailing.isEmpty()) {
+                        result.append(trailing);
+                    }
 
                     // Generate a warning
                     if (spec.errorMessage != null) {
@@ -57,10 +73,7 @@ public class SprintfOperator {
 
                         String warningMessage = "Invalid conversion in sprintf: \"" + formatForWarning + "\"";
                         WarnDie.warn(new RuntimeScalar(warningMessage), new RuntimeScalar(""));
-                    //  System.err.println("DEBUG: Generated warning for: " + spec.raw);
                     }
-
-                //  System.err.println("DEBUG: About to continue, skipping further processing");
                     continue;  // Make sure we skip further processing
                 }
 
@@ -71,7 +84,7 @@ public class SprintfOperator {
                     WarnDie.warn(new RuntimeScalar(spec.invalidLengthModifierWarning), new RuntimeScalar(""));
                 }
 
-            //  System.err.println("DEBUG: Processing valid spec: " + spec.raw);
+                //  System.err.println("DEBUG: Processing valid spec: " + spec.raw);
 
                 // The rest of the valid format processing continues here...
                 int savedArgIndex = argIndex;
@@ -135,7 +148,8 @@ public class SprintfOperator {
                     }
                     if (valueArgIndex >= list.size()) {
                         if (spec.conversionChar == 'n') {
-                            throw new PerlCompilerException("%n specifier not supported");
+                            // %n is a no-op for now - just continue without throwing
+                            continue;
                         }
 
                         // Different formats have different MISSING patterns
@@ -197,9 +211,17 @@ public class SprintfOperator {
 
     private static String formatVectorString(RuntimeScalar value, String flags, int width,
                                              int precision, char conversionChar) {
-        String str = value.toString();
+        // Check if this is a version object
+        String str;
+        if (value.isBlessed() && NameNormalizer.getBlessStr(value.blessId).equals("version")) {
+            // Extract the version string from the version object
+            RuntimeHash versionObj = value.hashDeref();
+            str = versionObj.get("version").toString();
+        } else {
+            str = value.toString();
+        }
 
-        // Handle version objects (simple numeric strings with dots)
+        // Handle version objects or dotted numeric strings
         if (str.matches("\\d+(\\.\\d+)*")) {
             String[] parts = str.split("\\.");
             StringBuilder result = new StringBuilder();
@@ -341,18 +363,33 @@ public class SprintfOperator {
         }
 
         // Apply precision padding
-        if (precision > 0 && formatted.length() < precision) {
-            if (formatted.startsWith("+") || formatted.startsWith(" ") ||
-                    formatted.startsWith("0x") || formatted.startsWith("0X") ||
-                    formatted.startsWith("0b") || formatted.startsWith("0B")) {
-                // Preserve prefixes
-                String prefix = formatted.replaceFirst("^(.[xXbB]?)?.*", "$1");
-                String number = formatted.substring(prefix.length());
-                formatted = prefix + String.format("%0" + (precision - prefix.length()) + "d",
-                        Integer.parseInt(number.isEmpty() ? "0" : number));
-            } else {
-                formatted = String.format("%0" + precision + "d", Integer.parseInt(formatted));
+        if (precision > 0) {
+            String prefix = "";
+            String number = formatted;
+
+            // Extract any prefix (sign, 0x, 0b, etc.)
+            if (formatted.startsWith("+") || formatted.startsWith("-") || formatted.startsWith(" ")) {
+                prefix = formatted.substring(0, 1);
+                number = formatted.substring(1);
             }
+            if (number.startsWith("0x") || number.startsWith("0X") ||
+                    number.startsWith("0b") || number.startsWith("0B") ||
+                    (number.startsWith("0") && flags.contains("#") && conversionChar == 'o')) {
+                prefix += number.substring(0, number.startsWith("0x") || number.startsWith("0X") ||
+                        number.startsWith("0b") || number.startsWith("0B") ? 2 : 1);
+                number = number.substring(prefix.length() - (formatted.startsWith("+") || formatted.startsWith("-") || formatted.startsWith(" ") ? 1 : 0));
+            }
+
+            // Pad the numeric part
+            if (number.length() < precision - (flags.contains("#") && (conversionChar == 'o' || conversionChar == 'x' || conversionChar == 'X' || conversionChar == 'b' || conversionChar == 'B') && byteValue != 0 ? prefix.length() : 0)) {
+                int padWidth = precision;
+                if (flags.contains("#") && byteValue != 0 && (conversionChar == 'o' || conversionChar == 'x' || conversionChar == 'X' || conversionChar == 'b' || conversionChar == 'B')) {
+                    padWidth = precision; // Don't subtract prefix for padding calculation
+                }
+                number = String.format("%0" + padWidth + "s", number);
+            }
+
+            formatted = prefix + number;
         }
 
         return formatted;

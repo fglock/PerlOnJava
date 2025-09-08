@@ -5,6 +5,36 @@ import java.util.List;
 
 public class SprintfFormatParser {
 
+    public static ParseResult parse(String format) {
+        ParseResult result = new ParseResult();
+        Parser parser = new Parser(format);
+
+        while (!parser.isAtEnd()) {
+            int start = parser.pos;
+
+            if (parser.current() == '%') {
+                FormatSpecifier spec = parser.parseSpecifier();
+                if (spec != null) {
+                    result.addSpecifier(spec);
+                } else {
+                    // Failed to parse, add % as literal
+                    result.addLiteral("%");
+                    parser.advance();
+                }
+            } else {
+                // Scan for next % or end
+                StringBuilder literal = new StringBuilder();
+                while (!parser.isAtEnd() && parser.current() != '%') {
+                    literal.append(parser.current());
+                    parser.advance();
+                }
+                result.addLiteral(literal.toString());
+            }
+        }
+
+        return result;
+    }
+
     public static class ParseResult {
         public final List<Object> elements = new ArrayList<>(); // String or FormatSpecifier
 
@@ -40,36 +70,6 @@ public class SprintfFormatParser {
         public char conversionChar;
         public boolean isValid = true;
         public String errorMessage;
-    }
-
-    public static ParseResult parse(String format) {
-        ParseResult result = new ParseResult();
-        Parser parser = new Parser(format);
-
-        while (!parser.isAtEnd()) {
-            int start = parser.pos;
-
-            if (parser.current() == '%') {
-                FormatSpecifier spec = parser.parseSpecifier();
-                if (spec != null) {
-                    result.addSpecifier(spec);
-                } else {
-                    // Failed to parse, add % as literal
-                    result.addLiteral("%");
-                    parser.advance();
-                }
-            } else {
-                // Scan for next % or end
-                StringBuilder literal = new StringBuilder();
-                while (!parser.isAtEnd() && parser.current() != '%') {
-                    literal.append(parser.current());
-                    parser.advance();
-                }
-                result.addLiteral(literal.toString());
-            }
-        }
-
-        return result;
     }
 
     private static class Parser {
@@ -213,14 +213,16 @@ public class SprintfFormatParser {
             if (!isAtEnd()) {
                 if (peek(0) == 'h' && peek(1) == 'h') {
                     spec.lengthModifier = "hh";
-                    advance(); advance();
+                    advance();
+                    advance();
                 } else if (peek(0) == 'l' && peek(1) == 'l') {
                     spec.lengthModifier = "ll";
-                    advance(); advance();
+                    advance();
+                    advance();
                 } else if ("hlLqzjtV".indexOf(current()) >= 0) {
                     spec.lengthModifier = String.valueOf(current());
                     advance();
-                //  System.err.println("DEBUG: Found length modifier: " + spec.lengthModifier);
+                    //  System.err.println("DEBUG: Found length modifier: " + spec.lengthModifier);
                 }
             }
 
@@ -271,7 +273,7 @@ public class SprintfFormatParser {
         }
 
         void validateSpecifier(FormatSpecifier spec) {
-        //  System.err.println("DEBUG: Validating spec: " + spec.raw + ", lengthModifier: " + spec.lengthModifier);
+            //  System.err.println("DEBUG: Validating spec: " + spec.raw + ", lengthModifier: " + spec.lengthModifier);
 
             // Check if we have no conversion character (e.g., %L, %V, %h, %l, %q, %z, %t)
             if (spec.conversionChar == '\0') {
@@ -333,7 +335,7 @@ public class SprintfFormatParser {
             // Validate vector flag combinations
             if (spec.vectorFlag) {
                 // Vector flag is only valid with certain conversions
-                String validVectorConversions = "diouxXbBcsaAeEfFgG";
+                String validVectorConversions = "diouxXbBs";
                 if (validVectorConversions.indexOf(spec.conversionChar) < 0) {
                     spec.isValid = false;
                     spec.errorMessage = "INVALID";
@@ -373,7 +375,6 @@ public class SprintfFormatParser {
                 if (spec.raw.matches("%.*v.*\\s+.*[a-zA-Z]")) {
                     spec.isValid = false;
                     spec.errorMessage = "INVALID";
-                    return;
                 }
             }
         }
@@ -395,7 +396,6 @@ public class SprintfFormatParser {
                 if (spec.conversionChar == 'c') {
                     spec.isValid = false;
                     spec.errorMessage = "INVALID";
-                    return;
                 }
 
                 // For some formats like "% .*d", it creates specific error patterns
