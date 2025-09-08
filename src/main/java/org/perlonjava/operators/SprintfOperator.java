@@ -143,67 +143,53 @@ public class SprintfOperator {
         // Get the value to format
         RuntimeScalar value = (RuntimeScalar) list.elements.get(args.valueArgIndex);
 
-        // For vector formats with %*v, we need special handling
-        if (spec.vectorFlag && spec.widthFromArg) {
-            // Only treat as separator if * came BEFORE v
-            // Check the raw format to see the order
-            int starPos = spec.raw.indexOf('*');
-            int vPos = spec.raw.indexOf('v');
-
-            if (starPos < vPos) {
-                // This is %*v format - * is separator
-                // System.err.println("DEBUG: Processing %*v format (separator)");
-
+        // Special handling for %*v formats where * is the separator
+        if (spec.vectorFlag) {
+            // Check if this is %*v format (custom separator)
+            if (spec.widthFromArg && spec.raw.matches(".*\\*v.*")) {
+                // %*v format - * is for separator
                 String separator = ".";
-                int sepArgIndex;
-
-                if (spec.widthArgIndex != null) {
-                    sepArgIndex = spec.widthArgIndex - 1;
-                } else {
-                    sepArgIndex = argIndex;
-                }
-
-                // System.err.println("DEBUG: sepArgIndex=" + sepArgIndex);
+                int sepArgIndex = argIndex;
 
                 if (sepArgIndex < list.size()) {
                     separator = ((RuntimeScalar) list.elements.get(sepArgIndex)).toString();
-                    // System.err.println("DEBUG: Got separator: '" + separator + "'");
                 }
 
-                // For %*v formats, we need to get the value from the correct position
-                int actualValueIndex;
-                if (spec.parameterIndex != null) {
-                    actualValueIndex = spec.parameterIndex - 1;
+                int actualWidth = 0;
+                int valueIndex;
+
+                if (spec.precisionFromArg) {
+                    // %*v*d format - second * is for width
+                    int widthArgIndex = sepArgIndex + 1;
+                    if (widthArgIndex < list.size()) {
+                        actualWidth = ((RuntimeScalar) list.elements.get(widthArgIndex)).getInt();
+                    }
+                    valueIndex = widthArgIndex + 1;
                 } else {
-                    // Skip past the separator argument
-                    actualValueIndex = argIndex + 1;
+                    // %*vd or %*v2d format
+                    actualWidth = spec.width != null ? spec.width : 0;
+                    valueIndex = sepArgIndex + 1;
                 }
 
-                if (actualValueIndex >= list.size()) {
+                if (valueIndex >= list.size()) {
                     return handleMissingArgument(spec, args);
                 }
+                value = (RuntimeScalar) list.elements.get(valueIndex);
 
-                // Update value to the correct argument
-                value = (RuntimeScalar) list.elements.get(actualValueIndex);
-
-                // System.err.println("DEBUG: Calling formatVectorString with width=" + spec.width + ", separator='" + separator + "'");
-
-                // Format with custom separator - use spec.width which has the actual width
-                return formatter.formatVectorString(value, spec.flags, spec.width != null ? spec.width : 0,
+                return formatter.formatVectorString(value, spec.flags, actualWidth,
                         args.precision, spec.conversionChar, separator);
+            } else if (spec.widthFromArg) {
+                // %v*d format - * is for width, not separator
+                // Use default separator and get width from args
+                return formatter.formatVectorString(value, spec.flags, args.width,
+                        args.precision, spec.conversionChar);
             } else {
-                // This is %v*d format - * is width, handle normally
-                // System.err.println("DEBUG: Processing %v*d format (width from arg)");
-                // Fall through to normal formatting
+                // Regular vector format
+                return formatter.formatVectorString(value, spec.flags, args.width,
+                        args.precision, spec.conversionChar);
             }
-        }
-
-        // Format the value using the appropriate formatter
-        if (spec.vectorFlag) {
-            // System.err.println("DEBUG: Processing vector format: " + spec.raw);
-            return formatter.formatVectorString(value, spec.flags, args.width,
-                    args.precision, spec.conversionChar);
         } else {
+            // Non-vector format
             return formatter.formatValue(value, spec.flags, args.width,
                     args.precision, spec.conversionChar);
         }

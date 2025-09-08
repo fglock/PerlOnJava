@@ -141,54 +141,46 @@ public class SprintfFormatParser {
                     break;
                 }
             }
-            // // ADD THIS DEBUG LINE:
-            // System.err.println("DEBUG: After flags: pos=" + pos + ", flags='" + spec.flags + "', next char='" + current() + "'");
 
-            // 2.5 Parse vector flag (THIS IS CORRECT POSITION)
+            // 2.5 Parse vector flag if it appears after flags
             if (!isAtEnd() && current() == 'v') {
                 spec.vectorFlag = true;
                 advance();
-                // // ADD THIS DEBUG LINE:
-                // System.err.println("DEBUG: Vector flag found, pos=" + pos + ", next char='" + current() + "'");
             }
 
-            // 3. Parse width - SPECIAL HANDLING FOR VECTOR
-            if (spec.vectorFlag && match('*')) {
-                // For vector format, * means custom separator, not width!
-                spec.widthFromArg = true;  // Repurpose this to mean "custom separator"
+            // 3. Parse width (and handle %*v formats)
+            if (!spec.vectorFlag && match('*')) {
+                // Could be regular width or %*v format
+                if (!isAtEnd() && current() == 'v') {
+                    // This is %*v format - * is for custom separator
+                    spec.vectorFlag = true;
+                    spec.widthFromArg = true;  // Means "has custom separator"
+                    advance(); // consume 'v'
 
-                // Now parse the actual width if present
-                spec.width = parseNumber();  // This will parse the "2" in %*v2d
-            } else if (match('*')) {
-                spec.widthFromArg = true;
-                // Check for parameter index
-                checkpoint = pos;
-                Integer widthParam = parseNumber();
-                if (widthParam != null && match('$')) {
-                    spec.widthArgIndex = widthParam;
+                    // Now check for width after %*v
+                    if (match('*')) {
+                        // %*v*d format
+                        spec.precisionFromArg = true; // HACK: means second *
+                    } else {
+                        spec.width = parseNumber();
+                    }
                 } else {
-                    pos = checkpoint; // Reset
-                }
-            } else {
-                spec.width = parseNumber();
-                // // ADD THIS DEBUG LINE:
-                // System.err.println("DEBUG: Width parsed: " + spec.width + ", pos=" + pos + ", next char='" + current() + "'");
-            }
-
-            if (!isAtEnd() && current() == 'v') {
-                spec.vectorFlag = true;
-                advance();
-                // System.err.println("DEBUG: Vector flag found after width, pos=" + pos);
-
-                // // ADD THIS: For %*v formats, parse additional width
-                if (spec.widthFromArg) {
-                    // The * was for separator, now parse the actual width
-                    Integer width2 = parseNumber();
-                    if (width2 != null) {
-                        spec.width = width2;
-                        // System.err.println("DEBUG: Parsed width after vector: " + spec.width);
+                    // Regular * for width
+                    spec.widthFromArg = true;
+                    checkpoint = pos;
+                    Integer widthParam = parseNumber();
+                    if (widthParam != null && match('$')) {
+                        spec.widthArgIndex = widthParam;
+                    } else {
+                        pos = checkpoint;
                     }
                 }
+            } else if (spec.vectorFlag && match('*')) {
+                // %v*d format - * is for width
+                spec.widthFromArg = true;
+                // Don't set precisionFromArg here
+            } else {
+                spec.width = parseNumber();
             }
 
             // Check for spaces in the format (invalid)
