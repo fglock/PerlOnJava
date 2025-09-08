@@ -69,7 +69,8 @@ public class SprintfOperator {
                     charsWritten += formatted.length();
 
                     // Update argument index if not using positional parameters
-                    if (spec.parameterIndex == null && spec.conversionChar != '%') {
+                    // BUT don't update if the specifier was invalid
+                    if (spec.parameterIndex == null && spec.conversionChar != '%' && spec.isValid) {
                         argIndex = updateArgIndex(spec, argIndex);
                     }
                 }
@@ -341,6 +342,9 @@ public class SprintfOperator {
             String warningMessage = "Invalid conversion in sprintf: \"" + formatForWarning + "\"";
             WarnDie.warn(new RuntimeScalar(warningMessage), new RuntimeScalar(""));
         }
+
+        // Don't consume any arguments for invalid specifiers
+        // The caller should NOT update argIndex for invalid formats
 
         return formatOnly + trailing;
     }
