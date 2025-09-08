@@ -137,40 +137,57 @@ public class SprintfOperator {
 
         // For vector formats with %*v, we need special handling
         if (spec.vectorFlag && spec.widthFromArg) {
-            // In %*vd, the * is the separator, not width!
-            String separator = ".";
-            int sepArgIndex;
+            // Only treat as separator if * came BEFORE v
+            // Check the raw format to see the order
+            int starPos = spec.raw.indexOf('*');
+            int vPos = spec.raw.indexOf('v');
 
-            if (spec.widthArgIndex != null) {
-                sepArgIndex = spec.widthArgIndex - 1;
+            if (starPos < vPos) {
+                // This is %*v format - * is separator
+                System.err.println("DEBUG: Processing %*v format (separator)");
+
+                String separator = ".";
+                int sepArgIndex;
+
+                if (spec.widthArgIndex != null) {
+                    sepArgIndex = spec.widthArgIndex - 1;
+                } else {
+                    sepArgIndex = argIndex;
+                }
+
+                System.err.println("DEBUG: sepArgIndex=" + sepArgIndex);
+
+                if (sepArgIndex < list.size()) {
+                    separator = ((RuntimeScalar) list.elements.get(sepArgIndex)).toString();
+                    System.err.println("DEBUG: Got separator: '" + separator + "'");
+                }
+
+                // For %*v formats, we need to get the value from the correct position
+                int actualValueIndex;
+                if (spec.parameterIndex != null) {
+                    actualValueIndex = spec.parameterIndex - 1;
+                } else {
+                    // Skip past the separator argument
+                    actualValueIndex = argIndex + 1;
+                }
+
+                if (actualValueIndex >= list.size()) {
+                    return handleMissingArgument(spec, args);
+                }
+
+                // Update value to the correct argument
+                value = (RuntimeScalar) list.elements.get(actualValueIndex);
+
+                System.err.println("DEBUG: Calling formatVectorString with width=" + spec.width + ", separator='" + separator + "'");
+
+                // Format with custom separator - use spec.width which has the actual width
+                return formatter.formatVectorString(value, spec.flags, spec.width != null ? spec.width : 0,
+                        args.precision, spec.conversionChar, separator);
             } else {
-                sepArgIndex = argIndex;
-                // Note: argIndex will be updated by the caller based on consumed args
+                // This is %v*d format - * is width, handle normally
+                System.err.println("DEBUG: Processing %v*d format (width from arg)");
+                // Fall through to normal formatting
             }
-
-            if (sepArgIndex < list.size()) {
-                separator = ((RuntimeScalar) list.elements.get(sepArgIndex)).toString();
-            }
-
-            // For %*v formats, we need to get the value from the correct position
-            int actualValueIndex;
-            if (spec.parameterIndex != null) {
-                actualValueIndex = spec.parameterIndex - 1;
-            } else {
-                // Skip past the separator argument
-                actualValueIndex = argIndex + 1;
-            }
-
-            if (actualValueIndex >= list.size()) {
-                return handleMissingArgument(spec, args);
-            }
-
-            // Update value to the correct argument
-            value = (RuntimeScalar) list.elements.get(actualValueIndex);
-
-            // Format with custom separator (width is 0 for %*v formats)
-            return formatter.formatVectorString(value, spec.flags, 0,
-                    args.precision, spec.conversionChar, separator);
         }
 
         // Format the value using the appropriate formatter
