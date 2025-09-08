@@ -1,7 +1,8 @@
-package org.perlonjava.operators;
+package org.perlonjava.operators.sprintf;
 
-import org.perlonjava.perlmodule.Version;
-import org.perlonjava.runtime.*;
+import org.perlonjava.operators.ReferenceOperators;
+import org.perlonjava.runtime.RuntimeHash;
+import org.perlonjava.runtime.RuntimeScalar;
 
 /**
  * Handles vector string formatting for sprintf operations.
@@ -20,77 +21,77 @@ import org.perlonjava.runtime.*;
  *   sprintf "%vx", "ABC"      # "41.42.43"
  *   sprintf "%v.2x", "ABC"    # "41.42.43" (with precision)
  *   sprintf "%vd", "5.10.1"   # "5.10.1" (version string)
-/**
-  * </pre>
-  */
+ * /**
+ * </pre>
+ */
 public class SprintfVectorFormatter {
 
     /**
-      * Format a vector string with custom separator support.
-      */
+     * Format a vector string with custom separator support.
+     */
     public String formatVectorString(RuntimeScalar value, String flags, int width,
-                                int precision, char conversionChar, String separator) {
-    // Handle version objects specially
-    if (value.isBlessed()) {
-        String className = ReferenceOperators.ref(value).toString();
+                                     int precision, char conversionChar, String separator) {
+        // Handle version objects specially
+        if (value.isBlessed()) {
+            String className = ReferenceOperators.ref(value).toString();
 
-        if (className.equals("version")) {
-            RuntimeHash versionObj = value.hashDeref();
-            // Use the original representation for sprintf
-            RuntimeScalar originalScalar = versionObj.get("original");
-            if (originalScalar.getDefinedBoolean()) {
-                String originalStr = originalScalar.toString();
+            if (className.equals("version")) {
+                RuntimeHash versionObj = value.hashDeref();
+                // Use the original representation for sprintf
+                RuntimeScalar originalScalar = versionObj.get("original");
+                if (originalScalar.getDefinedBoolean()) {
+                    String originalStr = originalScalar.toString();
 
-                // For version objects created with version->new(), use the original
-                // This preserves the exact format (e.g., "1.2" not "1.2.0")
-                if (originalStr.matches("\\d+(\\.\\d+)*")) {
-                    return formatVersionVector(originalStr, flags, width, precision, conversionChar, separator);
-                }
+                    // For version objects created with version->new(), use the original
+                    // This preserves the exact format (e.g., "1.2" not "1.2.0")
+                    if (originalStr.matches("\\d+(\\.\\d+)*")) {
+                        return formatVersionVector(originalStr, flags, width, precision, conversionChar, separator);
+                    }
 
-                // For v-strings (e.g., "v1.2.3"), remove the 'v'
-                if (originalStr.startsWith("v")) {
-                    return formatVersionVector(originalStr.substring(1), flags, width, precision, conversionChar, separator);
+                    // For v-strings (e.g., "v1.2.3"), remove the 'v'
+                    if (originalStr.startsWith("v")) {
+                        return formatVersionVector(originalStr.substring(1), flags, width, precision, conversionChar, separator);
+                    }
                 }
             }
         }
+
+        String str = value.toString();
+
+        // Handle version objects or dotted numeric strings
+        // ONLY treat as version if it contains dots!
+        if (str.contains(".") && str.matches("\\d+(\\.\\d+)*")) {
+            return formatVersionVector(str, flags, width, precision, conversionChar, separator);
+        }
+
+        // Handle regular strings (byte-by-byte)
+        return formatByteVector(str, flags, width, precision, conversionChar, separator);
     }
-
-    String str = value.toString();
-
-    // Handle version objects or dotted numeric strings
-    // ONLY treat as version if it contains dots!
-    if (str.contains(".") && str.matches("\\d+(\\.\\d+)*")) {
-        return formatVersionVector(str, flags, width, precision, conversionChar, separator);
-    }
-
-    // Handle regular strings (byte-by-byte)
-    return formatByteVector(str, flags, width, precision, conversionChar, separator);
-}
 
     // Keep the original method for backward compatibility
     public String formatVectorString(RuntimeScalar value, String flags, int width,
-                                    int precision, char conversionChar) {
+                                     int precision, char conversionChar) {
         return formatVectorString(value, flags, width, precision, conversionChar, ".");
     }
 
-  /**
-    * Format a version-style vector (dotted numeric string).
-    *
-    * <p>Version strings like "5.10.1" are split on dots and each numeric
-    * component is formatted individually. This is commonly used for
-    * version number display.
-    *
-    * @param versionStr The version string to format
-    * @param flags Format flags
-    * @param width Field width for the entire result
-    * @param precision Precision for each element
-    * @param conversionChar Conversion character
-    * @return The formatted version vector
-    */
-  private String formatVersionVector(String versionStr, String flags, int width,
-                                   int precision, char conversionChar) {
-      return formatVersionVector(versionStr, flags, width, precision, conversionChar, ".");
-  }
+    /**
+     * Format a version-style vector (dotted numeric string).
+     *
+     * <p>Version strings like "5.10.1" are split on dots and each numeric
+     * component is formatted individually. This is commonly used for
+     * version number display.
+     *
+     * @param versionStr     The version string to format
+     * @param flags          Format flags
+     * @param width          Field width for the entire result
+     * @param precision      Precision for each element
+     * @param conversionChar Conversion character
+     * @return The formatted version vector
+     */
+    private String formatVersionVector(String versionStr, String flags, int width,
+                                       int precision, char conversionChar) {
+        return formatVersionVector(versionStr, flags, width, precision, conversionChar, ".");
+    }
 
     private String formatVersionVector(String versionStr, String flags, int width,
                                        int precision, char conversionChar, String separator) {
@@ -119,16 +120,16 @@ public class SprintfVectorFormatter {
     }
 
     /**
-      * Format a byte vector (string treated as sequence of bytes).
-      *
+     * Format a byte vector (string treated as sequence of bytes).
+     *
      * <p>Each character in the string is converted to its byte value (0-255)
      * and formatted according to the conversion specifier. The results are
      * joined with dots.
      *
-     * @param str The string to treat as a byte sequence
-     * @param flags Format flags
-     * @param width Field width for the entire result
-     * @param precision Precision for each byte
+     * @param str            The string to treat as a byte sequence
+     * @param flags          Format flags
+     * @param width          Field width for the entire result
+     * @param precision      Precision for each byte
      * @param conversionChar Conversion character
      * @return The formatted byte vector
      */
@@ -168,14 +169,14 @@ public class SprintfVectorFormatter {
      * conversion character, applying the appropriate base conversion and
      * prefix handling.
      *
-     * @param byteValue The numeric value to format (0-255 for bytes)
-     * @param flags Format flags
-     * @param precision Precision for this element
+     * @param byteValue      The numeric value to format (0-255 for bytes)
+     * @param flags          Format flags
+     * @param precision      Precision for this element
      * @param conversionChar Conversion character
      * @return The formatted element
      */
     private String formatVectorValue(int byteValue, String flags, int width, int precision,
-                               char conversionChar) {
+                                     char conversionChar) {
         // First format the base value
         String formatted = switch (conversionChar) {
             case 'd', 'i' -> String.valueOf(byteValue);
@@ -249,7 +250,7 @@ public class SprintfVectorFormatter {
                     prefix = formatted.substring(0, 1);
                     number = formatted.substring(1);
                 } else if (formatted.startsWith("0x") || formatted.startsWith("0X") ||
-                           formatted.startsWith("0b") || formatted.startsWith("0B")) {
+                        formatted.startsWith("0b") || formatted.startsWith("0B")) {
                     prefix = formatted.substring(0, 2);
                     number = formatted.substring(2);
                 }
@@ -275,7 +276,7 @@ public class SprintfVectorFormatter {
      * (+ or space) if specified.
      *
      * @param byteValue The value to format
-     * @param flags Format flags
+     * @param flags     Format flags
      * @return The formatted decimal string
      */
     private String formatVectorDecimal(int byteValue, String flags) {
@@ -298,7 +299,7 @@ public class SprintfVectorFormatter {
      * zero for non-zero values.
      *
      * @param byteValue The value to format
-     * @param flags Format flags
+     * @param flags     Format flags
      * @return The formatted octal string
      */
     private String formatVectorOctal(int byteValue, String flags) {
@@ -319,7 +320,7 @@ public class SprintfVectorFormatter {
      * "0x" or "0X" prefix for non-zero values.
      *
      * @param byteValue The value to format
-     * @param flags Format flags
+     * @param flags     Format flags
      * @param uppercase Whether to use uppercase letters (A-F)
      * @return The formatted hexadecimal string
      */
@@ -344,8 +345,8 @@ public class SprintfVectorFormatter {
      * <p>Formats the value as a binary number. The # flag adds a
      * "0b" or "0B" prefix for non-zero values.
      *
-     * @param byteValue The value to format
-     * @param flags Format flags
+     * @param byteValue      The value to format
+     * @param flags          Format flags
      * @param conversionChar 'b' for lowercase prefix, 'B' for uppercase
      * @return The formatted binary string
      */

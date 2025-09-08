@@ -201,7 +201,7 @@ public class Operator {
      * Extracts a substring from a given RuntimeScalar based on the provided offset and length.
      * This method mimics Perl's substr function, handling negative offsets and lengths.
      *
-     * @param ctx The context of the operation.
+     * @param ctx  The context of the operation.
      * @param args The original string, the offset and optionally the length.
      * @return A RuntimeSubstrLvalue representing the extracted substring, which can be used for further operations.
      */
@@ -317,7 +317,7 @@ public class Operator {
                     runtimeArray.elements.addAll(offset, arr.elements);
                 }
 
-                yield  removedElements;
+                yield removedElements;
             }
             case AUTOVIVIFY_ARRAY -> {
                 AutovivificationArray.vivify(runtimeArray);
@@ -326,7 +326,6 @@ public class Operator {
             case TIED_ARRAY -> TieArray.tiedSplice(runtimeArray, list);
             default -> throw new IllegalStateException("Unknown array type: " + runtimeArray.type);
         };
-
 
 
     }
@@ -429,6 +428,7 @@ public class Operator {
 
     /**
      * Parses a reset expression like "a-z" or "XYZ" into a set of characters
+     *
      * @param expr The reset expression
      * @return Set of characters that variables should start with to be reset
      */
@@ -463,6 +463,7 @@ public class Operator {
 
     /**
      * Read the value of a symbolic link
+     *
      * @param args RuntimeBase array: [filename] or empty (uses $_)
      * @return RuntimeScalar with link target or undef on error
      */
@@ -510,6 +511,7 @@ public class Operator {
 
     /**
      * Rename a file (Perl's rename operator)
+     *
      * @param args RuntimeBase array: [oldname, newname]
      * @return RuntimeScalar with 1 on success, 0 on failure
      */

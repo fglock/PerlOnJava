@@ -10,13 +10,13 @@ import java.nio.charset.StandardCharsets;
  * Maintains state during unpacking operations.
  */
 public class UnpackState {
+    public final boolean isUTF8Data;
     private final String dataString;
     private final byte[] originalBytes;
     private final int[] codePoints;
     private int codePointIndex = 0;
     private boolean characterMode;
     private ByteBuffer buffer;
-    public final boolean isUTF8Data;
 
     public UnpackState(String dataString, boolean startsWithU) {
         this.dataString = dataString;

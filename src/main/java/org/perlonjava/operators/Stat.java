@@ -1,7 +1,10 @@
 package org.perlonjava.operators;
 
-import org.perlonjava.runtime.*;
 import org.perlonjava.io.ClosedIOHandle;
+import org.perlonjava.runtime.RuntimeIO;
+import org.perlonjava.runtime.RuntimeList;
+import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.RuntimeScalarType;
 
 import java.io.IOException;
 import java.nio.file.Files;

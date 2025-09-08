@@ -1,8 +1,12 @@
 package org.perlonjava.operators;
 
 import com.sun.jna.*;
-import com.sun.jna.platform.win32.*;
-import org.perlonjava.runtime.*;
+import com.sun.jna.platform.win32.Kernel32;
+import com.sun.jna.platform.win32.WinBase;
+import com.sun.jna.platform.win32.WinNT;
+import org.perlonjava.runtime.RuntimeBase;
+import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.RuntimeScalarType;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -10,7 +14,7 @@ import java.nio.file.Paths;
 
 /**
  * Native implementation of Perl's utime operator using JNA
- *
+ * <p>
  * This implementation provides direct access to system utime functions:
  * - On POSIX systems: Uses native utime()/utimes() system calls
  * - On Windows: Uses SetFileTime() API
@@ -24,44 +28,6 @@ public class UtimeOperator {
     // Windows epoch starts 1601, Unix epoch starts 1970
     // Difference in 100-nanosecond intervals
     private static final long WINDOWS_EPOCH_DIFF = 116444736000000000L;
-
-    /**
-     * Structure for POSIX utimbuf
-     */
-    public static class Utimbuf extends Structure {
-        public NativeLong actime;  // access time
-        public NativeLong modtime; // modification time
-
-        @Override
-        protected java.util.List<String> getFieldOrder() {
-            return java.util.Arrays.asList("actime", "modtime");
-        }
-    }
-
-    /**
-     * Structure for POSIX timeval (used by utimes)
-     */
-    public static class Timeval extends Structure {
-        public NativeLong tv_sec;  // seconds
-        public NativeLong tv_usec; // microseconds
-
-        @Override
-        protected java.util.List<String> getFieldOrder() {
-            return java.util.Arrays.asList("tv_sec", "tv_usec");
-        }
-    }
-
-    /**
-     * Extended POSIX interface for utime functions
-     */
-    public interface ExtendedPosixLibrary extends Library {
-        ExtendedPosixLibrary INSTANCE = Native.load("c", ExtendedPosixLibrary.class);
-
-        int utime(String filename, Utimbuf times);
-        int utimes(String filename, Timeval[] times);
-        int futimes(int fd, Timeval[] times);
-        int lutimes(String filename, Timeval[] times); // For symlinks
-    }
 
     /**
      * Implements Perl's utime operator using native system calls
@@ -90,8 +56,8 @@ public class UtimeOperator {
             modTime = currentTime;
         } else {
             // Get times in seconds (Perl uses seconds since epoch)
-            accessTime = accessTimeArg.getDefinedBoolean() ? (long)accessTimeArg.getDouble() : 0;
-            modTime = modTimeArg.getDefinedBoolean() ? (long)modTimeArg.getDouble() : 0;
+            accessTime = accessTimeArg.getDefinedBoolean() ? (long) accessTimeArg.getDouble() : 0;
+            modTime = modTimeArg.getDefinedBoolean() ? (long) modTimeArg.getDouble() : 0;
         }
 
         int successCount = 0;
@@ -298,8 +264,8 @@ public class UtimeOperator {
         long windowsTime = (unixTime * 10000000L) + WINDOWS_EPOCH_DIFF;
 
         WinBase.FILETIME ft = new WinBase.FILETIME();
-        ft.dwLowDateTime = (int)(windowsTime & 0xFFFFFFFFL);
-        ft.dwHighDateTime = (int)((windowsTime >> 32) & 0xFFFFFFFFL);
+        ft.dwLowDateTime = (int) (windowsTime & 0xFFFFFFFFL);
+        ft.dwHighDateTime = (int) ((windowsTime >> 32) & 0xFFFFFFFFL);
         return ft;
     }
 
@@ -339,6 +305,47 @@ public class UtimeOperator {
             } catch (Exception e) {
                 return false;
             }
+        }
+    }
+
+    /**
+     * Extended POSIX interface for utime functions
+     */
+    public interface ExtendedPosixLibrary extends Library {
+        ExtendedPosixLibrary INSTANCE = Native.load("c", ExtendedPosixLibrary.class);
+
+        int utime(String filename, Utimbuf times);
+
+        int utimes(String filename, Timeval[] times);
+
+        int futimes(int fd, Timeval[] times);
+
+        int lutimes(String filename, Timeval[] times); // For symlinks
+    }
+
+    /**
+     * Structure for POSIX utimbuf
+     */
+    public static class Utimbuf extends Structure {
+        public NativeLong actime;  // access time
+        public NativeLong modtime; // modification time
+
+        @Override
+        protected java.util.List<String> getFieldOrder() {
+            return java.util.Arrays.asList("actime", "modtime");
+        }
+    }
+
+    /**
+     * Structure for POSIX timeval (used by utimes)
+     */
+    public static class Timeval extends Structure {
+        public NativeLong tv_sec;  // seconds
+        public NativeLong tv_usec; // microseconds
+
+        @Override
+        protected java.util.List<String> getFieldOrder() {
+            return java.util.Arrays.asList("tv_sec", "tv_usec");
         }
     }
 }

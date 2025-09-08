@@ -101,7 +101,7 @@ public class PrototypeArgs {
     static ListNode consumeArgsWithPrototype(Parser parser, String prototype, boolean handleParen) {
         int index = parser.tokenIndex;
         ListNode args = new ListNode(parser.tokenIndex);
-        boolean hasParentheses = handleParen ? handleOpeningParenthesis(parser) : false;
+        boolean hasParentheses = handleParen && handleOpeningParenthesis(parser);
 
         // Comma is forbidden here
         if (prototype != null && !prototype.isEmpty() && isComma(TokenUtils.peek(parser))) {

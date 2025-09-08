@@ -1,11 +1,11 @@
-package org.perlonjava.operators;
+package org.perlonjava.operators.sprintf;
 
 /**
  * Validates sprintf format specifiers according to Perl rules
  */
 public class SprintfValidator {
 
-    public SprintfValidationResult validate(SprintfFormatParser.FormatSpecifier spec) {
+    public SprintfValidationResult validate(FormatSpecifier spec) {
         // Handle %%
         if (spec.conversionChar == '%') {
             if (spec.widthFromArg || spec.precisionFromArg) {
@@ -91,21 +91,17 @@ public class SprintfValidator {
         return new SprintfValidationResult(SprintfValidationResult.Status.VALID);
     }
 
-    private boolean hasInvalidSpaces(SprintfFormatParser.FormatSpecifier spec) {
+    private boolean hasInvalidSpaces(FormatSpecifier spec) {
         // Check for patterns like %6. 6s, %6 .6s, %6.6 s
         if (spec.raw.matches("%[^%]*\\s+[^%]*")) {
             return true;
         }
 
         // Check for vector formats with spaces like %v. 3d, %0v3 d
-        if (spec.vectorFlag && spec.raw.contains(" ")) {
-            return true;
-        }
-
-        return false;
+        return spec.vectorFlag && spec.raw.contains(" ");
     }
 
-    private SprintfValidationResult validateHashFlag(SprintfFormatParser.FormatSpecifier spec) {
+    private SprintfValidationResult validateHashFlag(FormatSpecifier spec) {
         // # flag is only valid for o, x, X, b, B, e, E, f, F, g, G, a, A
         String validHashConversions = "oxXbBeEfFgGaA";
         if (validHashConversions.indexOf(spec.conversionChar) < 0) {
@@ -114,7 +110,7 @@ public class SprintfValidator {
         return new SprintfValidationResult(SprintfValidationResult.Status.VALID);
     }
 
-    private SprintfValidationResult validateLengthModifier(SprintfFormatParser.FormatSpecifier spec) {
+    private SprintfValidationResult validateLengthModifier(FormatSpecifier spec) {
         String combo = spec.lengthModifier + spec.conversionChar;
         // h with floating point is invalid
         if ("hf".equals(combo) || "hF".equals(combo) || "hg".equals(combo) ||
@@ -131,7 +127,7 @@ public class SprintfValidator {
         return new SprintfValidationResult(SprintfValidationResult.Status.VALID);
     }
 
-    private SprintfValidationResult validateVectorFormat(SprintfFormatParser.FormatSpecifier spec) {
+    private SprintfValidationResult validateVectorFormat(FormatSpecifier spec) {
         // Vector flag is only valid with certain conversions
         String validVectorConversions = "diouxXbBcsaAeEfFgG";
         if (validVectorConversions.indexOf(spec.conversionChar) < 0) {
@@ -147,7 +143,7 @@ public class SprintfValidator {
         return new SprintfValidationResult(SprintfValidationResult.Status.VALID);
     }
 
-    private SprintfValidationResult validateFlagCombinations(SprintfFormatParser.FormatSpecifier spec) {
+    private SprintfValidationResult validateFlagCombinations(FormatSpecifier spec) {
         // + and space flags are ignored for unsigned conversions
         boolean isUnsigned = "uUoOxXbB".indexOf(spec.conversionChar) >= 0;
 

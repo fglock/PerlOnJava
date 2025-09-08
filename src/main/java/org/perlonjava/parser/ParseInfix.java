@@ -3,7 +3,6 @@ package org.perlonjava.parser;
 import org.perlonjava.astnode.*;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
-import org.perlonjava.operators.Operator;
 import org.perlonjava.runtime.PerlCompilerException;
 
 import java.util.ArrayList;

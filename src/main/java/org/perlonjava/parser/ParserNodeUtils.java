@@ -31,7 +31,7 @@ public class ParserNodeUtils {
      *
      * @param node The node to potentially transform to scalar context
      * @return The node in scalar context - either the original node if already scalar,
-     *         or wrapped in a scalar context operator if transformation is needed
+     * or wrapped in a scalar context operator if transformation is needed
      */
     static Node toScalarContext(Node node) {
         boolean isAlreadyScalar = switch (node) {

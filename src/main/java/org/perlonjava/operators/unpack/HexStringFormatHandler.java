@@ -1,7 +1,9 @@
 package org.perlonjava.operators.unpack;
 
 import org.perlonjava.operators.UnpackState;
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.RuntimeBase;
+import org.perlonjava.runtime.RuntimeScalar;
+
 import java.nio.ByteBuffer;
 import java.util.List;
 
@@ -9,8 +11,8 @@ import java.util.List;
  * Handles hex string formats 'h' and 'H'.
  */
 public class HexStringFormatHandler implements FormatHandler {
-    private final char format;
     private static final char[] HEX_CHARS = "0123456789abcdef".toCharArray();
+    private final char format;
 
     public HexStringFormatHandler(char format) {
         this.format = format;

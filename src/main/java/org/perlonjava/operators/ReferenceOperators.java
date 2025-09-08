@@ -23,14 +23,14 @@ public class ReferenceOperators {
      */
     public static RuntimeScalar bless(RuntimeScalar runtimeScalar, RuntimeScalar className) {
         if (RuntimeScalarType.isReference(runtimeScalar)) {
-                // Default to "main" if className is empty
-                String str = className.toString();
-                if (str.isEmpty()) {
-                    str = "main";
-                }
-                ((RuntimeBase) runtimeScalar.value).setBlessId(NameNormalizer.getBlessId(str));
+            // Default to "main" if className is empty
+            String str = className.toString();
+            if (str.isEmpty()) {
+                str = "main";
+            }
+            ((RuntimeBase) runtimeScalar.value).setBlessId(NameNormalizer.getBlessId(str));
         } else {
-                throw new PerlCompilerException("Can't bless non-reference value");
+            throw new PerlCompilerException("Can't bless non-reference value");
         }
         return runtimeScalar;
     }

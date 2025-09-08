@@ -1,10 +1,15 @@
 package org.perlonjava.operators;
 
-import org.perlonjava.runtime.*;
+import org.perlonjava.operators.sprintf.FormatSpecifier;
+import org.perlonjava.operators.sprintf.SprintfFormatParser;
+import org.perlonjava.operators.sprintf.SprintfValueFormatter;
+import org.perlonjava.runtime.RuntimeBase;
+import org.perlonjava.runtime.RuntimeList;
+import org.perlonjava.runtime.RuntimeScalar;
 
 /**
  * Implements Perl's sprintf operator for formatted string output.
- *
+ * <p>
  * This class serves as the main entry point for sprintf operations,
  * coordinating between the format parser and various formatters.
  *
@@ -15,7 +20,7 @@ public class SprintfOperator {
 
     /**
      * Formats the elements according to the specified format string.
-     *
+     * <p>
      * This method implements Perl's sprintf function, supporting:
      * - Positional parameters (e.g., %2$d)
      * - Various conversion specifiers (d, s, f, x, etc.)
@@ -45,11 +50,10 @@ public class SprintfOperator {
         SprintfValueFormatter formatter = new SprintfValueFormatter();
 
         for (Object element : parsed.elements) {
-            if (element instanceof String) {
-                String literal = (String) element;
+            if (element instanceof String literal) {
                 result.append(literal);
                 charsWritten += literal.length();
-            } else if (element instanceof SprintfFormatParser.FormatSpecifier spec) {
+            } else if (element instanceof FormatSpecifier spec) {
                 // Check if this is an overlapping specifier (warning only, no output)
                 if (spec.isOverlapping) {
                     // Only generate warning, don't add to output
@@ -97,7 +101,7 @@ public class SprintfOperator {
         return new RuntimeScalar(result.toString());
     }
 
-    private static void handlePercentN(SprintfFormatParser.FormatSpecifier spec,
+    private static void handlePercentN(FormatSpecifier spec,
                                        RuntimeList list, int argIndex) {
         int targetIndex = spec.parameterIndex != null ? spec.parameterIndex - 1 : argIndex;
         if (targetIndex < list.size()) {
@@ -117,7 +121,7 @@ public class SprintfOperator {
      * @return The formatted string
      */
     private static String processFormatSpecifier(
-            SprintfFormatParser.FormatSpecifier spec,
+            FormatSpecifier spec,
             RuntimeList list,
             int argIndex,
             SprintfValueFormatter formatter) {
@@ -163,7 +167,7 @@ public class SprintfOperator {
                 int sepArgIndex = argIndex;
 
                 if (sepArgIndex < list.size()) {
-                    separator = ((RuntimeScalar) list.elements.get(sepArgIndex)).toString();
+                    separator = list.elements.get(sepArgIndex).toString();
                 }
 
                 int actualWidth = 0;
@@ -207,20 +211,10 @@ public class SprintfOperator {
     }
 
     /**
-     * Container for format arguments (width, precision, value index).
-     */
-    private static class FormatArguments {
-        int width = 0;
-        int precision = -1;
-        int valueArgIndex;
-        int consumedArgs = 0;
-    }
-
-    /**
      * Extract width, precision, and value index from the format specifier.
      */
     private static FormatArguments extractFormatArguments(
-            SprintfFormatParser.FormatSpecifier spec,
+            FormatSpecifier spec,
             RuntimeList list,
             int argIndex) {
 
@@ -317,7 +311,7 @@ public class SprintfOperator {
     /**
      * Update argument index after processing a format specifier.
      */
-    private static int updateArgIndex(SprintfFormatParser.FormatSpecifier spec,
+    private static int updateArgIndex(FormatSpecifier spec,
                                       int currentIndex) {
         int consumed = 1;  // The value argument
 
@@ -334,7 +328,7 @@ public class SprintfOperator {
     /**
      * Handle invalid format specifiers.
      */
-    private static String handleInvalidSpecifier(SprintfFormatParser.FormatSpecifier spec) {
+    private static String handleInvalidSpecifier(FormatSpecifier spec) {
         // System.err.println("DEBUG handleInvalidSpecifier: raw='" + spec.raw + "', errorMessage='" + spec.errorMessage + "'");
 
         String formatOnly = spec.raw;
@@ -376,7 +370,7 @@ public class SprintfOperator {
     /**
      * Handle missing argument for a format specifier.
      */
-    private static String handleMissingArgument(SprintfFormatParser.FormatSpecifier spec,
+    private static String handleMissingArgument(FormatSpecifier spec,
                                                 FormatArguments args) {
         // Generate warning
         WarnDie.warn(new RuntimeScalar("Missing argument in sprintf"), new RuntimeScalar(""));
@@ -393,5 +387,15 @@ public class SprintfOperator {
             case 'c' -> "\0";
             default -> "";
         };
+    }
+
+    /**
+     * Container for format arguments (width, precision, value index).
+     */
+    private static class FormatArguments {
+        int width = 0;
+        int precision = -1;
+        int valueArgIndex;
+        int consumedArgs = 0;
     }
 }

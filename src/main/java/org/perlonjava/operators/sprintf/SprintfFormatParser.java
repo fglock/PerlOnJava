@@ -1,4 +1,4 @@
-package org.perlonjava.operators;
+package org.perlonjava.operators.sprintf;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -68,30 +68,6 @@ public class SprintfFormatParser {
         public void addSpecifier(FormatSpecifier spec) {
             elements.add(spec);
         }
-    }
-
-    public static class FormatSpecifier {
-        public int startPos;
-        public int endPos;
-        public String raw = "";
-
-        // Parsed components
-        public boolean invalidDueToSpace = false;
-        public String invalidLengthModifierWarning;
-        public Integer parameterIndex;      // null or 1-based index
-        public String flags = "";           // combination of -, +, space, #, 0
-        public Integer width;               // null if not specified
-        public boolean widthFromArg;        // true if width is from argument
-        public Integer widthArgIndex;       // parameter index for width (1-based)
-        public Integer precision;           // null if not specified
-        public boolean precisionFromArg;    // true if precision is from argument
-        public Integer precisionArgIndex;   // parameter index for precision (1-based)
-        public String lengthModifier;       // h, l, ll, etc.
-        public boolean vectorFlag;
-        public char conversionChar;
-        public boolean isValid = true;
-        public String errorMessage;
-        public boolean isOverlapping = false;  // Don't include in output, just warn
     }
 
     private static class Parser {
@@ -225,12 +201,9 @@ public class SprintfFormatParser {
 
             // Check for spaces in the format (invalid)
             int savePos = pos;
-            boolean hasInvalidSpace = false;
+            boolean hasInvalidSpace = !isAtEnd() && current() == ' ' && peek(1) != '\0';
 
             // Check for space after width
-            if (!isAtEnd() && current() == ' ' && peek(1) != '\0') {
-                hasInvalidSpace = true;
-            }
 
             // Skip any spaces (they make the format invalid)
             while (!isAtEnd() && current() == ' ') {
@@ -299,18 +272,14 @@ public class SprintfFormatParser {
             } else {
                 spec.conversionChar = current();
                 advance();
-                System.err.println("DEBUG: Parsed conversion char '" + spec.conversionChar + "'");
+                // System.err.println("DEBUG: Parsed conversion char '" + spec.conversionChar + "'");
             }
 
             spec.endPos = pos;
             spec.raw = input.substring(spec.startPos, spec.endPos);
 
-            // ADD DEBUG HERE:
-            System.err.println("DEBUG parseSpecifier: raw='" + spec.raw +
-                "', vectorFlag=" + spec.vectorFlag +
-                ", conversionChar='" + spec.conversionChar + "'");
+            // System.err.println("DEBUG parseSpecifier: raw='" + spec.raw + "', vectorFlag=" + spec.vectorFlag + ", conversionChar='" + spec.conversionChar + "'");
 
-            // Add debug here to check the state before returning
             // System.err.println("DEBUG: Before return - isValid=" + spec.isValid +
             //                   ", errorMessage='" + spec.errorMessage + "'");
 
@@ -323,7 +292,6 @@ public class SprintfFormatParser {
                 validateSpecifier(spec);
             }
 
-            // Add debug after validation
             // System.err.println("DEBUG handleInvalidSpecifier: raw='" + spec.raw +
             //     "', errorMessage='" + spec.errorMessage + "'");
 
@@ -341,10 +309,11 @@ public class SprintfFormatParser {
             return null;
         }
 
-            void validateSpecifier(FormatSpecifier spec) {
-    // System.err.println("DEBUG validateSpecifier: raw='" + spec.raw +
-    //     "', vectorFlag=" + spec.vectorFlag +
-    //     ", conversionChar='" + spec.conversionChar + "'");
+        void validateSpecifier(FormatSpecifier spec) {
+            // System.err.println("DEBUG validateSpecifier: raw='" + spec.raw +
+            //     "', vectorFlag=" + spec.vectorFlag +
+            //     ", conversionChar='" + spec.conversionChar + "'");
+
             // Special case: %*v formats are valid
             if (spec.vectorFlag && spec.widthFromArg) {
                 // This is a valid vector format with custom separator
@@ -359,19 +328,18 @@ public class SprintfFormatParser {
                 return;
             }
 
-                  // Check for vector formats FIRST (before %n check)
-                  if (spec.vectorFlag) {
-                      // Vector flag is only valid with certain conversions
-                      String validVectorConversions = "diouxXbB";
-                      System.err.println("DEBUG: Checking vector conversion '" + spec.conversionChar +
-                            "' in '" + validVectorConversions + "'");
-                      if (validVectorConversions.indexOf(spec.conversionChar) < 0) {
-                          System.err.println("DEBUG: Setting invalid for vector format");
-                          spec.isValid = false;
-                          spec.errorMessage = "INVALID";
-                          return;
-                      }
-                  }
+            // Check for vector formats FIRST (before %n check)
+            if (spec.vectorFlag) {
+                // Vector flag is only valid with certain conversions
+                String validVectorConversions = "diouxXbB";
+                // System.err.println("DEBUG: Checking vector conversion '" + spec.conversionChar +  "' in '" + validVectorConversions + "'");
+                if (validVectorConversions.indexOf(spec.conversionChar) < 0) {
+                    // System.err.println("DEBUG: Setting invalid for vector format");
+                    spec.isValid = false;
+                    spec.errorMessage = "INVALID";
+                    return;
+                }
+            }
 
             if ("V".equals(spec.lengthModifier)) {
                 // V is silently ignored in Perl
@@ -379,14 +347,14 @@ public class SprintfFormatParser {
                 // Don't set invalidLengthModifierWarning
             }
 
-    // Check for invalid conversion characters
-    // Valid conversion characters are: diouxXeEfFgGaAbBcspn%DUO
-    String validChars = "diouxXeEfFgGaAbBcspn%DUO";  // REMOVE 'v' from this list
-    if (validChars.indexOf(spec.conversionChar) < 0) {
-        spec.isValid = false;
-        spec.errorMessage = "INVALID";
-        return;
-    }
+            // Check for invalid conversion characters
+            // Valid conversion characters are: diouxXeEfFgGaAbBcspn%DUO
+            String validChars = "diouxXeEfFgGaAbBcspn%DUO";  // REMOVE 'v' from this list
+            if (validChars.indexOf(spec.conversionChar) < 0) {
+                spec.isValid = false;
+                spec.errorMessage = "INVALID";
+                return;
+            }
 
             // Special case: uppercase letters that might look like length modifiers
             if (spec.lengthModifier != null) {

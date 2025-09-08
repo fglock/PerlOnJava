@@ -36,7 +36,7 @@ public class ScalarGlobOperatorHelper {
      * Converts a glob pattern to a regular expression.
      *
      * @param scalarGlobOperator
-     * @param glob the glob pattern
+     * @param glob               the glob pattern
      * @return compiled regex pattern, or null on error
      */
     static Pattern globToRegex(ScalarGlobOperator scalarGlobOperator, String glob) {
@@ -204,12 +204,10 @@ public class ScalarGlobOperatorHelper {
                 next == '{' || next == '}' || next == '\\' || next == ' ') {
             // However, in Windows absolute paths like C:\*.txt, the backslash
             // before * is still a path separator
-            if (pos == 2 && pos >= 2 &&
+            return pos == 2 && pos >= 2 &&
                     Character.isLetter(pattern.charAt(0)) &&
-                    pattern.charAt(1) == ':') {
-                return true; // Drive letter path
-            }
-            return false; // Likely an escape sequence
+                    pattern.charAt(1) == ':'; // Drive letter path
+// Likely an escape sequence
         }
 
         // Default to path separator for other cases
@@ -307,11 +305,7 @@ public class ScalarGlobOperatorHelper {
         }
 
         // Check for UNC path (\\server\share)
-        if (pattern.startsWith("\\\\") || pattern.startsWith("//")) {
-            return true;
-        }
-
-        return false;
+        return pattern.startsWith("\\\\") || pattern.startsWith("//");
     }
 
     /**

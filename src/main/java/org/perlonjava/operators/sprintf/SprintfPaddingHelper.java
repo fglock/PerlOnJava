@@ -1,8 +1,8 @@
-package org.perlonjava.operators;
+package org.perlonjava.operators.sprintf;
 
 /**
  * Helper class for sprintf padding operations.
- *
+ * <p>
  * This class provides utilities for applying width, precision, and
  * zero-padding to formatted strings according to sprintf semantics.
  */
@@ -42,7 +42,7 @@ public class SprintfPaddingHelper {
 
     /**
      * Apply precision to a vector element.
-     *
+     * <p>
      * Vector precision works by zero-padding numeric values
      * while preserving any prefixes (sign, 0x, etc.).
      *
@@ -91,10 +91,10 @@ public class SprintfPaddingHelper {
 
     /**
      * Apply zero padding to a formatted number.
-     *
+     * <p>
      * Zero padding goes after sign/prefix but before the numeric value.
      * For example: -42 with width 6 becomes -00042
-     *              0xFF with width 8 becomes 0x0000FF
+     * 0xFF with width 8 becomes 0x0000FF
      *
      * @param str   The formatted string
      * @param width The desired width
@@ -130,11 +130,11 @@ public class SprintfPaddingHelper {
 
         // Extract base prefix if present
         if (result.number.startsWith("0x") || result.number.startsWith("0X") ||
-            result.number.startsWith("0b") || result.number.startsWith("0B")) {
+                result.number.startsWith("0b") || result.number.startsWith("0B")) {
             result.prefix += result.number.substring(0, 2);
             result.number = result.number.substring(2);
         } else if (result.number.startsWith("0") && result.number.length() > 1 &&
-                   Character.isDigit(result.number.charAt(1))) {
+                Character.isDigit(result.number.charAt(1))) {
             // Octal prefix - but only treat as prefix for formatting purposes
             // if explicitly requested
         }

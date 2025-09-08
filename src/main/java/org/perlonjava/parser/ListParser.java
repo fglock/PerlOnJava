@@ -7,8 +7,6 @@ import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.PerlCompilerException;
 
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 
 import static org.perlonjava.parser.TokenUtils.peek;

@@ -1,8 +1,15 @@
 package org.perlonjava.operators;
 
 import org.perlonjava.operators.unpack.*;
-import org.perlonjava.runtime.*;
-import java.util.*;
+import org.perlonjava.runtime.PerlCompilerException;
+import org.perlonjava.runtime.RuntimeBase;
+import org.perlonjava.runtime.RuntimeList;
+import org.perlonjava.runtime.RuntimeScalar;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Stack;
 
 /**
  * Provides functionality to unpack binary data into a list of scalars

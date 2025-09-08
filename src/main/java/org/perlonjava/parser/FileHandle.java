@@ -89,10 +89,10 @@ public class FileHandle {
 
         // Handle glob or string expressions when we have brackets
         if (hasBracket && token.type == LexerTokenType.OPERATOR && (token.text.equals("*") || token.text.equals("\\") || token.text.equals("\""))) {
-                // Parse glob expression: {*STDOUT}, {\*STDOUT}, {"STDOUT"} etc.
-                // ParsePrimary.parsePrimary() has logic to handle both * and \* cases
-                // and will create the appropriate glob or reference node
-                fileHandle = ParsePrimary.parsePrimary(parser);
+            // Parse glob expression: {*STDOUT}, {\*STDOUT}, {"STDOUT"} etc.
+            // ParsePrimary.parsePrimary() has logic to handle both * and \* cases
+            // and will create the appropriate glob or reference node
+            fileHandle = ParsePrimary.parsePrimary(parser);
         }
         // Handle bareword file handles (most common case)
         // Examples: STDOUT, STDERR, STDIN, or user-defined handles like LOG, FILE, etc.
@@ -121,8 +121,7 @@ public class FileHandle {
 
                 if ("<<".equals(nextText)) {
                     // `<<` is an infix, but it is also a heredoc
-                }
-                else if (ParserTables.INFIX_OP.contains(nextText) || "{[".contains(nextText) || "->".equals(nextText)) {
+                } else if (ParserTables.INFIX_OP.contains(nextText) || "{[".contains(nextText) || "->".equals(nextText)) {
                     // Examples that are NOT file handles:
                     // print $fh + 2;     # arithmetic
                     // print $fh{key};    # hash access

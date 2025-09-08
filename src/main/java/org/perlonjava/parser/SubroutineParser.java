@@ -22,7 +22,6 @@ import static org.perlonjava.parser.ParserTables.INFIX_OP;
 import static org.perlonjava.parser.PrototypeArgs.consumeArgsWithPrototype;
 import static org.perlonjava.parser.SignatureParser.parseSignature;
 import static org.perlonjava.parser.TokenUtils.peek;
-import static org.perlonjava.runtime.GlobalVariable.isPackageLoaded;
 
 public class SubroutineParser {
 
@@ -148,10 +147,7 @@ public class SubroutineParser {
     }
 
     private static boolean isValidIndirectMethod(String subName) {
-        if (CORE_PROTOTYPES.containsKey(subName) || subName.startsWith("CORE::")) {
-            return false;
-        }
-        return true;
+        return !CORE_PROTOTYPES.containsKey(subName) && !subName.startsWith("CORE::");
     }
 
     private static Node parseIndirectMethodCall(Parser parser, IdentifierNode nameNode) {

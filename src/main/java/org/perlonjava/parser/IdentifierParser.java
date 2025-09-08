@@ -318,7 +318,7 @@ public class IdentifierParser {
                 // Reset parser position and throw error
                 parser.tokenIndex = startIndex;
                 parser.throwError("Unrecognized character \\x{" +
-                    Integer.toHexString((int) varName.charAt(varName.length()-1)) + "}");
+                        Integer.toHexString(varName.charAt(varName.length() - 1)) + "}");
             }
         }
     }

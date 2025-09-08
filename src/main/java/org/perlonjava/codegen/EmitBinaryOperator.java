@@ -30,9 +30,9 @@ public class EmitBinaryOperator {
                 int intValue = Integer.parseInt(value);
                 emitterVisitor.ctx.mv.visitLdcInsn(intValue);
                 emitterVisitor.ctx.mv.visitMethodInsn(
-                        operatorHandler.getMethodType(),
-                        operatorHandler.getClassName(),
-                        operatorHandler.getMethodName(),
+                        operatorHandler.methodType(),
+                        operatorHandler.className(),
+                        operatorHandler.methodName(),
                         operatorHandler.getDescriptorWithIntParameter(),
                         false);
                 EmitOperator.handleVoidContext(emitterVisitor);

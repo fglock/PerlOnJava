@@ -275,19 +275,6 @@ public class SystemOperator {
     }
 
     /**
-     * Helper class to hold command execution results.
-     */
-    private static class CommandResult {
-        final String output;
-        final int exitCode;
-
-        CommandResult(String output, int exitCode) {
-            this.output = output;
-            this.exitCode = exitCode;
-        }
-    }
-
-    /**
      * Executes a command and attempts to replace the current process.
      * This implements Perl's exec() function.
      * <p>
@@ -344,7 +331,7 @@ public class SystemOperator {
      *
      * @param command The command to execute.
      * @return The exit code of the command.
-     * @throws IOException if an error occurs during command execution.
+     * @throws IOException          if an error occurs during command execution.
      * @throws InterruptedException if the command execution is interrupted.
      */
     private static int execCommand(String command) throws IOException, InterruptedException {
@@ -374,7 +361,7 @@ public class SystemOperator {
      *
      * @param commandArgs List of command and arguments.
      * @return The exit code of the command.
-     * @throws IOException if an error occurs during command execution.
+     * @throws IOException          if an error occurs during command execution.
      * @throws InterruptedException if the command execution is interrupted.
      */
     private static int execCommandDirect(List<String> commandArgs) throws IOException, InterruptedException {
@@ -407,5 +394,11 @@ public class SystemOperator {
 
         // Return undef to indicate failure
         return scalarUndef;
+    }
+
+    /**
+         * Helper class to hold command execution results.
+         */
+        private record CommandResult(String output, int exitCode) {
     }
 }
