@@ -13,9 +13,30 @@ public class SprintfFormatParser {
             int start = parser.pos;
 
             if (parser.current() == '%') {
+                int savedPos = parser.pos; // Save position before parsing
                 FormatSpecifier spec = parser.parseSpecifier();
                 if (spec != null) {
                     result.addSpecifier(spec);
+
+                    // Special case: if the format ends with % as conversion char,
+                    // check if that % starts another invalid format (for warning only)
+                    if (spec.conversionChar == '%' && !spec.isValid && !parser.isAtEnd()) {
+                        // Temporarily parse from the second % to check for invalid format
+                        int currentPos = parser.pos;
+                        parser.pos = savedPos + spec.raw.length() - 1;
+
+                        if (parser.current() == '%') {
+                            FormatSpecifier overlapSpec = parser.parseSpecifier();
+                            if (overlapSpec != null && !overlapSpec.isValid) {
+                                // Mark as overlapping - generate warning but not output
+                                overlapSpec.isOverlapping = true;
+                                result.addSpecifier(overlapSpec);
+                            }
+                        }
+
+                        // Restore original position
+                        parser.pos = currentPos;
+                    }
                 } else {
                     // Failed to parse, add % as literal
                     result.addLiteral("%");
@@ -70,6 +91,7 @@ public class SprintfFormatParser {
         public char conversionChar;
         public boolean isValid = true;
         public String errorMessage;
+        public boolean isOverlapping = false;  // Don't include in output, just warn
     }
 
     private static class Parser {
@@ -277,10 +299,16 @@ public class SprintfFormatParser {
             } else {
                 spec.conversionChar = current();
                 advance();
+                System.err.println("DEBUG: Parsed conversion char '" + spec.conversionChar + "'");
             }
 
             spec.endPos = pos;
             spec.raw = input.substring(spec.startPos, spec.endPos);
+
+            // ADD DEBUG HERE:
+            System.err.println("DEBUG parseSpecifier: raw='" + spec.raw +
+                "', vectorFlag=" + spec.vectorFlag +
+                ", conversionChar='" + spec.conversionChar + "'");
 
             // Add debug here to check the state before returning
             // System.err.println("DEBUG: Before return - isValid=" + spec.isValid +
@@ -331,19 +359,19 @@ public class SprintfFormatParser {
                 return;
             }
 
-            // Check for vector formats FIRST (before %n check)
-            if (spec.vectorFlag) {
-                // Vector flag is only valid with certain conversions
-                String validVectorConversions = "diouxXbB";  // Remove 's'
-      // System.err.println("DEBUG: Checking vector conversion '" + spec.conversionChar +
-      //       "' in '" + validVectorConversions + "'");
-      if (validVectorConversions.indexOf(spec.conversionChar) < 0) {
-          // System.err.println("DEBUG: Setting invalid for vector format");
-                    spec.isValid = false;
-                    spec.errorMessage = "INVALID";
-                    return;
-                }
-            }
+                  // Check for vector formats FIRST (before %n check)
+                  if (spec.vectorFlag) {
+                      // Vector flag is only valid with certain conversions
+                      String validVectorConversions = "diouxXbB";
+                      System.err.println("DEBUG: Checking vector conversion '" + spec.conversionChar +
+                            "' in '" + validVectorConversions + "'");
+                      if (validVectorConversions.indexOf(spec.conversionChar) < 0) {
+                          System.err.println("DEBUG: Setting invalid for vector format");
+                          spec.isValid = false;
+                          spec.errorMessage = "INVALID";
+                          return;
+                      }
+                  }
 
             if ("V".equals(spec.lengthModifier)) {
                 // V is silently ignored in Perl

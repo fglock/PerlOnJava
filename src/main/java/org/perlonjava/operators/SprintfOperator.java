@@ -50,6 +50,16 @@ public class SprintfOperator {
                 result.append(literal);
                 charsWritten += literal.length();
             } else if (element instanceof SprintfFormatParser.FormatSpecifier spec) {
+                // Check if this is an overlapping specifier (warning only, no output)
+                if (spec.isOverlapping) {
+                    // Only generate warning, don't add to output
+                    if (!spec.isValid) {
+                        // Just generate the warning, don't add to result
+                        handleInvalidSpecifier(spec);
+                    }
+                    continue; // Skip adding to result and updating argIndex
+                }
+
                 // Check if spec is invalid FIRST
                 if (!spec.isValid) {
                     String formatted = processFormatSpecifier(spec, list, argIndex, formatter);
@@ -77,7 +87,6 @@ public class SprintfOperator {
                     charsWritten += formatted.length();
 
                     // Update argument index if not using positional parameters
-                    // BUT don't update if the specifier was invalid
                     if (spec.parameterIndex == null && spec.conversionChar != '%') {
                         argIndex = updateArgIndex(spec, argIndex);
                     }
@@ -113,6 +122,14 @@ public class SprintfOperator {
             int argIndex,
             SprintfValueFormatter formatter) {
 
+        System.err.println("DEBUG processFormatSpecifier: raw='" + spec.raw +
+                      "', isValid=" + spec.isValid + ", errorMessage=" + spec.errorMessage);
+
+        // Handle invalid specifiers FIRST (before %% check)
+        if (!spec.isValid) {
+            return handleInvalidSpecifier(spec);
+        }
+
         // Handle %% - literal percent sign
         if (spec.conversionChar == '%') {
             if (spec.widthFromArg) {
@@ -124,11 +141,6 @@ public class SprintfOperator {
 
         // Check if conversion character is missing
         if (spec.conversionChar == '\0') {
-            return handleInvalidSpecifier(spec);
-        }
-
-        // Handle invalid specifiers
-        if (!spec.isValid) {
             return handleInvalidSpecifier(spec);
         }
 
@@ -324,6 +336,9 @@ public class SprintfOperator {
      * Handle invalid format specifiers.
      */
     private static String handleInvalidSpecifier(SprintfFormatParser.FormatSpecifier spec) {
+        System.err.println("DEBUG handleInvalidSpecifier: raw='" + spec.raw +
+                      "', errorMessage='" + spec.errorMessage + "'");
+
         String formatOnly = spec.raw;
         String trailing = "";
 
@@ -351,10 +366,12 @@ public class SprintfOperator {
             }
 
             String warningMessage = "Invalid conversion in sprintf: \"" + formatForWarning + "\"";
+            System.err.println("DEBUG: About to warn: " + warningMessage);
             WarnDie.warn(new RuntimeScalar(warningMessage), new RuntimeScalar(""));
         }
 
         // Don't consume any arguments for invalid specifiers
+        System.err.println("DEBUG: Returning from handleInvalidSpecifier: '" + formatOnly + trailing + "'");
         return formatOnly + trailing;
     }
 
