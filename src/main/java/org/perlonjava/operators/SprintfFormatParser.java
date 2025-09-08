@@ -146,6 +146,11 @@ public class SprintfFormatParser {
             int savePos = pos;
             boolean hasInvalidSpace = false;
 
+            // Check for vector flag 'v' here (after width, before precision)
+            if (match('v')) {
+                spec.vectorFlag = true;
+            }
+
             // 3. Parse width
             if (match('*')) {
                 spec.widthFromArg = true;
@@ -223,17 +228,6 @@ public class SprintfFormatParser {
                     spec.lengthModifier = String.valueOf(current());
                     advance();
                     //  System.err.println("DEBUG: Found length modifier: " + spec.lengthModifier);
-                }
-            }
-
-            // 6. Parse vector flag
-            if (match('v')) {
-                spec.vectorFlag = true;
-
-                // For vector formats, we need to handle the complex syntax
-                // Skip any combination of spaces, dots, digits, and * until we find a letter
-                while (!isAtEnd() && !Character.isLetter(current())) {
-                    advance();
                 }
             }
 

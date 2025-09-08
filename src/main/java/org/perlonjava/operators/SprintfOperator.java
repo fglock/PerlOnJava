@@ -27,7 +27,7 @@ public class SprintfOperator {
                 result.append((String) element);
             } else if (element instanceof SprintfFormatParser.FormatSpecifier spec) {
 
-                //  System.err.println("DEBUG Operator: spec.raw=" + spec.raw + ", isValid=" + spec.isValid + ", errorMessage=" + spec.errorMessage);
+                //  // System.err.println("DEBUG Operator: spec.raw=" + spec.raw + ", isValid=" + spec.isValid + ", errorMessage=" + spec.errorMessage);
 
                 // Handle %%
                 if (spec.conversionChar == '%') {
@@ -84,7 +84,7 @@ public class SprintfOperator {
                     WarnDie.warn(new RuntimeScalar(spec.invalidLengthModifierWarning), new RuntimeScalar(""));
                 }
 
-                //  System.err.println("DEBUG: Processing valid spec: " + spec.raw);
+                //  // System.err.println("DEBUG: Processing valid spec: " + spec.raw);
 
                 // The rest of the valid format processing continues here...
                 int savedArgIndex = argIndex;
@@ -146,6 +146,7 @@ public class SprintfOperator {
                     } else {
                         valueArgIndex = argIndex++;
                     }
+                    // System.err.println("DEBUG sprintf: before MISSING check - valueArgIndex=" + valueArgIndex + ", list.size=" + list.size() + ", vectorFlag=" + spec.vectorFlag);
                     if (valueArgIndex >= list.size()) {
                         if (spec.conversionChar == 'n') {
                             // %n is a no-op for now - just continue without throwing
@@ -185,8 +186,17 @@ public class SprintfOperator {
                     // Format the value
                     String formatted;
                     if (spec.vectorFlag) {
+                        // System.err.println("DEBUG sprintf: vector format, valueArgIndex=" + valueArgIndex + ", list.size=" + list.size());
+                        // System.err.println("DEBUG sprintf: value type=" + value.type + ", value=" + value + ", toString()=" + value.toString());
+
+                        // Check if it's a VSTRING
+                        if (value.type == RuntimeScalarType.VSTRING) {
+                            // System.err.println("DEBUG sprintf: This is a VSTRING!");
+                        }
+
                         formatted = formatVectorString(value, spec.flags, width,
                                 precision, spec.conversionChar);
+                        // System.err.println("DEBUG sprintf: formatVectorString returned: '" + formatted + "'");
                     } else {
                         formatted = formatValue(value, spec.flags, width,
                                 precision, spec.conversionChar);
@@ -208,12 +218,20 @@ public class SprintfOperator {
         // List of invalid specifiers that should return "INVALID"
         return "CHIKMVWYJLNPQRSTZ".indexOf(c) >= 0;
     }
-
     private static String formatVectorString(RuntimeScalar value, String flags, int width,
                                              int precision, char conversionChar) {
-        // Check if this is a version object
+    try {
+        // System.err.println("DEBUG formatVectorString: Start - type=" + value.type + ", precision=" + precision);
+
         String str;
-        if (value.isBlessed() && NameNormalizer.getBlessStr(value.blessId).equals("version")) {
+        boolean isVersionObject = false;
+
+        // Check for VSTRING type first
+        if (value.type == RuntimeScalarType.VSTRING) {
+            // VSTRINGs should be handled as byte sequences
+            str = value.toString();
+            // Don't treat it as a version object
+        } else if (value.isBlessed() && NameNormalizer.getBlessStr(value.blessId).equals("version")) {
             // Extract the version string from the version object
             RuntimeHash versionObj = value.hashDeref();
             str = versionObj.get("version").toString();
@@ -263,7 +281,11 @@ public class SprintfOperator {
             }
 
             int byteValue = bytes[i] & 0xFF;
+            // System.err.println("DEBUG formatVectorString: Processing byte[" + i + "]=" + byteValue);
+
             String formatted = formatVectorValue(byteValue, flags, precision, conversionChar);
+            // System.err.println("DEBUG formatVectorString: Formatted to: " + formatted);
+
             result.append(formatted);
         }
 
@@ -279,7 +301,12 @@ public class SprintfOperator {
         }
 
         return formatted;
+    } catch (Exception e) {
+        // System.err.println("ERROR in formatVectorString: " + e);
+        e.printStackTrace();
+        throw e;
     }
+}
 
     private static boolean isVersionObject(RuntimeScalar value) {
         // Check if this is a version object by looking at its string representation
@@ -362,6 +389,7 @@ public class SprintfOperator {
                 formatted = String.valueOf(byteValue);
         }
 
+        // System.err.println("DEBUG sprintf: calling formatVectorString with precision=" + precision);
         // Apply precision padding
         if (precision > 0) {
             String prefix = "";
@@ -381,12 +409,9 @@ public class SprintfOperator {
             }
 
             // Pad the numeric part
-            if (number.length() < precision - (flags.contains("#") && (conversionChar == 'o' || conversionChar == 'x' || conversionChar == 'X' || conversionChar == 'b' || conversionChar == 'B') && byteValue != 0 ? prefix.length() : 0)) {
-                int padWidth = precision;
-                if (flags.contains("#") && byteValue != 0 && (conversionChar == 'o' || conversionChar == 'x' || conversionChar == 'X' || conversionChar == 'b' || conversionChar == 'B')) {
-                    padWidth = precision; // Don't subtract prefix for padding calculation
-                }
-                number = String.format("%0" + padWidth + "s", number);
+            if (number.length() < precision) {
+                int padWidth = precision - number.length();
+                number = "0".repeat(padWidth) + number;
             }
 
             formatted = prefix + number;
