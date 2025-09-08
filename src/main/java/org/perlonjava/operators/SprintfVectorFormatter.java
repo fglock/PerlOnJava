@@ -58,7 +58,8 @@ public class SprintfVectorFormatter {
     String str = value.toString();
 
     // Handle version objects or dotted numeric strings
-    if (str.matches("\\d+(\\.\\d+)*")) {
+    // ONLY treat as version if it contains dots!
+    if (str.contains(".") && str.matches("\\d+(\\.\\d+)*")) {
         return formatVersionVector(str, flags, width, precision, conversionChar, separator);
     }
 
