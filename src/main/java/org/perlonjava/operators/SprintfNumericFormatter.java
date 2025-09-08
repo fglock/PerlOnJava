@@ -92,12 +92,13 @@ public class SprintfNumericFormatter {
             };
         }
 
-        // Apply precision (zero-padding for minimum digits)
+        // Store original flags
+        String originalFlags = flags;
+
+        // Apply precision FIRST
         if (precision >= 0) {
-            // Special case: precision 0 with value 0 produces empty string
             if (precision == 0 && value == 0) {
                 result = "";
-                // But # flag with octal still shows "0"
                 if (usePrefix && base == 8) {
                     result = "0";
                 }
@@ -106,7 +107,7 @@ public class SprintfNumericFormatter {
             }
         }
 
-        // Add prefix if needed (only for non-zero values)
+        // Add prefix if needed
         if (usePrefix && value != 0 && !result.isEmpty()) {
             if (base == 8 && !result.startsWith("0")) {
                 result = "0" + result;
@@ -115,7 +116,7 @@ public class SprintfNumericFormatter {
             }
         }
 
-        // Add sign only for base 10
+        // Add sign
         if (base == 10) {
             if (negative) {
                 result = "-" + result;
@@ -126,13 +127,12 @@ public class SprintfNumericFormatter {
             }
         }
 
-        // Apply width with appropriate padding
-        // IMPORTANT: If precision was specified, remove '0' flag
-        String widthFlags = flags;
-        if (precision >= 0 && widthFlags.contains("0")) {
-            widthFlags = widthFlags.replace("0", "");
+        // Apply width - if precision was specified, ignore the '0' flag
+        if (precision >= 0) {
+            flags = flags.replace("0", "");
         }
-        return SprintfPaddingHelper.applyWidth(result, width, widthFlags);
+
+        return SprintfPaddingHelper.applyWidth(result, width, flags);
     }
 
     /**

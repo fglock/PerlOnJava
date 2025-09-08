@@ -270,7 +270,6 @@ public class SprintfFormatParser {
                 spec.errorMessage = "INVALID";
                 return;
             }
-
             if ("V".equals(spec.lengthModifier)) {
                 // V is silently ignored in Perl
                 spec.lengthModifier = null; // Clear it so it's processed as %d
@@ -278,8 +277,8 @@ public class SprintfFormatParser {
             }
 
     // Check for invalid conversion characters
-    // Valid conversion characters are: diouxXeEfFgGaAbBcspn%vDUO
-    String validChars = "diouxXeEfFgGaAbBcspn%vDUO";  // Added O
+    // Valid conversion characters are: diouxXeEfFgGaAbBcspn%DUO
+    String validChars = "diouxXeEfFgGaAbBcspn%DUO";  // REMOVE 'v' from this list
     if (validChars.indexOf(spec.conversionChar) < 0) {
         spec.isValid = false;
         spec.errorMessage = "INVALID";
@@ -366,6 +365,17 @@ public class SprintfFormatParser {
                     spec.isValid = false;
                     spec.errorMessage = "INVALID";
                 }
+            }
+
+            // Check for %2$vd format (positional parameter with vector)
+            if (spec.parameterIndex != null && spec.vectorFlag) {
+                // This might need special handling
+            }
+
+            // Check for invalid format strings with spaces
+            if (spec.raw.contains(" ") && !spec.raw.equals("% d") && !spec.raw.equals("% .0d")) {
+                // Some space-containing formats are valid, others aren't
+                // This needs careful handling based on the test cases
             }
         }
 

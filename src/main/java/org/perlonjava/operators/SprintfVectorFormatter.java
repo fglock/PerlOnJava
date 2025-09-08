@@ -21,32 +21,21 @@ import org.perlonjava.runtime.RuntimeScalar;
  *   sprintf "%vx", "ABC"      # "41.42.43"
  *   sprintf "%v.2x", "ABC"    # "41.42.43" (with precision)
  *   sprintf "%vd", "5.10.1"   # "5.10.1" (version string)
- * </pre>
- */
+/**
+  * </pre>
+  */
 public class SprintfVectorFormatter {
 
     /**
-     * Format a vector string according to the specified conversion.
-     *
-     * <p>This method determines whether the input is a version string (dotted numbers)
-     * or a regular string, and formats it accordingly. Each element is formatted
-     * using the specified conversion character and joined with dots.
-     *
-     * @param value      The value to format as a vector
-     * @param flags      Format flags (-, +, space, #, 0)
-     * @param width      Field width for the entire result
-     * @param precision  Precision for each vector element
-     * @param conversionChar Conversion character (d, x, o, b, etc.)
-     * @return The formatted vector string
-     */
+      * Format a vector string with custom separator support.
+      */
     public String formatVectorString(RuntimeScalar value, String flags, int width,
-                                   int precision, char conversionChar) {
+                                    int precision, char conversionChar, String separator) {
         // Handle version objects specially
         if (value.blessId != 0 && NameNormalizer.getBlessStr(value.blessId).equals("version")) {
-            // Convert version object to string representation
             RuntimeHash versionObj = value.hashDeref();
             String versionStr = versionObj.get("version").toString();
-            return formatVersionVector(versionStr, flags, width, precision, conversionChar);
+            return formatVersionVector(versionStr, flags, width, precision, conversionChar, separator);
         }
 
         String str = value.toString();
@@ -60,45 +49,53 @@ public class SprintfVectorFormatter {
         return formatByteVector(str, flags, width, precision, conversionChar);
     }
 
+    // Keep the original method for backward compatibility
+    public String formatVectorString(RuntimeScalar value, String flags, int width,
+                                    int precision, char conversionChar) {
+        return formatVectorString(value, flags, width, precision, conversionChar, ".");
+    }
+
     /**
-     * Format a version-style vector (dotted numeric string).
-     *
-     * <p>Version strings like "5.10.1" are split on dots and each numeric
-     * component is formatted individually. This is commonly used for
-     * version number display.
-     *
-     * @param versionStr The version string to format
-     * @param flags Format flags
-     * @param width Field width for the entire result
-     * @param precision Precision for each element
-     * @param conversionChar Conversion character
-     * @return The formatted version vector
-     */
+      * Format a version-style vector (dotted numeric string).
+      *
+      * <p>Version strings like "5.10.1" are split on dots and each numeric
+      * component is formatted individually. This is commonly used for
+      * version number display.
+      *
+      * @param versionStr The version string to format
+      * @param flags Format flags
+      * @param width Field width for the entire result
+      * @param precision Precision for each element
+      * @param conversionChar Conversion character
+      * @return The formatted version vector
+      */
     private String formatVersionVector(String versionStr, String flags, int width,
                                      int precision, char conversionChar) {
+        return formatVersionVector(versionStr, flags, width, precision, conversionChar, ".");
+    }
+
+    private String formatVersionVector(String versionStr, String flags, int width,
+                                     int precision, char conversionChar, String separator) {
         String[] parts = versionStr.split("\\.");
         StringBuilder result = new StringBuilder();
 
         for (int i = 0; i < parts.length; i++) {
-            if (i > 0) result.append(".");
+            if (i > 0) result.append(separator);
 
             try {
                 int intValue = Integer.parseInt(parts[i]);
                 String formatted = formatVectorValue(intValue, flags, precision, conversionChar);
                 result.append(formatted);
             } catch (NumberFormatException e) {
-                // If parsing fails, append the original part
                 result.append(parts[i]);
             }
         }
 
-        // Apply width to the entire result
         return SprintfPaddingHelper.applyWidth(result.toString(), width, flags);
     }
-
     /**
-     * Format a byte vector (string treated as sequence of bytes).
-     *
+      * Format a byte vector (string treated as sequence of bytes).
+      *
      * <p>Each character in the string is converted to its byte value (0-255)
      * and formatted according to the conversion specifier. The results are
      * joined with dots.
