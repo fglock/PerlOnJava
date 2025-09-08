@@ -122,8 +122,7 @@ public class SprintfOperator {
             int argIndex,
             SprintfValueFormatter formatter) {
 
-        System.err.println("DEBUG processFormatSpecifier: raw='" + spec.raw +
-                      "', isValid=" + spec.isValid + ", errorMessage=" + spec.errorMessage);
+        // System.err.println("DEBUG processFormatSpecifier: raw='" + spec.raw + "', isValid=" + spec.isValid + ", errorMessage=" + spec.errorMessage);
 
         // Handle invalid specifiers FIRST (before %% check)
         if (!spec.isValid) {
@@ -336,8 +335,7 @@ public class SprintfOperator {
      * Handle invalid format specifiers.
      */
     private static String handleInvalidSpecifier(SprintfFormatParser.FormatSpecifier spec) {
-        System.err.println("DEBUG handleInvalidSpecifier: raw='" + spec.raw +
-                      "', errorMessage='" + spec.errorMessage + "'");
+        // System.err.println("DEBUG handleInvalidSpecifier: raw='" + spec.raw + "', errorMessage='" + spec.errorMessage + "'");
 
         String formatOnly = spec.raw;
         String trailing = "";
@@ -366,12 +364,12 @@ public class SprintfOperator {
             }
 
             String warningMessage = "Invalid conversion in sprintf: \"" + formatForWarning + "\"";
-            System.err.println("DEBUG: About to warn: " + warningMessage);
+            // System.err.println("DEBUG: About to warn: " + warningMessage);
             WarnDie.warn(new RuntimeScalar(warningMessage), new RuntimeScalar(""));
         }
 
         // Don't consume any arguments for invalid specifiers
-        System.err.println("DEBUG: Returning from handleInvalidSpecifier: '" + formatOnly + trailing + "'");
+        // System.err.println("DEBUG: Returning from handleInvalidSpecifier: '" + formatOnly + trailing + "'");
         return formatOnly + trailing;
     }
 
