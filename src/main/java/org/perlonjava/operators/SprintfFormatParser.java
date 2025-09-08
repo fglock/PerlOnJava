@@ -222,8 +222,13 @@ public class SprintfFormatParser {
                 } else if ("hlLqzjtV".indexOf(current()) >= 0) {
                     spec.lengthModifier = String.valueOf(current());
                     advance();
-                    //  System.err.println("DEBUG: Found length modifier: " + spec.lengthModifier);
                 }
+            }
+
+            // 6. Parse vector flag
+            if (!isAtEnd() && current() == 'v') {
+                spec.vectorFlag = true;
+                advance();
             }
 
             // 7. Parse conversion character
