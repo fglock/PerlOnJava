@@ -282,13 +282,14 @@ public class SprintfFormatParser {
                 // Don't set invalidLengthModifierWarning
             }
 
-            // Check for invalid conversion characters
-            String invalidChars = "CHIJKLMNPQRSTWYZhjklmnqrtwyz";
-            if (invalidChars.indexOf(spec.conversionChar) >= 0) {
-                spec.isValid = false;
-                spec.errorMessage = "INVALID";
-                return;
-            }
+    // Check for invalid conversion characters
+    // Valid conversion characters are: diouxXeEfFgGaAbBcspn%vDU
+    String validChars = "diouxXeEfFgGaAbBcspn%vDU";
+    if (validChars.indexOf(spec.conversionChar) < 0) {
+        spec.isValid = false;
+        spec.errorMessage = "INVALID";
+        return;
+    }
 
             // Special case: uppercase letters that might look like length modifiers
             if (spec.lengthModifier != null) {
