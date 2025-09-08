@@ -161,7 +161,11 @@ public class SprintfNumericFormatter {
             }
         }
 
-        // Apply width
+        // Apply width - if precision was specified, ignore the '0' flag
+        if (precision >= 0) {
+            String cleanFlags = flags.replace("0", "");
+            return SprintfPaddingHelper.applyWidth(result, width, cleanFlags);
+        }
         return SprintfPaddingHelper.applyWidth(result, width, flags);
     }
 
@@ -248,7 +252,11 @@ public class SprintfNumericFormatter {
             result = prefix + result;
         }
 
-        // Apply width
+        // Apply width - if precision was specified, ignore the '0' flag
+        if (precision >= 0) {
+            String cleanFlags = flags.replace("0", "");
+            return SprintfPaddingHelper.applyWidth(result, width, cleanFlags);
+        }
         return SprintfPaddingHelper.applyWidth(result, width, flags);
     }
 
@@ -419,12 +427,25 @@ public class SprintfNumericFormatter {
      * @return The string with trailing zeros removed
      */
     private String removeTrailingZeros(String result) {
-        if (!result.contains("e") && !result.contains("E")) {
-            // Remove trailing zeros after decimal point
+        // Handle exponential notation separately
+        int eIndex = result.toLowerCase().indexOf('e');
+
+        if (eIndex != -1) {
+            // Split into mantissa and exponent
+            String mantissa = result.substring(0, eIndex);
+            String exponent = result.substring(eIndex);
+
+            // Remove trailing zeros from mantissa only
+            mantissa = mantissa.replaceAll("(\\.\\d*?)0+$", "$1");
+            // Remove trailing decimal point if no fractional part
+            mantissa = mantissa.replaceAll("\\.$", "");
+
+            return mantissa + exponent;
+        } else {
+            // Non-exponential: remove trailing zeros and decimal point
             result = result.replaceAll("(\\.\\d*?)0+$", "$1");
-            // Remove trailing decimal point if no fractional part remains
             result = result.replaceAll("\\.$", "");
+            return result;
         }
-        return result;
     }
 }
