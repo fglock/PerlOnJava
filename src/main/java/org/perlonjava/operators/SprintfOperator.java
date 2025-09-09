@@ -156,8 +156,10 @@ public class SprintfOperator {
         // 2. No positional parameters were used
         // 3. No invalid specifiers were found
         // 4. There are unused arguments
-        if (hasValidSpecifier && !hasPositionalParameter && !hasInvalidSpecifier &&
-            maxArgIndexUsed >= 0 && maxArgIndexUsed + 1 < list.size()) {
+        // OR special case: empty format with any arguments
+        if (!hasPositionalParameter && !hasInvalidSpecifier && list.size() > 0 &&
+            ((hasValidSpecifier && maxArgIndexUsed >= 0 && maxArgIndexUsed + 1 < list.size()) ||
+             (!hasValidSpecifier && maxArgIndexUsed == -1))) {
             WarnDie.warn(new RuntimeScalar("Redundant argument in sprintf"), new RuntimeScalar(""));
         }
 
