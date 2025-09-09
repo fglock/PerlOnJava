@@ -59,8 +59,10 @@ public class SprintfOperator {
                 result.append(literal);
                 charsWritten += literal.length();
             } else if (element instanceof FormatSpecifier spec) {
+                System.err.println("DEBUG: Processing spec: " + spec.raw + ", isValid=" + spec.isValid);
                 // Check if this is an overlapping specifier (warning only, no output)
                 if (spec.isOverlapping) {
+                    System.err.println("DEBUG: Skipping overlapping spec");
                     // Only generate warning, don't add to output
                     if (!spec.isValid) {
                         // Just generate the warning, don't add to result
@@ -72,6 +74,7 @@ public class SprintfOperator {
 
                 // Check if spec is invalid FIRST
                 if (!spec.isValid) {
+                    System.err.println("DEBUG: Processing invalid spec");
                     String formatted = processFormatSpecifier(spec, list, argIndex, formatter);
                     result.append(formatted);
                     charsWritten += formatted.length();
@@ -109,6 +112,7 @@ public class SprintfOperator {
                     continue;  // Skip to next format element
                 } else {
                     ProcessResult processResult = processFormatSpecifierTracked(spec, list, argIndex, formatter);
+                    System.err.println("DEBUG: Called processFormatSpecifierTracked");
                     result.append(processResult.formatted);
                     charsWritten += processResult.formatted.length();
 
@@ -186,16 +190,17 @@ public class SprintfOperator {
     /**
      * Process a single format specifier with tracking.
      */
-    private static ProcessResult processFormatSpecifierTracked(
-            FormatSpecifier spec,
-            RuntimeList list,
-            int sepArgIndex,
-            SprintfValueFormatter formatter) {
+        private static ProcessResult processFormatSpecifierTracked(
+                FormatSpecifier spec,
+                RuntimeList list,
+                int sepArgIndex,
+                SprintfValueFormatter formatter) {
 
-        String formatted = processFormatSpecifier(spec, list, sepArgIndex, formatter, -1);
+            System.err.println("DEBUG: processFormatSpecifierTracked called for: " + spec.raw);
+            String formatted = processFormatSpecifier(spec, list, sepArgIndex, formatter, -1);
 
-        // Calculate max arg index used
-        int maxUsed = -1;
+            // Calculate max arg index used
+            int maxUsed = -1;
 
         // Handle %% - literal percent sign
         if (spec.conversionChar == '%') {
@@ -236,9 +241,6 @@ public class SprintfOperator {
             return new ProcessResult(formatted, maxUsed);
         }
 
-        // Track all consumed arguments properly
-        FormatArguments args = extractFormatArguments(spec, list, sepArgIndex);
-
         // Track width argument if consumed
         if (spec.widthFromArg) {
             if (spec.widthArgIndex != null) {
@@ -273,8 +275,13 @@ public class SprintfOperator {
         }
 
         // Track value argument
-        if (args.valueArgIndex < list.size()) {
-            maxUsed = Math.max(maxUsed, args.valueArgIndex);
+        if (spec.parameterIndex != null) {
+            maxUsed = Math.max(maxUsed, spec.parameterIndex - 1);
+        } else {
+            int valuePos = sepArgIndex;
+            if (spec.widthFromArg && spec.widthArgIndex == null) valuePos++;
+            if (spec.precisionFromArg && spec.precisionArgIndex == null) valuePos++;
+            maxUsed = Math.max(maxUsed, valuePos);
         }
 
         return new ProcessResult(formatted, maxUsed);
@@ -297,7 +304,7 @@ public class SprintfOperator {
             SprintfValueFormatter formatter,
             int maxArgIndexUsed) {
 
-        // System.err.println("DEBUG processFormatSpecifier: raw='" + spec.raw + "', isValid=" + spec.isValid + ", errorMessage=" + spec.errorMessage);
+        System.err.println("DEBUG: processFormatSpecifier start for: " + spec.raw);
 
         // Handle invalid specifiers FIRST (before %% check)
         if (!spec.isValid) {
@@ -307,6 +314,7 @@ public class SprintfOperator {
         // Handle %% - literal percent sign
         if (spec.conversionChar == '%') {
             if (spec.widthFromArg) {
+                System.err.println("DEBUG: About to call extractFormatArguments");
                 FormatArguments args = extractFormatArguments(spec, list, sepArgIndex);
                 // Consume the width argument but still return %
             }
@@ -319,6 +327,7 @@ public class SprintfOperator {
         }
 
         // Process width, precision, and value arguments
+        System.err.println("DEBUG: About to call extractFormatArguments");
         FormatArguments args = extractFormatArguments(spec, list, sepArgIndex);
 
         // Check for missing value argument
@@ -399,6 +408,9 @@ public class SprintfOperator {
             RuntimeList list,
             int argIndex) {
 
+        System.err.println("DEBUG: extractFormatArguments start - argIndex=" + argIndex);
+        System.err.println("DEBUG: spec.widthFromArg=" + spec.widthFromArg + ", spec.widthArgIndex=" + spec.widthArgIndex);
+
         FormatArguments args = new FormatArguments();
         int currentArgIndex = argIndex;
 
@@ -406,8 +418,11 @@ public class SprintfOperator {
         if (spec.widthFromArg) {
             int widthArgIndex;
             if (spec.widthArgIndex != null) {
-                // Explicit index like %*2$d
+                // Explicit index like %*2$d - positional parameter
                 widthArgIndex = spec.widthArgIndex - 1;
+                System.err.println("DEBUG: Positional width at index " + widthArgIndex);
+                // DON'T increment currentArgIndex or consumedArgs for positional
+                // because it's not consuming from the sequential stream
             } else if (spec.parameterIndex != null) {
                 // When we have %2$*d, the width comes from the current position
                 widthArgIndex = currentArgIndex;
@@ -434,12 +449,15 @@ public class SprintfOperator {
             args.width = spec.width;
         }
 
-        // Process precision
+        System.err.println("DEBUG: After width processing: consumedArgs=" + args.consumedArgs);
+
+        // Process precision (similar logic)
         if (spec.precisionFromArg) {
             int precArgIndex;
             if (spec.precisionArgIndex != null) {
-                // Explicit index like %.*2$d
+                // Explicit index like %.*2$d - positional parameter
                 precArgIndex = spec.precisionArgIndex - 1;
+                // DON'T increment currentArgIndex or consumedArgs for positional
             } else if (spec.parameterIndex != null) {
                 // When we have %2$.*d, precision comes from current position
                 precArgIndex = currentArgIndex;
@@ -465,12 +483,16 @@ public class SprintfOperator {
             args.precision = spec.precision;
         }
 
+        System.err.println("DEBUG: Before valueArgIndex calc - argIndex=" + argIndex + ", consumedArgs=" + args.consumedArgs);
+
         // Determine value argument index
         if (spec.parameterIndex != null) {
             args.valueArgIndex = spec.parameterIndex - 1;
         } else {
             args.valueArgIndex = argIndex + args.consumedArgs;
         }
+
+        System.err.println("DEBUG: Calculated valueArgIndex=" + args.valueArgIndex + ", list.size()=" + list.size());
 
         return args;
     }
