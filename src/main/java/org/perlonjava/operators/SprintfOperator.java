@@ -41,7 +41,11 @@ public class SprintfOperator {
         String format = runtimeScalar.toString();
 
         StringBuilder result = new StringBuilder();
-        int argIndex = 0;
+        int argIndex = 0;  // Sequential argument index
+        int maxArgIndexUsed = -1;  // Track highest argument index used
+        boolean hasValidSpecifier = false;  // Track if we have any valid specifiers
+        boolean hasPositionalParameter = false; // Track if any positional parameters are used
+        boolean hasInvalidSpecifier = false; // Track if any invalid specifiers were found
 
         // Parse the format string into literals and format specifiers
         SprintfFormatParser.ParseResult parsed = SprintfFormatParser.parse(format);
@@ -60,6 +64,7 @@ public class SprintfOperator {
                     if (!spec.isValid) {
                         // Just generate the warning, don't add to result
                         handleInvalidSpecifier(spec);
+                        hasInvalidSpecifier = true;
                     }
                     continue; // Skip adding to result and updating argIndex
                 }
@@ -69,36 +74,85 @@ public class SprintfOperator {
                     String formatted = processFormatSpecifier(spec, list, argIndex, formatter);
                     result.append(formatted);
                     charsWritten += formatted.length();
+                    hasInvalidSpecifier = true;
+                    // Invalid specifiers don't consume arguments
                     continue;
                 }
 
+                // Check for positional parameters
+                if (spec.parameterIndex != null || spec.widthArgIndex != null || spec.precisionArgIndex != null) {
+                    hasPositionalParameter = true;
+                }
+
+                // We have a valid specifier
+                hasValidSpecifier = true;
+
                 if (spec.conversionChar == 'n') {
                     // %n doesn't produce output, but does consume an argument
+                    int targetIndex = spec.parameterIndex != null ? spec.parameterIndex - 1 : argIndex;
+                    maxArgIndexUsed = Math.max(maxArgIndexUsed, targetIndex);
                     handlePercentN(spec, list, argIndex);
 
-                    // Update argument index
+                    // Update sequential argument index for non-positional width/precision
                     if (spec.parameterIndex == null) {
                         argIndex++;  // %n does consume an argument
-                        if (spec.widthFromArg && spec.widthArgIndex == null) argIndex++;
-                        if (spec.precisionFromArg && spec.precisionArgIndex == null) argIndex++;
+                    }
+                    if (spec.widthFromArg && spec.widthArgIndex == null) {
+                        argIndex++;
+                    }
+                    if (spec.precisionFromArg && spec.precisionArgIndex == null) {
+                        argIndex++;
                     }
 
                     // Don't add anything to result or charsWritten
                     continue;  // Skip to next format element
                 } else {
-                    String formatted = processFormatSpecifier(spec, list, argIndex, formatter);
-                    result.append(formatted);
-                    charsWritten += formatted.length();
+                    ProcessResult processResult = processFormatSpecifierTracked(spec, list, argIndex, formatter);
+                    result.append(processResult.formatted);
+                    charsWritten += processResult.formatted.length();
 
-                    // Update argument index if not using positional parameters
-                    if (spec.parameterIndex == null && spec.conversionChar != '%') {
-                        argIndex = updateArgIndex(spec, argIndex);
+                    // Only update maxArgIndexUsed if this specifier actually consumed arguments
+                    if (spec.conversionChar != '%' || spec.widthFromArg) {
+                        maxArgIndexUsed = Math.max(maxArgIndexUsed, processResult.maxArgIndexUsed);
+                    }
+
+                    // Update sequential argument index based on what was consumed
+                    if (spec.parameterIndex == null) {
+                        // Non-positional value argument advances the sequential index
+                        argIndex++;
+                    }
+                    // Width/precision without explicit position also advance sequential index
+                    if (spec.widthFromArg && spec.widthArgIndex == null) {
+                        argIndex++;
+                    }
+                    if (spec.precisionFromArg && spec.precisionArgIndex == null) {
+                        argIndex++;
                     }
                 }
             }
         }
 
+        // Only check for redundant arguments if:
+        // 1. We had at least one valid specifier that consumed arguments
+        // 2. No positional parameters were used
+        // 3. No invalid specifiers were found
+        // 4. There are unused arguments
+        if (hasValidSpecifier && !hasPositionalParameter && !hasInvalidSpecifier &&
+            maxArgIndexUsed >= 0 && maxArgIndexUsed + 1 < list.size()) {
+            WarnDie.warn(new RuntimeScalar("Redundant argument in sprintf"), new RuntimeScalar(""));
+        }
+
         return new RuntimeScalar(result.toString());
+    }
+
+    private static class ProcessResult {
+        String formatted;
+        int maxArgIndexUsed;
+
+        ProcessResult(String formatted, int maxArgIndexUsed) {
+            this.formatted = formatted;
+            this.maxArgIndexUsed = maxArgIndexUsed;
+        }
     }
 
     private static void handlePercentN(FormatSpecifier spec,
@@ -112,19 +166,118 @@ public class SprintfOperator {
     }
 
     /**
+     * Process a single format specifier with tracking.
+     */
+    private static ProcessResult processFormatSpecifierTracked(
+            FormatSpecifier spec,
+            RuntimeList list,
+            int sepArgIndex,
+            SprintfValueFormatter formatter) {
+
+        String formatted = processFormatSpecifier(spec, list, sepArgIndex, formatter, -1);
+
+        // Calculate max arg index used
+        int maxUsed = -1;
+
+        // Handle %% - literal percent sign
+        if (spec.conversionChar == '%') {
+            if (spec.widthFromArg) {
+                // %*% consumes a width argument
+                if (spec.widthArgIndex != null) {
+                    maxUsed = Math.max(maxUsed, spec.widthArgIndex - 1);
+                } else if (spec.parameterIndex == null) {
+                    maxUsed = Math.max(maxUsed, sepArgIndex);
+                }
+            }
+            return new ProcessResult(formatted, maxUsed);
+        }
+
+        // For invalid specifiers, don't track any arguments
+        if (!spec.isValid) {
+            return new ProcessResult(formatted, maxUsed);
+        }
+
+        // Special handling for %*v formats
+        if (spec.vectorFlag && spec.widthFromArg && spec.raw.matches(".*\\*v.*")) {
+            // %*v format - first arg is separator
+            int currentIndex = sepArgIndex;
+
+            // Track separator argument
+            maxUsed = Math.max(maxUsed, currentIndex);
+            currentIndex++;
+
+            if (spec.precisionFromArg) {
+                // %*v*d format - second arg is width
+                maxUsed = Math.max(maxUsed, currentIndex);
+                currentIndex++;
+            }
+
+            // Track value argument
+            maxUsed = Math.max(maxUsed, currentIndex);
+
+            return new ProcessResult(formatted, maxUsed);
+        }
+
+        // Track all consumed arguments properly
+        FormatArguments args = extractFormatArguments(spec, list, sepArgIndex);
+
+        // Track width argument if consumed
+        if (spec.widthFromArg) {
+            if (spec.widthArgIndex != null) {
+                maxUsed = Math.max(maxUsed, spec.widthArgIndex - 1);
+            } else {
+                // Width from sequential position
+                int widthPos = sepArgIndex;
+                if (spec.parameterIndex != null) {
+                    // For %2$*d, width comes from current sequential position
+                    widthPos = sepArgIndex;
+                }
+                maxUsed = Math.max(maxUsed, widthPos);
+            }
+        }
+
+        // Track precision argument if consumed
+        if (spec.precisionFromArg) {
+            if (spec.precisionArgIndex != null) {
+                maxUsed = Math.max(maxUsed, spec.precisionArgIndex - 1);
+            } else {
+                // Precision from sequential position
+                int precPos = sepArgIndex;
+                if (spec.widthFromArg && spec.widthArgIndex == null) {
+                    precPos++;  // After width
+                }
+                if (spec.parameterIndex != null && !spec.widthFromArg) {
+                    // For %2$.*d, precision comes from current sequential position
+                    precPos = sepArgIndex;
+                }
+                maxUsed = Math.max(maxUsed, precPos);
+            }
+        }
+
+        // Track value argument
+        if (args.valueArgIndex < list.size()) {
+            maxUsed = Math.max(maxUsed, args.valueArgIndex);
+        }
+
+        return new ProcessResult(formatted, maxUsed);
+    }
+
+    /**
      * Process a single format specifier.
      *
      * @param spec      The parsed format specifier
      * @param list      The argument list
      * @param sepArgIndex  Current argument index
      * @param formatter The value formatter instance
+     * @param maxArgIndexUsed Maximum argument index used so far (for tracking)
      * @return The formatted string
      */
     private static String processFormatSpecifier(
             FormatSpecifier spec,
             RuntimeList list,
             int sepArgIndex,
-            SprintfValueFormatter formatter) {
+            SprintfValueFormatter formatter,
+            int maxArgIndexUsed) {
 
         // System.err.println("DEBUG processFormatSpecifier: raw='" + spec.raw + "', isValid=" + spec.isValid + ", errorMessage=" + spec.errorMessage);
 
@@ -207,6 +360,17 @@ public class SprintfOperator {
             return formatter.formatValue(value, spec.flags, args.width,
                     args.precision, spec.conversionChar);
         }
+    }
+
+    /**
+     * Process without tracking (for compatibility).
+     */
+    private static String processFormatSpecifier(
+            FormatSpecifier spec,
+            RuntimeList list,
+            int sepArgIndex,
+            SprintfValueFormatter formatter) {
+        return processFormatSpecifier(spec, list, sepArgIndex, formatter, -1);
     }
 
     /**
