@@ -271,8 +271,8 @@ public class IOOperator {
             } catch (PerlCompilerException e) {
                 // Change sprintf error messages to printf
                 String message = e.getMessage();
-                if (message != null && message.contains("Integer overflow in format string for sprintf")) {
-                    throw new PerlCompilerException("Integer overflow in format string for printf");
+                if (message != null && message.contains("Integer overflow in format string for sprintf ")) {
+                    throw new PerlCompilerException("Integer overflow in format string for printf ");
                 }
                 // Re-throw other exceptions unchanged
                 throw e;
