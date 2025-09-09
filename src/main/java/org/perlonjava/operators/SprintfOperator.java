@@ -6,6 +6,7 @@ import org.perlonjava.operators.sprintf.SprintfValueFormatter;
 import org.perlonjava.runtime.RuntimeBase;
 import org.perlonjava.runtime.RuntimeList;
 import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.RuntimeScalarType;
 
 /**
  * Implements Perl's sprintf operator for formatted string output.
@@ -117,10 +118,11 @@ public class SprintfOperator {
                     }
 
                     // Update sequential argument index based on what was consumed
-                    if (spec.parameterIndex == null) {
+                    if (spec.parameterIndex == null && spec.conversionChar != '%') {
                         // Non-positional value argument advances the sequential index
                         argIndex++;
                     }
+
                     // Width/precision without explicit position also advance sequential index
                     if (spec.widthFromArg && spec.widthArgIndex == null) {
                         argIndex++;
@@ -160,8 +162,24 @@ public class SprintfOperator {
         int targetIndex = spec.parameterIndex != null ? spec.parameterIndex - 1 : argIndex;
         if (targetIndex < list.size()) {
             RuntimeScalar target = (RuntimeScalar) list.elements.get(targetIndex);
-            // In Perl, %n modifies the original variable, not a copy
-            target.set(new RuntimeScalar(charsWritten));
+
+            // Check if it's a reference
+            if (target.type == RuntimeScalarType.REFERENCE) {
+                // For references, dereference and modify
+                RuntimeScalar deref = target.scalarDeref();
+                if (deref != null) {
+                    deref.set(new RuntimeScalar(charsWritten));
+                }
+            } else {
+                // For regular scalars, modify directly if not a constant
+                // The set() method should handle the read-only check internally
+                try {
+                    target.set(new RuntimeScalar(charsWritten));
+                } catch (Exception e) {
+                    // Silently ignore if it's a read-only value
+                    // In Perl, %n with a constant just consumes the argument
+                }
+            }
         }
     }
 
