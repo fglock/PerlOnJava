@@ -556,6 +556,11 @@ public class SprintfOperator {
         // Generate warning
         WarnDie.warn(new RuntimeScalar("Missing argument in sprintf"), new RuntimeScalar(""));
 
+        // Special handling for vector formats
+        if (spec.vectorFlag) {
+            return " ";  // Vector formats with missing argument output a space
+        }
+
         // Return appropriate default value based on conversion type
         return switch (spec.conversionChar) {
             case 'f', 'F' -> {
