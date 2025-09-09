@@ -65,7 +65,7 @@ public class SprintfOperator {
                     (spec.parameterIndex != null && spec.parameterIndex == Integer.MAX_VALUE) ||
                     (spec.widthArgIndex != null && spec.widthArgIndex == Integer.MAX_VALUE) ||
                     (spec.precisionArgIndex != null && spec.precisionArgIndex == Integer.MAX_VALUE)) {
-                    throw new RuntimeException("Integer overflow in format string for sprintf");
+                    throw new RuntimeException("Integer overflow in format string for sprintf ");
                 }
 
                 // Check if this is an overlapping specifier (warning only, no output)
