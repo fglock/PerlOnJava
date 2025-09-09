@@ -68,7 +68,7 @@ public class SprintfOperator {
                     // Check for impractically large width/precision values
                     (spec.width != null && spec.width > MAX_PRACTICAL_FORMAT_SIZE) ||
                     (spec.precision != null && spec.precision > MAX_PRACTICAL_FORMAT_SIZE)) {
-                    throw new PerlCompilerException("Integer overflow in format string for sprintf");
+                    throw new PerlCompilerException("Integer overflow in format string for sprintf ");
                 }
 
                 // Check if this is an overlapping specifier (warning only, no output)
@@ -464,7 +464,7 @@ public class SprintfOperator {
                 }
                 // Check for potential overflow from large positive or negative values
                 if (args.width > 999999999) {
-                    throw new PerlCompilerException("Integer overflow in format string for sprintf");
+                    throw new PerlCompilerException("Integer overflow in format string for sprintf ");
                 }
             } else {
                 WarnDie.warn(new RuntimeScalar("Missing argument in sprintf"),
