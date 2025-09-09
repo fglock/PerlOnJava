@@ -193,28 +193,58 @@ public class SprintfFormatParser {
                             spec.widthFromArg = true;  // Means "has custom separator"
                             advance(); // consume 'v'
 
+                            System.err.println("DEBUG Parser: Parsed %*v, next char: '" + current() + "'");
+
                             // Now check for width after %*v
                             if (match('*')) {
+                                System.err.println("DEBUG Parser: Found * after %*v");
                                 // Check for invalid positional after %*v*
                                 checkpoint = pos;
                                 Integer posParam = parseNumber();
-                                if (posParam != null && peek(0) == '$') {
+                                System.err.println("DEBUG Parser: After %*v*, number=" + posParam + ", current='" + current() + "'");
+
+                                if (posParam != null && match('$')) {
+                                    System.err.println("DEBUG Parser: Detected invalid %*v*N$ pattern");
                                     // %*v*999$ is invalid
-                                    advance(); // consume $
-                                    while (!isAtEnd() && !Character.isLetter(current())) {
-                                        advance();
-                                    }
+
+                                    // Continue parsing to get the conversion character
                                     if (!isAtEnd()) {
                                         spec.conversionChar = current();
                                         advance();
                                     }
+
                                     spec.isValid = false;
                                     spec.errorMessage = "INVALID";
                                     spec.endPos = pos;
                                     spec.raw = input.substring(spec.startPos, spec.endPos);
+                                    System.err.println("DEBUG Parser: Returning invalid spec: " + spec.raw);
+                                    return spec;
+                                } else if (posParam != null) {
+                                    // ADDITIONAL CHANGE: Handle case where we have number but no $
+                                    // This is still invalid - don't reset position
+                                    System.err.println("DEBUG Parser: Found number after %*v* but no $ - treating as invalid");
+
+                                    // The number is part of the format, continue to find conversion char
+                                    // Current position is after the number
+                                    if (!isAtEnd()) {
+                                        // Skip any backslashes or other characters until we find a letter
+                                        while (!isAtEnd() && !Character.isLetter(current())) {
+                                            advance();
+                                        }
+                                        if (!isAtEnd()) {
+                                            spec.conversionChar = current();
+                                            advance();
+                                        }
+                                    }
+
+                                    spec.isValid = false;
+                                    spec.errorMessage = "INVALID";
+                                    spec.endPos = pos;
+                                    spec.raw = input.substring(spec.startPos, spec.endPos);
+                                    System.err.println("DEBUG Parser: Returning invalid spec: " + spec.raw);
                                     return spec;
                                 } else {
-                                    pos = checkpoint; // Reset
+                                    pos = checkpoint; // Reset only if no number was found
                                     spec.precisionFromArg = true; // HACK: means second *
                                 }
                             } else {
@@ -311,14 +341,44 @@ public class SprintfFormatParser {
                 }
             }
 
-            // 7. Parse conversion character
+// 7. Parse conversion character
             if (isAtEnd()) {
                 spec.isValid = false;
                 spec.errorMessage = "MISSING";
             } else {
-                spec.conversionChar = current();
+                char firstChar = current();
                 advance();
-                // System.err.println("DEBUG: Parsed conversion char '" + spec.conversionChar + "'");
+
+                // Check if this might be part of a positional parameter
+                if (Character.isDigit(firstChar) && !isAtEnd()) {
+                    // Look ahead to see if we have more digits and a $
+                    int checkPos = pos;
+                    while (!isAtEnd() && Character.isDigit(current())) {
+                        advance();
+                    }
+
+                    if (!isAtEnd() && current() == '$') {
+                        // This is an invalid positional parameter at the conversion position
+                        advance(); // consume $
+
+                        // Get the actual conversion character
+                        if (!isAtEnd()) {
+                            spec.conversionChar = current();
+                            advance();
+                        } else {
+                            spec.conversionChar = firstChar; // Use the first digit if nothing follows
+                        }
+
+                        spec.isValid = false;
+                        spec.errorMessage = "INVALID";
+                    } else {
+                        // Not a positional parameter, just use the first character
+                        pos = checkPos; // Reset to after first char
+                        spec.conversionChar = firstChar;
+                    }
+                } else {
+                    spec.conversionChar = firstChar;
+                }
             }
 
             spec.endPos = pos;
