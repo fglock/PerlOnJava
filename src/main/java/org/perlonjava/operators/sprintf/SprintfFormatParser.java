@@ -206,19 +206,9 @@ public class SprintfFormatParser {
                                 Integer posParam = parseNumber();
 
                                 if (posParam != null && match('$')) {
-                                    // %*v*999$ is invalid
-
-                                    // Continue parsing to get the conversion character
-                                    if (!isAtEnd()) {
-                                        spec.conversionChar = current();
-                                        advance();
-                                    }
-
-                                    spec.isValid = false;
-                                    spec.errorMessage = "INVALID";
-                                    spec.endPos = pos;
-                                    spec.raw = input.substring(spec.startPos, spec.endPos);
-                                    return spec;
+                                    // %*v*999$ is valid - positional width for vector format
+                                    spec.widthArgIndex = posParam;
+                                    // Let parsing continue normally
                                 } else if (posParam != null) {
                                     // ADDITIONAL CHANGE: Handle case where we have number but no $
                                     // This is still invalid - don't reset position

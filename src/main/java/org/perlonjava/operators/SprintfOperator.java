@@ -117,6 +117,14 @@ public class SprintfOperator {
                         maxArgIndexUsed = Math.max(maxArgIndexUsed, processResult.maxArgIndexUsed);
                     }
 
+                    // Special handling for %*v formats - they consume an extra argument for separator
+                    if (spec.vectorFlag && spec.widthFromArg && spec.raw.matches(".*\\*v.*") && spec.parameterIndex == null) {
+                        // %*v format consumes separator as first sequential argument
+                        // The value argument is already counted in the normal flow
+                        // So we need one extra increment for the separator
+                        argIndex++;
+                    }
+
                     // Update sequential argument index based on what was consumed
                     if (spec.parameterIndex == null && spec.conversionChar != '%') {
                         // Non-positional value argument advances the sequential index
