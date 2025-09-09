@@ -13,6 +13,7 @@ public class FormatSpecifier {
     public Integer width;               // null if not specified
     public boolean widthFromArg;        // true if width is from argument
     public Integer widthArgIndex;       // parameter index for width (1-based)
+    public Integer separatorArgIndex;   // parameter index for vector separator (1-based)
     public Integer precision;           // null if not specified
     public boolean precisionFromArg;    // true if precision is from argument
     public Integer precisionArgIndex;   // parameter index for precision (1-based)

@@ -340,8 +340,18 @@ public class SprintfOperator {
 
         // Special handling for %*v formats where * is the separator
         if (spec.vectorFlag) {
-            // Check if this is %*v format (custom separator)
-            if (spec.widthFromArg && spec.raw.matches(".*\\*v.*")) {
+            // Check if we have a separator argument index
+            if (spec.separatorArgIndex != null) {
+                // Get separator from the specified argument
+                String separator = ".";
+                int sepIndex = spec.separatorArgIndex - 1;
+                if (sepIndex < list.size()) {
+                    separator = list.elements.get(sepIndex).toString();
+                }
+
+                return formatter.formatVectorString(value, spec.flags, args.width,
+                        args.precision, spec.conversionChar, separator);
+            } else if (spec.widthFromArg && spec.raw.matches(".*\\*v.*")) {
                 // %*v format - * is for separator
                 String separator = ".";
 

@@ -140,6 +140,7 @@ public class SprintfFormatParser {
                 }
             }
 
+
             // 2.5 Parse vector flag if it appears after flags
             boolean vectorParsedWithWidth = false;
             if (!isAtEnd() && current() == 'v') {
@@ -162,6 +163,8 @@ public class SprintfFormatParser {
                 }
             }
 
+            System.err.println("DEBUG Parser: After vector flag section, pos=" + pos + ", current='" + current() + "'");
+
             // 3. Parse width (skip if already parsed with vector flag)
             if (!vectorParsedWithWidth) {
                 if (!spec.vectorFlag && match('*')) {
@@ -177,6 +180,11 @@ public class SprintfFormatParser {
                         if (!isAtEnd() && current() == 'v') {
                             spec.vectorFlag = true;
                             advance();
+
+                            // For %N$*M$v pattern, the *M$ is the separator source
+                            spec.separatorArgIndex = widthParam;
+                            // Don't set widthArgIndex here - actual width may come later
+                            spec.widthFromArg = true;  // Still indicates custom separator
 
                             // Parse width after vector flag if present
                             if (Character.isDigit(current())) {
@@ -274,6 +282,8 @@ public class SprintfFormatParser {
                     }
                 }
             }
+
+            System.err.println("DEBUG Parser: After width parsing section, pos=" + pos + ", current='" + current() + "'");
 
             // Check for spaces in the format (invalid)
             int savePos = pos;
@@ -424,8 +434,16 @@ public class SprintfFormatParser {
                 }
             }
 
-            spec.endPos = pos;
-            spec.raw = input.substring(spec.startPos, spec.endPos);
+       spec.endPos = pos;
+       spec.raw = input.substring(spec.startPos, spec.endPos);
+
+       // Add this debug line here:
+       System.err.println("DEBUG parseSpecifier final: raw='" + spec.raw +
+                        "', paramIndex=" + spec.parameterIndex +
+                        ", widthFromArg=" + spec.widthFromArg +
+                        ", widthArgIndex=" + spec.widthArgIndex +
+                        ", precFromArg=" + spec.precisionFromArg +
+                        ", precArgIndex=" + spec.precisionArgIndex);
 
             // System.err.println("DEBUG parseSpecifier: raw='" + spec.raw + "', vectorFlag=" + spec.vectorFlag + ", conversionChar='" + spec.conversionChar + "'");
 
