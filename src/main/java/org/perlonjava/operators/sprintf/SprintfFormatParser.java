@@ -441,7 +441,14 @@ public class SprintfFormatParser {
                 advance();
             }
             if (pos > start) {
-                return Integer.parseInt(input.substring(start, pos));
+                String numStr = input.substring(start, pos);
+                try {
+                    return Integer.parseInt(numStr);
+                } catch (NumberFormatException e) {
+                    // Integer overflow detected
+                    // Return a special marker value that will be checked later
+                    return Integer.MAX_VALUE;
+                }
             }
             return null;
         }

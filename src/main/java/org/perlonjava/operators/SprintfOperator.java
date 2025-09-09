@@ -59,6 +59,15 @@ public class SprintfOperator {
                 result.append(literal);
                 charsWritten += literal.length();
             } else if (element instanceof FormatSpecifier spec) {
+                // Check for integer overflow FIRST
+                if ((spec.width != null && spec.width == Integer.MAX_VALUE) ||
+                    (spec.precision != null && spec.precision == Integer.MAX_VALUE) ||
+                    (spec.parameterIndex != null && spec.parameterIndex == Integer.MAX_VALUE) ||
+                    (spec.widthArgIndex != null && spec.widthArgIndex == Integer.MAX_VALUE) ||
+                    (spec.precisionArgIndex != null && spec.precisionArgIndex == Integer.MAX_VALUE)) {
+                    throw new RuntimeException("Integer overflow in format string for sprintf");
+                }
+
                 // Check if this is an overlapping specifier (warning only, no output)
                 if (spec.isOverlapping) {
                     // Only generate warning, don't add to output
