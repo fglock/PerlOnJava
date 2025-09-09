@@ -170,17 +170,21 @@ public class SprintfValueFormatter {
      * @return The hexadecimal representation
      */
     private String formatPointer(RuntimeScalar value, String flags) {
-        // For Inf/NaN, get the object's hash code as address
+        // Get the double value to check for special cases
         double d = value.getDouble();
+
+        // For Inf/NaN, we need to get an address-like value
+        // In Perl, this typically returns the internal SV pointer as hex
         if (Double.isInfinite(d) || Double.isNaN(d)) {
-            String hex = String.format("%x", value.hashCode());
+            // Use the object's identity hash code as a pseudo-address
+            String hex = Integer.toHexString(System.identityHashCode(value));
             if (flags.contains("#")) {
                 hex = "0x" + hex;
             }
             return hex;
         }
 
-        // Normal case
+        // Normal case - format the numeric value as hex
         String hex = String.format("%x", value.getLong());
         if (flags.contains("#")) {
             hex = "0x" + hex;

@@ -524,6 +524,15 @@ public class SprintfFormatParser {
             // Validate length modifier combinations
             if (spec.lengthModifier != null) {
                 String combo = spec.lengthModifier + spec.conversionChar;
+
+                // Check for quad formats (unsupported in Perl without quads)
+                if (("ll".equals(spec.lengthModifier) || "L".equals(spec.lengthModifier)) &&
+                    "diuDIU".indexOf(spec.conversionChar) >= 0) {
+                    spec.isValid = false;
+                    spec.errorMessage = "INVALID";
+                    return;
+                }
+
                 // h with floating point is invalid
                 if ("hf".equals(combo) || "hF".equals(combo) || "hg".equals(combo) ||
                         "hG".equals(combo) || "he".equals(combo) || "hE".equals(combo) ||
