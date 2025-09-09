@@ -163,8 +163,6 @@ public class SprintfFormatParser {
                 }
             }
 
-            System.err.println("DEBUG Parser: After vector flag section, pos=" + pos + ", current='" + current() + "'");
-
             // 3. Parse width (skip if already parsed with vector flag)
             if (!vectorParsedWithWidth) {
                 if (!spec.vectorFlag && match('*')) {
@@ -201,18 +199,13 @@ public class SprintfFormatParser {
                             spec.widthFromArg = true;  // Means "has custom separator"
                             advance(); // consume 'v'
 
-                            System.err.println("DEBUG Parser: Parsed %*v, next char: '" + current() + "'");
-
                             // Now check for width after %*v
                             if (match('*')) {
-                                System.err.println("DEBUG Parser: Found * after %*v");
                                 // Check for invalid positional after %*v*
                                 checkpoint = pos;
                                 Integer posParam = parseNumber();
-                                System.err.println("DEBUG Parser: After %*v*, number=" + posParam + ", current='" + current() + "'");
 
                                 if (posParam != null && match('$')) {
-                                    System.err.println("DEBUG Parser: Detected invalid %*v*N$ pattern");
                                     // %*v*999$ is invalid
 
                                     // Continue parsing to get the conversion character
@@ -225,12 +218,10 @@ public class SprintfFormatParser {
                                     spec.errorMessage = "INVALID";
                                     spec.endPos = pos;
                                     spec.raw = input.substring(spec.startPos, spec.endPos);
-                                    System.err.println("DEBUG Parser: Returning invalid spec: " + spec.raw);
                                     return spec;
                                 } else if (posParam != null) {
                                     // ADDITIONAL CHANGE: Handle case where we have number but no $
                                     // This is still invalid - don't reset position
-                                    System.err.println("DEBUG Parser: Found number after %*v* but no $ - treating as invalid");
 
                                     // The number is part of the format, continue to find conversion char
                                     // Current position is after the number
@@ -249,7 +240,6 @@ public class SprintfFormatParser {
                                     spec.errorMessage = "INVALID";
                                     spec.endPos = pos;
                                     spec.raw = input.substring(spec.startPos, spec.endPos);
-                                    System.err.println("DEBUG Parser: Returning invalid spec: " + spec.raw);
                                     return spec;
                                 } else {
                                     pos = checkpoint; // Reset only if no number was found
@@ -282,8 +272,6 @@ public class SprintfFormatParser {
                     }
                 }
             }
-
-            System.err.println("DEBUG Parser: After width parsing section, pos=" + pos + ", current='" + current() + "'");
 
             // Check for spaces in the format (invalid)
             int savePos = pos;
@@ -438,17 +426,10 @@ public class SprintfFormatParser {
        spec.raw = input.substring(spec.startPos, spec.endPos);
 
        // Add this debug line here:
-       System.err.println("DEBUG parseSpecifier final: raw='" + spec.raw +
-                        "', paramIndex=" + spec.parameterIndex +
-                        ", widthFromArg=" + spec.widthFromArg +
-                        ", widthArgIndex=" + spec.widthArgIndex +
-                        ", precFromArg=" + spec.precisionFromArg +
-                        ", precArgIndex=" + spec.precisionArgIndex);
 
-            // System.err.println("DEBUG parseSpecifier: raw='" + spec.raw + "', vectorFlag=" + spec.vectorFlag + ", conversionChar='" + spec.conversionChar + "'");
+            //
 
-            // System.err.println("DEBUG: Before return - isValid=" + spec.isValid +
-            //                   ", errorMessage='" + spec.errorMessage + "'");
+            //
 
             // Mark as invalid if we found spaces in the format
             if (hasInvalidSpace) {
@@ -459,8 +440,7 @@ public class SprintfFormatParser {
                 validateSpecifier(spec);
             }
 
-            // System.err.println("DEBUG handleInvalidSpecifier: raw='" + spec.raw +
-            //     "', errorMessage='" + spec.errorMessage + "'");
+            //
 
             return spec;
         }
@@ -477,9 +457,7 @@ public class SprintfFormatParser {
         }
 
         void validateSpecifier(FormatSpecifier spec) {
-            // System.err.println("DEBUG validateSpecifier: raw='" + spec.raw +
-            //     "', vectorFlag=" + spec.vectorFlag +
-            //     ", conversionChar='" + spec.conversionChar + "'");
+            //
 
             // Special case: %*v formats are valid
             if (spec.vectorFlag && spec.widthFromArg) {
@@ -499,9 +477,9 @@ public class SprintfFormatParser {
             if (spec.vectorFlag) {
                 // Vector flag is only valid with certain conversions
                 String validVectorConversions = "diouxXbB";
-                // System.err.println("DEBUG: Checking vector conversion '" + spec.conversionChar +  "' in '" + validVectorConversions + "'");
+                //
                 if (validVectorConversions.indexOf(spec.conversionChar) < 0) {
-                    // System.err.println("DEBUG: Setting invalid for vector format");
+                    //
                     spec.isValid = false;
                     spec.errorMessage = "INVALID";
                     return;

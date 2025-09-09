@@ -151,9 +151,7 @@ public class SprintfVectorFormatter {
                 elementFlags = flags.replace("+", "").replace(" ", "");
             }
 
-            // System.err.println("DEBUG formatByteVector: value=" + value +
-            //                  ", flags='" + elementFlags + "', width=" + width +
-            //                  ", precision=" + precision + ", conv=" + conversionChar);
+            //
 
             String formatted = formatVectorValue(value, elementFlags, width, precision, conversionChar);
             result.append(formatted);
