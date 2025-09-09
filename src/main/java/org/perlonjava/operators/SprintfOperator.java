@@ -468,9 +468,11 @@ public class SprintfOperator {
                 if (args.width < 0) {
                     spec.flags += "-";
                     args.width = -args.width;
-                }
-                // Check for potential overflow from large positive or negative values
-                if (args.width > MAX_PRACTICAL_FORMAT_SIZE) {
+                    // After negation, check again for overflow
+                    if (args.width < 0 || args.width > MAX_PRACTICAL_FORMAT_SIZE) {
+                        throw new PerlCompilerException("Integer overflow in format string for sprintf ");
+                    }
+                } else if (args.width > MAX_PRACTICAL_FORMAT_SIZE) {
                     throw new PerlCompilerException("Integer overflow in format string for sprintf ");
                 }
             } else {
@@ -510,6 +512,10 @@ public class SprintfOperator {
 
                 args.precision = (int)precLong;
                 if (args.precision < 0) {
+                    // For precision, check if negating would cause issues
+                    if (args.precision < -MAX_PRACTICAL_FORMAT_SIZE) {
+                        throw new PerlCompilerException("Integer overflow in format string for sprintf ");
+                    }
                     args.precision = -1;  // Negative precision is ignored
                 } else if (args.precision > MAX_PRACTICAL_FORMAT_SIZE) {
                     throw new PerlCompilerException("Integer overflow in format string for sprintf ");
