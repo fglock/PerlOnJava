@@ -263,8 +263,20 @@ public class IOOperator {
 
         RuntimeScalar format = (RuntimeScalar) runtimeList.elements.removeFirst(); // Extract the format string from elements
 
+        String formattedString;
+
         // Use sprintf to get the formatted string
-        String formattedString = SprintfOperator.sprintf(format, runtimeList).toString();
+            try {
+                formattedString = SprintfOperator.sprintf(format, runtimeList).toString();
+            } catch (PerlCompilerException e) {
+                // Change sprintf error messages to printf
+                String message = e.getMessage();
+                if (message != null && message.contains("Integer overflow in format string for sprintf")) {
+                    throw new PerlCompilerException("Integer overflow in format string for printf");
+                }
+                // Re-throw other exceptions unchanged
+                throw e;
+            }
 
         // Write the formatted content to the file handle
         return fh.write(formattedString);
