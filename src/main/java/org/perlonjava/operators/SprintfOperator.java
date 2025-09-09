@@ -184,8 +184,7 @@ public class SprintfOperator {
         int targetIndex = spec.parameterIndex != null ? spec.parameterIndex - 1 : argIndex;
         if (targetIndex >= list.size()) {
             // Missing argument for %n
-            WarnDie.warn(new RuntimeScalar("Missing argument for %n in sprintf"), new RuntimeScalar(""));
-            return;
+            throw  new PerlCompilerException("Missing argument for %n in sprintf");
         }
         RuntimeScalar target = (RuntimeScalar) list.elements.get(targetIndex);
 
