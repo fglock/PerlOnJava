@@ -267,7 +267,11 @@ public class MathOperators {
             if (result != null) return result;
         }
 
-        return new RuntimeScalar(Math.sqrt(runtimeScalar.getDouble()));
+        double d = runtimeScalar.getDouble();
+        if (d < 0) {
+            throw new PerlCompilerException("Can't take sqrt of " + ScalarUtils.formatLikePerl(d));
+        }
+        return new RuntimeScalar(Math.sqrt(d));
     }
 
     /**
