@@ -52,8 +52,9 @@ public class SprintfValueFormatter {
     public String formatValue(RuntimeScalar value, String flags, int width,
                               int precision, char conversion) {
         // Check for special floating-point values first
+        // BUT exclude %p - it should format the address even for Inf/NaN
         double doubleValue = value.getDouble();
-        if (Double.isInfinite(doubleValue) || Double.isNaN(doubleValue)) {
+        if ((Double.isInfinite(doubleValue) || Double.isNaN(doubleValue)) && conversion != 'p') {
             return numericFormatter.formatSpecialValue(doubleValue, flags, width, conversion);
         }
 
@@ -73,7 +74,7 @@ public class SprintfValueFormatter {
             // String and character conversions - handle directly
             case 'c' -> formatCharacter(value, flags, width);
             case 's' -> formatString(value.toString(), flags, width, precision);
-            case 'p' -> formatPointer(value, flags);  // Add flags parameter
+            case 'p' -> formatPointer(value, flags);  // This should already pass flags
             case 'n' -> throw new PerlCompilerException("%n specifier not supported");
 
             // Uppercase variants (synonyms)
@@ -170,25 +171,15 @@ public class SprintfValueFormatter {
      * @return The hexadecimal representation
      */
     private String formatPointer(RuntimeScalar value, String flags) {
-        // Get the double value to check for special cases
-        double d = value.getDouble();
+        // Get a hex representation of the "address"
+        // For Java objects, we use the identity hash code as a pseudo-pointer
+        String hex = Integer.toHexString(System.identityHashCode(value));
 
-        // For Inf/NaN, we need to get an address-like value
-        // In Perl, this typically returns the internal SV pointer as hex
-        if (Double.isInfinite(d) || Double.isNaN(d)) {
-            // Use the object's identity hash code as a pseudo-address
-            String hex = Integer.toHexString(System.identityHashCode(value));
-            if (flags.contains("#")) {
-                hex = "0x" + hex;
-            }
-            return hex;
-        }
-
-        // Normal case - format the numeric value as hex
-        String hex = String.format("%x", value.getLong());
+        // Add 0x prefix if # flag is present
         if (flags.contains("#")) {
             hex = "0x" + hex;
         }
+
         return hex;
     }
 }

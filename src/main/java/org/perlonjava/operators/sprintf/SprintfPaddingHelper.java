@@ -1,5 +1,8 @@
 package org.perlonjava.operators.sprintf;
 
+import org.perlonjava.operators.SprintfOperator;
+import org.perlonjava.runtime.PerlCompilerException;
+
 /**
  * Helper class for sprintf padding operations.
  * <p>
@@ -77,8 +80,16 @@ public class SprintfPaddingHelper {
      * Pad a string on the left with a specified character.
      */
     public static String padLeft(String str, int width, char padChar) {
-        if (str.length() >= width) return str;
-        return String.valueOf(padChar).repeat(width - str.length()) + str;
+        // Add overflow protection
+        if (width > SprintfOperator.MAX_PRACTICAL_FORMAT_SIZE) {
+            throw new PerlCompilerException("Integer overflow in format string for sprintf ");
+        }
+
+        int padLength = width - str.length();
+        if (padLength <= 0) {
+            return str;
+        }
+        return String.valueOf(padChar).repeat(padLength) + str;
     }
 
     /**
