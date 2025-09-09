@@ -558,7 +558,8 @@ public class SprintfOperator {
 
         // Special handling for vector formats
         if (spec.vectorFlag) {
-            return " ";  // Vector formats with missing argument output a space
+            return "";  // Vector formats with missing argument output nothing
+                       // The warning handler will add " MISSING" with space
         }
 
         // Return appropriate default value based on conversion type
