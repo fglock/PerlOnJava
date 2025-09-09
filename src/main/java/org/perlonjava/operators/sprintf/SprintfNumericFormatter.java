@@ -290,6 +290,12 @@ public class SprintfNumericFormatter {
             cleanFlags = cleanFlags.replace("0", "");
         }
 
+        // Java requires width when using - flag, but Perl doesn't
+        // Add a minimal width if - flag is present but width is 0
+        if (cleanFlags.contains("-") && width == 0) {
+            width = 1;  // Minimal width to satisfy Java's formatter
+        }
+
         // Special handling for %g to remove trailing zeros
         if ((conversion == 'g' || conversion == 'G')) {
             return formatGFloatingPoint(value, cleanFlags, width, precision, conversion);

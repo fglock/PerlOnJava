@@ -21,6 +21,9 @@ public class SprintfOperator {
 
     private static int charsWritten = 0;
 
+    // Maximum practical limit for width/precision to prevent memory issues
+    private static final int MAX_PRACTICAL_FORMAT_SIZE = 2000000000;
+
     /**
      * Formats the elements according to the specified format string.
      * <p>
@@ -64,7 +67,10 @@ public class SprintfOperator {
                     (spec.precision != null && spec.precision == Integer.MAX_VALUE) ||
                     (spec.parameterIndex != null && spec.parameterIndex == Integer.MAX_VALUE) ||
                     (spec.widthArgIndex != null && spec.widthArgIndex == Integer.MAX_VALUE) ||
-                    (spec.precisionArgIndex != null && spec.precisionArgIndex == Integer.MAX_VALUE)) {
+                    (spec.precisionArgIndex != null && spec.precisionArgIndex == Integer.MAX_VALUE) ||
+                    // Check for impractically large width/precision values
+                    (spec.width != null && spec.width > MAX_PRACTICAL_FORMAT_SIZE) ||
+                    (spec.precision != null && spec.precision > MAX_PRACTICAL_FORMAT_SIZE)) {
                     throw new RuntimeException("Integer overflow in format string for sprintf ");
                 }
 
