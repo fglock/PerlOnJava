@@ -177,8 +177,12 @@ public class SprintfOperator {
     private static void handlePercentN(FormatSpecifier spec,
                                        RuntimeList list, int argIndex) {
         int targetIndex = spec.parameterIndex != null ? spec.parameterIndex - 1 : argIndex;
-        if (targetIndex < list.size()) {
-            RuntimeScalar target = (RuntimeScalar) list.elements.get(targetIndex);
+        if (targetIndex >= list.size()) {
+            // Missing argument for %n
+            WarnDie.warn(new RuntimeScalar("Missing argument for %n in sprintf"), new RuntimeScalar(""));
+            return;
+        }
+        RuntimeScalar target = (RuntimeScalar) list.elements.get(targetIndex);
 
             // Check if it's a reference
             if (target.type == RuntimeScalarType.REFERENCE) {
@@ -197,7 +201,6 @@ public class SprintfOperator {
                     // In Perl, %n with a constant just consumes the argument
                 }
             }
-        }
     }
 
     /**
@@ -454,6 +457,10 @@ public class SprintfOperator {
                     spec.flags += "-";
                     args.width = -args.width;
                 }
+                // Check for potential overflow from large positive or negative values
+                if (args.width > 999999999) {
+                    throw new RuntimeException("Integer overflow in format string for sprintf ");
+                }
             } else {
                 WarnDie.warn(new RuntimeScalar("Missing argument in sprintf"),
                         new RuntimeScalar(""));
@@ -485,6 +492,10 @@ public class SprintfOperator {
                 args.precision = ((RuntimeScalar) list.elements.get(precArgIndex)).getInt();
                 if (args.precision < 0) {
                     args.precision = -1;  // Negative precision is ignored
+                }
+                // Check for potential overflow
+                if (args.precision > 999999999) {
+                    throw new RuntimeException("Integer overflow in format string for sprintf ");
                 }
             } else {
                 WarnDie.warn(new RuntimeScalar("Missing argument in sprintf"),
