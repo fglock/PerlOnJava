@@ -3,10 +3,7 @@ package org.perlonjava.operators;
 import org.perlonjava.operators.sprintf.FormatSpecifier;
 import org.perlonjava.operators.sprintf.SprintfFormatParser;
 import org.perlonjava.operators.sprintf.SprintfValueFormatter;
-import org.perlonjava.runtime.RuntimeBase;
-import org.perlonjava.runtime.RuntimeList;
-import org.perlonjava.runtime.RuntimeScalar;
-import org.perlonjava.runtime.RuntimeScalarType;
+import org.perlonjava.runtime.*;
 
 /**
  * Implements Perl's sprintf operator for formatted string output.
@@ -71,7 +68,7 @@ public class SprintfOperator {
                     // Check for impractically large width/precision values
                     (spec.width != null && spec.width > MAX_PRACTICAL_FORMAT_SIZE) ||
                     (spec.precision != null && spec.precision > MAX_PRACTICAL_FORMAT_SIZE)) {
-                    throw new RuntimeException("Integer overflow in format string for sprintf ");
+                    throw new PerlCompilerException("Integer overflow in format string for sprintf");
                 }
 
                 // Check if this is an overlapping specifier (warning only, no output)
@@ -467,7 +464,7 @@ public class SprintfOperator {
                 }
                 // Check for potential overflow from large positive or negative values
                 if (args.width > 999999999) {
-                    throw new RuntimeException("Integer overflow in format string for sprintf ");
+                    throw new PerlCompilerException("Integer overflow in format string for sprintf");
                 }
             } else {
                 WarnDie.warn(new RuntimeScalar("Missing argument in sprintf"),
