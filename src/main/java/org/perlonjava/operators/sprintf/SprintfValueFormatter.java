@@ -170,6 +170,17 @@ public class SprintfValueFormatter {
      * @return The hexadecimal representation
      */
     private String formatPointer(RuntimeScalar value, String flags) {
+        // For Inf/NaN, get the object's hash code as address
+        double d = value.getDouble();
+        if (Double.isInfinite(d) || Double.isNaN(d)) {
+            String hex = String.format("%x", value.hashCode());
+            if (flags.contains("#")) {
+                hex = "0x" + hex;
+            }
+            return hex;
+        }
+
+        // Normal case
         String hex = String.format("%x", value.getLong());
         if (flags.contains("#")) {
             hex = "0x" + hex;
