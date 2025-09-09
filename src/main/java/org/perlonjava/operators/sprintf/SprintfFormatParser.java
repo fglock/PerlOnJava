@@ -341,43 +341,86 @@ public class SprintfFormatParser {
                 }
             }
 
-// 7. Parse conversion character
+            // 7. Parse conversion character
             if (isAtEnd()) {
                 spec.isValid = false;
                 spec.errorMessage = "MISSING";
             } else {
                 char firstChar = current();
-                advance();
 
-                // Check if this might be part of a positional parameter
-                if (Character.isDigit(firstChar) && !isAtEnd()) {
-                    // Look ahead to see if we have more digits and a $
-                    int checkPos = pos;
-                    while (!isAtEnd() && Character.isDigit(current())) {
-                        advance();
-                    }
+                // Special handling for * after vector format
+                if (firstChar == '*' && spec.vectorFlag) {
+                    // For vector formats, * might be a width specifier, not conversion char
+                    checkpoint = pos;
+                    advance(); // consume *
+                    Integer widthParam = parseNumber();
+                    if (widthParam != null && match('$')) {
+                        // This is a positional width like *2$, not a conversion character
+                        spec.widthFromArg = true;
+                        spec.widthArgIndex = widthParam;
 
-                    if (!isAtEnd() && current() == '$') {
-                        // This is an invalid positional parameter at the conversion position
-                        advance(); // consume $
+                        // Continue parsing for precision
+                        if (match('.')) {
+                            if (match('*')) {
+                                spec.precisionFromArg = true;
+                                Integer precParam = parseNumber();
+                                if (precParam != null && match('$')) {
+                                    spec.precisionArgIndex = precParam;
+                                }
+                            } else {
+                                Integer prec = parseNumber();
+                                spec.precision = (prec != null) ? prec : 0;
+                            }
+                        }
 
-                        // Get the actual conversion character
+                        // Now get the actual conversion character
                         if (!isAtEnd()) {
                             spec.conversionChar = current();
                             advance();
                         } else {
-                            spec.conversionChar = firstChar; // Use the first digit if nothing follows
+                            spec.isValid = false;
+                            spec.errorMessage = "MISSING";
                         }
-
-                        spec.isValid = false;
-                        spec.errorMessage = "INVALID";
                     } else {
-                        // Not a positional parameter, just use the first character
-                        pos = checkPos; // Reset to after first char
+                        // Not a positional width, reset and treat * as conversion char
+                        pos = checkpoint;
                         spec.conversionChar = firstChar;
+                        advance();
                     }
                 } else {
-                    spec.conversionChar = firstChar;
+                    // Normal conversion character parsing
+                    advance();
+
+                    // Check if this might be part of a positional parameter
+                    if (Character.isDigit(firstChar) && !isAtEnd()) {
+                        // Look ahead to see if we have more digits and a $
+                        int checkPos = pos;
+                        while (!isAtEnd() && Character.isDigit(current())) {
+                            advance();
+                        }
+
+                        if (!isAtEnd() && current() == '$') {
+                            // This is an invalid positional parameter at the conversion position
+                            advance(); // consume $
+
+                            // Get the actual conversion character
+                            if (!isAtEnd()) {
+                                spec.conversionChar = current();
+                                advance();
+                            } else {
+                                spec.conversionChar = firstChar; // Use the first digit if nothing follows
+                            }
+
+                            spec.isValid = false;
+                            spec.errorMessage = "INVALID";
+                        } else {
+                            // Not a positional parameter, just use the first character
+                            pos = checkPos; // Reset to after first char
+                            spec.conversionChar = firstChar;
+                        }
+                    } else {
+                        spec.conversionChar = firstChar;
+                    }
                 }
             }
 
