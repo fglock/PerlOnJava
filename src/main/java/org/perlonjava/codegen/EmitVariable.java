@@ -144,7 +144,8 @@ public class EmitVariable {
                 boolean createIfNotExists = name.contains("::") // Fully qualified name
                         || ScalarUtils.isInteger(name)  // Regex variable always exists
                         || !emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_VARS)  // `no strict "vars"`
-                        || isDeclared;
+                        || isDeclared
+                        || (!name.isEmpty() && name.codePointAt(0) < 0x20); // starts with control char;
                 fetchGlobalVariable(emitterVisitor.ctx, createIfNotExists, sigil, name, node.getIndex());
             } else {
                 // retrieve the `my` or `our` variable from local vars
