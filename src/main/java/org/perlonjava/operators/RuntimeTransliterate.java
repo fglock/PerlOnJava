@@ -347,8 +347,15 @@ public class RuntimeTransliterate {
                     result.add(0x1B);
                     return 2; // Escape character
                 case '0':
-                    result.add(0);
-                    return 2; // Null character
+                case '1':
+                case '2':
+                case '3':
+                case '4':
+                case '5':
+                case '6':
+                case '7':
+                    // Handle octal escape sequences
+                    return 1 + parseOctalSequence(input, pos + 1, result);
                 case 'x':
                     return 2 + parseHexSequence(input, pos + 2, result);
                 case '-':
@@ -390,6 +397,37 @@ public class RuntimeTransliterate {
             result.add((int) ch);
             return 1;
         }
+    }
+
+    /**
+     * Parses octal escape sequences (\0, \77, \377, etc.).
+     * Returns the number of characters consumed (not including the initial backslash).
+     */
+    private int parseOctalSequence(String input, int start, List<Integer> result) {
+        int value = 0;
+        int digits = 0;
+        int pos = start;
+
+        // Parse up to 3 octal digits
+        while (pos < input.length() && digits < 3) {
+            char ch = input.charAt(pos);
+            if (ch >= '0' && ch <= '7') {
+                value = value * 8 + (ch - '0');
+                digits++;
+                pos++;
+            } else {
+                break;
+            }
+        }
+
+        // In Perl, octal values are capped at 0377 (255 decimal)
+        // to maintain compatibility with older versions
+        if (value > 0377) {
+            value = 0377;
+        }
+
+        result.add(value);
+        return digits;
     }
 
     /**

@@ -75,4 +75,60 @@ subtest 'Transliteration with complement on mixed strings' => sub {
     is($string, "HelloXWorldX", "'Hello World 123!' replaces non-alphabetic characters with 'X' and squeezes");
 };
 
+subtest 'Transliteration with octal ranges and complement (BUG)' => sub {
+    # Test for the suspected bug with tr///c and octal ranges
+    my $string;
+    my $count;
+
+    # Test 1: ASCII character 'A' should be within \0-\377 range
+    $string = "A";
+    $count = $string =~ tr/\0-\377//c;
+    TODO: {
+        local $TODO = "tr///c with octal ranges incorrectly counts all chars as outside range";
+        is($count, 0, "Character 'A' should be within \\0-\\377 range");
+    }
+
+    # Test 2: Multiple ASCII characters should all be within \0-\377 range
+    $string = "ABCDE";
+    $count = $string =~ tr/\0-\377//c;
+    TODO: {
+        local $TODO = "tr///c with octal ranges incorrectly counts all chars as outside range";
+        is($count, 0, "All characters in 'ABCDE' should be within \\0-\\377 range");
+    }
+
+    # Test 3: Extended ASCII characters should be within \0-\377 range
+    $string = chr(161) . chr(162) . chr(163);
+    $count = $string =~ tr/\0-\377//c;
+    TODO: {
+        local $TODO = "tr///c with octal ranges incorrectly counts all chars as outside range";
+        is($count, 0, "Characters chr(161-163) should be within \\0-\\377 range");
+    }
+
+    # Test 4: Character above 255 should be outside \0-\377 range
+    $string = chr(256);
+    $count = $string =~ tr/\0-\377//c;
+    is($count, 1, "Character chr(256) should be outside \\0-\\377 range");
+
+    # Test 5: Mixed string with 8-bit and non-8-bit characters
+    $string = "ABC" . chr(256) . "DEF";
+    $count = $string =~ tr/\0-\377//c;
+    TODO: {
+        local $TODO = "tr///c with octal ranges incorrectly counts all chars as outside range";
+        is($count, 1, "Only chr(256) should be outside \\0-\\377 range in mixed string");
+    }
+
+    # Test 6: Test with smaller range \0-\177 (0-127)
+    $string = "A";
+    $count = $string =~ tr/\0-\177//c;
+    TODO: {
+        local $TODO = "tr///c with character ranges not working correctly";
+        is($count, 0, "Character 'A' (65) should be within \\0-\\177 range");
+    }
+
+    # Test 7: Character above 127 should be outside \0-\177 range
+    $string = chr(128);
+    $count = $string =~ tr/\0-\177//c;
+    is($count, 1, "Character chr(128) should be outside \\0-\\177 range");
+};
+
 done_testing();
