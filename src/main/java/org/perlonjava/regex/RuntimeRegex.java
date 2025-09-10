@@ -461,18 +461,22 @@ public class RuntimeRegex implements RuntimeScalarReference {
             String finalResult = resultBuffer.toString();
 
             if (regex.regexFlags.isNonDestructive()) {
+                // /r modifier: return the modified string
                 return new RuntimeScalar(finalResult);
+            } else {
+                // Save the modified string back to the original scalar
+                string.set(finalResult);
+                // Return the number of substitutions made
+                return RuntimeScalarCache.getScalarInt(found);
             }
-            // Save the modified string back to the original scalar
-            string.set(finalResult);
-            // Return the number of substitutions made
-            return RuntimeScalarCache.getScalarInt(found);
         } else {
             if (regex.regexFlags.isNonDestructive()) {
+                // /r modifier with no matches: return the original string
                 return string;
+            } else {
+                // Return `undef`
+                return scalarUndef;
             }
-            // Return `undef`
-            return scalarUndef;
         }
     }
 

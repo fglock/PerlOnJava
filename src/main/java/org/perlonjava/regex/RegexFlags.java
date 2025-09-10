@@ -141,6 +141,8 @@ public class RegexFlags {
         if (isDotAll) flagString.append('s');
         if (isNonCapturing) flagString.append('n');
         if (isExtended) flagString.append('x');
+        if (isNonDestructive) flagString.append('r');
+        if (isNonDestructive) flagString.append('g');
 
         return flagString.toString();
     }
