@@ -140,6 +140,21 @@ public class RegexPreprocessor {
             if (c2 == '?' && c3 == '#') {
                 // Remove inline comments (?# ... )
                 offset = handleSkipComment(offset, s, length);
+            } else if (c2 == '?' && c3 == '@') {
+                // Handle (?@...) which is not implemented
+                regexError(s, offset + 2, "Sequence (?@...) not implemented");
+            } else if (c2 == '?' && c3 == '{') {
+                // Handle (?{ ... }) code blocks
+                int braceEnd = findClosingBrace(s, offset + 3, length);
+                if (braceEnd == -1) {
+                    regexErrorNoPosition(s, "Missing right curly or square bracket");
+                }
+                // For now, just skip the code block
+                sb.append("(?:");  // Convert to non-capturing group
+                offset = braceEnd;
+            } else if (c2 == '?' && c3 == '(') {
+                // Handle (?(condition)yes|no) conditionals
+                return handleConditionalPattern(s, offset, length, sb, regexFlags);
             } else if (c2 == '?' && c3 == '<' && c4 == '=') {
                 // Positive lookbehind (?<=...)
                 validateLookbehindLength(s, offset);
@@ -170,7 +185,7 @@ public class RegexPreprocessor {
 
         // Ensure the closing parenthesis is consumed
         if (offset >= length || s.codePointAt(offset) != ')') {
-            regexError(s, offset, "Missing right curly or square bracket" );
+            regexError(s, offset, "Missing right curly or square bracket");
         }
         sb.append(')');
         return offset;
@@ -463,5 +478,128 @@ public class RegexPreprocessor {
         } else {
             return Integer.parseInt(quantifier);
         }
+    }
+
+    private static int findClosingBrace(String s, int start, int length) {
+        int depth = 1;
+        int pos = start;
+        while (pos < length && depth > 0) {
+            char ch = s.charAt(pos);
+            if (ch == '{') {
+                depth++;
+            } else if (ch == '}') {
+                depth--;
+                if (depth == 0) {
+                    return pos;
+                }
+            } else if (ch == '\\' && pos + 1 < length) {
+                pos++; // Skip escaped character
+            }
+            pos++;
+        }
+        return -1; // Not found
+    }
+
+    // Add this method to find matching parenthesis
+    private static int findMatchingParen(String s, int start, int length) {
+        int depth = 1;
+        int pos = start + 1;  // Start after the opening paren
+        while (pos < length && depth > 0) {
+            char ch = s.charAt(pos);
+            if (ch == '(') {
+                depth++;
+            } else if (ch == ')') {
+                depth--;
+                if (depth == 0) {
+                    return pos;
+                }
+            } else if (ch == '\\' && pos + 1 < length) {
+                pos++; // Skip escaped character
+            }
+            pos++;
+        }
+        return -1; // Not found
+    }
+
+    // Add this method to handle conditional patterns
+    private static int handleConditionalPattern(String s, int offset, int length, StringBuilder sb, RegexFlags regexFlags) {
+        // offset is at '(' of (?(condition)yes|no)
+        int condStart = offset + 3;  // Skip (?(
+
+        // Find the end of the condition
+        int condEnd = condStart;
+        int parenDepth = 0;
+        boolean foundEnd = false;
+
+        while (condEnd < length && !foundEnd) {
+            char ch = s.charAt(condEnd);
+            if (ch == '(') {
+                parenDepth++;
+            } else if (ch == ')' && parenDepth == 0) {
+                foundEnd = true;
+                break;
+            } else if (ch == ')') {
+                parenDepth--;
+            }
+            condEnd++;
+        }
+
+        if (!foundEnd) {
+            regexError(s, condEnd, "Switch (?(condition)... not terminated");
+        }
+
+        // Extract and validate the condition
+        String condition = s.substring(condStart, condEnd).trim();
+
+        // Check for invalid conditions
+        if (condition.matches("\\d+[a-zA-Z].*")) {
+            // Find where the non-digit starts
+            int i = 0;
+            while (i < condition.length() && Character.isDigit(condition.charAt(i))) {
+                i++;
+            }
+            regexError(s, condStart + i + 1, "Switch condition not recognized");
+        }
+
+        // Check for specific invalid patterns
+        if (condition.startsWith("?")) {
+            regexError(s, condStart, "Unknown switch condition (?(...))");
+        }
+
+        if (!condition.matches("\\d+|<[^>]+>|'[^']+'")) {
+            regexError(s, condStart, "Unknown switch condition (?(...))");
+        }
+
+        // Now parse the yes|no branches
+        int pos = condEnd + 1;  // Skip past the closing )
+        int pipeCount = 0;
+        int branchStart = pos;
+        parenDepth = 0;
+
+        while (pos < length) {
+            char ch = s.charAt(pos);
+            if (ch == '(') {
+                parenDepth++;
+            } else if (ch == ')' && parenDepth == 0) {
+                // End of conditional
+                break;
+            } else if (ch == ')') {
+                parenDepth--;
+            } else if (ch == '|' && parenDepth == 0) {
+                pipeCount++;
+                if (pipeCount > 1) {
+                    regexError(s, pos, "Switch (?(condition)... contains too many branches");
+                }
+            }
+            pos++;
+        }
+
+        if (pos >= length) {
+            regexError(s, pos, "Switch (?(condition)... not terminated");
+        }
+
+        // For now, just convert to a non-capturing group
+        sb.append("(?:");
+        return handleRegex(s, branchStart, sb, regexFlags, true);
     }
 }
