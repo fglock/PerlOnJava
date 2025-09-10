@@ -315,6 +315,7 @@ The following areas are currently under active development to enhance the functi
 
   - Add special variables: `@{^CAPTURE}`, `${^LAST_SUCCESSFUL_PATTERN}`.
   - Bugfix in regex `/r`.
+  - Bugfix in transliterate with octal values.
   - Planned release date: 2025-12-10.
 
 - Work in Progress
