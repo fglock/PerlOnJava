@@ -1,2 +1,3 @@
-Suggestion - fix one test at a time; add println statements; create a one-liner Perl (jperl) to test behaviour
+Fix one test at a time; add println statements; create a one-liner Perl (jperl) to test behaviour.
+Give enough context if the changes, and tag the snippets with the file name so the editor doesn't make mistakes.
 
