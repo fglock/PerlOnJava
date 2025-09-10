@@ -155,12 +155,12 @@ public class RegexPreprocessor {
                 offset = handleSkipComment(offset, s, length);
             } else if (c3 == '@') {
                 // Handle (?@...) which is not implemented
-                regexError(s, offset + 2, "Sequence (?@...) not implemented");
+                regexError(s, offset + 3, "Sequence (?@...) not implemented");
             } else if (c3 == '{') {
                 // Handle (?{ ... }) code blocks
                 int braceEnd = findClosingBrace(s, offset + 3, length);
                 if (braceEnd == -1) {
-                    regexErrorNoPosition(s, "Missing right curly or square bracket");
+                    regexErrorNoPosition("Missing right curly or square bracket");
                 }
                 // For now, just skip the code block
                 sb.append("(?:");  // Convert to non-capturing group
@@ -182,9 +182,15 @@ public class RegexPreprocessor {
                 // Negative lookbehind (?<!...)
                 validateLookbehindLength(s, offset);
                 offset = handleRegularParentheses(s, offset, length, sb, regexFlags);
-            } else if (c3 == '<' && c4 == ';') {
-                // (?<;...) invalid group name
-                regexError(s, offset + 3, "Group name must start with a non-digit word character");
+            } else if (c3 == '=') {
+                // Positive lookahead (?=...)
+                offset = handleRegularParentheses(s, offset, length, sb, regexFlags);
+            } else if (c3 == '!') {
+                // Negative lookahead (?!...)
+                offset = handleRegularParentheses(s, offset, length, sb, regexFlags);
+            } else if (c3 == '>') {
+                // Atomic group (?>...) - non-backtracking group
+                offset = handleRegularParentheses(s, offset, length, sb, regexFlags);
             } else if (c3 == '<' && isAlphabetic(c4)) {
                 // Handle named capture (?<name> ... )
                 offset = handleNamedCapture(c3, s, offset, length, sb, regexFlags);
@@ -409,20 +415,25 @@ public class RegexPreprocessor {
     }
 
     // Lookbehind errors don't show position
-    static void regexErrorNoPosition(String s, String errMsg) {
-        throw new PerlCompilerException(errMsg + " in regex m/" + s + "/");
+    static void regexErrorNoPosition(String errMsg) {
+        throw new PerlCompilerException(errMsg);
     }
 
     /**
       * Validates that a lookbehind assertion doesn't potentially match more than 255 characters.
       */
     private static void validateLookbehindLength(String s, int offset) {
+        // System.err.println("DEBUG: validateLookbehindLength called for: " + s.substring(offset, Math.min(s.length(), offset + 20)));
         int start = offset + 4; // Skip past (?<= or (?<!
         int maxLength = calculateMaxLength(s, start);
 
         if (maxLength >= 255 || maxLength == -1) { // >= 255 means 255 or more
-            regexErrorNoPosition(s, "Lookbehind longer than 255 not implemented");
+            regexErrorSimple(s, "Lookbehind longer than 255 not implemented");
         }
+    }
+
+    static void regexErrorSimple(String s, String errMsg) {
+        throw new PerlCompilerException(errMsg + " in regex m/" + s + "/");
     }
 
     /**
@@ -575,7 +586,7 @@ public class RegexPreprocessor {
         }
 
         if (!foundEnd) {
-            regexError(s, condEnd, "Switch (?(condition)... not terminated");
+            throw new PerlCompilerException("Switch (?(condition)... not terminated" + " in regex m/" + s + "/");
         }
 
         // Extract and validate the condition
@@ -588,21 +599,21 @@ public class RegexPreprocessor {
             while (i < condition.length() && Character.isDigit(condition.charAt(i))) {
                 i++;
             }
-            regexError(s, condStart + i + 1, "Switch condition not recognized");
+            throw new PerlCompilerException("Switch condition not recognized" + " in regex m/" + s + "/");
         }
 
         // Check for specific invalid patterns
         if (condition.equals("??{}") || condition.equals("?[")) {
-            regexError(s, condStart, "Unknown switch condition (?(...))");
+            throw new PerlCompilerException("Unknown switch condition (?(...)) in regex m/" + s + "/");
         }
 
         if (condition.startsWith("?")) {
-            regexError(s, condStart, "Unknown switch condition (?(...))");
+            throw new PerlCompilerException("Unknown switch condition (?(...)) in regex m/" + s + "/");
         }
 
         // Check for non-numeric conditions that aren't valid
         if (!condition.matches("\\d+") && !condition.matches("<[^>]+>") && !condition.matches("'[^']+'")) {
-            regexError(s, condStart, "Unknown switch condition (?(...))");
+            throw new PerlCompilerException("Unknown switch condition (?(...)) in regex m/" + s + "/");
         }
 
         // Now parse the yes|no branches
@@ -623,14 +634,14 @@ public class RegexPreprocessor {
             } else if (ch == '|' && parenDepth == 0) {
                 pipeCount++;
                 if (pipeCount > 1) {
-                    regexError(s, pos, "Switch (?(condition)... contains too many branches");
+                    throw new PerlCompilerException("Switch (?(condition)... contains too many branches" + " in regex m/" + s + "/");
                 }
             }
             pos++;
         }
 
         if (pos >= length) {
-            regexError(s, pos, "Switch (?(condition)... not terminated");
+            throw new PerlCompilerException("Switch (?(condition)... not terminated" + " in regex m/" + s + "/");
         }
 
         // For now, just convert to a non-capturing group
