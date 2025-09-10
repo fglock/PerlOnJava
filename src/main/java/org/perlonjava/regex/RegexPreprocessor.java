@@ -121,18 +121,33 @@ public class RegexPreprocessor {
         if (offset > s.length()) {
             offset = s.length();
         }
-        throw new PerlCompilerException(errMsg + "; marked by <-- HERE in m/" +
+        // Remove debug prints for now
+        // System.err.println("DEBUG: offset=" + offset + ", s='" + s + "'");
+        // System.err.println("DEBUG: marker at: '" + s.substring(0, offset) + "{#}" + s.substring(offset) + "'");
+
+        // The error format expected by tests is:
+        // "Error message in regex; marked by <-- HERE in m/regex <-- HERE remaining/"
+        throw new PerlCompilerException(errMsg + " in regex; marked by <-- HERE in m/" +
                 s.substring(0, offset) + " <-- HERE " + s.substring(offset) + "/");
     }
 
     private static int handleParentheses(String s, int offset, int length, StringBuilder sb, int c, RegexFlags regexFlags, boolean stopAtClosingParen) {
-        if (offset < length - 3) {
+        if (offset + 3 < length) {  // Changed condition to be safer
             int c2 = s.codePointAt(offset + 1);
             int c3 = s.codePointAt(offset + 2);
             int c4 = s.codePointAt(offset + 3);
+
             if (c2 == '?' && c3 == '#') {
                 // Remove inline comments (?# ... )
                 offset = handleSkipComment(offset, s, length);
+            } else if (c2 == '?' && c3 == '<' && c4 == '=') {
+                // Positive lookbehind (?<=...)
+                validateLookbehindLength(s, offset);
+                offset = handleRegularParentheses(s, offset, length, sb, regexFlags);
+            } else if (c2 == '?' && c3 == '<' && c4 == '!') {
+                // Negative lookbehind (?<!...)
+                validateLookbehindLength(s, offset);
+                offset = handleRegularParentheses(s, offset, length, sb, regexFlags);
             } else if (c2 == '?' && ((c3 >= 'a' && c3 <= 'z') || c3 == '-' || c3 == '^')) {
                 // Handle (?modifiers: ... ) construct
                 return RegexPreprocessorHelper.handleFlagModifiers(s, offset, sb, regexFlags);
@@ -202,8 +217,29 @@ public class RegexPreprocessor {
     private static int handleCharacterClass(String s, boolean flag_xx, StringBuilder sb, int c, int offset) {
         final int length = s.length();
         int len = sb.length();
-        sb.append(Character.toChars(c));
+        sb.append(Character.toChars(c));  // Append the '['
         offset++;
+
+        // Add check for POSIX syntax at the start of character class
+        if (offset < length && s.charAt(offset) == '[') {
+            // Check for [[=...=]] or [[.....]]
+            if (offset + 1 < length) {
+                char nextChar = s.charAt(offset + 1);
+                if (nextChar == '=' || nextChar == '.') {
+                    // Look for closing syntax
+                    int searchPos = offset + 2;
+                    while (searchPos < length - 1) {
+                        if (s.charAt(searchPos) == nextChar && s.charAt(searchPos + 1) == ']') {
+                            // Found complete POSIX syntax
+                            String syntaxType = nextChar == '=' ? "[= =]" : "[. .]";
+                            regexError(s, searchPos + 2, "POSIX syntax " + syntaxType + " is reserved for future extensions");
+                        }
+                        searchPos++;
+                    }
+                }
+            }
+        }
+
         StringBuilder rejected = new StringBuilder();
         offset = RegexPreprocessorHelper.handleRegexCharacterClassEscape(offset, s, sb, length, flag_xx, rejected);
         if (!rejected.isEmpty()) {
@@ -271,6 +307,22 @@ public class RegexPreprocessor {
      * @return The updated offset after processing the character class.
      */
     static int handleCharacterClass(int offset, String s, StringBuilder sb, int length) {
+        // Check for POSIX syntax [= =] or [. .]
+        if (offset + 3 < length && s.charAt(offset) == '[' &&
+            (s.charAt(offset + 1) == '=' || s.charAt(offset + 1) == '.')) {
+            char syntaxChar = s.charAt(offset + 1);
+            // Look for closing syntax
+            int closePos = offset + 2;
+            while (closePos < length - 1) {
+                if (s.charAt(closePos) == syntaxChar && s.charAt(closePos + 1) == ']') {
+                    // Found POSIX syntax
+                    String syntaxType = syntaxChar == '=' ? "[= =]" : "[. .]";
+                    // Point to after the ']' that closes the POSIX syntax
+                    regexError(s, closePos + 2, "POSIX syntax " + syntaxType + " is reserved for future extensions");
+                }
+                closePos++;
+            }
+        }
         int endDelimiter = s.indexOf(":]", offset);
         if (endDelimiter > -1) {
             String potentialClass = s.substring(offset, endDelimiter + 2);
@@ -285,13 +337,13 @@ public class RegexPreprocessor {
     }
 
     /**
-     * Skips over inline comments within the regex.
-     *
-     * @param offset The current offset in the regex string.
-     * @param s      The regex string.
-     * @param length The length of the regex string.
-     * @return The updated offset after skipping the comment.
-     */
+      * Skips over inline comments within the regex.
+      *
+      * @param offset The current offset in the regex string.
+      * @param s      The regex string.
+      * @param length The length of the regex string.
+      * @return The updated offset after skipping the comment.
+      */
     private static int handleSkipComment(int offset, String s, int length) {
         // comment (?# ... )
         int offset3 = offset;
@@ -311,33 +363,105 @@ public class RegexPreprocessor {
         return offset;  // possible error - end of comment not found
     }
 
+    // Lookbehind errors don't show position
+    static void regexErrorNoPosition(String s, String errMsg) {
+        throw new PerlCompilerException(errMsg + " in regex m/" + s + "/");
+    }
+
     /**
-     * WIP - replace undescore in named capture
-     */
-    private static void handleUnderscoreInNamedCapture(int c2, int c3, int c4) {
-        if (c2 == '?' && c3 == '<' &&
-                ((c4 >= 'A' && c4 <= 'Z') || (c4 >= 'a' && c4 <= 'z') || (c4 == '_'))
-        ) {
-//                                    // named capture (?<one> ... )
-//                                    // replace underscore in name
-//                                    int endName = s.indexOf(">", offset+3);
-//                                    // PlCORE.say("endName " + endName + " offset " + offset);
-//                                    if (endName > offset) {
-//                                        String name = s.substring(offset+3, endName);
-//                                        String validName = name.replace("_", "UnderScore") + "Num" + named_capture_count; // See: regex_named_capture()
-//                                        if (this.namedCaptures == null) {
-//                                            this.namedCaptures = new PlHash();
-//                                        }
-//                                        this.namedCaptures.hget_arrayref(name).array_deref_strict().push_void(new PlString(validName));
-//                                        // PlCORE.say("name [" + name + "]");
-//                                        sb.append("(?<");
-//                                        sb.append(validName);
-//                                        sb.append(">");
-//                                        offset = endName;
-//                                        named_capture_count++;
-//                                        // PlCORE.say("name sb [" + sb + "]");
-//                                        append = false;
-//                                    }
+      * Validates that a lookbehind assertion doesn't potentially match more than 255 characters.
+      */
+    private static void validateLookbehindLength(String s, int offset) {
+        int start = offset + 4; // Skip past (?<= or (?<!
+        int maxLength = calculateMaxLength(s, start);
+
+        if (maxLength >= 255 || maxLength == -1) { // >= 255 means 255 or more
+            regexErrorNoPosition(s, "Lookbehind longer than 255 not implemented");
+        }
+    }
+
+    /**
+      * Calculates the maximum length a pattern can match.
+      * Returns -1 if the pattern can match unlimited length.
+      */
+    private static int calculateMaxLength(String pattern, int start) {
+        int pos = start;
+        int totalLength = 0;
+        int depth = 1; // We're inside the lookbehind parentheses
+
+        while (pos < pattern.length() && depth > 0) {
+            char ch = pattern.charAt(pos);
+
+            if (ch == '(') {
+                depth++;
+                pos++;
+            } else if (ch == ')') {
+                depth--;
+                if (depth == 0) break;
+                pos++;
+            } else if (ch == '\\' && pos + 1 < pattern.length()) {
+                // Handle escape sequences
+                pos += 2;
+                totalLength++;
+            } else if (ch == '.') {
+                // Check if followed by * or +
+                if (pos + 1 < pattern.length()) {
+                    char next = pattern.charAt(pos + 1);
+                    if (next == '*' || next == '+') {
+                        return -1; // Unlimited length
+                    }
+                }
+                totalLength++;
+                pos++;
+            } else if (ch == '*' || ch == '+') {
+                return -1; // Previous element can repeat unlimited times
+            } else if (ch == '?') {
+                // Handle special case of (? which might be a group
+                if (pos + 1 < pattern.length() && pattern.charAt(pos + 1) == '&') {
+                    // This is (?&...) which is a subroutine call
+                    return -1; // Can match unlimited
+                }
+                pos++;
+            } else if (ch == '{') {
+                // Handle {n,m} quantifiers
+                int endBrace = pattern.indexOf('}', pos);
+                if (endBrace > pos) {
+                    String quantifier = pattern.substring(pos + 1, endBrace);
+                    int multiplier = parseQuantifierMax(quantifier);
+                    if (multiplier == -1) {
+                        return -1; // Unlimited
+                    }
+                    // The quantifier applies to the immediately preceding atom
+                    totalLength = totalLength - 1 + multiplier;
+                    pos = endBrace + 1;
+                } else {
+                    totalLength++;
+                    pos++;
+                }
+            } else {
+                // Regular character
+                totalLength++;
+                pos++;
+            }
+        }
+
+        return totalLength;
+    }
+
+    /**
+      * Parses a quantifier like "200", "0,255", "1000" and returns the maximum count.
+      * Returns -1 if unbounded (e.g., "5,").
+      */
+    private static int parseQuantifierMax(String quantifier) {
+        quantifier = quantifier.trim();
+        if (quantifier.contains(",")) {
+            String[] parts = quantifier.split(",");
+            if (parts.length == 1 || parts[1].trim().isEmpty()) {
+                return -1; // {n,} is unbounded
+            }
+            return Integer.parseInt(parts[1].trim());
+        } else {
+            return Integer.parseInt(quantifier);
         }
     }
 }
