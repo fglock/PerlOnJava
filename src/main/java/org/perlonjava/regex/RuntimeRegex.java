@@ -92,12 +92,15 @@ public class RuntimeRegex implements RuntimeScalarReference {
             try {
                 // Compile the regex pattern
                 regex.pattern = Pattern.compile(javaPattern, regex.patternFlags);
+            } catch (PerlCompilerException e) {
+                throw e;
             } catch (Exception e) {
-                // throw new PerlCompilerException("Regex compilation failed: " + e.getMessage());
 
                 // XXX TODO - temporarily warn instead of die, and return an invalid pattern so we can run Perl tests
-                WarnDie.warn(new RuntimeScalar("Regex compilation failed: " + e.getMessage()), new RuntimeScalar());
-                regex.pattern = Pattern.compile(Character.toString(0) + "ERROR" + Character.toString(0), Pattern.DOTALL);
+                // WarnDie.warn(new RuntimeScalar("Regex compilation failed: " + e.getMessage()), new RuntimeScalar());
+                // regex.pattern = Pattern.compile(Character.toString(0) + "ERROR" + Character.toString(0), Pattern.DOTALL);
+
+                throw new PerlCompilerException("Regex compilation failed: " + e.getMessage());
             }
 
             // Cache the result if the cache is not full
