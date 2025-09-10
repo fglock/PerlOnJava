@@ -176,7 +176,7 @@ public class RegexPreprocessorHelper {
      * @param rejected A StringBuilder to collect rejected sequences.
      * @return The updated offset after processing the character class.
      */
-    static int handleRegexCharacterClassEscape(int offset, String s, StringBuilder sb, int length, boolean flag_xx,
+                                       static int handleRegexCharacterClassEscape(int offset, String s, StringBuilder sb, int length, boolean flag_xx,
                                                StringBuilder rejected) {
         // inside [ ... ]
         //      space    becomes: "\ " unless the /xx flag is used (flag_xx)
@@ -190,10 +190,31 @@ public class RegexPreprocessorHelper {
         int lastChar = -1;  // Track last character for range validation
         boolean wasEscape = false;  // Track if last char was from escape sequence
 
+        // ADD THIS ENTIRE BLOCK for POSIX syntax checking
+        if (offset < length && s.charAt(offset) == '[') {
+            // Check for [[=...=]] or [[.....]]
+            if (offset + 1 < length) {
+                char nextChar = s.charAt(offset + 1);
+                if (nextChar == '=' || nextChar == '.') {
+                    // Look for closing syntax
+                    int searchPos = offset + 2;
+                    while (searchPos < length - 1) {
+                        if (s.charAt(searchPos) == nextChar && s.charAt(searchPos + 1) == ']') {
+                            // Found complete POSIX syntax
+                            String syntaxType = nextChar == '=' ? "[= =]" : "[. .]";
+                            // IMPORTANT: Use searchPos + 2, not offset + 2
+                            RegexPreprocessor.regexError(s, searchPos + 2, "POSIX syntax " + syntaxType + " is reserved for future extensions");
+                        }
+                        searchPos++;
+                    }
+                }
+            }
+        }
+
         while (offset < length) {
             final int c = s.codePointAt(offset);
             switch (c) {
-                case ']':
+                                                   case ']':
                     // Special case: ] immediately after [ or [^ is a literal ]
                     if (first || afterCaret) {
                         sb.append("\\]");
@@ -462,4 +483,3 @@ public class RegexPreprocessorHelper {
     }
 
 }
-
