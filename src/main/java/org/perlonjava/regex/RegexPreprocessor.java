@@ -132,18 +132,31 @@ public class RegexPreprocessor {
     }
 
     private static int handleParentheses(String s, int offset, int length, StringBuilder sb, int c, RegexFlags regexFlags, boolean stopAtClosingParen) {
-        if (offset + 3 < length) {  // Changed condition to be safer
-            int c2 = s.codePointAt(offset + 1);
-            int c3 = s.codePointAt(offset + 2);
-            int c4 = s.codePointAt(offset + 3);
+        // Check for incomplete (?
+        if (offset + 1 >= length) {
+            regexError(s, offset + 1, "Sequence (? incomplete");
+        }
 
-            if (c2 == '?' && c3 == '#') {
+        int c2 = s.codePointAt(offset + 1);
+
+        // Handle (?
+        if (c2 == '?') {
+            if (offset + 2 >= length) {
+                regexError(s, offset + 1, "Sequence (? incomplete");
+            }
+
+            int c3 = s.codePointAt(offset + 2);
+
+            // For sequences that need a 4th character
+            int c4 = (offset + 3 < length) ? s.codePointAt(offset + 3) : -1;
+
+            if (c3 == '#') {
                 // Remove inline comments (?# ... )
                 offset = handleSkipComment(offset, s, length);
-            } else if (c2 == '?' && c3 == '@') {
+            } else if (c3 == '@') {
                 // Handle (?@...) which is not implemented
                 regexError(s, offset + 2, "Sequence (?@...) not implemented");
-            } else if (c2 == '?' && c3 == '{') {
+            } else if (c3 == '{') {
                 // Handle (?{ ... }) code blocks
                 int braceEnd = findClosingBrace(s, offset + 3, length);
                 if (braceEnd == -1) {
@@ -152,34 +165,51 @@ public class RegexPreprocessor {
                 // For now, just skip the code block
                 sb.append("(?:");  // Convert to non-capturing group
                 offset = braceEnd;
-            } else if (c2 == '?' && c3 == '(') {
+            } else if (c3 == '(') {
                 // Handle (?(condition)yes|no) conditionals
                 return handleConditionalPattern(s, offset, length, sb, regexFlags);
-            } else if (c2 == '?' && c3 == '<' && c4 == '=') {
+            } else if (c3 == ';') {
+                // (?;...) is not recognized
+                regexError(s, offset + 2, "Sequence (?;...) not recognized");
+            } else if (c3 == '\\') {
+                // (?\...) is not recognized
+                regexError(s, offset + 2, "Sequence (?\\...) not recognized");
+            } else if (c3 == '<' && c4 == '=') {
                 // Positive lookbehind (?<=...)
                 validateLookbehindLength(s, offset);
                 offset = handleRegularParentheses(s, offset, length, sb, regexFlags);
-            } else if (c2 == '?' && c3 == '<' && c4 == '!') {
+            } else if (c3 == '<' && c4 == '!') {
                 // Negative lookbehind (?<!...)
                 validateLookbehindLength(s, offset);
                 offset = handleRegularParentheses(s, offset, length, sb, regexFlags);
-            } else if (c2 == '?' && ((c3 >= 'a' && c3 <= 'z') || c3 == '-' || c3 == '^')) {
-                // Handle (?modifiers: ... ) construct
-                return RegexPreprocessorHelper.handleFlagModifiers(s, offset, sb, regexFlags);
-            } else if (c2 == '?' && c3 == '<' && isAlphabetic(c4)) {
+            } else if (c3 == '<' && c4 == ';') {
+                // (?<;...) invalid group name
+                regexError(s, offset + 3, "Group name must start with a non-digit word character");
+            } else if (c3 == '<' && isAlphabetic(c4)) {
                 // Handle named capture (?<name> ... )
                 offset = handleNamedCapture(c3, s, offset, length, sb, regexFlags);
-            } else if (c2 == '?' && c3 == '\'') {
+            } else if (c3 == '\'') {
                 // Handle named capture (?'name' ... )
                 offset = handleNamedCapture(c3, s, offset, length, sb, regexFlags);
-            } else if (c2 == '?' && c3 == '[') {
+            } else if (c3 == '[') {
                 // Handle extended bracketed character class (?[...])
                 return ExtendedCharClass.handleExtendedCharacterClass(s, offset, sb, regexFlags);
-            } else {
+            } else if ((c3 >= 'a' && c3 <= 'z') || c3 == '-' || c3 == '^' || c3 == ':') {
+                // Handle (?modifiers: ... ) construct and non-capturing groups
+                return RegexPreprocessorHelper.handleFlagModifiers(s, offset, sb, regexFlags);
+            } else if (c3 == ':') {
+                // Handle non-capturing group (?:...)
                 offset = handleRegularParentheses(s, offset, length, sb, regexFlags);
+            } else {
+                // Unknown sequence - show the actual character
+                String seq = "(?";
+                if (offset + 2 < length) {
+                    seq += Character.toString((char)s.codePointAt(offset + 2));
+                }
+                regexError(s, offset + 2, "Sequence " + seq + "...) not recognized");
             }
         } else {
-            // Recursively preprocess the content inside the parentheses
+            // Regular parenthesis
             offset = handleRegularParentheses(s, offset, length, sb, regexFlags);
         }
 
@@ -562,11 +592,16 @@ public class RegexPreprocessor {
         }
 
         // Check for specific invalid patterns
+        if (condition.equals("??{}") || condition.equals("?[")) {
+            regexError(s, condStart, "Unknown switch condition (?(...))");
+        }
+
         if (condition.startsWith("?")) {
             regexError(s, condStart, "Unknown switch condition (?(...))");
         }
 
-        if (!condition.matches("\\d+|<[^>]+>|'[^']+'")) {
+        // Check for non-numeric conditions that aren't valid
+        if (!condition.matches("\\d+") && !condition.matches("<[^>]+>") && !condition.matches("'[^']+'")) {
             regexError(s, condStart, "Unknown switch condition (?(...))");
         }
 
