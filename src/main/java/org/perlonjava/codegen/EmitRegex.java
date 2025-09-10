@@ -148,6 +148,8 @@ public class EmitRegex {
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/regex/RuntimeRegex", "getQuotedRegex",
                 "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        // Clean up stack if in void context
+        EmitOperator.handleVoidContext(emitterVisitor);
     }
 
     /**
