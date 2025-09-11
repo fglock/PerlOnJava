@@ -433,9 +433,6 @@ public abstract class StringSegmentParser {
 
             // Check for NEWLINE tokens to process pending heredocs
             if (token.type == LexerTokenType.NEWLINE) {
-                // Add the newline to current segment
-                appendToCurrentSegment(token.text);
-
                 // Check if there are pending heredocs to process
                 if (!parser.getHeredocNodes().isEmpty()) {
                     ctx.logDebug("StringSegmentParser: Found NEWLINE with " + parser.getHeredocNodes().size() + " pending heredocs at index " + (parser.tokenIndex - 1));
@@ -466,6 +463,9 @@ public abstract class StringSegmentParser {
 
                     // parseHeredocAfterNewline updates parser.tokenIndex, so continue from there
                     continue;
+                } else {
+                    // No heredocs pending, append the newline normally
+                    appendToCurrentSegment(token.text);
                 }
                 continue;
             }
