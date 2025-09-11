@@ -92,6 +92,13 @@ public class Variable {
      */
     static Node parseArrayHashAccessInBraces(Parser parser, Node operand, boolean isRegex) {
         while (true) {
+            // Skip whitespace, comments, etc. inside braces
+            parser.tokenIndex = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
+
+            if (parser.tokenIndex >= parser.tokens.size()) {
+                break;
+            }
+
             var token = parser.tokens.get(parser.tokenIndex);
             if (token.text.equals("}")) {
                 // Hit the closing brace, stop parsing
