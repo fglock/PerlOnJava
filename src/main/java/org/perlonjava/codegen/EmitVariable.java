@@ -162,7 +162,7 @@ public class EmitVariable {
             case "@":
                 // `@$a`
                 emitterVisitor.ctx.logDebug("GETVAR `@$a`");
-                node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
+                node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "arrayDeref", "()Lorg/perlonjava/runtime/RuntimeArray;", false);
                 if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
@@ -171,7 +171,7 @@ public class EmitVariable {
             case "%":
                 // `%$a`
                 emitterVisitor.ctx.logDebug("GETVAR `%$a`");
-                node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
+                node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "hashDeref", "()Lorg/perlonjava/runtime/RuntimeHash;", false);
                 return;
             case "$":
