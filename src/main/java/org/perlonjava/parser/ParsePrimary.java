@@ -294,6 +294,23 @@ public class ParsePrimary {
                 operand = parser.parseExpression(parser.getPrecedence(token.text) + 1);
                 return new OperatorNode(operator, operand, parser.tokenIndex);
 
+            case "~~":
+                // Handle ~~ as two separate ~ operators
+                // First, handle it as a single ~ operator
+                String firstOperator = "~";
+                if (parser.ctx.symbolTable.isFeatureCategoryEnabled("bitwise")) {
+                    firstOperator = "binary~";
+                }
+
+                // Put back a single ~ token for the next parse
+                parser.tokenIndex--; // Back up
+                LexerToken currentToken = parser.tokens.get(parser.tokenIndex);
+                currentToken.text = "~";
+
+                // Parse the operand (which will start with the second ~)
+                operand = parser.parseExpression(parser.getPrecedence("~") + 1);
+                return new OperatorNode(firstOperator, operand, parser.tokenIndex);
+
             case "--":
             case "++":
                 // Pre-increment/decrement operators
