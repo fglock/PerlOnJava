@@ -3,9 +3,11 @@ package org.perlonjava.parser;
 import org.perlonjava.astnode.*;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
+import org.perlonjava.operators.WarnDie;
 import org.perlonjava.runtime.GlobalVariable;
 import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.PerlCompilerException;
+import org.perlonjava.runtime.RuntimeScalar;
 
 import static org.perlonjava.parser.ParsePrimary.parsePrimary;
 import static org.perlonjava.parser.ParserNodeUtils.atUnderscore;
@@ -452,33 +454,108 @@ public class Variable {
         }
 
         if (bracedVarName != null) {
-            Node operand = new OperatorNode(sigil, new IdentifierNode(bracedVarName, parser.tokenIndex), parser.tokenIndex);
+            // Check if this might be ambiguous with an operator
+            boolean isAmbiguous = isAmbiguousOperatorName(bracedVarName);
 
-            try {
-                operand = parseArrayHashAccessInBraces(parser, operand, isStringInterpolation);
-                if (TokenUtils.peek(parser).text.equals("}")) {
-                    TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
-                    return operand;
-                } else {
+            // Check if this is potentially an operator (s, m, q, etc.) followed by delimiter
+            if (isMaybeOperator(bracedVarName, parser)) {
+                // Reset and parse as expression
+                parser.tokenIndex = savedIndex;
+            } else {
+                Node operand = new OperatorNode(sigil, new IdentifierNode(bracedVarName, parser.tokenIndex), parser.tokenIndex);
+
+                try {
+                    int beforeAccess = parser.tokenIndex;
+                    operand = parseArrayHashAccessInBraces(parser, operand, isStringInterpolation);
+
+                    // Check if we successfully parsed to the closing brace
+                    if (TokenUtils.peek(parser).text.equals("}")) {
+                        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+
+                        // Issue ambiguity warning if needed
+                        if (isAmbiguous) {
+                            String accessType = "";
+                            if (operand instanceof BinaryOperatorNode binOp) {
+                                if (binOp.operator.equals("[")) {
+                                    accessType = "[...]";
+                                } else if (binOp.operator.equals("{")) {
+                                    accessType = "{...}";
+                                }
+                            }
+
+                            if (accessType.isEmpty()) {
+                                // Simple variable like ${s}
+                                WarnDie.warn(
+                                    new RuntimeScalar("Ambiguous use of ${" + bracedVarName + "} resolved to $" + bracedVarName),
+                                    new RuntimeScalar(parser.ctx.errorUtil.errorMessage(parser.tokenIndex, "")),
+                                    null, 0
+                                );
+                            } else {
+                                // Array/hash access like ${tr[10]}
+                                WarnDie.warn(
+                                    new RuntimeScalar("Ambiguous use of ${" + bracedVarName + accessType + "} resolved to $" + bracedVarName + accessType),
+                                        new RuntimeScalar(parser.ctx.errorUtil.errorMessage(parser.tokenIndex, "")),
+                                    null, 0
+                                );
+                            }
+                        }
+
+                        return operand;
+                    } else {
+                        // We didn't reach the closing brace, which means there's more content
+                        // that couldn't be parsed as array/hash access. This might be an operator.
+                        parser.tokenIndex = savedIndex;
+                    }
+                } catch (Exception e) {
                     parser.tokenIndex = savedIndex;
                 }
-            } catch (Exception e) {
-                parser.tokenIndex = savedIndex;
             }
         } else {
             parser.tokenIndex = savedIndex;
         }
 
-        // Fall back to parsing as a general expression with original context
+// Fall back to parsing as a block
         try {
-            Node operand = parser.parseExpression(0);
+            Node block = ParseBlock.parseBlock(parser);
             if (!TokenUtils.peek(parser).text.equals("}")) {
                 throw new PerlCompilerException(parser.tokenIndex, "Missing closing brace in variable interpolation", parser.ctx.errorUtil);
             }
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
-            return new OperatorNode(sigil, operand, parser.tokenIndex);
+            return new OperatorNode(sigil, block, parser.tokenIndex);
         } catch (Exception e) {
             throw new PerlCompilerException(parser.tokenIndex, "Syntax error in braced variable: " + e.getMessage(), parser.ctx.errorUtil);
         }
+    }
+
+    /**
+     * Checks if the given identifier might be the start of an operator rather than a variable name.
+     * This handles cases like ${s|||} where 's' could be either a variable or the substitution operator.
+     */
+    private static boolean isMaybeOperator(String identifier, Parser parser) {
+        // Check if this could be a quote-like operator
+        if (isAmbiguousOperatorName(identifier)) {
+            // Look at what follows
+            if (parser.tokenIndex < parser.tokens.size()) {
+                var nextToken = parser.tokens.get(parser.tokenIndex);
+                // If followed by a delimiter character (not alphanumeric, _, [, {, or }), it's likely an operator
+                if (nextToken.text.length() == 1) {
+                    char ch = nextToken.text.charAt(0);
+                    // Exclude [ and { because those indicate array/hash access on a variable
+                    if (!Character.isLetterOrDigit(ch) && ch != '_' && ch != '}' && ch != '[' && ch != '{') {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Checks if an identifier name could be ambiguous with a Perl operator.
+     */
+    private static boolean isAmbiguousOperatorName(String identifier) {
+        return "s".equals(identifier) || "m".equals(identifier) || "q".equals(identifier) ||
+               "qx".equals(identifier) || "qr".equals(identifier) || "y".equals(identifier) ||
+               "tr".equals(identifier) || "qq".equals(identifier) || "qw".equals(identifier);
     }
 }
