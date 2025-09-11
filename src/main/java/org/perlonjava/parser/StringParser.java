@@ -57,30 +57,64 @@ public class StringParser {
         StringBuilder remain = new StringBuilder();  // Buffer to hold the remaining string
         ArrayList<String> buffers = new ArrayList<>();
 
+        // Track token positions for heredoc processing
+        int startTokPos = tokPos;
+        StringBuilder pendingBuffer = new StringBuilder();  // Buffer for content pending heredoc check
+
         while (state != END_TOKEN) {
             LexerToken currentToken = tokens.get(tokPos);
-
             if (currentToken.type == LexerTokenType.EOF) {
                 throw new PerlCompilerException(tokPos, "Can't find string terminator " + endDelim + " anywhere before EOF", ctx.errorUtil);
             }
 
             // Process heredocs at newlines during string parsing
-            if (currentToken.type == LexerTokenType.NEWLINE && parser != null && !parser.getHeredocNodes().isEmpty()) {
-                // Save the current parser position
-                int savedIndex = parser.tokenIndex;
-                parser.tokenIndex = tokPos;
+            if (currentToken.type == LexerTokenType.NEWLINE) {
+                ctx.logDebug("parseRawStringWithDelimiter: Found NEWLINE at tokPos=" + tokPos +
+                             ", parser=" + (parser != null) +
+                             ", heredocCount=" + (parser != null ? parser.getHeredocNodes().size() : 0));
 
-                // Process pending heredocs
-                ParseHeredoc.parseHeredocAfterNewline(parser);
+                if (parser != null && !parser.getHeredocNodes().isEmpty()) {
+                    ctx.logDebug("parseRawStringWithDelimiter: Processing heredocs");
 
-                // Update our position after heredoc processing
-                tokPos = parser.tokenIndex;
+                    // Save the current parser position
+                    int savedIndex = parser.tokenIndex;
+                    int beforeHeredocTokPos = tokPos;
+                    parser.tokenIndex = tokPos;
 
-                // Restore parser position
-                parser.tokenIndex = savedIndex;
-                continue;
+                    // Process pending heredocs
+                    ParseHeredoc.parseHeredocAfterNewline(parser);
+
+                    // Calculate how many tokens were consumed by heredoc processing
+                    int afterHeredocTokPos = parser.tokenIndex;
+                    int tokensConsumed = afterHeredocTokPos - beforeHeredocTokPos;
+
+                    ctx.logDebug("parseRawStringWithDelimiter: Heredoc consumed " + tokensConsumed + " tokens");
+
+                    // If heredoc consumed more than just the newline, we need to handle it
+                    if (tokensConsumed > 1) {
+                        // Add any pending content up to the newline
+                        buffer.append(pendingBuffer);
+                        pendingBuffer.setLength(0);
+
+                        // Skip the newline (it triggered heredoc) and all consumed content
+                        tokPos = afterHeredocTokPos - 1;  // -1 because loop will increment
+                    } else {
+                        // Heredoc only consumed the newline, add pending content including newline
+                        pendingBuffer.append(currentToken.text);
+                        buffer.append(pendingBuffer);
+                        pendingBuffer.setLength(0);
+                    }
+
+                    // Restore parser position
+                    parser.tokenIndex = savedIndex;
+
+                    // Continue to next token
+                    tokPos++;
+                    continue;
+                }
             }
 
+            // Process token characters
             for (char ch : currentToken.text.toCharArray()) {
                 switch (state) {
                     case START:
@@ -101,8 +135,10 @@ public class StringParser {
                                 if (redo && !isPair) {
                                     redo = false;
                                     // Restart FSM for another string
+                                    buffer.append(pendingBuffer);  // Flush pending
                                     buffers.add(buffer.toString());
                                     buffer = new StringBuilder();
+                                    pendingBuffer.setLength(0);
                                     break;  // Exit the loop to restart FSM
                                 } else {
                                     state = END_TOKEN;  // End parsing
@@ -113,11 +149,11 @@ public class StringParser {
                         } else if (ch == '\\') {
                             state = ESCAPE;  // Move to ESCAPE state
                         }
-                        buffer.append(ch);  // Append character to buffer
+                        pendingBuffer.append(ch);  // Append to pending buffer
                         break;
 
                     case ESCAPE:
-                        buffer.append(ch);  // Append escaped character to buffer
+                        pendingBuffer.append(ch);  // Append escaped character to pending buffer
                         state = STRING;  // Return to STRING state
                         break;
 
@@ -126,8 +162,18 @@ public class StringParser {
                         break;
                 }
             }
+
+            // If we haven't hit a newline, flush pending buffer to main buffer
+            if (currentToken.type != LexerTokenType.NEWLINE) {
+                buffer.append(pendingBuffer);
+                pendingBuffer.setLength(0);
+            }
+
             tokPos++;  // Move to the next token
         }
+
+        // Final flush of any pending content
+        buffer.append(pendingBuffer);
 
         if (ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8)
                 || ctx.compilerOptions.isUnicodeSource) {
