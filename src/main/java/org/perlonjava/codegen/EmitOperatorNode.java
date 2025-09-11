@@ -2,6 +2,7 @@ package org.perlonjava.codegen;
 
 import org.perlonjava.astnode.*;
 import org.perlonjava.astvisitor.EmitterVisitor;
+import org.perlonjava.runtime.PerlCompilerException;
 
 /**
  * Handles the bytecode emission for Perl operator nodes during compilation.
@@ -117,7 +118,13 @@ public class EmitOperatorNode {
                  "-T", "-B",
                  "-M", "-A", "-C" -> EmitOperatorFileTest.handleFileTestBuiltin(emitterVisitor, node);
 
+            case "HEREDOC" -> handleMissingHeredoc(node);
+
             default -> EmitOperator.handleOperator(emitterVisitor, node);
         }
+    }
+
+    private static void handleMissingHeredoc(OperatorNode node) {
+        throw new PerlCompilerException("HEREDOC marker " + node.getAnnotation("identifier") + " not found");
     }
 }
