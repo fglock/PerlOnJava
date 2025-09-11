@@ -268,7 +268,7 @@ public class StringParser {
         return list;
     }
 
-    public static OperatorNode parseRegexReplace(EmitterContext ctx, ParsedString rawStr) {
+    public static OperatorNode parseRegexReplace(EmitterContext ctx, ParsedString rawStr, Parser parser) {
         String operator = "replaceRegex";
         Node parsed = parseRegexString(ctx, rawStr);
         String replaceStr = rawStr.buffers.get(1);
@@ -278,7 +278,7 @@ public class StringParser {
         if (modifierStr.contains("e")) {
             // if modifiers include `e`, then parse the `replace` code
             ctx.logDebug("regex e-modifier: " + replaceStr);
-            Parser blockParser = new Parser(ctx, new Lexer(replaceStr).tokenize());
+            Parser blockParser = new Parser(ctx, new Lexer(replaceStr).tokenize(), parser.getHeredocNodes());
             replace = ParseBlock.parseBlock(blockParser);
         } else if (rawStr.secondBufferStartDelim != '\'') {
             // handle string interpolaton
@@ -431,7 +431,7 @@ public class StringParser {
             case "/=":
                 return parseRegexMatch(parser.ctx, operator, rawStr);
             case "s":
-                return parseRegexReplace(parser.ctx, rawStr);
+                return parseRegexReplace(parser.ctx, rawStr, parser);
             case "\"":
             case "qq":
                 return StringDoubleQuoted.parseDoubleQuotedString(parser.ctx, rawStr, true, true, false, parser.getHeredocNodes());
