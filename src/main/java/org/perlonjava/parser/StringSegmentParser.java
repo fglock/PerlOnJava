@@ -415,10 +415,59 @@ public abstract class StringSegmentParser {
      * @return the final AST node representing the parsed string
      */
     public Node parse() {
+        ctx.logDebug("StringSegmentParser.parse: Starting with " + tokens.size() + " tokens, heredoc count: " + parser.getHeredocNodes().size());
+
         while (true) {
-            var token = tokens.get(parser.tokenIndex++);
-            if (token.type == LexerTokenType.EOF) {
+            if (parser.tokenIndex >= tokens.size()) {
+                ctx.logDebug("StringSegmentParser.parse: Reached end of tokens at index " + parser.tokenIndex);
                 break;
+            }
+            var token = tokens.get(parser.tokenIndex++);
+
+            ctx.logDebug("StringSegmentParser.parse: Token at " + (parser.tokenIndex-1) + ": type=" + token.type + ", text='" + token.text.replace("\n", "\\n") + "'");
+
+            if (token.type == LexerTokenType.EOF) {
+                ctx.logDebug("StringSegmentParser.parse: Found EOF token");
+                break;
+            }
+
+            // Check for NEWLINE tokens to process pending heredocs
+            if (token.type == LexerTokenType.NEWLINE) {
+                // Add the newline to current segment
+                appendToCurrentSegment(token.text);
+
+                // Check if there are pending heredocs to process
+                if (!parser.getHeredocNodes().isEmpty()) {
+                    ctx.logDebug("StringSegmentParser: Found NEWLINE with " + parser.getHeredocNodes().size() + " pending heredocs at index " + (parser.tokenIndex - 1));
+
+                    // Log which heredocs are pending
+                    for (OperatorNode heredoc : parser.getHeredocNodes()) {
+                        ctx.logDebug("  Pending heredoc: " + heredoc.getAnnotation("identifier"));
+                    }
+
+                    // Flush current segment before processing heredocs
+                    flushCurrentSegment();
+
+                    // Adjust tokenIndex to point to the NEWLINE token for parseHeredocAfterNewline
+                    parser.tokenIndex--;  // Back up to the NEWLINE token
+
+                    ctx.logDebug("StringSegmentParser: Calling parseHeredocAfterNewline with tokenIndex=" + parser.tokenIndex);
+
+                    // Process ALL heredocs after the newline
+                    ParseHeredoc.parseHeredocAfterNewline(parser);
+
+                    // Check if we've consumed all tokens
+                    if (parser.tokenIndex >= tokens.size()) {
+                        ctx.logDebug("StringSegmentParser: Heredoc processing consumed all remaining tokens");
+                        break;
+                    }
+
+                    ctx.logDebug("StringSegmentParser: After heredoc processing, tokenIndex = " + parser.tokenIndex + ", remaining tokens = " + (tokens.size() - parser.tokenIndex));
+
+                    // parseHeredocAfterNewline updates parser.tokenIndex, so continue from there
+                    continue;
+                }
+                continue;
             }
 
             var text = token.text;
@@ -430,6 +479,7 @@ public abstract class StringSegmentParser {
             appendToCurrentSegment(text);
         }
 
+        ctx.logDebug("StringSegmentParser.parse: Finished parsing, segments count: " + segments.size());
         return buildResult();
     }
 
