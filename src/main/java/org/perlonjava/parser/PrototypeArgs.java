@@ -56,6 +56,31 @@ public class PrototypeArgs {
     }
 
     /**
+     * Checks if the given prototype allows zero arguments.
+     *
+     * @param prototype The prototype string to check
+     * @return true if zero arguments are allowed, false otherwise
+     */
+    private static boolean allowsZeroArguments(String prototype) {
+        if (prototype == null || prototype.isEmpty()) {
+            return true; // No prototype means any number of args
+        }
+
+        // Skip whitespace at the beginning
+        int i = 0;
+        while (i < prototype.length() && Character.isWhitespace(prototype.charAt(i))) {
+            i++;
+        }
+
+        if (i >= prototype.length()) {
+            return true; // Only whitespace
+        }
+
+        char firstChar = prototype.charAt(i);
+        return firstChar == ';' || firstChar == '@' || firstChar == '%';
+    }
+
+    /**
      * Check if the current token is an expression terminator or assignment operator
      * that should end argument parsing.
      */
@@ -102,6 +127,15 @@ public class PrototypeArgs {
         int index = parser.tokenIndex;
         ListNode args = new ListNode(parser.tokenIndex);
         boolean hasParentheses = handleParen && handleOpeningParenthesis(parser);
+
+        // Check for => immediately after subroutine name (no parentheses)
+        if (!hasParentheses && TokenUtils.peek(parser).text.equals("=>")) {
+            // This is a subroutine call with zero arguments
+            if (!allowsZeroArguments(prototype)) {
+                throwNotEnoughArgumentsError(parser);
+            }
+            return args;
+        }
 
         // Comma is forbidden here
         if (prototype != null && !prototype.isEmpty() && isComma(TokenUtils.peek(parser))) {
