@@ -88,6 +88,11 @@ public class ParseHeredoc {
         List<LexerToken> tokens = parser.tokens;
         int newlineIndex = parser.tokenIndex;
 
+        parser.ctx.logDebug("ParseHeredoc.parseHeredocAfterNewline: Starting at tokenIndex=" + newlineIndex + ", heredoc count=" + heredocNodes.size() + ", total tokens=" + tokens.size());
+
+        // Create a list to track heredocs we couldn't process
+        List<OperatorNode> deferredHeredocs = new ArrayList<>();
+
         while (!heredocNodes.isEmpty()) {
             OperatorNode heredocNode = heredocNodes.removeFirst(); // Remove immediately
 
@@ -95,7 +100,15 @@ public class ParseHeredoc {
             String identifier = (String) heredocNode.getAnnotation("identifier");
             boolean indent = heredocNode.getBooleanAnnotation("indent");
 
-            parser.ctx.logDebug("Processing heredoc with identifier: " + identifier);
+            parser.ctx.logDebug("Processing heredoc with identifier: " + identifier + ", delimiter: " + delimiter);
+
+            // Check if we have enough tokens to potentially find this heredoc
+            // If we're near the end of tokens and haven't found content yet, defer this heredoc
+            if (newlineIndex + 1 >= tokens.size()) {
+                parser.ctx.logDebug("Deferring heredoc " + identifier + " - not enough tokens in current context");
+                deferredHeredocs.add(heredocNode);
+                continue;
+            }
 
             // Consume the heredoc content
             List<String> lines = new ArrayList<>();
@@ -104,15 +117,18 @@ public class ParseHeredoc {
             StringBuilder currentLine = new StringBuilder();
             boolean foundTerminator = false; // Track if we found the terminator
 
+            parser.ctx.logDebug("  Looking for heredoc content starting at token index: " + currentIndex);
+
             while (currentIndex < tokens.size()) {
                 LexerToken token = tokens.get(currentIndex);
 
                 // Debug: Log current token
-                parser.ctx.logDebug("Current token: " + token.text + ", type: " + token.type);
+                parser.ctx.logDebug("  Token[" + currentIndex + "]: type=" + token.type + ", text='" + token.text.replace("\n", "\\n") + "'");
 
                 if (token.type == LexerTokenType.NEWLINE || (!identifier.isEmpty() && token.type == LexerTokenType.EOF)) {
                     // End of the current line
                     String line = currentLine.toString();
+                    parser.ctx.logDebug("  Completed line: '" + line + "'");
                     lines.add(line);
                     currentLine.setLength(0); // Reset the current line
 
@@ -130,6 +146,7 @@ public class ParseHeredoc {
                         // Determine the indentation of the end marker
                         indentWhitespace = line.substring(0, line.length() - lineToCompare.length());
                         parser.ctx.logDebug("Detected end marker indentation: '" + indentWhitespace + "'");
+                        parser.ctx.logDebug("Found heredoc terminator '" + identifier + "' at token index " + currentIndex);
                         foundTerminator = true; // Mark that we found the terminator
                         break;
                     }
@@ -144,7 +161,17 @@ public class ParseHeredoc {
 
             // Check if we found the terminator
             if (!foundTerminator) {
-                heredocError(parser, heredocNode);
+                // If we're at EOF and still haven't found the terminator, this is an error
+                if (currentIndex >= tokens.size() ||
+                    (currentIndex < tokens.size() && tokens.get(currentIndex).type == LexerTokenType.EOF)) {
+                    // This is a real error - the terminator is missing
+                    heredocError(parser, heredocNode);
+                }
+
+                // Otherwise, if we're in a nested context, defer for parent to handle
+                parser.ctx.logDebug("Heredoc " + identifier + " terminator not found in current context - deferring");
+                deferredHeredocs.add(heredocNode);
+                continue;
             }
 
             // Handle indentation
@@ -198,6 +225,10 @@ public class ParseHeredoc {
             newlineIndex = currentIndex;
         }
 
+        // Re-add deferred heredocs back to the queue for processing in outer context
+        heredocNodes.addAll(deferredHeredocs);
+        parser.ctx.logDebug("ParseHeredoc.parseHeredocAfterNewline: Deferred " + deferredHeredocs.size() + " heredocs back to queue");
+
         parser.debugHeredocState("HEREDOC_AFTER_CLEAR");
         parser.tokenIndex = newlineIndex;
     }
@@ -207,8 +238,17 @@ public class ParseHeredoc {
         buffers.add(string);
         StringParser.ParsedString rawStr = new StringParser.ParsedString(newlineIndex, newlineIndex, buffers, ' ', ' ', ' ', ' ');
 
-        // Pass the main parser's heredoc nodes to the string parser
-        return StringDoubleQuoted.parseDoubleQuotedString(parser.ctx, rawStr, true, true, false, parser.getHeredocNodes());
+        // When interpolating heredoc content, create a new heredoc context
+        // to avoid processing parent heredocs in the wrong context
+        List<OperatorNode> heredocContext = new ArrayList<>();
+
+        // Parse the string with the new context
+        Node result = StringDoubleQuoted.parseDoubleQuotedString(parser.ctx, rawStr, true, true, false, heredocContext);
+
+        // After parsing, any heredocs declared in this context need to be added to the parent
+        parser.getHeredocNodes().addAll(heredocContext);
+
+        return result;
     }
 
     /**

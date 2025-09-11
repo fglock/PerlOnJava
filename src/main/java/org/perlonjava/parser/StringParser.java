@@ -46,7 +46,7 @@ public class StringParser {
      * @param redo   Flag to indicate if the parsing should be redone; example:  s/.../.../
      * @return ParsedString object containing the parsed string and updated token index.
      */
-    public static ParsedString parseRawStringWithDelimiter(EmitterContext ctx, List<LexerToken> tokens, int index, boolean redo) {
+    public static ParsedString parseRawStringWithDelimiter(EmitterContext ctx, List<LexerToken> tokens, int index, boolean redo, Parser parser) {
         int tokPos = index;  // Current position in the tokens list
         char startDelim = 0;  // Starting delimiter
         char endDelim = 0;  // Ending delimiter
@@ -58,11 +58,30 @@ public class StringParser {
         ArrayList<String> buffers = new ArrayList<>();
 
         while (state != END_TOKEN) {
-            if (tokens.get(tokPos).type == LexerTokenType.EOF) {
+            LexerToken currentToken = tokens.get(tokPos);
+
+            if (currentToken.type == LexerTokenType.EOF) {
                 throw new PerlCompilerException(tokPos, "Can't find string terminator " + endDelim + " anywhere before EOF", ctx.errorUtil);
             }
 
-            for (char ch : tokens.get(tokPos).text.toCharArray()) {
+            // Process heredocs at newlines during string parsing
+            if (currentToken.type == LexerTokenType.NEWLINE && parser != null && !parser.getHeredocNodes().isEmpty()) {
+                // Save the current parser position
+                int savedIndex = parser.tokenIndex;
+                parser.tokenIndex = tokPos;
+
+                // Process pending heredocs
+                ParseHeredoc.parseHeredocAfterNewline(parser);
+
+                // Update our position after heredoc processing
+                tokPos = parser.tokenIndex;
+
+                // Restore parser position
+                parser.tokenIndex = savedIndex;
+                continue;
+            }
+
+            for (char ch : currentToken.text.toCharArray()) {
                 switch (state) {
                     case START:
                         startDelim = ch;
@@ -143,7 +162,7 @@ public class StringParser {
     public static ParsedString parseRawStrings(Parser parser, EmitterContext ctx, List<LexerToken> tokens, int tokenIndex, int stringCount) {
         int pos = tokenIndex;
         boolean redo = (stringCount == 3);
-        ParsedString ast = parseRawStringWithDelimiter(ctx, tokens, pos, redo); // use redo flag to extract 2 strings
+        ParsedString ast = parseRawStringWithDelimiter(ctx, tokens, pos, redo, parser); // use redo flag to extract 2 strings
         if (stringCount == 1) {
             return ast;
         }
@@ -153,7 +172,7 @@ public class StringParser {
             char delim = ast.startDelim; // / or {
             if (QUOTE_PAIR.containsKey(delim)) {
                 pos = Whitespace.skipWhitespace(parser, pos, tokens);
-                ParsedString ast2 = parseRawStringWithDelimiter(ctx, tokens, pos, false);
+                ParsedString ast2 = parseRawStringWithDelimiter(ctx, tokens, pos, false, parser);
                 ast.buffers.add(ast2.buffers.getFirst());
                 ast.next = ast2.next;
                 ast.secondBufferStartDelim = ast2.startDelim;
