@@ -71,11 +71,8 @@ public class Variable {
             // Create a Variable node
             return new OperatorNode(sigil, new IdentifierNode(varName, parser.tokenIndex), parser.tokenIndex);
         } else if (peek(parser).text.equals("{")) {
-            // Handle curly brackets to parse a nested expression `${v}`
-            TokenUtils.consume(parser); // Consume the '{'
-            Node block = ParseBlock.parseBlock(parser); // Parse the block inside the curly brackets
-            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}"); // Consume the '}'
-            return new OperatorNode(sigil, ParserNodeUtils.toScalarContext(block), parser.tokenIndex);
+            // Handle curly brackets - use parseBracedVariable instead of parseBlock
+            return parseBracedVariable(parser, sigil, false);
         }
 
         // Not a variable name, not a block. This could be a dereference like @$a
@@ -408,7 +405,44 @@ public class Variable {
 
         // Continue with original parsing logic - this preserves context for special variables
         int savedIndex = parser.tokenIndex;
-        String bracedVarName = IdentifierParser.parseComplexIdentifierInner(parser, true);
+
+        // Check if this starts with ^ (control character variable)
+        String bracedVarName = null;
+        if (parser.tokens.get(parser.tokenIndex).text.equals("^")) {
+            // Save position before trying to parse ^ variable
+            int beforeCaret = parser.tokenIndex;
+            parser.tokenIndex++; // consume ^
+
+            // Now parse the identifier part after ^
+            String identifier = IdentifierParser.parseComplexIdentifierInner(parser, false);
+            if (identifier != null && !identifier.isEmpty()) {
+                // Convert ^X to control character as parseComplexIdentifier would do
+                char firstChar = identifier.charAt(0);
+                String ctrlChar;
+                if (firstChar >= 'A' && firstChar <= 'Z') {
+                    ctrlChar = String.valueOf((char)(firstChar - 'A' + 1));
+                } else if (firstChar >= 'a' && firstChar <= 'z') {
+                    ctrlChar = String.valueOf((char)(firstChar - 'a' + 1));
+                } else if (firstChar == '@') {
+                    ctrlChar = String.valueOf((char)0);
+                } else if (firstChar >= '[' && firstChar <= '_') {
+                    ctrlChar = String.valueOf((char)(firstChar - '[' + 27));
+                } else if (firstChar == '?') {
+                    ctrlChar = String.valueOf((char)127);
+                } else {
+                    ctrlChar = String.valueOf(firstChar);
+                }
+                bracedVarName = ctrlChar + identifier.substring(1);
+            } else {
+                // Failed to parse identifier after ^, restore position
+                parser.tokenIndex = beforeCaret;
+            }
+        }
+
+        // If we didn't parse a ^ variable, try normal parsing
+        if (bracedVarName == null) {
+            bracedVarName = IdentifierParser.parseComplexIdentifierInner(parser, true);
+        }
 
         if (bracedVarName != null) {
             Node operand = new OperatorNode(sigil, new IdentifierNode(bracedVarName, parser.tokenIndex), parser.tokenIndex);
