@@ -113,6 +113,10 @@ public class Pack {
                 PackHelper.writeUuencodedString(output, str);
             } else if (format == 'a' || format == 'A' || format == 'Z') {
                 valueIndex = handleStringFormat(valueIndex, values, hasStar, format, count, byteMode, output);
+            } else if (format == 'x') {
+                for (int j = 0; j < count; j++) {
+                    output.write(0);
+                }
             } else {
                 // Numeric formats
                 for (int j = 0; j < count; j++) {

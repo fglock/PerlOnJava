@@ -314,6 +314,7 @@ The following areas are currently under active development to enhance the functi
 - **v5.42.2**: Next minor version
 
   - Add special variables: `@{^CAPTURE}`, `${^LAST_SUCCESSFUL_PATTERN}`.
+  - Add pack format `x`.
   - Bugfix in regex `/r`.
   - Bugfix in transliterate with octal values.
   - Bugfix in nested heredocs.
