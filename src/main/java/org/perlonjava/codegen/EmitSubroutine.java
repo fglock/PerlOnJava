@@ -36,6 +36,10 @@ public class EmitSubroutine {
         }
         MethodVisitor mv = ctx.mv;
 
+        // Mark the block as subroutine block,
+        // this prevents the "code too large" transform in emitBlock()
+        node.block.setAnnotation("blockIsSubroutine", true);
+
         // Retrieve closure variable list
         // Alternately, scan the AST for variables and capture only the ones that are used
         Map<Integer, SymbolTable.SymbolEntry> visibleVariables = ctx.symbolTable.getAllVisibleVariables();
