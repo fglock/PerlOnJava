@@ -17,6 +17,22 @@ public class RegexPreprocessorHelper {
         }
 
         char nextChar = s.charAt(offset);
+
+        // Check for numeric backreferences
+        if (nextChar >= '1' && nextChar <= '9') {
+            // This is a backreference like \1, \2, etc.
+            int refNum = nextChar - '0';
+
+            // Check if we have captured this many groups
+            if (refNum > RegexPreprocessor.captureGroupCount) {
+                sb.setLength(sb.length() - 1); // Remove the backslash
+                RegexPreprocessor.regexError(s, offset + 1, "Reference to nonexistent group");
+            }
+
+            sb.append(nextChar);
+            return offset;
+        }
+
         if (nextChar == 'g' && offset + 1 < length && s.charAt(offset + 1) == '{') {
             // Handle \g{name} backreference
             offset += 2; // Skip past \g{
@@ -141,7 +157,7 @@ public class RegexPreprocessorHelper {
                 sb.append(translatedProperty);
                 offset = endBrace;
             } else {
-                RegexPreprocessor.regexError(s, offset, "Unmatched brace in \\p{...} or \\P{...} construct");
+                RegexPreprocessor.regexError(s, offset, "Missing right brace on \\\\p{}");
             }
         } else {
             int c2 = s.codePointAt(offset);
@@ -190,7 +206,7 @@ public class RegexPreprocessorHelper {
         int lastChar = -1;  // Track last character for range validation
         boolean wasEscape = false;  // Track if last char was from escape sequence
 
-        // ADD THIS ENTIRE BLOCK for POSIX syntax checking
+        // POSIX syntax checking
         if (offset < length && s.charAt(offset) == '[') {
             // Check for [[=...=]] or [[.....]]
             if (offset + 1 < length) {
@@ -269,11 +285,17 @@ public class RegexPreprocessorHelper {
                     wasEscape = false;
                     break;
                 case '[':
-                    // Check for character class like [:ascii:]
-                    offset = RegexPreprocessor.handleCharacterClass(offset, s, sb, length);
+                    // Check if this could be a POSIX character class like [:ascii:]
+                    if (offset + 1 < length && s.charAt(offset + 1) == ':') {
+                        // This might be a POSIX character class
+                        offset = RegexPreprocessor.handleCharacterClass(offset, s, sb, length);
+                    } else {
+                        // It's just a literal [ inside a character class
+                        sb.append("\\[");  // Escape it for Java regex
+                    }
                     first = false;
                     afterCaret = false;
-                    lastChar = -1;  // Reset for special constructs
+                    lastChar = '[';
                     wasEscape = false;
                     break;
                 case '\\':  // Handle escape sequences
@@ -381,12 +403,64 @@ public class RegexPreprocessorHelper {
 
         int flagsEnd = (colonPos == -1 || closeParen < colonPos) ? closeParen : colonPos;
         String flags = s.substring(start, flagsEnd);
+
+        // Check for invalid (?^- pattern
+        if (flags.startsWith("^-")) {
+            RegexPreprocessor.regexError(s, start + 1, "Sequence (?^-...) not recognized");
+        }
+
+        // Check for invalid (?^d pattern
+        if (flags.startsWith("^d")) {
+            RegexPreprocessor.regexError(s, start + 2, "Sequence (?^d...) not recognized");
+        }
+
         sb.append("(?");
 
         // Split into positive and negative parts
         String[] parts = flags.split("-", 2);
         String positiveFlags = parts[0];
         String negativeFlags = parts.length > 1 ? parts[1] : "";
+
+        // Check for mutually exclusive modifiers
+        if (positiveFlags.contains("l") && positiveFlags.contains("u")) {
+            // Find position of second flag
+            int lPos = positiveFlags.indexOf('l');
+            int uPos = positiveFlags.indexOf('u');
+            int errorPos = Math.max(lPos, uPos);
+            RegexPreprocessor.regexError(s, start + errorPos + 1, "Regexp modifiers \"l\" and \"u\" are mutually exclusive");
+        }
+
+        // Check for d and a being mutually exclusive
+        if (positiveFlags.contains("d") && positiveFlags.contains("a")) {
+            // Find position of second flag
+            int dPos = positiveFlags.indexOf('d');
+            int aPos = positiveFlags.indexOf('a');
+            int errorPos = Math.max(dPos, aPos);
+            RegexPreprocessor.regexError(s, start + errorPos + 1, "Regexp modifiers \"d\" and \"a\" are mutually exclusive");
+        }
+
+        // Check for duplicate modifiers
+        if (positiveFlags.indexOf('l') != positiveFlags.lastIndexOf('l')) {
+            int secondL = positiveFlags.lastIndexOf('l');
+            RegexPreprocessor.regexError(s, start + secondL + 1, "Regexp modifier \"l\" may not appear twice");
+        }
+
+        // Check for 'a' appearing more than twice
+        int aCount = positiveFlags.length() - positiveFlags.replace("a", "").length();
+        if (aCount > 2) {
+            // Find position of third 'a'
+            int pos = -1;
+            for (int i = 0; i < 3; i++) {
+                pos = positiveFlags.indexOf('a', pos + 1);
+            }
+            RegexPreprocessor.regexError(s, start + pos + 1, "Regexp modifier \"a\" may appear a maximum of twice");
+        }
+
+        // Check for modifiers in negative part that shouldn't be there
+        if (negativeFlags.contains("l")) {
+            int lPos = negativeFlags.indexOf('l');
+            RegexPreprocessor.regexError(s, start + parts[0].length() + 1 + lPos + 1, "Regexp modifier \"l\" may not appear after the \"-\"");
+        }
 
         // Handle caret case
         if (!positiveFlags.isEmpty() && positiveFlags.charAt(0) == '^') {
