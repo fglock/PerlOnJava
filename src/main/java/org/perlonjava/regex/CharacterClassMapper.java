@@ -45,6 +45,11 @@ public class CharacterClassMapper {
     }
 
     public static String getMappedClass(String className) {
+        // Check for empty POSIX class [:]
+        if (className.equals("[:]")) {
+            throw new PerlCompilerException("POSIX class [:] unknown");
+        }
+
         String replacement = CHARACTER_CLASSES.get(className);
         if (replacement == null) {
             throw new PerlCompilerException("POSIX class " + className + " unknown");

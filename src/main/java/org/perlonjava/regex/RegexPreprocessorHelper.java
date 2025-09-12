@@ -46,41 +46,40 @@ public class RegexPreprocessorHelper {
                 RegexPreprocessor.regexError(s, offset - 2, "Unterminated \\k'...' backreference");
             }
         }
-
         if (nextChar == 'g') {
             // Handle various \g forms
             if (offset + 1 >= length) {
                 // Bare \g at end of string
                 sb.setLength(sb.length() - 1); // Remove the backslash
                 RegexPreprocessor.regexError(s, offset, "Reference to nonexistent group");
-            } else if (s.charAt(offset + 1) == '{') {
-                // Handle \g{name} or \g{number}
+            } else if (nextChar == 'g' && offset + 1 < length && s.charAt(offset + 1) == '{') {
+                // Handle \g{name} backreference
                 offset += 2; // Skip past \g{
                 int endBrace = s.indexOf('}', offset);
                 if (endBrace != -1) {
-                    String ref = s.substring(offset, endBrace);
-                    if (ref.startsWith("-")) {
-                        // Handle relative backreference
-                        int relativeRef = Integer.parseInt(ref);
-                        int absoluteRef = RegexPreprocessor.captureGroupCount + relativeRef + 1;
-                        if (absoluteRef > 0) {
-                            sb.setLength(sb.length() - 1); // Remove the backslash
-                            sb.append("\\").append(absoluteRef);
-                        } else {
-                            sb.setLength(sb.length() - 1); // Remove the backslash
-                            RegexPreprocessor.regexError(s, offset - 2, "Reference to nonexistent or unclosed group");
-                        }
-                    } else if (ref.matches("\\d+")) {
-                        // Numeric reference like \g{1}
+                    String ref = s.substring(offset, endBrace).trim(); // Trim whitespace
+
+                    // Check if it's numeric (including negative)
+                    try {
                         int groupNum = Integer.parseInt(ref);
-                        if (groupNum > RegexPreprocessor.captureGroupCount) {
+                        if (groupNum == 0) {
+                            RegexPreprocessor.regexError(s, offset - 2, "Reference to invalid group 0");
+                        } else if (groupNum < 0) {
+                            // Handle relative backreference
+                            int absoluteRef = RegexPreprocessor.captureGroupCount + groupNum + 1;
+                            if (absoluteRef > 0) {
+                                sb.setLength(sb.length() - 1); // Remove the backslash
+                                sb.append("\\").append(absoluteRef);
+                            } else {
+                                RegexPreprocessor.regexError(s, offset - 2, "Reference to nonexistent group");
+                            }
+                        } else {
+                            // Positive numeric reference
                             sb.setLength(sb.length() - 1); // Remove the backslash
-                            RegexPreprocessor.regexError(s, offset - 2, "Reference to nonexistent group");
+                            sb.append("\\").append(groupNum);
                         }
-                        sb.setLength(sb.length() - 1); // Remove the backslash
-                        sb.append("\\").append(groupNum);
-                    } else {
-                        // Handle named backreference
+                    } catch (NumberFormatException e) {
+                        // It's a named reference
                         sb.setLength(sb.length() - 1); // Remove the backslash
                         sb.append("\\k<").append(ref).append(">");
                     }
@@ -110,6 +109,26 @@ public class RegexPreprocessorHelper {
                 sb.setLength(sb.length() - 1); // Remove the backslash
                 RegexPreprocessor.regexError(s, offset, "Reference to nonexistent group");
             }
+        } else if (nextChar == 'h') {
+            // \h - horizontal whitespace
+            sb.setLength(sb.length() - 1); // Remove the backslash
+            sb.append("[\\t\\x20\\xA0\\x{1680}\\x{2000}-\\x{200A}\\x{202F}\\x{205F}\\x{3000}]");
+            return offset;
+        } else if (nextChar == 'H') {
+            // \H - not horizontal whitespace
+            sb.setLength(sb.length() - 1); // Remove the backslash
+            sb.append("[^\\t\\x20\\xA0\\x{1680}\\x{2000}-\\x{200A}\\x{202F}\\x{205F}\\x{3000}]");
+            return offset;
+        } else if (nextChar == 'v') {
+            // \v - vertical whitespace
+            sb.setLength(sb.length() - 1); // Remove the backslash
+            sb.append("[\\n\\x0B\\f\\r\\x85\\x{2028}\\x{2029}]");
+            return offset;
+        } else if (nextChar == 'V') {
+            // \V - not vertical whitespace
+            sb.setLength(sb.length() - 1); // Remove the backslash
+            sb.append("[^\\n\\x0B\\f\\r\\x85\\x{2028}\\x{2029}]");
+            return offset;
         } else if ((nextChar == 'b' || nextChar == 'B') && offset + 1 < length && s.charAt(offset + 1) == '{') {
             // Handle \b{...} and \B{...} boundary assertions
             boolean negated = (nextChar == 'B');
