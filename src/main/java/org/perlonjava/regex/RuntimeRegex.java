@@ -85,22 +85,25 @@ public class RuntimeRegex implements RuntimeScalarReference {
             regex.regexFlags = fromModifiers(modifiers, patternString);
             regex.patternFlags = regex.regexFlags.toPatternFlags();
 
-            String javaPattern = preProcessRegex(patternString, regex.regexFlags);
-
-            regex.patternString = patternString;
-
             try {
+               String javaPattern = preProcessRegex(patternString, regex.regexFlags);
+
+                regex.patternString = patternString;
+
                 // Compile the regex pattern
                 regex.pattern = Pattern.compile(javaPattern, regex.patternFlags);
-            } catch (PerlCompilerException e) {
-                throw e;
             } catch (Exception e) {
-
-                // XXX TODO - temporarily warn instead of die, and return an invalid pattern so we can run Perl tests
-                // WarnDie.warn(new RuntimeScalar("Regex compilation failed: " + e.getMessage()), new RuntimeScalar());
-                // regex.pattern = Pattern.compile(Character.toString(0) + "ERROR" + Character.toString(0), Pattern.DOTALL);
-
-                throw new PerlCompilerException("Regex compilation failed: " + e.getMessage());
+                if (GlobalVariable.getGlobalHash("main::ENV").elements.get("JPERL_UNIMPLEMENTED").toString().equals("warn")
+                ) {
+                    // Temporarily warn instead of die, and return an invalid pattern so we can run Perl tests
+                    WarnDie.warn(new RuntimeScalar("Regex compilation failed: " + e.getMessage()), new RuntimeScalar());
+                    regex.pattern = Pattern.compile(Character.toString(0) + "ERROR" + Character.toString(0), Pattern.DOTALL);
+                } else {
+                    if (e instanceof PerlCompilerException) {
+                        throw e;
+                    }
+                    throw new PerlCompilerException("Regex compilation failed: " + e.getMessage());
+                }
             }
 
             // Cache the result if the cache is not full
