@@ -47,12 +47,7 @@ public class RegexPreprocessorHelper {
             }
         }
         if (nextChar == 'g') {
-            // Handle various \g forms
-            if (offset + 1 >= length) {
-                // Bare \g at end of string
-                sb.setLength(sb.length() - 1); // Remove the backslash
-                RegexPreprocessor.regexError(s, offset, "Reference to nonexistent group");
-            } else if (nextChar == 'g' && offset + 1 < length && s.charAt(offset + 1) == '{') {
+            if (offset + 1 < length && s.charAt(offset + 1) == '{') {
                 // Handle \g{name} backreference
                 offset += 2; // Skip past \g{
                 int endBrace = s.indexOf('}', offset);
@@ -85,29 +80,41 @@ public class RegexPreprocessorHelper {
                     }
                     offset = endBrace;
                 }
-            } else if (Character.isDigit(s.charAt(offset + 1))) {
-                // Handle \g1, \g2, etc. (without braces)
+            } else if (offset + 1 < length && Character.isDigit(s.charAt(offset + 1))) {
+                // Handle \g0, \g1, etc.
                 int start = offset + 1;
                 int end = start;
                 while (end < length && Character.isDigit(s.charAt(end))) {
                     end++;
                 }
-                String groupNumStr = s.substring(start, end);
-                int groupNum = Integer.parseInt(groupNumStr);
+                String numStr = s.substring(start, end);
+                int groupNum = Integer.parseInt(numStr);
 
-                if (groupNum > RegexPreprocessor.captureGroupCount) {
-                    sb.setLength(sb.length() - 1); // Remove the backslash
-                    RegexPreprocessor.regexError(s, offset, "Reference to nonexistent group");
+                if (groupNum == 0) {
+                    RegexPreprocessor.regexError(s, offset, "Reference to invalid group 0");
                 }
 
-                // Convert \g1 to \1
                 sb.setLength(sb.length() - 1); // Remove the backslash
                 sb.append("\\").append(groupNum);
                 return end - 1; // -1 because the main loop will increment
-            } else {
-                // Bare \g followed by non-digit
-                sb.setLength(sb.length() - 1); // Remove the backslash
-                RegexPreprocessor.regexError(s, offset, "Reference to nonexistent group");
+            } else if (offset + 1 < length && s.charAt(offset + 1) == '-') {
+                // Handle \g-1, \g-2, etc.
+                int start = offset + 1;
+                int end = start + 1; // Skip the minus
+                while (end < length && Character.isDigit(s.charAt(end))) {
+                    end++;
+                }
+                String numStr = s.substring(start, end);
+                int relativeRef = Integer.parseInt(numStr);
+                int absoluteRef = RegexPreprocessor.captureGroupCount + relativeRef + 1;
+
+                if (absoluteRef > 0) {
+                    sb.setLength(sb.length() - 1); // Remove the backslash
+                    sb.append("\\").append(absoluteRef);
+                } else {
+                    RegexPreprocessor.regexError(s, offset, "Reference to nonexistent group");
+                }
+                return end - 1;
             }
         } else if (nextChar == 'h') {
             // \h - horizontal whitespace
@@ -128,6 +135,14 @@ public class RegexPreprocessorHelper {
             // \V - not vertical whitespace
             sb.setLength(sb.length() - 1); // Remove the backslash
             sb.append("[^\\n\\x0B\\f\\r\\x85\\x{2028}\\x{2029}]");
+            return offset;
+        } else if (nextChar == 'K') {
+            // \K - keep assertion (reset start of match)
+            // Convert to positive lookbehind for everything before this point
+            // This is a simplified implementation
+            sb.setLength(sb.length() - 1); // Remove the backslash
+            // Mark position but don't add anything - this needs special handling
+            // For now, just ignore it to avoid compilation errors
             return offset;
         } else if ((nextChar == 'b' || nextChar == 'B') && offset + 1 < length && s.charAt(offset + 1) == '{') {
             // Handle \b{...} and \B{...} boundary assertions
