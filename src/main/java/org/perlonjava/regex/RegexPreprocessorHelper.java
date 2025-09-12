@@ -32,29 +32,83 @@ public class RegexPreprocessorHelper {
             sb.append(nextChar);
             return offset;
         }
+        if (nextChar == 'k' && offset + 1 < length && s.charAt(offset + 1) == '\'') {
+            // Handle \k'name' backreference (Perl syntax)
+            offset += 2; // Skip past \k'
+            int endQuote = s.indexOf('\'', offset);
+            if (endQuote != -1) {
+                String name = s.substring(offset, endQuote);
+                // Convert to Java syntax \k<name>
+                sb.setLength(sb.length() - 1); // Remove the backslash
+                sb.append("\\k<").append(name).append(">");
+                return endQuote; // Return position at closing quote
+            } else {
+                RegexPreprocessor.regexError(s, offset - 2, "Unterminated \\k'...' backreference");
+            }
+        }
 
-        if (nextChar == 'g' && offset + 1 < length && s.charAt(offset + 1) == '{') {
-            // Handle \g{name} backreference
-            offset += 2; // Skip past \g{
-            int endBrace = s.indexOf('}', offset);
-            if (endBrace != -1) {
-                String ref = s.substring(offset, endBrace);
-                if (ref.startsWith("-")) {
-                    // Handle relative backreference
-                    int relativeRef = Integer.parseInt(ref);
-                    int absoluteRef = RegexPreprocessor.captureGroupCount + relativeRef + 1;
-                    if (absoluteRef > 0) {
+        if (nextChar == 'g') {
+            // Handle various \g forms
+            if (offset + 1 >= length) {
+                // Bare \g at end of string
+                sb.setLength(sb.length() - 1); // Remove the backslash
+                RegexPreprocessor.regexError(s, offset, "Reference to nonexistent group");
+            } else if (s.charAt(offset + 1) == '{') {
+                // Handle \g{name} or \g{number}
+                offset += 2; // Skip past \g{
+                int endBrace = s.indexOf('}', offset);
+                if (endBrace != -1) {
+                    String ref = s.substring(offset, endBrace);
+                    if (ref.startsWith("-")) {
+                        // Handle relative backreference
+                        int relativeRef = Integer.parseInt(ref);
+                        int absoluteRef = RegexPreprocessor.captureGroupCount + relativeRef + 1;
+                        if (absoluteRef > 0) {
+                            sb.setLength(sb.length() - 1); // Remove the backslash
+                            sb.append("\\").append(absoluteRef);
+                        } else {
+                            sb.setLength(sb.length() - 1); // Remove the backslash
+                            RegexPreprocessor.regexError(s, offset - 2, "Reference to nonexistent or unclosed group");
+                        }
+                    } else if (ref.matches("\\d+")) {
+                        // Numeric reference like \g{1}
+                        int groupNum = Integer.parseInt(ref);
+                        if (groupNum > RegexPreprocessor.captureGroupCount) {
+                            sb.setLength(sb.length() - 1); // Remove the backslash
+                            RegexPreprocessor.regexError(s, offset - 2, "Reference to nonexistent group");
+                        }
                         sb.setLength(sb.length() - 1); // Remove the backslash
-                        sb.append("\\").append(absoluteRef);
+                        sb.append("\\").append(groupNum);
                     } else {
-                        throw new IllegalArgumentException("Invalid relative backreference: " + ref);
+                        // Handle named backreference
+                        sb.setLength(sb.length() - 1); // Remove the backslash
+                        sb.append("\\k<").append(ref).append(">");
                     }
-                } else {
-                    // Handle named backreference
-                    sb.setLength(sb.length() - 1); // Remove the backslash
-                    sb.append("\\k<").append(ref).append(">");
+                    offset = endBrace;
                 }
-                offset = endBrace;
+            } else if (Character.isDigit(s.charAt(offset + 1))) {
+                // Handle \g1, \g2, etc. (without braces)
+                int start = offset + 1;
+                int end = start;
+                while (end < length && Character.isDigit(s.charAt(end))) {
+                    end++;
+                }
+                String groupNumStr = s.substring(start, end);
+                int groupNum = Integer.parseInt(groupNumStr);
+
+                if (groupNum > RegexPreprocessor.captureGroupCount) {
+                    sb.setLength(sb.length() - 1); // Remove the backslash
+                    RegexPreprocessor.regexError(s, offset, "Reference to nonexistent group");
+                }
+
+                // Convert \g1 to \1
+                sb.setLength(sb.length() - 1); // Remove the backslash
+                sb.append("\\").append(groupNum);
+                return end - 1; // -1 because the main loop will increment
+            } else {
+                // Bare \g followed by non-digit
+                sb.setLength(sb.length() - 1); // Remove the backslash
+                RegexPreprocessor.regexError(s, offset, "Reference to nonexistent group");
             }
         } else if ((nextChar == 'b' || nextChar == 'B') && offset + 1 < length && s.charAt(offset + 1) == '{') {
             // Handle \b{...} and \B{...} boundary assertions

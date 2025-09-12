@@ -263,10 +263,16 @@ public class RegexPreprocessor {
             regexError(s, offset + 1, "Sequence (? incomplete");
         }
 
-        int c2 = s.codePointAt(offset + 1);
+            int c2 = s.codePointAt(offset + 1);
 
-        // Handle (?
-        if (c2 == '?') {
+            // Check for (*...) verb patterns FIRST, before checking (?
+            if (c2 == '*') {
+                // (*...) is interpreted as a verb pattern, which we don't support
+                regexError(s, offset + 2, "Unknown verb");
+            }
+
+            // Handle (?
+            if (c2 == '?') {
             if (offset + 2 >= length) {
                 // Marker should be after the ?
                 regexError(s, offset + 2, "Sequence (? incomplete");
@@ -407,6 +413,8 @@ public class RegexPreprocessor {
         int len = sb.length();
         sb.append(Character.toChars(c));  // Append the '['
         offset++;
+
+
 
         // Check if the bracket is properly closed
         int bracketEnd = offset;
