@@ -194,6 +194,8 @@ public class RegexPreprocessor {
                 // Don't flag *+, ++, ?+ as nested quantifiers (they're possessive)
                 if (nextChar == '+' && (s.charAt(offset) == '*' || s.charAt(offset) == '+' || s.charAt(offset) == '?')) {
                     // This is a possessive quantifier, not nested
+                } else if (nextChar == '?' && (s.charAt(offset) == '*' || s.charAt(offset) == '+' || s.charAt(offset) == '?' || s.charAt(offset) == '}')) {
+                    // This is a non-greedy quantifier, not nested
                 } else if (nextChar == '*' || nextChar == '+' || nextChar == '?' || nextChar == '{') {
                     regexError(s, offset + 2, "Nested quantifiers");
                 }
