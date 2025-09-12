@@ -95,8 +95,14 @@ public class RegexPreprocessor {
                         isPossessive = true;
                     }
 
-                    // Check for nested quantifiers (but not possessive)
-                    if (!isPossessive && sb.length() > 0) {
+                    // Check if this might be a non-greedy quantifier
+                    boolean isNonGreedy = false;
+                    if (offset + 1 < length && s.charAt(offset + 1) == '?') {
+                        isNonGreedy = true;
+                    }
+
+                    // Check for nested quantifiers (but not possessive or non-greedy)
+                    if (!isPossessive && !isNonGreedy && sb.length() > 0) {
                         char lastChar = sb.charAt(sb.length() - 1);
                         if (lastChar == '*' || lastChar == '+' || lastChar == '?') {
                             regexError(s, offset + 1, "Nested quantifiers");
@@ -105,11 +111,17 @@ public class RegexPreprocessor {
 
                     sb.append(Character.toChars(c));
 
-                    // If possessive, also append the following +
+                    // If possessive or non-greedy, also append the following character
                     if (isPossessive) {
                         sb.append('+');
                         offset++; // Skip the extra +
                         lastWasQuantifiable = false; // Can't quantify a possessive quantifier
+                    } else if (isNonGreedy) {
+                        sb.append('?');
+                        offset++; // Skip the extra ?
+                        lastWasQuantifiable = false; // Can't quantify a non-greedy quantifier
+                    } else {
+                        lastWasQuantifiable = false; // Regular quantifier
                     }
                     break;
 
@@ -166,6 +178,11 @@ public class RegexPreprocessor {
                             sb.append('+');
                             offset++;
                         }
+                        // Check for non-greedy quantifier {n,m}?
+                        else if (offset + 1 < length && s.charAt(offset + 1) == '?') {
+                            sb.append('?');
+                            offset++;
+                        }
 
                         isQuantifier = true;
                         lastWasQuantifiable = false; // Can't quantify a quantifier
@@ -192,11 +209,9 @@ public class RegexPreprocessor {
             if (isQuantifier && offset + 1 < length) {
                 char nextChar = s.charAt(offset + 1);
                 // Don't flag *+, ++, ?+ as nested quantifiers (they're possessive)
-                if (nextChar == '+' && (s.charAt(offset) == '*' || s.charAt(offset) == '+' || s.charAt(offset) == '?')) {
-                    // This is a possessive quantifier, not nested
-                } else if (nextChar == '?' && (s.charAt(offset) == '*' || s.charAt(offset) == '+' || s.charAt(offset) == '?' || s.charAt(offset) == '}')) {
-                    // This is a non-greedy quantifier, not nested
-                } else if (nextChar == '*' || nextChar == '+' || nextChar == '?' || nextChar == '{') {
+                // Don't flag *?, +?, ??, }? as nested quantifiers (they're non-greedy)
+                boolean isModifier = (nextChar == '+' || nextChar == '?');
+                if (!isModifier && (nextChar == '*' || nextChar == '+' || nextChar == '?' || nextChar == '{')) {
                     regexError(s, offset + 2, "Nested quantifiers");
                 }
             }
