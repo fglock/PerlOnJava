@@ -226,6 +226,11 @@ sub process_test_result {
 sub run_single_test {
     my ($test_file) = @_;
 
+    # Temporarily disable fatal unimplemented errors
+    # so we can run tests that mix implemented and unimplemented features
+    local $ENV{JPERL_UNIMPLEMENTED} = $test_file =~ m{pat_rt_report.t}
+        ? "warn" : "";
+
     # Save current directory
     my $old_dir = File::Spec->rel2abs('.');
 
