@@ -233,25 +233,19 @@ public class RegexPreprocessorHelper {
                 sb.append("[^\\n]");
                 return offset;
             }
-        } else if ((nextChar == 'p' || nextChar == 'P')) {
-            if (offset + 1 < length && s.charAt(offset + 1) == '{') {
-                // Existing code for \p{...} and \P{...}
-                boolean negated = (nextChar == 'P');
-                offset += 2; // Skip past \p{ or \P{
-                int endBrace = s.indexOf('}', offset);
-                if (endBrace != -1) {
-                    String property = s.substring(offset, endBrace).trim();
-                    String translatedProperty = translateUnicodeProperty(property, negated);
-                    sb.setLength(sb.length() - 1); // Remove the backslash
-                    sb.append(translatedProperty);
-                    offset = endBrace;
-                } else {
-                    RegexPreprocessor.regexError(s, offset, "Missing right brace on \\\\p{}");
-                }
+        } else if ((nextChar == 'p' || nextChar == 'P') && offset + 1 < length && s.charAt(offset + 1) == '{') {
+            // Handle \p{...} and \P{...} constructs
+            boolean negated = (nextChar == 'P');
+            offset += 2; // Skip past \p or \P
+            int endBrace = s.indexOf('}', offset);
+            if (endBrace != -1) {
+                String property = s.substring(offset, endBrace).trim();
+                String translatedProperty = translateUnicodeProperty(property, negated);
+                sb.setLength(sb.length() - 1); // Remove the backslash
+                sb.append(translatedProperty);
+                offset = endBrace;
             } else {
-                // \p or \P without brace
-                RegexPreprocessor.regexError(s, offset + 1,
-                    "Character following \\" + nextChar + " must be '{' or a single-character Unicode property name");
+                RegexPreprocessor.regexError(s, offset, "Missing right brace on \\\\p{}");
             }
         } else {
             int c2 = s.codePointAt(offset);
