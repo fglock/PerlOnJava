@@ -84,10 +84,19 @@ public class RegexPreprocessor {
                 case '*':
                 case '+':
                 case '?':
-                    // Check if this is at the start or after certain characters
-                    if (offset == 0 || sb.length() == 0) {
-                        regexError(s, offset + 1, "Quantifier follows nothing");
-                    }
+                                    // Check if this is at the start or after certain characters
+                                    if (offset == 0 || sb.length() == 0) {
+                                        regexError(s, offset + 1, "Quantifier follows nothing");
+                                    }
+
+                                    // Check what the last character was
+                                    if (sb.length() > 0) {
+                                        char lastChar = sb.charAt(sb.length() - 1);
+                                        // Check if quantifier follows |
+                                        if (lastChar == '|') {
+                                            regexError(s, offset + 1, "Quantifier follows nothing");
+                                        }
+                                    }
 
                     // Check if this might be a possessive quantifier
                     boolean isPossessive = false;
@@ -99,6 +108,15 @@ public class RegexPreprocessor {
                     boolean isNonGreedy = false;
                     if (offset + 1 < length && s.charAt(offset + 1) == '?') {
                         isNonGreedy = true;
+                    }
+
+                    // Check what the last character was
+                    if (sb.length() > 0) {
+                        char lastChar = sb.charAt(sb.length() - 1);
+                        // Check if quantifier follows |
+                        if (lastChar == '|') {
+                            regexError(s, offset + 1, "Quantifier follows nothing");
+                        }
                     }
 
                     // Check for nested quantifiers (but not possessive or non-greedy)
