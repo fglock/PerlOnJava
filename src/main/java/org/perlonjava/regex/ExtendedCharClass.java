@@ -15,7 +15,22 @@ public class ExtendedCharClass {
      * @return Position after the closing ])
      */
     static int handleExtendedCharacterClass(String s, int offset, StringBuilder sb, RegexFlags regexFlags) {
+        // System.err.println("DEBUG: handleExtendedCharacterClass called at offset " + offset);
+
         int start = offset + 3; // Skip past '(?['
+
+        // First, check if this is an empty extended character class
+        int i = start;
+        while (i < s.length() && Character.isWhitespace(s.charAt(i))) {
+            i++;
+        }
+
+        if (i < s.length() && s.charAt(i) == ']' && i + 1 < s.length() && s.charAt(i + 1) == ')') {
+            // This is an empty extended character class
+            RegexPreprocessor.regexError(s, start, "Incomplete expression within '(?[ ])'");
+        }
+
+        // Now find the end
         int end = findExtendedClassEnd(s, start);
 
         if (end == -1) {
@@ -23,6 +38,13 @@ public class ExtendedCharClass {
         }
 
         String content = s.substring(start, end);
+
+        // System.err.println("DEBUG: ExtendedCharClass content: '" + content + "'");
+
+        // Check for empty or whitespace-only content
+        if (content.trim().isEmpty()) {
+            RegexPreprocessor.regexError(s, start, "Incomplete expression within '(?[ ])'");
+        }
 
         // try {
         // Parse and transform the extended character class
@@ -44,72 +66,56 @@ public class ExtendedCharClass {
         int depth = 1;
         int i = start;
         boolean inEscape = false;
-        boolean inCharClass = false;
-        boolean firstInClass = false;
-        boolean afterCaret = false;
+
+        // System.err.println("DEBUG: findExtendedClassEnd starting at position " + start);
+        // System.err.println("DEBUG: Looking at: '" + s.substring(start) + "'");
 
         while (i < s.length() && depth > 0) {
             char c = s.charAt(i);
 
             if (inEscape) {
                 inEscape = false;
-                firstInClass = false;
-                afterCaret = false;
                 i++;
+                continue;
+            }
+
+            // Check for nested (?[...])
+            if (c == '(' && i + 2 < s.length() && s.charAt(i + 1) == '?' && s.charAt(i + 2) == '[') {
+                // System.err.println("DEBUG: Found nested (?[ at position " + i);
+                // We found a nested extended character class
+                // We need to skip over it entirely
+                int nestedEnd = findExtendedClassEnd(s, i + 3);
+                if (nestedEnd == -1) {
+                    // The nested one is unterminated, but we should continue
+                    // The error will be caught when that nested one is processed
+                    return -1;
+                }
+                // Skip to after the "])'" of the nested extended class
+                i = nestedEnd + 2; // +2 for "])"
                 continue;
             }
 
             switch (c) {
                 case '\\':
                     inEscape = true;
-                    firstInClass = false;
-                    afterCaret = false;
                     break;
                 case '[':
-                    if (!inCharClass) {
-                        inCharClass = true;
-                        firstInClass = true;
-                        afterCaret = false;
-                    }
                     depth++;
                     break;
-                case '^':
-                    if (inCharClass && firstInClass) {
-                        afterCaret = true;
-                    }
-                    firstInClass = false;
-                    break;
                 case ']':
-                    // Special case: ] immediately after [ or [^ is literal
-                    if (inCharClass && (firstInClass || afterCaret)) {
-                        // This is a literal ], don't decrease depth
-                        firstInClass = false;
-                        afterCaret = false;
-                    } else {
-                        depth--;
-                        if (inCharClass && depth > 0) {
-                            // We just closed a character class
-                            inCharClass = false;
+                    depth--;
+                    if (depth == 0) {
+                        // Check if this ends the extended character class
+                        int j = i + 1;
+                        while (j < s.length() && Character.isWhitespace(s.charAt(j))) {
+                            j++;
                         }
-
-                        if (depth == 0) {
-                            // Check if this ends the extended character class
-                            int j = i + 1;
-                            while (j < s.length() && Character.isWhitespace(s.charAt(j))) {
-                                j++;
-                            }
-                            if (j < s.length() && s.charAt(j) == ')') {
-                                return i;
-                            }
-                            // Not properly terminated
-                            return -1;
+                        if (j < s.length() && s.charAt(j) == ')') {
+                            // System.err.println("DEBUG: Found end of extended class at position " + i);
+                            return i;
                         }
-                    }
-                    break;
-                default:
-                    if (!Character.isWhitespace(c)) {
-                        firstInClass = false;
-                        afterCaret = false;
+                        // Not properly terminated
+                        return -1;
                     }
                     break;
             }
@@ -123,6 +129,10 @@ public class ExtendedCharClass {
      * Transform the extended character class content into Java syntax
      */
     private static String transformExtendedClass(String content, String originalRegex, int contentStart) {
+        // Before tokenizing, scan for nested regex constructs and process them
+        // This allows us to catch errors in nested patterns
+        scanForNestedConstructs(content, originalRegex, contentStart);
+
         // Tokenize the expression
         List<Token> tokens = tokenizeExtendedClass(content, originalRegex, contentStart);
 
@@ -133,6 +143,53 @@ public class ExtendedCharClass {
         return evaluateExtendedClass(tree);
     }
 
+    private static void scanForNestedConstructs(String content, String originalRegex, int contentStart) {
+        int i = 0;
+        while (i < content.length()) {
+            char c = content.charAt(i);
+
+            // Look for (?...) constructs
+            if (c == '(' && i + 1 < content.length() && content.charAt(i + 1) == '?') {
+                // System.err.println("DEBUG: Found nested (? at position " + i + " in extended char class content");
+
+                // Check what type of construct this is
+                if (i + 2 < content.length()) {
+                    char nextChar = content.charAt(i + 2);
+
+                    if (nextChar == '[') {
+                        // Nested extended character class - process it recursively
+                        // System.err.println("DEBUG: Found nested (?[ at position " + i);
+                        // Call handleExtendedCharacterClass recursively
+                        StringBuilder dummySb = new StringBuilder();
+                        ExtendedCharClass.handleExtendedCharacterClass(originalRegex, contentStart + i, dummySb, RegexFlags.fromModifiers("", ""));
+                    } else if (nextChar == 'x' && i + 3 < content.length() && content.charAt(i + 3) == ':') {
+                        // (?x:...) construct - scan inside it
+                        // System.err.println("DEBUG: Found (?x: at position " + i);
+                        // Find the matching closing paren
+                        int closePos = findMatchingParen(content, i);
+                        if (closePos > i + 4) {
+                            String innerContent = content.substring(i + 4, closePos);
+                            scanForNestedConstructs(innerContent, originalRegex, contentStart + i + 4);
+                        }
+                    }
+                }
+            }
+            i++;
+        }
+    }
+
+    private static int findMatchingParen(String s, int start) {
+        int depth = 1;
+        int i = start + 1;
+        while (i < s.length() && depth > 0) {
+            char c = s.charAt(i);
+            if (c == '(') depth++;
+            else if (c == ')') depth--;
+            i++;
+        }
+        return depth == 0 ? i - 1 : -1;
+    }
+
     /**
      * Tokenize the extended character class content
      * Automatically handles whitespace (xx mode)
@@ -140,6 +197,8 @@ public class ExtendedCharClass {
     private static List<Token> tokenizeExtendedClass(String content, String originalRegex, int contentStart) {
         List<Token> tokens = new ArrayList<>();
         int i = 0;
+
+        // System.err.println("DEBUG: tokenizeExtendedClass content: '" + content + "'");
 
         while (i < content.length()) {
             // Skip whitespace (automatic /xx mode)
@@ -221,6 +280,12 @@ public class ExtendedCharClass {
         }
 
         tokens.add(new Token(TokenType.EOF, "", contentStart + content.length()));
+
+        // Check if we have any meaningful tokens
+        if (tokens.size() == 1 && tokens.get(0).type == TokenType.EOF) {
+            RegexPreprocessor.regexError(originalRegex, contentStart, "Incomplete expression within '(?[ ])'");
+        }
+
         return tokens;
     }
 

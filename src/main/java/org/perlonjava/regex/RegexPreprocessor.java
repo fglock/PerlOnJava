@@ -69,6 +69,7 @@ public class RegexPreprocessor {
      */
     static int handleRegex(String s, int offset, StringBuilder sb, RegexFlags regexFlags, boolean stopAtClosingParen) {
         final int length = s.length();
+        boolean lastWasQuantifiable = false; // Track if the last thing can be quantified
 
         // Remove \G from the pattern string for Java compilation
         if (s.startsWith("\\G", offset)) {
@@ -77,22 +78,62 @@ public class RegexPreprocessor {
 
         while (offset < length) {
             final int c = s.codePointAt(offset);
+            boolean isQuantifier = false;
+
             switch (c) {
+                case '*':
+                case '+':
+                case '?':
+                    // Check if this is at the start or after certain characters
+                    if (offset == 0 || sb.length() == 0) {
+                        regexError(s, offset + 1, "Quantifier follows nothing");
+                    }
+
+                    // Check if this might be a possessive quantifier
+                    boolean isPossessive = false;
+                    if (offset + 1 < length && s.charAt(offset + 1) == '+') {
+                        isPossessive = true;
+                    }
+
+                    // Check for nested quantifiers (but not possessive)
+                    if (!isPossessive && sb.length() > 0) {
+                        char lastChar = sb.charAt(sb.length() - 1);
+                        if (lastChar == '*' || lastChar == '+' || lastChar == '?') {
+                            regexError(s, offset + 1, "Nested quantifiers");
+                        }
+                    }
+
+                    sb.append(Character.toChars(c));
+
+                    // If possessive, also append the following +
+                    if (isPossessive) {
+                        sb.append('+');
+                        offset++; // Skip the extra +
+                        lastWasQuantifiable = false; // Can't quantify a possessive quantifier
+                    }
+                    break;
+
                 case '\\':  // Handle escape sequences
                     offset = RegexPreprocessorHelper.handleEscapeSequences(s, sb, c, offset);
+                    lastWasQuantifiable = true;
                     break;
+
                 case '[':   // Handle character classes
                     offset = handleCharacterClass(s, regexFlags.isExtendedWhitespace(), sb, c, offset);
                     break;
+
                 case '(':
                     offset = handleParentheses(s, offset, length, sb, c, regexFlags, stopAtClosingParen);
+                    lastWasQuantifiable = true;
                     break;
+
                 case ')':
                     if (stopAtClosingParen) {
                         return offset;
                     }
                     regexError(s, offset, "Unmatched ) in regex");
                     break;
+
                 case '#':
                     if (regexFlags.isExtended() || regexFlags.isExtendedWhitespace()) {
                         // Consume comment to end of line
@@ -105,12 +146,59 @@ public class RegexPreprocessor {
                         break;
                     } else {
                         sb.append(Character.toChars(c));
+                        lastWasQuantifiable = true;
                         break;
                     }
+
+                case '{':
+                    // Check if previous character was a quantifier or if this could be {n}+
+                    if (offset > 0 && !lastWasQuantifiable) {
+                        // This might be a literal brace, not a quantifier
+                        sb.append(Character.toChars(c));
+                        lastWasQuantifiable = true;
+                    } else {
+                        // Could be a quantifier
+                        int savedOffset = offset;
+                        offset = handleQuantifier(s, offset, sb);
+
+                        // Check for possessive quantifier {n,m}+
+                        if (offset + 1 < length && s.charAt(offset + 1) == '+') {
+                            sb.append('+');
+                            offset++;
+                        }
+
+                        isQuantifier = true;
+                        lastWasQuantifiable = false; // Can't quantify a quantifier
+                    }
+                    break;
+
+                case '^':
+                    sb.append(Character.toChars(c));
+                    lastWasQuantifiable = false; // Can't quantify anchors
+                    break;
+
+                case '|':
+                    sb.append(Character.toChars(c));
+                    lastWasQuantifiable = false; // Next item starts fresh
+                    break;
+
                 default:    // Append normal characters
                     sb.append(Character.toChars(c));
+                    lastWasQuantifiable = true;
                     break;
             }
+
+            // Check for nested quantifiers
+            if (isQuantifier && offset + 1 < length) {
+                char nextChar = s.charAt(offset + 1);
+                // Don't flag *+, ++, ?+ as nested quantifiers (they're possessive)
+                if (nextChar == '+' && (s.charAt(offset) == '*' || s.charAt(offset) == '+' || s.charAt(offset) == '?')) {
+                    // This is a possessive quantifier, not nested
+                } else if (nextChar == '*' || nextChar == '+' || nextChar == '?' || nextChar == '{') {
+                    regexError(s, offset + 2, "Nested quantifiers");
+                }
+            }
+
             offset++;
         }
 
@@ -121,14 +209,17 @@ public class RegexPreprocessor {
         if (offset > s.length()) {
             offset = s.length();
         }
-        // Remove debug prints for now
-        // System.err.println("DEBUG: offset=" + offset + ", s='" + s + "'");
-        // System.err.println("DEBUG: marker at: '" + s.substring(0, offset) + "{#}" + s.substring(offset) + "'");
 
-        // The error format expected by tests is:
+
         // "Error message in regex; marked by <-- HERE in m/regex <-- HERE remaining/"
+        String before = s.substring(0, offset);
+        String after = s.substring(offset);
+
+        // When marker is at the end, no space before <-- HERE
+        String marker = after.isEmpty() ? " <-- HERE" : " <-- HERE ";
+
         throw new PerlCompilerException(errMsg + " in regex; marked by <-- HERE in m/" +
-                s.substring(0, offset) + " <-- HERE " + s.substring(offset) + "/");
+                before + marker + after + "/");
     }
 
     private static int handleParentheses(String s, int offset, int length, StringBuilder sb, int c, RegexFlags regexFlags, boolean stopAtClosingParen) {
@@ -142,7 +233,8 @@ public class RegexPreprocessor {
         // Handle (?
         if (c2 == '?') {
             if (offset + 2 >= length) {
-                regexError(s, offset + 1, "Sequence (? incomplete");
+                // Marker should be after the ?
+                regexError(s, offset + 2, "Sequence (? incomplete");
             }
 
             int c3 = s.codePointAt(offset + 2);
@@ -169,11 +261,11 @@ public class RegexPreprocessor {
                 // Handle (?(condition)yes|no) conditionals
                 return handleConditionalPattern(s, offset, length, sb, regexFlags);
             } else if (c3 == ';') {
-                // (?;...) is not recognized
-                regexError(s, offset + 2, "Sequence (?;...) not recognized");
+                // (?;...) is not recognized - marker should be after ;
+                regexError(s, offset + 3, "Sequence (?;...) not recognized");
             } else if (c3 == '\\') {
-                // (?\...) is not recognized
-                regexError(s, offset + 2, "Sequence (?\\...) not recognized");
+                // (?\...) is not recognized - marker should be after \
+                regexError(s, offset + 3, "Sequence (?\\...) not recognized");
             } else if (c3 == '<' && c4 == '=') {
                 // Positive lookbehind (?<=...)
                 validateLookbehindLength(s, offset);
@@ -182,18 +274,18 @@ public class RegexPreprocessor {
                 // Negative lookbehind (?<!...)
                 validateLookbehindLength(s, offset);
                 offset = handleRegularParentheses(s, offset, length, sb, regexFlags);
-            } else if (c3 == '=') {
-                // Positive lookahead (?=...)
-                offset = handleRegularParentheses(s, offset, length, sb, regexFlags);
-            } else if (c3 == '!') {
-                // Negative lookahead (?!...)
-                offset = handleRegularParentheses(s, offset, length, sb, regexFlags);
-            } else if (c3 == '>') {
-                // Atomic group (?>...) - non-backtracking group
-                offset = handleRegularParentheses(s, offset, length, sb, regexFlags);
             } else if (c3 == '<' && isAlphabetic(c4)) {
                 // Handle named capture (?<name> ... )
                 offset = handleNamedCapture(c3, s, offset, length, sb, regexFlags);
+            } else if (c3 == '<') {
+                // Invalid character after (?<
+                if (offset + 3 < length) {
+                    // For (?<;x, the marker should be after the invalid character (the ;)
+                    regexError(s, offset + 4, "Group name must start with a non-digit word character");
+                } else {
+                    // Pattern ends after (?<
+                    regexError(s, offset + 3, "Sequence (?<... not terminated");
+                }
             } else if (c3 == '\'') {
                 // Handle named capture (?'name' ... )
                 offset = handleNamedCapture(c3, s, offset, length, sb, regexFlags);
@@ -205,6 +297,15 @@ public class RegexPreprocessor {
                 return RegexPreprocessorHelper.handleFlagModifiers(s, offset, sb, regexFlags);
             } else if (c3 == ':') {
                 // Handle non-capturing group (?:...)
+                offset = handleRegularParentheses(s, offset, length, sb, regexFlags);
+            } else if (c3 == '=') {
+                // Positive lookahead (?=...)
+                offset = handleRegularParentheses(s, offset, length, sb, regexFlags);
+            } else if (c3 == '!') {
+                // Negative lookahead (?!...)
+                offset = handleRegularParentheses(s, offset, length, sb, regexFlags);
+            } else if (c3 == '>') {
+                // Atomic group (?>...) - non-backtracking group
                 offset = handleRegularParentheses(s, offset, length, sb, regexFlags);
             } else {
                 // Unknown sequence - show the actual character
@@ -219,10 +320,11 @@ public class RegexPreprocessor {
             offset = handleRegularParentheses(s, offset, length, sb, regexFlags);
         }
 
-        // Ensure the closing parenthesis is consumed
-        if (offset >= length || s.codePointAt(offset) != ')') {
-            regexError(s, offset, "Missing right curly or square bracket");
-        }
+            // Ensure the closing parenthesis is consumed
+            if (offset >= length || s.codePointAt(offset) != ')') {
+                // Change this error message based on what we're looking for
+                regexError(s, offset - 1, "Unmatched (");
+            }
         sb.append(')');
         return offset;
     }
@@ -271,7 +373,30 @@ public class RegexPreprocessor {
         sb.append(Character.toChars(c));  // Append the '['
         offset++;
 
-        // Add check for POSIX syntax at the start of character class
+        // Check if the bracket is properly closed
+        int bracketEnd = offset;
+        int depth = 1;
+        boolean inEscape = false;
+
+        while (bracketEnd < length && depth > 0) {
+            char ch = s.charAt(bracketEnd);
+            if (inEscape) {
+                inEscape = false;
+            } else if (ch == '\\') {
+                inEscape = true;
+            } else if (ch == '[') {
+                // Don't increment depth - [ is just a literal inside a character class
+            } else if (ch == ']') {
+                depth--;
+            }
+            bracketEnd++;
+        }
+
+        if (depth > 0) {
+            regexError(s, offset, "Unmatched [");
+        }
+
+        // Check for POSIX syntax at the start of character class
         if (offset < length && s.charAt(offset) == '[') {
             // Check for [[=...=]] or [[.....]]
             if (offset + 1 < length) {
@@ -423,7 +548,11 @@ public class RegexPreprocessor {
       * Validates that a lookbehind assertion doesn't potentially match more than 255 characters.
       */
     private static void validateLookbehindLength(String s, int offset) {
-        // System.err.println("DEBUG: validateLookbehindLength called for: " + s.substring(offset, Math.min(s.length(), offset + 20)));
+        // System.err.println("DEBUG: validateLookbehindLength called with string length " + s.length());
+        // System.err.println("DEBUG: String codepoints: ");
+        // s.codePoints().forEach(cp -> System.err.printf("U+%04X ", cp));
+        // System.err.println();
+
         int start = offset + 4; // Skip past (?<= or (?<!
         int maxLength = calculateMaxLength(s, start);
 
@@ -541,7 +670,7 @@ public class RegexPreprocessor {
         return -1; // Not found
     }
 
-    // Add this method to find matching parenthesis
+    // Find matching parenthesis
     private static int findMatchingParen(String s, int start, int length) {
         int depth = 1;
         int pos = start + 1;  // Start after the opening paren
@@ -562,7 +691,7 @@ public class RegexPreprocessor {
         return -1; // Not found
     }
 
-    // Add this method to handle conditional patterns
+    // Handle conditional patterns
     private static int handleConditionalPattern(String s, int offset, int length, StringBuilder sb, RegexFlags regexFlags) {
         // offset is at '(' of (?(condition)yes|no)
         int condStart = offset + 3;  // Skip (?(
@@ -586,34 +715,51 @@ public class RegexPreprocessor {
         }
 
         if (!foundEnd) {
-            throw new PerlCompilerException("Switch (?(condition)... not terminated" + " in regex m/" + s + "/");
+            // Error should point to where we expected the closing paren
+            regexError(s, condEnd, "Switch (?(condition)... not terminated");
         }
 
         // Extract and validate the condition
         String condition = s.substring(condStart, condEnd).trim();
 
-        // Check for invalid conditions
+        // System.err.println("DEBUG: Conditional pattern condition: '" + condition + "'");
+
+        // Check for invalid conditions like "1x" or "1x(?#)"
         if (condition.matches("\\d+[a-zA-Z].*")) {
-            // Find where the non-digit starts
+            // Find where the alphabetic part starts
             int i = 0;
             while (i < condition.length() && Character.isDigit(condition.charAt(i))) {
                 i++;
             }
-            throw new PerlCompilerException("Switch condition not recognized" + " in regex m/" + s + "/");
+            // For "1x(?#)", we want the marker after "x", not after the comment
+            // So we need to find where the alphabetic part ends
+            int alphaEnd = i;
+            while (alphaEnd < condition.length() && Character.isLetter(condition.charAt(alphaEnd))) {
+                alphaEnd++;
+            }
+            // Error should point after the alphanumeric part
+            regexError(s, condStart + alphaEnd, "Switch condition not recognized");
         }
 
         // Check for specific invalid patterns
         if (condition.equals("??{}") || condition.equals("?[")) {
-            throw new PerlCompilerException("Unknown switch condition (?(...)) in regex m/" + s + "/");
+            // Marker should be after the first ?
+            regexError(s, condStart + 1, "Unknown switch condition (?(...))");
         }
 
         if (condition.startsWith("?")) {
-            throw new PerlCompilerException("Unknown switch condition (?(...)) in regex m/" + s + "/");
+            // Marker should be after the first ?
+            regexError(s, condStart + 1, "Unknown switch condition (?(...))");
         }
 
         // Check for non-numeric conditions that aren't valid
         if (!condition.matches("\\d+") && !condition.matches("<[^>]+>") && !condition.matches("'[^']+'")) {
-            throw new PerlCompilerException("Unknown switch condition (?(...)) in regex m/" + s + "/");
+            // For single character conditions like "x", marker should be after the character
+            if (condition.length() == 1) {
+                regexError(s, condStart + 1, "Unknown switch condition (?(...))");
+            } else {
+                regexError(s, condStart, "Unknown switch condition (?(...))");
+            }
         }
 
         // Now parse the yes|no branches
@@ -621,6 +767,13 @@ public class RegexPreprocessor {
         int pipeCount = 0;
         int branchStart = pos;
         parenDepth = 0;
+
+        // First, check if we have any content after the condition
+        if (pos >= length) {
+            // No branches at all - for /(?(1)/ the marker should be right after the )
+            // condEnd is at the position of ), so condEnd + 1 is after it
+            regexError(s, condEnd + 1, "Switch (?(condition)... not terminated");
+        }
 
         while (pos < length) {
             char ch = s.charAt(pos);
@@ -634,18 +787,72 @@ public class RegexPreprocessor {
             } else if (ch == '|' && parenDepth == 0) {
                 pipeCount++;
                 if (pipeCount > 1) {
-                    throw new PerlCompilerException("Switch (?(condition)... contains too many branches" + " in regex m/" + s + "/");
+                    // Mark the error right after this pipe character
+                    regexError(s, pos + 1, "Switch (?(condition)... contains too many branches");
                 }
+            } else if (ch == '\\' && pos + 1 < length) {
+                pos++; // Skip escaped character
             }
             pos++;
         }
 
-        if (pos >= length) {
-            throw new PerlCompilerException("Switch (?(condition)... not terminated" + " in regex m/" + s + "/");
+        if (pos >= length || s.charAt(pos) != ')') {
+            // The pattern ends without closing the conditional
+            regexError(s, pos, "Switch (?(condition)... not terminated");
         }
 
         // For now, just convert to a non-capturing group
         sb.append("(?:");
         return handleRegex(s, branchStart, sb, regexFlags, true);
+    }
+
+    private static int handleQuantifier(String s, int offset, StringBuilder sb) {
+        int start = offset; // Position of '{'
+        int end = s.indexOf('}', start);
+
+        if (end == -1) {
+            // Let it through - Java will handle the error
+            sb.append('{');
+            return offset;
+        }
+
+        String quantifier = s.substring(start + 1, end);
+        String[] parts = quantifier.split(",", -1);
+
+        try {
+            // Check first number
+            if (!parts[0].isEmpty()) {
+                // Check for leading zeros
+                if (parts[0].length() > 1 && parts[0].charAt(0) == '0') {
+                    regexError(s, start + 1, "Invalid quantifier in {,}");
+                }
+
+                long n = Long.parseLong(parts[0]);
+                if (n > Integer.MAX_VALUE) {
+                    regexError(s, start + 1, "Quantifier in {,} bigger than " + Integer.MAX_VALUE);
+                }
+            }
+
+            // Check second number if present
+            if (parts.length > 1 && !parts[1].isEmpty()) {
+                // Check for leading zeros
+                if (parts[1].length() > 1 && parts[1].charAt(0) == '0') {
+                    int commaPos = quantifier.indexOf(',');
+                    regexError(s, start + 1 + commaPos + 1, "Invalid quantifier in {,}");
+                }
+
+                long m = Long.parseLong(parts[1]);
+                if (m > Integer.MAX_VALUE) {
+                    int commaPos = quantifier.indexOf(',');
+                    regexError(s, start + 1 + commaPos, "Quantifier in {,} bigger than " + Integer.MAX_VALUE);
+                }
+            }
+        } catch (NumberFormatException e) {
+            // Not a valid quantifier, let it through
+        }
+
+        // If we get here, it's valid
+        sb.append(s.substring(start, end + 1));
+        return end;
     }
 }
