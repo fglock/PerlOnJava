@@ -2,6 +2,9 @@ package org.perlonjava.regex;
 
 import org.perlonjava.runtime.PerlCompilerException;
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import static java.lang.Character.isAlphabetic;
 
 /**
@@ -49,6 +52,7 @@ public class RegexPreprocessor {
      */
     static String preProcessRegex(String s, RegexFlags regexFlags) {
         captureGroupCount = 0;
+        s = convertPythonStyleGroups(s);
         StringBuilder sb = new StringBuilder();
         handleRegex(s, 0, sb, regexFlags, false);
         return sb.toString();
@@ -897,5 +901,19 @@ public class RegexPreprocessor {
         // If we get here, it's valid
         sb.append(s.substring(start, end + 1));
         return end;
+    }
+
+    private static String convertPythonStyleGroups(String pattern) {
+        // Convert (?P<name>...) to (?<name>...)
+        pattern = pattern.replaceAll("\\(\\?P<", "(?<");
+
+        // Convert (?P=name) to \k<name>
+        StringBuffer result = new StringBuffer();
+        Matcher m = Pattern.compile("\\(\\?P=([^)]+)\\)").matcher(pattern);
+        while (m.find()) {
+            m.appendReplacement(result, "\\\\k<" + m.group(1) + ">");
+        }
+        m.appendTail(result);
+        return result.toString();
     }
 }
