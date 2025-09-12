@@ -24,4 +24,4 @@ else
 fi
 
 # Launch Java
-java -cp "$CLASSPATH:$JAR_PATH" org.perlonjava.Main "$@"
+java ${JPERL_OPTS} -cp "$CLASSPATH:$JAR_PATH" org.perlonjava.Main "$@"

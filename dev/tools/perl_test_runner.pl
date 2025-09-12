@@ -230,6 +230,8 @@ sub run_single_test {
     # so we can run tests that mix implemented and unimplemented features
     local $ENV{JPERL_UNIMPLEMENTED} = $test_file =~ m{ re/pat_rt_report.t | re/pat.t }x
         ? "warn" : "";
+    local $ENV{JPERL_OPTS} = $test_file =~ m{ re/pat.t }x
+        ? "-Xss256m" : "";
 
     # Save current directory
     my $old_dir = File::Spec->rel2abs('.');
