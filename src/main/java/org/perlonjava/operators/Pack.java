@@ -86,31 +86,74 @@ public class Pack {
                     throw new PerlCompilerException("pack: unmatched parenthesis in template");
                 }
 
-                // Check for endianness modifier after the group
-                char groupEndian = ' '; // default: inherit from parent
-                if (closePos + 1 < template.length()) {
-                    char nextChar = template.charAt(closePos + 1);
-                    if (nextChar == '<' || nextChar == '>') {
-                        groupEndian = nextChar;
-                    }
-                }
-
                 // Extract group content
                 String groupContent = template.substring(i + 1, closePos);
 
+                // Check for modifiers and repeat count after the group
+                int nextPos = closePos + 1;
+                char groupEndian = ' ';
+                int groupRepeatCount = 1;
+
+                // Parse modifiers after ')'
+                while (nextPos < template.length()) {
+                    char nextChar = template.charAt(nextPos);
+                    if (nextChar == '<' || nextChar == '>') {
+                        if (groupEndian == ' ') {
+                            groupEndian = nextChar;
+                        }
+                        nextPos++;
+                    } else if (nextChar == '!') {
+                        // Skip '!' for now
+                        nextPos++;
+                    } else if (Character.isDigit(nextChar)) {
+                        // Parse repeat count
+                        int j = nextPos;
+                        while (j < template.length() && Character.isDigit(template.charAt(j))) {
+                            j++;
+                        }
+                        groupRepeatCount = Integer.parseInt(template.substring(nextPos, j));
+                        nextPos = j;
+                        break;
+                    } else if (nextChar == '*') {
+                        groupRepeatCount = Integer.MAX_VALUE;
+                        nextPos++;
+                        break;
+                    } else {
+                        break;
+                    }
+                }
+
                 // Check for conflicting endianness within the group
                 if (groupEndian != ' ' && hasConflictingEndianness(groupContent, groupEndian)) {
-                    throw new PerlCompilerException("Can't use both '<' and '>' in a group with different byte-order in pack");
+                    throw new PerlCompilerException("Can't use '" + groupEndian + "' in a group with different byte-order in pack");
                 }
 
-                // Process group (recursive pack)
-                // For now, let's skip the actual processing and focus on the error detection
+                // Process the group content repeatedly
+                for (int rep = 0; rep < groupRepeatCount; rep++) {
+                    // Create a sub-packer for the group content
+                    RuntimeList groupArgs = new RuntimeList();
+                    groupArgs.add(new RuntimeScalar(groupContent));
 
-                // Move past the group and any endianness modifier
-                i = closePos;
-                if (closePos + 1 < template.length() && (template.charAt(closePos + 1) == '<' || template.charAt(closePos + 1) == '>')) {
-                    i++;
+                    // Collect values for this group iteration
+                    int groupValueCount = countValuesNeeded(groupContent);
+                    if (groupRepeatCount == Integer.MAX_VALUE) {
+                        // For *, use remaining values
+                        groupValueCount = Math.min(groupValueCount, values.size() - valueIndex);
+                        if (groupValueCount <= 0) break;
+                    }
+
+                    for (int v = 0; v < groupValueCount && valueIndex < values.size(); v++) {
+                        groupArgs.add(values.get(valueIndex++));
+                    }
+
+                    // Recursively pack the group
+                    RuntimeScalar groupResult = pack(groupArgs);
+                    byte[] groupBytes = groupResult.toString().getBytes(StandardCharsets.ISO_8859_1);
+                    output.write(groupBytes, 0, groupBytes.length);
                 }
+
+                // Move past the group and modifiers
+                i = nextPos - 1; // -1 because loop will increment
                 continue;
             }
 
@@ -606,28 +649,132 @@ public class Pack {
         // Check if the group content has endianness modifiers that conflict with the group's endianness
         for (int i = 0; i < groupContent.length(); i++) {
             char c = groupContent.charAt(i);
-            if ((c == '<' && groupEndian == '>') || (c == '>' && groupEndian == '<')) {
-                // Check if this is actually a modifier (follows a format that supports it)
-                if (i > 0) {
-                    char prevChar = groupContent.charAt(i - 1);
-                    if ("sSiIlLqQjJfFdDpP".indexOf(prevChar) >= 0) {
-                        return true;
-                    }
-                }
-            }
-            // Also check for nested groups with conflicting endianness
+
+            // Check for nested groups with conflicting endianness
             if (c == '(') {
                 int closePos = findMatchingParen(groupContent, i);
-                if (closePos != -1 && closePos + 1 < groupContent.length()) {
-                    char nestedEndian = groupContent.charAt(closePos + 1);
-                    if ((nestedEndian == '<' && groupEndian == '>') ||
-                        (nestedEndian == '>' && groupEndian == '<')) {
+                if (closePos != -1) {
+                    // Check for endianness modifier after the nested group
+                    int checkPos = closePos + 1;
+                    while (checkPos < groupContent.length()) {
+                        char modifier = groupContent.charAt(checkPos);
+                        if (modifier == '<' || modifier == '>') {
+                            if ((modifier == '<' && groupEndian == '>') ||
+                                (modifier == '>' && groupEndian == '<')) {
+                                return true;
+                            }
+                            break;
+                        } else if (modifier == '!') {
+                            checkPos++;
+                        } else {
+                            break;
+                        }
+                    }
+                    // Also recursively check inside the nested group
+                    String nestedContent = groupContent.substring(i + 1, closePos);
+                    if (hasConflictingEndianness(nestedContent, groupEndian)) {
+                        return true;
+                    }
+                    i = closePos;
+                }
+            } else if ((c == '<' || c == '>') && i > 0) {
+                // Check if this is a modifier for a format that supports it
+                char prevChar = groupContent.charAt(i - 1);
+                if ("sSiIlLqQjJfFdDpP".indexOf(prevChar) >= 0) {
+                    if ((c == '<' && groupEndian == '>') || (c == '>' && groupEndian == '<')) {
                         return true;
                     }
                 }
-                i = closePos; // Skip the nested group
             }
         }
         return false;
+    }
+
+    private static int countValuesNeeded(String template) {
+        int count = 0;
+        for (int i = 0; i < template.length(); i++) {
+            char format = template.charAt(i);
+
+            if (Character.isWhitespace(format) || format == '#') {
+                continue;
+            }
+
+            if (format == '(') {
+                int closePos = findMatchingParen(template, i);
+                if (closePos != -1) {
+                    // Count values needed for the group content
+                    String groupContent = template.substring(i + 1, closePos);
+                    int groupCount = countValuesNeeded(groupContent);
+
+                    // Skip past the group and check for repeat count
+                    i = closePos;
+                    // Skip modifiers
+                    while (i + 1 < template.length() &&
+                           (template.charAt(i + 1) == '<' ||
+                            template.charAt(i + 1) == '>' ||
+                            template.charAt(i + 1) == '!')) {
+                        i++;
+                    }
+
+                    // Check for repeat count after group
+                    int repeatCount = 1;
+                    if (i + 1 < template.length()) {
+                        if (template.charAt(i + 1) == '*') {
+                            return Integer.MAX_VALUE;
+                        } else if (Character.isDigit(template.charAt(i + 1))) {
+                            int j = i + 1;
+                            while (j < template.length() && Character.isDigit(template.charAt(j))) {
+                                j++;
+                            }
+                            repeatCount = Integer.parseInt(template.substring(i + 1, j));
+                            i = j - 1;
+                        }
+                    }
+
+                    count += groupCount * repeatCount;
+                }
+                continue;
+            }
+
+            // Skip '/' which doesn't consume values when counting
+            if (format == '/') {
+                i++; // Skip the next format too
+                continue;
+            }
+
+            // Skip modifiers
+            while (i + 1 < template.length() &&
+                   (template.charAt(i + 1) == '<' ||
+                    template.charAt(i + 1) == '>' ||
+                    template.charAt(i + 1) == '!')) {
+                i++;
+            }
+
+            // Parse repeat count
+            int repeatCount = 1;
+            if (i + 1 < template.length()) {
+                if (template.charAt(i + 1) == '*') {
+                    return Integer.MAX_VALUE;
+                } else if (Character.isDigit(template.charAt(i + 1))) {
+                    int j = i + 1;
+                    while (j < template.length() && Character.isDigit(template.charAt(j))) {
+                        j++;
+                    }
+                    repeatCount = Integer.parseInt(template.substring(i + 1, j));
+                    i = j - 1;
+                }
+            }
+
+            // Count based on format
+            if ("xX@.".indexOf(format) >= 0) {
+                // These don't consume values
+                continue;
+            } else if ("aAZbBhHu".indexOf(format) >= 0) {
+                count += 1; // These consume exactly one value regardless of repeat count
+            } else if (isNumericFormat(format) || format == 'p') {
+                count += repeatCount;
+            }
+        }
+        return count;
     }
 }
