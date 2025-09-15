@@ -192,4 +192,18 @@ public class UnpackState {
             return originalBytes.length;
         }
     }
+
+    /**
+     * Gets the current code point index (for character mode).
+     */
+    public int getCurrentCodePointIndex() {
+        return codePointIndex;
+    }
+
+    /**
+     * Sets the code point index directly (for character mode).
+     */
+    public void setCodePointIndex(int index) {
+        codePointIndex = Math.max(0, Math.min(index, codePoints.length));
+    }
 }

@@ -10,17 +10,18 @@ import java.util.List;
  */
 public class AtFormatHandler implements FormatHandler {
     @Override
-    public void unpack(UnpackState state, List<RuntimeBase> values, int count, boolean isStarCount) {
-        // @ doesn't produce a value, it just moves the position
-        System.err.println("DEBUG: AtFormatHandler called with count=" + count + ", isStarCount=" + isStarCount);
-        if (isStarCount) {
-            // @* means go to end of string
-            state.setPosition(state.getTotalLength());
-        } else {
-            // @N means go to position N (0-based)
-            state.setPosition(count);
-        }
-        System.err.println("DEBUG: After setPosition, codePointIndex should be " + count);
+    public void unpack(UnpackState state, List<RuntimeBase> output, int count, boolean isStarCount) {
+        System.err.println("DEBUG: AtFormatHandler.unpack called with count=" + count);
+        System.err.println("DEBUG: Current position before setPosition: " +
+            (state.isCharacterMode() ? state.getCurrentCodePointIndex() : state.getBuffer().position()));
+
+        // Set absolute position
+        state.setPosition(count);
+
+        System.err.println("DEBUG: Current position after setPosition: " +
+            (state.isCharacterMode() ? state.getCurrentCodePointIndex() : state.getBuffer().position()));
+
+        // @ doesn't produce any output values
     }
 
     @Override
