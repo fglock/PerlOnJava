@@ -118,12 +118,27 @@ public class Unpack {
                     throw new PerlCompilerException("unpack: unmatched parenthesis in template");
                 }
 
+                // Check for endianness modifier after the group
+                char groupEndian = ' '; // default: no specific endianness
+                int nextPos = closePos + 1;
+                if (nextPos < template.length()) {
+                    char nextChar = template.charAt(nextPos);
+                    if (nextChar == '<' || nextChar == '>') {
+                        groupEndian = nextChar;
+                        nextPos++;
+                    }
+                }
+
                 // Extract group content
                 String groupContent = template.substring(i + 1, closePos);
 
+                // Check for conflicting endianness within the group
+                if (groupEndian != ' ' && hasConflictingEndianness(groupContent, groupEndian)) {
+                    throw new PerlCompilerException("Can't use both '<' and '>' in a group with different byte-order in unpack");
+                }
+
                 // Check for repeat count after closing paren
                 int groupRepeatCount = 1;
-                int nextPos = closePos + 1;
 
                 if (nextPos < template.length()) {
                     char nextChar = template.charAt(nextPos);
@@ -382,6 +397,35 @@ public class Unpack {
             }
         }
         return -1;
+    }
+
+    private static boolean hasConflictingEndianness(String groupContent, char groupEndian) {
+        // Check if the group content has endianness modifiers that conflict with the group's endianness
+        for (int i = 0; i < groupContent.length(); i++) {
+            char c = groupContent.charAt(i);
+            if ((c == '<' && groupEndian == '>') || (c == '>' && groupEndian == '<')) {
+                // Check if this is actually a modifier (follows a format that supports it)
+                if (i > 0) {
+                    char prevChar = groupContent.charAt(i - 1);
+                    if ("sSiIlLqQjJfFdDpP".indexOf(prevChar) >= 0) {
+                        return true;
+                    }
+                }
+            }
+            // Also check for nested groups with conflicting endianness
+            if (c == '(') {
+                int closePos = findMatchingParen(groupContent, i);
+                if (closePos != -1 && closePos + 1 < groupContent.length()) {
+                    char nestedEndian = groupContent.charAt(closePos + 1);
+                    if ((nestedEndian == '<' && groupEndian == '>') ||
+                        (nestedEndian == '>' && groupEndian == '<')) {
+                        return true;
+                    }
+                }
+                i = closePos; // Skip the nested group
+            }
+        }
+        return false;
     }
 
     private static void processGroup(String groupTemplate, UnpackState state, List<RuntimeBase> values,

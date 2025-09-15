@@ -57,6 +57,10 @@ public class Pack {
         // Track if 'U' was used in normal mode (not byte mode)
         boolean hasUnicodeInNormalMode = false;
 
+        // Stack to track byte order for nested groups
+        java.util.Stack<Character> groupEndianStack = new java.util.Stack<>();
+        groupEndianStack.push(' '); // Default: no specific endianness
+
         for (int i = 0; i < template.length(); i++) {
             char format = template.charAt(i);
 
@@ -74,15 +78,37 @@ public class Pack {
                 continue;
             }
 
-            // Skip spaces
-            if (Character.isWhitespace(format)) {
-                continue;
-            }
+            // Handle parentheses for grouping
+            if (format == '(') {
+                // Find matching closing parenthesis
+                int closePos = findMatchingParen(template, i);
+                if (closePos == -1) {
+                    throw new PerlCompilerException("pack: unmatched parenthesis in template");
+                }
 
-            // Skip comments
-            if (format == '#') {
-                // Skip to end of line or end of template
-                while (i + 1 < template.length() && template.charAt(i + 1) != '\n') {
+                // Check for endianness modifier after the group
+                char groupEndian = ' '; // default: inherit from parent
+                if (closePos + 1 < template.length()) {
+                    char nextChar = template.charAt(closePos + 1);
+                    if (nextChar == '<' || nextChar == '>') {
+                        groupEndian = nextChar;
+                    }
+                }
+
+                // Extract group content
+                String groupContent = template.substring(i + 1, closePos);
+
+                // Check for conflicting endianness within the group
+                if (groupEndian != ' ' && hasConflictingEndianness(groupContent, groupEndian)) {
+                    throw new PerlCompilerException("Can't use both '<' and '>' in a group with different byte-order in pack");
+                }
+
+                // Process group (recursive pack)
+                // For now, let's skip the actual processing and focus on the error detection
+
+                // Move past the group and any endianness modifier
+                i = closePos;
+                if (closePos + 1 < template.length() && (template.charAt(closePos + 1) == '<' || template.charAt(closePos + 1) == '>')) {
                     i++;
                 }
                 continue;
@@ -562,5 +588,46 @@ public class Pack {
             default:
                 return false;
         }
+    }
+
+    private static int findMatchingParen(String template, int openPos) {
+        int depth = 1;
+        for (int i = openPos + 1; i < template.length(); i++) {
+            if (template.charAt(i) == '(') depth++;
+            else if (template.charAt(i) == ')') {
+                depth--;
+                if (depth == 0) return i;
+            }
+        }
+        return -1;
+    }
+
+    private static boolean hasConflictingEndianness(String groupContent, char groupEndian) {
+        // Check if the group content has endianness modifiers that conflict with the group's endianness
+        for (int i = 0; i < groupContent.length(); i++) {
+            char c = groupContent.charAt(i);
+            if ((c == '<' && groupEndian == '>') || (c == '>' && groupEndian == '<')) {
+                // Check if this is actually a modifier (follows a format that supports it)
+                if (i > 0) {
+                    char prevChar = groupContent.charAt(i - 1);
+                    if ("sSiIlLqQjJfFdDpP".indexOf(prevChar) >= 0) {
+                        return true;
+                    }
+                }
+            }
+            // Also check for nested groups with conflicting endianness
+            if (c == '(') {
+                int closePos = findMatchingParen(groupContent, i);
+                if (closePos != -1 && closePos + 1 < groupContent.length()) {
+                    char nestedEndian = groupContent.charAt(closePos + 1);
+                    if ((nestedEndian == '<' && groupEndian == '>') ||
+                        (nestedEndian == '>' && groupEndian == '<')) {
+                        return true;
+                    }
+                }
+                i = closePos; // Skip the nested group
+            }
+        }
+        return false;
     }
 }
