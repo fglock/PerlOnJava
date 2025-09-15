@@ -42,7 +42,8 @@ public class Unpack {
         handlers.put('W', new WFormatHandler());
         handlers.put('x', new XFormatHandler());
         handlers.put('w', new WBERFormatHandler());
-        handlers.put('p', new PointerFormatHandler());  // Add this line here
+        handlers.put('p', new PointerFormatHandler());
+        handlers.put('u', new UuencodeFormatHandler());  // Add this line here
         // Note: U handler is created dynamically based on startsWithU
     }
 
