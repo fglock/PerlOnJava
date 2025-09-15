@@ -43,7 +43,8 @@ public class Unpack {
         handlers.put('x', new XFormatHandler());
         handlers.put('w', new WBERFormatHandler());
         handlers.put('p', new PointerFormatHandler());
-        handlers.put('u', new UuencodeFormatHandler());  // Add this line here
+        handlers.put('u', new UuencodeFormatHandler());
+        handlers.put('@', new AtFormatHandler());  // Add this line
         // Note: U handler is created dynamically based on startsWithU
     }
 
@@ -166,10 +167,56 @@ public class Unpack {
                 continue;
             }
 
+            // Skip comments
+            if (format == '#') {
+                // Skip to end of line or end of template
+                while (i + 1 < template.length() && template.charAt(i + 1) != '\n') {
+                    i++;
+                }
+                i++;
+                continue;
+            }
+
             // Handle endianness modifiers that might appear after certain formats
             if ((format == '<' || format == '>') && i > 0) {
                 // This is likely a modifier for the previous format, skip it
                 i++;
+                continue;
+            }
+
+            // Handle '/' for counted strings
+            if (format == '/') {
+                if (values.isEmpty()) {
+                    throw new PerlCompilerException("'/' must follow a numeric type");
+                }
+
+                // Get the count from the last unpacked value
+                RuntimeBase lastValue = values.get(values.size() - 1);
+                int slashCount = ((RuntimeScalar)lastValue).getInt();
+                values.remove(values.size() - 1); // Remove the count value
+
+                // Get the string format that follows '/'
+                i++;
+                if (i >= template.length()) {
+                    throw new PerlCompilerException("Code missing after '/'");
+                }
+                char stringFormat = template.charAt(i);
+
+                if (stringFormat != 'a' && stringFormat != 'A' && stringFormat != 'Z') {
+                    throw new PerlCompilerException("'/' must be followed by a string type");
+                }
+
+                // Parse optional count/star after string format
+                boolean hasStarAfterSlash = false;
+                if (i + 1 < template.length() && template.charAt(i + 1) == '*') {
+                    hasStarAfterSlash = true;
+                    i++; // consume the '*'
+                }
+
+                // Unpack the string with the count from the previous numeric value
+                FormatHandler stringHandler = handlers.get(stringFormat);
+                // Pass slashCount as the count, and hasStarAfterSlash as isStarCount
+                stringHandler.unpack(state, values, slashCount, hasStarAfterSlash);
                 continue;
             }
 
@@ -187,6 +234,11 @@ public class Unpack {
             // Parse count
             int count = 1;
             boolean isStarCount = false;
+
+            // First, skip any '!' modifiers after the format character
+            while (i + 1 < template.length() && template.charAt(i + 1) == '!') {
+                i++; // Skip '!' - for unpack, it doesn't change behavior
+            }
 
             if (i + 1 < template.length()) {
                 char nextChar = template.charAt(i + 1);
@@ -248,7 +300,12 @@ public class Unpack {
                         checksum &= 0xFFFFFFFFL;
                     }
 
-                    values.add(new RuntimeScalar((int)checksum));
+                    // For 32-bit checksums that would be negative as int, convert to long
+                    if (checksumBits == 32 && checksum > Integer.MAX_VALUE) {
+                        values.add(new RuntimeScalar(checksum));
+                    } else {
+                        values.add(new RuntimeScalar((int)checksum));
+                    }
                 } else {
                     handler.unpack(state, values, count, isStarCount);
                 }
@@ -341,6 +398,41 @@ public class Unpack {
                 } else if (format == 'U' && j + 1 < groupTemplate.length() && groupTemplate.charAt(j + 1) == '0') {
                     state.switchToByteMode();
                     j++; // Skip the '0'
+                    continue;
+                }
+
+                // Handle '/' for counted strings
+                if (format == '/') {
+                    if (values.isEmpty()) {
+                        throw new PerlCompilerException("'/' must follow a numeric type");
+                    }
+
+                    // Get the count from the last unpacked value
+                    RuntimeBase lastValue = values.get(values.size() - 1);
+                    int slashCount = ((RuntimeScalar)lastValue).getInt();
+                    values.remove(values.size() - 1); // Remove the count value
+
+                    // Get the string format that follows '/'
+                    j++;
+                    if (j >= groupTemplate.length()) {
+                        throw new PerlCompilerException("Code missing after '/'");
+                    }
+                    char stringFormat = groupTemplate.charAt(j);
+
+                    if (stringFormat != 'a' && stringFormat != 'A' && stringFormat != 'Z') {
+                        throw new PerlCompilerException("'/' must be followed by a string type");
+                    }
+
+                    // Parse optional count/star after string format
+                    boolean hasStarAfterSlash = false;
+                    if (j + 1 < groupTemplate.length() && groupTemplate.charAt(j + 1) == '*') {
+                        hasStarAfterSlash = true;
+                        j++;
+                    }
+
+                    // Unpack the string with the count
+                    FormatHandler stringHandler = handlers.get(stringFormat);
+                    stringHandler.unpack(state, values, hasStarAfterSlash ? slashCount : 1, false);
                     continue;
                 }
 
