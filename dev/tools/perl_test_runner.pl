@@ -232,6 +232,8 @@ sub run_single_test {
         ? "warn" : "";
     local $ENV{JPERL_OPTS} = $test_file =~ m{ re/pat.t }x
         ? "-Xss256m" : "";
+    local $ENV{JPERL_LARGECODE} = $test_file =~ m{ re/pat.t }x
+        ? "refactor" : "";
 
     # Save current directory
     my $old_dir = File::Spec->rel2abs('.');
