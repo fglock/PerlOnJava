@@ -64,7 +64,6 @@ public class CoreOperatorResolver {
             case "select" -> OperatorParser.parseSelect(parser, token, currentIndex);
             case "stat", "lstat" -> OperatorParser.parseStat(parser, token, currentIndex);
             case "readpipe" -> OperatorParser.parseReadpipe(parser);
-            case "unpack" -> OperatorParser.parseUnpack(parser, token);
             case "bless" -> OperatorParser.parseBless(parser, currentIndex);
             case "split" -> OperatorParser.parseSplit(parser, token, currentIndex);
             case "push", "unshift", "join", "sprintf" ->

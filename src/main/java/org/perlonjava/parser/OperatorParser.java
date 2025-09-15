@@ -396,19 +396,6 @@ public class OperatorParser {
         return new OperatorNode(token.text, operand, currentIndex);
     }
 
-    static OperatorNode parseUnpack(Parser parser, LexerToken token) {
-        ListNode operand;
-        // Handle 'unpack' operator with one mandatory and one optional argument
-        operand = ListParser.parseZeroOrMoreList(parser, 1, false, true, false, false);
-        if (operand.elements.size() == 1) {
-            // Create `$_` variable if only one argument is provided
-            operand.elements.add(
-                    ParserNodeUtils.scalarUnderscore(parser)
-            );
-        }
-        return new OperatorNode(token.text, operand, parser.tokenIndex);
-    }
-
     static BinaryOperatorNode parseBless(Parser parser, int currentIndex) {
         // Handle 'bless' operator with special handling for class name
         Node ref;

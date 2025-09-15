@@ -1,12 +1,11 @@
 package org.perlonjava.operators;
 
 import org.perlonjava.operators.unpack.*;
-import org.perlonjava.runtime.PerlCompilerException;
-import org.perlonjava.runtime.RuntimeBase;
-import org.perlonjava.runtime.RuntimeList;
-import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.*;
 
 import java.util.*;
+
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
 /**
  * Provides functionality to unpack binary data into a list of scalars
@@ -41,6 +40,7 @@ public class Unpack {
         handlers.put('H', new HexStringFormatHandler('H'));
         handlers.put('W', new WFormatHandler());
         handlers.put('x', new XFormatHandler());
+        handlers.put('X', new XBackwardHandler());  // Add this line
         handlers.put('w', new WBERFormatHandler());
         handlers.put('p', new PointerFormatHandler());
         handlers.put('u', new UuencodeFormatHandler());
@@ -48,13 +48,14 @@ public class Unpack {
         // Note: U handler is created dynamically based on startsWithU
     }
 
-    public static RuntimeList unpack(RuntimeList args) {
-        if (args.elements.size() < 2) {
-            throw new PerlCompilerException("unpack: not enough arguments");
-        }
-
-        RuntimeScalar templateScalar = (RuntimeScalar) args.elements.get(0);
-        RuntimeScalar packedData = args.elements.get(1).scalar();
+    /** unpack(template, data)
+     *
+     * @param args
+     * @return
+     */
+    public static RuntimeList unpack(int ctx, RuntimeBase... args) {
+        RuntimeScalar templateScalar = (RuntimeScalar) args[0];
+        RuntimeScalar packedData = args.length > 1 ? args[1].scalar() : scalarUndef;
 
         String template = templateScalar.toString();
         String dataString = packedData.toString();
@@ -210,13 +211,16 @@ public class Unpack {
                 boolean hasStarAfterSlash = false;
                 if (i + 1 < template.length() && template.charAt(i + 1) == '*') {
                     hasStarAfterSlash = true;
-                    i++; // consume the '*'
+                    i++; // Move to the '*'
                 }
 
                 // Unpack the string with the count from the previous numeric value
                 FormatHandler stringHandler = handlers.get(stringFormat);
-                // Pass slashCount as the count, and hasStarAfterSlash as isStarCount
                 stringHandler.unpack(state, values, slashCount, hasStarAfterSlash);
+
+                // IMPORTANT: Skip past all characters we've processed
+                // The continue statement will skip the normal i++ at the end of the loop
+                i++;  // Move past the last character we processed
                 continue;
             }
 
@@ -251,7 +255,11 @@ public class Unpack {
                     while (j < template.length() && Character.isDigit(template.charAt(j))) {
                         j++;
                     }
-                    count = Integer.parseInt(template.substring(i + 1, j));
+                    String countStr = template.substring(i + 1, j);
+                    count = Integer.parseInt(countStr);
+                    if (format == '@') {
+                        System.err.println("DEBUG: @ count string '" + countStr + "' parsed to " + count);
+                    }
                     i = j - 1;
                 }
             }
@@ -259,6 +267,9 @@ public class Unpack {
                     // Get handler and unpack
                     FormatHandler handler = getHandler(format, startsWithU);
                     if (handler != null) {
+                        if (format == '@') {
+                            System.err.println("DEBUG: Calling @ handler with count=" + count);
+                        }
                         // For 'p' format, check and consume endianness modifiers
                         if (format == 'p' && i + 1 < template.length()) {
                             char nextChar = template.charAt(i + 1);
