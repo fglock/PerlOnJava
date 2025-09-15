@@ -48,7 +48,8 @@ public class Unpack {
         // Note: U handler is created dynamically based on startsWithU
     }
 
-    /** unpack(template, data)
+    /**
+     * unpack(template, data)
      *
      * @param args
      * @return
@@ -77,40 +78,40 @@ public class Unpack {
         // Stack to track mode for parentheses scoping
         Stack<Boolean> modeStack = new Stack<>();
 
-            // Parse template
-            int i = 0;
-            while (i < template.length()) {
-                char format = template.charAt(i);
-                boolean isChecksum = false;
-                int checksumBits = 16; // default
+        // Parse template
+        int i = 0;
+        while (i < template.length()) {
+            char format = template.charAt(i);
+            boolean isChecksum = false;
+            int checksumBits = 16; // default
 
-                // Check for checksum modifier
-                if (format == '%') {
-                    isChecksum = true;
-                    i++;
+            // Check for checksum modifier
+            if (format == '%') {
+                isChecksum = true;
+                i++;
+                if (i >= template.length()) {
+                    throw new PerlCompilerException("unpack: '%' must be followed by a format");
+                }
+
+                // Parse optional bit count
+                if (Character.isDigit(template.charAt(i))) {
+                    int j = i;
+                    while (j < template.length() && Character.isDigit(template.charAt(j))) {
+                        j++;
+                    }
+                    checksumBits = Integer.parseInt(template.substring(i, j));
+                    i = j;
                     if (i >= template.length()) {
                         throw new PerlCompilerException("unpack: '%' must be followed by a format");
                     }
-
-                    // Parse optional bit count
-                    if (Character.isDigit(template.charAt(i))) {
-                        int j = i;
-                        while (j < template.length() && Character.isDigit(template.charAt(j))) {
-                            j++;
-                        }
-                        checksumBits = Integer.parseInt(template.substring(i, j));
-                        i = j;
-                        if (i >= template.length()) {
-                            throw new PerlCompilerException("unpack: '%' must be followed by a format");
-                        }
-                    }
-
-                    // Get the actual format after %
-                    format = template.charAt(i);
                 }
 
-                // Handle parentheses for grouping
-                if (format == '(') {
+                // Get the actual format after %
+                format = template.charAt(i);
+            }
+
+            // Handle parentheses for grouping
+            if (format == '(') {
                 // Find matching closing parenthesis
                 int closePos = findMatchingParen(template, i);
                 if (closePos == -1) {
@@ -193,7 +194,7 @@ public class Unpack {
 
                 // Get the count from the last unpacked value
                 RuntimeBase lastValue = values.get(values.size() - 1);
-                int slashCount = ((RuntimeScalar)lastValue).getInt();
+                int slashCount = ((RuntimeScalar) lastValue).getInt();
                 values.remove(values.size() - 1); // Remove the count value
 
                 // Get the string format that follows '/'
@@ -264,23 +265,23 @@ public class Unpack {
                 }
             }
 
-                    // Get handler and unpack
-                    FormatHandler handler = getHandler(format, startsWithU);
-                    if (handler != null) {
-                        if (format == '@') {
-                            System.err.println("DEBUG: Calling @ handler with count=" + count);
-                        }
-                        // For 'p' format, check and consume endianness modifiers
-                        if (format == 'p' && i + 1 < template.length()) {
-                            char nextChar = template.charAt(i + 1);
-                            if (nextChar == '<' || nextChar == '>') {
-                                i++; // consume the modifier
-                                // Note: For our simple implementation, we ignore endianness
-                                // since we're using hashCode which is already platform-specific
-                            }
-                        }
+            // Get handler and unpack
+            FormatHandler handler = getHandler(format, startsWithU);
+            if (handler != null) {
+                if (format == '@') {
+                    System.err.println("DEBUG: Calling @ handler with count=" + count);
+                }
+                // For 'p' format, check and consume endianness modifiers
+                if (format == 'p' && i + 1 < template.length()) {
+                    char nextChar = template.charAt(i + 1);
+                    if (nextChar == '<' || nextChar == '>') {
+                        i++; // consume the modifier
+                        // Note: For our simple implementation, we ignore endianness
+                        // since we're using hashCode which is already platform-specific
+                    }
+                }
 
-                        if (isChecksum) {
+                if (isChecksum) {
                     // Handle checksum calculation
                     List<RuntimeBase> tempValues = new ArrayList<>();
                     handler.unpack(state, tempValues, count, isStarCount);
@@ -300,7 +301,7 @@ public class Unpack {
                     } else {
                         // For other formats, sum the numeric values
                         for (RuntimeBase value : tempValues) {
-                            checksum += ((RuntimeScalar)value).getInt();
+                            checksum += ((RuntimeScalar) value).getInt();
                         }
                     }
 
@@ -315,7 +316,7 @@ public class Unpack {
                     if (checksumBits == 32 && checksum > Integer.MAX_VALUE) {
                         values.add(new RuntimeScalar(checksum));
                     } else {
-                        values.add(new RuntimeScalar((int)checksum));
+                        values.add(new RuntimeScalar((int) checksum));
                     }
                 } else {
                     handler.unpack(state, values, count, isStarCount);
@@ -326,7 +327,9 @@ public class Unpack {
 
             i++;
         }
-
+        if (ctx == RuntimeContextType.SCALAR && !out.isEmpty()) {
+            return out.elements.getFirst().getList();
+        }
         return out;
     }
 
@@ -420,7 +423,7 @@ public class Unpack {
 
                     // Get the count from the last unpacked value
                     RuntimeBase lastValue = values.get(values.size() - 1);
-                    int slashCount = ((RuntimeScalar)lastValue).getInt();
+                    int slashCount = ((RuntimeScalar) lastValue).getInt();
                     values.remove(values.size() - 1); // Remove the count value
 
                     // Get the string format that follows '/'
