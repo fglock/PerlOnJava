@@ -118,23 +118,31 @@ public class Unpack {
                     throw new PerlCompilerException("unpack: unmatched parenthesis in template");
                 }
 
-                // Check for endianness modifier after the group
-                char groupEndian = ' '; // default: no specific endianness
-                int nextPos = closePos + 1;
-                if (nextPos < template.length()) {
-                    char nextChar = template.charAt(nextPos);
-                    if (nextChar == '<' || nextChar == '>') {
-                        groupEndian = nextChar;
-                        nextPos++;
-                    }
-                }
-
                 // Extract group content
                 String groupContent = template.substring(i + 1, closePos);
 
+                // Check for endianness modifier after the group
+                char groupEndian = ' '; // default: no specific endianness
+                int nextPos = closePos + 1;
+
+                // Parse modifiers after ')'
+                while (nextPos < template.length()) {
+                    char nextChar = template.charAt(nextPos);
+                    if (nextChar == '<' || nextChar == '>') {
+                        if (groupEndian == ' ') {
+                            groupEndian = nextChar;
+                        }
+                        nextPos++;
+                    } else if (nextChar == '!') {
+                        nextPos++;
+                    } else {
+                        break;
+                    }
+                }
+
                 // Check for conflicting endianness within the group
                 if (groupEndian != ' ' && hasConflictingEndianness(groupContent, groupEndian)) {
-                    throw new PerlCompilerException("Can't use both '<' and '>' in a group with different byte-order in unpack");
+                    throw new PerlCompilerException("Can't use '" + groupEndian + "' in a group with different byte-order in unpack");
                 }
 
                 // Check for repeat count after closing paren
