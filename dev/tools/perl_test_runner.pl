@@ -232,7 +232,7 @@ sub run_single_test {
         ? "warn" : "";
     local $ENV{JPERL_OPTS} = $test_file =~ m{ re/pat.t }x
         ? "-Xss256m" : "";
-    local $ENV{JPERL_LARGECODE} = $test_file =~ m{ re/pat.t }x
+    local $ENV{JPERL_LARGECODE} = $test_file =~ m{ re/pat.t | re/pat_advanced.t | op/signatures.t }x
         ? "refactor" : "";
 
     # Save current directory
