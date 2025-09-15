@@ -42,6 +42,7 @@ public class Unpack {
         handlers.put('W', new WFormatHandler());
         handlers.put('x', new XFormatHandler());
         handlers.put('w', new WBERFormatHandler());
+        handlers.put('p', new PointerFormatHandler());  // Add this line here
         // Note: U handler is created dynamically based on startsWithU
     }
 
@@ -164,6 +165,13 @@ public class Unpack {
                 continue;
             }
 
+            // Handle endianness modifiers that might appear after certain formats
+            if ((format == '<' || format == '>') && i > 0) {
+                // This is likely a modifier for the previous format, skip it
+                i++;
+                continue;
+            }
+
             // Check for explicit mode modifiers
             if (format == 'C' && i + 1 < template.length() && template.charAt(i + 1) == '0') {
                 state.switchToCharacterMode();
@@ -195,10 +203,20 @@ public class Unpack {
                 }
             }
 
-            // Get handler and unpack
-            FormatHandler handler = getHandler(format, startsWithU);
-            if (handler != null) {
-                if (isChecksum) {
+                    // Get handler and unpack
+                    FormatHandler handler = getHandler(format, startsWithU);
+                    if (handler != null) {
+                        // For 'p' format, check and consume endianness modifiers
+                        if (format == 'p' && i + 1 < template.length()) {
+                            char nextChar = template.charAt(i + 1);
+                            if (nextChar == '<' || nextChar == '>') {
+                                i++; // consume the modifier
+                                // Note: For our simple implementation, we ignore endianness
+                                // since we're using hashCode which is already platform-specific
+                            }
+                        }
+
+                        if (isChecksum) {
                     // Handle checksum calculation
                     List<RuntimeBase> tempValues = new ArrayList<>();
                     handler.unpack(state, tempValues, count, isStarCount);
