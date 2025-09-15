@@ -169,10 +169,34 @@ public class Pack {
                 continue;
             }
 
-            // Check if this is a numeric format followed by '/' - skip it entirely
-            if (isNumericFormat(format) && i + 1 < template.length() && template.charAt(i + 1) == '/') {
-                // System.err.println("DEBUG: skipping format '" + format + "' because it's followed by '/', valueIndex=" + valueIndex);
-                continue;
+            // Check if this is a numeric/Z format followed by '/' - skip it entirely
+            if ((isNumericFormat(format) || format == 'Z') && i + 1 < template.length()) {
+                // Look ahead, skipping modifiers and counts
+                int lookAhead = i + 1;
+
+                // Skip modifiers
+                while (lookAhead < template.length() &&
+                       (template.charAt(lookAhead) == '<' ||
+                        template.charAt(lookAhead) == '>' ||
+                        template.charAt(lookAhead) == '!')) {
+                    lookAhead++;
+                }
+
+                // Skip count or *
+                if (lookAhead < template.length() && template.charAt(lookAhead) == '*') {
+                    lookAhead++;
+                } else if (lookAhead < template.length() && Character.isDigit(template.charAt(lookAhead))) {
+                    while (lookAhead < template.length() && Character.isDigit(template.charAt(lookAhead))) {
+                        lookAhead++;
+                    }
+                }
+
+                // Check if followed by '/'
+                if (lookAhead < template.length() && template.charAt(lookAhead) == '/') {
+                    // Skip this entire format sequence - it's used for length encoding
+                    i = lookAhead - 1; // -1 because loop will increment
+                    continue;
+                }
             }
 
             // Parse modifiers BEFORE parsing counts
@@ -257,22 +281,60 @@ public class Pack {
                 }
             } else if (format == '/') {
                 // System.err.println("DEBUG: entering '/' handler, valueIndex=" + valueIndex);
-                // '/' must follow a numeric type
+                // '/' must follow a numeric type or Z
                 if (i == 0) {
                     throw new PerlCompilerException("Invalid type '/'");
                 }
 
-                // Find the numeric format that precedes '/'
-                // Need to look back, skipping any modifiers
+                // Find the format that precedes '/'
+                // Need to look back, skipping any modifiers and repeat counts
                 int numericPos = i - 1;
+
+                // Skip back over repeat counts and '*'
+                if (numericPos > 0 && (template.charAt(numericPos) == '*' || Character.isDigit(template.charAt(numericPos)))) {
+                    if (template.charAt(numericPos) == '*') {
+                        // Skip the '*' to get to the format
+                        numericPos--;
+                    } else {
+                        // Skip digits
+                        while (numericPos > 0 && Character.isDigit(template.charAt(numericPos))) {
+                            numericPos--;
+                        }
+                        // Now numericPos points to the format character
+                    }
+                }
+
+                // Skip back over any modifiers
                 while (numericPos > 0 && (template.charAt(numericPos) == '<' ||
                                          template.charAt(numericPos) == '>' ||
                                          template.charAt(numericPos) == '!')) {
                     numericPos--;
                 }
 
-                char lengthFormat = template.charAt(numericPos);
-                if (!isNumericFormat(lengthFormat)) {
+                // If we hit a ')', we need to look at what's inside the group
+                char lengthFormat;
+                if (numericPos >= 0 && template.charAt(numericPos) == ')') {
+                    // Find the matching '(' and get the last numeric format in the group
+                    int openPos = numericPos - 1;
+                    int depth = 1;
+                    while (openPos >= 0 && depth > 0) {
+                        if (template.charAt(openPos) == ')') depth++;
+                        else if (template.charAt(openPos) == '(') depth--;
+                        openPos--;
+                    }
+                    openPos++; // Move back to the '('
+
+                    // Find the last numeric format in the group
+                    lengthFormat = findLastNumericFormat(template.substring(openPos + 1, numericPos));
+                    if (lengthFormat == '\0') {
+                        throw new PerlCompilerException("'/' must follow a numeric type");
+                    }
+                } else if (numericPos >= 0) {
+                    lengthFormat = template.charAt(numericPos);
+                    if (!isNumericFormat(lengthFormat) && lengthFormat != 'Z') {
+                        throw new PerlCompilerException("'/' must follow a numeric type");
+                    }
+                } else {
                     throw new PerlCompilerException("'/' must follow a numeric type");
                 }
 
@@ -355,8 +417,15 @@ public class Pack {
                         output.write(lengthToWrite & 0xFF);
                         break;
                     case 'Z':
-                        output.write(lengthToWrite & 0xFF);
-                        break;
+                                            // For Z*/, encode length as null-terminated decimal string
+                                            String lengthStr = String.valueOf(lengthToWrite);
+                                            try {
+                                                output.write(lengthStr.getBytes(StandardCharsets.US_ASCII));
+                                                output.write(0); // null terminator
+                                            } catch (IOException e) {
+                                                throw new RuntimeException(e);
+                                            }
+                                            break;
                     default:
                         throw new PerlCompilerException("Invalid length type '" + lengthFormat + "' for '/'");
                 }
@@ -660,7 +729,7 @@ public class Pack {
                         char modifier = groupContent.charAt(checkPos);
                         if (modifier == '<' || modifier == '>') {
                             if ((modifier == '<' && groupEndian == '>') ||
-                                (modifier == '>' && groupEndian == '<')) {
+                                    (modifier == '>' && groupEndian == '<')) {
                                 return true;
                             }
                             break;
@@ -710,9 +779,9 @@ public class Pack {
                     i = closePos;
                     // Skip modifiers
                     while (i + 1 < template.length() &&
-                           (template.charAt(i + 1) == '<' ||
-                            template.charAt(i + 1) == '>' ||
-                            template.charAt(i + 1) == '!')) {
+                            (template.charAt(i + 1) == '<' ||
+                                    template.charAt(i + 1) == '>' ||
+                                    template.charAt(i + 1) == '!')) {
                         i++;
                     }
 
@@ -744,9 +813,9 @@ public class Pack {
 
             // Skip modifiers
             while (i + 1 < template.length() &&
-                   (template.charAt(i + 1) == '<' ||
-                    template.charAt(i + 1) == '>' ||
-                    template.charAt(i + 1) == '!')) {
+                    (template.charAt(i + 1) == '<' ||
+                            template.charAt(i + 1) == '>' ||
+                            template.charAt(i + 1) == '!')) {
                 i++;
             }
 
@@ -776,5 +845,27 @@ public class Pack {
             }
         }
         return count;
+    }
+
+    private static char findLastNumericFormat(String template) {
+        char lastNumeric = '\0';
+        for (int i = 0; i < template.length(); i++) {
+            char c = template.charAt(i);
+            if (isNumericFormat(c) || c == 'Z') {
+                lastNumeric = c;
+            } else if (c == '(') {
+                // Skip the group
+                int closePos = findMatchingParen(template, i);
+                if (closePos != -1) {
+                    // Check inside the group
+                    char groupNumeric = findLastNumericFormat(template.substring(i + 1, closePos));
+                    if (groupNumeric != '\0') {
+                        lastNumeric = groupNumeric;
+                    }
+                    i = closePos;
+                }
+            }
+        }
+        return lastNumeric;
     }
 }
