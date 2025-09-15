@@ -160,4 +160,36 @@ public class UnpackState {
         }
         return buffer.remaining();
     }
+
+    /**
+     * Sets the absolute position in the data.
+     * @param newPosition The new position (0-based)
+     */
+    public void setPosition(int newPosition) {
+        System.err.println("DEBUG: setPosition called with " + newPosition + ", characterMode=" + characterMode);
+        if (characterMode) {
+            // In character mode, position is in code points
+            codePointIndex = Math.min(newPosition, codePoints.length);
+            System.err.println("DEBUG: Set codePointIndex to " + codePointIndex);
+        } else {
+            // In byte mode, we need to recreate the buffer at the new position
+            if (originalBytes != null && originalBytes.length > 0) {
+                int bytePos = Math.min(newPosition, originalBytes.length);
+                buffer = ByteBuffer.wrap(originalBytes, bytePos, originalBytes.length - bytePos);
+                buffer.order(ByteOrder.LITTLE_ENDIAN);
+                System.err.println("DEBUG: Reset buffer to position " + bytePos);
+            }
+        }
+    }
+
+    /**
+     * Gets the total length of the data.
+     */
+    public int getTotalLength() {
+        if (characterMode) {
+            return codePoints.length;
+        } else {
+            return originalBytes.length;
+        }
+    }
 }
