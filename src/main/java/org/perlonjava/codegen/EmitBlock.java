@@ -4,6 +4,7 @@ import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.perlonjava.astnode.*;
 import org.perlonjava.astvisitor.EmitterVisitor;
+import org.perlonjava.runtime.GlobalVariable;
 import org.perlonjava.runtime.RuntimeContextType;
 
 import java.util.List;
@@ -25,8 +26,10 @@ public class EmitBlock {
         // Check if we can emit this as a subroutine, to avoid "Method too large" error.
         // TODO: Check for possible goto's, then don't move the block to subroutine
         if (node.elements.size() > LARGE_BLOCK
-                 && !emitterVisitor.ctx.javaClassInfo.gotoLabelStack.isEmpty()
-                 && !node.getBooleanAnnotation("blockIsSubroutine")) {
+                && !emitterVisitor.ctx.javaClassInfo.gotoLabelStack.isEmpty()
+                && !node.getBooleanAnnotation("blockIsSubroutine")
+                && GlobalVariable.getGlobalHash("main::ENV").get("JPERL_LARGECODE").toString().equals("refactor")
+        ) {
             // Create sub {...}->()
             int index = node.tokenIndex;
             BinaryOperatorNode subr = new BinaryOperatorNode(
