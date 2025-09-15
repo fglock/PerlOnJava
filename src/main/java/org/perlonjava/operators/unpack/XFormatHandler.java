@@ -2,24 +2,29 @@ package org.perlonjava.operators.unpack;
 
 import org.perlonjava.operators.UnpackState;
 import org.perlonjava.runtime.RuntimeBase;
-import org.perlonjava.runtime.RuntimeScalar;
 
 import java.nio.ByteBuffer;
 import java.util.List;
 
 /**
- * Handles 'x' format - byte zero.
+ * Handles 'x' format - skip bytes, don't add any values to output.
  */
 public class XFormatHandler implements FormatHandler {
     @Override
     public void unpack(UnpackState state, List<RuntimeBase> output, int count, boolean isStarCount) {
-        for (int i = 0; i < count; i++) {
-            if (state.isCharacterMode()) {
-                output.add(new RuntimeScalar("\0"));
-            } else {
-                output.add(new RuntimeScalar("\0"));
+        // x format should skip bytes but not add any values to the result
+        if (state.isCharacterMode()) {
+            // In character mode, skip code points
+            for (int i = 0; i < count && state.hasMoreCodePoints(); i++) {
+                state.nextCodePoint();
             }
+        } else {
+            // In byte mode, skip bytes
+            ByteBuffer buffer = state.getBuffer();
+            int toSkip = Math.min(count, buffer.remaining());
+            buffer.position(buffer.position() + toSkip);
         }
+        // Don't add anything to output - x just skips
     }
 
     @Override
