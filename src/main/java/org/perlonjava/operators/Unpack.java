@@ -6,10 +6,7 @@ import org.perlonjava.runtime.RuntimeBase;
 import org.perlonjava.runtime.RuntimeList;
 import org.perlonjava.runtime.RuntimeScalar;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Stack;
+import java.util.*;
 
 /**
  * Provides functionality to unpack binary data into a list of scalars
@@ -26,8 +23,8 @@ public class Unpack {
         handlers.put('s', new NumericFormatHandler.ShortHandler(true));
         handlers.put('L', new NumericFormatHandler.LongHandler(false));
         handlers.put('l', new NumericFormatHandler.LongHandler(true));
-        handlers.put('i', new NumericFormatHandler.LongHandler(true));
-        handlers.put('I', new NumericFormatHandler.LongHandler(true));
+        handlers.put('i', new NumericFormatHandler.LongHandler(true));   // signed int
+        handlers.put('I', new NumericFormatHandler.LongHandler(false));  // unsigned int
         handlers.put('N', new NumericFormatHandler.NetworkLongHandler());
         handlers.put('n', new NumericFormatHandler.NetworkShortHandler());
         handlers.put('V', new NumericFormatHandler.VAXLongHandler());
@@ -44,7 +41,7 @@ public class Unpack {
         handlers.put('H', new HexStringFormatHandler('H'));
         handlers.put('W', new WFormatHandler());
         handlers.put('x', new XFormatHandler());
-        handlers.put('%', new ChecksumFormatHandler());
+        handlers.put('w', new WBERFormatHandler());
         // Note: U handler is created dynamically based on startsWithU
     }
 
@@ -76,13 +73,40 @@ public class Unpack {
         // Stack to track mode for parentheses scoping
         Stack<Boolean> modeStack = new Stack<>();
 
-        // Parse template
-        int i = 0;
-        while (i < template.length()) {
-            char format = template.charAt(i);
+            // Parse template
+            int i = 0;
+            while (i < template.length()) {
+                char format = template.charAt(i);
+                boolean isChecksum = false;
+                int checksumBits = 16; // default
 
-            // Handle parentheses for grouping
-            if (format == '(') {
+                // Check for checksum modifier
+                if (format == '%') {
+                    isChecksum = true;
+                    i++;
+                    if (i >= template.length()) {
+                        throw new PerlCompilerException("unpack: '%' must be followed by a format");
+                    }
+
+                    // Parse optional bit count
+                    if (Character.isDigit(template.charAt(i))) {
+                        int j = i;
+                        while (j < template.length() && Character.isDigit(template.charAt(j))) {
+                            j++;
+                        }
+                        checksumBits = Integer.parseInt(template.substring(i, j));
+                        i = j;
+                        if (i >= template.length()) {
+                            throw new PerlCompilerException("unpack: '%' must be followed by a format");
+                        }
+                    }
+
+                    // Get the actual format after %
+                    format = template.charAt(i);
+                }
+
+                // Handle parentheses for grouping
+                if (format == '(') {
                 // Find matching closing parenthesis
                 int closePos = findMatchingParen(template, i);
                 if (closePos == -1) {
@@ -174,7 +198,41 @@ public class Unpack {
             // Get handler and unpack
             FormatHandler handler = getHandler(format, startsWithU);
             if (handler != null) {
-                handler.unpack(state, values, count, isStarCount);
+                if (isChecksum) {
+                    // Handle checksum calculation
+                    List<RuntimeBase> tempValues = new ArrayList<>();
+                    handler.unpack(state, tempValues, count, isStarCount);
+
+                    // Calculate checksum based on format
+                    long checksum = 0;
+                    if (format == 'b' || format == 'B') {
+                        // For binary formats, count 1 bits
+                        for (RuntimeBase value : tempValues) {
+                            String binary = value.toString();
+                            for (int j = 0; j < binary.length(); j++) {
+                                if (binary.charAt(j) == '1') {
+                                    checksum++;
+                                }
+                            }
+                        }
+                    } else {
+                        // For other formats, sum the numeric values
+                        for (RuntimeBase value : tempValues) {
+                            checksum += ((RuntimeScalar)value).getInt();
+                        }
+                    }
+
+                    // Apply bit mask based on checksumBits
+                    if (checksumBits == 16) {
+                        checksum &= 0xFFFF;
+                    } else if (checksumBits == 32) {
+                        checksum &= 0xFFFFFFFFL;
+                    }
+
+                    values.add(new RuntimeScalar((int)checksum));
+                } else {
+                    handler.unpack(state, values, count, isStarCount);
+                }
             } else {
                 throw new PerlCompilerException("unpack: unsupported format character: " + format);
             }
@@ -207,6 +265,7 @@ public class Unpack {
                 return state.isCharacterMode() ? state.remainingCodePoints() : state.remainingBytes();
             case 'b':
             case 'B':
+            case '%':
                 return state.isCharacterMode() ? state.remainingCodePoints() * 8 : state.remainingBytes() * 8;
             case 'h':
             case 'H':
