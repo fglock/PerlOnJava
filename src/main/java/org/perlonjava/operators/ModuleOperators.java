@@ -32,100 +32,107 @@ public class ModuleOperators {
         GlobalVariable.setGlobalVariable("main::@", "");
         GlobalVariable.setGlobalVariable("main::!", "");
 
-        // `do` file
         String fileName = runtimeScalar.toString();
         Path fullName = null;
         String code = null;
         String actualFileName = null;
 
-        // Check if the filename is an absolute path or starts with ./ or ../
-        Path filePath = Paths.get(fileName);
-        if (filePath.isAbsolute() || fileName.startsWith("./") || fileName.startsWith("../")) {
-            // For absolute or explicit relative paths, resolve using RuntimeIO.getPath
-            filePath = RuntimeIO.resolvePath(fileName);
-            if (Files.exists(filePath)) {
-                // Check if it's a directory
-                if (Files.isDirectory(filePath)) {
-                    GlobalVariable.setGlobalVariable("main::!", "Is a directory");
-                    return new RuntimeScalar(); // return undef
-                }
-                fullName = filePath;
-                actualFileName = fullName.toString();
-            }
+        // Check if the argument is a file handle (GLOB or GLOBREFERENCE)
+        if (runtimeScalar.type == RuntimeScalarType.GLOB || runtimeScalar.type == RuntimeScalarType.GLOBREFERENCE) {
+            // `do` filehandle
+            code = Readline.readline(runtimeScalar, RuntimeContextType.LIST).toString();
         } else {
-            // Otherwise, search in INC directories
-            List<RuntimeScalar> inc = GlobalVariable.getGlobalArray("main::INC").elements;
+            // `do` filename
 
-            // Make sure the jar files are in @INC - the Perl test files can remove it
-            boolean seen = false;
-            for (RuntimeBase dir : inc) {
-                if (dir.toString().equals(GlobalContext.JAR_PERLLIB)) {
-                    seen = true;
-                    break;
-                }
-            }
-            if (!seen) {
-                inc.add(new RuntimeScalar(GlobalContext.JAR_PERLLIB));
-            }
-
-            for (RuntimeBase dir : inc) {
-                String dirName = dir.toString();
-                if (dirName.equals(GlobalContext.JAR_PERLLIB)) {
-                    // Try to find in jar at "src/main/perl/lib"
-                    String resourcePath = "/lib/" + fileName;
-                    URL resource = RuntimeScalar.class.getResource(resourcePath);
-                    if (resource != null) {
-                        String path = resource.getPath();
-                        // Remove leading slash if on Windows
-                        if (SystemUtils.osIsWindows() && path.startsWith("/")) {
-                            path = path.substring(1);
-                        }
-                        fullName = Paths.get(path);
-                        actualFileName = fullName.toString();
-
-                        try (InputStream is = resource.openStream();
-                             BufferedReader reader = new BufferedReader(new InputStreamReader(is))) {
-                            StringBuilder content = new StringBuilder();
-                            String line = null;
-                            while ((line = reader.readLine()) != null) {
-                                content.append(line).append("\n");
-                            }
-                            code = content.toString();
-                            break;
-                        } catch (IOException e1) {
-                            // Continue to next directory
-                        }
+            // Check if the filename is an absolute path or starts with ./ or ../
+            Path filePath = Paths.get(fileName);
+            if (filePath.isAbsolute() || fileName.startsWith("./") || fileName.startsWith("../")) {
+                // For absolute or explicit relative paths, resolve using RuntimeIO.getPath
+                filePath = RuntimeIO.resolvePath(fileName);
+                if (Files.exists(filePath)) {
+                    // Check if it's a directory
+                    if (Files.isDirectory(filePath)) {
+                        GlobalVariable.setGlobalVariable("main::!", "Is a directory");
+                        return new RuntimeScalar(); // return undef
                     }
-                } else {
-                    // Use RuntimeIO.getPath to properly resolve the directory path first
-                    Path dirPath = RuntimeIO.resolvePath(dirName);
-                    if (fileName.endsWith(".pm")) {
-                        // Try to find a .pmc file
-                        Path fullPath = dirPath.resolve(fileName + "c");
-                        if (Files.exists(fullPath) && !Files.isDirectory(fullPath)) {
+                    fullName = filePath;
+                    actualFileName = fullName.toString();
+                }
+            } else {
+                // Otherwise, search in INC directories
+                List<RuntimeScalar> inc = GlobalVariable.getGlobalArray("main::INC").elements;
+
+                // Make sure the jar files are in @INC - the Perl test files can remove it
+                boolean seen = false;
+                for (RuntimeBase dir : inc) {
+                    if (dir.toString().equals(GlobalContext.JAR_PERLLIB)) {
+                        seen = true;
+                        break;
+                    }
+                }
+                if (!seen) {
+                    inc.add(new RuntimeScalar(GlobalContext.JAR_PERLLIB));
+                }
+
+                for (RuntimeBase dir : inc) {
+                    String dirName = dir.toString();
+                    if (dirName.equals(GlobalContext.JAR_PERLLIB)) {
+                        // Try to find in jar at "src/main/perl/lib"
+                        String resourcePath = "/lib/" + fileName;
+                        URL resource = RuntimeScalar.class.getResource(resourcePath);
+                        if (resource != null) {
+                            String path = resource.getPath();
+                            // Remove leading slash if on Windows
+                            if (SystemUtils.osIsWindows() && path.startsWith("/")) {
+                                path = path.substring(1);
+                            }
+                            fullName = Paths.get(path);
+                            actualFileName = fullName.toString();
+
+                            try (InputStream is = resource.openStream();
+                                 BufferedReader reader = new BufferedReader(new InputStreamReader(is))) {
+                                StringBuilder content = new StringBuilder();
+                                String line = null;
+                                while ((line = reader.readLine()) != null) {
+                                    content.append(line).append("\n");
+                                }
+                                code = content.toString();
+                                break;
+                            } catch (IOException e1) {
+                                // Continue to next directory
+                            }
+                        }
+                    } else {
+                        // Use RuntimeIO.getPath to properly resolve the directory path first
+                        Path dirPath = RuntimeIO.resolvePath(dirName);
+                        if (fileName.endsWith(".pm")) {
+                            // Try to find a .pmc file
+                            Path fullPath = dirPath.resolve(fileName + "c");
+                            if (Files.exists(fullPath) && !Files.isDirectory(fullPath)) {
+                                fullName = fullPath;
+                                actualFileName = fullName.toString();
+                                break;
+                            }
+                        }
+                        Path fullPath = dirPath.resolve(fileName);
+                        if (Files.exists(fullPath)) {
+                            // Check if it's a directory
+                            if (Files.isDirectory(fullPath)) {
+                                // Continue searching in other @INC directories
+                                continue;
+                            }
                             fullName = fullPath;
                             actualFileName = fullName.toString();
                             break;
                         }
                     }
-                    Path fullPath = dirPath.resolve(fileName);
-                    if (Files.exists(fullPath)) {
-                        // Check if it's a directory
-                        if (Files.isDirectory(fullPath)) {
-                            // Continue searching in other @INC directories
-                            continue;
-                        }
-                        fullName = fullPath;
-                        actualFileName = fullName.toString();
-                        break;
-                    }
                 }
             }
-        }
 
-        if (fullName == null) {
-            GlobalVariable.setGlobalVariable("main::!", "No such file or directory");
-            return new RuntimeScalar(); // return undef
+            if (fullName == null) {
+                GlobalVariable.setGlobalVariable("main::!", "No such file or directory");
+                return new RuntimeScalar(); // return undef
+            }
         }
 
         CompilerOptions parsedArgs = new CompilerOptions();
@@ -146,9 +153,9 @@ public class ModuleOperators {
         }
 
         RuntimeList result;
-        FeatureFlags outerFeature = Feature.featureManager;
+        FeatureFlags outerFeature = featureManager;
         try {
-            Feature.featureManager = new FeatureFlags();
+            featureManager = new FeatureFlags();
 
             result = PerlLanguageProvider.executePerlCode(parsedArgs, false);
 
@@ -165,7 +172,7 @@ public class ModuleOperators {
             GlobalVariable.setGlobalVariable("main::@", findInnermostCause(t).getMessage());
             return new RuntimeScalar(); // return undef
         } finally {
-            Feature.featureManager = outerFeature;
+            featureManager = outerFeature;
         }
 
         RuntimeScalar finalResult = result == null ? scalarUndef : result.scalar();
