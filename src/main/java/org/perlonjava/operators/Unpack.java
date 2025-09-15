@@ -20,8 +20,8 @@ public class Unpack {
 
     static {
         // Initialize format handlers
-        handlers.put('c', new CFormatHandler());
-        handlers.put('C', new CFormatHandler());
+        handlers.put('c', new CFormatHandler(true));   // signed char
+        handlers.put('C', new CFormatHandler(false));  // unsigned char
         handlers.put('S', new NumericFormatHandler.ShortHandler(false));
         handlers.put('s', new NumericFormatHandler.ShortHandler(true));
         handlers.put('L', new NumericFormatHandler.LongHandler(false));
@@ -44,6 +44,7 @@ public class Unpack {
         handlers.put('H', new HexStringFormatHandler('H'));
         handlers.put('W', new WFormatHandler());
         handlers.put('x', new XFormatHandler());
+        handlers.put('%', new ChecksumFormatHandler());
         // Note: U handler is created dynamically based on startsWithU
     }
 
