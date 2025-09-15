@@ -6,12 +6,21 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 
 /**
  * Provides functionality to pack a list of scalars into a binary string
  * based on a specified template, similar to Perl's pack function.
  */
 public class Pack {
+    // Temporary storage for pointer simulation
+    private static final Map<Integer, String> pointerMap = new HashMap<>();
+
+    // Add getter for unpack to use
+    public static String getPointerString(int hashCode) {
+        return pointerMap.get(hashCode);
+    }
 
     /**
      * Packs a list of RuntimeScalar objects into a binary string according to the specified template.
@@ -46,6 +55,8 @@ public class Pack {
         for (int i = 0; i < template.length(); i++) {
             char format = template.charAt(i);
 
+            System.err.println("DEBUG: pack processing format '" + format + "' at position " + i);
+
             // Skip spaces
             if (Character.isWhitespace(format)) {
                 continue;
@@ -63,10 +74,36 @@ public class Pack {
                 continue;
             }
 
+            // Parse modifiers BEFORE parsing counts
+            boolean bigEndian = false;
+            boolean littleEndian = false;
+            boolean nativeSize = false;
+
+            // Keep checking for modifiers while we find them
+            while (i + 1 < template.length()) {
+                char modifier = template.charAt(i + 1);
+                if (modifier == '<') {
+                    littleEndian = true;
+                    i++; // consume the '<'
+                    System.err.println("DEBUG: found little-endian modifier");
+                } else if (modifier == '>') {
+                    bigEndian = true;
+                    i++; // consume the '>'
+                    System.err.println("DEBUG: found big-endian modifier");
+                } else if (modifier == '!') {
+                    nativeSize = true;
+                    i++; // consume the '!'
+                    System.err.println("DEBUG: found native-size modifier");
+                } else {
+                    // Not a modifier, stop looking
+                    break;
+                }
+            }
+
             int count = 1;
             boolean hasStar = false;
 
-            // Check for repeat count or '*'
+            // Check for repeat count or '*' AFTER endianness modifier
             if (i + 1 < template.length()) {
                 char nextChar = template.charAt(i + 1);
                 if (Character.isDigit(nextChar)) {
@@ -143,10 +180,20 @@ public class Pack {
                             output.write(intValue & 0xFF);
                             break;
                         case 's':
-                            PackHelper.writeShortLittleEndian(output, value.getInt());
+                            // Signed short - use endianness if specified
+                            if (bigEndian) {
+                                PackHelper.writeShortBigEndian(output, value.getInt());
+                            } else {
+                                PackHelper.writeShortLittleEndian(output, value.getInt());
+                            }
                             break;
                         case 'S':
-                            PackHelper.writeShort(output, value.getInt());
+                            // Unsigned short - use endianness if specified
+                            if (bigEndian) {
+                                PackHelper.writeShortBigEndian(output, value.getInt());
+                            } else {
+                                PackHelper.writeShort(output, value.getInt());
+                            }
                             break;
                         case 'l':
                             PackHelper.writeIntLittleEndian(output, (long) value.getDouble());
@@ -159,17 +206,21 @@ public class Pack {
                             // Native integer (assume 32-bit little-endian)
                             PackHelper.writeIntLittleEndian(output, (long) value.getDouble());
                             break;
-                        case 'N':
-                            PackHelper.writeIntBigEndian(output, (long) value.getDouble());
-                            break;
-                        case 'V':
-                            PackHelper.writeIntLittleEndian(output, (long) value.getDouble());
-                            break;
                         case 'n':
+                            // Network short (always big-endian)
                             PackHelper.writeShortBigEndian(output, value.getInt());
                             break;
+                        case 'N':
+                            // Network long (always big-endian)
+                            PackHelper.writeIntBigEndian(output, (long) value.getDouble());
+                            break;
                         case 'v':
+                            // VAX short (always little-endian)
                             PackHelper.writeShortLittleEndian(output, value.getInt());
+                            break;
+                        case 'V':
+                            // VAX long (always little-endian)
+                            PackHelper.writeIntLittleEndian(output, (long) value.getDouble());
                             break;
                         case 'w':
                             // BER compressed integer
@@ -190,6 +241,24 @@ public class Pack {
                             break;
                         case 'd':
                             PackHelper.writeDouble(output, value.getDouble());
+                            break;
+                        case 'p':
+                            // Pack a pointer - simulate using hashCode
+                            int ptr = 0;
+                            // Check if value is defined (not undef)
+                            if (value.getDefinedBoolean()) {
+                                String str = value.toString();
+                                ptr = str.hashCode();
+                                pointerMap.put(ptr, str);
+                                System.err.println("DEBUG: pack 'p' storing '" + str + "' with hash " + ptr);
+                            }
+
+                            // Use the already-parsed endianness
+                            if (bigEndian) {
+                                PackHelper.writeIntBigEndian(output, ptr);
+                            } else {
+                                PackHelper.writeIntLittleEndian(output, ptr);
+                            }
                             break;
                         default:
                             throw new PerlCompilerException("pack: unsupported format character: " + format);
