@@ -445,20 +445,19 @@ public class Pack {
                     } else if (format == '@') {
                 // @ is used for absolute positioning
                 // @n means null-fill or truncate to position n
-                int targetPosition = count;
                 int currentPosition = output.size();
 
-                if (targetPosition > currentPosition) {
+                if (count > currentPosition) {
                     // Pad with nulls to reach target position
-                    for (int k = currentPosition; k < targetPosition; k++) {
+                    for (int k = currentPosition; k < count; k++) {
                         output.write(0);
                     }
-                } else if (targetPosition < currentPosition) {
+                } else if (count < currentPosition) {
                     // Truncate to target position
-                    byte[] truncated = new byte[targetPosition];
-                    System.arraycopy(output.toByteArray(), 0, truncated, 0, targetPosition);
+                    byte[] truncated = new byte[count];
+                    System.arraycopy(output.toByteArray(), 0, truncated, 0, count);
                     output.reset();
-                    output.write(truncated, 0, targetPosition);
+                    output.write(truncated, 0, count);
                 }
             } else {
                 // Numeric formats
@@ -695,30 +694,12 @@ public class Pack {
     }
 
     private static boolean isNumericFormat(char format) {
-        switch (format) {
-            case 'c':
-            case 'C':
-            case 's':
-            case 'S':
-            case 'l':
-            case 'L':
-            case 'i':
-            case 'I':
-            case 'n':
-            case 'N':
-            case 'v':
-            case 'V':
-            case 'w':
-            case 'W':
-            case 'q':
-            case 'Q':
-            case 'j':
-            case 'J':
-            case 'Z':  // Z can be used as a count
-                return true;
-            default:
-                return false;
-        }
+        return switch (format) {
+            case 'c', 'C', 's', 'S', 'l', 'L', 'i', 'I', 'n', 'N', 'v', 'V', 'w', 'W', 'q', 'Q', 'j', 'J',
+                 'Z' ->  // Z can be used as a count
+                    true;
+            default -> false;
+        };
     }
 
     private static int findMatchingParen(String template, int openPos) {
