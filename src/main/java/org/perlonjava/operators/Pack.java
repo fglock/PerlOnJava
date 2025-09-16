@@ -478,31 +478,6 @@ public class Pack {
                 }
             } else if (format == '@') {
                 // @ is used for absolute positioning
-                // '/' uses the previously packed numeric value as a count for the following string format
-
-                // First, check what follows '/'
-                if (i + 1 >= template.length()) {
-                    throw new PerlCompilerException("Code missing after '/'");
-                }
-
-                i++; // move to next character after '/'
-                char nextChar = template.charAt(i);
-
-                // Check if '/' is followed by a repeat count (which is an error)
-                // This includes '*' or any digit
-                if (nextChar == '*' || Character.isDigit(nextChar)) {
-                    throw new PerlCompilerException("'/' does not take a repeat count");
-                }
-
-                // Check if it's a valid string format
-                if (nextChar != 'a' && nextChar != 'A' && nextChar != 'Z') {
-                    throw new PerlCompilerException("'/' must be followed by a string type");
-                }
-
-                // Now we can continue processing...
-                // (rest of the handler code)
-            } else if (format == '@') {
-                // @ is used for absolute positioning
                 // @n means null-fill or truncate to position n
                 int targetPosition = count;
                 int currentPosition = output.size();
