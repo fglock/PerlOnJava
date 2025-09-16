@@ -154,6 +154,18 @@ public class Unpack {
                         // Repeat until end of data
                         groupRepeatCount = Integer.MAX_VALUE;
                         nextPos++;
+                    } else if (nextChar == '[') {
+                        // Parse repeat count in brackets [n]
+                        int j = nextPos + 1;
+                        while (j < template.length() && Character.isDigit(template.charAt(j))) {
+                            j++;
+                        }
+                        if (j >= template.length() || template.charAt(j) != ']') {
+                            throw new PerlCompilerException("No group ending character ']' found in template");
+                        }
+                        String countStr = template.substring(nextPos + 1, j);
+                        groupRepeatCount = Integer.parseInt(countStr);
+                        nextPos = j + 1; // Move past ']'
                     } else if (Character.isDigit(nextChar)) {
                         // Parse numeric repeat count
                         int j = nextPos;
@@ -274,6 +286,18 @@ public class Unpack {
                     isStarCount = true;
                     i++;
                     count = getRemainingCount(state, format, startsWithU);
+                } else if (nextChar == '[') {
+                    // Parse repeat count in brackets [n]
+                    int j = i + 2;
+                    while (j < template.length() && Character.isDigit(template.charAt(j))) {
+                        j++;
+                    }
+                    if (j >= template.length() || template.charAt(j) != ']') {
+                        throw new PerlCompilerException("No group ending character ']' found in template");
+                    }
+                    String countStr = template.substring(i + 2, j);
+                    count = Integer.parseInt(countStr);
+                    i = j; // Position at ']'
                 } else if (Character.isDigit(nextChar)) {
                     int j = i + 1;
                     while (j < template.length() && Character.isDigit(template.charAt(j))) {
