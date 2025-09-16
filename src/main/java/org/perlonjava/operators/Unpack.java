@@ -82,7 +82,7 @@ public class Unpack {
         int i = 0;
         while (i < template.length()) {
             char format = template.charAt(i);
-            System.err.println("DEBUG: unpack main loop i=" + i + ", format='" + format + "' (code " + (int)format + "), template='" + template + "'");
+            System.err.println("DEBUG: unpack main loop i=" + i + ", format='" + format + "' (code " + (int)format + "), template='" + template + "', remaining='" + template.substring(i) + "'");
             boolean isChecksum = false;
             int checksumBits = 16; // default
 
@@ -328,13 +328,9 @@ public class Unpack {
                     }
                     String countStr = template.substring(i + 1, j);
                     count = Integer.parseInt(countStr);
-                    if (format == '@') {
-                        System.err.println("DEBUG: @ count string '" + countStr + "' parsed to " + count);
-                    }
                     i = j - 1;
                 }
             }
-
             // Get handler and unpack
             FormatHandler handler = getHandler(format, startsWithU);
             if (handler != null) {
@@ -494,12 +490,68 @@ public class Unpack {
                 break;
             }
 
+            // Save position before processing group (for detecting progress with *)
+            int positionBefore;
+            if (state.isCharacterMode()) {
+                positionBefore = state.getCurrentCodePointIndex();
+            } else {
+                positionBefore = state.getTotalLength() - state.remainingBytes();
+            }
+
+            System.err.println("DEBUG: Group iteration " + rep + " starting at position " + positionBefore);
+            int valuesBeforeGroup = values.size();
+
             // Process the group content
             for (int j = 0; j < groupTemplate.length(); j++) {
                 char format = groupTemplate.charAt(j);
 
                 // Skip whitespace
                 if (Character.isWhitespace(format)) {
+                    continue;
+                }
+
+                // Handle nested groups
+                if (format == '(') {
+                    // Find the matching closing parenthesis within the group
+                    int closePos = findMatchingParen(groupTemplate, j);
+                    if (closePos == -1) {
+                        throw new PerlCompilerException("unpack: unmatched parenthesis in template");
+                    }
+
+                    // Extract nested group content
+                    String nestedGroupContent = groupTemplate.substring(j + 1, closePos);
+
+                    // Check for modifiers and repeat count after the nested group
+                    int nestedNextPos = closePos + 1;
+                    int nestedRepeatCount = 1;
+
+                    // Parse modifiers after ')'
+                    while (nestedNextPos < groupTemplate.length()) {
+                        char nextChar = groupTemplate.charAt(nestedNextPos);
+                        if (nextChar == '<' || nextChar == '>' || nextChar == '!') {
+                            nestedNextPos++;
+                        } else if (nextChar == '*') {
+                            nestedRepeatCount = Integer.MAX_VALUE;
+                            nestedNextPos++;
+                            break;
+                        } else if (Character.isDigit(nextChar)) {
+                            int endPos = nestedNextPos;
+                            while (endPos < groupTemplate.length() && Character.isDigit(groupTemplate.charAt(endPos))) {
+                                endPos++;
+                            }
+                            nestedRepeatCount = Integer.parseInt(groupTemplate.substring(nestedNextPos, endPos));
+                            nestedNextPos = endPos;
+                            break;
+                        } else {
+                            break;
+                        }
+                    }
+
+                    // Process the nested group with its repeat count
+                    processGroup(nestedGroupContent, state, values, nestedRepeatCount, startsWithU, modeStack);
+
+                    // Move past the nested group and its modifiers/count
+                    j = nestedNextPos - 1; // -1 because loop will increment
                     continue;
                 }
 
@@ -511,6 +563,36 @@ public class Unpack {
                 } else if (format == 'U' && j + 1 < groupTemplate.length() && groupTemplate.charAt(j + 1) == '0') {
                     state.switchToByteMode();
                     j++; // Skip the '0'
+                    continue;
+                }
+
+                // Handle @ format
+                if (format == '@') {
+                    System.err.println("DEBUG: Found @ in group at position " + j);
+                    // Parse count for @
+                    int atCount = 0;
+                    boolean atHasStar = false;
+
+                    if (j + 1 < groupTemplate.length()) {
+                        char nextChar = groupTemplate.charAt(j + 1);
+                        if (nextChar == '*') {
+                            atHasStar = true;
+                            j++;
+                        } else if (Character.isDigit(nextChar)) {
+                            int k = j + 1;
+                            while (k < groupTemplate.length() && Character.isDigit(groupTemplate.charAt(k))) {
+                                k++;
+                            }
+                            atCount = Integer.parseInt(groupTemplate.substring(j + 1, k));
+                            j = k - 1;
+                        }
+                    }
+
+                    // Get handler and unpack
+                    FormatHandler handler = getHandler('@', startsWithU);
+                    if (handler != null) {
+                        handler.unpack(state, values, atCount, atHasStar);
+                    }
                     continue;
                 }
 
@@ -580,6 +662,18 @@ public class Unpack {
                         isStarCount = true;
                         j++;
                         count = getRemainingCount(state, format, startsWithU);
+                    } else if (nextChar == '[') {
+                        // Parse repeat count in brackets [n]
+                        int k = j + 2;
+                        while (k < groupTemplate.length() && Character.isDigit(groupTemplate.charAt(k))) {
+                            k++;
+                        }
+                        if (k >= groupTemplate.length() || groupTemplate.charAt(k) != ']') {
+                            throw new PerlCompilerException("No group ending character ']' found in template");
+                        }
+                        String countStr = groupTemplate.substring(j + 2, k);
+                        count = Integer.parseInt(countStr);
+                        j = k; // Position at ']'
                     } else if (Character.isDigit(nextChar)) {
                         int k = j + 1;
                         while (k < groupTemplate.length() && Character.isDigit(groupTemplate.charAt(k))) {
@@ -596,6 +690,39 @@ public class Unpack {
                     handler.unpack(state, values, count, isStarCount);
                 } else {
                     throw new PerlCompilerException("unpack: unsupported format character: " + format);
+                }
+            }
+
+            // DEBUG: Show what values were extracted in this iteration
+            System.err.println("DEBUG: Group iteration " + rep + " complete, extracted " +
+                              (values.size() - valuesBeforeGroup) + " values");
+            if (values.size() > valuesBeforeGroup) {
+                List<String> extracted = new ArrayList<>();
+                for (int idx = valuesBeforeGroup; idx < values.size(); idx++) {
+                    extracted.add(values.get(idx).toString());
+                }
+                System.err.println("DEBUG: Values: " + extracted);
+            }
+
+            // Check if we made progress (for * repeat count)
+            if (repeatCount == Integer.MAX_VALUE) {
+                int positionAfter;
+                if (state.isCharacterMode()) {
+                    positionAfter = state.getCurrentCodePointIndex();
+                } else {
+                    positionAfter = state.getTotalLength() - state.remainingBytes();
+                }
+
+                // If we've consumed all data, stop
+                if (state.remainingBytes() == 0 && positionAfter >= state.getTotalLength()) {
+                    System.err.println("DEBUG: All data consumed, stopping group repetition");
+                    break;
+                }
+
+                // If no progress was made, stop
+                if (positionAfter == positionBefore) {
+                    System.err.println("DEBUG: No progress made in group with * repeat, stopping");
+                    break;
                 }
             }
         }
