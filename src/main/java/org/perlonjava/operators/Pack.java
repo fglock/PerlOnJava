@@ -318,8 +318,13 @@ public class Pack {
                 // Need to look back, skipping any modifiers and repeat counts
                 int numericPos = i - 1;
 
+                // Skip back over whitespace FIRST
+                while (numericPos >= 0 && Character.isWhitespace(template.charAt(numericPos))) {
+                    numericPos--;
+                }
+
                 // Skip back over repeat counts and '*'
-                if (numericPos > 0 && (template.charAt(numericPos) == '*' || Character.isDigit(template.charAt(numericPos)))) {
+                if (numericPos >= 0 && (template.charAt(numericPos) == '*' || Character.isDigit(template.charAt(numericPos)))) {
                     if (template.charAt(numericPos) == '*') {
                         // Skip the '*' to get to the format
                         numericPos--;
