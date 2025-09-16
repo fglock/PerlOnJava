@@ -1,6 +1,7 @@
 package org.perlonjava.operators;
 
 import org.perlonjava.runtime.*;
+import org.perlonjava.operators.pack.*;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -8,7 +9,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
-
 /**
  * Provides functionality to pack a list of scalars into a binary string
  * based on a specified template, similar to Perl's pack function.
