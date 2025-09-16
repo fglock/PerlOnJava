@@ -56,11 +56,7 @@ public class Pack {
 
         // Track if 'U' was used in normal mode (not byte mode)
         boolean hasUnicodeInNormalMode = false;
-
-        // Stack to track byte order for nested groups
-        java.util.Stack<Character> groupEndianStack = new java.util.Stack<>();
-        groupEndianStack.push(' '); // Default: no specific endianness
-
+        
         for (int i = 0; i < template.length(); i++) {
             char format = template.charAt(i);
             System.err.println("DEBUG: main loop i=" + i + ", format='" + format + "' (code " + (int)format + ")");
@@ -902,25 +898,4 @@ public class Pack {
         return count;
     }
 
-    private static char findLastNumericFormat(String template) {
-        char lastNumeric = '\0';
-        for (int i = 0; i < template.length(); i++) {
-            char c = template.charAt(i);
-            if (isNumericFormat(c) || c == 'Z') {
-                lastNumeric = c;
-            } else if (c == '(') {
-                // Skip the group
-                int closePos = findMatchingParen(template, i);
-                if (closePos != -1) {
-                    // Check inside the group
-                    char groupNumeric = findLastNumericFormat(template.substring(i + 1, closePos));
-                    if (groupNumeric != '\0') {
-                        lastNumeric = groupNumeric;
-                    }
-                    i = closePos;
-                }
-            }
-        }
-        return lastNumeric;
-    }
 }

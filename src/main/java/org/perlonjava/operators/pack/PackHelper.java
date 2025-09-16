@@ -113,28 +113,10 @@ public class PackHelper {
      * Check if the format is an integer format that should reject Inf/NaN values
      */
     public static boolean isIntegerFormat(char format) {
-        switch (format) {
-            case 'c':
-            case 'C':
-            case 's':
-            case 'S':
-            case 'l':
-            case 'L':
-            case 'i':
-            case 'I':
-            case 'n':
-            case 'N':
-            case 'v':
-            case 'V':
-            case 'j':
-            case 'J':
-            case 'w':
-            case 'W':
-            case 'U':
-                return true;
-            default:
-                return false;
-        }
+        return switch (format) {
+            case 'c', 'C', 's', 'S', 'l', 'L', 'i', 'I', 'n', 'N', 'v', 'V', 'j', 'J', 'w', 'W', 'U' -> true;
+            default -> false;
+        };
     }
 
     /**
@@ -153,27 +135,6 @@ public class PackHelper {
             // Write low-order 7 bits with continuation bit
             output.write((int) ((value & 0x7F) | 0x80));
         }
-    }
-
-    /**
-     * Validates the '/' format in pack/unpack templates.
-     */
-    public static char validateSlashFormat(String template, int position) {
-        if (position + 1 >= template.length()) {
-            throw new PerlCompilerException("Code missing after '/'");
-        }
-
-        char afterSlash = template.charAt(position + 1);
-
-        if (afterSlash == '*' || Character.isDigit(afterSlash)) {
-            throw new PerlCompilerException("'/' does not take a repeat count");
-        }
-
-        if (afterSlash != 'a' && afterSlash != 'A' && afterSlash != 'Z') {
-            throw new PerlCompilerException("'/' must be followed by a string type");
-        }
-
-        return afterSlash;
     }
 
     /**
@@ -328,13 +289,6 @@ public class PackHelper {
                 output.write(0);
             }
         }
-    }
-
-    /**
-     * Overloaded writeString for backward compatibility
-     */
-    private static void writeString(ByteArrayOutputStream output, String str, int count, char format) {
-        writeString(output, str, count, format, false);
     }
 
     /**
