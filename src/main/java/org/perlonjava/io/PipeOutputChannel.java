@@ -3,14 +3,8 @@ package org.perlonjava.io;
 import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.runtime.RuntimeScalarCache;
 
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
+import java.io.*;
 import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -51,25 +45,39 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
  */
 public class PipeOutputChannel implements IOHandle {
 
-    /** Pattern to detect shell metacharacters */
+    /**
+     * Pattern to detect shell metacharacters
+     */
     private static final Pattern SHELL_METACHARACTERS = Pattern.compile("[*?\\[\\]{}()<>|&;`'\"\\\\$\\s]");
 
-    /** The external process */
+    /**
+     * The external process
+     */
     private Process process;
 
-    /** Writer for the process stdin */
+    /**
+     * Writer for the process stdin
+     */
     private BufferedWriter writer;
 
-    /** Reader for the process stderr (for error handling) */
+    /**
+     * Reader for the process stderr (for error handling)
+     */
     private BufferedReader errorReader;
 
-    /** Reader for the process stdout (for debugging/monitoring) */
+    /**
+     * Reader for the process stdout (for debugging/monitoring)
+     */
     private BufferedReader outputReader;
 
-    /** Tracks whether the pipe has been closed */
+    /**
+     * Tracks whether the pipe has been closed
+     */
     private boolean isClosed;
 
-    /** The exit code of the process (-1 if not yet terminated) */
+    /**
+     * The exit code of the process (-1 if not yet terminated)
+     */
     private int exitCode = 0;
 
     /**
@@ -213,7 +221,7 @@ public class PipeOutputChannel implements IOHandle {
      * Read operation is not supported for output pipes.
      *
      * @param maxBytes the maximum number of bytes to read (ignored)
-     * @param charset the character encoding (ignored)
+     * @param charset  the character encoding (ignored)
      * @return RuntimeScalar with error
      */
     @Override
@@ -281,7 +289,7 @@ public class PipeOutputChannel implements IOHandle {
     /**
      * Seek operation is not supported for pipes.
      *
-     * @param pos the position (ignored)
+     * @param pos    the position (ignored)
      * @param whence the whence parameter (ignored)
      * @return RuntimeScalar with false
      */

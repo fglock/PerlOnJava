@@ -298,14 +298,14 @@ public class NextMethod {
     }
 
     static RuntimeScalar superMethod(RuntimeScalar currentSub, String methodName) {
-       RuntimeScalar method;
-       String packageName = ((RuntimeCode) currentSub.value).packageName;
-       method = InheritanceResolver.findMethodInHierarchy(
-               methodName.substring(7),    // method name without SUPER:: prefix
-               packageName,
-               packageName + "::" + methodName,  // cache key includes the SUPER:: prefix
-               1   // start looking in the parent package
-       );
-       return method;
-   }
+        RuntimeScalar method;
+        String packageName = ((RuntimeCode) currentSub.value).packageName;
+        method = InheritanceResolver.findMethodInHierarchy(
+                methodName.substring(7),    // method name without SUPER:: prefix
+                packageName,
+                packageName + "::" + methodName,  // cache key includes the SUPER:: prefix
+                1   // start looking in the parent package
+        );
+        return method;
+    }
 }

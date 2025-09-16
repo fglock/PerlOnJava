@@ -2,7 +2,6 @@ package org.perlonjava.codegen;
 
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
-import org.objectweb.asm.Type;
 import org.perlonjava.astnode.BinaryOperatorNode;
 import org.perlonjava.astnode.IdentifierNode;
 import org.perlonjava.astnode.OperatorNode;

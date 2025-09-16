@@ -44,6 +44,7 @@ public class StandardIO implements IOHandle {
     private BufferedOutputStream bufferedOutputStream;
     private boolean isEOF;
     private int bufferPosition = 0;
+    private CharsetDecoderHelper decoderHelper;
 
     public StandardIO(InputStream inputStream) {
         this.inputStream = inputStream;
@@ -174,8 +175,6 @@ public class StandardIO implements IOHandle {
         return RuntimeScalarCache.scalarTrue;
     }
 
-    private CharsetDecoderHelper decoderHelper;
-
     @Override
     public RuntimeScalar doRead(int maxBytes, Charset charset) {
         try {
@@ -241,16 +240,6 @@ public class StandardIO implements IOHandle {
         return RuntimeScalarCache.scalarUndef;
     }
 
-    private static class QueueItem {
-        final byte[] data;
-        final int seq;
-
-        QueueItem(byte[] data, int seq) {
-            this.data = data;
-            this.seq = seq;
-        }
-    }
-
     @Override
     public RuntimeScalar sysread(int length) {
         if (inputStream != null) {
@@ -300,5 +289,8 @@ public class StandardIO implements IOHandle {
             }
         }
         return RuntimeIO.handleIOError("syswrite operation not supported on input stream");
+    }
+
+    private record QueueItem(byte[] data, int seq) {
     }
 }

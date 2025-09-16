@@ -70,8 +70,8 @@ public class StringParser {
             // Process heredocs at newlines during string parsing
             if (currentToken.type == LexerTokenType.NEWLINE) {
                 ctx.logDebug("parseRawStringWithDelimiter: Found NEWLINE at tokPos=" + tokPos +
-                             ", parser=" + (parser != null) +
-                             ", heredocCount=" + (parser != null ? parser.getHeredocNodes().size() : 0));
+                        ", parser=" + (parser != null) +
+                        ", heredocCount=" + (parser != null ? parser.getHeredocNodes().size() : 0));
 
                 if (parser != null && !parser.getHeredocNodes().isEmpty()) {
                     ctx.logDebug("parseRawStringWithDelimiter: Processing heredocs");

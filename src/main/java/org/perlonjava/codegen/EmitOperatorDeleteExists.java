@@ -121,7 +121,7 @@ public class EmitOperatorDeleteExists {
      * @param emitterVisitor The visitor walking the AST
      */
     static void handleDefined(OperatorNode node, String operator,
-                                       EmitterVisitor emitterVisitor) {
+                              EmitterVisitor emitterVisitor) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
         if (node.operand instanceof ListNode listNode && listNode.elements.size() == 1) {

@@ -1,6 +1,7 @@
 package org.perlonjava.mro;
 
 import org.perlonjava.runtime.PerlCompilerException;
+
 import java.util.*;
 
 public class C3 {

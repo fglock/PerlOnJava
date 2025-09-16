@@ -23,7 +23,7 @@ public class StringFormatHandler implements FormatHandler {
         if (state.isCharacterMode()) {
             // Debug: check current position
             System.err.println("DEBUG: StringFormatHandler in character mode, current position: " +
-                state.getCurrentCodePointIndex());
+                    state.getCurrentCodePointIndex());
 
             // In character mode, read characters directly
             StringBuilder sb = new StringBuilder();
@@ -32,7 +32,7 @@ public class StringFormatHandler implements FormatHandler {
             for (int i = 0; i < charsToRead; i++) {
                 if (state.hasMoreCodePoints()) {
                     int cp = state.nextCodePoint();
-                    System.err.println("DEBUG: Read code point: " + cp + " ('" + (char)cp + "')");
+                    System.err.println("DEBUG: Read code point: " + cp + " ('" + (char) cp + "')");
                     sb.appendCodePoint(cp);
                 } else {
                     break;

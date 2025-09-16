@@ -17,14 +17,12 @@ public class EmitBinaryOperatorNode {
             case "||", "or" ->
                     EmitLogicalOperator.emitLogicalOperator(emitterVisitor, node, Opcodes.IFNE, "getBoolean");
 
-            case "||=" ->
-                    EmitLogicalOperator.emitLogicalAssign(emitterVisitor, node, Opcodes.IFNE, "getBoolean");
+            case "||=" -> EmitLogicalOperator.emitLogicalAssign(emitterVisitor, node, Opcodes.IFNE, "getBoolean");
 
             case "&&", "and" ->
                     EmitLogicalOperator.emitLogicalOperator(emitterVisitor, node, Opcodes.IFEQ, "getBoolean");
 
-            case "&&=" ->
-                    EmitLogicalOperator.emitLogicalAssign(emitterVisitor, node, Opcodes.IFEQ, "getBoolean");
+            case "&&=" -> EmitLogicalOperator.emitLogicalAssign(emitterVisitor, node, Opcodes.IFEQ, "getBoolean");
 
             case "//" ->
                     EmitLogicalOperator.emitLogicalOperator(emitterVisitor, node, Opcodes.IFNE, "getDefinedBoolean");
@@ -51,23 +49,18 @@ public class EmitBinaryOperatorNode {
             case "map", "sort", "grep", "all", "any" -> EmitOperator.handleMapOperator(emitterVisitor, node);
 
             // I/O operations
-            case "eof", "printf", "print", "say" ->
-                    EmitOperator.handleSayOperator(emitterVisitor, node);
+            case "eof", "printf", "print", "say" -> EmitOperator.handleSayOperator(emitterVisitor, node);
 
             case "close", "readline", "fileno", "getc", "tell" ->
                     EmitOperator.handleReadlineOperator(emitterVisitor, node);
 
-            case "truncate" ->
-                    EmitOperator.handleTruncateOperator(emitterVisitor, node);
+            case "truncate" -> EmitOperator.handleTruncateOperator(emitterVisitor, node);
 
-            case "binmode", "seek" ->
-                    EmitOperator.handleBinmodeOperator(emitterVisitor, node);
+            case "binmode", "seek" -> EmitOperator.handleBinmodeOperator(emitterVisitor, node);
 
             // String operations
-            case "join", "sprintf" ->
-                    EmitOperator.handleSubstr(emitterVisitor, node);
-            case "split"->
-                    EmitOperator.handleSplit(emitterVisitor, node);
+            case "join", "sprintf" -> EmitOperator.handleSubstr(emitterVisitor, node);
+            case "split" -> EmitOperator.handleSplit(emitterVisitor, node);
 
             case "x" -> EmitOperator.handleRepeat(emitterVisitor, node);
 
@@ -78,8 +71,7 @@ public class EmitBinaryOperatorNode {
             // Compound assignment operators
             case "**=", "+=", "*=", "&=", "&.=", "binary&=", "<<=", "-=", "/=",
                  "|=", "|.=", "binary|=", ">>=", ".=", "%=", "^=", "^.=",
-                 "binary^=", "x=", "^^=" ->
-                    EmitBinaryOperator.handleCompoundAssignment(emitterVisitor, node);
+                 "binary^=", "x=", "^^=" -> EmitBinaryOperator.handleCompoundAssignment(emitterVisitor, node);
 
             // Range and flip-flop operators
             case "..." -> EmitLogicalOperator.emitFlipFlopOperator(emitterVisitor, node);
@@ -88,15 +80,13 @@ public class EmitBinaryOperatorNode {
 
             // Comparison operators (chained)
             case "<", ">", "<=", ">=", "lt", "gt", "le", "ge",
-                 "==", "!=", "eq", "ne" ->
-                    EmitOperatorChained.emitChainedComparison(emitterVisitor, node);
+                 "==", "!=", "eq", "ne" -> EmitOperatorChained.emitChainedComparison(emitterVisitor, node);
 
             // Binary operators
             case "%", "&", "&.", "*", "**", "+", "-", "/", "^^", "xor",
                  "<<", "<=>", ">>", "^", "^.", "|", "|.",
-                 "bless", "cmp", "isa" ->
-                    EmitBinaryOperator.handleBinaryOperator(emitterVisitor, node,
-                            OperatorHandler.get(node.operator));
+                 "bless", "cmp", "isa" -> EmitBinaryOperator.handleBinaryOperator(emitterVisitor, node,
+                    OperatorHandler.get(node.operator));
 
             default -> throw new PerlCompilerException(node.tokenIndex,
                     "Not implemented operator: " + node.operator, emitterVisitor.ctx.errorUtil);

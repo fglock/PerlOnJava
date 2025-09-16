@@ -88,31 +88,25 @@ public class RegexPreprocessor {
                 case '*':
                 case '+':
                 case '?':
-                                    // Check if this is at the start or after certain characters
-                                    if (offset == 0 || sb.length() == 0) {
-                                        regexError(s, offset + 1, "Quantifier follows nothing");
-                                    }
+                    // Check if this is at the start or after certain characters
+                    if (offset == 0 || sb.length() == 0) {
+                        regexError(s, offset + 1, "Quantifier follows nothing");
+                    }
 
-                                    // Check what the last character was
-                                    if (sb.length() > 0) {
-                                        char lastChar = sb.charAt(sb.length() - 1);
-                                        // Check if quantifier follows |
-                                        if (lastChar == '|') {
-                                            regexError(s, offset + 1, "Quantifier follows nothing");
-                                        }
-                                    }
+                    // Check what the last character was
+                    if (sb.length() > 0) {
+                        char lastChar = sb.charAt(sb.length() - 1);
+                        // Check if quantifier follows |
+                        if (lastChar == '|') {
+                            regexError(s, offset + 1, "Quantifier follows nothing");
+                        }
+                    }
 
                     // Check if this might be a possessive quantifier
-                    boolean isPossessive = false;
-                    if (offset + 1 < length && s.charAt(offset + 1) == '+') {
-                        isPossessive = true;
-                    }
+                    boolean isPossessive = offset + 1 < length && s.charAt(offset + 1) == '+';
 
                     // Check if this might be a non-greedy quantifier
-                    boolean isNonGreedy = false;
-                    if (offset + 1 < length && s.charAt(offset + 1) == '?') {
-                        isNonGreedy = true;
-                    }
+                    boolean isNonGreedy = offset + 1 < length && s.charAt(offset + 1) == '?';
 
                     // Check what the last character was
                     if (sb.length() > 0) {
@@ -267,16 +261,16 @@ public class RegexPreprocessor {
             regexError(s, offset + 1, "Sequence (? incomplete");
         }
 
-            int c2 = s.codePointAt(offset + 1);
+        int c2 = s.codePointAt(offset + 1);
 
-            // Check for (*...) verb patterns FIRST, before checking (?
-            if (c2 == '*') {
-                // (*...) is interpreted as a verb pattern, which we don't support
-                regexError(s, offset + 2, "Unknown verb");
-            }
+        // Check for (*...) verb patterns FIRST, before checking (?
+        if (c2 == '*') {
+            // (*...) is interpreted as a verb pattern, which we don't support
+            regexError(s, offset + 2, "Unknown verb");
+        }
 
-            // Handle (?
-            if (c2 == '?') {
+        // Handle (?
+        if (c2 == '?') {
             if (offset + 2 >= length) {
                 // Marker should be after the ?
                 regexError(s, offset + 2, "Sequence (? incomplete");
@@ -356,7 +350,7 @@ public class RegexPreprocessor {
                 // Unknown sequence - show the actual character
                 String seq = "(?";
                 if (offset + 2 < length) {
-                    seq += Character.toString((char)s.codePointAt(offset + 2));
+                    seq += Character.toString((char) s.codePointAt(offset + 2));
                 }
                 regexError(s, offset + 2, "Sequence " + seq + "...) not recognized");
             }
@@ -365,11 +359,11 @@ public class RegexPreprocessor {
             offset = handleRegularParentheses(s, offset, length, sb, regexFlags);
         }
 
-            // Ensure the closing parenthesis is consumed
-            if (offset >= length || s.codePointAt(offset) != ')') {
-                // Change this error message based on what we're looking for
-                regexError(s, offset - 1, "Unmatched (");
-            }
+        // Ensure the closing parenthesis is consumed
+        if (offset >= length || s.codePointAt(offset) != ')') {
+            // Change this error message based on what we're looking for
+            regexError(s, offset - 1, "Unmatched (");
+        }
         sb.append(')');
         return offset;
     }
@@ -417,7 +411,6 @@ public class RegexPreprocessor {
         int len = sb.length();
         sb.append(Character.toChars(c));  // Append the '['
         offset++;
-
 
 
         // Check if the bracket is properly closed
@@ -532,7 +525,7 @@ public class RegexPreprocessor {
     static int handleCharacterClass(int offset, String s, StringBuilder sb, int length) {
         // Check for POSIX syntax [= =] or [. .]
         if (offset + 3 < length && s.charAt(offset) == '[' &&
-            (s.charAt(offset + 1) == '=' || s.charAt(offset + 1) == '.')) {
+                (s.charAt(offset + 1) == '=' || s.charAt(offset + 1) == '.')) {
             char syntaxChar = s.charAt(offset + 1);
             // Look for closing syntax
             int closePos = offset + 2;
@@ -560,13 +553,13 @@ public class RegexPreprocessor {
     }
 
     /**
-      * Skips over inline comments within the regex.
-      *
-      * @param offset The current offset in the regex string.
-      * @param s      The regex string.
-      * @param length The length of the regex string.
-      * @return The updated offset after skipping the comment.
-      */
+     * Skips over inline comments within the regex.
+     *
+     * @param offset The current offset in the regex string.
+     * @param s      The regex string.
+     * @param length The length of the regex string.
+     * @return The updated offset after skipping the comment.
+     */
     private static int handleSkipComment(int offset, String s, int length) {
         // comment (?# ... )
         int offset3 = offset;
@@ -592,8 +585,8 @@ public class RegexPreprocessor {
     }
 
     /**
-      * Validates that a lookbehind assertion doesn't potentially match more than 255 characters.
-      */
+     * Validates that a lookbehind assertion doesn't potentially match more than 255 characters.
+     */
     private static void validateLookbehindLength(String s, int offset) {
         // System.err.println("DEBUG: validateLookbehindLength called with string length " + s.length());
         // System.err.println("DEBUG: String codepoints: ");
@@ -613,9 +606,9 @@ public class RegexPreprocessor {
     }
 
     /**
-      * Calculates the maximum length a pattern can match.
-      * Returns -1 if the pattern can match unlimited length.
-      */
+     * Calculates the maximum length a pattern can match.
+     * Returns -1 if the pattern can match unlimited length.
+     */
     private static int calculateMaxLength(String pattern, int start) {
         int pos = start;
         int totalLength = 0;
@@ -681,9 +674,9 @@ public class RegexPreprocessor {
     }
 
     /**
-      * Parses a quantifier like "200", "0,255", "1000" and returns the maximum count.
-      * Returns -1 if unbounded (e.g., "5,").
-      */
+     * Parses a quantifier like "200", "0,255", "1000" and returns the maximum count.
+     * Returns -1 if unbounded (e.g., "5,").
+     */
     private static int parseQuantifierMax(String quantifier) {
         quantifier = quantifier.trim();
         if (quantifier.contains(",")) {
@@ -899,7 +892,7 @@ public class RegexPreprocessor {
         }
 
         // If we get here, it's valid
-        sb.append(s.substring(start, end + 1));
+        sb.append(s, start, end + 1);
         return end;
     }
 

@@ -397,8 +397,8 @@ public class SystemOperator {
     }
 
     /**
-         * Helper class to hold command execution results.
-         */
-        private record CommandResult(String output, int exitCode) {
+     * Helper class to hold command execution results.
+     */
+    private record CommandResult(String output, int exitCode) {
     }
 }

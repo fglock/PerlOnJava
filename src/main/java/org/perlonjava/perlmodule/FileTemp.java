@@ -1,12 +1,20 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.RuntimeArray;
+import org.perlonjava.runtime.RuntimeList;
+import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.SystemUtils;
 
-import java.io.*;
+import java.io.IOException;
 import java.nio.file.*;
-import java.nio.file.attribute.*;
+import java.nio.file.attribute.FileAttribute;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.security.SecureRandom;
-import java.util.*;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -383,14 +391,14 @@ public class FileTemp extends PerlModuleBase {
     private static void deleteDirectory(Path dir) throws IOException {
         if (Files.exists(dir)) {
             Files.walk(dir)
-                .sorted(Comparator.reverseOrder())
-                .forEach(path -> {
-                    try {
-                        Files.delete(path);
-                    } catch (IOException e) {
-                        // Ignore
-                    }
-                });
+                    .sorted(Comparator.reverseOrder())
+                    .forEach(path -> {
+                        try {
+                            Files.delete(path);
+                        } catch (IOException e) {
+                            // Ignore
+                        }
+                    });
         }
     }
 }

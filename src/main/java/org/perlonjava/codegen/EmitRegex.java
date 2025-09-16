@@ -5,8 +5,6 @@ import org.perlonjava.astnode.*;
 import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.runtime.RuntimeContextType;
 
-import static org.perlonjava.codegen.EmitOperator.emitOperator;
-
 /**
  * The EmitRegex class is responsible for handling regex-related operations
  * within the code generation process. It provides methods to handle binding

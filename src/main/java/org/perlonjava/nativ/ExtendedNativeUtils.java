@@ -1,12 +1,8 @@
 package org.perlonjava.nativ;
 
-import com.sun.jna.*;
-import com.sun.jna.platform.win32.*;
-import com.sun.jna.ptr.IntByReference;
 import org.perlonjava.runtime.*;
 
-import java.net.*;
-import java.nio.ByteBuffer;
+import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -40,9 +36,10 @@ public class ExtendedNativeUtils extends NativeUtils {
             return new RuntimeScalar("");
         }
     }
+
     /**
-      * Get password entry by username
-      */
+     * Get password entry by username
+     */
     public static RuntimeList getpwnam(int ctx, RuntimeBase... args) {
         if (args.length < 1) return new RuntimeList();
         String username = args[0].toString();
@@ -151,8 +148,8 @@ public class ExtendedNativeUtils extends NativeUtils {
     }
 
     /**
-      * Get password entry by UID
-      */
+     * Get password entry by UID
+     */
     public static RuntimeList getpwuid(int ctx, RuntimeBase... args) {
         if (args.length < 1) return new RuntimeList();
 
@@ -167,8 +164,8 @@ public class ExtendedNativeUtils extends NativeUtils {
     }
 
     /**
-      * Get group entry by name
-      */
+     * Get group entry by name
+     */
     public static RuntimeArray getgrnam(int ctx, RuntimeBase... args) {
         if (args.length < 1) return new RuntimeArray();
         String groupname = args[0].toString();

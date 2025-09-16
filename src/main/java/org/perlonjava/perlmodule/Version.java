@@ -1,16 +1,11 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.runtime.*;
-import org.perlonjava.operators.VersionHelper;
 import org.perlonjava.operators.ReferenceOperators;
+import org.perlonjava.operators.VersionHelper;
+import org.perlonjava.runtime.*;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
-import static org.perlonjava.runtime.RuntimeScalarCache.*;
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
+import static org.perlonjava.runtime.RuntimeScalarCache.*;
 import static org.perlonjava.runtime.RuntimeScalarType.DOUBLE;
 
 // TODO - create test cases

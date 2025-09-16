@@ -2,7 +2,6 @@ package org.perlonjava.perlmodule;
 
 import org.perlonjava.runtime.RuntimeArray;
 import org.perlonjava.runtime.RuntimeList;
-import org.perlonjava.runtime.RuntimeScalar;
 
 import java.lang.reflect.Method;
 

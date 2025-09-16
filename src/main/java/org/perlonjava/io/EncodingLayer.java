@@ -31,37 +31,28 @@ import java.nio.charset.*;
  */
 public class EncodingLayer implements IOLayer {
 
-    private final String layerName;
-
-    public String getLayerName() {
-        return layerName;
-    }
-
     /**
      * Default buffer size for input processing.
      * This size is chosen to balance memory usage with performance.
      */
     private static final int BUFFER_SIZE = 1024;
-
+    private final String layerName;
     /**
      * The character set used for encoding/decoding operations.
      */
     private final Charset charset;
-
     /**
      * Decoder for converting bytes to characters.
      * Configured to replace malformed input and unmappable characters
      * with the replacement character (U+FFFD).
      */
     private final CharsetDecoder decoder;
-
     /**
      * Encoder for converting characters to bytes.
      * Configured to replace malformed input and unmappable characters
      * with the charset's default replacement byte sequence.
      */
     private final CharsetEncoder encoder;
-
     /**
      * Buffer for accumulating input bytes.
      * This buffer holds incomplete multi-byte sequences between read operations,
@@ -89,6 +80,10 @@ public class EncodingLayer implements IOLayer {
                 .onUnmappableCharacter(CodingErrorAction.REPLACE);
         this.inputBuffer = ByteBuffer.allocate(BUFFER_SIZE);
         this.layerName = layerName;
+    }
+
+    public String getLayerName() {
+        return layerName;
     }
 
     /**

@@ -2,7 +2,6 @@ package org.perlonjava.astvisitor;
 
 import org.perlonjava.astnode.*;
 import org.perlonjava.operators.BitwiseOperators;
-import org.perlonjava.operators.CompareOperators;
 import org.perlonjava.operators.MathOperators;
 import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.runtime.RuntimeScalarType;
@@ -238,8 +237,7 @@ public class ConstantFoldingVisitor implements Visitor {
     private RuntimeScalar getConstantValue(Node node) {
         if (node instanceof NumberNode) {
             return new RuntimeScalar(((NumberNode) node).value);
-        } else if (node instanceof StringNode) {
-            StringNode strNode = (StringNode) node;
+        } else if (node instanceof StringNode strNode) {
             RuntimeScalar scalar = new RuntimeScalar(strNode.value);
             if (strNode.isVString) {
                 scalar.type = RuntimeScalarType.VSTRING;
@@ -253,11 +251,9 @@ public class ConstantFoldingVisitor implements Visitor {
         String funcName = function.name;
 
         // Only fold if we have a constant argument list
-        if (!(args instanceof ListNode)) {
+        if (!(args instanceof ListNode argList)) {
             return null;
         }
-
-        ListNode argList = (ListNode) args;
 
         // First fold all arguments
         List<Node> foldedArgs = new ArrayList<>();
@@ -426,7 +422,7 @@ public class ConstantFoldingVisitor implements Visitor {
                 // String operations
                 case ".":
                     // String concatenation
-                    result = new RuntimeScalar(leftValue.toString() + rightValue.toString());
+                    result = new RuntimeScalar(leftValue.toString() + rightValue);
                     return new StringNode(result.toString(), tokenIndex);
 
                 case "x":
@@ -483,7 +479,7 @@ public class ConstantFoldingVisitor implements Visitor {
                     result = BitwiseOperators.shiftRight(leftValue, rightValue);
                     return new NumberNode(result.toString(), tokenIndex);
 
-                    // XXX TODO: This must account for Chained operators like `4 < 5 < 3`
+                // XXX TODO: This must account for Chained operators like `4 < 5 < 3`
 
 //                // Numeric comparison operators using CompareOperators
 //                case "<":

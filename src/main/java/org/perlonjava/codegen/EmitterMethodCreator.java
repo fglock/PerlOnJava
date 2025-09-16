@@ -325,7 +325,7 @@ public class EmitterMethodCreator implements Opcodes {
      * most use cases but should be considered for long-running applications that
      * generate many unique anonymous subroutines.</p>
      *
-     * @param ctx The emitter context containing the class information
+     * @param ctx       The emitter context containing the class information
      * @param classData The bytecode of the generated class
      * @return The loaded Class object
      */

@@ -1,22 +1,20 @@
 package org.perlonjava.terminal;
 
+import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeIO;
 import org.perlonjava.runtime.RuntimeScalar;
-import org.perlonjava.runtime.PerlCompilerException;
 
 import java.io.*;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.*;
 
 /**
  * Base class for Unix-like terminal handlers (Linux and macOS).
  */
 public abstract class UnixTerminalHandler implements TerminalHandler {
-    protected Map<RuntimeIO, String> originalSettings = new HashMap<>();
-    protected Map<RuntimeIO, Integer> currentModes = new HashMap<>();
-    protected InputStream rawInputStream;
-    protected String sttyCmd;
-
     // Control character name mappings
     private static final Map<String, String> STTY_TO_READKEY = new HashMap<>();
     private static final Map<String, String> READKEY_TO_STTY = new HashMap<>();
@@ -48,6 +46,11 @@ public abstract class UnixTerminalHandler implements TerminalHandler {
             READKEY_TO_STTY.put(entry.getValue(), entry.getKey().toLowerCase());
         }
     }
+
+    protected Map<RuntimeIO, String> originalSettings = new HashMap<>();
+    protected Map<RuntimeIO, Integer> currentModes = new HashMap<>();
+    protected InputStream rawInputStream;
+    protected String sttyCmd;
 
     @Override
     public void saveOriginalSettings(RuntimeIO fh) {
@@ -128,7 +131,7 @@ public abstract class UnixTerminalHandler implements TerminalHandler {
             });
 
             try {
-                int ch = future.get((long)(timeoutSeconds * 1000), TimeUnit.MILLISECONDS);
+                int ch = future.get((long) (timeoutSeconds * 1000), TimeUnit.MILLISECONDS);
                 return ch == -1 ? 0 : (char) ch;
             } catch (TimeoutException e) {
                 future.cancel(true);
@@ -167,7 +170,7 @@ public abstract class UnixTerminalHandler implements TerminalHandler {
             });
 
             try {
-                return future.get((long)(timeoutSeconds * 1000), TimeUnit.MILLISECONDS);
+                return future.get((long) (timeoutSeconds * 1000), TimeUnit.MILLISECONDS);
             } catch (TimeoutException e) {
                 future.cancel(true);
                 return null;
@@ -273,7 +276,7 @@ public abstract class UnixTerminalHandler implements TerminalHandler {
                             if (ch == '?') {
                                 value = "\u007F"; // DEL
                             } else {
-                                value = String.valueOf((char)(ch - '@'));
+                                value = String.valueOf((char) (ch - '@'));
                             }
                         }
 
@@ -315,7 +318,7 @@ public abstract class UnixTerminalHandler implements TerminalHandler {
                         char ch = value.charAt(0);
                         if (ch < 32) {
                             // Convert control character to ^X notation
-                            value = "^" + (char)(ch + '@');
+                            value = "^" + (char) (ch + '@');
                         } else if (ch == 127) {
                             value = "^?";
                         }

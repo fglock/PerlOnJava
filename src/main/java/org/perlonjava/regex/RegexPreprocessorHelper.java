@@ -280,7 +280,7 @@ public class RegexPreprocessorHelper {
      * @param rejected A StringBuilder to collect rejected sequences.
      * @return The updated offset after processing the character class.
      */
-                                       static int handleRegexCharacterClassEscape(int offset, String s, StringBuilder sb, int length, boolean flag_xx,
+    static int handleRegexCharacterClassEscape(int offset, String s, StringBuilder sb, int length, boolean flag_xx,
                                                StringBuilder rejected) {
         // inside [ ... ]
         //      space    becomes: "\ " unless the /xx flag is used (flag_xx)
@@ -318,7 +318,7 @@ public class RegexPreprocessorHelper {
         while (offset < length) {
             final int c = s.codePointAt(offset);
             switch (c) {
-                                                   case ']':
+                case ']':
                     // Special case: ] immediately after [ or [^ is a literal ]
                     if (first || afterCaret) {
                         sb.append("\\]");
@@ -362,7 +362,7 @@ public class RegexPreprocessorHelper {
                                 String rangeStart = Character.toString(lastChar);
                                 String rangeEnd = Character.toString(nextChar);
                                 RegexPreprocessor.regexError(s, offset + 2,
-                                    "Invalid [] range \"" + rangeStart + "-" + rangeEnd + "\" in regex");
+                                        "Invalid [] range \"" + rangeStart + "-" + rangeEnd + "\" in regex");
                             }
                         }
                     }

@@ -8,10 +8,9 @@ import java.util.Stack;
  * global symbol table and restoring it when the context exits.
  */
 public class GlobalRuntimeScalar extends RuntimeScalar {
-    private final String fullName;
-
     // Stack to store the previous values when localized
     private static final Stack<SavedGlobalState> localizedStack = new Stack<>();
+    private final String fullName;
 
     public GlobalRuntimeScalar(String fullName) {
         super();
@@ -55,14 +54,7 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
         }
     }
 
-    private static class SavedGlobalState {
-        final String fullName;
-        final RuntimeScalar originalVariable;
-
-        SavedGlobalState(String fullName, RuntimeScalar originalVariable) {
-            this.fullName = fullName;
-            this.originalVariable = originalVariable;
-        }
+    private record SavedGlobalState(String fullName, RuntimeScalar originalVariable) {
     }
 }
 

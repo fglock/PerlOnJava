@@ -266,17 +266,17 @@ public class IOOperator {
         String formattedString;
 
         // Use sprintf to get the formatted string
-            try {
-                formattedString = SprintfOperator.sprintf(format, runtimeList).toString();
-            } catch (PerlCompilerException e) {
-                // Change sprintf error messages to printf
-                String message = e.getMessage();
-                if (message != null && message.contains("Integer overflow in format string for sprintf ")) {
-                    throw new PerlCompilerException("Integer overflow in format string for printf ");
-                }
-                // Re-throw other exceptions unchanged
-                throw e;
+        try {
+            formattedString = SprintfOperator.sprintf(format, runtimeList).toString();
+        } catch (PerlCompilerException e) {
+            // Change sprintf error messages to printf
+            String message = e.getMessage();
+            if (message != null && message.contains("Integer overflow in format string for sprintf ")) {
+                throw new PerlCompilerException("Integer overflow in format string for printf ");
             }
+            // Re-throw other exceptions unchanged
+            throw e;
+        }
 
         // Write the formatted content to the file handle
         return fh.write(formattedString);

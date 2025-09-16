@@ -1,7 +1,6 @@
 package org.perlonjava.perlmodule;
 
 import org.apache.commons.csv.*;
-import org.perlonjava.operators.Readline;
 import org.perlonjava.runtime.*;
 
 import java.io.StringWriter;

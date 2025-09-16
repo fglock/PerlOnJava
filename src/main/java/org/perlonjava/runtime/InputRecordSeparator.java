@@ -1,6 +1,5 @@
 package org.perlonjava.runtime;
 
-import static org.perlonjava.runtime.RuntimeScalarCache.*;
 import static org.perlonjava.runtime.RuntimeScalarType.*;
 
 /**

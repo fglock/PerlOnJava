@@ -67,7 +67,7 @@ public class WBERFormatHandler implements FormatHandler {
                 // Convert to RuntimeScalar, preserving exact value
                 RuntimeScalar scalar;
                 if (value.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) <= 0 &&
-                    value.compareTo(BigInteger.valueOf(Long.MIN_VALUE)) >= 0) {
+                        value.compareTo(BigInteger.valueOf(Long.MIN_VALUE)) >= 0) {
                     // Fits in a long
                     scalar = new RuntimeScalar(value.longValue());
                 } else {

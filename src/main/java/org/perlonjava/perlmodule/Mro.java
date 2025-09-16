@@ -6,8 +6,6 @@ import org.perlonjava.runtime.*;
 
 import java.util.*;
 
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
-
 /**
  * The Mro class provides Perl's mro (Method Resolution Order) module functionality.
  * It allows switching between different MRO algorithms (DFS and C3) and provides
@@ -147,7 +145,7 @@ public class Mro extends PerlModuleBase {
         // Check if class exists
         if (!GlobalVariable.existsGlobalArray(className + "::ISA")) {
             // Class doesn't exist, return just the classname
-            linearized = Arrays.asList(className);
+            linearized = Collections.singletonList(className);
         } else {
             // Invalidate cache to ensure we see any ISA changes
             InheritanceResolver.invalidateCache();

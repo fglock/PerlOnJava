@@ -82,7 +82,7 @@ public class EmitEval {
      * </pre>
      *
      * @param emitterVisitor The visitor that traverses the AST
-     * @param node The OperatorNode representing the eval operation (contains the eval string expression)
+     * @param node           The OperatorNode representing the eval operation (contains the eval string expression)
      */
     static void handleEvalOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         EmitterContext ctx = emitterVisitor.ctx;

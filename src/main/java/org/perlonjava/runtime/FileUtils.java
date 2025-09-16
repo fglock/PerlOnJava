@@ -42,15 +42,15 @@ public class FileUtils {
         int offset = 0;
 
         // Check for BOM (Byte Order Mark)
-        if (bytes.length >= 3 && bytes[0] == (byte)0xEF && bytes[1] == (byte)0xBB && bytes[2] == (byte)0xBF) {
+        if (bytes.length >= 3 && bytes[0] == (byte) 0xEF && bytes[1] == (byte) 0xBB && bytes[2] == (byte) 0xBF) {
             // UTF-8 BOM
             charset = StandardCharsets.UTF_8;
             offset = 3;
-        } else if (bytes.length >= 2 && bytes[0] == (byte)0xFE && bytes[1] == (byte)0xFF) {
+        } else if (bytes.length >= 2 && bytes[0] == (byte) 0xFE && bytes[1] == (byte) 0xFF) {
             // UTF-16BE BOM
             charset = StandardCharsets.UTF_16BE;
             offset = 2;
-        } else if (bytes.length >= 2 && bytes[0] == (byte)0xFF && bytes[1] == (byte)0xFE) {
+        } else if (bytes.length >= 2 && bytes[0] == (byte) 0xFF && bytes[1] == (byte) 0xFE) {
             // UTF-16LE BOM
             charset = StandardCharsets.UTF_16LE;
             offset = 2;
@@ -90,7 +90,7 @@ public class FileUtils {
             int nullCount = 0;
 
             int lookSize = 1000;
-            int zeroesSize = lookSize/5;
+            int zeroesSize = lookSize / 5;
 
             for (int i = 0; i < Math.min(bytes.length, lookSize); i++) {
                 if (bytes[i] == 0) nullCount++;

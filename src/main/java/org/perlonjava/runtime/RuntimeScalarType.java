@@ -2,9 +2,6 @@ package org.perlonjava.runtime;
 
 public class RuntimeScalarType {
 
-    // Reference types (with high bit set)
-    private static final int REFERENCE_BIT = 0x8000;
-
     public static final int INTEGER = 0;
     public static final int DOUBLE = 1;
     public static final int STRING = 2;
@@ -17,6 +14,8 @@ public class RuntimeScalarType {
     public static final int JAVAOBJECT = 9;
     public static final int TIED_SCALAR = 10;
     public static final int DUALVAR = 11;
+    // Reference types (with high bit set)
+    private static final int REFERENCE_BIT = 0x8000;
     // References with bit pattern
     public static final int CODE = 100 | REFERENCE_BIT;
     public static final int REFERENCE = 101 | REFERENCE_BIT;

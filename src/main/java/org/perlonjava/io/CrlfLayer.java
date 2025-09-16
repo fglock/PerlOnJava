@@ -31,10 +31,6 @@ package org.perlonjava.io;
  */
 public class CrlfLayer implements IOLayer {
 
-    public String getLayerName() {
-        return "crlf";
-    }
-
     /**
      * Tracks whether the last character processed was a carriage return (CR).
      *
@@ -43,6 +39,10 @@ public class CrlfLayer implements IOLayer {
      * is LF, it will be skipped as part of the CRLF sequence.</p>
      */
     private boolean lastWasCR = false;
+
+    public String getLayerName() {
+        return "crlf";
+    }
 
     /**
      * Processes input by converting Windows-style line endings to Unix-style.

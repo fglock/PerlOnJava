@@ -51,7 +51,7 @@ public class PerlLanguageProvider {
     /**
      * Executes the given Perl code and returns the result.
      *
-     * @param compilerOptions Compiler flags, file name and source code
+     * @param compilerOptions  Compiler flags, file name and source code
      * @param isTopLevelScript Whether this is the top-level script (affects BEGIN/END/etc handling)
      * @return The result of the Perl code execution.
      */

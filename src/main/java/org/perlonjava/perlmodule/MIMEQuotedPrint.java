@@ -1,6 +1,9 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.RuntimeArray;
+import org.perlonjava.runtime.RuntimeList;
+import org.perlonjava.runtime.RuntimeScalar;
+
 import java.nio.charset.StandardCharsets;
 
 public class MIMEQuotedPrint extends PerlModuleBase {
@@ -27,7 +30,7 @@ public class MIMEQuotedPrint extends PerlModuleBase {
         }
         RuntimeScalar str = args.get(0);
         RuntimeScalar eol = args.size() > 1 ? args.get(1) : new RuntimeScalar("\n");
-        boolean binaryMode = args.size() > 2 ? args.get(2).getBoolean() : false;
+        boolean binaryMode = args.size() > 2 && args.get(2).getBoolean();
 
         // Empty EOL implies binary mode
         if (eol.toString().isEmpty()) {
@@ -93,11 +96,7 @@ public class MIMEQuotedPrint extends PerlModuleBase {
                 // Exception: space (32) and tab (9) are only encoded at end of line
                 if (unsigned == 32 || unsigned == 9) {
                     // Only encode if at end of line or end of input
-                    if (i == bytes.length - 1 || (i + 1 < bytes.length && bytes[i + 1] == 10)) {
-                        needsEncoding = true;
-                    } else {
-                        needsEncoding = false;
-                    }
+                    needsEncoding = i == bytes.length - 1 || (i + 1 < bytes.length && bytes[i + 1] == 10);
                 } else {
                     needsEncoding = true;
                 }

@@ -31,6 +31,10 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         this.IO = new RuntimeScalar();
     }
 
+    public static boolean isGlobAssigned(String globName) {
+        return GlobalVariable.globalGlobs.getOrDefault(globName, false);
+    }
+
     /**
      * Sets the value of the typeglob based on the type of the provided RuntimeScalar.
      * Supports setting CODE and GLOB types, with special handling for IO objects.
@@ -128,10 +132,6 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         GlobalVariable.globalGlobs.put(globName, true);
     }
 
-    public static boolean isGlobAssigned(String globName) {
-        return GlobalVariable.globalGlobs.getOrDefault(globName, false);
-    }
-
     /**
      * Retrieves a reference or value associated with a specific key from a global variable.
      *
@@ -158,10 +158,12 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     public RuntimeScalar getIO() {
         return this.IO;
     }
+
     public RuntimeGlob setIO(RuntimeScalar io) {
         this.IO = io;
         return this;
     }
+
     public RuntimeGlob setIO(RuntimeIO io) {
         this.IO = new RuntimeScalar(io);
         return this;

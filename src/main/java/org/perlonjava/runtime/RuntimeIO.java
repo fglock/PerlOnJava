@@ -475,8 +475,7 @@ public class RuntimeIO implements RuntimeScalarReference {
                 } else {
                     fh.ioHandle = new PipeOutputChannel(strings);
                 }
-            }
-            else if ("<".equals(mode)) {
+            } else if ("<".equals(mode)) {
                 if (strings.size() == 1) {
                     fh.ioHandle = new PipeInputChannel(strings.getFirst());
                 } else {

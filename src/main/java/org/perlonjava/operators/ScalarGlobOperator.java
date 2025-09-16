@@ -286,9 +286,9 @@ public class ScalarGlobOperator {
     }
 
     /**
-         * Holds path components after parsing.
-         */
-        private record PathComponents(File baseDir, String filePattern, boolean hasDirectory, String directoryPart) {
+     * Holds path components after parsing.
+     */
+    private record PathComponents(File baseDir, String filePattern, boolean hasDirectory, String directoryPart) {
     }
 
 }

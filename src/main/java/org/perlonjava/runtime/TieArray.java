@@ -4,8 +4,6 @@ import org.perlonjava.mro.InheritanceResolver;
 
 import java.util.ArrayList;
 
-import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
-
 /**
  * TieArray provides support for Perl's tie mechanism for array variables.
  *
@@ -221,7 +219,9 @@ public class TieArray extends ArrayList<RuntimeScalar> {
         return tiedPackage;
     }
 
-    public int size() { return tiedFetchSize(parent).getInt(); }
+    public int size() {
+        return tiedFetchSize(parent).getInt();
+    }
 
     public RuntimeScalar get(int i) {
         return parent.get(i);

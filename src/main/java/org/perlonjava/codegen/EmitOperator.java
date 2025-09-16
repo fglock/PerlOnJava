@@ -684,9 +684,7 @@ public class EmitOperator {
             }
 
             // Check if it is an apply `->()`
-            if (binOp.operator.equals("->") && binOp.right instanceof ListNode) {
-                return true;
-            }
+            return binOp.operator.equals("->") && binOp.right instanceof ListNode;
         }
 
         return false;

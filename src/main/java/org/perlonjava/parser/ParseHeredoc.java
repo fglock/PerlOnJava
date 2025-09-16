@@ -163,7 +163,7 @@ public class ParseHeredoc {
             if (!foundTerminator) {
                 // If we're at EOF and still haven't found the terminator, this is an error
                 if (currentIndex >= tokens.size() ||
-                    (currentIndex < tokens.size() && tokens.get(currentIndex).type == LexerTokenType.EOF)) {
+                        (currentIndex < tokens.size() && tokens.get(currentIndex).type == LexerTokenType.EOF)) {
                     // This is a real error - the terminator is missing
                     heredocError(parser, heredocNode);
                 }

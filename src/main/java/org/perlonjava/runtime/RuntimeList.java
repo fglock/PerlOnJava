@@ -120,12 +120,15 @@ public class RuntimeList extends RuntimeBase {
             this.elements.add(value);
         }
     }
+
     public void add(RuntimeScalar value) {
         this.elements.add(value);
     }
+
     public void add(RuntimeArray value) {
         this.elements.add(value);
     }
+
     public void add(RuntimeHash value) {
         this.elements.add(value);
     }

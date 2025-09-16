@@ -6,7 +6,6 @@ import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.runtime.SystemUtils;
 
 import java.io.File;
-import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
@@ -337,7 +336,8 @@ public class FileSpec extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for splitdir() method");
         }
         String directories = args.get(1).toString();
-        String[] dirs = directories.split(Pattern.quote(File.separator));        List<RuntimeScalar> dirList = new ArrayList<>();
+        String[] dirs = directories.split(Pattern.quote(File.separator));
+        List<RuntimeScalar> dirList = new ArrayList<>();
         for (String dir : dirs) {
             dirList.add(new RuntimeScalar(dir));
         }

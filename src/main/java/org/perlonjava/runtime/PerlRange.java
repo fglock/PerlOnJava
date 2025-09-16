@@ -3,7 +3,6 @@ package org.perlonjava.runtime;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 
-import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarEmptyString;
 
 /**

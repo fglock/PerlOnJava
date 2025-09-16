@@ -1,9 +1,12 @@
 package org.perlonjava.perlmodule;
 
 import org.perlonjava.parser.StringParser;
-import org.perlonjava.runtime.*;
-import java.util.Base64;
+import org.perlonjava.runtime.RuntimeArray;
+import org.perlonjava.runtime.RuntimeList;
+import org.perlonjava.runtime.RuntimeScalar;
+
 import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 
 public class MIMEBase64 extends PerlModuleBase {
 
@@ -64,7 +67,7 @@ public class MIMEBase64 extends PerlModuleBase {
                     if (i > 0) {
                         result.append(eolStr);
                     }
-                    result.append(base64.substring(i, Math.min(i + 76, base64.length())));
+                    result.append(base64, i, Math.min(i + 76, base64.length()));
                 }
 
                 // Always append the line ending at the end

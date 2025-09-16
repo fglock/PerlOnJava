@@ -429,15 +429,15 @@ public class Variable {
                 char firstChar = identifier.charAt(0);
                 String ctrlChar;
                 if (firstChar >= 'A' && firstChar <= 'Z') {
-                    ctrlChar = String.valueOf((char)(firstChar - 'A' + 1));
+                    ctrlChar = String.valueOf((char) (firstChar - 'A' + 1));
                 } else if (firstChar >= 'a' && firstChar <= 'z') {
-                    ctrlChar = String.valueOf((char)(firstChar - 'a' + 1));
+                    ctrlChar = String.valueOf((char) (firstChar - 'a' + 1));
                 } else if (firstChar == '@') {
-                    ctrlChar = String.valueOf((char)0);
+                    ctrlChar = String.valueOf((char) 0);
                 } else if (firstChar >= '[' && firstChar <= '_') {
-                    ctrlChar = String.valueOf((char)(firstChar - '[' + 27));
+                    ctrlChar = String.valueOf((char) (firstChar - '[' + 27));
                 } else if (firstChar == '?') {
-                    ctrlChar = String.valueOf((char)127);
+                    ctrlChar = String.valueOf((char) 127);
                 } else {
                     ctrlChar = String.valueOf(firstChar);
                 }
@@ -486,16 +486,16 @@ public class Variable {
                             if (accessType.isEmpty()) {
                                 // Simple variable like ${s}
                                 WarnDie.warn(
-                                    new RuntimeScalar("Ambiguous use of ${" + bracedVarName + "} resolved to $" + bracedVarName),
-                                    new RuntimeScalar(parser.ctx.errorUtil.errorMessage(parser.tokenIndex, "")),
-                                    null, 0
+                                        new RuntimeScalar("Ambiguous use of ${" + bracedVarName + "} resolved to $" + bracedVarName),
+                                        new RuntimeScalar(parser.ctx.errorUtil.errorMessage(parser.tokenIndex, "")),
+                                        null, 0
                                 );
                             } else {
                                 // Array/hash access like ${tr[10]}
                                 WarnDie.warn(
-                                    new RuntimeScalar("Ambiguous use of ${" + bracedVarName + accessType + "} resolved to $" + bracedVarName + accessType),
+                                        new RuntimeScalar("Ambiguous use of ${" + bracedVarName + accessType + "} resolved to $" + bracedVarName + accessType),
                                         new RuntimeScalar(parser.ctx.errorUtil.errorMessage(parser.tokenIndex, "")),
-                                    null, 0
+                                        null, 0
                                 );
                             }
                         }
@@ -541,9 +541,7 @@ public class Variable {
                 if (nextToken.text.length() == 1) {
                     char ch = nextToken.text.charAt(0);
                     // Exclude [ and { because those indicate array/hash access on a variable
-                    if (!Character.isLetterOrDigit(ch) && ch != '_' && ch != '}' && ch != '[' && ch != '{') {
-                        return true;
-                    }
+                    return !Character.isLetterOrDigit(ch) && ch != '_' && ch != '}' && ch != '[' && ch != '{';
                 }
             }
         }
@@ -555,7 +553,7 @@ public class Variable {
      */
     private static boolean isAmbiguousOperatorName(String identifier) {
         return "s".equals(identifier) || "m".equals(identifier) || "q".equals(identifier) ||
-               "qx".equals(identifier) || "qr".equals(identifier) || "y".equals(identifier) ||
-               "tr".equals(identifier) || "qq".equals(identifier) || "qw".equals(identifier);
+                "qx".equals(identifier) || "qr".equals(identifier) || "y".equals(identifier) ||
+                "tr".equals(identifier) || "qq".equals(identifier) || "qw".equals(identifier);
     }
 }

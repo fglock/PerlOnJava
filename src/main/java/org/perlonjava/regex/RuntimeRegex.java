@@ -86,7 +86,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
             regex.patternFlags = regex.regexFlags.toPatternFlags();
 
             try {
-               String javaPattern = preProcessRegex(patternString, regex.regexFlags);
+                String javaPattern = preProcessRegex(patternString, regex.regexFlags);
 
                 regex.patternString = patternString;
 

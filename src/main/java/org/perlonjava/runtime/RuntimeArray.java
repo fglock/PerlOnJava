@@ -1,7 +1,5 @@
 package org.perlonjava.runtime;
 
-import org.perlonjava.operators.MathOperators;
-
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -126,10 +124,6 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         };
     }
 
-    public RuntimeScalar shift() {
-        return shift(this);
-    }
-
     /**
      * Gets the index of the last element in the array.
      *
@@ -164,10 +158,6 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             default -> throw new IllegalStateException("Unknown array type: " + runtimeArray.type);
         };
     }
-    
-    public RuntimeScalar push(RuntimeBase value) {
-        return push(this, value);
-    }
 
     /**
      * Adds values to the beginning of the array.
@@ -182,7 +172,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 RuntimeArray arr = new RuntimeArray();
                 RuntimeArray.push(arr, value);
                 runtimeArray.elements.addAll(0, arr.elements);
-                yield  getScalarInt(runtimeArray.elements.size());
+                yield getScalarInt(runtimeArray.elements.size());
             }
             case AUTOVIVIFY_ARRAY -> {
                 AutovivificationArray.vivify(runtimeArray);
@@ -191,6 +181,14 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             case TIED_ARRAY -> TieArray.tiedUnshift(runtimeArray, value);
             default -> throw new IllegalStateException("Unknown array type: " + runtimeArray.type);
         };
+    }
+
+    public RuntimeScalar shift() {
+        return shift(this);
+    }
+
+    public RuntimeScalar push(RuntimeBase value) {
+        return push(this, value);
     }
 
     /**
@@ -310,14 +308,14 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     index = elements.size() + index; // Handle negative indices
                 }
                 if (index < 0 || index >= elements.size()) {
-                    yield  scalarUndef;
+                    yield scalarUndef;
                 }
                 if (index == elements.size() - 1) {
-                    yield  pop(this);
+                    yield pop(this);
                 }
                 RuntimeScalar previous = this.get(index);
                 this.elements.set(index, null);
-                yield  previous;
+                yield previous;
             }
             case AUTOVIVIFY_ARRAY -> scalarUndef;
             case TIED_ARRAY -> TieArray.tiedDelete(this, getScalarInt(index));
@@ -450,18 +448,18 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             case PLAIN_ARRAY -> {
                 this.elements.clear();
                 value.addToArray(this);
-                yield  this;
+                yield this;
             }
             case AUTOVIVIFY_ARRAY -> {
                 AutovivificationArray.vivify(this);
-                yield  this.setFromList(value);
+                yield this.setFromList(value);
             }
             case TIED_ARRAY -> {
                 TieArray.tiedClear(this);
                 for (RuntimeScalar runtimeScalar : value) {
                     TieArray.tiedPush(this, runtimeScalar);
                 }
-                yield  this;
+                yield this;
             }
             default -> throw new IllegalStateException("Unknown array type: " + type);
         };
@@ -523,7 +521,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     public RuntimeScalar scalar() {
         return switch (type) {
             case PLAIN_ARRAY -> getScalarInt(elements.size());
-            case AUTOVIVIFY_ARRAY -> throw new PerlCompilerException("Can't use an undefined value as an ARRAY reference");
+            case AUTOVIVIFY_ARRAY ->
+                    throw new PerlCompilerException("Can't use an undefined value as an ARRAY reference");
             case TIED_ARRAY -> TieArray.tiedFetchSize(this);
             default -> throw new IllegalStateException("Unknown array type: " + type);
         };
@@ -533,7 +532,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     public int lastElementIndex() {
         return switch (type) {
             case PLAIN_ARRAY -> elements.size() - 1;
-            case AUTOVIVIFY_ARRAY -> throw new PerlCompilerException("Can't use an undefined value as an ARRAY reference");
+            case AUTOVIVIFY_ARRAY ->
+                    throw new PerlCompilerException("Can't use an undefined value as an ARRAY reference");
             case TIED_ARRAY -> TieArray.tiedFetchSize(this).getInt() - 1;
             default -> throw new IllegalStateException("Unknown array type: " + type);
         };
@@ -562,7 +562,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 AutovivificationArray.vivify(this);
                 setLastElementIndex(value);
             }
-            case TIED_ARRAY -> TieArray.tiedStoreSize(this,  new RuntimeScalar(value.getInt() + 1));
+            case TIED_ARRAY -> TieArray.tiedStoreSize(this, new RuntimeScalar(value.getInt() + 1));
             default -> throw new IllegalStateException("Unknown array type: " + type);
         }
     }
@@ -817,8 +817,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * Inner class implementing the Iterator interface for RuntimeArray.
      */
     private class RuntimeArrayIterator implements Iterator<RuntimeScalar> {
-        private int currentIndex = 0;
         private final int size = elements.size();
+        private int currentIndex = 0;
 
         @Override
         public boolean hasNext() {

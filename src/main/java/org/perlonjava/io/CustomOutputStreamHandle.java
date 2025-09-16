@@ -47,10 +47,14 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
  * @see OutputStream
  */
 public class CustomOutputStreamHandle implements IOHandle {
-    /** The underlying Java OutputStream that performs actual output operations */
+    /**
+     * The underlying Java OutputStream that performs actual output operations
+     */
     private final OutputStream outputStream;
 
-    /** Tracks the number of bytes written for tell() functionality */
+    /**
+     * Tracks the number of bytes written for tell() functionality
+     */
     private long bytesWritten = 0;
 
     /**

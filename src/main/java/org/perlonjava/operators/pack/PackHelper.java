@@ -1,6 +1,5 @@
 package org.perlonjava.operators.pack;
 
-import org.perlonjava.operators.Pack;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeScalar;
 
@@ -340,9 +339,9 @@ public class PackHelper {
 
         // Skip modifiers (<, >, !)
         while (lookAhead < template.length() &&
-               (template.charAt(lookAhead) == '<' ||
-                template.charAt(lookAhead) == '>' ||
-                template.charAt(lookAhead) == '!')) {
+                (template.charAt(lookAhead) == '<' ||
+                        template.charAt(lookAhead) == '>' ||
+                        template.charAt(lookAhead) == '!')) {
             lookAhead++;
         }
 

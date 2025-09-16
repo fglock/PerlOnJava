@@ -1,19 +1,21 @@
 package org.perlonjava.terminal;
 
+import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeIO;
 import org.perlonjava.runtime.RuntimeScalar;
-import org.perlonjava.runtime.PerlCompilerException;
 
 import java.io.*;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.*;
 
 /**
  * Windows-specific terminal handler implementation.
  */
 public class WindowsTerminalHandler implements TerminalHandler {
-    private Console console = System.console();
-    private Map<RuntimeIO, Integer> currentModes = new HashMap<>();
+    private final Console console = System.console();
+    private final Map<RuntimeIO, Integer> currentModes = new HashMap<>();
 
     @Override
     public void setTerminalMode(int mode, RuntimeIO fh) {
@@ -89,7 +91,7 @@ public class WindowsTerminalHandler implements TerminalHandler {
             });
 
             try {
-                int ch = future.get((long)(timeoutSeconds * 1000), TimeUnit.MILLISECONDS);
+                int ch = future.get((long) (timeoutSeconds * 1000), TimeUnit.MILLISECONDS);
                 return ch == -1 ? 0 : (char) ch;
             } catch (TimeoutException e) {
                 future.cancel(true);

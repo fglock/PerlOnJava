@@ -1,10 +1,11 @@
 package org.perlonjava.operators.unpack;
 
-import org.perlonjava.runtime.RuntimeScalar;
-import org.perlonjava.runtime.RuntimeBase;
 import org.perlonjava.operators.UnpackState;
-import java.util.List;
+import org.perlonjava.runtime.RuntimeBase;
+import org.perlonjava.runtime.RuntimeScalar;
+
 import java.io.ByteArrayOutputStream;
+import java.util.List;
 
 public class UuencodeFormatHandler implements FormatHandler {
 
