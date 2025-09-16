@@ -90,6 +90,7 @@ public class Pack {
 
                 // Extract group content
                 String groupContent = template.substring(i + 1, closePos);
+                System.err.println("DEBUG: found group at positions " + i + " to " + closePos + ", content: '" + groupContent + "'");
 
                 // Check for modifiers and repeat count after the group
                 int nextPos = closePos + 1;
@@ -150,15 +151,31 @@ public class Pack {
 
                     // Collect values for this group iteration
                     int groupValueCount = countValuesNeeded(groupContent);
+                    System.err.println("DEBUG: group '" + groupContent + "' needs " + groupValueCount + " values, valueIndex=" + valueIndex + ", remaining=" + (values.size() - valueIndex));
+
+                    // Add more specific handling for * groups
                     if (groupRepeatCount == Integer.MAX_VALUE) {
-                        // For *, use remaining values
-                        groupValueCount = Math.min(groupValueCount, values.size() - valueIndex);
-                        if (groupValueCount <= 0) break;
+                        // For *, we need to calculate how many values one iteration needs
+                        // If countValuesNeeded returned MAX_VALUE, we have a problem
+                        if (groupValueCount == Integer.MAX_VALUE) {
+                            // This shouldn't happen for group content
+                            System.err.println("ERROR: countValuesNeeded returned MAX_VALUE for group content: " + groupContent);
+                            // Try to calculate it differently
+                            // For now, just break
+                            break;
+                        }
+
+                        // Check if we have enough values for at least one complete iteration
+                        if (values.size() - valueIndex < groupValueCount) {
+                            System.err.println("DEBUG: not enough values for complete group iteration, breaking");
+                            break;
+                        }
                     }
 
                     for (int v = 0; v < groupValueCount && valueIndex < values.size(); v++) {
                         groupArgs.add(values.get(valueIndex++));
                     }
+                    System.err.println("DEBUG: collected " + (groupArgs.size() - 1) + " values for group");
 
                     // Recursively pack the group
                     RuntimeScalar groupResult = pack(groupArgs);
@@ -763,10 +780,20 @@ public class Pack {
 
     private static int countValuesNeeded(String template) {
         int count = 0;
+        System.err.println("DEBUG countValuesNeeded: template='" + template + "'");
         for (int i = 0; i < template.length(); i++) {
             char format = template.charAt(i);
+            System.err.println("DEBUG countValuesNeeded: i=" + i + ", format='" + format + "', count=" + count);
 
             if (Character.isWhitespace(format) || format == '#') {
+                continue;
+            }
+
+            // Skip comments
+            if (format == '#') {
+                while (i + 1 < template.length() && template.charAt(i + 1) != '\n') {
+                    i++;
+                }
                 continue;
             }
 
@@ -791,6 +818,7 @@ public class Pack {
                     int repeatCount = 1;
                     if (i + 1 < template.length()) {
                         if (template.charAt(i + 1) == '*') {
+                            System.err.println("DEBUG countValuesNeeded: returning MAX_VALUE due to group with *");
                             return Integer.MAX_VALUE;
                         } else if (Character.isDigit(template.charAt(i + 1))) {
                             int j = i + 1;
@@ -807,6 +835,18 @@ public class Pack {
                 continue;
             }
 
+            // FIRST: Check if this numeric format is part of a '/' construct
+            if (isNumericFormat(format) || format == 'Z') {
+                int slashPos = PackHelper.checkForSlashConstruct(template, i);
+                if (slashPos != -1) {
+                    System.err.println("DEBUG countValuesNeeded: format '" + format + "' at " + i + " is part of N/ construct, skipping to " + slashPos);
+                    // This numeric format is part of N/X construct
+                    // It doesn't consume a value - skip to the '/'
+                    i = slashPos - 1; // -1 because loop will increment
+                    continue;
+                }
+            }
+
             // Handle '/' - it doesn't consume values itself
             if (format == '/') {
                 // Skip whitespace after '/'
@@ -818,19 +858,9 @@ public class Pack {
                     // Skip the string format after '/'
                     i = j;
                     format = template.charAt(i);
+                    System.err.println("DEBUG countValuesNeeded: '/' skipping to format '" + format + "' at position " + i);
                 }
                 // Fall through to count the string format normally
-            }
-
-            // Check if this numeric format is part of a '/' construct
-            if (isNumericFormat(format) || format == 'Z') {
-                int slashPos = PackHelper.checkForSlashConstruct(template, i);
-                if (slashPos != -1) {
-                    // This numeric format is part of N/X construct
-                    // It doesn't consume a value - skip to the '/'
-                    i = slashPos - 1; // -1 because loop will increment
-                    continue;
-                }
             }
 
             // Skip modifiers
@@ -843,9 +873,22 @@ public class Pack {
 
             // Parse repeat count
             int repeatCount = 1;
+            boolean hasStar = false;
             if (i + 1 < template.length()) {
                 if (template.charAt(i + 1) == '*') {
-                    return Integer.MAX_VALUE;
+                    hasStar = true;
+                    i++;
+                    System.err.println("DEBUG countValuesNeeded: found * after format '" + format + "'");
+                } else if (template.charAt(i + 1) == '[') {
+                    // Parse repeat count in brackets [n]
+                    int j = i + 2;
+                    while (j < template.length() && Character.isDigit(template.charAt(j))) {
+                        j++;
+                    }
+                    if (j < template.length() && template.charAt(j) == ']') {
+                        repeatCount = Integer.parseInt(template.substring(i + 2, j));
+                        i = j;
+                    }
                 } else if (Character.isDigit(template.charAt(i + 1))) {
                     int j = i + 1;
                     while (j < template.length() && Character.isDigit(template.charAt(j))) {
@@ -861,11 +904,20 @@ public class Pack {
                 // These don't consume values
                 continue;
             } else if ("aAZbBhHu".indexOf(format) >= 0) {
-                count += 1; // These consume exactly one value regardless of repeat count
+                // String/binary formats consume exactly one value regardless of repeat count
+                count += 1;
+                System.err.println("DEBUG countValuesNeeded: string format '" + format + "' adds 1, count=" + count);
             } else if (isNumericFormat(format) || format == 'p') {
+                // Numeric formats consume 'repeatCount' values (or return MAX for *)
+                if (hasStar) {
+                    System.err.println("DEBUG countValuesNeeded: returning MAX_VALUE due to numeric format '" + format + "' with *");
+                    return Integer.MAX_VALUE;
+                }
                 count += repeatCount;
+                System.err.println("DEBUG countValuesNeeded: numeric format '" + format + "' adds " + repeatCount + ", count=" + count);
             }
         }
+        System.err.println("DEBUG countValuesNeeded: returning " + count);
         return count;
     }
 
