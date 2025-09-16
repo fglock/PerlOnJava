@@ -184,33 +184,11 @@ public class Pack {
             }
 
             // Check if this is a numeric format followed by '/' - skip it entirely
-            if ((isNumericFormat(format) || format == 'Z') && i + 1 < template.length()) {
-                // Look ahead, skipping modifiers and counts
-                int lookAhead = i + 1;
-                System.err.println("DEBUG: checking if numeric format '" + format + "' is followed by '/'");
-
-                // Skip modifiers
-                while (lookAhead < template.length() &&
-                       (template.charAt(lookAhead) == '<' ||
-                        template.charAt(lookAhead) == '>' ||
-                        template.charAt(lookAhead) == '!')) {
-                    lookAhead++;
-                }
-
-                // Skip count or *
-                if (lookAhead < template.length() && template.charAt(lookAhead) == '*') {
-                    lookAhead++;
-                } else if (lookAhead < template.length() && Character.isDigit(template.charAt(lookAhead))) {
-                    while (lookAhead < template.length() && Character.isDigit(template.charAt(lookAhead))) {
-                        lookAhead++;
-                    }
-                }
-
-                // Check if followed by '/'
-                if (lookAhead < template.length() && template.charAt(lookAhead) == '/') {
-                    // Skip this entire format sequence - it's used for length encoding
-                    System.err.println("DEBUG: skipping format sequence ending at position " + (lookAhead - 1));
-                    i = lookAhead - 1; // -1 because loop will increment
+            if (isNumericFormat(format) || format == 'Z') {
+                int slashPos = PackHelper.checkForSlashConstruct(template, i);
+                if (slashPos != -1) {
+                    System.err.println("DEBUG: skipping format '" + format + "' at position " + i + " because it's part of '/' construct");
+                    i = slashPos - 1; // -1 because loop will increment
                     continue;
                 }
             }
@@ -307,9 +285,34 @@ public class Pack {
                 for (int j = 0; j < count; j++) {
                     output.write(0);
                 }
-            } else if (format == '/') {
-                // System.err.println("DEBUG: entering '/' handler, valueIndex=" + valueIndex);
-                // '/' must follow a numeric type or Z
+                    } else if (format == '/') {
+                        System.err.println("DEBUG: entering '/' handler, i=" + i);
+
+                // FIRST check if '/' is at the start of template (invalid)
+                if (i == 0) {
+                    throw new PerlCompilerException("Invalid type '/'");
+                }
+
+                // THEN check what follows '/'
+                // Always use i+1 because i points to '/' itself
+                if (i + 1 >= template.length()) {
+                    throw new PerlCompilerException("Code missing after '/'");
+                }
+                System.err.println("DEBUG: checking character at position " + i);
+                char afterSlash = template.charAt(i + 1);  // Always i+1!
+                System.err.println("DEBUG: character after '/' is '" + afterSlash + "' (code " + (int)afterSlash + ")");
+
+                // Check if '/' is followed by a repeat count (which is an error)
+                if (afterSlash == '*' || Character.isDigit(afterSlash)) {
+                    throw new PerlCompilerException("'/' does not take a repeat count");
+                }
+
+                // Check if it's a valid string format
+                if (afterSlash != 'a' && afterSlash != 'A' && afterSlash != 'Z') {
+                    throw new PerlCompilerException("'/' must be followed by a string type");
+                }
+
+                // NOW check if '/' follows a numeric type
                 if (i == 0) {
                     throw new PerlCompilerException("Invalid type '/'");
                 }
@@ -372,15 +375,8 @@ public class Pack {
                 }
 
                 // Get the string format that follows '/'
-                if (i + 1 >= template.length()) {
-                    throw new PerlCompilerException("'/' must be followed by a string type");
-                }
-
                 i++; // move to string format
                 char stringFormat = template.charAt(i);
-                if (stringFormat != 'a' && stringFormat != 'A' && stringFormat != 'Z') {
-                    throw new PerlCompilerException("'/' must be followed by a string type");
-                }
 
                 // Parse count for string format
                 int stringCount = -1; // -1 means use full string
@@ -480,8 +476,31 @@ public class Pack {
                 if (stringFormat == 'Z' && stringCount < 0) {
                     output.write(0); // null terminator
                 }
-            } else if (format == '/') {
-                // ... existing '/' handler code ...
+            } else if (format == '@') {
+                // @ is used for absolute positioning
+                // '/' uses the previously packed numeric value as a count for the following string format
+
+                // First, check what follows '/'
+                if (i + 1 >= template.length()) {
+                    throw new PerlCompilerException("Code missing after '/'");
+                }
+
+                i++; // move to next character after '/'
+                char nextChar = template.charAt(i);
+
+                // Check if '/' is followed by a repeat count (which is an error)
+                // This includes '*' or any digit
+                if (nextChar == '*' || Character.isDigit(nextChar)) {
+                    throw new PerlCompilerException("'/' does not take a repeat count");
+                }
+
+                // Check if it's a valid string format
+                if (nextChar != 'a' && nextChar != 'A' && nextChar != 'Z') {
+                    throw new PerlCompilerException("'/' must be followed by a string type");
+                }
+
+                // Now we can continue processing...
+                // (rest of the handler code)
             } else if (format == '@') {
                 // @ is used for absolute positioning
                 // @n means null-fill or truncate to position n

@@ -156,6 +156,27 @@ public class PackHelper {
     }
 
     /**
+     * Validates the '/' format in pack/unpack templates.
+     */
+    public static char validateSlashFormat(String template, int position) {
+        if (position + 1 >= template.length()) {
+            throw new PerlCompilerException("Code missing after '/'");
+        }
+
+        char afterSlash = template.charAt(position + 1);
+
+        if (afterSlash == '*' || Character.isDigit(afterSlash)) {
+            throw new PerlCompilerException("'/' does not take a repeat count");
+        }
+
+        if (afterSlash != 'a' && afterSlash != 'A' && afterSlash != 'Z') {
+            throw new PerlCompilerException("'/' must be followed by a string type");
+        }
+
+        return afterSlash;
+    }
+
+    /**
      * Writes a short integer to the output stream in little-endian order.
      *
      * @param output The ByteArrayOutputStream to write to.
@@ -346,5 +367,43 @@ public class PackHelper {
         if (bitIndex > 0) {
             output.write(byteValue);
         }
+    }
+
+    /**
+     * Check if a format at the given position is part of a '/' construct.
+     * For example, in "n/a*", the 'n' is part of a '/' construct.
+     *
+     * @param template The template string
+     * @param position The position of the format character
+     * @return The position of '/' if found, or -1 if not part of '/' construct
+     */
+    public static int checkForSlashConstruct(String template, int position) {
+        int lookAhead = position + 1;
+
+        // Skip modifiers (<, >, !)
+        while (lookAhead < template.length() &&
+               (template.charAt(lookAhead) == '<' ||
+                template.charAt(lookAhead) == '>' ||
+                template.charAt(lookAhead) == '!')) {
+            lookAhead++;
+        }
+
+        // Skip count or *
+        if (lookAhead < template.length()) {
+            if (template.charAt(lookAhead) == '*') {
+                lookAhead++;
+            } else if (Character.isDigit(template.charAt(lookAhead))) {
+                while (lookAhead < template.length() && Character.isDigit(template.charAt(lookAhead))) {
+                    lookAhead++;
+                }
+            }
+        }
+
+        // Check if followed by '/'
+        if (lookAhead < template.length() && template.charAt(lookAhead) == '/') {
+            return lookAhead;
+        }
+
+        return -1;
     }
 }
