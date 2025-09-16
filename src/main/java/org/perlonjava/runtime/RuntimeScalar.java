@@ -195,6 +195,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return newScalar;
     }
 
+    public static RuntimeScalar undef() {
+        return scalarUndef;
+    }
+
     /**
      * Stores a value into the tied variable.
      * This method must be implemented by subclasses to provide the appropriate
@@ -259,7 +263,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case REGEX -> scalarOne; // Assuming regexes are truthy, so 1
             case JAVAOBJECT -> value != null ? scalarOne : scalarZero;
             case TIED_SCALAR -> this.tiedFetch().getNumber();
-            case DUALVAR -> ((DualVar) this.value).numericValue;
+            case DUALVAR -> ((DualVar) this.value).numericValue();
             default -> Overload.numify(this);
         };
     }
@@ -277,7 +281,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case REGEX -> 1; // Assuming regexes are truthy, so 1
             case JAVAOBJECT -> value != null ? 1 : 0;
             case TIED_SCALAR -> this.tiedFetch().getInt();
-            case DUALVAR -> ((DualVar) this.value).numericValue.getInt();
+            case DUALVAR -> ((DualVar) this.value).numericValue().getInt();
             default -> Overload.numify(this).getInt();
         };
     }
@@ -295,7 +299,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case REGEX -> 1L;
             case JAVAOBJECT -> value != null ? 1L : 0L;
             case TIED_SCALAR -> this.tiedFetch().getLong();
-            case DUALVAR -> ((DualVar) this.value).numericValue.getLong();
+            case DUALVAR -> ((DualVar) this.value).numericValue().getLong();
             default -> Overload.numify(this).getLong();
         };
     }
@@ -313,7 +317,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case REGEX -> 1.0;
             case JAVAOBJECT -> value != null ? 1.0 : 0.0;
             case TIED_SCALAR -> this.tiedFetch().getDouble();
-            case DUALVAR -> ((DualVar) this.value).numericValue.getDouble();
+            case DUALVAR -> ((DualVar) this.value).numericValue().getDouble();
             default -> Overload.numify(this).getDouble();
         };
     }
@@ -334,7 +338,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case REGEX -> true;
             case JAVAOBJECT -> value != null;
             case TIED_SCALAR -> this.tiedFetch().getBoolean();
-            case DUALVAR -> ((DualVar) this.value).stringValue.getBoolean();
+            case DUALVAR -> ((DualVar) this.value).stringValue().getBoolean();
             default -> Overload.boolify(this).getBoolean();
         };
     }
@@ -461,7 +465,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case REGEX -> value.toString();
             case JAVAOBJECT -> value.toString();
             case TIED_SCALAR -> this.tiedFetch().toString();
-            case DUALVAR -> ((DualVar) this.value).stringValue.toString();
+            case DUALVAR -> ((DualVar) this.value).stringValue().toString();
             default -> Overload.stringify(this).toString();
         };
     }
@@ -737,7 +741,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             // case BOOLEAN -> (boolean) value;
             case CODE -> ((RuntimeCode) value).defined();
             case TIED_SCALAR -> this.tiedFetch().getDefinedBoolean();
-            case DUALVAR -> ((DualVar) this.value).stringValue.getDefinedBoolean();
+            case DUALVAR -> ((DualVar) this.value).stringValue().getDefinedBoolean();
             default -> type != UNDEF;
         };
     }
@@ -1148,9 +1152,5 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         public void reset() {
             hasNext = true;
         }
-    }
-
-    public static RuntimeScalar undef () {
-        return scalarUndef;
     }
 }

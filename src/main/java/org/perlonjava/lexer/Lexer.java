@@ -88,6 +88,14 @@ public class Lexer {
         }
     }
 
+    /**
+     * Helper method to check if a character is ASCII whitespace only.
+     * This excludes Unicode whitespace characters that should be treated as invalid identifier characters.
+     */
+    private static boolean isAsciiWhitespace(char c) {
+        return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f';
+    }
+
     // Method to tokenize the input string into a list of tokens
     public List<LexerToken> tokenize() {
         List<LexerToken> tokens = new ArrayList<>();
@@ -101,14 +109,6 @@ public class Lexer {
 
         this.input = null;  // Throw away input to spare memory
         return tokens;
-    }
-
-    /**
-     * Helper method to check if a character is ASCII whitespace only.
-     * This excludes Unicode whitespace characters that should be treated as invalid identifier characters.
-     */
-    private static boolean isAsciiWhitespace(char c) {
-        return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f';
     }
 
     public LexerToken nextToken() {

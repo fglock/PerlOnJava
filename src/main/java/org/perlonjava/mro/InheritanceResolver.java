@@ -10,29 +10,19 @@ import java.util.*;
  * for method resolution and linearized class hierarchies to improve performance.
  */
 public class InheritanceResolver {
-    public static boolean autoloadEnabled = true;
-
-    // MRO algorithm selection
-    public enum MROAlgorithm {
-        C3,
-        DFS
-    }
-
-    // Default MRO algorithm
-    private static MROAlgorithm currentMRO = MROAlgorithm.DFS;
-
-    // Per-package MRO settings
-    private static final Map<String, MROAlgorithm> packageMRO = new HashMap<>();
-
-    // Method resolution cache
-    private static final Map<String, RuntimeScalar> methodCache = new HashMap<>();
     // Cache for linearized class hierarchies
     static final Map<String, List<String>> linearizedClassesCache = new HashMap<>();
+    // Per-package MRO settings
+    private static final Map<String, MROAlgorithm> packageMRO = new HashMap<>();
+    // Method resolution cache
+    private static final Map<String, RuntimeScalar> methodCache = new HashMap<>();
     // Cache for OverloadContext instances by blessing ID
     private static final Map<Integer, OverloadContext> overloadContextCache = new HashMap<>();
-
     // Track ISA array states for change detection
     private static final Map<String, List<String>> isaStateCache = new HashMap<>();
+    public static boolean autoloadEnabled = true;
+    // Default MRO algorithm
+    private static MROAlgorithm currentMRO = MROAlgorithm.DFS;
 
     /**
      * Sets the default MRO algorithm.
@@ -48,7 +38,7 @@ public class InheritanceResolver {
      * Sets the MRO algorithm for a specific package.
      *
      * @param packageName The name of the package.
-     * @param algorithm The MRO algorithm to use for this package.
+     * @param algorithm   The MRO algorithm to use for this package.
      */
     public static void setPackageMRO(String packageName, MROAlgorithm algorithm) {
         packageMRO.put(packageName, algorithm);
@@ -313,5 +303,11 @@ public class InheritanceResolver {
         // Cache the fact that method was not found (using null)
         methodCache.put(cacheKey, null);
         return null;
+    }
+
+    // MRO algorithm selection
+    public enum MROAlgorithm {
+        C3,
+        DFS
     }
 }

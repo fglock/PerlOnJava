@@ -14,10 +14,6 @@ import static org.perlonjava.parser.SpecialBlockParser.getCurrentScope;
 public class FeatureFlags {
     // A hierarchy of feature bundles
     private static final Map<String, String[]> featureBundles = new HashMap<>();
-
-    // Instance-level enabled features tracking
-    private final Set<String> enabledFeatures = new HashSet<>();
-
     // Pattern to match version bundles like :5.37
     private static final Pattern VERSION_PATTERN = Pattern.compile("^:(\\d+)\\.(\\d+)$");
 
@@ -65,6 +61,9 @@ public class FeatureFlags {
         featureBundles.put("perlonjava::internal::mro_c3", new String[]{"perlonjava::internal::mro_c3"});
         featureBundles.put("perlonjava::internal::next_method", new String[]{"perlonjava::internal::next_method"});
     }
+
+    // Instance-level enabled features tracking
+    private final Set<String> enabledFeatures = new HashSet<>();
 
     /**
      * Constructs a FeatureFlags object.
@@ -159,7 +158,7 @@ public class FeatureFlags {
                 int bundleMinor = Integer.parseInt(bundleMatcher.group(2));
 
                 if (bundleMajor > requestedMajor ||
-                    (bundleMajor == requestedMajor && bundleMinor > requestedMinor)) {
+                        (bundleMajor == requestedMajor && bundleMinor > requestedMinor)) {
                     return bundle;
                 }
             }
@@ -290,7 +289,7 @@ public class FeatureFlags {
      * @param feature The name of the feature to enable.
      */
     public void enableFeature(String feature) {
-        if (feature != null && featureExists(feature)) {
+        if (featureExists(feature)) {
             enabledFeatures.add(feature.trim());
 
             // Also try to enable it in the symbol table if available

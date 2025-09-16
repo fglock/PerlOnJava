@@ -3,11 +3,7 @@ package org.perlonjava.io;
 import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.runtime.RuntimeScalarCache;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.InputStream;
+import java.io.*;
 import java.nio.charset.Charset;
 import java.util.Arrays;
 import java.util.List;
@@ -30,25 +26,59 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
  */
 public class PipeInputChannel implements IOHandle {
 
-    /** Pattern to detect shell metacharacters */
+    /**
+     * Pattern to detect shell metacharacters
+     */
     private static final Pattern SHELL_METACHARACTERS = Pattern.compile("[*?\\[\\]{}()<>|&;`'\"\\\\$\\s]");
 
-    /** The external process */
+    /**
+     * The external process
+     */
     private Process process;
 
-    /** Input stream from the process stdout */
+    /**
+     * Input stream from the process stdout
+     */
     private InputStream inputStream;
 
-    /** Reader for the process stderr (for error handling) */
+    /**
+     * Reader for the process stderr (for error handling)
+     */
     private BufferedReader errorReader;
 
-    /** Tracks whether end-of-file has been reached */
+    /**
+     * Tracks whether end-of-file has been reached
+     */
     private boolean isEOF;
 
-    /** The exit code of the process (-1 if not yet terminated) */
+    /**
+     * The exit code of the process (-1 if not yet terminated)
+     */
     private int exitCode = 0;
 
     // ... (constructor and setup methods remain the same, but remove BufferedReader setup)
+
+    /**
+     * Creates a new PipeInputChannel for the specified command.
+     *
+     * @param command the command to execute (can be a shell command or program with args)
+     * @throws IOException if an I/O error occurs starting the process
+     */
+    public PipeInputChannel(String command) throws IOException {
+        this.isEOF = false;
+        startProcess(command);
+    }
+
+    /**
+     * Creates a new PipeInputChannel for the specified command with arguments.
+     *
+     * @param commandArgs list of command and arguments
+     * @throws IOException if an I/O error occurs starting the process
+     */
+    public PipeInputChannel(List<String> commandArgs) throws IOException {
+        this.isEOF = false;
+        startProcessDirect(commandArgs);
+    }
 
     /**
      * Common setup for the process builder.
@@ -90,7 +120,7 @@ public class PipeInputChannel implements IOHandle {
      * This reads exactly the requested number of bytes (or less if EOF/error).
      *
      * @param maxBytes the maximum number of bytes to read
-     * @param charset the character encoding to use for converting bytes to string
+     * @param charset  the character encoding to use for converting bytes to string
      * @return RuntimeScalar containing the read data
      */
     @Override
@@ -112,7 +142,7 @@ public class PipeInputChannel implements IOHandle {
             // Convert bytes to string where each char represents a byte
             StringBuilder sb = new StringBuilder(bytesRead);
             for (int i = 0; i < bytesRead; i++) {
-                sb.append((char)(buffer[i] & 0xFF));
+                sb.append((char) (buffer[i] & 0xFF));
             }
 
             return new RuntimeScalar(sb.toString());
@@ -154,28 +184,6 @@ public class PipeInputChannel implements IOHandle {
         } catch (IOException e) {
             return handleIOException(e, "close pipe failed");
         }
-    }
-
-    /**
-     * Creates a new PipeInputChannel for the specified command.
-     *
-     * @param command the command to execute (can be a shell command or program with args)
-     * @throws IOException if an I/O error occurs starting the process
-     */
-    public PipeInputChannel(String command) throws IOException {
-        this.isEOF = false;
-        startProcess(command);
-    }
-
-    /**
-     * Creates a new PipeInputChannel for the specified command with arguments.
-     *
-     * @param commandArgs list of command and arguments
-     * @throws IOException if an I/O error occurs starting the process
-     */
-    public PipeInputChannel(List<String> commandArgs) throws IOException {
-        this.isEOF = false;
-        startProcessDirect(commandArgs);
     }
 
     /**
@@ -264,7 +272,7 @@ public class PipeInputChannel implements IOHandle {
     /**
      * Seek operation is not supported for pipes.
      *
-     * @param pos the position (ignored)
+     * @param pos    the position (ignored)
      * @param whence the whence parameter (ignored)
      * @return RuntimeScalar with false
      */

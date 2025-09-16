@@ -424,7 +424,7 @@ public abstract class StringSegmentParser {
             }
             var token = tokens.get(parser.tokenIndex++);
 
-            ctx.logDebug("StringSegmentParser.parse: Token at " + (parser.tokenIndex-1) + ": type=" + token.type + ", text='" + token.text.replace("\n", "\\n") + "'");
+            ctx.logDebug("StringSegmentParser.parse: Token at " + (parser.tokenIndex - 1) + ": type=" + token.type + ", text='" + token.text.replace("\n", "\\n") + "'");
 
             if (token.type == LexerTokenType.EOF) {
                 ctx.logDebug("StringSegmentParser.parse: Found EOF token");

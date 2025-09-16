@@ -9,7 +9,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.perlonjava.runtime.RuntimeScalarCache.*;
+import static org.perlonjava.runtime.RuntimeScalarCache.getScalarBoolean;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
 /**
  * The TermReadLine class provides functionalities similar to the Perl Term::ReadLine module.
@@ -20,9 +21,9 @@ public class TermReadLine extends PerlModuleBase {
     private String appName;
     private BufferedReader inputReader;
     private PrintWriter outputWriter;
-    private List<String> history;
+    private final List<String> history;
     private int minLine;
-    private boolean autoHistory;
+    private final boolean autoHistory;
     private Map<String, Object> attributes;
     private Map<String, Boolean> features;
 
@@ -68,27 +69,6 @@ public class TermReadLine extends PerlModuleBase {
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Term::ReadLine method: " + e.getMessage());
         }
-    }
-
-
-    private void initializeAttributes() {
-        attributes = new HashMap<>();
-        attributes.put("appname", appName != null ? appName : "");  // Default to empty string
-        attributes.put("minline", minLine);
-        attributes.put("autohistory", autoHistory);
-        attributes.put("library_version", "PerlOnJava-1.0");
-        attributes.put("readline_name", "Term::ReadLine::PerlOnJava");
-    }
-
-    private void initializeFeatures() {
-        features = new HashMap<>();
-        features.put("appname", true);
-        features.put("minline", true);
-        features.put("autohistory", true);
-        features.put("addhistory", true);
-        features.put("attribs", true);
-        features.put("setHistory", true);
-        features.put("getHistory", true);
     }
 
     /**
@@ -173,16 +153,6 @@ public class TermReadLine extends PerlModuleBase {
             instance.addToHistory(line);
         }
         return new RuntimeList();
-    }
-
-    private void addToHistory(String line) {
-        if (line != null && line.trim().length() >= minLine) {
-            history.add(line);
-            // Keep history size reasonable (last 1000 entries)
-            if (history.size() > 1000) {
-                history.remove(0);
-            }
-        }
     }
 
     /**
@@ -297,23 +267,6 @@ public class TermReadLine extends PerlModuleBase {
         return new RuntimeList(featuresHash.createReference());
     }
 
-    // Additional utility methods for history management
-
-    public List<String> getHistory() {
-        return new ArrayList<>(history);
-    }
-
-    public void clearHistory() {
-        history.clear();
-    }
-
-    public void setHistory(List<String> newHistory) {
-        history.clear();
-        if (newHistory != null) {
-            history.addAll(newHistory);
-        }
-    }
-
     // Cross-platform console detection
     private static boolean isConsoleAvailable() {
         return System.console() != null;
@@ -323,5 +276,52 @@ public class TermReadLine extends PerlModuleBase {
     private static boolean isInteractive() {
         String term = System.getenv("TERM");
         return term != null && !term.equals("dumb") && isConsoleAvailable();
+    }
+
+    private void initializeAttributes() {
+        attributes = new HashMap<>();
+        attributes.put("appname", appName != null ? appName : "");  // Default to empty string
+        attributes.put("minline", minLine);
+        attributes.put("autohistory", autoHistory);
+        attributes.put("library_version", "PerlOnJava-1.0");
+        attributes.put("readline_name", "Term::ReadLine::PerlOnJava");
+    }
+
+    // Additional utility methods for history management
+
+    private void initializeFeatures() {
+        features = new HashMap<>();
+        features.put("appname", true);
+        features.put("minline", true);
+        features.put("autohistory", true);
+        features.put("addhistory", true);
+        features.put("attribs", true);
+        features.put("setHistory", true);
+        features.put("getHistory", true);
+    }
+
+    private void addToHistory(String line) {
+        if (line != null && line.trim().length() >= minLine) {
+            history.add(line);
+            // Keep history size reasonable (last 1000 entries)
+            if (history.size() > 1000) {
+                history.remove(0);
+            }
+        }
+    }
+
+    public List<String> getHistory() {
+        return new ArrayList<>(history);
+    }
+
+    public void setHistory(List<String> newHistory) {
+        history.clear();
+        if (newHistory != null) {
+            history.addAll(newHistory);
+        }
+    }
+
+    public void clearHistory() {
+        history.clear();
     }
 }

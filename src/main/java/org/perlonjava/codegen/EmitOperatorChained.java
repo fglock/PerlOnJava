@@ -11,8 +11,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-import static org.perlonjava.codegen.EmitOperator.emitOperator;
-
 public class EmitOperatorChained {
     public static final String[] CHAIN_COMPARISON_OP = new String[]{"<", ">", "<=", ">=", "lt", "gt", "le", "ge"};
     public static final String[] CHAIN_EQUALITY_OP = new String[]{"==", "!=", "eq", "ne"};

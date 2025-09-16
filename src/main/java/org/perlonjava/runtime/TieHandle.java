@@ -30,13 +30,19 @@ import org.perlonjava.mro.InheritanceResolver;
  */
 public class TieHandle extends RuntimeIO {
 
-    /** The tied object (handler) that implements the tie interface methods. */
+    /**
+     * The tied object (handler) that implements the tie interface methods.
+     */
     private final RuntimeScalar self;
 
-    /** The package name that this handle is tied to. */
+    /**
+     * The package name that this handle is tied to.
+     */
     private final String tiedPackage;
 
-    /** The original value of the handle before it was tied. */
+    /**
+     * The original value of the handle before it was tied.
+     */
     private final RuntimeIO previousValue;
 
     /**
@@ -50,38 +56,6 @@ public class TieHandle extends RuntimeIO {
         this.tiedPackage = tiedPackage;
         this.previousValue = previousValue;
         this.self = self;
-    }
-
-    /**
-     * Helper method to call methods on the tied object.
-     */
-    private RuntimeScalar tieCall(String method, RuntimeBase... args) {
-        // Call the Perl method
-        return RuntimeCode.call(
-                self,
-                new RuntimeScalar(method),
-                null,
-                new RuntimeArray(args),
-                RuntimeContextType.SCALAR
-        ).getFirst();
-    }
-
-    /**
-     * Calls a tie method if it exists in the tied object's class hierarchy.
-     * Used by tiedDestroy() and tiedUntie() for optional methods.
-     */
-    private RuntimeScalar tieCallIfExists(String methodName) {
-        String className = getTiedPackage();
-
-        // Check if method exists in the class hierarchy
-        RuntimeScalar method = InheritanceResolver.findMethodInHierarchy(methodName, className, null, 0);
-        if (method == null) {
-            // Method doesn't exist, return undef
-            return RuntimeScalarCache.scalarUndef;
-        }
-
-        // Method exists, call it
-        return RuntimeCode.apply(method, new RuntimeArray(self), RuntimeContextType.SCALAR).getFirst();
     }
 
     /**
@@ -192,6 +166,38 @@ public class TieHandle extends RuntimeIO {
      */
     public static RuntimeScalar tiedUntie(TieHandle tieHandle) {
         return tieHandle.tieCallIfExists("UNTIE");
+    }
+
+    /**
+     * Helper method to call methods on the tied object.
+     */
+    private RuntimeScalar tieCall(String method, RuntimeBase... args) {
+        // Call the Perl method
+        return RuntimeCode.call(
+                self,
+                new RuntimeScalar(method),
+                null,
+                new RuntimeArray(args),
+                RuntimeContextType.SCALAR
+        ).getFirst();
+    }
+
+    /**
+     * Calls a tie method if it exists in the tied object's class hierarchy.
+     * Used by tiedDestroy() and tiedUntie() for optional methods.
+     */
+    private RuntimeScalar tieCallIfExists(String methodName) {
+        String className = getTiedPackage();
+
+        // Check if method exists in the class hierarchy
+        RuntimeScalar method = InheritanceResolver.findMethodInHierarchy(methodName, className, null, 0);
+        if (method == null) {
+            // Method doesn't exist, return undef
+            return RuntimeScalarCache.scalarUndef;
+        }
+
+        // Method exists, call it
+        return RuntimeCode.apply(method, new RuntimeArray(self), RuntimeContextType.SCALAR).getFirst();
     }
 
     public RuntimeIO getPreviousValue() {

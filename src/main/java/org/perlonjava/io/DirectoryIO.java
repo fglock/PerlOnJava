@@ -1,10 +1,11 @@
 package org.perlonjava.io;
 
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.PerlCompilerException;
+import org.perlonjava.runtime.RuntimeContextType;
+import org.perlonjava.runtime.RuntimeList;
+import org.perlonjava.runtime.RuntimeScalar;
 
-import java.io.IOException;
 import java.nio.file.DirectoryStream;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;

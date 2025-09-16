@@ -13,8 +13,8 @@ import static org.perlonjava.runtime.ExceptionFormatter.findInnermostCause;
  * Utility class for generating error messages with context from a list of tokens.
  */
 public class ErrorMessageUtil {
-    private String fileName;
     private final List<LexerToken> tokens;
+    private String fileName;
     private int tokenIndex;
     private int lastLineNumber;
 
@@ -29,22 +29,6 @@ public class ErrorMessageUtil {
         this.tokens = tokens;
         this.tokenIndex = -1;
         this.lastLineNumber = 1;
-    }
-
-    public String getFileName() {
-        return fileName;
-    }
-
-    public void setFileName(String fileName) {
-        this.fileName = fileName;
-    }
-
-    public void setLineNumber(int lineNumber) {
-        this.lastLineNumber = lineNumber;
-    }
-
-    public void setTokenIndex(int index) {
-        this.tokenIndex = index;
     }
 
     /**
@@ -149,6 +133,22 @@ public class ErrorMessageUtil {
         }
 
         return sb.toString();
+    }
+
+    public String getFileName() {
+        return fileName;
+    }
+
+    public void setFileName(String fileName) {
+        this.fileName = fileName;
+    }
+
+    public void setLineNumber(int lineNumber) {
+        this.lastLineNumber = lineNumber;
+    }
+
+    public void setTokenIndex(int index) {
+        this.tokenIndex = index;
     }
 
     /**

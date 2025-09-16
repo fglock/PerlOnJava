@@ -1,6 +1,7 @@
 package org.perlonjava.terminal;
 
 import org.perlonjava.runtime.RuntimeIO;
+
 import java.io.IOException;
 import java.util.Map;
 
@@ -33,6 +34,7 @@ public interface TerminalHandler {
 
     /**
      * Reads a single character with optional timeout.
+     *
      * @param timeoutSeconds timeout in seconds (0 = blocking, <0 = non-blocking)
      * @return the character read, or 0 if timeout/EOF
      */
@@ -40,30 +42,35 @@ public interface TerminalHandler {
 
     /**
      * Reads a line with optional timeout.
+     *
      * @return the line read, or null if timeout/EOF
      */
     String readLineWithTimeout(double timeoutSeconds, RuntimeIO fh) throws IOException;
 
     /**
      * Gets the terminal size.
+     *
      * @return array of [width, height, xpixels, ypixels], or null if unsupported
      */
     int[] getTerminalSize(RuntimeIO fh);
 
     /**
      * Sets the terminal size.
+     *
      * @return true if successful
      */
     boolean setTerminalSize(int width, int height, int xpixels, int ypixels, RuntimeIO fh);
 
     /**
      * Gets the terminal speed.
+     *
      * @return array of [input_speed, output_speed], or null if unsupported
      */
     int[] getTerminalSpeed(RuntimeIO fh);
 
     /**
      * Gets control characters.
+     *
      * @return map of control character names to values
      */
     Map<String, String> getControlChars(RuntimeIO fh);

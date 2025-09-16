@@ -6,10 +6,11 @@ import org.perlonjava.terminal.MacOSTerminalHandler;
 import org.perlonjava.terminal.TerminalHandler;
 import org.perlonjava.terminal.WindowsTerminalHandler;
 
-import java.io.*;
-import java.util.*;
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 
-import static org.perlonjava.runtime.RuntimeScalarCache.*;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 import static org.perlonjava.runtime.RuntimeScalarType.INTEGER;
 
 /**
@@ -18,8 +19,8 @@ import static org.perlonjava.runtime.RuntimeScalarType.INTEGER;
  */
 public class TermReadKey extends PerlModuleBase {
 
-    private static Map<String, Integer> terminalModes = new HashMap<>();
-    private static TerminalHandler handler;
+    private static final Map<String, Integer> terminalModes = new HashMap<>();
+    private static final TerminalHandler handler;
 
     static {
         // Initialize terminal mode mappings
@@ -146,10 +147,11 @@ public class TermReadKey extends PerlModuleBase {
             return new RuntimeList(scalarUndef);
         }
     }
+
     /**
-      * Reads a line of input with timeout.
-      * ReadLine([timeout], [filehandle])
-      */
+     * Reads a line of input with timeout.
+     * ReadLine([timeout], [filehandle])
+     */
     public static RuntimeList readLine(RuntimeArray args, int ctx) {
         double timeout = 0; // Default is blocking
         RuntimeIO fh = RuntimeIO.stdin;

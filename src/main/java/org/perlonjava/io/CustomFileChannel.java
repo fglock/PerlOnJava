@@ -10,7 +10,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Set;
@@ -57,19 +56,25 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
  */
 public class CustomFileChannel implements IOHandle {
 
-    /** The underlying Java NIO FileChannel for actual I/O operations */
+    /**
+     * The underlying Java NIO FileChannel for actual I/O operations
+     */
     private final FileChannel fileChannel;
 
-    /** Tracks whether end-of-file has been reached during reading */
+    /**
+     * Tracks whether end-of-file has been reached during reading
+     */
     private boolean isEOF;
 
-    /** Helper for handling multi-byte character decoding across read boundaries */
+    /**
+     * Helper for handling multi-byte character decoding across read boundaries
+     */
     private CharsetDecoderHelper decoderHelper;
 
     /**
      * Creates a new CustomFileChannel for the specified file path.
      *
-     * @param path the path to the file to open
+     * @param path    the path to the file to open
      * @param options the options specifying how the file is opened (READ, WRITE, etc.)
      * @throws IOException if an I/O error occurs opening the file
      */
@@ -84,9 +89,9 @@ public class CustomFileChannel implements IOHandle {
      * <p>This constructor is useful for wrapping standard I/O streams (stdin, stdout, stderr)
      * or file descriptors obtained from native code.
      *
-     * @param fd the file descriptor to wrap
+     * @param fd      the file descriptor to wrap
      * @param options the options specifying the mode (must contain either READ or WRITE)
-     * @throws IOException if an I/O error occurs
+     * @throws IOException              if an I/O error occurs
      * @throws IllegalArgumentException if options don't contain READ or WRITE
      */
     public CustomFileChannel(FileDescriptor fd, Set<StandardOpenOption> options) throws IOException {
@@ -110,7 +115,7 @@ public class CustomFileChannel implements IOHandle {
      * This is crucial for UTF-8 and other variable-length encodings.
      *
      * @param maxBytes the maximum number of bytes to read
-     * @param charset the character encoding to use for decoding
+     * @param charset  the character encoding to use for decoding
      * @return RuntimeScalar containing the decoded string data
      */
     @Override
@@ -133,7 +138,7 @@ public class CustomFileChannel implements IOHandle {
             // Convert bytes to string where each char represents a byte
             StringBuilder result = new StringBuilder(bytesRead);
             for (int i = 0; i < bytesRead; i++) {
-                result.append((char)(buffer[i] & 0xFF));
+                result.append((char) (buffer[i] & 0xFF));
             }
             return new RuntimeScalar(result.toString());
         } catch (IOException e) {
@@ -220,7 +225,7 @@ public class CustomFileChannel implements IOHandle {
      *
      * <p>Seeking clears the EOF flag since we may no longer be at the end of file.
      *
-     * @param pos the offset in bytes
+     * @param pos    the offset in bytes
      * @param whence the reference point for the offset (SEEK_SET, SEEK_CUR, or SEEK_END)
      * @return RuntimeScalar with true on success, false on failure
      */

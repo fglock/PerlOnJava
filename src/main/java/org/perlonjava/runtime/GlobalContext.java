@@ -7,7 +7,6 @@ import org.perlonjava.perlmodule.*;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Spliterator;
 
 import static org.perlonjava.runtime.RuntimeIO.initStdHandles;
 

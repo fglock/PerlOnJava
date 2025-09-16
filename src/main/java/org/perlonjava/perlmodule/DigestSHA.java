@@ -10,7 +10,8 @@ import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 
-import static org.perlonjava.runtime.RuntimeScalarCache.*;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarFalse;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 import static org.perlonjava.runtime.RuntimeScalarType.JAVAOBJECT;
 
 /**
@@ -23,6 +24,7 @@ public class DigestSHA extends PerlModuleBase {
 
     // Map Perl algorithm names to Java algorithm names
     private static final Map<String, String> ALGORITHM_MAP = new HashMap<>();
+
     static {
         ALGORITHM_MAP.put("1", "SHA-1");
         ALGORITHM_MAP.put("224", "SHA-224");

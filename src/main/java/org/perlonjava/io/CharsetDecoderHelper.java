@@ -2,11 +2,7 @@ package org.perlonjava.io;
 
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
-import java.nio.charset.Charset;
-import java.nio.charset.CharsetDecoder;
-import java.nio.charset.CoderResult;
-import java.nio.charset.CodingErrorAction;
-import java.nio.charset.StandardCharsets;
+import java.nio.charset.*;
 
 /**
  * Helper class for decoding bytes to strings with proper handling of
@@ -50,16 +46,24 @@ import java.nio.charset.StandardCharsets;
  * @see Charset
  */
 public class CharsetDecoderHelper {
-    /** The charset decoder configured with error handling policies */
+    /**
+     * The charset decoder configured with error handling policies
+     */
     private CharsetDecoder decoder;
 
-    /** Buffer for storing incomplete byte sequences between decode calls */
+    /**
+     * Buffer for storing incomplete byte sequences between decode calls
+     */
     private ByteBuffer leftoverBuffer;
 
-    /** The current charset being used for decoding */
+    /**
+     * The current charset being used for decoding
+     */
     private Charset currentCharset;
 
-    /** Flag indicating if more data is needed to decode at least one character */
+    /**
+     * Flag indicating if more data is needed to decode at least one character
+     */
     private boolean needMoreData = false;
 
     /**
@@ -131,9 +135,9 @@ public class CharsetDecoderHelper {
      *   <li>Incomplete sequence: Buffers bytes and sets needMoreData flag</li>
      * </ul>
      *
-     * @param buffer the byte array containing the data
+     * @param buffer    the byte array containing the data
      * @param bytesRead the number of bytes read (-1 for EOF)
-     * @param charset the charset to use for decoding
+     * @param charset   the charset to use for decoding
      * @return the decoded string (may be empty if waiting for more data)
      */
     public String decode(byte[] buffer, int bytesRead, Charset charset) {

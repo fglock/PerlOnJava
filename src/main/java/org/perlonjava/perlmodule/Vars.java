@@ -1,6 +1,5 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.parser.FileHandle;
 import org.perlonjava.runtime.*;
 
 /**

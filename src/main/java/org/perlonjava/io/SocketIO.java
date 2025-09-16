@@ -27,6 +27,7 @@ public class SocketIO implements IOHandle {
     private InputStream inputStream;
     private OutputStream outputStream;
     private boolean isEOF;
+    private CharsetDecoderHelper decoderHelper;
 
     /**
      * Constructs a SocketIO instance for a client socket.
@@ -150,8 +151,6 @@ public class SocketIO implements IOHandle {
         }
         return scalarUndef;
     }
-
-    private CharsetDecoderHelper decoderHelper;
 
     @Override
     public RuntimeScalar doRead(int maxBytes, Charset charset) {

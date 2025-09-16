@@ -2,7 +2,8 @@ package org.perlonjava.perlmodule;
 
 import org.perlonjava.runtime.*;
 
-import static org.perlonjava.runtime.FeatureFlags.*;
+import static org.perlonjava.runtime.FeatureFlags.featureExists;
+import static org.perlonjava.runtime.FeatureFlags.getFeatureList;
 
 /**
  * The FeatureFlags class provides functionalities similar to the Perl feature module.

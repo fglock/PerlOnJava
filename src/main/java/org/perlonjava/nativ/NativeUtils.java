@@ -1,8 +1,16 @@
 package org.perlonjava.nativ;
 
-import com.sun.jna.*;
-import com.sun.jna.platform.win32.*;
-import org.perlonjava.runtime.*;
+import com.sun.jna.Function;
+import com.sun.jna.Native;
+import com.sun.jna.Platform;
+import com.sun.jna.platform.win32.Kernel32;
+import com.sun.jna.platform.win32.Tlhelp32;
+import com.sun.jna.platform.win32.WinDef;
+import com.sun.jna.platform.win32.WinNT;
+import org.perlonjava.runtime.GlobalVariable;
+import org.perlonjava.runtime.RuntimeBase;
+import org.perlonjava.runtime.RuntimeIO;
+import org.perlonjava.runtime.RuntimeScalar;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -26,6 +34,7 @@ public class NativeUtils {
 
     /**
      * Create a symbolic link
+     *
      * @param args RuntimeScalar array containing [oldfile, newfile]
      * @return RuntimeScalar with 1 for success, 0 for failure
      */
@@ -89,6 +98,7 @@ public class NativeUtils {
 
     /**
      * Create a hard link between two files
+     *
      * @param args RuntimeScalar array containing [oldfile, newfile]
      * @return RuntimeScalar with 1 for success, 0 for failure
      */
@@ -123,6 +133,7 @@ public class NativeUtils {
 
     /**
      * Get parent process ID
+     *
      * @param args Unused (for API consistency)
      * @return RuntimeScalar with parent process ID
      */
@@ -153,6 +164,7 @@ public class NativeUtils {
 
     /**
      * Get user ID (returns username-based hash on Windows)
+     *
      * @param args Unused (for API consistency)
      * @return RuntimeScalar with user ID
      */
@@ -175,6 +187,7 @@ public class NativeUtils {
 
     /**
      * Get effective user ID
+     *
      * @param args Unused (for API consistency)
      * @return RuntimeScalar with effective user ID
      */
@@ -189,6 +202,7 @@ public class NativeUtils {
 
     /**
      * Get group ID (returns computer name hash on Windows)
+     *
      * @param args Unused (for API consistency)
      * @return RuntimeScalar with group ID
      */
@@ -211,6 +225,7 @@ public class NativeUtils {
 
     /**
      * Get effective group ID
+     *
      * @param args Unused (for API consistency)
      * @return RuntimeScalar with effective group ID
      */

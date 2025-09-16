@@ -1,13 +1,14 @@
 package org.perlonjava.operators;
 
+import org.perlonjava.operators.pack.PackHelper;
 import org.perlonjava.runtime.*;
-import org.perlonjava.operators.pack.*;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.HashMap;
+
 /**
  * Provides functionality to pack a list of scalars into a binary string
  * based on a specified template, similar to Perl's pack function.
@@ -58,7 +59,7 @@ public class Pack {
 
         for (int i = 0; i < template.length(); i++) {
             char format = template.charAt(i);
-            System.err.println("DEBUG: main loop i=" + i + ", format='" + format + "' (code " + (int)format + ")");
+            System.err.println("DEBUG: main loop i=" + i + ", format='" + format + "' (code " + (int) format + ")");
 
             // Skip spaces
             if (Character.isWhitespace(format)) {
@@ -279,7 +280,7 @@ public class Pack {
                         dataToWrite = new byte[stringCount];
                         System.arraycopy(strBytes, 0, dataToWrite, 0, actualCount);
                         // Pad with nulls or spaces depending on format
-                        byte padByte = (stringFormat == 'A') ? (byte)' ' : (byte)0;
+                        byte padByte = (stringFormat == 'A') ? (byte) ' ' : (byte) 0;
                         for (int k = actualCount; k < stringCount; k++) {
                             dataToWrite[k] = padByte;
                         }
@@ -427,13 +428,13 @@ public class Pack {
                 for (int j = 0; j < count; j++) {
                     output.write(0);
                 }
-                    } else if (format == '/') {
-                        System.err.println("DEBUG: entering '/' handler, i=" + i);
+            } else if (format == '/') {
+                System.err.println("DEBUG: entering '/' handler, i=" + i);
 
-                        // This should only happen if '/' appears without a preceding numeric format
-                        // which is an error
-                        throw new PerlCompilerException("Invalid type '/'");
-                    } else if (format == '@') {
+                // This should only happen if '/' appears without a preceding numeric format
+                // which is an error
+                throw new PerlCompilerException("Invalid type '/'");
+            } else if (format == '@') {
                 // @ is used for absolute positioning
                 // @n means null-fill or truncate to position n
                 int currentPosition = output.size();

@@ -22,14 +22,6 @@ public class DBI extends PerlModuleBase {
     private static final String GENERAL_ERROR_STATE = "S1000";
 
     /**
-     * Functional interface for DBI operations that can throw exceptions.
-     */
-    @FunctionalInterface
-    private interface DBIOperation {
-        RuntimeList execute() throws Exception;
-    }
-
-    /**
      * Constructor initializes the DBI module.
      */
     public DBI() {
@@ -76,8 +68,8 @@ public class DBI extends PerlModuleBase {
     /**
      * Executes a DBI operation with standardized error handling.
      *
-     * @param operation The operation to execute
-     * @param handle The database or statement handle for error context
+     * @param operation  The operation to execute
+     * @param handle     The database or statement handle for error context
      * @param methodName The name of the method being executed (for error messages)
      * @return RuntimeList result from the operation or error result
      */
@@ -815,5 +807,13 @@ public class DBI extends PerlModuleBase {
 
             return info.createReference().getList();
         }, dbh, "get_info");
+    }
+
+    /**
+     * Functional interface for DBI operations that can throw exceptions.
+     */
+    @FunctionalInterface
+    private interface DBIOperation {
+        RuntimeList execute() throws Exception;
     }
 }

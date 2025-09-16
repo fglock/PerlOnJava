@@ -1,9 +1,9 @@
 package org.perlonjava.io;
 
+import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeIO;
 import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.runtime.RuntimeScalarCache;
-import org.perlonjava.runtime.PerlCompilerException;
 
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -74,8 +74,8 @@ public class ScalarBackedIO implements IOHandle {
         // Copy any remaining content after write position
         if (position + newBytes.length < currentBytes.length) {
             System.arraycopy(currentBytes, position + newBytes.length,
-                           resultBytes, position + newBytes.length,
-                           currentBytes.length - position - newBytes.length);
+                    resultBytes, position + newBytes.length,
+                    currentBytes.length - position - newBytes.length);
         }
 
         // Update backing scalar
@@ -110,7 +110,7 @@ public class ScalarBackedIO implements IOHandle {
     /**
      * Seeks to a new position based on the whence parameter.
      *
-     * @param pos the offset in bytes
+     * @param pos    the offset in bytes
      * @param whence the reference point for the offset (SEEK_SET, SEEK_CUR, or SEEK_END)
      * @return RuntimeScalar with true on success
      */
@@ -156,13 +156,13 @@ public class ScalarBackedIO implements IOHandle {
             return RuntimeScalarCache.scalarTrue;
         }
 
-        byte[] truncatedBytes = new byte[(int)length];
-        System.arraycopy(contentBytes, 0, truncatedBytes, 0, (int)length);
+        byte[] truncatedBytes = new byte[(int) length];
+        System.arraycopy(contentBytes, 0, truncatedBytes, 0, (int) length);
 
         backingScalar.set(new String(truncatedBytes, StandardCharsets.ISO_8859_1));
 
         if (position > length) {
-            position = (int)length;
+            position = (int) length;
             isEOF = true;
         }
 

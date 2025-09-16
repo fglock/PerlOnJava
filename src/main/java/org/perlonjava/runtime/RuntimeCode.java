@@ -76,13 +76,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // Field to hold the thread compiling this code
     public Supplier<Void> compilerSupplier;
 
-    // Add a method to clear caches when globals are reset
-    public static void clearCaches() {
-        evalCache.clear();
-        methodHandleCache.clear();
-        anonSubs.clear();
-    }
-
     /**
      * Constructs a RuntimeCode instance with the specified prototype and attributes.
      *
@@ -98,6 +91,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.methodHandle = methodObject;
         this.codeObject = codeObject;
         this.prototype = prototype;
+    }
+
+    // Add a method to clear caches when globals are reset
+    public static void clearCaches() {
+        evalCache.clear();
+        methodHandleCache.clear();
+        anonSubs.clear();
     }
 
     public static void copy(RuntimeCode code, RuntimeCode codeFrom) {
@@ -246,11 +246,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     /**
      * Call a method in a Perl-like class hierarchy using the C3 linearization algorithm.
      *
-     * @param runtimeScalar  The object to call the method on.
-     * @param method         The method to resolve.
-     * @param currentSub     The subroutine to resolve SUPER::method in.
-     * @param args           The arguments to pass to the method.
-     * @param callContext    The call context.
+     * @param runtimeScalar The object to call the method on.
+     * @param method        The method to resolve.
+     * @param currentSub    The subroutine to resolve SUPER::method in.
+     * @param args          The arguments to pass to the method.
+     * @param callContext   The call context.
      * @return The result of the method call.
      */
     public static RuntimeList call(RuntimeScalar runtimeScalar,
@@ -273,7 +273,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Retrieve Perl class name
         String perlClassName;
 
-        if (RuntimeScalarType.isReference (runtimeScalar)) {
+        if (RuntimeScalarType.isReference(runtimeScalar)) {
             // Handle all reference types (REFERENCE, ARRAYREFERENCE, HASHREFERENCE, etc.)
             int blessId = ((RuntimeBase) runtimeScalar.value).blessId;
             if (blessId == 0) {
@@ -302,10 +302,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 perlClassName = perlClassName.substring(0, perlClassName.length() - 2);
             }
             if (perlClassName.startsWith("::")) {
-                perlClassName = perlClassName.substring(2, perlClassName.length());
+                perlClassName = perlClassName.substring(2);
             }
             if (perlClassName.startsWith("main::")) {
-                perlClassName = perlClassName.substring(6, perlClassName.length());
+                perlClassName = perlClassName.substring(6);
             }
             if (perlClassName.isEmpty()) {
                 // Nothing left
@@ -525,6 +525,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     /**
      * Gets the current package name using caller() information
+     *
      * @return The current package name with "::" suffix
      */
     public static String getCurrentPackage() {

@@ -1,8 +1,6 @@
 package org.perlonjava.runtime;
 
 import org.perlonjava.codegen.CustomClassLoader;
-import org.perlonjava.operators.Operator;
-import org.perlonjava.parser.DataSection;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -12,8 +10,6 @@ import java.util.regex.Pattern;
 
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarFalse;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
-import static org.perlonjava.runtime.RuntimeScalarType.GLOB;
-import static org.perlonjava.runtime.RuntimeScalarType.GLOBREFERENCE;
 
 /**
  * The GlobalVariable class manages global variables, arrays, hashes, and references
@@ -25,27 +21,22 @@ public class GlobalVariable {
     public static final Map<String, RuntimeScalar> globalVariables = new HashMap<>();
     public static final Map<String, RuntimeArray> globalArrays = new HashMap<>();
     public static final Map<String, RuntimeHash> globalHashes = new HashMap<>();
-    static final Map<String, RuntimeScalar> globalCodeRefs = new HashMap<>();
-    static final Map<String, RuntimeGlob> globalIORefs = new HashMap<>();
-
-    // Global class loader for all generated classes - not final so we can replace it
-    public static CustomClassLoader globalClassLoader =
-            new CustomClassLoader(GlobalVariable.class.getClassLoader());
-
     // Cache for package existence checks
     public static final Map<String, Boolean> packageExistsCache = new HashMap<>();
-
-    // Flags used by operator override
-
-    // globalGlobs: Tracks typeglob assignments (e.g., *CORE::GLOBAL::hex = sub {...})
-    // Used to detect when built-in operators have been globally overridden
-    static final Map<String, Boolean> globalGlobs = new HashMap<>();
-
     // isSubs: Tracks subroutines declared via 'use subs' pragma (e.g., use subs 'hex')
     // Maps fully-qualified names (package::subname) to indicate they should be called
     // as user-defined subroutines instead of built-in operators
     public static final Map<String, Boolean> isSubs = new HashMap<>();
+    static final Map<String, RuntimeScalar> globalCodeRefs = new HashMap<>();
+    static final Map<String, RuntimeGlob> globalIORefs = new HashMap<>();
 
+    // Flags used by operator override
+    // globalGlobs: Tracks typeglob assignments (e.g., *CORE::GLOBAL::hex = sub {...})
+    // Used to detect when built-in operators have been globally overridden
+    static final Map<String, Boolean> globalGlobs = new HashMap<>();
+    // Global class loader for all generated classes - not final so we can replace it
+    public static CustomClassLoader globalClassLoader =
+            new CustomClassLoader(GlobalVariable.class.getClassLoader());
     // Regular expression for regex variables like $main::1
     static Pattern regexVariablePattern = Pattern.compile("^main::(\\d+)$");
 
@@ -314,7 +305,8 @@ public class GlobalVariable {
 
     /**
      * Resets all global variables whose names start with any of the specified characters
-     * @param resetChars Set of characters to match variable names against
+     *
+     * @param resetChars     Set of characters to match variable names against
      * @param currentPackage The current package name with "::" suffix
      */
     public static void resetGlobalVariables(Set<Character> resetChars, String currentPackage) {
@@ -353,9 +345,10 @@ public class GlobalVariable {
 
     /**
      * Determines if a variable should be reset based on its name and the reset characters
-     * @param fullKey The full variable key (e.g. "main::myvar")
+     *
+     * @param fullKey       The full variable key (e.g. "main::myvar")
      * @param packagePrefix The current package prefix (e.g. "main::")
-     * @param resetChars The set of characters to match against
+     * @param resetChars    The set of characters to match against
      * @return true if the variable should be reset
      */
     private static boolean shouldResetVariable(String fullKey, String packagePrefix, Set<Character> resetChars) {

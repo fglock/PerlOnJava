@@ -27,13 +27,19 @@ import java.util.HashMap;
  */
 public class TieHash extends HashMap<String, RuntimeScalar> {
 
-    /** The tied object (handler) that implements the tie interface methods. */
+    /**
+     * The tied object (handler) that implements the tie interface methods.
+     */
     private final RuntimeScalar self;
 
-    /** The package name that this hash is tied to. */
+    /**
+     * The package name that this hash is tied to.
+     */
     private final String tiedPackage;
 
-    /** The original value of the hash before it was tied. */
+    /**
+     * The original value of the hash before it was tied.
+     */
     private final RuntimeHash previousValue;
 
     /**

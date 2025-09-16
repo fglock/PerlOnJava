@@ -18,7 +18,9 @@ package org.perlonjava.runtime;
  */
 public class TieScalar extends TiedVariableBase {
 
-    /** The original value of the scalar before it was tied. */
+    /**
+     * The original value of the scalar before it was tied.
+     */
     private final RuntimeScalar previousValue;
 
     /**
@@ -34,20 +36,6 @@ public class TieScalar extends TiedVariableBase {
     }
 
     /**
-     * Fetches the value from a tied scalar (delegates to FETCH).
-     */
-    public RuntimeScalar tiedFetch() {
-        return tieCall("FETCH");
-    }
-
-    /**
-     * Stores a value into a tied scalar (delegates to STORE).
-     */
-    public RuntimeScalar tiedStore(RuntimeScalar v) {
-        return tieCall( "STORE", v);
-    }
-
-    /**
      * Called when a tied scalar goes out of scope (delegates to DESTROY if exists).
      */
     public static RuntimeScalar tiedDestroy(RuntimeScalar runtimeScalar) {
@@ -59,6 +47,20 @@ public class TieScalar extends TiedVariableBase {
      */
     public static RuntimeScalar tiedUntie(RuntimeScalar runtimeScalar) {
         return ((TieScalar) runtimeScalar.value).tieCallIfExists("UNTIE");
+    }
+
+    /**
+     * Fetches the value from a tied scalar (delegates to FETCH).
+     */
+    public RuntimeScalar tiedFetch() {
+        return tieCall("FETCH");
+    }
+
+    /**
+     * Stores a value into a tied scalar (delegates to STORE).
+     */
+    public RuntimeScalar tiedStore(RuntimeScalar v) {
+        return tieCall("STORE", v);
     }
 
     public RuntimeScalar getPreviousValue() {

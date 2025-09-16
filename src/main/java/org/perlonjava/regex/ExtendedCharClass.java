@@ -502,7 +502,7 @@ public class ExtendedCharClass {
 
                                     // Unwrap if necessary
                                     if (translated.startsWith("[") && translated.endsWith("]")) {
-                                        result.append(translated.substring(1, translated.length() - 1));
+                                        result.append(translated, 1, translated.length() - 1);
                                     } else {
                                         result.append(translated);
                                     }
@@ -570,7 +570,7 @@ public class ExtendedCharClass {
                 }
             }
 
-            return "[" + result.toString() + "]";
+            return "[" + result + "]";
         }
 
         // Should not reach here
@@ -703,10 +703,10 @@ public class ExtendedCharClass {
     }
 
     private static class ExtendedClassParser {
-        private List<Token> tokens;
+        private final List<Token> tokens;
         private int current = 0;
-        private String originalRegex;
-        private int contentStart;
+        private final String originalRegex;
+        private final int contentStart;
 
         ExtendedClassParser(List<Token> tokens, String originalRegex, int contentStart) {
             this.tokens = tokens;

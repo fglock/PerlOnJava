@@ -4,7 +4,8 @@ import org.perlonjava.astnode.*;
 import org.perlonjava.perlmodule.Strict;
 
 import static org.perlonjava.runtime.ScalarUtils.printable;
-import static org.perlonjava.symbols.ScopedSymbolTable.*;
+import static org.perlonjava.symbols.ScopedSymbolTable.stringifyFeatureFlags;
+import static org.perlonjava.symbols.ScopedSymbolTable.stringifyWarningFlags;
 
 /*
  *

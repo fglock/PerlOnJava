@@ -9,7 +9,7 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
 /**
  * Java::System - Perl module for accessing Java system properties and environment
- *
+ * <p>
  * This module provides a Perl interface to Java's System class, allowing
  * Perl code to access system properties, environment variables, and other
  * JVM information.
@@ -65,7 +65,7 @@ public class JavaSystem extends PerlModuleBase {
     /**
      * Get a system property by name
      * Usage: my $value = getProperty('java.version');
-     *        my $value = getProperty('os.name', 'default');
+     * my $value = getProperty('os.name', 'default');
      */
     public static RuntimeList getProperty(RuntimeArray args, int ctx) {
         if (args.size() < 1) {

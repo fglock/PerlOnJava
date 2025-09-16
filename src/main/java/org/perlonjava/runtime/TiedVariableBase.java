@@ -5,7 +5,7 @@ import org.perlonjava.mro.InheritanceResolver;
 /**
  * TiedVariableBase provides a common base class for all tied variable types in Perl.
  * This includes tied scalars ($v), array elements ($a[10]), and hash elements ($h{a}).
- * 
+ *
  * <p>All tied variables share common behavior:</p>
  * <ul>
  * <li>Delegation of operations to tie handler methods (FETCH, STORE, etc.)</li>
@@ -15,10 +15,14 @@ import org.perlonjava.mro.InheritanceResolver;
  * </ul>
  */
 public abstract class TiedVariableBase extends RuntimeBaseProxy {
-    /** The tied object (handler) that implements the tie interface methods. */
+    /**
+     * The tied object (handler) that implements the tie interface methods.
+     */
     protected final RuntimeScalar self;
-    
-    /** The package name that this variable is tied to. */
+
+    /**
+     * The package name that this variable is tied to.
+     */
     protected final String tiedPackage;
 
     /**
@@ -35,7 +39,7 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
 
     /**
      * Calls a tie method on the tied object.
-     * 
+     *
      * @param method the method name to call
      * @param args   additional arguments to pass to the method
      * @return the result of the method call
@@ -54,7 +58,7 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
     /**
      * Calls a tie method if it exists in the tied object's class hierarchy.
      * Used for optional methods like DESTROY and UNTIE.
-     * 
+     *
      * @param methodName the method name to call
      * @return the result of the method call, or undef if method doesn't exist
      */
@@ -94,7 +98,7 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
     }
 
     // Common delegated operations that require vivification
-    
+
     @Override
     public RuntimeScalar defined() {
         vivify();
@@ -151,7 +155,7 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
 
     /**
      * Creates a copy of the current value after vivification.
-     * 
+     *
      * @return a new RuntimeScalar with the current value
      */
     public RuntimeScalar fetch() {
@@ -160,7 +164,7 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
     }
 
     // Array and scalar addition operations
-    
+
     @Override
     public void addToArray(RuntimeArray array) {
         vivify();
@@ -172,7 +176,7 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
         vivify();
         return super.addToScalar(v);
     }
-    
+
     public RuntimeScalar getSelf() {
         return self;
     }

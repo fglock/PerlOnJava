@@ -126,8 +126,8 @@ public class EmitVariable {
                             || symbolEntry.decl().equals("state")
                             || symbolEntry.decl().equals("our")
 
-                            // XXX This breaks some tests
-                            // || (symbolEntry.decl().equals("our") && symbolEntry.name().equals("@_"))
+                    // XXX This breaks some tests
+                    // || (symbolEntry.decl().equals("our") && symbolEntry.name().equals("@_"))
             );
 
             if (!isLexical) {

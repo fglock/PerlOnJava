@@ -1,6 +1,6 @@
 package org.perlonjava.codegen;
 
-import org.perlonjava.astnode.*;
+import org.perlonjava.astnode.OperatorNode;
 import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.runtime.PerlCompilerException;
 
@@ -33,8 +33,7 @@ public class EmitOperatorNode {
             case "keys", "values", "pack", "mkdir", "opendir", "seekdir", "crypt", "vec", "read", "sysopen", "chmod" ->
                     EmitOperator.handleOpWithList(emitterVisitor, node);
 
-            case "each" ->
-                    EmitOperator.handleEach(emitterVisitor, node);
+            case "each" -> EmitOperator.handleEach(emitterVisitor, node);
 
             // Variable declarations
             case "our", "state", "my" -> EmitVariable.handleMyOperator(emitterVisitor, node);
@@ -66,7 +65,8 @@ public class EmitOperatorNode {
                  "hex", "lc", "lcfirst", "length", "log",
                  "oct", "ord", "pos", "quotemeta", "rand", "ref",
                  "rewinddir", "rmdir", "sin", "sleep", "sqrt",
-                 "srand", "study", "telldir", "uc", "ucfirst" -> EmitOperator.handleUnaryDefaultCase(node, node.operator, emitterVisitor);
+                 "srand", "study", "telldir", "uc", "ucfirst" ->
+                    EmitOperator.handleUnaryDefaultCase(node, node.operator, emitterVisitor);
 
             // Miscellaneous operators
             case "time", "times" -> EmitOperator.handleTimeOperator(emitterVisitor, node);

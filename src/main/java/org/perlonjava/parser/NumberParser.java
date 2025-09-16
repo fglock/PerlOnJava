@@ -578,7 +578,7 @@ public class NumberParser {
      *
      * @param usesBinaryExponent true for binary/octal, false for hex
      */
-        private record NumberFormat(int radix, Predicate<String> digitValidator, Function<String, Long> integerParser,
-                                    Function<String, Double> fractionalParser, boolean usesBinaryExponent, String name) {
+    private record NumberFormat(int radix, Predicate<String> digitValidator, Function<String, Long> integerParser,
+                                Function<String, Double> fractionalParser, boolean usesBinaryExponent, String name) {
     }
 }

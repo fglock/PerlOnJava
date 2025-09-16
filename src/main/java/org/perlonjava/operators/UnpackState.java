@@ -163,6 +163,7 @@ public class UnpackState {
 
     /**
      * Sets the absolute position in the data.
+     *
      * @param newPosition The new position (0-based)
      */
     public void setPosition(int newPosition) {

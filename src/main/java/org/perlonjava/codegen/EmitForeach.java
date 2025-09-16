@@ -6,7 +6,6 @@ import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
 import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.perlmodule.Warnings;
-import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.RuntimeContextType;
 
 public class EmitForeach {
@@ -114,10 +113,10 @@ public class EmitForeach {
                 mv.visitLdcInsn(globalVarName);
                 mv.visitInsn(Opcodes.SWAP); // Stack: globalVarName, iteratorValue
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/GlobalVariable",
-                    "aliasGlobalVariable",
-                    "(Ljava/lang/String;Lorg/perlonjava/runtime/RuntimeScalar;)V",
-                    false);
+                        "org/perlonjava/runtime/GlobalVariable",
+                        "aliasGlobalVariable",
+                        "(Ljava/lang/String;Lorg/perlonjava/runtime/RuntimeScalar;)V",
+                        false);
             } else if (node.variable instanceof OperatorNode operatorNode) {
                 // Local variable case
                 String varName = operatorNode.operator + ((IdentifierNode) operatorNode.operand).name;

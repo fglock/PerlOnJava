@@ -4,39 +4,25 @@ import org.perlonjava.runtime.PerlCompilerException;
 
 import static java.util.regex.Pattern.*;
 
-public class RegexFlags {
-    private final boolean isGlobalMatch;         // g flag - match globally (find all occurrences)
-    private final boolean keepCurrentPosition;   // c flag - continue matching from last match position
-    private final boolean isNonDestructive;      // r flag - non-destructive match (leaves target string unchanged)
-    private final boolean isMatchExactlyOnce;    // m?PAT? flag - match pattern exactly once
-    private final boolean useGAssertion;         // \G assertion - match must occur at previous match end
-    private final boolean isExtendedWhitespace;  // xx flag - ignore whitespace and comments in pattern
-    private final boolean isNonCapturing;        // n flag - make groups non-capturing by default
-    private final boolean isOptimized;           // o flag - compile pattern only once
-    private final boolean isCaseInsensitive;     // i flag - case insensitive matching
-    private final boolean isMultiLine;           // m flag - multiline mode (^ and $ match line boundaries)
-    private final boolean isDotAll;              // s flag - dot matches all characters including newline
-    private final boolean isExtended;            // x flag - ignore whitespace and # comments in pattern
-    private final boolean preservesMatch;        // p flag - preserve match after failed matches
-
-    public RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boolean isNonDestructive,
-                      boolean isMatchExactlyOnce, boolean useGAssertion, boolean isExtendedWhitespace,
-                      boolean isNonCapturing, boolean isOptimized, boolean isCaseInsensitive,
-                      boolean isMultiLine, boolean isDotAll, boolean isExtended, boolean preservesMatch) {
-        this.isGlobalMatch = isGlobalMatch;
-        this.keepCurrentPosition = keepCurrentPosition;
-        this.isNonDestructive = isNonDestructive;
-        this.isMatchExactlyOnce = isMatchExactlyOnce;
-        this.useGAssertion = useGAssertion;
-        this.isExtendedWhitespace = isExtendedWhitespace;
-        this.isNonCapturing = isNonCapturing;
-        this.isOptimized = isOptimized;
-        this.isCaseInsensitive = isCaseInsensitive;
-        this.isMultiLine = isMultiLine;
-        this.isDotAll = isDotAll;
-        this.isExtended = isExtended;
-        this.preservesMatch = preservesMatch;
-    }
+/**
+ * @param isGlobalMatch        g flag - match globally (find all occurrences)
+ * @param keepCurrentPosition  c flag - continue matching from last match position
+ * @param isNonDestructive     r flag - non-destructive match (leaves target string unchanged)
+ * @param isMatchExactlyOnce   m?PAT? flag - match pattern exactly once
+ * @param useGAssertion        \G assertion - match must occur at previous match end
+ * @param isExtendedWhitespace xx flag - ignore whitespace and comments in pattern
+ * @param isNonCapturing       n flag - make groups non-capturing by default
+ * @param isOptimized          o flag - compile pattern only once
+ * @param isCaseInsensitive    i flag - case insensitive matching
+ * @param isMultiLine          m flag - multiline mode (^ and $ match line boundaries)
+ * @param isDotAll             s flag - dot matches all characters including newline
+ * @param isExtended           x flag - ignore whitespace and # comments in pattern
+ * @param preservesMatch       p flag - preserve match after failed matches
+ */
+public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boolean isNonDestructive,
+                         boolean isMatchExactlyOnce, boolean useGAssertion, boolean isExtendedWhitespace,
+                         boolean isNonCapturing, boolean isOptimized, boolean isCaseInsensitive, boolean isMultiLine,
+                         boolean isDotAll, boolean isExtended, boolean preservesMatch) {
 
     public static RegexFlags fromModifiers(String modifiers, String patternString) {
         return new RegexFlags(
@@ -145,58 +131,5 @@ public class RegexFlags {
         if (isNonDestructive) flagString.append('g');
 
         return flagString.toString();
-    }
-
-    // Getters
-    public boolean isGlobalMatch() {
-        return isGlobalMatch;
-    }
-
-    public boolean keepCurrentPosition() {
-        return keepCurrentPosition;
-    }
-
-    public boolean isNonDestructive() {
-        return isNonDestructive;
-    }
-
-    public boolean isMatchExactlyOnce() {
-        return isMatchExactlyOnce;
-    }
-
-    public boolean useGAssertion() {
-        return useGAssertion;
-    }
-
-    public boolean isExtendedWhitespace() {
-        return isExtendedWhitespace;
-    }
-
-    public boolean isNonCapturing() {
-        return isNonCapturing;
-    }
-
-    public boolean isOptimized() {
-        return isOptimized;
-    }
-
-    public boolean isCaseInsensitive() {
-        return isCaseInsensitive;
-    }
-
-    public boolean isMultiLine() {
-        return isMultiLine;
-    }
-
-    public boolean isDotAll() {
-        return isDotAll;
-    }
-
-    public boolean isExtended() {
-        return isExtended;
-    }
-
-    public boolean preservesMatch() {
-        return preservesMatch;
     }
 }

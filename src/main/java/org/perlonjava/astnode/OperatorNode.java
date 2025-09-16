@@ -2,9 +2,6 @@ package org.perlonjava.astnode;
 
 import org.perlonjava.astvisitor.Visitor;
 
-import java.util.HashMap;
-import java.util.Map;
-
 /**
  * The OperatorNode class represents a node in the abstract syntax tree (AST) that holds
  * a unary or list operator and its operand. This class implements the Node interface, allowing it to be

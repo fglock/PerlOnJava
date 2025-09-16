@@ -33,37 +33,64 @@ public class UnicodeResolver {
         try {
             // Special cases - Perl XPosix properties not natively supported in Java
             switch (property) {
-                case "XPosixSpace": case "XPerlSpace": case "SpacePerl":
+                case "XPosixSpace":
+                case "XPerlSpace":
+                case "SpacePerl":
                     // Use ICU4J UnicodeSet for accurate XPosixSpace
                     return getXPosixSpacePattern(negated);
                 case "XPosixAlnum":
                     return wrapCharClass("\\p{IsAlphabetic}\\p{IsDigit}", negated);
-                case "XPosixAlpha": case "Alpha": case "Alphabetic":
+                case "XPosixAlpha":
+                case "Alpha":
+                case "Alphabetic":
                     return wrapProperty("IsAlphabetic", negated);
-                case "XPosixBlank": case "Blank": case "HorizSpace":
+                case "XPosixBlank":
+                case "Blank":
+                case "HorizSpace":
                     return wrapProperty("IsWhite_Space", negated);
-                case "XPosixCntrl": case "Cc": case "Cntrl": case "Control":
+                case "XPosixCntrl":
+                case "Cc":
+                case "Cntrl":
+                case "Control":
                     return wrapProperty("gc=Cc", negated);
-                case "XPosixDigit": case "Decimal_Number": case "Digit": case "Nd":
+                case "XPosixDigit":
+                case "Decimal_Number":
+                case "Digit":
+                case "Nd":
                     return wrapProperty("IsDigit", negated);
-                case "XPosixGraph": case "Graph":
+                case "XPosixGraph":
+                case "Graph":
                     return wrapCharClass("\\p{IsAlphabetic}\\p{IsDigit}\\p{IsPunctuation}", negated);
-                case "XPosixLower": case "Lower": case "Lowercase":
+                case "XPosixLower":
+                case "Lower":
+                case "Lowercase":
                     return wrapProperty("IsLowercase", negated);
-                case "XPosixPrint": case "Print":
+                case "XPosixPrint":
+                case "Print":
                     return wrapCharClass("\\p{IsAlphabetic}\\p{IsDigit}\\p{IsPunctuation}\\p{IsWhite_Space}", negated);
                 case "XPosixPunct":
                     return wrapProperty("IsPunctuation", negated);
-                case "XPosixUpper": case "Upper": case "Uppercase":
+                case "XPosixUpper":
+                case "Upper":
+                case "Uppercase":
                     return wrapProperty("IsUppercase", negated);
-                case "XPosixWord": case "Word": case "IsWord":
+                case "XPosixWord":
+                case "Word":
+                case "IsWord":
                     return wrapCharClass("\\p{IsAlphabetic}\\p{gc=Mn}\\p{gc=Me}\\p{gc=Mc}\\p{IsDigit}\\p{gc=Pc}", negated);
-                case "XPosixXDigit": case "Hex": case "Hex_Digit": case "XDigit":
+                case "XPosixXDigit":
+                case "Hex":
+                case "Hex_Digit":
+                case "XDigit":
                     return wrapProperty("IsHex_Digit", negated);
-                case "XIDS": case "XIDStart": case "XID_Start":
+                case "XIDS":
+                case "XIDStart":
+                case "XID_Start":
                     // Use ICU4J UnicodeSet for accurate XID_Start
                     return getXIDStartPattern(negated);
-                case "XIDC": case "XIDCont": case "XID_Continue":
+                case "XIDC":
+                case "XIDCont":
+                case "XID_Continue":
                     // Use ICU4J UnicodeSet for accurate XID_Continue
                     return getXIDContinuePattern(negated);
                 case "_Perl_IDStart":

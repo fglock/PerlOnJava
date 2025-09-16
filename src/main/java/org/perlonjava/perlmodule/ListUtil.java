@@ -5,16 +5,16 @@ import org.perlonjava.runtime.*;
 
 import java.util.*;
 
-import static org.perlonjava.runtime.RuntimeScalarCache.*;
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
+import static org.perlonjava.runtime.RuntimeScalarCache.*;
 
 /**
  * List::Util module implementation for PerlOnJava.
- *
+ * <p>
  * Copyright (c) 1997-2009 Graham Barr <gbarr@pobox.com>. All rights reserved.
  * This program is free software; you can redistribute it and/or
  * modify it under the same terms as Perl itself.
- *
+ * <p>
  * Maintained since 2013 by Paul Evans <leonerd@leonerd.org.uk>
  */
 public class ListUtil extends PerlModuleBase {

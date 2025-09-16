@@ -43,7 +43,7 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
                 // If the array is auto-vivified, vivify the parent array
                 AutovivificationArray.vivify(parent);
             }
-            
+
             List<RuntimeScalar> elements = parent.elements;
 
             // Expand the array if needed

@@ -5,7 +5,6 @@ import org.perlonjava.runtime.RuntimeScalar;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.function.Function;
 
@@ -44,30 +43,27 @@ import java.util.function.Function;
  */
 public class LayeredIOHandle implements IOHandle {
     /**
+     * List of currently active layers.
+     * Maintained for proper cleanup and reset operations.
+     */
+    public final List<IOLayer> activeLayers = new ArrayList<>();
+    /**
      * The underlying IO handle that performs actual read/write operations.
      * This could be a file handle, socket handle, or any other IOHandle implementation.
      */
     private final IOHandle delegate;
-
     /**
      * The composed function pipeline for input transformations.
      * Each layer's processInput method is composed into this pipeline
      * in the order they were applied.
      */
     private Function<String, String> inputPipeline = Function.identity();
-
     /**
      * The composed function pipeline for output transformations.
      * Each layer's processOutput method is composed into this pipeline
      * in the order they were applied.
      */
     private Function<String, String> outputPipeline = Function.identity();
-
-    /**
-     * List of currently active layers.
-     * Maintained for proper cleanup and reset operations.
-     */
-    public final List<IOLayer> activeLayers = new ArrayList<>();
 
     /**
      * Constructs a new layered IO handle wrapping the given delegate.
@@ -135,7 +131,7 @@ public class LayeredIOHandle implements IOHandle {
      * across read boundaries by reading additional data when necessary.</p>
      *
      * @param maxBytes the maximum number of bytes to read
-     * @param charset the character set (currently unused, layers handle encoding)
+     * @param charset  the character set (currently unused, layers handle encoding)
      * @return a RuntimeScalar containing the read data
      */
     @Override
@@ -168,7 +164,7 @@ public class LayeredIOHandle implements IOHandle {
             // Add the processed characters to the result
             if (!processed.isEmpty()) {
                 int charsToTake = Math.min(processed.length(), charactersNeeded);
-                result.append(processed.substring(0, charsToTake));
+                result.append(processed, 0, charsToTake);
                 charactersNeeded -= charsToTake;
 
                 // If we have extra characters, let the layer buffer them
@@ -455,7 +451,7 @@ public class LayeredIOHandle implements IOHandle {
      *
      * <p>This matches Perl's behavior where seeking clears layer buffers.</p>
      *
-     * @param pos the position to seek to
+     * @param pos    the position to seek to
      * @param whence the seek mode (SEEK_SET, SEEK_CUR, or SEEK_END)
      * @return the result from the delegate's seek operation
      */

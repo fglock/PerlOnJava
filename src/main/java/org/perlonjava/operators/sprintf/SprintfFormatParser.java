@@ -412,10 +412,10 @@ public class SprintfFormatParser {
                 }
             }
 
-       spec.endPos = pos;
-       spec.raw = input.substring(spec.startPos, spec.endPos);
+            spec.endPos = pos;
+            spec.raw = input.substring(spec.startPos, spec.endPos);
 
-       // Add this debug line here:
+            // Add this debug line here:
 
             //
 
@@ -527,7 +527,7 @@ public class SprintfFormatParser {
 
                 // Check for quad formats (unsupported in Perl without quads)
                 if (("ll".equals(spec.lengthModifier) || "L".equals(spec.lengthModifier)) &&
-                    "diuDIU".indexOf(spec.conversionChar) >= 0) {
+                        "diuDIU".indexOf(spec.conversionChar) >= 0) {
                     spec.isValid = false;
                     spec.errorMessage = "INVALID";
                     return;

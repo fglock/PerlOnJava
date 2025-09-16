@@ -83,7 +83,7 @@ public class Unpack {
         int i = 0;
         while (i < template.length()) {
             char format = template.charAt(i);
-            System.err.println("DEBUG: unpack main loop i=" + i + ", format='" + format + "' (code " + (int)format + "), template='" + template + "', remaining='" + template.substring(i) + "'");
+            System.err.println("DEBUG: unpack main loop i=" + i + ", format='" + format + "' (code " + (int) format + "), template='" + template + "', remaining='" + template.substring(i) + "'");
             boolean isChecksum = false;
             int checksumBits = 16; // default
 
@@ -470,7 +470,7 @@ public class Unpack {
                 if (closePos != -1 && closePos + 1 < groupContent.length()) {
                     char nestedEndian = groupContent.charAt(closePos + 1);
                     if ((nestedEndian == '<' && groupEndian == '>') ||
-                        (nestedEndian == '>' && groupEndian == '<')) {
+                            (nestedEndian == '>' && groupEndian == '<')) {
                         return true;
                     }
                 }

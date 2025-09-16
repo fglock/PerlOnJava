@@ -1,8 +1,13 @@
 package org.perlonjava.terminal;
 
 import org.perlonjava.runtime.RuntimeIO;
-import java.io.*;
-import java.util.*;
+
+import java.io.FileDescriptor;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 /**
  * macOS-specific terminal handler implementation.

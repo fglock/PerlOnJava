@@ -2,7 +2,6 @@ package org.perlonjava.operators;
 
 import org.perlonjava.CompilerOptions;
 import org.perlonjava.Configuration;
-import org.perlonjava.perlmodule.Feature;
 import org.perlonjava.runtime.*;
 import org.perlonjava.scriptengine.PerlLanguageProvider;
 

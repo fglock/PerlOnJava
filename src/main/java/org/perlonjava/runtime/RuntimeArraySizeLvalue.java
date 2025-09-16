@@ -1,7 +1,5 @@
 package org.perlonjava.runtime;
 
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
-
 /**
  * Represents the value of $#{array}.
  */

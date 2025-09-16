@@ -16,10 +16,9 @@ import org.perlonjava.runtime.*;
  */
 public class SprintfOperator {
 
-    private static int charsWritten = 0;
-
     // Maximum practical limit for width/precision to prevent memory issues
     public static final int MAX_PRACTICAL_FORMAT_SIZE = 8192;
+    private static int charsWritten = 0;
 
     /**
      * Formats the elements according to the specified format string.
@@ -61,13 +60,13 @@ public class SprintfOperator {
             } else if (element instanceof FormatSpecifier spec) {
                 // Check for integer overflow FIRST
                 if ((spec.width != null && (spec.width == Integer.MAX_VALUE || spec.width > MAX_PRACTICAL_FORMAT_SIZE)) ||
-                    (spec.precision != null && (spec.precision == Integer.MAX_VALUE || spec.precision > MAX_PRACTICAL_FORMAT_SIZE)) ||
-                    (spec.parameterIndex != null && spec.parameterIndex == Integer.MAX_VALUE) ||
-                    (spec.widthArgIndex != null && spec.widthArgIndex == Integer.MAX_VALUE) ||
-                    (spec.precisionArgIndex != null && spec.precisionArgIndex == Integer.MAX_VALUE) ||
-                    // Check for impractically large width/precision values
-                    (spec.width != null && spec.width > MAX_PRACTICAL_FORMAT_SIZE) ||
-                    (spec.precision != null && spec.precision > MAX_PRACTICAL_FORMAT_SIZE)) {
+                        (spec.precision != null && (spec.precision == Integer.MAX_VALUE || spec.precision > MAX_PRACTICAL_FORMAT_SIZE)) ||
+                        (spec.parameterIndex != null && spec.parameterIndex == Integer.MAX_VALUE) ||
+                        (spec.widthArgIndex != null && spec.widthArgIndex == Integer.MAX_VALUE) ||
+                        (spec.precisionArgIndex != null && spec.precisionArgIndex == Integer.MAX_VALUE) ||
+                        // Check for impractically large width/precision values
+                        (spec.width != null && spec.width > MAX_PRACTICAL_FORMAT_SIZE) ||
+                        (spec.precision != null && spec.precision > MAX_PRACTICAL_FORMAT_SIZE)) {
                     throw new PerlCompilerException("Integer overflow in format string for sprintf ");
                 }
 
@@ -161,22 +160,12 @@ public class SprintfOperator {
         // 4. There are unused arguments
         // OR special case: empty format with any arguments
         if (!hasPositionalParameter && !hasInvalidSpecifier && list.size() > 0 &&
-            ((hasValidSpecifier && maxArgIndexUsed >= 0 && maxArgIndexUsed + 1 < list.size()) ||
-             (!hasValidSpecifier && maxArgIndexUsed == -1))) {
+                ((hasValidSpecifier && maxArgIndexUsed >= 0 && maxArgIndexUsed + 1 < list.size()) ||
+                        (!hasValidSpecifier && maxArgIndexUsed == -1))) {
             WarnDie.warn(new RuntimeScalar("Redundant argument in sprintf"), new RuntimeScalar(""));
         }
 
         return new RuntimeScalar(result.toString());
-    }
-
-    private static class ProcessResult {
-        String formatted;
-        int maxArgIndexUsed;
-
-        ProcessResult(String formatted, int maxArgIndexUsed) {
-            this.formatted = formatted;
-            this.maxArgIndexUsed = maxArgIndexUsed;
-        }
     }
 
     private static void handlePercentN(FormatSpecifier spec,
@@ -184,41 +173,41 @@ public class SprintfOperator {
         int targetIndex = spec.parameterIndex != null ? spec.parameterIndex - 1 : argIndex;
         if (targetIndex >= list.size()) {
             // Missing argument for %n
-            throw  new PerlCompilerException("Missing argument for %n in sprintf");
+            throw new PerlCompilerException("Missing argument for %n in sprintf");
         }
         RuntimeScalar target = (RuntimeScalar) list.elements.get(targetIndex);
 
-            // Check if it's a reference
-            if (target.type == RuntimeScalarType.REFERENCE) {
-                // For references, dereference and modify
-                RuntimeScalar deref = target.scalarDeref();
-                if (deref != null) {
-                    deref.set(new RuntimeScalar(charsWritten));
-                }
-            } else {
-                // For regular scalars, modify directly if not a constant
-                // The set() method should handle the read-only check internally
-                try {
-                    target.set(new RuntimeScalar(charsWritten));
-                } catch (Exception e) {
-                    // Silently ignore if it's a read-only value
-                    // In Perl, %n with a constant just consumes the argument
-                }
+        // Check if it's a reference
+        if (target.type == RuntimeScalarType.REFERENCE) {
+            // For references, dereference and modify
+            RuntimeScalar deref = target.scalarDeref();
+            if (deref != null) {
+                deref.set(new RuntimeScalar(charsWritten));
             }
+        } else {
+            // For regular scalars, modify directly if not a constant
+            // The set() method should handle the read-only check internally
+            try {
+                target.set(new RuntimeScalar(charsWritten));
+            } catch (Exception e) {
+                // Silently ignore if it's a read-only value
+                // In Perl, %n with a constant just consumes the argument
+            }
+        }
     }
 
     /**
      * Process a single format specifier with tracking.
      */
-        private static ProcessResult processFormatSpecifierTracked(
-                FormatSpecifier spec,
-                RuntimeList list,
-                int sepArgIndex,
-                SprintfValueFormatter formatter) {
-            String formatted = processFormatSpecifier(spec, list, sepArgIndex, formatter, -1);
+    private static ProcessResult processFormatSpecifierTracked(
+            FormatSpecifier spec,
+            RuntimeList list,
+            int sepArgIndex,
+            SprintfValueFormatter formatter) {
+        String formatted = processFormatSpecifier(spec, list, sepArgIndex, formatter, -1);
 
-            // Calculate max arg index used
-            int maxUsed = -1;
+        // Calculate max arg index used
+        int maxUsed = -1;
 
         // Handle %% - literal percent sign
         if (spec.conversionChar == '%') {
@@ -308,10 +297,10 @@ public class SprintfOperator {
     /**
      * Process a single format specifier.
      *
-     * @param spec      The parsed format specifier
-     * @param list      The argument list
-     * @param sepArgIndex  Current argument index
-     * @param formatter The value formatter instance
+     * @param spec            The parsed format specifier
+     * @param list            The argument list
+     * @param sepArgIndex     Current argument index
+     * @param formatter       The value formatter instance
      * @param maxArgIndexUsed Maximum argument index used so far (for tracking)
      * @return The formatted string
      */
@@ -463,7 +452,7 @@ public class SprintfOperator {
                     throw new PerlCompilerException("Integer overflow in format string for sprintf ");
                 }
 
-                args.width = (int)widthLong;
+                args.width = (int) widthLong;
                 if (args.width < 0) {
                     spec.flags += "-";
                     args.width = -args.width;
@@ -509,7 +498,7 @@ public class SprintfOperator {
                     throw new PerlCompilerException("Integer overflow in format string for sprintf ");
                 }
 
-                args.precision = (int)precLong;
+                args.precision = (int) precLong;
                 if (args.precision < 0) {
                     // For precision, check if negating would cause issues
                     if (args.precision < -MAX_PRACTICAL_FORMAT_SIZE) {
@@ -621,7 +610,7 @@ public class SprintfOperator {
         // Special handling for vector formats
         if (spec.vectorFlag) {
             return "";  // Vector formats with missing argument output nothing
-                       // The warning handler will add " MISSING" with space
+            // The warning handler will add " MISSING" with space
         }
 
         // Return appropriate default value based on conversion type
@@ -636,6 +625,16 @@ public class SprintfOperator {
             case 'c' -> "\0";
             default -> "";
         };
+    }
+
+    private static class ProcessResult {
+        String formatted;
+        int maxArgIndexUsed;
+
+        ProcessResult(String formatted, int maxArgIndexUsed) {
+            this.formatted = formatted;
+            this.maxArgIndexUsed = maxArgIndexUsed;
+        }
     }
 
     /**
