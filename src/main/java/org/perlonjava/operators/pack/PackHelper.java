@@ -1,4 +1,4 @@
-package org.perlonjava.operators;
+package org.perlonjava.operators.pack;
 
 import org.perlonjava.runtime.PerlCompilerException;
 
@@ -13,7 +13,7 @@ public class PackHelper {
      * @param output The ByteArrayOutputStream to write to.
      * @param str    The string to uuencode.
      */
-    static void writeUuencodedString(ByteArrayOutputStream output, String str) {
+    public static void writeUuencodedString(ByteArrayOutputStream output, String str) {
         byte[] bytes = str.getBytes(StandardCharsets.UTF_8);
         int length = bytes.length;
 
@@ -62,7 +62,7 @@ public class PackHelper {
      * @param count  The number of hex digits to write.
      * @param format The format character indicating the hex string type ('h' for low nybble first, 'H' for high nybble first).
      */
-    static void writeHexString(ByteArrayOutputStream output, String str, int count, char format) {
+    public static void writeHexString(ByteArrayOutputStream output, String str, int count, char format) {
         int hexDigitsToProcess = Math.min(str.length(), count);
 
         // Process pairs of hex digits
@@ -112,7 +112,7 @@ public class PackHelper {
     /**
      * Check if the format is an integer format that should reject Inf/NaN values
      */
-    static boolean isIntegerFormat(char format) {
+    public static boolean isIntegerFormat(char format) {
         switch (format) {
             case 'c':
             case 'C':
@@ -140,7 +140,7 @@ public class PackHelper {
     /**
      * Write a BER compressed integer
      */
-    static void writeBER(ByteArrayOutputStream output, long value) {
+    public static void writeBER(ByteArrayOutputStream output, long value) {
         if (value < 0) {
             throw new PerlCompilerException("Cannot compress negative numbers");
         }
@@ -182,7 +182,7 @@ public class PackHelper {
      * @param output The ByteArrayOutputStream to write to.
      * @param value  The integer value to write.
      */
-    static void writeShort(ByteArrayOutputStream output, int value) {
+    public static void writeShort(ByteArrayOutputStream output, int value) {
         output.write(value & 0xFF);
         output.write((value >> 8) & 0xFF);
     }
@@ -193,7 +193,7 @@ public class PackHelper {
      * @param output The ByteArrayOutputStream to write to.
      * @param value  The integer value to write.
      */
-    static void writeShortBigEndian(ByteArrayOutputStream output, int value) {
+    public static void writeShortBigEndian(ByteArrayOutputStream output, int value) {
         output.write((value >> 8) & 0xFF);
         output.write(value & 0xFF);
     }
@@ -204,7 +204,7 @@ public class PackHelper {
      * @param output The ByteArrayOutputStream to write to.
      * @param value  The integer value to write.
      */
-    static void writeShortLittleEndian(ByteArrayOutputStream output, int value) {
+    public static void writeShortLittleEndian(ByteArrayOutputStream output, int value) {
         output.write(value & 0xFF);
         output.write((value >> 8) & 0xFF);
     }
@@ -228,7 +228,7 @@ public class PackHelper {
      * @param output The ByteArrayOutputStream to write to.
      * @param value  The long value to write.
      */
-    static void writeIntBigEndian(ByteArrayOutputStream output, long value) {
+    public static void writeIntBigEndian(ByteArrayOutputStream output, long value) {
         output.write((int) ((value >> 24) & 0xFF));
         output.write((int) ((value >> 16) & 0xFF));
         output.write((int) ((value >> 8) & 0xFF));
@@ -241,7 +241,7 @@ public class PackHelper {
      * @param output The ByteArrayOutputStream to write to.
      * @param value  The long value to write.
      */
-    static void writeIntLittleEndian(ByteArrayOutputStream output, long value) {
+    public static void writeIntLittleEndian(ByteArrayOutputStream output, long value) {
         output.write((int) (value & 0xFF));
         output.write((int) ((value >> 8) & 0xFF));
         output.write((int) ((value >> 16) & 0xFF));
@@ -254,7 +254,7 @@ public class PackHelper {
      * @param output The ByteArrayOutputStream to write to.
      * @param value  The long value to write.
      */
-    static void writeLong(ByteArrayOutputStream output, long value) {
+    public static void writeLong(ByteArrayOutputStream output, long value) {
         output.write((int) (value & 0xFF));
         output.write((int) ((value >> 8) & 0xFF));
         output.write((int) ((value >> 16) & 0xFF));
@@ -267,7 +267,7 @@ public class PackHelper {
      * @param output The ByteArrayOutputStream to write to.
      * @param value  The float value to write.
      */
-    static void writeFloat(ByteArrayOutputStream output, float value) {
+    public static void writeFloat(ByteArrayOutputStream output, float value) {
         int intBits = Float.floatToIntBits(value);
         writeInt(output, intBits);
     }
@@ -278,7 +278,7 @@ public class PackHelper {
      * @param output The ByteArrayOutputStream to write to.
      * @param value  The double value to write.
      */
-    static void writeDouble(ByteArrayOutputStream output, double value) {
+    public static void writeDouble(ByteArrayOutputStream output, double value) {
         long longBits = Double.doubleToLongBits(value);
         output.write((int) (longBits & 0xFF));
         output.write((int) ((longBits >> 8) & 0xFF));
@@ -299,7 +299,7 @@ public class PackHelper {
      * @param format   The format character indicating the string type.
      * @param byteMode Whether we're in character mode (C0) or byte mode (U0)
      */
-    static void writeString(ByteArrayOutputStream output, String str, int count, char format, boolean byteMode) {
+    public static void writeString(ByteArrayOutputStream output, String str, int count, char format, boolean byteMode) {
         byte[] bytes;
 
         if (byteMode && format == 'a') {
@@ -345,7 +345,7 @@ public class PackHelper {
      * @param count  The number of bits to write.
      * @param format The format character indicating the bit string type.
      */
-    static void writeBitString(ByteArrayOutputStream output, String str, int count, char format) {
+    public static void writeBitString(ByteArrayOutputStream output, String str, int count, char format) {
         int bitIndex = 0;
         int byteValue = 0;
         int bitsToProcess = Math.min(str.length(), count);
