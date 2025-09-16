@@ -56,7 +56,7 @@ public class Pack {
 
         // Track if 'U' was used in normal mode (not byte mode)
         boolean hasUnicodeInNormalMode = false;
-        
+
         for (int i = 0; i < template.length(); i++) {
             char format = template.charAt(i);
             System.err.println("DEBUG: main loop i=" + i + ", format='" + format + "' (code " + (int)format + ")");
