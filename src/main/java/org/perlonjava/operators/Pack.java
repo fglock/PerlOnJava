@@ -294,12 +294,17 @@ public class Pack {
                 }
 
                 // THEN check what follows '/'
-                // Always use i+1 because i points to '/' itself
-                if (i + 1 >= template.length()) {
+                // Skip whitespace when looking for what follows '/'
+                int checkPos = i + 1;
+                while (checkPos < template.length() && Character.isWhitespace(template.charAt(checkPos))) {
+                    checkPos++;
+                }
+
+                if (checkPos >= template.length()) {
                     throw new PerlCompilerException("Code missing after '/'");
                 }
                 System.err.println("DEBUG: checking character at position " + i);
-                char afterSlash = template.charAt(i + 1);  // Always i+1!
+                char afterSlash = template.charAt(checkPos);
                 System.err.println("DEBUG: character after '/' is '" + afterSlash + "' (code " + (int)afterSlash + ")");
 
                 // Check if '/' is followed by a repeat count (which is an error)
