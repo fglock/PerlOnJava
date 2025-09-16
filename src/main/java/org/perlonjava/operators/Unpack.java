@@ -82,6 +82,7 @@ public class Unpack {
         int i = 0;
         while (i < template.length()) {
             char format = template.charAt(i);
+            System.err.println("DEBUG: unpack main loop i=" + i + ", format='" + format + "' (code " + (int)format + "), template='" + template + "'");
             boolean isChecksum = false;
             int checksumBits = 16; // default
 
@@ -232,13 +233,35 @@ public class Unpack {
                 int slashCount = ((RuntimeScalar) lastValue).getInt();
                 values.remove(values.size() - 1); // Remove the count value
 
-                // Get the string format that follows '/'
+                // Get the format that follows '/'
                 i++;
                 if (i >= template.length()) {
                     throw new PerlCompilerException("Code missing after '/'");
                 }
                 char stringFormat = template.charAt(i);
 
+                // Check if it's a group
+                if (stringFormat == '(') {
+                    // Find the matching closing parenthesis
+                    int closePos = findMatchingParen(template, i);
+                    if (closePos == -1) {
+                        throw new PerlCompilerException("unpack: unmatched parenthesis in template");
+                    }
+
+                    // Extract group content
+                    String groupContent = template.substring(i + 1, closePos);
+
+                    // Process the group slashCount times
+                    for (int slashRep = 0; slashRep < slashCount; slashRep++) {
+                        processGroup(groupContent, state, values, 1, startsWithU, modeStack);
+                    }
+
+                    // Move past the closing ')'
+                    i = closePos + 1;
+                    continue;
+                }
+
+                // Original code for string formats
                 if (stringFormat != 'a' && stringFormat != 'A' && stringFormat != 'Z') {
                     throw new PerlCompilerException("'/' must be followed by a string type");
                 }
@@ -508,6 +531,27 @@ public class Unpack {
                         throw new PerlCompilerException("Code missing after '/'");
                     }
                     char stringFormat = groupTemplate.charAt(j);
+
+                    // Check if it's a nested group
+                    if (stringFormat == '(') {
+                        // Find the matching closing parenthesis within the group
+                        int closePos = findMatchingParen(groupTemplate, j);
+                        if (closePos == -1) {
+                            throw new PerlCompilerException("unpack: unmatched parenthesis in template");
+                        }
+
+                        // Extract nested group content
+                        String nestedGroupContent = groupTemplate.substring(j + 1, closePos);
+
+                        // Process the nested group slashCount times
+                        for (int slashRep = 0; slashRep < slashCount; slashRep++) {
+                            processGroup(nestedGroupContent, state, values, 1, startsWithU, modeStack);
+                        }
+
+                        // Move past the nested group
+                        j = closePos + 1;
+                        continue;
+                    }
 
                     if (stringFormat != 'a' && stringFormat != 'A' && stringFormat != 'Z') {
                         throw new PerlCompilerException("'/' must be followed by a string type");

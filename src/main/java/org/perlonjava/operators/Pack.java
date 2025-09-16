@@ -63,9 +63,11 @@ public class Pack {
 
         for (int i = 0; i < template.length(); i++) {
             char format = template.charAt(i);
+            System.err.println("DEBUG: main loop i=" + i + ", format='" + format + "' (code " + (int)format + ")");
 
             // Skip spaces
             if (Character.isWhitespace(format)) {
+                System.err.println("DEBUG: skipping whitespace");
                 continue;
             }
 
@@ -169,10 +171,11 @@ public class Pack {
                 continue;
             }
 
-            // Check if this is a numeric/Z format followed by '/' - skip it entirely
+            // Check if this is a numeric format followed by '/' - skip it entirely
             if ((isNumericFormat(format) || format == 'Z') && i + 1 < template.length()) {
                 // Look ahead, skipping modifiers and counts
                 int lookAhead = i + 1;
+                System.err.println("DEBUG: checking if numeric format '" + format + "' is followed by '/'");
 
                 // Skip modifiers
                 while (lookAhead < template.length() &&
@@ -194,6 +197,7 @@ public class Pack {
                 // Check if followed by '/'
                 if (lookAhead < template.length() && template.charAt(lookAhead) == '/') {
                     // Skip this entire format sequence - it's used for length encoding
+                    System.err.println("DEBUG: skipping format sequence ending at position " + (lookAhead - 1));
                     i = lookAhead - 1; // -1 because loop will increment
                     continue;
                 }
