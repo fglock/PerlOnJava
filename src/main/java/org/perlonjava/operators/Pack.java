@@ -107,6 +107,18 @@ public class Pack {
                     } else if (nextChar == '!') {
                         // Skip '!' for now
                         nextPos++;
+                    } else if (nextChar == '[') {
+                        // Parse repeat count in brackets [n]
+                        int j = nextPos + 1;
+                        while (j < template.length() && Character.isDigit(template.charAt(j))) {
+                            j++;
+                        }
+                        if (j >= template.length() || template.charAt(j) != ']') {
+                            throw new PerlCompilerException("No group ending character ']' found in template");
+                        }
+                        groupRepeatCount = Integer.parseInt(template.substring(nextPos + 1, j));
+                        nextPos = j + 1; // Move past ']'
+                        break;
                     } else if (Character.isDigit(nextChar)) {
                         // Parse repeat count
                         int j = nextPos;
@@ -235,7 +247,19 @@ public class Pack {
             // Check for repeat count or '*' AFTER endianness modifier
             if (i + 1 < template.length()) {
                 char nextChar = template.charAt(i + 1);
-                if (Character.isDigit(nextChar)) {
+                if (nextChar == '[') {
+                    // Parse repeat count in brackets [n]
+                    int j = i + 2;
+                    while (j < template.length() && Character.isDigit(template.charAt(j))) {
+                        j++;
+                    }
+                    if (j >= template.length() || template.charAt(j) != ']') {
+                        throw new PerlCompilerException("No group ending character ']' found in template");
+                    }
+                    String countStr = template.substring(i + 2, j);
+                    count = Integer.parseInt(countStr);
+                    i = j; // Position at ']'
+                } else if (Character.isDigit(nextChar)) {
                     int j = i + 1;
                     while (j < template.length() && Character.isDigit(template.charAt(j))) {
                         j++;
@@ -420,16 +444,28 @@ public class Pack {
                     case 'C':
                         output.write(lengthToWrite & 0xFF);
                         break;
+                    case 's':
+                        PackHelper.writeShortLittleEndian(output, lengthToWrite);
+                        break;
+                    case 'S':
+                        PackHelper.writeShort(output, lengthToWrite);
+                        break;
+                    case 'i':
+                    case 'I':
+                    case 'l':
+                    case 'L':
+                        PackHelper.writeIntLittleEndian(output, lengthToWrite);
+                        break;
                     case 'Z':
-                                            // For Z*/, encode length as null-terminated decimal string
-                                            String lengthStr = String.valueOf(lengthToWrite);
-                                            try {
-                                                output.write(lengthStr.getBytes(StandardCharsets.US_ASCII));
-                                                output.write(0); // null terminator
-                                            } catch (IOException e) {
-                                                throw new RuntimeException(e);
-                                            }
-                                            break;
+                        // For Z*/, encode length as null-terminated decimal string
+                        String lengthStr = String.valueOf(lengthToWrite);
+                        try {
+                            output.write(lengthStr.getBytes(StandardCharsets.US_ASCII));
+                            output.write(0); // null terminator
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
+                        break;
                     default:
                         throw new PerlCompilerException("Invalid length type '" + lengthFormat + "' for '/'");
                 }
@@ -438,6 +474,26 @@ public class Pack {
                 output.write(dataToWrite, 0, dataToWrite.length);
                 if (stringFormat == 'Z' && stringCount < 0) {
                     output.write(0); // null terminator
+                }
+            } else if (format == '/') {
+                // ... existing '/' handler code ...
+            } else if (format == '@') {
+                // @ is used for absolute positioning
+                // @n means null-fill or truncate to position n
+                int targetPosition = count;
+                int currentPosition = output.size();
+
+                if (targetPosition > currentPosition) {
+                    // Pad with nulls to reach target position
+                    for (int k = currentPosition; k < targetPosition; k++) {
+                        output.write(0);
+                    }
+                } else if (targetPosition < currentPosition) {
+                    // Truncate to target position
+                    byte[] truncated = new byte[targetPosition];
+                    System.arraycopy(output.toByteArray(), 0, truncated, 0, targetPosition);
+                    output.reset();
+                    output.write(truncated, 0, targetPosition);
                 }
             } else {
                 // Check if this is a numeric format followed by '/' - skip it
