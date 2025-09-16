@@ -183,16 +183,6 @@ public class Pack {
                 continue;
             }
 
-            // Check if this is a numeric format followed by '/' - skip it entirely
-            if (isNumericFormat(format) || format == 'Z') {
-                int slashPos = PackHelper.checkForSlashConstruct(template, i);
-                if (slashPos != -1) {
-                    System.err.println("DEBUG: skipping format '" + format + "' at position " + i + " because it's part of '/' construct");
-                    i = slashPos - 1; // -1 because loop will increment
-                    continue;
-                }
-            }
-
             // Parse modifiers BEFORE parsing counts
             boolean bigEndian = false;
             boolean littleEndian = false;
@@ -216,6 +206,150 @@ public class Pack {
                 } else {
                     // Not a modifier, stop looking
                     break;
+                }
+            }
+
+            // Check if this numeric format is part of a '/' construct BEFORE parsing count
+            if (isNumericFormat(format) || format == 'Z') {
+                int slashPos = PackHelper.checkForSlashConstruct(template, i);
+                if (slashPos != -1) {
+                    System.err.println("DEBUG: handling " + format + "/ construct at position " + i);
+
+                    // Skip whitespace after '/'
+                    int stringPos = slashPos + 1;
+                    while (stringPos < template.length() && Character.isWhitespace(template.charAt(stringPos))) {
+                        stringPos++;
+                    }
+
+                    if (stringPos >= template.length()) {
+                        throw new PerlCompilerException("Code missing after '/'");
+                    }
+
+                    char stringFormat = template.charAt(stringPos);
+                    System.err.println("DEBUG: string format after '/' is '" + stringFormat + "'");
+
+                    // Validate string format
+                    if (stringFormat != 'a' && stringFormat != 'A' && stringFormat != 'Z') {
+                        throw new PerlCompilerException("'/' must be followed by a string type");
+                    }
+
+                    // Check for count after string format
+                    int stringCount = -1; // -1 means use full string
+                    int endPos = stringPos;
+
+                    if (stringPos + 1 < template.length()) {
+                        if (template.charAt(stringPos + 1) == '*') {
+                            endPos = stringPos + 1;
+                        } else if (Character.isDigit(template.charAt(stringPos + 1))) {
+                            int j = stringPos + 1;
+                            while (j < template.length() && Character.isDigit(template.charAt(j))) {
+                                j++;
+                            }
+                            stringCount = Integer.parseInt(template.substring(stringPos + 1, j));
+                            endPos = j - 1;
+                        }
+                    }
+
+                    // Now get the string value
+                    if (valueIndex >= values.size()) {
+                        System.err.println("DEBUG: pack N/ needs value at index " + valueIndex + " but only have " + values.size() + " values");
+                        throw new PerlCompilerException("pack: not enough arguments");
+                    }
+
+                    RuntimeScalar strValue = values.get(valueIndex++);
+                    String str = strValue.toString();
+                    System.err.println("DEBUG: pack N/ consuming string '" + str + "'");
+
+                    // Determine what to pack
+                    byte[] dataToWrite;
+                    int lengthToWrite;
+
+                    if (stringCount >= 0) {
+                        // Specific count requested
+                        byte[] strBytes = str.getBytes(StandardCharsets.UTF_8);
+                        int actualCount = Math.min(stringCount, strBytes.length);
+                        dataToWrite = new byte[stringCount];
+                        System.arraycopy(strBytes, 0, dataToWrite, 0, actualCount);
+                        // Pad with nulls or spaces depending on format
+                        byte padByte = (stringFormat == 'A') ? (byte)' ' : (byte)0;
+                        for (int k = actualCount; k < stringCount; k++) {
+                            dataToWrite[k] = padByte;
+                        }
+                        lengthToWrite = stringCount;
+                    } else {
+                        // Use full string
+                        dataToWrite = str.getBytes(StandardCharsets.UTF_8);
+                        lengthToWrite = dataToWrite.length;
+                        if (stringFormat == 'Z') {
+                            lengthToWrite++; // Include null terminator in count
+                        }
+                    }
+
+                    // Pack the length using the numeric format
+                    System.err.println("DEBUG: packing length " + lengthToWrite + " with format '" + format + "'");
+                    switch (format) {
+                        case 'n':
+                            PackHelper.writeShortBigEndian(output, lengthToWrite);
+                            break;
+                        case 'N':
+                            PackHelper.writeIntBigEndian(output, lengthToWrite);
+                            break;
+                        case 'v':
+                            PackHelper.writeShortLittleEndian(output, lengthToWrite);
+                            break;
+                        case 'V':
+                            PackHelper.writeIntLittleEndian(output, lengthToWrite);
+                            break;
+                        case 'w':
+                            PackHelper.writeBER(output, lengthToWrite);
+                            break;
+                        case 'C':
+                            output.write(lengthToWrite & 0xFF);
+                            break;
+                        case 's':
+                            if (bigEndian) {
+                                PackHelper.writeShortBigEndian(output, lengthToWrite);
+                            } else {
+                                PackHelper.writeShortLittleEndian(output, lengthToWrite);
+                            }
+                            break;
+                        case 'S':
+                            if (bigEndian) {
+                                PackHelper.writeShortBigEndian(output, lengthToWrite);
+                            } else {
+                                PackHelper.writeShort(output, lengthToWrite);
+                            }
+                            break;
+                        case 'i':
+                        case 'I':
+                        case 'l':
+                        case 'L':
+                            if (bigEndian) {
+                                PackHelper.writeIntBigEndian(output, lengthToWrite);
+                            } else {
+                                PackHelper.writeIntLittleEndian(output, lengthToWrite);
+                            }
+                            break;
+                        case 'Z':
+                            // For Z*/, encode length as null-terminated decimal string
+                            String lengthStr = String.valueOf(lengthToWrite);
+                            byte[] lengthBytes = lengthStr.getBytes(StandardCharsets.US_ASCII);
+                            output.write(lengthBytes, 0, lengthBytes.length);
+                            output.write(0); // null terminator
+                            break;
+                        default:
+                            throw new PerlCompilerException("Invalid length type '" + format + "' for '/'");
+                    }
+
+                    // Write the string data
+                    output.write(dataToWrite, 0, dataToWrite.length);
+                    if (stringFormat == 'Z' && stringCount < 0) {
+                        output.write(0); // null terminator
+                    }
+
+                    // Update position to end of the N/X construct
+                    i = endPos;
+                    continue;
                 }
             }
 
@@ -288,200 +422,10 @@ public class Pack {
                     } else if (format == '/') {
                         System.err.println("DEBUG: entering '/' handler, i=" + i);
 
-                // FIRST check if '/' is at the start of template (invalid)
-                if (i == 0) {
-                    throw new PerlCompilerException("Invalid type '/'");
-                }
-
-                // THEN check what follows '/'
-                // Skip whitespace when looking for what follows '/'
-                int checkPos = i + 1;
-                while (checkPos < template.length() && Character.isWhitespace(template.charAt(checkPos))) {
-                    checkPos++;
-                }
-
-                if (checkPos >= template.length()) {
-                    throw new PerlCompilerException("Code missing after '/'");
-                }
-                System.err.println("DEBUG: checking character at position " + i);
-                char afterSlash = template.charAt(checkPos);
-                System.err.println("DEBUG: character after '/' is '" + afterSlash + "' (code " + (int)afterSlash + ")");
-
-                // Check if '/' is followed by a repeat count (which is an error)
-                if (afterSlash == '*' || Character.isDigit(afterSlash)) {
-                    throw new PerlCompilerException("'/' does not take a repeat count");
-                }
-
-                // Check if it's a valid string format
-                if (afterSlash != 'a' && afterSlash != 'A' && afterSlash != 'Z') {
-                    throw new PerlCompilerException("'/' must be followed by a string type");
-                }
-
-                // NOW check if '/' follows a numeric type
-                if (i == 0) {
-                    throw new PerlCompilerException("Invalid type '/'");
-                }
-
-                // Find the format that precedes '/'
-                // Need to look back, skipping any modifiers and repeat counts
-                int numericPos = i - 1;
-
-                // Skip back over whitespace FIRST
-                while (numericPos >= 0 && Character.isWhitespace(template.charAt(numericPos))) {
-                    numericPos--;
-                }
-
-                // Skip back over repeat counts and '*'
-                if (numericPos >= 0 && (template.charAt(numericPos) == '*' || Character.isDigit(template.charAt(numericPos)))) {
-                    if (template.charAt(numericPos) == '*') {
-                        // Skip the '*' to get to the format
-                        numericPos--;
-                    } else {
-                        // Skip digits
-                        while (numericPos > 0 && Character.isDigit(template.charAt(numericPos))) {
-                            numericPos--;
-                        }
-                        // Now numericPos points to the format character
-                    }
-                }
-
-                // Skip back over any modifiers
-                while (numericPos > 0 && (template.charAt(numericPos) == '<' ||
-                                         template.charAt(numericPos) == '>' ||
-                                         template.charAt(numericPos) == '!')) {
-                    numericPos--;
-                }
-
-                // If we hit a ')', we need to look at what's inside the group
-                char lengthFormat;
-                if (numericPos >= 0 && template.charAt(numericPos) == ')') {
-                    // Find the matching '(' and get the last numeric format in the group
-                    int openPos = numericPos - 1;
-                    int depth = 1;
-                    while (openPos >= 0 && depth > 0) {
-                        if (template.charAt(openPos) == ')') depth++;
-                        else if (template.charAt(openPos) == '(') depth--;
-                        openPos--;
-                    }
-                    openPos++; // Move back to the '('
-
-                    // Find the last numeric format in the group
-                    lengthFormat = findLastNumericFormat(template.substring(openPos + 1, numericPos));
-                    if (lengthFormat == '\0') {
-                        throw new PerlCompilerException("'/' must follow a numeric type");
-                    }
-                } else if (numericPos >= 0) {
-                    lengthFormat = template.charAt(numericPos);
-                    if (!isNumericFormat(lengthFormat) && lengthFormat != 'Z') {
-                        throw new PerlCompilerException("'/' must follow a numeric type");
-                    }
-                } else {
-                    throw new PerlCompilerException("'/' must follow a numeric type");
-                }
-
-                // Get the string format that follows '/'
-                i++; // move to string format
-                char stringFormat = template.charAt(i);
-
-                // Parse count for string format
-                int stringCount = -1; // -1 means use full string
-                if (i + 1 < template.length() && template.charAt(i + 1) == '*') {
-                    i++; // consume the '*'
-                } else if (i + 1 < template.length() && Character.isDigit(template.charAt(i + 1))) {
-                    int endPos = i + 1;
-                    while (endPos < template.length() && Character.isDigit(template.charAt(endPos))) {
-                        endPos++;
-                    }
-                    stringCount = Integer.parseInt(template.substring(i + 1, endPos));
-                    i = endPos - 1; // position at last digit
-                }
-
-                // Get the string value
-                if (valueIndex >= values.size()) {
-                    // System.err.println("DEBUG: pack '/' needs value at index " + valueIndex + " but only have " + values.size() + " values");
-                    throw new PerlCompilerException("pack: not enough arguments");
-                }
-                // System.err.println("DEBUG: pack '/' consuming value[" + valueIndex + "] = '" + values.get(valueIndex).toString() + "'");
-                RuntimeScalar strValue = values.get(valueIndex++);
-                String str = strValue.toString();
-
-                // Determine what to pack
-                byte[] dataToWrite;
-                int lengthToWrite;
-
-                if (stringCount >= 0) {
-                    // Specific count requested
-                    byte[] strBytes = str.getBytes(StandardCharsets.UTF_8);
-                    int actualCount = Math.min(stringCount, strBytes.length);
-                    dataToWrite = new byte[stringCount];
-                    System.arraycopy(strBytes, 0, dataToWrite, 0, actualCount);
-                    // Pad with nulls or spaces depending on format
-                    byte padByte = (stringFormat == 'A') ? (byte)' ' : (byte)0;
-                    for (int k = actualCount; k < stringCount; k++) {
-                        dataToWrite[k] = padByte;
-                    }
-                    lengthToWrite = stringCount;
-                } else {
-                    // Use full string
-                    dataToWrite = str.getBytes(StandardCharsets.UTF_8);
-                    lengthToWrite = dataToWrite.length;
-                    if (stringFormat == 'Z') {
-                        lengthToWrite++; // Include null terminator in count
-                    }
-                }
-
-                // Pack the length using the numeric format
-                switch (lengthFormat) {
-                    case 'n':
-                        PackHelper.writeShortBigEndian(output, lengthToWrite);
-                        break;
-                    case 'N':
-                        PackHelper.writeIntBigEndian(output, lengthToWrite);
-                        break;
-                    case 'v':
-                        PackHelper.writeShortLittleEndian(output, lengthToWrite);
-                        break;
-                    case 'V':
-                        PackHelper.writeIntLittleEndian(output, lengthToWrite);
-                        break;
-                    case 'w':
-                        PackHelper.writeBER(output, lengthToWrite);
-                        break;
-                    case 'C':
-                        output.write(lengthToWrite & 0xFF);
-                        break;
-                    case 's':
-                        PackHelper.writeShortLittleEndian(output, lengthToWrite);
-                        break;
-                    case 'S':
-                        PackHelper.writeShort(output, lengthToWrite);
-                        break;
-                    case 'i':
-                    case 'I':
-                    case 'l':
-                    case 'L':
-                        PackHelper.writeIntLittleEndian(output, lengthToWrite);
-                        break;
-                    case 'Z':
-                        // For Z*/, encode length as null-terminated decimal string
-                        String lengthStr = String.valueOf(lengthToWrite);
-                        try {
-                            output.write(lengthStr.getBytes(StandardCharsets.US_ASCII));
-                            output.write(0); // null terminator
-                        } catch (IOException e) {
-                            throw new RuntimeException(e);
-                        }
-                        break;
-                    default:
-                        throw new PerlCompilerException("Invalid length type '" + lengthFormat + "' for '/'");
-                }
-
-                // Write the string data
-                output.write(dataToWrite, 0, dataToWrite.length);
-                if (stringFormat == 'Z' && stringCount < 0) {
-                    output.write(0); // null terminator
-                }
-            } else if (format == '@') {
+                        // This should only happen if '/' appears without a preceding numeric format
+                        // which is an error
+                        throw new PerlCompilerException("Invalid type '/'");
+                    } else if (format == '@') {
                 // @ is used for absolute positioning
                 // @n means null-fill or truncate to position n
                 int targetPosition = count;
@@ -500,12 +444,6 @@ public class Pack {
                     output.write(truncated, 0, targetPosition);
                 }
             } else {
-                // Check if this is a numeric format followed by '/' - skip it
-                if (isNumericFormat(format) && i + 1 < template.length() && template.charAt(i + 1) == '/') {
-                    // System.err.println("DEBUG: skipping format '" + format + "' because it's followed by '/', valueIndex=" + valueIndex);
-                    continue;
-                }
-
                 // Numeric formats
                 for (int j = 0; j < count; j++) {
                     if (valueIndex >= values.size()) {
@@ -869,10 +807,30 @@ public class Pack {
                 continue;
             }
 
-            // Skip '/' which doesn't consume values when counting
+            // Handle '/' - it doesn't consume values itself
             if (format == '/') {
-                i++; // Skip the next format too
-                continue;
+                // Skip whitespace after '/'
+                int j = i + 1;
+                while (j < template.length() && Character.isWhitespace(template.charAt(j))) {
+                    j++;
+                }
+                if (j < template.length()) {
+                    // Skip the string format after '/'
+                    i = j;
+                    format = template.charAt(i);
+                }
+                // Fall through to count the string format normally
+            }
+
+            // Check if this numeric format is part of a '/' construct
+            if (isNumericFormat(format) || format == 'Z') {
+                int slashPos = PackHelper.checkForSlashConstruct(template, i);
+                if (slashPos != -1) {
+                    // This numeric format is part of N/X construct
+                    // It doesn't consume a value - skip to the '/'
+                    i = slashPos - 1; // -1 because loop will increment
+                    continue;
+                }
             }
 
             // Skip modifiers
