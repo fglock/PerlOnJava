@@ -291,14 +291,14 @@ public class PackHelper {
             }
 
             // Count based on format
-            if ("xX@.".indexOf(format) >= 0) {
+            if ("xX@".indexOf(format) >= 0) {
                 // These don't consume values
                 continue;
             } else if ("aAZbBhHu".indexOf(format) >= 0) {
                 // String/binary formats consume exactly one value regardless of repeat count
                 count += 1;
                 System.err.println("DEBUG countValuesNeeded: string format '" + format + "' adds 1, count=" + count);
-            } else if (isNumericFormat(format) || format == 'p') {
+            } else if (isNumericFormat(format) || format == 'p' || format == '.') {
                 // Numeric formats consume 'repeatCount' values (or return MAX for *)
                 if (hasStar) {
                     System.err.println("DEBUG countValuesNeeded: returning MAX_VALUE due to numeric format '" + format + "' with *");

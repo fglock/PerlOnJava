@@ -162,7 +162,36 @@ public class Pack {
                 case '@':
                     handleAbsolutePosition(count, output);
                     break;
-                case 'p', 'P':
+                case '.':
+                    // . means null-fill or truncate to absolute position specified by value
+                    if (valueIndex >= values.size()) {
+                        throw new PerlCompilerException("pack: '.' requires a position value");
+                    }
+                    RuntimeScalar posValue = values.get(valueIndex++);
+                    int targetPos = (int) posValue.getDouble();
+
+                    System.err.println("DEBUG: '.' format - current size: " + output.size() + ", target position: " + targetPos);
+
+                    if (targetPos < 0) {
+                        throw new PerlCompilerException("pack: negative position for '.'");
+                    }
+
+                    int currentSize = output.size();
+                    if (targetPos > currentSize) {
+                        // Null-fill to reach the target position
+                        for (int k = currentSize; k < targetPos; k++) {
+                            output.write(0);
+                        }
+                    } else if (targetPos < currentSize) {
+                        // Truncate to the target position
+                        byte[] currentData = output.toByteArray();
+                        output.reset();
+                        output.write(currentData, 0, targetPos);
+                    }
+                    // If targetPos == currentSize, do nothing
+                    break;
+                case 'p':
+                case 'P':
                     valueIndex = handlePointer(values, valueIndex, count, modifiers, output);
                     break;
                 case 'U':
