@@ -29,9 +29,12 @@ public class Unpack {
         handlers.put('n', new NumericFormatHandler.NetworkShortHandler());
         handlers.put('V', new NumericFormatHandler.VAXLongHandler());
         handlers.put('v', new NumericFormatHandler.VAXShortHandler());
+        handlers.put('q', new NumericFormatHandler.LongHandler(true));   // signed 64-bit quad
+        handlers.put('Q', new NumericFormatHandler.LongHandler(false));  // unsigned 64-bit quad
         handlers.put('f', new NumericFormatHandler.FloatHandler());
         handlers.put('F', new NumericFormatHandler.DoubleHandler());  // F is double-precision like d
         handlers.put('d', new NumericFormatHandler.DoubleHandler());
+        handlers.put('D', new NumericFormatHandler.DoubleHandler());  // D is long double, treat as double
         handlers.put('a', new StringFormatHandler('a'));
         handlers.put('A', new StringFormatHandler('A'));
         handlers.put('Z', new StringFormatHandler('Z'));

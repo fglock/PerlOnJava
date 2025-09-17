@@ -15,7 +15,7 @@ public class PackHelper {
      */
     public static boolean isIntegerFormat(char format) {
         return switch (format) {
-            case 'c', 'C', 's', 'S', 'l', 'L', 'i', 'I', 'n', 'N', 'v', 'V', 'j', 'J', 'w', 'W', 'U' -> true;
+            case 'c', 'C', 's', 'S', 'l', 'L', 'i', 'I', 'n', 'N', 'v', 'V', 'j', 'J', 'w', 'W', 'U', 'q', 'Q' -> true;
             default -> false;
         };
     }
