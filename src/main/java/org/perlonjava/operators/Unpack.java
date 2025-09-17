@@ -245,7 +245,7 @@ public class Unpack {
             }
 
             // Check if this numeric format is part of a '/' construct
-            if (PackHelper.isNumericFormat(format)) {
+            if (PackHelper.isNumericFormat(format) || format == 'Z' || format == 'A' || format == 'a') {
                 int slashPos = PackHelper.checkForSlashConstruct(template, i);
                 if (slashPos != -1) {
                     i = UnpackHelper.processSlashConstruct(template, i, format, state, values, startsWithU, modeStack);
