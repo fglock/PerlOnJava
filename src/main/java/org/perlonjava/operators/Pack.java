@@ -538,11 +538,14 @@ public class Pack {
                                            char format, ParsedModifiers modifiers,
                                            ByteArrayOutputStream output) {
         for (int j = 0; j < count; j++) {
+            RuntimeScalar value;
             if (valueIndex >= values.size()) {
-                throw new PerlCompilerException("pack: not enough arguments");
+                // If no more arguments, use 0 as per Perl behavior (empty string converts to 0)
+                value = new RuntimeScalar(0);
+            } else {
+                value = values.get(valueIndex);
+                valueIndex++;
             }
-
-            RuntimeScalar value = values.get(valueIndex++);
 
             // Check for Inf/NaN values for integer formats
             if (PackHelper.isIntegerFormat(format)) {
