@@ -52,6 +52,7 @@ public class Unpack {
         handlers.put('P', new PointerFormatHandler());  // P uses same handler as p for simplicity
         handlers.put('u', new UuencodeFormatHandler());
         handlers.put('@', new AtFormatHandler());
+        handlers.put('.', new DotFormatHandler());  // Add the dot handler
         // Note: U handler is created dynamically based on startsWithU
     }
 
@@ -351,10 +352,14 @@ public class Unpack {
             boolean isStarCount = false;
 
             // First, skip any modifiers (<, >, !) after the format character
+            boolean hasShriek = false;
             while (i + 1 < template.length() &&
                     (template.charAt(i + 1) == '!' ||
                             template.charAt(i + 1) == '<' ||
                             template.charAt(i + 1) == '>')) {
+                if (template.charAt(i + 1) == '!') {
+                    hasShriek = true;
+                }
                 i++; // Skip modifiers - for unpack, we ignore them for now
             }
 
@@ -413,6 +418,12 @@ public class Unpack {
             if (handler != null) {
                 if (format == '@') {
                     System.err.println("DEBUG: Calling @ handler with count=" + count);
+                } else if (format == '.') {
+                    // Special handling for '.' with '!' modifier
+                    if (hasShriek) {
+                        // .! means byte offset instead of character offset
+                        handler = new DotShriekFormatHandler();
+                    }
                 }
                 // For 'p' format, check and consume endianness modifiers
                 if (format == 'p' && i + 1 < template.length()) {

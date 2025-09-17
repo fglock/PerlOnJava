@@ -335,12 +335,19 @@ public class Pack {
         int stringCount = stringCountInfo.hasStar ? -1 : stringCountInfo.count;
         int endPos = stringCountInfo.endPosition;
 
-        // Get the string value
+        // Get the string value - handle missing arguments gracefully
+        RuntimeScalar strValue;
         if (valueIndex >= values.size()) {
-            throw new PerlCompilerException("pack: not enough arguments");
+            // No more arguments - use empty string for string formats, 0 for numeric
+            if (stringFormat == 'a' || stringFormat == 'A' || stringFormat == 'Z' || stringFormat == 'U') {
+                strValue = new RuntimeScalar("");
+            } else {
+                strValue = new RuntimeScalar(0);
+            }
+        } else {
+            strValue = values.get(valueIndex);
         }
 
-        RuntimeScalar strValue = values.get(valueIndex);
         String str = strValue.toString();
 
         // Determine what to pack
