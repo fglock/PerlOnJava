@@ -639,6 +639,10 @@ public class Pack {
                     // BER compressed integer
                     PackWriter.writeBER(output, (long) value.getDouble());
                     break;
+                case 'j':
+                    // Perl internal signed integer - treat as long
+                    PackWriter.writeLong(output, (long) value.getDouble());
+                    break;
                 case 'f':
                     PackWriter.writeFloat(output, (float) value.getDouble());
                     break;
