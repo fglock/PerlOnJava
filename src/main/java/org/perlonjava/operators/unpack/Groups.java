@@ -250,6 +250,22 @@ public class Groups {
                     continue;
                 }
 
+                // First, parse any modifiers (<, >, !) after the format character
+                boolean hasShriek = false;
+                int modifierEnd = j;
+                while (modifierEnd + 1 < groupTemplate.length() &&
+                        (groupTemplate.charAt(modifierEnd + 1) == '!' ||
+                                groupTemplate.charAt(modifierEnd + 1) == '<' ||
+                                groupTemplate.charAt(modifierEnd + 1) == '>')) {
+                    if (groupTemplate.charAt(modifierEnd + 1) == '!') {
+                        hasShriek = true;
+                    }
+                    modifierEnd++; // Skip modifiers
+                }
+
+                // Update j to skip past consumed modifiers
+                j = modifierEnd;
+
                 // Parse count
                 int count = 1;
                 boolean isStarCount = false;
@@ -285,6 +301,10 @@ public class Groups {
                 // Get handler and unpack
                 FormatHandler handler = Unpack.getHandler(format, startsWithU);
                 if (handler != null) {
+                    // Special handling for '.' with '!' modifier
+                    if (format == '.' && hasShriek) {
+                        handler = new DotShriekFormatHandler();
+                    }
                     handler.unpack(state, values, count, isStarCount);
                 } else {
                     throw new PerlCompilerException("unpack: unsupported format character: " + format);
