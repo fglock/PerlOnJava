@@ -151,8 +151,18 @@ public class Pack {
                     handleBackup(count, output);
                     break;
                 case '/':
-                    // '/' must follow a numeric type - this is an error in the template
-                    throw new PerlCompilerException("'/' must follow a numeric type in pack at position " + i);
+                    // In Perl, '/' can appear after any format, but requires code after it
+                    // Skip whitespace after '/'
+                    int nextPos = i + 1;
+                    while (nextPos < template.length() && Character.isWhitespace(template.charAt(nextPos))) {
+                        nextPos++;
+                    }
+
+                    if (nextPos >= template.length()) {
+                        throw new PerlCompilerException("Code missing after '/'");
+                    } else {
+                        throw new PerlCompilerException("'/' must follow a numeric type in pack");
+                    }
                 case '@':
                     handleAbsolutePosition(count, output);
                     break;
