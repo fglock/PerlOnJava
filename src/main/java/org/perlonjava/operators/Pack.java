@@ -1,6 +1,6 @@
 package org.perlonjava.operators;
 
-import org.perlonjava.operators.pack.PackHelper;
+import org.perlonjava.operators.pack.*;
 import org.perlonjava.runtime.*;
 
 import java.io.ByteArrayOutputStream;
@@ -92,7 +92,7 @@ public class Pack {
             }
 
             // Parse modifiers BEFORE parsing counts
-            ParsedModifiers modifiers = parseModifiers(template, i);
+            ParsedModifiers modifiers = PackParser.parseModifiers(template, i);
             i = modifiers.endPosition;
 
             // Check if this numeric format is part of a '/' construct BEFORE parsing count
@@ -106,7 +106,7 @@ public class Pack {
             }
 
             // Parse repeat count
-            ParsedCount parsedCount = parseRepeatCount(template, i);
+            ParsedCount parsedCount = PackParser.parseRepeatCount(template, i);
             i = parsedCount.endPosition;
             int count = parsedCount.count;
             boolean hasStar = parsedCount.hasStar;
@@ -170,65 +170,6 @@ public class Pack {
         }
     }
 
-    private static ParsedModifiers parseModifiers(String template, int position) {
-        ParsedModifiers result = new ParsedModifiers();
-        result.endPosition = position;
-
-        while (result.endPosition + 1 < template.length()) {
-            char modifier = template.charAt(result.endPosition + 1);
-            if (modifier == '<') {
-                result.littleEndian = true;
-                result.endPosition++;
-            } else if (modifier == '>') {
-                result.bigEndian = true;
-                result.endPosition++;
-            } else if (modifier == '!') {
-                result.nativeSize = true;
-                result.endPosition++;
-            } else {
-                break;
-            }
-        }
-
-        return result;
-    }
-
-    private static ParsedCount parseRepeatCount(String template, int position) {
-        ParsedCount result = new ParsedCount();
-        result.count = 1;
-        result.hasStar = false;
-        result.endPosition = position;
-
-        if (position + 1 < template.length()) {
-            char nextChar = template.charAt(position + 1);
-            if (nextChar == '[') {
-                // Parse repeat count in brackets [n]
-                int j = position + 2;
-                while (j < template.length() && Character.isDigit(template.charAt(j))) {
-                    j++;
-                }
-                if (j >= template.length() || template.charAt(j) != ']') {
-                    throw new PerlCompilerException("No group ending character ']' found in template");
-                }
-                String countStr = template.substring(position + 2, j);
-                result.count = Integer.parseInt(countStr);
-                result.endPosition = j;
-            } else if (Character.isDigit(nextChar)) {
-                int j = position + 1;
-                while (j < template.length() && Character.isDigit(template.charAt(j))) {
-                    j++;
-                }
-                result.count = Integer.parseInt(template.substring(position + 1, j));
-                result.endPosition = j - 1;
-            } else if (nextChar == '*') {
-                result.hasStar = true;
-                result.endPosition = position + 1;
-            }
-        }
-
-        return result;
-    }
-
     private static int skipComment(String template, int position) {
         while (position + 1 < template.length() && template.charAt(position + 1) != '\n') {
             position++;
@@ -249,7 +190,7 @@ public class Pack {
         System.err.println("DEBUG: found group at positions " + openPos + " to " + closePos + ", content: '" + groupContent + "'");
 
         // Parse group modifiers and repeat count
-        GroupInfo groupInfo = parseGroupInfo(template, closePos);
+        GroupInfo groupInfo = PackParser.parseGroupInfo(template, closePos);
 
         // Check for conflicting endianness within the group
         if (groupInfo.endian != ' ' && PackHelper.hasConflictingEndianness(groupContent, groupInfo.endian)) {
@@ -286,54 +227,6 @@ public class Pack {
         return groupInfo.endPosition - 1; // -1 because loop will increment
     }
 
-    private static GroupInfo parseGroupInfo(String template, int closePos) {
-        GroupInfo info = new GroupInfo();
-        int nextPos = closePos + 1;
-
-        // Parse modifiers after ')'
-        while (nextPos < template.length()) {
-            char nextChar = template.charAt(nextPos);
-            if (nextChar == '<' || nextChar == '>') {
-                if (info.endian == ' ') {
-                    info.endian = nextChar;
-                }
-                nextPos++;
-            } else if (nextChar == '!') {
-                nextPos++;
-            } else if (nextChar == '[') {
-                // Parse repeat count in brackets [n]
-                int j = nextPos + 1;
-                while (j < template.length() && Character.isDigit(template.charAt(j))) {
-                    j++;
-                }
-                if (j >= template.length() || template.charAt(j) != ']') {
-                    throw new PerlCompilerException("No group ending character ']' found in template");
-                }
-                info.repeatCount = Integer.parseInt(template.substring(nextPos + 1, j));
-                nextPos = j + 1;
-                break;
-            } else if (Character.isDigit(nextChar)) {
-                // Parse repeat count
-                int j = nextPos;
-                while (j < template.length() && Character.isDigit(template.charAt(j))) {
-                    j++;
-                }
-                info.repeatCount = Integer.parseInt(template.substring(nextPos, j));
-                nextPos = j;
-                break;
-            } else if (nextChar == '*') {
-                info.repeatCount = Integer.MAX_VALUE;
-                nextPos++;
-                break;
-            } else {
-                break;
-            }
-        }
-
-        info.endPosition = nextPos;
-        return info;
-    }
-
     private static int getValueIndexAfterGroup(String template, int groupEndPos, List<RuntimeScalar> values, int currentValueIndex) {
         // Find the group start
         int depth = 1;
@@ -346,7 +239,7 @@ public class Pack {
         groupStart++; // Adjust to point to '('
 
         String groupContent = template.substring(groupStart + 1, groupEndPos);
-        GroupInfo groupInfo = parseGroupInfo(template, groupEndPos);
+        GroupInfo groupInfo = PackParser.parseGroupInfo(template, groupEndPos);
 
         int valuesPerIteration = PackHelper.countValuesNeeded(groupContent);
         if (valuesPerIteration == Integer.MAX_VALUE || groupInfo.repeatCount == Integer.MAX_VALUE) {
@@ -385,7 +278,7 @@ public class Pack {
         }
 
         // Parse string count
-        ParsedCount stringCountInfo = parseRepeatCount(template, stringPos);
+        ParsedCount stringCountInfo = PackParser.parseRepeatCount(template, stringPos);
         int stringCount = stringCountInfo.hasStar ? -1 : stringCountInfo.count;
         int endPos = stringCountInfo.endPosition;
 
@@ -439,35 +332,35 @@ public class Pack {
 
         switch (format) {
             case 'n':
-                PackHelper.writeShortBigEndian(output, length);
+                PackWriter.writeShortBigEndian(output, length);
                 break;
             case 'N':
-                PackHelper.writeIntBigEndian(output, length);
+                PackWriter.writeIntBigEndian(output, length);
                 break;
             case 'v':
-                PackHelper.writeShortLittleEndian(output, length);
+                PackWriter.writeShortLittleEndian(output, length);
                 break;
             case 'V':
-                PackHelper.writeIntLittleEndian(output, length);
+                PackWriter.writeIntLittleEndian(output, length);
                 break;
             case 'w':
-                PackHelper.writeBER(output, length);
+                PackWriter.writeBER(output, length);
                 break;
             case 'C':
                 output.write(length & 0xFF);
                 break;
             case 's':
                 if (modifiers.bigEndian) {
-                    PackHelper.writeShortBigEndian(output, length);
+                    PackWriter.writeShortBigEndian(output, length);
                 } else {
-                    PackHelper.writeShortLittleEndian(output, length);
+                    PackWriter.writeShortLittleEndian(output, length);
                 }
                 break;
             case 'S':
                 if (modifiers.bigEndian) {
-                    PackHelper.writeShortBigEndian(output, length);
+                    PackWriter.writeShortBigEndian(output, length);
                 } else {
-                    PackHelper.writeShort(output, length);
+                    PackWriter.writeShort(output, length);
                 }
                 break;
             case 'i':
@@ -475,9 +368,9 @@ public class Pack {
             case 'l':
             case 'L':
                 if (modifiers.bigEndian) {
-                    PackHelper.writeIntBigEndian(output, length);
+                    PackWriter.writeIntBigEndian(output, length);
                 } else {
-                    PackHelper.writeIntLittleEndian(output, length);
+                    PackWriter.writeIntLittleEndian(output, length);
                 }
                 break;
             case 'Z':
@@ -502,7 +395,7 @@ public class Pack {
         if (hasStar) {
             count = bitString.length();
         }
-        PackHelper.writeBitString(output, bitString, count, format);
+        PackWriter.writeBitString(output, bitString, count, format);
         return valueIndex;
     }
 
@@ -516,7 +409,7 @@ public class Pack {
         if (hasStar) {
             count = hexString.length();
         }
-        PackHelper.writeHexString(output, hexString, count, format);
+        PackWriter.writeHexString(output, hexString, count, format);
         return valueIndex;
     }
 
@@ -526,7 +419,7 @@ public class Pack {
         }
         RuntimeScalar value = values.get(valueIndex++);
         String str = value.toString();
-        PackHelper.writeUuencodedString(output, str);
+        PackWriter.writeUuencodedString(output, str);
         return valueIndex;
     }
 
@@ -572,9 +465,9 @@ public class Pack {
 
             // Use the already-parsed endianness
             if (modifiers.bigEndian) {
-                PackHelper.writeIntBigEndian(output, ptr);
+                PackWriter.writeIntBigEndian(output, ptr);
             } else {
-                PackHelper.writeIntLittleEndian(output, ptr);
+                PackWriter.writeIntLittleEndian(output, ptr);
             }
         }
         return valueIndex;
@@ -634,60 +527,60 @@ public class Pack {
                 case 's':
                     // Signed short - use endianness if specified
                     if (modifiers.bigEndian) {
-                        PackHelper.writeShortBigEndian(output, value.getInt());
+                        PackWriter.writeShortBigEndian(output, value.getInt());
                     } else {
-                        PackHelper.writeShortLittleEndian(output, value.getInt());
+                        PackWriter.writeShortLittleEndian(output, value.getInt());
                     }
                     break;
                 case 'S':
                     // Unsigned short - use endianness if specified
                     if (modifiers.bigEndian) {
-                        PackHelper.writeShortBigEndian(output, value.getInt());
+                        PackWriter.writeShortBigEndian(output, value.getInt());
                     } else {
-                        PackHelper.writeShort(output, value.getInt());
+                        PackWriter.writeShort(output, value.getInt());
                     }
                     break;
                 case 'l':
-                    PackHelper.writeIntLittleEndian(output, (long) value.getDouble());
+                    PackWriter.writeIntLittleEndian(output, (long) value.getDouble());
                     break;
                 case 'L':
                 case 'J':
-                    PackHelper.writeLong(output, (long) value.getDouble());
+                    PackWriter.writeLong(output, (long) value.getDouble());
                     break;
                 case 'i':
                 case 'I':
                     // Native integer (assume 32-bit little-endian)
-                    PackHelper.writeIntLittleEndian(output, (long) value.getDouble());
+                    PackWriter.writeIntLittleEndian(output, (long) value.getDouble());
                     break;
                 case 'n':
                     // Network short (always big-endian)
-                    PackHelper.writeShortBigEndian(output, value.getInt());
+                    PackWriter.writeShortBigEndian(output, value.getInt());
                     break;
                 case 'N':
                     // Network long (always big-endian)
-                    PackHelper.writeIntBigEndian(output, (long) value.getDouble());
+                    PackWriter.writeIntBigEndian(output, (long) value.getDouble());
                     break;
                 case 'v':
                     // VAX short (always little-endian)
-                    PackHelper.writeShortLittleEndian(output, value.getInt());
+                    PackWriter.writeShortLittleEndian(output, value.getInt());
                     break;
                 case 'V':
                     // VAX long (always little-endian)
-                    PackHelper.writeIntLittleEndian(output, (long) value.getDouble());
+                    PackWriter.writeIntLittleEndian(output, (long) value.getDouble());
                     break;
                 case 'w':
                     // BER compressed integer
-                    PackHelper.writeBER(output, (long) value.getDouble());
+                    PackWriter.writeBER(output, (long) value.getDouble());
                     break;
                 case 'f':
-                    PackHelper.writeFloat(output, (float) value.getDouble());
+                    PackWriter.writeFloat(output, (float) value.getDouble());
                     break;
                 case 'F':
                     // F is double-precision float in native format (8 bytes)
-                    PackHelper.writeDouble(output, value.getDouble());
+                    PackWriter.writeDouble(output, value.getDouble());
                     break;
                 case 'd':
-                    PackHelper.writeDouble(output, value.getDouble());
+                    PackWriter.writeDouble(output, value.getDouble());
                     break;
                 default:
                     throw new PerlCompilerException("pack: unsupported format character: " + format);
@@ -696,22 +589,4 @@ public class Pack {
         return valueIndex;
     }
 
-    private static class ParsedModifiers {
-        boolean bigEndian;
-        boolean littleEndian;
-        boolean nativeSize;
-        int endPosition;
-    }
-
-    private static class ParsedCount {
-        int count;
-        boolean hasStar;
-        int endPosition;
-    }
-
-    private static class GroupInfo {
-        char endian = ' ';
-        int repeatCount = 1;
-        int endPosition;
-    }
 }
