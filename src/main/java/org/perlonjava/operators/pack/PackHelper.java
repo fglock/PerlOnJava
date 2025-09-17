@@ -132,27 +132,40 @@ public class PackHelper {
     }
 
     public static void packW(RuntimeScalar value, ByteArrayOutputStream output) {
-        // Pack a Unicode code point as UTF-8 bytes
-        int codePoint;
+        // Pack an unsigned char value (can be greater than 255)
+        int intValue;
         String strValue = value.toString();
         if (!strValue.isEmpty() && !Character.isDigit(strValue.charAt(0))) {
             // If it's a character, get its code point
-            codePoint = strValue.codePointAt(0);
+            intValue = strValue.codePointAt(0);
         } else {
-            // If it's a number, use it directly as code point
-            codePoint = value.getInt();
+            // If it's a number, use it directly
+            intValue = value.getInt();
         }
 
-        if (Character.isValidCodePoint(codePoint)) {
-            String unicodeChar = new String(Character.toChars(codePoint));
-            byte[] utf8Bytes = unicodeChar.getBytes(StandardCharsets.UTF_8);
-            try {
+        System.err.println("DEBUG: packW intValue=" + intValue);
+
+        try {
+            if (Character.isValidCodePoint(intValue)) {
+                // Valid Unicode - encode as UTF-8
+                String unicodeChar = new String(Character.toChars(intValue));
+                byte[] utf8Bytes = unicodeChar.getBytes(StandardCharsets.UTF_8);
                 output.write(utf8Bytes);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
+                System.err.println("DEBUG: packW wrote " + utf8Bytes.length + " UTF-8 bytes for Unicode " + intValue);
+            } else {
+                // Beyond Unicode range - for now, wrap to valid range
+                // This is a compromise until we can handle extended values properly
+                int wrappedValue = intValue & 0x1FFFFF; // 21 bits
+                if (wrappedValue > 0x10FFFF) {
+                    wrappedValue = wrappedValue % 0x110000; // Modulo to fit in Unicode range
+                }
+                String unicodeChar = new String(Character.toChars(wrappedValue));
+                byte[] utf8Bytes = unicodeChar.getBytes(StandardCharsets.UTF_8);
+                output.write(utf8Bytes);
+                System.err.println("DEBUG: packW wrapped " + intValue + " to " + wrappedValue + ", wrote " + utf8Bytes.length + " bytes");
             }
-        } else {
-            throw new PerlCompilerException("pack: invalid Unicode code point: " + codePoint);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
     }
 
