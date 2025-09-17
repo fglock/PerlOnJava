@@ -80,10 +80,15 @@ public class PackHelper {
 
     public static int handleStringFormat(int valueIndex, List<RuntimeScalar> values, boolean hasStar, char format, int count, boolean byteMode, ByteArrayOutputStream output) {
         // String formats consume only one value
+        RuntimeScalar value;
         if (valueIndex >= values.size()) {
-            throw new PerlCompilerException("pack: not enough arguments");
+            // If no more arguments, use empty string as per Perl behavior
+            value = new RuntimeScalar("");
+        } else {
+            value = values.get(valueIndex);
+            valueIndex++;
         }
-        RuntimeScalar value = values.get(valueIndex++);
+
         String str = value.toString();
         if (hasStar) {
             // For string formats with *, use the string length as count
