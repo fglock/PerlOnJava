@@ -18,12 +18,12 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
  */
 public class TermReadLine extends PerlModuleBase {
 
+    private final List<String> history;
+    private final boolean autoHistory;
     private String appName;
     private BufferedReader inputReader;
     private PrintWriter outputWriter;
-    private final List<String> history;
     private int minLine;
-    private final boolean autoHistory;
     private Map<String, Object> attributes;
     private Map<String, Boolean> features;
 

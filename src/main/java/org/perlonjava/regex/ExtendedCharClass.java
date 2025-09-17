@@ -704,9 +704,9 @@ public class ExtendedCharClass {
 
     private static class ExtendedClassParser {
         private final List<Token> tokens;
-        private int current = 0;
         private final String originalRegex;
         private final int contentStart;
+        private int current = 0;
 
         ExtendedClassParser(List<Token> tokens, String originalRegex, int contentStart) {
             this.tokens = tokens;
