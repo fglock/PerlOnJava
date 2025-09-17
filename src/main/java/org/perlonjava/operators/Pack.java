@@ -103,7 +103,7 @@ public class Pack {
 
             // Check if this numeric format is part of a '/' construct
             // Check from current position i (not after modifiers) to catch S / A* with spaces
-            if (PackHelper.isNumericFormat(format) || format == 'Z') {
+            if (PackHelper.isNumericFormat(format) || format == 'Z' || format == 'A' || format == 'a') {
                 int slashPos = PackHelper.checkForSlashConstruct(template, i);
                 if (slashPos != -1) {
                     System.err.println("DEBUG: Detected slash construct for format '" + format + "' at position " + i);
@@ -359,6 +359,19 @@ public class Pack {
         System.err.println("DEBUG: packing length " + length + " with format '" + format + "'");
 
         switch (format) {
+            case 'A':
+                // For A format as length, pack as ASCII decimal string with spaces
+                String lengthStrA = String.valueOf(length);
+                byte[] lengthBytesA = lengthStrA.getBytes(StandardCharsets.US_ASCII);
+                output.write(lengthBytesA, 0, lengthBytesA.length);
+                // Pad with spaces to make it fixed width if needed
+                break;
+            case 'a':
+                // For a format as length, pack as ASCII decimal string with nulls
+                String lengthStrLower = String.valueOf(length);
+                byte[] lengthBytesLower = lengthStrLower.getBytes(StandardCharsets.US_ASCII);
+                output.write(lengthBytesLower, 0, lengthBytesLower.length);
+                break;
             case 'n':
                 PackWriter.writeShortBigEndian(output, length);
                 break;
