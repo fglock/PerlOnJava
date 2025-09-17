@@ -17,7 +17,7 @@ public class Pack {
     // Temporary storage for pointer simulation
     private static final Map<Integer, String> pointerMap = new HashMap<>();
 
-    // Add getter for unpack to use
+    // Getter for unpack to use
     public static String getPointerString(int hashCode) {
         return pointerMap.get(hashCode);
     }
@@ -52,10 +52,6 @@ public class Pack {
         // Track if 'U' was used in normal mode (not byte mode)
         boolean hasUnicodeInNormalMode = false;
 
-        // Stack to track byte order for nested groups
-        java.util.Stack<Character> groupEndianStack = new java.util.Stack<>();
-        groupEndianStack.push(' '); // Default: no specific endianness
-
         for (int i = 0; i < template.length(); i++) {
             char format = template.charAt(i);
             System.err.println("DEBUG: main loop i=" + i + ", format='" + format + "' (code " + (int) format + ")");
@@ -72,7 +68,7 @@ public class Pack {
                 continue;
             }
 
-            // NEW: Handle commas (skip with warning)
+            // Handle commas (skip with warning)
             if (format == ',') {
                 System.err.println("WARNING: Invalid type ',' in pack");
                 // In Perl, this would use warn() but continue execution
@@ -166,10 +162,7 @@ public class Pack {
                 case '@':
                     handleAbsolutePosition(count, output);
                     break;
-                case 'p':
-                    valueIndex = handlePointer(values, valueIndex, count, modifiers, output);
-                    break;
-                case 'P':
+                case 'p', 'P':
                     valueIndex = handlePointer(values, valueIndex, count, modifiers, output);
                     break;
                 case 'U':

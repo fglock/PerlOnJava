@@ -3,18 +3,22 @@ package org.perlonjava.operators.unpack;
 import org.perlonjava.operators.Unpack;
 import org.perlonjava.operators.UnpackState;
 import org.perlonjava.operators.pack.PackHelper;
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.PerlCompilerException;
+import org.perlonjava.runtime.RuntimeBase;
+import org.perlonjava.runtime.RuntimeScalar;
+
 import java.util.List;
 
 public class UnpackHelper {
 
     /**
      * Process a slash construct (e.g., "S/A*", "n/(...)")
+     *
      * @return the new position after processing the construct
      */
     public static int processSlashConstruct(String template, int position, char numericFormat,
-                                           UnpackState state, List<RuntimeBase> values,
-                                           boolean startsWithU, java.util.Stack<Boolean> modeStack) {
+                                            UnpackState state, List<RuntimeBase> values,
+                                            boolean startsWithU, java.util.Stack<Boolean> modeStack) {
 
         System.err.println("DEBUG: Processing slash construct " + numericFormat + "/ at position " + position);
 
@@ -26,7 +30,7 @@ public class UnpackHelper {
 
             // Get the count value from the string
             RuntimeBase lastValue = values.getLast();
-            String countStr = ((RuntimeScalar) lastValue).toString().trim();
+            String countStr = lastValue.toString().trim();
             int slashCount;
             try {
                 slashCount = Integer.parseInt(countStr);
@@ -171,6 +175,7 @@ public class UnpackHelper {
 
     /**
      * Parse repeat count from template at given position
+     *
      * @return a ParsedCount object with count, hasStar flag, and end position
      */
     public static ParsedCount parseRepeatCount(String template, int position) {
@@ -211,15 +216,6 @@ public class UnpackHelper {
         return new ParsedCount(count, hasStar, i);
     }
 
-    public static class ParsedCount {
-        public final int count;
-        public final boolean hasStar;
-        public final int endPosition;
-
-        public ParsedCount(int count, boolean hasStar, int endPosition) {
-            this.count = count;
-            this.hasStar = hasStar;
-            this.endPosition = endPosition;
-        }
+    public record ParsedCount(int count, boolean hasStar, int endPosition) {
     }
 }

@@ -1,6 +1,5 @@
 package org.perlonjava.operators.pack;
 
-import org.perlonjava.operators.Pack;
 import org.perlonjava.runtime.PerlCompilerException;
 
 public class PackParser {

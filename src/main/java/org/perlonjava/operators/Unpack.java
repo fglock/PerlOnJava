@@ -243,7 +243,7 @@ public class Unpack {
                 continue;
             }
 
-            // NEW: Handle commas (skip with warning)
+            // Handle commas (skip with warning)
             if (format == ',') {
                 System.err.println("WARNING: Invalid type ',' in unpack");
                 i++;
@@ -352,9 +352,9 @@ public class Unpack {
 
             // First, skip any modifiers (<, >, !) after the format character
             while (i + 1 < template.length() &&
-                   (template.charAt(i + 1) == '!' ||
-                    template.charAt(i + 1) == '<' ||
-                    template.charAt(i + 1) == '>')) {
+                    (template.charAt(i + 1) == '!' ||
+                            template.charAt(i + 1) == '<' ||
+                            template.charAt(i + 1) == '>')) {
                 i++; // Skip modifiers - for unpack, we ignore them for now
             }
 
