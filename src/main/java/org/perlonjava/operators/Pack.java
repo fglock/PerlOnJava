@@ -147,9 +147,12 @@ public class Pack {
                 case 'x':
                     handleNullPadding(count, output);
                     break;
-                            case '/':
-                                // '/' must follow a numeric type - this is an error in the template
-                                throw new PerlCompilerException("'/' must follow a numeric type in pack at position " + i);
+                case 'X':
+                    handleBackup(count, output);
+                    break;
+                case '/':
+                    // '/' must follow a numeric type - this is an error in the template
+                    throw new PerlCompilerException("'/' must follow a numeric type in pack at position " + i);
                 case '@':
                     handleAbsolutePosition(count, output);
                     break;
@@ -456,6 +459,27 @@ public class Pack {
             output.reset();
             output.write(truncated, 0, targetPosition);
         }
+    }
+
+    private static void handleBackup(int count, ByteArrayOutputStream output) {
+        System.err.println("DEBUG: handleBackup called with count=" + count + ", current size=" + output.size());
+        int currentSize = output.size();
+
+        if (count > currentSize) {
+            throw new PerlCompilerException("'X' outside of string in pack");
+        }
+
+        int newSize = currentSize - count;
+
+        if (newSize < currentSize) {
+            // Truncate the output by backing up
+            byte[] currentData = output.toByteArray();
+            output.reset();
+            if (newSize > 0) {
+                output.write(currentData, 0, newSize);
+            }
+        }
+        System.err.println("DEBUG: handleBackup finished, new size=" + output.size());
     }
 
     private static int handlePointer(List<RuntimeScalar> values, int valueIndex, int count,
