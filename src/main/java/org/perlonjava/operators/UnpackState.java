@@ -207,4 +207,54 @@ public class UnpackState {
     public void setCodePointIndex(int index) {
         codePointIndex = Math.max(0, Math.min(index, codePoints.length));
     }
+
+    /**
+     * Gets the current position in the data.
+     * In character mode, returns the code point index.
+     * In byte mode, returns the byte position.
+     */
+    public int getPosition() {
+        if (characterMode) {
+            return codePointIndex;
+        } else {
+            if (buffer == null) {
+                return 0;
+            }
+            return buffer.position();
+        }
+    }
+
+    /**
+     * Gets the current byte position regardless of mode.
+     */
+    public int getBytePosition() {
+        if (buffer != null) {
+            return buffer.position();
+        } else if (!characterMode) {
+            // We're in byte mode but buffer hasn't been initialized yet
+            return 0;
+        } else {
+            // We're in character mode - need to calculate byte position
+            int bytePos = 0;
+            if (isUTF8Data) {
+                // For UTF-8 data, calculate variable-length byte position
+                for (int i = 0; i < codePointIndex; i++) {
+                    int cp = codePoints[i];
+                    if (cp <= 0x7F) {
+                        bytePos += 1;
+                    } else if (cp <= 0x7FF) {
+                        bytePos += 2;
+                    } else if (cp <= 0xFFFF) {
+                        bytePos += 3;
+                    } else {
+                        bytePos += 4;
+                    }
+                }
+            } else {
+                // For ISO-8859-1 data, each code point is exactly one byte
+                bytePos = codePointIndex;
+            }
+            return bytePos;
+        }
+    }
 }
