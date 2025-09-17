@@ -68,6 +68,14 @@ public class Pack {
                 continue;
             }
 
+            // Check for misplaced brackets
+            if (format == '[') {
+                throw new PerlCompilerException("Mismatched brackets in template");
+            }
+            if (format == ']') {
+                throw new PerlCompilerException("Mismatched brackets in template");
+            }
+
             // Handle commas (skip with warning)
             if (format == ',') {
                 System.err.println("WARNING: Invalid type ',' in pack");
@@ -202,6 +210,10 @@ public class Pack {
                     valueIndex = handleWideCharacter(values, valueIndex, count, output);
                     break;
                 default:
+                    // Check for misplaced brackets
+                    if (format == '[' || format == ']') {
+                        throw new PerlCompilerException("Mismatched brackets in template");
+                    }
                     valueIndex = handleNumericFormat(values, valueIndex, count, format, modifiers, output);
                     break;
             }
