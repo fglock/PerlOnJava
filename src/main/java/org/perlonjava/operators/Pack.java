@@ -93,17 +93,21 @@ public class Pack {
 
             // Parse modifiers BEFORE parsing counts
             ParsedModifiers modifiers = PackParser.parseModifiers(template, i);
-            i = modifiers.endPosition;
 
-            // Check if this numeric format is part of a '/' construct BEFORE parsing count
+            // Check if this numeric format is part of a '/' construct
+            // Check from current position i (not after modifiers) to catch S / A* with spaces
             if (PackHelper.isNumericFormat(format) || format == 'Z') {
                 int slashPos = PackHelper.checkForSlashConstruct(template, i);
                 if (slashPos != -1) {
+                    System.err.println("DEBUG: Detected slash construct for format '" + format + "' at position " + i);
                     i = handleSlashConstruct(template, i, slashPos, format, values, valueIndex, output, modifiers);
                     valueIndex++;
                     continue;
                 }
             }
+
+            // Update position after checking for slash
+            i = modifiers.endPosition;
 
             // Parse repeat count
             ParsedCount parsedCount = PackParser.parseRepeatCount(template, i);
@@ -136,8 +140,9 @@ public class Pack {
                 case 'x':
                     handleNullPadding(count, output);
                     break;
-                case '/':
-                    throw new PerlCompilerException("Invalid type '/'");
+                            case '/':
+                                // '/' must follow a numeric type - this is an error in the template
+                                throw new PerlCompilerException("'/' must follow a numeric type in pack at position " + i);
                 case '@':
                     handleAbsolutePosition(count, output);
                     break;
