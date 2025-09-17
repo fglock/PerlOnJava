@@ -228,7 +228,7 @@ sub run_single_test {
 
     # Temporarily disable fatal unimplemented errors
     # so we can run tests that mix implemented and unimplemented features
-    local $ENV{JPERL_UNIMPLEMENTED} = $test_file =~ m{ re/pat_rt_report.t | re/pat.t }x
+    local $ENV{JPERL_UNIMPLEMENTED} = $test_file =~ m{ re/pat_rt_report.t | re/pat.t | op/pack.t }x
         ? "warn" : "";
     local $ENV{JPERL_OPTS} = $test_file =~ m{ re/pat.t }x
         ? "-Xss256m" : "";
