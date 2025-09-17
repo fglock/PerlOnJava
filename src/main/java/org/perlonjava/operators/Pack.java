@@ -603,6 +603,8 @@ public class Pack {
                 PackHelper.handleInfinity(value, format);
             }
 
+            System.err.println("DEBUG: handleNumericFormat processing format '" + format + "' with value: " + value.toString());
+
             switch (format) {
                 case 'c':
                     // Signed char
@@ -666,6 +668,16 @@ public class Pack {
                     // Perl internal signed integer - treat as long
                     PackWriter.writeLong(output, (long) value.getDouble());
                     break;
+                case 'q':
+                    // Signed 64-bit quad
+                    System.err.println("DEBUG: Processing q (signed quad) format");
+                    PackWriter.writeLong(output, (long) value.getDouble());
+                    break;
+                case 'Q':
+                    // Unsigned 64-bit quad
+                    System.err.println("DEBUG: Processing Q (unsigned quad) format");
+                    PackWriter.writeLong(output, (long) value.getDouble());
+                    break;
                 case 'f':
                     PackWriter.writeFloat(output, (float) value.getDouble());
                     break;
@@ -674,6 +686,11 @@ public class Pack {
                     PackWriter.writeDouble(output, value.getDouble());
                     break;
                 case 'd':
+                    PackWriter.writeDouble(output, value.getDouble());
+                    break;
+                case 'D':
+                    // Long double - treat as regular double in Java since we don't have long double
+                    System.err.println("DEBUG: Processing D (long double) format as regular double");
                     PackWriter.writeDouble(output, value.getDouble());
                     break;
                 default:
