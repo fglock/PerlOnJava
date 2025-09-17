@@ -2,6 +2,7 @@ package org.perlonjava.operators.unpack;
 
 import org.perlonjava.operators.Unpack;
 import org.perlonjava.operators.UnpackState;
+import org.perlonjava.operators.pack.PackHelper;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeBase;
 import org.perlonjava.runtime.RuntimeScalar;
@@ -96,6 +97,65 @@ public class Groups {
                     state.switchToByteMode();
                     j++; // Skip the '0'
                     continue;
+                }
+
+                // NEW: Check if this numeric format is part of a '/' construct
+                if (PackHelper.isNumericFormat(format)) {
+                    int slashPos = PackHelper.checkForSlashConstruct(groupTemplate, j);
+                    if (slashPos != -1) {
+                        System.err.println("DEBUG: Detected slash construct " + format + "/ at position " + j + " in group");
+
+                        // Unpack the numeric format to get the count
+                        FormatHandler handler = Unpack.getHandler(format, startsWithU);
+                        handler.unpack(state, values, 1, false);
+
+                        // Get the count value
+                        RuntimeBase lastValue = values.getLast();
+                        int slashCount = ((RuntimeScalar) lastValue).getInt();
+                        values.removeLast();
+
+                        // Move to after the '/'
+                        j = slashPos + 1;
+
+                        // Skip whitespace
+                        while (j < groupTemplate.length() && Character.isWhitespace(groupTemplate.charAt(j))) {
+                            j++;
+                        }
+
+                        if (j >= groupTemplate.length()) {
+                            throw new PerlCompilerException("Code missing after '/'");
+                        }
+
+                        char stringFormat = groupTemplate.charAt(j);
+
+                        if (stringFormat == '(') {
+                            int closePos = Unpack.findMatchingParen(groupTemplate, j);
+                            if (closePos == -1) {
+                                throw new PerlCompilerException("unpack: unmatched parenthesis in template");
+                            }
+
+                            String nestedGroupContent = groupTemplate.substring(j + 1, closePos);
+
+                            for (int slashRep = 0; slashRep < slashCount; slashRep++) {
+                                processGroup(nestedGroupContent, state, values, 1, startsWithU, modeStack);
+                            }
+
+                            j = closePos;
+                        } else if (stringFormat == 'a' || stringFormat == 'A' || stringFormat == 'Z') {
+                            boolean hasStarAfterSlash = false;
+                            if (j + 1 < groupTemplate.length() && groupTemplate.charAt(j + 1) == '*') {
+                                hasStarAfterSlash = true;
+                                j++;
+                            }
+
+                            FormatHandler stringHandler = Unpack.handlers.get(stringFormat);
+                            stringHandler.unpack(state, values, slashCount, hasStarAfterSlash);
+                        } else {
+                            throw new PerlCompilerException("'/' must be followed by a string type or group");
+                        }
+
+                        continue;
+                    }
                 }
 
                 // Handle @ format

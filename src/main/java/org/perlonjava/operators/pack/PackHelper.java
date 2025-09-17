@@ -39,10 +39,24 @@ public class PackHelper {
             lookAhead++;
         }
 
+        // Skip whitespace
+        while (lookAhead < template.length() && Character.isWhitespace(template.charAt(lookAhead))) {
+            lookAhead++;
+        }
+
         // Skip count or *
         if (lookAhead < template.length()) {
             if (template.charAt(lookAhead) == '*') {
                 lookAhead++;
+            } else if (template.charAt(lookAhead) == '[') {
+                // Handle [n] style counts
+                lookAhead++; // skip '['
+                while (lookAhead < template.length() && Character.isDigit(template.charAt(lookAhead))) {
+                    lookAhead++;
+                }
+                if (lookAhead < template.length() && template.charAt(lookAhead) == ']') {
+                    lookAhead++;
+                }
             } else if (Character.isDigit(template.charAt(lookAhead))) {
                 while (lookAhead < template.length() && Character.isDigit(template.charAt(lookAhead))) {
                     lookAhead++;
@@ -50,8 +64,14 @@ public class PackHelper {
             }
         }
 
+        // Skip more whitespace after count
+        while (lookAhead < template.length() && Character.isWhitespace(template.charAt(lookAhead))) {
+            lookAhead++;
+        }
+
         // Check if followed by '/'
         if (lookAhead < template.length() && template.charAt(lookAhead) == '/') {
+            System.err.println("DEBUG: Found slash at position " + lookAhead + " after format at position " + position);
             return lookAhead;
         }
 

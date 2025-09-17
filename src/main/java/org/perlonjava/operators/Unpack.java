@@ -1,5 +1,6 @@
 package org.perlonjava.operators;
 
+import org.perlonjava.operators.pack.PackHelper;
 import org.perlonjava.operators.unpack.*;
 import org.perlonjava.runtime.*;
 
@@ -214,6 +215,16 @@ public class Unpack {
                 }
                 i++;
                 continue;
+            }
+
+            // Check if this numeric format is part of a '/' construct
+            if (PackHelper.isNumericFormat(format)) {
+                int slashPos = PackHelper.checkForSlashConstruct(template, i);
+                if (slashPos != -1) {
+                    i = UnpackHelper.processSlashConstruct(template, i, format, state, values, startsWithU, modeStack);
+                    i++; // Move past the last processed character
+                    continue;
+                }
             }
 
             // Handle endianness modifiers that might appear after certain formats
