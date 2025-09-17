@@ -330,12 +330,6 @@ public class Pack {
         char stringFormat = template.charAt(stringPos);
         System.err.println("DEBUG: string format after '/' is '" + stringFormat + "'");
 
-        // Validate string format
-        if (stringFormat != 'a' && stringFormat != 'A' && stringFormat != 'Z' && stringFormat != 'U') {
-            System.err.println("DEBUG: Invalid string format '" + stringFormat + "' after '/'");
-            throw new PerlCompilerException("'/' must be followed by a string type");
-        }
-
         // Parse string count
         ParsedCount stringCountInfo = PackParser.parseRepeatCount(template, stringPos);
         int stringCount = stringCountInfo.hasStar ? -1 : stringCountInfo.count;
@@ -370,8 +364,8 @@ public class Pack {
                 dataToWrite = str.getBytes(StandardCharsets.UTF_8);
                 lengthToWrite = str.length();
             }
-        } else {
-            // Handle other string formats (a, A, Z)
+        } else if (stringFormat == 'a' || stringFormat == 'A' || stringFormat == 'Z') {
+            // Handle string formats (a, A, Z)
             if (stringCount >= 0) {
                 // Specific count requested
                 byte[] strBytes = str.getBytes(StandardCharsets.UTF_8);
@@ -392,6 +386,38 @@ public class Pack {
                     lengthToWrite++; // Include null terminator in count
                 }
             }
+        } else {
+            // For non-string formats after '/', we need to handle them differently
+            // The format after '/' specifies what to pack, and we pack that many items
+            // Count how many values are available
+            int availableValues = values.size() - valueIndex;
+            int itemsToWrite;
+
+            if (stringCount >= 0) {
+                // Use the minimum of requested count and available values
+                itemsToWrite = Math.min(stringCount, availableValues);
+            } else {
+                // Use all available values
+                itemsToWrite = availableValues;
+            }
+
+            // Pack the length first
+            packLength(output, format, itemsToWrite, modifiers);
+
+            // Now pack the items using the specified format
+            for (int j = 0; j < itemsToWrite && valueIndex < values.size(); j++) {
+                // Create a sub-pack for each item
+                RuntimeList itemArgs = new RuntimeList();
+                itemArgs.add(new RuntimeScalar(String.valueOf(stringFormat)));
+                itemArgs.add(values.get(valueIndex++));
+
+                RuntimeScalar itemResult = pack(itemArgs);
+                byte[] itemBytes = itemResult.toString().getBytes(StandardCharsets.ISO_8859_1);
+                output.write(itemBytes, 0, itemBytes.length);
+            }
+
+            // Return the position after consuming the correct number of values
+            return endPos;
         }
 
         // Pack the length using the numeric format
