@@ -241,6 +241,13 @@ public class Unpack {
                 continue;
             }
 
+            // Handle '!' modifier that might appear after certain formats
+            if (format == '!' && i > 0) {
+                // This is likely a modifier for the previous format, skip it
+                i++;
+                continue;
+            }
+
             // Handle '/' for counted strings
             if (format == '/') {
                 if (values.isEmpty()) {
@@ -317,9 +324,12 @@ public class Unpack {
             int count = 1;
             boolean isStarCount = false;
 
-            // First, skip any '!' modifiers after the format character
-            while (i + 1 < template.length() && template.charAt(i + 1) == '!') {
-                i++; // Skip '!' - for unpack, it doesn't change behavior
+            // First, skip any modifiers (<, >, !) after the format character
+            while (i + 1 < template.length() &&
+                   (template.charAt(i + 1) == '!' ||
+                    template.charAt(i + 1) == '<' ||
+                    template.charAt(i + 1) == '>')) {
+                i++; // Skip modifiers - for unpack, we ignore them for now
             }
 
             if (i + 1 < template.length()) {
