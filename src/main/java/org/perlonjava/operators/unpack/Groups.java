@@ -43,6 +43,12 @@ public class Groups {
                     continue;
                 }
 
+                // NEW: Handle commas (skip with warning)
+                if (format == ',') {
+                    System.err.println("WARNING: Invalid type ',' in unpack");
+                    continue;
+                }
+
                 // Handle nested groups
                 if (format == '(') {
                     // Find the matching closing parenthesis within the group
