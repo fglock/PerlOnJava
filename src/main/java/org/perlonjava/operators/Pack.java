@@ -159,6 +159,9 @@ public class Pack {
                 case 'p':
                     valueIndex = handlePointer(values, valueIndex, count, modifiers, output);
                     break;
+                case 'P':
+                    valueIndex = handlePointer(values, valueIndex, count, modifiers, output);
+                    break;
                 case 'U':
                     hasUnicodeInNormalMode = handleUnicode(values, valueIndex, count, byteMode, hasUnicodeInNormalMode, output);
                     valueIndex += count;
