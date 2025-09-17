@@ -220,29 +220,66 @@ public class Pack {
 
         // Process the group content repeatedly
         for (int rep = 0; rep < groupInfo.repeatCount; rep++) {
-            // Create a sub-packer for the group content
-            RuntimeList groupArgs = new RuntimeList();
-            groupArgs.add(new RuntimeScalar(groupContent));
+            // Special case: if group starts with X, handle it directly on parent buffer
+            if (groupContent.startsWith("X")) {
+                // Handle X directly on the parent's output
+                int xCount = 1;
+                int xPos = 1;
 
-            // Collect values for this group iteration
-            int groupValueCount = PackHelper.countValuesNeeded(groupContent);
-            System.err.println("DEBUG: group '" + groupContent + "' needs " + groupValueCount + " values, valueIndex=" + valueIndex + ", remaining=" + (values.size() - valueIndex));
-
-            // Handle * groups
-            if (groupInfo.repeatCount == Integer.MAX_VALUE) {
-                if (groupValueCount == Integer.MAX_VALUE || values.size() - valueIndex < groupValueCount) {
-                    break;
+                // Check for count after X
+                if (xPos < groupContent.length() && Character.isDigit(groupContent.charAt(xPos))) {
+                    int j = xPos;
+                    while (j < groupContent.length() && Character.isDigit(groupContent.charAt(j))) {
+                        j++;
+                    }
+                    xCount = Integer.parseInt(groupContent.substring(xPos, j));
+                    xPos = j;
                 }
-            }
 
-            for (int v = 0; v < groupValueCount && valueIndex < values.size(); v++) {
-                groupArgs.add(values.get(valueIndex++));
-            }
+                // Backup in parent buffer
+                handleBackup(xCount, output);
 
-            // Recursively pack the group
-            RuntimeScalar groupResult = pack(groupArgs);
-            byte[] groupBytes = groupResult.toString().getBytes(StandardCharsets.ISO_8859_1);
-            output.write(groupBytes, 0, groupBytes.length);
+                // Process the rest of the group normally
+                if (xPos < groupContent.length()) {
+                    String remainingContent = groupContent.substring(xPos);
+                    RuntimeList groupArgs = new RuntimeList();
+                    groupArgs.add(new RuntimeScalar(remainingContent));
+
+                    // Collect values for remaining content
+                    int remainingValueCount = PackHelper.countValuesNeeded(remainingContent);
+                    for (int v = 0; v < remainingValueCount && valueIndex < values.size(); v++) {
+                        groupArgs.add(values.get(valueIndex++));
+                    }
+
+                    RuntimeScalar groupResult = pack(groupArgs);
+                    byte[] groupBytes = groupResult.toString().getBytes(StandardCharsets.ISO_8859_1);
+                    output.write(groupBytes, 0, groupBytes.length);
+                }
+            } else {
+                // Normal group processing
+                RuntimeList groupArgs = new RuntimeList();
+                groupArgs.add(new RuntimeScalar(groupContent));
+
+                // Collect values for this group iteration
+                int groupValueCount = PackHelper.countValuesNeeded(groupContent);
+                System.err.println("DEBUG: group '" + groupContent + "' needs " + groupValueCount + " values, valueIndex=" + valueIndex + ", remaining=" + (values.size() - valueIndex));
+
+                // Handle * groups
+                if (groupInfo.repeatCount == Integer.MAX_VALUE) {
+                    if (groupValueCount == Integer.MAX_VALUE || values.size() - valueIndex < groupValueCount) {
+                        break;
+                    }
+                }
+
+                for (int v = 0; v < groupValueCount && valueIndex < values.size(); v++) {
+                    groupArgs.add(values.get(valueIndex++));
+                }
+
+                // Recursively pack the group
+                RuntimeScalar groupResult = pack(groupArgs);
+                byte[] groupBytes = groupResult.toString().getBytes(StandardCharsets.ISO_8859_1);
+                output.write(groupBytes, 0, groupBytes.length);
+            }
         }
 
         return groupInfo.endPosition - 1; // -1 because loop will increment
