@@ -217,6 +217,13 @@ public class Unpack {
                 continue;
             }
 
+            // NEW: Handle commas (skip with warning)
+            if (format == ',') {
+                System.err.println("WARNING: Invalid type ',' in unpack");
+                i++;
+                continue;
+            }
+
             // Check if this numeric format is part of a '/' construct
             if (PackHelper.isNumericFormat(format)) {
                 int slashPos = PackHelper.checkForSlashConstruct(template, i);

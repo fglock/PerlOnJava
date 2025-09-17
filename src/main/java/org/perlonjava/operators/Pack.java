@@ -72,6 +72,13 @@ public class Pack {
                 continue;
             }
 
+            // NEW: Handle commas (skip with warning)
+            if (format == ',') {
+                System.err.println("WARNING: Invalid type ',' in pack");
+                // In Perl, this would use warn() but continue execution
+                continue;
+            }
+
             // Handle parentheses for grouping
             if (format == '(') {
                 i = handleGroup(template, i, values, output, valueIndex);
