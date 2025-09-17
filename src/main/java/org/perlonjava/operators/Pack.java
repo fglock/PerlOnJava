@@ -402,10 +402,15 @@ public class Pack {
 
     private static int handleBitString(List<RuntimeScalar> values, int valueIndex, char format,
                                        int count, boolean hasStar, ByteArrayOutputStream output) {
+        RuntimeScalar value;
         if (valueIndex >= values.size()) {
-            throw new PerlCompilerException("pack: not enough arguments");
+            // If no more arguments, use empty string as per Perl behavior
+            value = new RuntimeScalar("");
+        } else {
+            value = values.get(valueIndex);
+            valueIndex++;
         }
-        RuntimeScalar value = values.get(valueIndex++);
+
         String bitString = value.toString();
         if (hasStar) {
             count = bitString.length();
@@ -416,10 +421,15 @@ public class Pack {
 
     private static int handleHexString(List<RuntimeScalar> values, int valueIndex, char format,
                                        int count, boolean hasStar, ByteArrayOutputStream output) {
+        RuntimeScalar value;
         if (valueIndex >= values.size()) {
-            throw new PerlCompilerException("pack: not enough arguments");
+            // If no more arguments, use empty string as per Perl behavior
+            value = new RuntimeScalar("");
+        } else {
+            value = values.get(valueIndex);
+            valueIndex++;
         }
-        RuntimeScalar value = values.get(valueIndex++);
+
         String hexString = value.toString();
         if (hasStar) {
             count = hexString.length();
