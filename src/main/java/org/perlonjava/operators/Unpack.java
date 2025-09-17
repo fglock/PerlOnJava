@@ -31,6 +31,8 @@ public class Unpack {
         handlers.put('v', new NumericFormatHandler.VAXShortHandler());
         handlers.put('q', new NumericFormatHandler.LongHandler(true));   // signed 64-bit quad
         handlers.put('Q', new NumericFormatHandler.LongHandler(false));  // unsigned 64-bit quad
+        handlers.put('j', new NumericFormatHandler.LongHandler(true));   // signed Perl IV
+        handlers.put('J', new NumericFormatHandler.LongHandler(false));  // unsigned Perl UV
         handlers.put('f', new NumericFormatHandler.FloatHandler());
         handlers.put('F', new NumericFormatHandler.DoubleHandler());  // F is double-precision like d
         handlers.put('d', new NumericFormatHandler.DoubleHandler());
@@ -47,6 +49,7 @@ public class Unpack {
         handlers.put('X', new XBackwardHandler());
         handlers.put('w', new WBERFormatHandler());
         handlers.put('p', new PointerFormatHandler());
+        handlers.put('P', new PointerFormatHandler());  // P uses same handler as p for simplicity
         handlers.put('u', new UuencodeFormatHandler());
         handlers.put('@', new AtFormatHandler());
         // Note: U handler is created dynamically based on startsWithU

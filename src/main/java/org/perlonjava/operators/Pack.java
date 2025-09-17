@@ -301,7 +301,8 @@ public class Pack {
         System.err.println("DEBUG: string format after '/' is '" + stringFormat + "'");
 
         // Validate string format
-        if (stringFormat != 'a' && stringFormat != 'A' && stringFormat != 'Z') {
+        if (stringFormat != 'a' && stringFormat != 'A' && stringFormat != 'Z' && stringFormat != 'U') {
+            System.err.println("DEBUG: Invalid string format '" + stringFormat + "' after '/'");
             throw new PerlCompilerException("'/' must be followed by a string type");
         }
 
@@ -322,24 +323,44 @@ public class Pack {
         byte[] dataToWrite;
         int lengthToWrite;
 
-        if (stringCount >= 0) {
-            // Specific count requested
-            byte[] strBytes = str.getBytes(StandardCharsets.UTF_8);
-            int actualCount = Math.min(stringCount, strBytes.length);
-            dataToWrite = new byte[stringCount];
-            System.arraycopy(strBytes, 0, dataToWrite, 0, actualCount);
-            // Pad with nulls or spaces depending on format
-            byte padByte = (stringFormat == 'A') ? (byte) ' ' : (byte) 0;
-            for (int k = actualCount; k < stringCount; k++) {
-                dataToWrite[k] = padByte;
+        if (stringFormat == 'U') {
+            // For U format, handle Unicode specially
+            if (stringCount >= 0) {
+                // Specific count requested - take first N characters
+                int actualCount = Math.min(stringCount, str.length());
+                StringBuilder sb = new StringBuilder();
+                for (int k = 0; k < actualCount; k++) {
+                    sb.append(str.charAt(k));
+                }
+                str = sb.toString();
+                dataToWrite = str.getBytes(StandardCharsets.UTF_8);
+                lengthToWrite = actualCount;
+            } else {
+                // Use full string
+                dataToWrite = str.getBytes(StandardCharsets.UTF_8);
+                lengthToWrite = str.length();
             }
-            lengthToWrite = stringCount;
         } else {
-            // Use full string
-            dataToWrite = str.getBytes(StandardCharsets.UTF_8);
-            lengthToWrite = dataToWrite.length;
-            if (stringFormat == 'Z') {
-                lengthToWrite++; // Include null terminator in count
+            // Handle other string formats (a, A, Z)
+            if (stringCount >= 0) {
+                // Specific count requested
+                byte[] strBytes = str.getBytes(StandardCharsets.UTF_8);
+                int actualCount = Math.min(stringCount, strBytes.length);
+                dataToWrite = new byte[stringCount];
+                System.arraycopy(strBytes, 0, dataToWrite, 0, actualCount);
+                // Pad with nulls or spaces depending on format
+                byte padByte = (stringFormat == 'A') ? (byte) ' ' : (byte) 0;
+                for (int k = actualCount; k < stringCount; k++) {
+                    dataToWrite[k] = padByte;
+                }
+                lengthToWrite = stringCount;
+            } else {
+                // Use full string
+                dataToWrite = str.getBytes(StandardCharsets.UTF_8);
+                lengthToWrite = dataToWrite.length;
+                if (stringFormat == 'Z') {
+                    lengthToWrite++; // Include null terminator in count
+                }
             }
         }
 

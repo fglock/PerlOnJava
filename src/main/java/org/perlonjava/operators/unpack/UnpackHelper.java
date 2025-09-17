@@ -73,21 +73,26 @@ public class UnpackHelper {
                 }
 
                 return closePos;
-            } else if (stringFormat == 'a' || stringFormat == 'A' || stringFormat == 'Z') {
-                // Parse optional count/star after string format
+            } else {
+                // Any valid format can follow '/', not just string types
+                FormatHandler formatHandler = Unpack.getHandler(stringFormat, startsWithU);
+                if (formatHandler == null) {
+                    System.err.println("DEBUG: No handler found for format '" + stringFormat + "'");
+                    throw new PerlCompilerException("'/' must be followed by a valid format or group");
+                }
+
+                // Parse optional count/star after the format
                 boolean hasStarAfterSlash = false;
                 if (i + 1 < template.length() && template.charAt(i + 1) == '*') {
                     hasStarAfterSlash = true;
                     i++; // Move to the '*'
                 }
 
-                // Unpack the string with the count
-                FormatHandler stringFormatHandler = Unpack.handlers.get(stringFormat);
-                stringFormatHandler.unpack(state, values, slashCount, hasStarAfterSlash);
+                // Unpack the format with the count
+                System.err.println("DEBUG: Unpacking format '" + stringFormat + "' " + slashCount + " times");
+                formatHandler.unpack(state, values, slashCount, hasStarAfterSlash);
 
                 return i;
-            } else {
-                throw new PerlCompilerException("'/' must be followed by a string type or group");
             }
         } else {
             // Original numeric format processing
@@ -99,6 +104,8 @@ public class UnpackHelper {
             RuntimeBase lastValue = values.getLast();
             int slashCount = ((RuntimeScalar) lastValue).getInt();
             values.removeLast(); // Remove the count value
+
+            System.err.println("DEBUG: Got slash count: " + slashCount);
 
             // Find the slash position
             int slashPos = PackHelper.checkForSlashConstruct(template, position);
@@ -119,6 +126,7 @@ public class UnpackHelper {
             }
 
             char stringFormat = template.charAt(i);
+            System.err.println("DEBUG: String format after '/' is: '" + stringFormat + "'");
 
             // Check if it's a group
             if (stringFormat == '(') {
@@ -137,21 +145,26 @@ public class UnpackHelper {
                 }
 
                 return closePos;
-            } else if (stringFormat == 'a' || stringFormat == 'A' || stringFormat == 'Z') {
-                // Parse optional count/star after string format
+            } else {
+                // Any valid format can follow '/', not just string types
+                FormatHandler formatHandler = Unpack.getHandler(stringFormat, startsWithU);
+                if (formatHandler == null) {
+                    System.err.println("DEBUG: No handler found for format '" + stringFormat + "'");
+                    throw new PerlCompilerException("'/' must be followed by a valid format or group");
+                }
+
+                // Parse optional count/star after the format
                 boolean hasStarAfterSlash = false;
                 if (i + 1 < template.length() && template.charAt(i + 1) == '*') {
                     hasStarAfterSlash = true;
                     i++; // Move to the '*'
                 }
 
-                // Unpack the string with the count
-                FormatHandler stringHandler = Unpack.handlers.get(stringFormat);
-                stringHandler.unpack(state, values, slashCount, hasStarAfterSlash);
+                // Unpack the format with the count
+                System.err.println("DEBUG: Unpacking format '" + stringFormat + "' " + slashCount + " times");
+                formatHandler.unpack(state, values, slashCount, hasStarAfterSlash);
 
                 return i;
-            } else {
-                throw new PerlCompilerException("'/' must be followed by a string type or group");
             }
         }
     }
