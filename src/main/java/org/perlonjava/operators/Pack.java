@@ -429,10 +429,14 @@ public class Pack {
     }
 
     private static int handleUuencode(List<RuntimeScalar> values, int valueIndex, ByteArrayOutputStream output) {
+        RuntimeScalar value;
         if (valueIndex >= values.size()) {
-            throw new PerlCompilerException("pack: not enough arguments");
+            // If no more arguments, use empty string as per Perl behavior
+            value = new RuntimeScalar("");
+        } else {
+            value = values.get(valueIndex);
+            valueIndex++;
         }
-        RuntimeScalar value = values.get(valueIndex++);
         String str = value.toString();
         PackWriter.writeUuencodedString(output, str);
         return valueIndex;
@@ -485,11 +489,15 @@ public class Pack {
     private static int handlePointer(List<RuntimeScalar> values, int valueIndex, int count,
                                      ParsedModifiers modifiers, ByteArrayOutputStream output) {
         for (int j = 0; j < count; j++) {
+            RuntimeScalar value;
             if (valueIndex >= values.size()) {
-                throw new PerlCompilerException("pack: not enough arguments");
+                // If no more arguments, use empty string as per Perl behavior
+                value = new RuntimeScalar("");
+            } else {
+                value = values.get(valueIndex);
+                valueIndex++;
             }
 
-            RuntimeScalar value = values.get(valueIndex++);
             int ptr = 0;
 
             // Check if value is defined (not undef)
@@ -513,10 +521,13 @@ public class Pack {
                                          boolean byteMode, boolean hasUnicodeInNormalMode,
                                          ByteArrayOutputStream output) {
         for (int j = 0; j < count; j++) {
+            RuntimeScalar value;
             if (valueIndex + j >= values.size()) {
-                throw new PerlCompilerException("pack: not enough arguments");
+                // If no more arguments, use 0 as per Perl behavior
+                value = new RuntimeScalar(0);
+            } else {
+                value = values.get(valueIndex + j);
             }
-            RuntimeScalar value = values.get(valueIndex + j);
             hasUnicodeInNormalMode = PackHelper.packU(value, byteMode, hasUnicodeInNormalMode, output);
         }
         return hasUnicodeInNormalMode;
@@ -525,10 +536,14 @@ public class Pack {
     private static int handleWideCharacter(List<RuntimeScalar> values, int valueIndex, int count,
                                            ByteArrayOutputStream output) {
         for (int j = 0; j < count; j++) {
+            RuntimeScalar value;
             if (valueIndex >= values.size()) {
-                throw new PerlCompilerException("pack: not enough arguments");
+                // If no more arguments, use 0 as per Perl behavior (empty string converts to 0)
+                value = new RuntimeScalar(0);
+            } else {
+                value = values.get(valueIndex);
+                valueIndex++;
             }
-            RuntimeScalar value = values.get(valueIndex++);
             PackHelper.packW(value, output);
         }
         return valueIndex;
