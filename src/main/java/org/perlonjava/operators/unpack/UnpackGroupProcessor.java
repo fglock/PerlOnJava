@@ -215,6 +215,9 @@ public class UnpackGroupProcessor {
         // Save current mode
         boolean savedMode = state.isCharacterMode();
 
+        // Track position history to detect cycles (for infinite loop prevention)
+        List<Integer> positionHistory = new ArrayList<>();
+
         for (int rep = 0; rep < repeatCount; rep++) {
             // If we're at the end of data and not on first iteration, stop
             if (rep > 0 && state.remainingBytes() == 0) {
@@ -244,6 +247,25 @@ public class UnpackGroupProcessor {
                 // Handle commas (skip with warning)
                 if (format == ',') {
                     System.err.println("WARNING: Invalid type ',' in unpack");
+                    continue;
+                }
+
+                // Handle endianness modifiers that might appear after certain formats
+                if ((format == '<' || format == '>') && j > 0) {
+                    // This is likely a modifier for the previous format, skip it
+                    continue;
+                }
+
+                // Handle '!' modifier that might appear after certain formats
+                if (format == '!' && j > 0) {
+                    // This is likely a modifier for the previous format, skip it
+                    // Also skip any following digit or '*' (e.g., !2, !4, !8, !*)
+                    if (j + 1 < groupTemplate.length()) {
+                        char nextChar = groupTemplate.charAt(j + 1);
+                        if (Character.isDigit(nextChar) || nextChar == '*') {
+                            j++; // Skip the digit or '*' as well
+                        }
+                    }
                     continue;
                 }
 
@@ -478,10 +500,22 @@ public class UnpackGroupProcessor {
 
                 int valuesAfterGroup = values.size();
 
+                // Check for position cycling (e.g., @ format moving position backward)
+                if (positionHistory.contains(positionAfter)) {
+                    System.err.println("DEBUG: Position cycle detected at position " + positionAfter + ", stopping infinite loop");
+                    break;
+                }
+                positionHistory.add(positionAfter);
+
                 // If no progress was made (no data consumed and no values added), stop
                 if (positionAfter == positionBefore && valuesAfterGroup == valuesBeforeGroup) {
                     System.err.println("DEBUG: No progress made in group iteration, stopping infinite loop");
                     break;
+                }
+
+                // Limit position history size to prevent memory issues
+                if (positionHistory.size() > 1000) {
+                    positionHistory.remove(0);
                 }
             }
         }
