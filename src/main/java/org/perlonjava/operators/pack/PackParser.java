@@ -151,6 +151,23 @@ public class PackParser {
     }
 
     /**
+     * Skips a comment in the template string, starting from the given position.
+     * 
+     * <p>Comments in pack templates start with '#' and continue until the end of the line.
+     * This method advances the position past the entire comment.</p>
+     * 
+     * @param template The template string
+     * @param position The starting position of the comment (should point to '#')
+     * @return The position after the comment
+     */
+    public static int skipComment(String template, int position) {
+        while (position + 1 < template.length() && template.charAt(position + 1) != '\n') {
+            position++;
+        }
+        return position;
+    }
+
+    /**
      * Parses group information including modifiers and repeat counts for parenthesized template sections.
      * 
      * <p>Groups in pack templates are enclosed in parentheses and can have modifiers and repeat counts
