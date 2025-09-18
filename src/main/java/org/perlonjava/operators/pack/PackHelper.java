@@ -106,7 +106,7 @@ public class PackHelper {
 
         // Check if followed by '/'
         if (lookAhead < template.length() && template.charAt(lookAhead) == '/') {
-            System.err.println("DEBUG: Found slash at position " + lookAhead + " after format at position " + position);
+            // DEBUG: Found slash at position " + lookAhead + " after format at position " + position
             return lookAhead;
         }
 
@@ -241,7 +241,7 @@ public class PackHelper {
             intValue = value.getInt();
         }
 
-        System.err.println("DEBUG: packW intValue=" + intValue);
+        // DEBUG: packW intValue=" + intValue
 
         try {
             if (Character.isValidCodePoint(intValue)) {
@@ -249,7 +249,7 @@ public class PackHelper {
                 String unicodeChar = new String(Character.toChars(intValue));
                 byte[] utf8Bytes = unicodeChar.getBytes(StandardCharsets.UTF_8);
                 output.write(utf8Bytes);
-                System.err.println("DEBUG: packW wrote " + utf8Bytes.length + " UTF-8 bytes for Unicode " + intValue);
+                // DEBUG: packW wrote " + utf8Bytes.length + " UTF-8 bytes for Unicode " + intValue
             } else {
                 // Beyond Unicode range - for now, wrap to valid range
                 // This is a compromise until we can handle extended values properly
@@ -260,7 +260,7 @@ public class PackHelper {
                 String unicodeChar = new String(Character.toChars(wrappedValue));
                 byte[] utf8Bytes = unicodeChar.getBytes(StandardCharsets.UTF_8);
                 output.write(utf8Bytes);
-                System.err.println("DEBUG: packW wrapped " + intValue + " to " + wrappedValue + ", wrote " + utf8Bytes.length + " bytes");
+                // DEBUG: packW wrapped " + intValue + " to " + wrappedValue + ", wrote " + utf8Bytes.length + " bytes
             }
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -289,10 +289,10 @@ public class PackHelper {
      */
     public static int countValuesNeeded(String template) {
         int count = 0;
-        System.err.println("DEBUG countValuesNeeded: template='" + template + "'");
+        // DEBUG countValuesNeeded: template='" + template + "'
         for (int i = 0; i < template.length(); i++) {
             char format = template.charAt(i);
-            System.err.println("DEBUG countValuesNeeded: i=" + i + ", format='" + format + "', count=" + count);
+            // DEBUG countValuesNeeded: i=" + i + ", format='" + format + "', count=" + count
 
             if (Character.isWhitespace(format) || format == '#') {
                 continue;
@@ -327,7 +327,7 @@ public class PackHelper {
                     int repeatCount = 1;
                     if (i + 1 < template.length()) {
                         if (template.charAt(i + 1) == '*') {
-                            System.err.println("DEBUG countValuesNeeded: returning MAX_VALUE due to group with *");
+                            // DEBUG countValuesNeeded: returning MAX_VALUE due to group with *
                             return Integer.MAX_VALUE;
                         } else if (Character.isDigit(template.charAt(i + 1))) {
                             int j = i + 1;
@@ -348,7 +348,7 @@ public class PackHelper {
             if (isNumericFormat(format) || format == 'Z') {
                 int slashPos = checkForSlashConstruct(template, i);
                 if (slashPos != -1) {
-                    System.err.println("DEBUG countValuesNeeded: format '" + format + "' at " + i + " is part of N/ construct, skipping to " + slashPos);
+                    // DEBUG countValuesNeeded: format '" + format + "' at " + i + " is part of N/ construct, skipping to " + slashPos
                     // This numeric format is part of N/X construct
                     // It doesn't consume a value - skip to the '/'
                     i = slashPos - 1; // -1 because loop will increment
@@ -367,7 +367,7 @@ public class PackHelper {
                     // Skip the string format after '/'
                     i = j;
                     format = template.charAt(i);
-                    System.err.println("DEBUG countValuesNeeded: '/' skipping to format '" + format + "' at position " + i);
+                    // DEBUG countValuesNeeded: '/' skipping to format '" + format + "' at position " + i
                 }
                 // Fall through to count the string format normally
             }
@@ -387,7 +387,7 @@ public class PackHelper {
                 if (template.charAt(i + 1) == '*') {
                     hasStar = true;
                     i++;
-                    System.err.println("DEBUG countValuesNeeded: found * after format '" + format + "'");
+                    // DEBUG countValuesNeeded: found * after format '" + format + "'
                 } else if (template.charAt(i + 1) == '[') {
                     // Parse repeat count in brackets [n]
                     int j = i + 2;
@@ -415,18 +415,18 @@ public class PackHelper {
             } else if ("aAZbBhHu".indexOf(format) >= 0) {
                 // String/binary formats consume exactly one value regardless of repeat count
                 count += 1;
-                System.err.println("DEBUG countValuesNeeded: string format '" + format + "' adds 1, count=" + count);
+                // DEBUG countValuesNeeded: string format '" + format + "' adds 1, count=" + count
             } else if (isNumericFormat(format) || format == 'p' || format == '.') {
                 // Numeric formats consume 'repeatCount' values (or return MAX for *)
                 if (hasStar) {
-                    System.err.println("DEBUG countValuesNeeded: returning MAX_VALUE due to numeric format '" + format + "' with *");
+                    // DEBUG countValuesNeeded: returning MAX_VALUE due to numeric format '" + format + "' with *
                     return Integer.MAX_VALUE;
                 }
                 count += repeatCount;
-                System.err.println("DEBUG countValuesNeeded: numeric format '" + format + "' adds " + repeatCount + ", count=" + count);
+                // DEBUG countValuesNeeded: numeric format '" + format + "' adds " + repeatCount + ", count=" + count
             }
         }
-        System.err.println("DEBUG countValuesNeeded: returning " + count);
+        // DEBUG countValuesNeeded: returning " + count
         return count;
     }
 
@@ -643,7 +643,7 @@ public class PackHelper {
      * @param modifiers The modifiers for the format
      */
     public static void packLength(ByteArrayOutputStream output, char format, int length, ParsedModifiers modifiers) {
-        System.err.println("DEBUG: packing length " + length + " with format '" + format + "'");
+        // DEBUG: packing length " + length + " with format '" + format + "'"
 
         switch (format) {
             case 'A':

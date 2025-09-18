@@ -38,7 +38,7 @@ public class ControlPackHandler implements PackFormatHandler {
                 valueIndex++;
                 int targetPos = (int) posValue.getDouble();
 
-                System.err.println("DEBUG: '.' format - current size: " + output.size() + ", target position: " + targetPos);
+                // DEBUG: '.' format - current size: " + output.size() + ", target position: " + targetPos
 
                 if (targetPos < 0) {
                     throw new PerlCompilerException("pack: negative position for '.'");
@@ -104,7 +104,7 @@ public class ControlPackHandler implements PackFormatHandler {
      * @param output The output stream
      */
     private static void handleBackup(int count, ByteArrayOutputStream output) {
-        System.err.println("DEBUG: handleBackup called with count=" + count + ", current size=" + output.size());
+        // DEBUG: handleBackup called with count=" + count + ", current size=" + output.size()
         int currentSize = output.size();
 
         if (count > currentSize) {

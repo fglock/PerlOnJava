@@ -65,7 +65,7 @@ public class PackWriter {
     public static void writeHexString(ByteArrayOutputStream output, String str, int count, char format) {
         int hexDigitsToProcess = Math.min(str.length(), count);
 
-        // Process pairs of hex digits
+        // Process pairs of hex digits from the input string
         int i;
         for (i = 0; i + 1 < hexDigitsToProcess; i += 2) {
             // Get first nybble
@@ -90,7 +90,7 @@ public class PackWriter {
             output.write(byteValue);
         }
 
-        // Handle the last hex digit if we have an odd count
+        // Handle the last hex digit if we have an odd count from input string
         if (i < hexDigitsToProcess) {
             char c = str.charAt(i);
             int nybble = Character.digit(c, 16);
@@ -106,6 +106,18 @@ public class PackWriter {
             }
 
             output.write(byteValue);
+            i++;
+        }
+
+        // Zero-pad if count is larger than available hex digits
+        // Each pair of hex digits produces one byte, so we need (count - hexDigitsToProcess) / 2 more bytes
+        int remainingHexDigits = count - hexDigitsToProcess;
+        if (remainingHexDigits > 0) {
+            // Write zero bytes for the remaining hex digit pairs
+            int zeroBytesToWrite = (remainingHexDigits + 1) / 2; // Round up for odd counts
+            for (int j = 0; j < zeroBytesToWrite; j++) {
+                output.write(0);
+            }
         }
     }
 

@@ -151,11 +151,11 @@ public class Pack {
 
         for (int i = 0; i < template.length(); i++) {
             char format = template.charAt(i);
-            System.err.println("DEBUG: main loop i=" + i + ", format='" + format + "' (code " + (int) format + ")");
+            // DEBUG: main loop i=" + i + ", format='" + format + "' (code " + (int) format + ")"
 
             // Skip spaces
             if (Character.isWhitespace(format)) {
-                System.err.println("DEBUG: skipping whitespace");
+                // DEBUG: skipping whitespace
                 continue;
             }
 
@@ -175,7 +175,7 @@ public class Pack {
 
             // Handle commas (skip with warning)
             if (format == ',') {
-                System.err.println("WARNING: Invalid type ',' in pack");
+                // WARNING: Invalid type ',' in pack
                 // In Perl, this would use warn() but continue execution
                 continue;
             }
@@ -207,7 +207,7 @@ public class Pack {
             if (PackHelper.isNumericFormat(format) || format == 'Z' || format == 'A' || format == 'a') {
                 int slashPos = PackHelper.checkForSlashConstruct(template, i);
                 if (slashPos != -1) {
-                    System.err.println("DEBUG: Detected slash construct for format '" + format + "' at position " + i);
+                    // DEBUG: Detected slash construct for format '" + format + "' at position " + i
                     i = PackGroupHandler.handleSlashConstruct(template, i, slashPos, format, values, valueIndex, output, modifiers, Pack::pack);
                     valueIndex++;
                     continue;

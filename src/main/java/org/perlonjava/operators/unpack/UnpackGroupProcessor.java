@@ -115,7 +115,7 @@ public class UnpackGroupProcessor {
                     groupRepeatCount = Integer.parseInt(bracketContent);
                 } else {
                     // Template-based count - calculate the packed size of the template
-                    System.err.println("DEBUG: Template-based repeat count [" + bracketContent + "] - not yet implemented");
+                    // DEBUG: Template-based repeat count [" + bracketContent + "] - not yet implemented
                     // For now, just use count = 1 to avoid errors
                     groupRepeatCount = 1;
                     // TODO: Implement pack size calculation for the template
@@ -232,7 +232,7 @@ public class UnpackGroupProcessor {
                 positionBefore = state.getTotalLength() - state.remainingBytes();
             }
 
-            System.err.println("DEBUG: Group iteration " + rep + " starting at position " + positionBefore);
+            // DEBUG: Group iteration " + rep + " starting at position " + positionBefore
             int valuesBeforeGroup = values.size();
 
             // Process the group content
@@ -246,7 +246,7 @@ public class UnpackGroupProcessor {
 
                 // Handle commas (skip with warning)
                 if (format == ',') {
-                    System.err.println("WARNING: Invalid type ',' in unpack");
+                    // WARNING: Invalid type ',' in unpack
                     continue;
                 }
 
@@ -359,7 +359,7 @@ public class UnpackGroupProcessor {
                             // Any valid format can follow '/', not just string types
                             FormatHandler formatHandler = Unpack.getHandler(stringFormat, startsWithU);
                             if (formatHandler == null) {
-                                System.err.println("DEBUG: No handler found for format '" + stringFormat + "'");
+                                // DEBUG: No handler found for format '" + stringFormat + "'
                                 throw new PerlCompilerException("'/' must be followed by a valid format or group");
                             }
 
@@ -371,7 +371,7 @@ public class UnpackGroupProcessor {
                             }
 
                             // Unpack the format with the count
-                            System.err.println("DEBUG: Unpacking format '" + stringFormat + "' " + slashCount + " times");
+                            // DEBUG: Unpacking format '" + stringFormat + "' " + slashCount + " times
                             formatHandler.unpack(state, values, slashCount, hasStarAfterSlash);
 
                             continue;
@@ -502,14 +502,14 @@ public class UnpackGroupProcessor {
 
                 // Check for position cycling (e.g., @ format moving position backward)
                 if (positionHistory.contains(positionAfter)) {
-                    System.err.println("DEBUG: Position cycle detected at position " + positionAfter + ", stopping infinite loop");
+                    // DEBUG: Position cycle detected at position " + positionAfter + ", stopping infinite loop
                     break;
                 }
                 positionHistory.add(positionAfter);
 
                 // If no progress was made (no data consumed and no values added), stop
                 if (positionAfter == positionBefore && valuesAfterGroup == valuesBeforeGroup) {
-                    System.err.println("DEBUG: No progress made in group iteration, stopping infinite loop");
+                    // DEBUG: No progress made in group iteration, stopping infinite loop
                     break;
                 }
 

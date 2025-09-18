@@ -34,7 +34,7 @@ public class NumericPackHandler implements PackFormatHandler {
                 PackHelper.handleInfinity(value, format);
             }
 
-            System.err.println("DEBUG: NumericPackHandler processing format '" + format + "' with value: " + value.toString());
+            // DEBUG: NumericPackHandler processing format '" + format + "' with value: " + value.toString()
 
             switch (format) {
                 case 'c':

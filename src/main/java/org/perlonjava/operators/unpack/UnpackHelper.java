@@ -21,7 +21,7 @@ public class UnpackHelper {
                                             UnpackState state, List<RuntimeBase> values,
                                             boolean startsWithU, java.util.Stack<Boolean> modeStack) {
 
-        System.err.println("DEBUG: Processing slash construct " + numericFormat + "/ at position " + position);
+        // DEBUG: Processing slash construct " + numericFormat + "/ at position " + position
 
         // Handle string formats as count formats for slash constructs
         if (numericFormat == 'A' || numericFormat == 'a' || numericFormat == 'Z') {
