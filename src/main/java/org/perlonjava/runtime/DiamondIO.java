@@ -1,6 +1,7 @@
 package org.perlonjava.runtime;
 
 import org.perlonjava.CompilerOptions;
+import org.perlonjava.io.ClosedIOHandle;
 import org.perlonjava.operators.Readline;
 
 import java.io.IOException;
@@ -68,8 +69,15 @@ public class DiamondIO {
             // Initialize the reading process if it hasn't started yet
             if (!readingStarted) {
                 readingStarted = true;
-                // If no files are specified, use standard input (represented by "-")
-                if (getGlobalArray("main::ARGV").isEmpty()) {
+                System.out.println("Reading started");
+                RuntimeIO argv = getGlobalIO("main::ARGV").getRuntimeIO();
+                System.out.println("ARGV: " + argv);
+                if (argv != null && !(argv.ioHandle instanceof ClosedIOHandle)) {
+                    System.out.println("Reading from ARGV opened");
+                    // If ARGV is open, read from it
+                    currentReader = argv;
+                } else if (getGlobalArray("main::ARGV").isEmpty()) {
+                    // If no files are specified, use standard input (represented by "-")
                     RuntimeArray.push(getGlobalArray("main::ARGV"), new RuntimeScalar("-"));
                 }
             }

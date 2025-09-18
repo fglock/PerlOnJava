@@ -10,24 +10,86 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Provides functionality to pack a list of scalars into a binary string
+ * The Pack class provides functionality to pack a list of scalars into a binary string
  * based on a specified template, similar to Perl's pack function.
+ * 
+ * <p>This class implements Perl's pack() function, which takes a template string and a list
+ * of values, and converts them into a packed binary string according to the format
+ * specifications in the template.</p>
+ * 
+ * <p>Supported format characters include:</p>
+ * <ul>
+ *   <li><b>a, A, Z</b> - ASCII string formats (null-padded, space-padded, null-terminated)</li>
+ *   <li><b>b, B</b> - Bit string formats (ascending/descending bit order)</li>
+ *   <li><b>h, H</b> - Hex string formats (low/high nibble first)</li>
+ *   <li><b>c, C</b> - Signed/unsigned char (8-bit)</li>
+ *   <li><b>s, S</b> - Signed/unsigned short (16-bit)</li>
+ *   <li><b>i, I, l, L</b> - Signed/unsigned int/long (32-bit)</li>
+ *   <li><b>q, Q, j, J</b> - Signed/unsigned quad (64-bit)</li>
+ *   <li><b>f, F, d, D</b> - Float formats (single/double precision)</li>
+ *   <li><b>n, N, v, V</b> - Network/VAX byte order formats</li>
+ *   <li><b>U, W</b> - Unicode formats</li>
+ *   <li><b>p, P</b> - Pointer formats</li>
+ *   <li><b>u</b> - UUencoded string</li>
+ *   <li><b>w</b> - BER compressed integer</li>
+ *   <li><b>x, X</b> - Null padding and backup</li>
+ *   <li><b>@, .</b> - Absolute positioning</li>
+ * </ul>
+ * 
+ * <p>The class also supports:</p>
+ * <ul>
+ *   <li>Repeat counts (e.g., "i4" for 4 integers)</li>
+ *   <li>Star notation (e.g., "i*" for all remaining values)</li>
+ *   <li>Grouping with parentheses (e.g., "(si)3" for 3 short-int pairs)</li>
+ *   <li>Endianness modifiers (&lt; for little-endian, &gt; for big-endian)</li>
+ *   <li>Slash constructs for length-prefixed data (e.g., "n/a*")</li>
+ *   <li>Mode switching (C0 for byte mode, U0 for character mode)</li>
+ * </ul>
+ * 
+ * @see org.perlonjava.operators.Unpack
+ * @see org.perlonjava.operators.pack.PackHelper
+ * @see org.perlonjava.operators.pack.PackParser
+ * @see org.perlonjava.operators.pack.PackWriter
  */
 public class Pack {
-    // Temporary storage for pointer simulation
+    /** 
+     * Temporary storage for pointer simulation used by 'p' and 'P' formats.
+     * Maps hash codes to their corresponding string values for later retrieval by unpack.
+     */
     private static final Map<Integer, String> pointerMap = new HashMap<>();
 
-    // Getter for unpack to use
+    /**
+     * Retrieves a string value associated with a pointer hash code.
+     * This method is used by the unpack operation to retrieve strings
+     * that were stored during pack operations with 'p' or 'P' formats.
+     * 
+     * @param hashCode The hash code of the string to retrieve
+     * @return The string associated with the hash code, or null if not found
+     */
     public static String getPointerString(int hashCode) {
         return pointerMap.get(hashCode);
     }
 
     /**
      * Packs a list of RuntimeScalar objects into a binary string according to the specified template.
-     *
-     * @param args A RuntimeList containing the template string followed by the values to pack.
-     * @return A RuntimeScalar representing the packed binary string.
-     * @throws RuntimeException if there are not enough arguments or if an unsupported format character is encountered.
+     * This is the main entry point for the pack operation.
+     * 
+     * <p>The first argument must be a template string that specifies how to pack the remaining
+     * arguments. The template consists of format characters, optional repeat counts, and
+     * various modifiers.</p>
+     * 
+     * <p>Examples:</p>
+     * <pre>
+     * pack("C*", 65, 66, 67)        // Pack as unsigned chars: "ABC"
+     * pack("n", 1234)               // Pack as network short: 2-byte big-endian
+     * pack("a10", "hello")          // Pack as 10-byte null-padded string
+     * pack("(si)2", 1, 100, 2, 200) // Pack 2 short-int pairs
+     * </pre>
+     * 
+     * @param args A RuntimeList containing the template string followed by the values to pack
+     * @return A RuntimeScalar representing the packed binary string
+     * @throws PerlCompilerException if there are not enough arguments, invalid format characters,
+     *                              mismatched brackets, or other template parsing errors
      */
     public static RuntimeScalar pack(RuntimeList args) {
         if (args.isEmpty()) {
@@ -232,6 +294,13 @@ public class Pack {
         }
     }
 
+    /**
+     * Skips a comment in the template string, starting from the given position.
+     * 
+     * @param template The template string
+     * @param position The starting position of the comment
+     * @return The position after the comment
+     */
     private static int skipComment(String template, int position) {
         while (position + 1 < template.length() && template.charAt(position + 1) != '\n') {
             position++;
@@ -239,6 +308,16 @@ public class Pack {
         return position;
     }
 
+    /**
+     * Handles a group in the template string, starting from the given position.
+     * 
+     * @param template The template string
+     * @param openPos The starting position of the group
+     * @param values The list of values to pack
+     * @param output The output stream
+     * @param valueIndex The current index in the values list
+     * @return The position after the group
+     */
     private static int handleGroup(String template, int openPos, List<RuntimeScalar> values,
                                    ByteArrayOutputStream output, int valueIndex) {
         // Find matching closing parenthesis
@@ -326,6 +405,15 @@ public class Pack {
         return groupInfo.endPosition - 1; // -1 because loop will increment
     }
 
+    /**
+     * Returns the index in the values list after processing a group.
+     * 
+     * @param template The template string
+     * @param groupEndPos The ending position of the group
+     * @param values The list of values to pack
+     * @param currentValueIndex The current index in the values list
+     * @return The index after the group
+     */
     private static int getValueIndexAfterGroup(String template, int groupEndPos, List<RuntimeScalar> values, int currentValueIndex) {
         // Find the group start
         int depth = 1;
@@ -353,6 +441,461 @@ public class Pack {
         return currentValueIndex;
     }
 
+    /**
+     * Handles a bit string format.
+     * 
+     * @param values The list of values to pack
+     * @param valueIndex The current index in the values list
+     * @param format The format character (b or B)
+     * @param count The repeat count
+     * @param hasStar Whether the count is a star (*)
+     * @param output The output stream
+     * @return The new index in the values list
+     */
+    private static int handleBitString(List<RuntimeScalar> values, int valueIndex, char format,
+                                       int count, boolean hasStar, ByteArrayOutputStream output) {
+        RuntimeScalar value;
+        if (valueIndex >= values.size()) {
+            // If no more arguments, use empty string as per Perl behavior
+            value = new RuntimeScalar("");
+        } else {
+            value = values.get(valueIndex);
+            valueIndex++;
+        }
+
+        String bitString = value.toString();
+        if (hasStar) {
+            count = bitString.length();
+        }
+        PackWriter.writeBitString(output, bitString, count, format);
+        return valueIndex;
+    }
+
+    /**
+     * Handles a hex string format.
+     * 
+     * @param values The list of values to pack
+     * @param valueIndex The current index in the values list
+     * @param format The format character (h or H)
+     * @param count The repeat count
+     * @param hasStar Whether the count is a star (*)
+     * @param output The output stream
+     * @return The new index in the values list
+     */
+    private static int handleHexString(List<RuntimeScalar> values, int valueIndex, char format,
+                                       int count, boolean hasStar, ByteArrayOutputStream output) {
+        RuntimeScalar value;
+        if (valueIndex >= values.size()) {
+            // If no more arguments, use empty string as per Perl behavior
+            value = new RuntimeScalar("");
+        } else {
+            value = values.get(valueIndex);
+            valueIndex++;
+        }
+
+        String hexString = value.toString();
+        if (hasStar) {
+            count = hexString.length();
+        }
+        PackWriter.writeHexString(output, hexString, count, format);
+        return valueIndex;
+    }
+
+    /**
+     * Handles a uuencoded string format.
+     * 
+     * @param values The list of values to pack
+     * @param valueIndex The current index in the values list
+     * @param output The output stream
+     * @return The new index in the values list
+     */
+    private static int handleUuencode(List<RuntimeScalar> values, int valueIndex, ByteArrayOutputStream output) {
+        RuntimeScalar value;
+        if (valueIndex >= values.size()) {
+            // If no more arguments, use empty string as per Perl behavior
+            value = new RuntimeScalar("");
+        } else {
+            value = values.get(valueIndex);
+            valueIndex++;
+        }
+        String str = value.toString();
+        PackWriter.writeUuencodedString(output, str);
+        return valueIndex;
+    }
+
+    /**
+     * Handles null padding.
+     * 
+     * @param count The number of null bytes to write
+     * @param output The output stream
+     */
+    private static void handleNullPadding(int count, ByteArrayOutputStream output) {
+        for (int j = 0; j < count; j++) {
+            output.write(0);
+        }
+    }
+
+    /**
+     * Handles absolute positioning.
+     * 
+     * @param targetPosition The target position
+     * @param output The output stream
+     */
+    private static void handleAbsolutePosition(int targetPosition, ByteArrayOutputStream output) {
+        int currentPosition = output.size();
+
+        if (targetPosition > currentPosition) {
+            // Pad with nulls to reach target position
+            for (int k = currentPosition; k < targetPosition; k++) {
+                output.write(0);
+            }
+        } else if (targetPosition < currentPosition) {
+            // Truncate to target position
+            byte[] truncated = new byte[targetPosition];
+            System.arraycopy(output.toByteArray(), 0, truncated, 0, targetPosition);
+            output.reset();
+            output.write(truncated, 0, targetPosition);
+        }
+    }
+
+    /**
+     * Handles backup.
+     * 
+     * @param count The number of bytes to back up
+     * @param output The output stream
+     */
+    private static void handleBackup(int count, ByteArrayOutputStream output) {
+        System.err.println("DEBUG: handleBackup called with count=" + count + ", current size=" + output.size());
+        int currentSize = output.size();
+
+        if (count > currentSize) {
+            throw new PerlCompilerException("'X' outside of string in pack");
+        }
+
+        int newSize = currentSize - count;
+
+        if (newSize < currentSize) {
+            // Truncate the output by backing up
+            byte[] currentData = output.toByteArray();
+            output.reset();
+            if (newSize > 0) {
+                output.write(currentData, 0, newSize);
+            }
+        }
+        System.err.println("DEBUG: handleBackup finished, new size=" + output.size());
+    }
+
+    /**
+     * Handles a pointer format.
+     * 
+     * @param values The list of values to pack
+     * @param valueIndex The current index in the values list
+     * @param count The repeat count
+     * @param modifiers The modifiers for the format
+     * @param output The output stream
+     * @return The new index in the values list
+     */
+    private static int handlePointer(List<RuntimeScalar> values, int valueIndex, int count,
+                                     ParsedModifiers modifiers, ByteArrayOutputStream output) {
+        for (int j = 0; j < count; j++) {
+            RuntimeScalar value;
+            if (valueIndex >= values.size()) {
+                // If no more arguments, use empty string as per Perl behavior
+                value = new RuntimeScalar("");
+            } else {
+                value = values.get(valueIndex);
+                valueIndex++;
+            }
+
+            int ptr = 0;
+
+            // Check if value is defined (not undef)
+            if (value.getDefinedBoolean()) {
+                String str = value.toString();
+                ptr = str.hashCode();
+                pointerMap.put(ptr, str);
+            }
+
+            // Use the already-parsed endianness
+            if (modifiers.bigEndian) {
+                PackWriter.writeIntBigEndian(output, ptr);
+            } else {
+                PackWriter.writeIntLittleEndian(output, ptr);
+            }
+        }
+        return valueIndex;
+    }
+
+    /**
+     * Handles a Unicode format.
+     * 
+     * @param values The list of values to pack
+     * @param valueIndex The current index in the values list
+     * @param count The repeat count
+     * @param byteMode Whether we are in byte mode
+     * @param hasUnicodeInNormalMode Whether we have already used Unicode in normal mode
+     * @param output The output stream
+     * @return Whether we have used Unicode in normal mode
+     */
+    private static boolean handleUnicode(List<RuntimeScalar> values, int valueIndex, int count,
+                                         boolean byteMode, boolean hasUnicodeInNormalMode,
+                                         ByteArrayOutputStream output) {
+        for (int j = 0; j < count; j++) {
+            RuntimeScalar value;
+            if (valueIndex + j >= values.size()) {
+                // If no more arguments, use 0 as per Perl behavior
+                value = new RuntimeScalar(0);
+            } else {
+                value = values.get(valueIndex + j);
+            }
+            hasUnicodeInNormalMode = PackHelper.packU(value, byteMode, hasUnicodeInNormalMode, output);
+        }
+        return hasUnicodeInNormalMode;
+    }
+
+    /**
+     * Handles a wide character format.
+     * 
+     * @param values The list of values to pack
+     * @param valueIndex The current index in the values list
+     * @param count The repeat count
+     * @param output The output stream
+     * @return The new index in the values list
+     */
+    private static int handleWideCharacter(List<RuntimeScalar> values, int valueIndex, int count,
+                                           ByteArrayOutputStream output) {
+        for (int j = 0; j < count; j++) {
+            RuntimeScalar value;
+            if (valueIndex >= values.size()) {
+                // If no more arguments, use 0 as per Perl behavior (empty string converts to 0)
+                value = new RuntimeScalar(0);
+            } else {
+                value = values.get(valueIndex);
+                valueIndex++;
+            }
+            PackHelper.packW(value, output);
+        }
+        return valueIndex;
+    }
+
+    /**
+     * Handles a numeric format.
+     * 
+     * @param values The list of values to pack
+     * @param valueIndex The current index in the values list
+     * @param count The repeat count
+     * @param format The format character
+     * @param modifiers The modifiers for the format
+     * @param output The output stream
+     * @return The new index in the values list
+     */
+    private static int handleNumericFormat(List<RuntimeScalar> values, int valueIndex, int count,
+                                           char format, ParsedModifiers modifiers,
+                                           ByteArrayOutputStream output) {
+        for (int j = 0; j < count; j++) {
+            RuntimeScalar value;
+            if (valueIndex >= values.size()) {
+                // If no more arguments, use 0 as per Perl behavior (empty string converts to 0)
+                value = new RuntimeScalar(0);
+            } else {
+                value = values.get(valueIndex);
+                valueIndex++;
+            }
+
+            // Check for Inf/NaN values for integer formats
+            if (PackHelper.isIntegerFormat(format)) {
+                PackHelper.handleInfinity(value, format);
+            }
+
+            System.err.println("DEBUG: handleNumericFormat processing format '" + format + "' with value: " + value.toString());
+
+            switch (format) {
+                case 'c':
+                    // Signed char
+                    int signedChar = value.getInt();
+                    output.write(signedChar & 0xFF);
+                    break;
+                case 'C':
+                    // Unsigned char
+                    int intValue = value.getInt();
+                    output.write(intValue & 0xFF);
+                    break;
+                case 's':
+                    // Signed short - use endianness if specified
+                    if (modifiers.bigEndian) {
+                        PackWriter.writeShortBigEndian(output, value.getInt());
+                    } else {
+                        PackWriter.writeShortLittleEndian(output, value.getInt());
+                    }
+                    break;
+                case 'S':
+                    // Unsigned short - use endianness if specified
+                    if (modifiers.bigEndian) {
+                        PackWriter.writeShortBigEndian(output, value.getInt());
+                    } else {
+                        PackWriter.writeShort(output, value.getInt());
+                    }
+                    break;
+                case 'l':
+                    PackWriter.writeIntLittleEndian(output, (long) value.getDouble());
+                    break;
+                case 'L':
+                case 'J':
+                    PackWriter.writeLong(output, (long) value.getDouble());
+                    break;
+                case 'i':
+                case 'I':
+                    // Native integer (assume 32-bit little-endian)
+                    PackWriter.writeIntLittleEndian(output, (long) value.getDouble());
+                    break;
+                case 'n':
+                    // Network short (always big-endian)
+                    PackWriter.writeShortBigEndian(output, value.getInt());
+                    break;
+                case 'N':
+                    // Network long (always big-endian)
+                    PackWriter.writeIntBigEndian(output, (long) value.getDouble());
+                    break;
+                case 'v':
+                    // VAX short (always little-endian)
+                    PackWriter.writeShortLittleEndian(output, value.getInt());
+                    break;
+                case 'V':
+                    // VAX long (always little-endian)
+                    PackWriter.writeIntLittleEndian(output, (long) value.getDouble());
+                    break;
+                case 'w':
+                    // BER compressed integer
+                    PackWriter.writeBER(output, (long) value.getDouble());
+                    break;
+                case 'j':
+                    // Perl internal signed integer - treat as long
+                    PackWriter.writeLong(output, (long) value.getDouble());
+                    break;
+                case 'q':
+                    // Signed 64-bit quad
+                    System.err.println("DEBUG: Processing q (signed quad) format");
+                    PackWriter.writeLong(output, (long) value.getDouble());
+                    break;
+                case 'Q':
+                    // Unsigned 64-bit quad
+                    System.err.println("DEBUG: Processing Q (unsigned quad) format");
+                    PackWriter.writeLong(output, (long) value.getDouble());
+                    break;
+                case 'f':
+                    PackWriter.writeFloat(output, (float) value.getDouble());
+                    break;
+                case 'F':
+                    // F is double-precision float in native format (8 bytes)
+                    PackWriter.writeDouble(output, value.getDouble());
+                    break;
+                case 'd':
+                    PackWriter.writeDouble(output, value.getDouble());
+                    break;
+                case 'D':
+                    // Long double - treat as regular double in Java since we don't have long double
+                    System.err.println("DEBUG: Processing D (long double) format as regular double");
+                    PackWriter.writeDouble(output, value.getDouble());
+                    break;
+                default:
+                    throw new PerlCompilerException("pack: unsupported format character: " + format);
+            }
+        }
+        return valueIndex;
+    }
+
+    /**
+     * Packs the length of a string according to the specified format.
+     * 
+     * @param output The output stream
+     * @param format The format character
+     * @param length The length to pack
+     * @param modifiers The modifiers for the format
+     */
+    private static void packLength(ByteArrayOutputStream output, char format, int length, ParsedModifiers modifiers) {
+        System.err.println("DEBUG: packing length " + length + " with format '" + format + "'");
+
+        switch (format) {
+            case 'A':
+                // For A format as length, pack as ASCII decimal string with spaces
+                String lengthStrA = String.valueOf(length);
+                byte[] lengthBytesA = lengthStrA.getBytes(StandardCharsets.US_ASCII);
+                output.write(lengthBytesA, 0, lengthBytesA.length);
+                // Pad with spaces to make it fixed width if needed
+                break;
+            case 'a':
+                // For a format as length, pack as ASCII decimal string with nulls
+                String lengthStrLower = String.valueOf(length);
+                byte[] lengthBytesLower = lengthStrLower.getBytes(StandardCharsets.US_ASCII);
+                output.write(lengthBytesLower, 0, lengthBytesLower.length);
+                break;
+            case 'n':
+                PackWriter.writeShortBigEndian(output, length);
+                break;
+            case 'N':
+                PackWriter.writeIntBigEndian(output, length);
+                break;
+            case 'v':
+                PackWriter.writeShortLittleEndian(output, length);
+                break;
+            case 'V':
+                PackWriter.writeIntLittleEndian(output, length);
+                break;
+            case 'w':
+                PackWriter.writeBER(output, length);
+                break;
+            case 'C':
+                output.write(length & 0xFF);
+                break;
+            case 's':
+                if (modifiers.bigEndian) {
+                    PackWriter.writeShortBigEndian(output, length);
+                } else {
+                    PackWriter.writeShortLittleEndian(output, length);
+                }
+                break;
+            case 'S':
+                if (modifiers.bigEndian) {
+                    PackWriter.writeShortBigEndian(output, length);
+                } else {
+                    PackWriter.writeShort(output, length);
+                }
+                break;
+            case 'i':
+            case 'I':
+            case 'l':
+            case 'L':
+                if (modifiers.bigEndian) {
+                    PackWriter.writeIntBigEndian(output, length);
+                } else {
+                    PackWriter.writeIntLittleEndian(output, length);
+                }
+                break;
+            case 'Z':
+                // For Z*/, encode length as null-terminated decimal string
+                String lengthStr = String.valueOf(length);
+                byte[] lengthBytes = lengthStr.getBytes(StandardCharsets.US_ASCII);
+                output.write(lengthBytes, 0, lengthBytes.length);
+                output.write(0); // null terminator
+                break;
+            default:
+                throw new PerlCompilerException("Invalid length type '" + format + "' for '/'");
+        }
+    }
+
+    /**
+     * Handles a slash construct.
+     * 
+     * @param template The template string
+     * @param position The starting position of the slash construct
+     * @param slashPos The position of the slash
+     * @param format The format character
+     * @param values The list of values to pack
+     * @param valueIndex The current index in the values list
+     * @param output The output stream
+     * @param modifiers The modifiers for the format
+     * @return The new position in the template string
+     */
     private static int handleSlashConstruct(String template, int position, int slashPos, char format,
                                             List<RuntimeScalar> values, int valueIndex,
                                             ByteArrayOutputStream output, ParsedModifiers modifiers) {
@@ -479,350 +1022,4 @@ public class Pack {
 
         return endPos;
     }
-
-    private static void packLength(ByteArrayOutputStream output, char format, int length, ParsedModifiers modifiers) {
-        System.err.println("DEBUG: packing length " + length + " with format '" + format + "'");
-
-        switch (format) {
-            case 'A':
-                // For A format as length, pack as ASCII decimal string with spaces
-                String lengthStrA = String.valueOf(length);
-                byte[] lengthBytesA = lengthStrA.getBytes(StandardCharsets.US_ASCII);
-                output.write(lengthBytesA, 0, lengthBytesA.length);
-                // Pad with spaces to make it fixed width if needed
-                break;
-            case 'a':
-                // For a format as length, pack as ASCII decimal string with nulls
-                String lengthStrLower = String.valueOf(length);
-                byte[] lengthBytesLower = lengthStrLower.getBytes(StandardCharsets.US_ASCII);
-                output.write(lengthBytesLower, 0, lengthBytesLower.length);
-                break;
-            case 'n':
-                PackWriter.writeShortBigEndian(output, length);
-                break;
-            case 'N':
-                PackWriter.writeIntBigEndian(output, length);
-                break;
-            case 'v':
-                PackWriter.writeShortLittleEndian(output, length);
-                break;
-            case 'V':
-                PackWriter.writeIntLittleEndian(output, length);
-                break;
-            case 'w':
-                PackWriter.writeBER(output, length);
-                break;
-            case 'C':
-                output.write(length & 0xFF);
-                break;
-            case 's':
-                if (modifiers.bigEndian) {
-                    PackWriter.writeShortBigEndian(output, length);
-                } else {
-                    PackWriter.writeShortLittleEndian(output, length);
-                }
-                break;
-            case 'S':
-                if (modifiers.bigEndian) {
-                    PackWriter.writeShortBigEndian(output, length);
-                } else {
-                    PackWriter.writeShort(output, length);
-                }
-                break;
-            case 'i':
-            case 'I':
-            case 'l':
-            case 'L':
-                if (modifiers.bigEndian) {
-                    PackWriter.writeIntBigEndian(output, length);
-                } else {
-                    PackWriter.writeIntLittleEndian(output, length);
-                }
-                break;
-            case 'Z':
-                // For Z*/, encode length as null-terminated decimal string
-                String lengthStr = String.valueOf(length);
-                byte[] lengthBytes = lengthStr.getBytes(StandardCharsets.US_ASCII);
-                output.write(lengthBytes, 0, lengthBytes.length);
-                output.write(0); // null terminator
-                break;
-            default:
-                throw new PerlCompilerException("Invalid length type '" + format + "' for '/'");
-        }
-    }
-
-    private static int handleBitString(List<RuntimeScalar> values, int valueIndex, char format,
-                                       int count, boolean hasStar, ByteArrayOutputStream output) {
-        RuntimeScalar value;
-        if (valueIndex >= values.size()) {
-            // If no more arguments, use empty string as per Perl behavior
-            value = new RuntimeScalar("");
-        } else {
-            value = values.get(valueIndex);
-            valueIndex++;
-        }
-
-        String bitString = value.toString();
-        if (hasStar) {
-            count = bitString.length();
-        }
-        PackWriter.writeBitString(output, bitString, count, format);
-        return valueIndex;
-    }
-
-    private static int handleHexString(List<RuntimeScalar> values, int valueIndex, char format,
-                                       int count, boolean hasStar, ByteArrayOutputStream output) {
-        RuntimeScalar value;
-        if (valueIndex >= values.size()) {
-            // If no more arguments, use empty string as per Perl behavior
-            value = new RuntimeScalar("");
-        } else {
-            value = values.get(valueIndex);
-            valueIndex++;
-        }
-
-        String hexString = value.toString();
-        if (hasStar) {
-            count = hexString.length();
-        }
-        PackWriter.writeHexString(output, hexString, count, format);
-        return valueIndex;
-    }
-
-    private static int handleUuencode(List<RuntimeScalar> values, int valueIndex, ByteArrayOutputStream output) {
-        RuntimeScalar value;
-        if (valueIndex >= values.size()) {
-            // If no more arguments, use empty string as per Perl behavior
-            value = new RuntimeScalar("");
-        } else {
-            value = values.get(valueIndex);
-            valueIndex++;
-        }
-        String str = value.toString();
-        PackWriter.writeUuencodedString(output, str);
-        return valueIndex;
-    }
-
-    private static void handleNullPadding(int count, ByteArrayOutputStream output) {
-        for (int j = 0; j < count; j++) {
-            output.write(0);
-        }
-    }
-
-    private static void handleAbsolutePosition(int targetPosition, ByteArrayOutputStream output) {
-        int currentPosition = output.size();
-
-        if (targetPosition > currentPosition) {
-            // Pad with nulls to reach target position
-            for (int k = currentPosition; k < targetPosition; k++) {
-                output.write(0);
-            }
-        } else if (targetPosition < currentPosition) {
-            // Truncate to target position
-            byte[] truncated = new byte[targetPosition];
-            System.arraycopy(output.toByteArray(), 0, truncated, 0, targetPosition);
-            output.reset();
-            output.write(truncated, 0, targetPosition);
-        }
-    }
-
-    private static void handleBackup(int count, ByteArrayOutputStream output) {
-        System.err.println("DEBUG: handleBackup called with count=" + count + ", current size=" + output.size());
-        int currentSize = output.size();
-
-        if (count > currentSize) {
-            throw new PerlCompilerException("'X' outside of string in pack");
-        }
-
-        int newSize = currentSize - count;
-
-        if (newSize < currentSize) {
-            // Truncate the output by backing up
-            byte[] currentData = output.toByteArray();
-            output.reset();
-            if (newSize > 0) {
-                output.write(currentData, 0, newSize);
-            }
-        }
-        System.err.println("DEBUG: handleBackup finished, new size=" + output.size());
-    }
-
-    private static int handlePointer(List<RuntimeScalar> values, int valueIndex, int count,
-                                     ParsedModifiers modifiers, ByteArrayOutputStream output) {
-        for (int j = 0; j < count; j++) {
-            RuntimeScalar value;
-            if (valueIndex >= values.size()) {
-                // If no more arguments, use empty string as per Perl behavior
-                value = new RuntimeScalar("");
-            } else {
-                value = values.get(valueIndex);
-                valueIndex++;
-            }
-
-            int ptr = 0;
-
-            // Check if value is defined (not undef)
-            if (value.getDefinedBoolean()) {
-                String str = value.toString();
-                ptr = str.hashCode();
-                pointerMap.put(ptr, str);
-            }
-
-            // Use the already-parsed endianness
-            if (modifiers.bigEndian) {
-                PackWriter.writeIntBigEndian(output, ptr);
-            } else {
-                PackWriter.writeIntLittleEndian(output, ptr);
-            }
-        }
-        return valueIndex;
-    }
-
-    private static boolean handleUnicode(List<RuntimeScalar> values, int valueIndex, int count,
-                                         boolean byteMode, boolean hasUnicodeInNormalMode,
-                                         ByteArrayOutputStream output) {
-        for (int j = 0; j < count; j++) {
-            RuntimeScalar value;
-            if (valueIndex + j >= values.size()) {
-                // If no more arguments, use 0 as per Perl behavior
-                value = new RuntimeScalar(0);
-            } else {
-                value = values.get(valueIndex + j);
-            }
-            hasUnicodeInNormalMode = PackHelper.packU(value, byteMode, hasUnicodeInNormalMode, output);
-        }
-        return hasUnicodeInNormalMode;
-    }
-
-    private static int handleWideCharacter(List<RuntimeScalar> values, int valueIndex, int count,
-                                           ByteArrayOutputStream output) {
-        for (int j = 0; j < count; j++) {
-            RuntimeScalar value;
-            if (valueIndex >= values.size()) {
-                // If no more arguments, use 0 as per Perl behavior (empty string converts to 0)
-                value = new RuntimeScalar(0);
-            } else {
-                value = values.get(valueIndex);
-                valueIndex++;
-            }
-            PackHelper.packW(value, output);
-        }
-        return valueIndex;
-    }
-
-    private static int handleNumericFormat(List<RuntimeScalar> values, int valueIndex, int count,
-                                           char format, ParsedModifiers modifiers,
-                                           ByteArrayOutputStream output) {
-        for (int j = 0; j < count; j++) {
-            RuntimeScalar value;
-            if (valueIndex >= values.size()) {
-                // If no more arguments, use 0 as per Perl behavior (empty string converts to 0)
-                value = new RuntimeScalar(0);
-            } else {
-                value = values.get(valueIndex);
-                valueIndex++;
-            }
-
-            // Check for Inf/NaN values for integer formats
-            if (PackHelper.isIntegerFormat(format)) {
-                PackHelper.handleInfinity(value, format);
-            }
-
-            System.err.println("DEBUG: handleNumericFormat processing format '" + format + "' with value: " + value.toString());
-
-            switch (format) {
-                case 'c':
-                    // Signed char
-                    int signedChar = value.getInt();
-                    output.write(signedChar & 0xFF);
-                    break;
-                case 'C':
-                    // Unsigned char
-                    int intValue = value.getInt();
-                    output.write(intValue & 0xFF);
-                    break;
-                case 's':
-                    // Signed short - use endianness if specified
-                    if (modifiers.bigEndian) {
-                        PackWriter.writeShortBigEndian(output, value.getInt());
-                    } else {
-                        PackWriter.writeShortLittleEndian(output, value.getInt());
-                    }
-                    break;
-                case 'S':
-                    // Unsigned short - use endianness if specified
-                    if (modifiers.bigEndian) {
-                        PackWriter.writeShortBigEndian(output, value.getInt());
-                    } else {
-                        PackWriter.writeShort(output, value.getInt());
-                    }
-                    break;
-                case 'l':
-                    PackWriter.writeIntLittleEndian(output, (long) value.getDouble());
-                    break;
-                case 'L':
-                case 'J':
-                    PackWriter.writeLong(output, (long) value.getDouble());
-                    break;
-                case 'i':
-                case 'I':
-                    // Native integer (assume 32-bit little-endian)
-                    PackWriter.writeIntLittleEndian(output, (long) value.getDouble());
-                    break;
-                case 'n':
-                    // Network short (always big-endian)
-                    PackWriter.writeShortBigEndian(output, value.getInt());
-                    break;
-                case 'N':
-                    // Network long (always big-endian)
-                    PackWriter.writeIntBigEndian(output, (long) value.getDouble());
-                    break;
-                case 'v':
-                    // VAX short (always little-endian)
-                    PackWriter.writeShortLittleEndian(output, value.getInt());
-                    break;
-                case 'V':
-                    // VAX long (always little-endian)
-                    PackWriter.writeIntLittleEndian(output, (long) value.getDouble());
-                    break;
-                case 'w':
-                    // BER compressed integer
-                    PackWriter.writeBER(output, (long) value.getDouble());
-                    break;
-                case 'j':
-                    // Perl internal signed integer - treat as long
-                    PackWriter.writeLong(output, (long) value.getDouble());
-                    break;
-                case 'q':
-                    // Signed 64-bit quad
-                    System.err.println("DEBUG: Processing q (signed quad) format");
-                    PackWriter.writeLong(output, (long) value.getDouble());
-                    break;
-                case 'Q':
-                    // Unsigned 64-bit quad
-                    System.err.println("DEBUG: Processing Q (unsigned quad) format");
-                    PackWriter.writeLong(output, (long) value.getDouble());
-                    break;
-                case 'f':
-                    PackWriter.writeFloat(output, (float) value.getDouble());
-                    break;
-                case 'F':
-                    // F is double-precision float in native format (8 bytes)
-                    PackWriter.writeDouble(output, value.getDouble());
-                    break;
-                case 'd':
-                    PackWriter.writeDouble(output, value.getDouble());
-                    break;
-                case 'D':
-                    // Long double - treat as regular double in Java since we don't have long double
-                    System.err.println("DEBUG: Processing D (long double) format as regular double");
-                    PackWriter.writeDouble(output, value.getDouble());
-                    break;
-                default:
-                    throw new PerlCompilerException("pack: unsupported format character: " + format);
-            }
-        }
-        return valueIndex;
-    }
-
 }
