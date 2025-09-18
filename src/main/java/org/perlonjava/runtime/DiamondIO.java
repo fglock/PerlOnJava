@@ -69,11 +69,11 @@ public class DiamondIO {
             // Initialize the reading process if it hasn't started yet
             if (!readingStarted) {
                 readingStarted = true;
-                System.out.println("Reading started");
+                // System.out.println("Reading started");
                 RuntimeIO argv = getGlobalIO("main::ARGV").getRuntimeIO();
-                System.out.println("ARGV: " + argv);
+                // System.out.println("ARGV: " + argv);
                 if (argv != null && !(argv.ioHandle instanceof ClosedIOHandle)) {
-                    System.out.println("Reading from ARGV opened");
+                    // System.out.println("Reading from ARGV opened");
                     // If ARGV is open, read from it
                     currentReader = argv;
                 } else if (getGlobalArray("main::ARGV").isEmpty()) {
