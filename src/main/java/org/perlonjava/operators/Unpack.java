@@ -122,109 +122,8 @@ public class Unpack {
 
             // Handle parentheses for grouping
             if (format == '(') {
-                // Find matching closing parenthesis
-                int closePos = findMatchingParen(template, i);
-                if (closePos == -1) {
-                    throw new PerlCompilerException("unpack: unmatched parenthesis in template");
-                }
-
-                // Extract group content
-                String groupContent = template.substring(i + 1, closePos);
-
-                // Check for endianness modifier after the group
-                char groupEndian = ' '; // default: no specific endianness
-                int nextPos = closePos + 1;
-
-                // Parse modifiers after ')'
-                while (nextPos < template.length()) {
-                    char nextChar = template.charAt(nextPos);
-                    if (nextChar == '<' || nextChar == '>') {
-                        if (groupEndian == ' ') {
-                            groupEndian = nextChar;
-                        }
-                        nextPos++;
-                    } else if (nextChar == '!') {
-                        nextPos++;
-                    } else {
-                        break;
-                    }
-                }
-
-                // Check for conflicting endianness within the group
-                if (groupEndian != ' ' && hasConflictingEndianness(groupContent, groupEndian)) {
-                    throw new PerlCompilerException("Can't use '" + groupEndian + "' in a group with different byte-order in unpack");
-                }
-
-                // Check for repeat count after closing paren
-                int groupRepeatCount = 1;
-
-                if (nextPos < template.length()) {
-                    char nextChar = template.charAt(nextPos);
-                    if (nextChar == '*') {
-                        // Repeat until end of data
-                        groupRepeatCount = Integer.MAX_VALUE;
-                        nextPos++;
-                    } else if (nextChar == '[') {
-                        // Parse repeat count in brackets [n] or [template]
-                        int j = nextPos + 1;
-                        int bracketDepth = 1;
-
-                        // Find the matching ']'
-                        while (j < template.length() && bracketDepth > 0) {
-                            char ch = template.charAt(j);
-                            if (ch == '[') bracketDepth++;
-                            else if (ch == ']') bracketDepth--;
-                            if (bracketDepth > 0) j++;
-                        }
-
-                        if (j >= template.length()) {
-                            throw new PerlCompilerException("No group ending character ']' found in template");
-                        }
-
-                        String bracketContent = template.substring(nextPos + 1, j);
-
-                        // Check if it's a numeric count or a template
-                        if (bracketContent.matches("\\d+")) {
-                            // Simple numeric count
-                            groupRepeatCount = Integer.parseInt(bracketContent);
-                        } else {
-                            // Template-based count - calculate the packed size of the template
-                            System.err.println("DEBUG: Template-based repeat count [" + bracketContent + "] - not yet implemented");
-                            // For now, just use count = 1 to avoid errors
-                            groupRepeatCount = 1;
-                            // TODO: Implement pack size calculation for the template
-                        }
-
-                        nextPos = j + 1; // Move past ']'
-                    } else if (Character.isDigit(nextChar)) {
-                        // Parse numeric repeat count
-                        int j = nextPos;
-                        while (j < template.length() && Character.isDigit(template.charAt(j))) {
-                            j++;
-                        }
-                        groupRepeatCount = Integer.parseInt(template.substring(nextPos, j));
-                        nextPos = j;
-                    }
-                }
-
-                // Push current mode onto stack
-                modeStack.push(state.isCharacterMode());
-
-                // Process the group
-                Groups.processGroup(groupContent, state, values, groupRepeatCount, startsWithU, modeStack);
-
-                // Restore mode from stack
-                if (!modeStack.isEmpty()) {
-                    boolean savedMode = modeStack.pop();
-                    if (savedMode) {
-                        state.switchToCharacterMode();
-                    } else {
-                        state.switchToByteMode();
-                    }
-                }
-
-                // Move past the group
-                i = nextPos;
+                i = UnpackGroupProcessor.parseGroupSyntax(template, i, state, values, startsWithU, modeStack);
+                i++;
                 continue;
             }
 
@@ -236,10 +135,7 @@ public class Unpack {
 
             // Skip comments
             if (format == '#') {
-                // Skip to end of line or end of template
-                while (i + 1 < template.length() && template.charAt(i + 1) != '\n') {
-                    i++;
-                }
+                i = UnpackParser.skipComment(template, i);
                 i++;
                 continue;
             }
@@ -295,22 +191,8 @@ public class Unpack {
 
                 // Check if it's a group
                 if (stringFormat == '(') {
-                    // Find the matching closing parenthesis
-                    int closePos = findMatchingParen(template, i);
-                    if (closePos == -1) {
-                        throw new PerlCompilerException("unpack: unmatched parenthesis in template");
-                    }
-
-                    // Extract group content
-                    String groupContent = template.substring(i + 1, closePos);
-
-                    // Process the group slashCount times
-                    for (int slashRep = 0; slashRep < slashCount; slashRep++) {
-                        Groups.processGroup(groupContent, state, values, 1, startsWithU, modeStack);
-                    }
-
-                    // Move past the closing ')'
-                    i = closePos + 1;
+                    i = UnpackGroupProcessor.processSlashGroup(template, i, slashCount, state, values, startsWithU, modeStack);
+                    i++;
                     continue;
                 }
 
@@ -347,71 +229,15 @@ public class Unpack {
                 continue;
             }
 
-            // Parse count
-            int count = 1;
-            boolean isStarCount = false;
-
-            // First, skip any modifiers (<, >, !) after the format character
-            boolean hasShriek = false;
-            while (i + 1 < template.length() &&
-                    (template.charAt(i + 1) == '!' ||
-                            template.charAt(i + 1) == '<' ||
-                            template.charAt(i + 1) == '>')) {
-                if (template.charAt(i + 1) == '!') {
-                    hasShriek = true;
-                }
-                i++; // Skip modifiers - for unpack, we ignore them for now
-            }
-
-            if (i + 1 < template.length()) {
-                char nextChar = template.charAt(i + 1);
-                if (nextChar == '*') {
-                    isStarCount = true;
-                    i++;
-                    count = getRemainingCount(state, format, startsWithU);
-                } else if (nextChar == '[') {
-                    // Parse repeat count in brackets [n] or [template]
-                    int j = i + 2;
-                    int bracketDepth = 1;
-
-                    // Find the matching ']'
-                    while (j < template.length() && bracketDepth > 0) {
-                        char ch = template.charAt(j);
-                        if (ch == '[') bracketDepth++;
-                        else if (ch == ']') bracketDepth--;
-                        if (bracketDepth > 0) j++;
-                    }
-
-                    if (j >= template.length()) {
-                        throw new PerlCompilerException("No group ending character ']' found in template");
-                    }
-
-                    String bracketContent = template.substring(i + 2, j).trim();
-
-                    // Check if it's a numeric count or a template
-                    if (bracketContent.matches("\\d+")) {
-                        // Simple numeric count
-                        count = Integer.parseInt(bracketContent);
-                    } else {
-                        // Template-based count - calculate the packed size of the template
-                        System.err.println("DEBUG: Template-based repeat count [" + bracketContent + "] for format '" + format + "' - using default count 1");
-                        // For now, just use count = 1 to avoid errors
-                        count = 1;
-                        // TODO: Implement pack size calculation for the template
-                        // The correct implementation would be:
-                        // count = calculatePackedLength(bracketContent);
-                    }
-
-                    i = j; // Position at ']'
-                } else if (Character.isDigit(nextChar)) {
-                    int j = i + 1;
-                    while (j < template.length() && Character.isDigit(template.charAt(j))) {
-                        j++;
-                    }
-                    String countStr = template.substring(i + 1, j);
-                    count = Integer.parseInt(countStr);
-                    i = j - 1;
-                }
+            // Parse count using UnpackParser
+            UnpackParser.ParsedCount parsedCount = UnpackParser.parseRepeatCount(template, i);
+            int count = parsedCount.count();
+            boolean isStarCount = parsedCount.isStarCount();
+            boolean hasShriek = parsedCount.hasShriek();
+            i = parsedCount.endPosition();
+            
+            if (isStarCount) {
+                count = UnpackHelper.getRemainingCount(state, format, startsWithU);
             }
             // Get handler and unpack
             FormatHandler handler = getHandler(format, startsWithU);
@@ -494,76 +320,6 @@ public class Unpack {
         return handlers.get(format);
     }
 
-    public static int getRemainingCount(UnpackState state, char format, boolean startsWithU) {
-        switch (format) {
-            case 'C':
-            case 'U':
-                if (state.isCharacterMode() || (format == 'U' && startsWithU)) {
-                    return state.remainingCodePoints();
-                } else {
-                    return state.remainingBytes();
-                }
-            case 'a':
-            case 'A':
-            case 'Z':
-                return state.isCharacterMode() ? state.remainingCodePoints() : state.remainingBytes();
-            case 'b':
-            case 'B':
-            case '%':
-                return state.isCharacterMode() ? state.remainingCodePoints() * 8 : state.remainingBytes() * 8;
-            case 'h':
-            case 'H':
-                return state.isCharacterMode() ? state.remainingCodePoints() * 2 : state.remainingBytes() * 2;
-            default:
-                FormatHandler handler = handlers.get(format);
-                if (handler != null) {
-                    int size = handler.getFormatSize();
-                    if (size > 0) {
-                        return state.remainingBytes() / size;
-                    }
-                }
-                return Integer.MAX_VALUE; // Let the handler decide
-        }
-    }
 
-    public static int findMatchingParen(String template, int openPos) {
-        int depth = 1;
-        for (int i = openPos + 1; i < template.length(); i++) {
-            if (template.charAt(i) == '(') depth++;
-            else if (template.charAt(i) == ')') {
-                depth--;
-                if (depth == 0) return i;
-            }
-        }
-        return -1;
-    }
 
-    private static boolean hasConflictingEndianness(String groupContent, char groupEndian) {
-        // Check if the group content has endianness modifiers that conflict with the group's endianness
-        for (int i = 0; i < groupContent.length(); i++) {
-            char c = groupContent.charAt(i);
-            if ((c == '<' && groupEndian == '>') || (c == '>' && groupEndian == '<')) {
-                // Check if this is actually a modifier (follows a format that supports it)
-                if (i > 0) {
-                    char prevChar = groupContent.charAt(i - 1);
-                    if ("sSiIlLqQjJfFdDpP".indexOf(prevChar) >= 0) {
-                        return true;
-                    }
-                }
-            }
-            // Also check for nested groups with conflicting endianness
-            if (c == '(') {
-                int closePos = findMatchingParen(groupContent, i);
-                if (closePos != -1 && closePos + 1 < groupContent.length()) {
-                    char nestedEndian = groupContent.charAt(closePos + 1);
-                    if ((nestedEndian == '<' && groupEndian == '>') ||
-                            (nestedEndian == '>' && groupEndian == '<')) {
-                        return true;
-                    }
-                }
-                i = closePos; // Skip the nested group
-            }
-        }
-        return false;
-    }
 }
