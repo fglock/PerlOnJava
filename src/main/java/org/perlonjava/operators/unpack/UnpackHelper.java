@@ -8,6 +8,7 @@ import org.perlonjava.runtime.RuntimeBase;
 import org.perlonjava.runtime.RuntimeScalar;
 
 import java.util.List;
+import java.util.Stack;
 
 public class UnpackHelper {
 
@@ -63,7 +64,7 @@ public class UnpackHelper {
             // Check if it's a group
             if (stringFormat == '(') {
                 // Find the matching closing parenthesis
-                int closePos = Unpack.findMatchingParen(template, i);
+                int closePos = UnpackHelper.findMatchingParen(template, i);
                 if (closePos == -1) {
                     throw new PerlCompilerException("unpack: unmatched parenthesis in template");
                 }
@@ -73,7 +74,7 @@ public class UnpackHelper {
 
                 // Process the group slashCount times
                 for (int slashRep = 0; slashRep < slashCount; slashRep++) {
-                    Groups.processGroup(groupContent, state, values, 1, startsWithU, modeStack);
+                    UnpackGroupProcessor.processGroupContent(groupContent, state, values, 1, startsWithU, modeStack);
                 }
 
                 return closePos;
@@ -135,7 +136,7 @@ public class UnpackHelper {
             // Check if it's a group
             if (stringFormat == '(') {
                 // Find the matching closing parenthesis
-                int closePos = Unpack.findMatchingParen(template, i);
+                int closePos = UnpackHelper.findMatchingParen(template, i);
                 if (closePos == -1) {
                     throw new PerlCompilerException("unpack: unmatched parenthesis in template");
                 }
@@ -145,7 +146,7 @@ public class UnpackHelper {
 
                 // Process the group slashCount times
                 for (int slashRep = 0; slashRep < slashCount; slashRep++) {
-                    Groups.processGroup(groupContent, state, values, 1, startsWithU, modeStack);
+                    UnpackGroupProcessor.processGroupContent(groupContent, state, values, 1, startsWithU, modeStack);
                 }
 
                 return closePos;
@@ -217,5 +218,87 @@ public class UnpackHelper {
     }
 
     public record ParsedCount(int count, boolean hasStar, int endPosition) {
+    }
+
+    /**
+     * Calculate the remaining count for star notation based on format and state
+     */
+    public static int getRemainingCount(UnpackState state, char format, boolean startsWithU) {
+        switch (format) {
+            case 'C':
+            case 'U':
+                if (state.isCharacterMode() || (format == 'U' && startsWithU)) {
+                    return state.remainingCodePoints();
+                } else {
+                    return state.remainingBytes();
+                }
+            case 'a':
+            case 'A':
+            case 'Z':
+                return state.isCharacterMode() ? state.remainingCodePoints() : state.remainingBytes();
+            case 'b':
+            case 'B':
+            case '%':
+                return state.isCharacterMode() ? state.remainingCodePoints() * 8 : state.remainingBytes() * 8;
+            case 'h':
+            case 'H':
+                return state.isCharacterMode() ? state.remainingCodePoints() * 2 : state.remainingBytes() * 2;
+            default:
+                FormatHandler handler = Unpack.handlers.get(format);
+                if (handler != null) {
+                    int size = handler.getFormatSize();
+                    if (size > 0) {
+                        return state.remainingBytes() / size;
+                    }
+                }
+                return Integer.MAX_VALUE; // Let the handler decide
+        }
+    }
+
+    /**
+     * Find the matching closing parenthesis for a group
+     */
+    public static int findMatchingParen(String template, int openPos) {
+        int depth = 1;
+        for (int i = openPos + 1; i < template.length(); i++) {
+            if (template.charAt(i) == '(') depth++;
+            else if (template.charAt(i) == ')') {
+                depth--;
+                if (depth == 0) return i;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Check if group content has conflicting endianness modifiers
+     */
+    public static boolean hasConflictingEndianness(String groupContent, char groupEndian) {
+        // Check if the group content has endianness modifiers that conflict with the group's endianness
+        for (int i = 0; i < groupContent.length(); i++) {
+            char c = groupContent.charAt(i);
+            if ((c == '<' && groupEndian == '>') || (c == '>' && groupEndian == '<')) {
+                // Check if this is actually a modifier (follows a format that supports it)
+                if (i > 0) {
+                    char prevChar = groupContent.charAt(i - 1);
+                    if ("sSiIlLqQjJfFdDpP".indexOf(prevChar) >= 0) {
+                        return true;
+                    }
+                }
+            }
+            // Also check for nested groups with conflicting endianness
+            if (c == '(') {
+                int closePos = findMatchingParen(groupContent, i);
+                if (closePos != -1 && closePos + 1 < groupContent.length()) {
+                    char nestedEndian = groupContent.charAt(closePos + 1);
+                    if ((nestedEndian == '<' && groupEndian == '>') ||
+                            (nestedEndian == '>' && groupEndian == '<')) {
+                        return true;
+                    }
+                }
+                i = closePos; // Skip the nested group
+            }
+        }
+        return false;
     }
 }
