@@ -91,7 +91,7 @@ public class Unpack {
         int i = 0;
         while (i < template.length()) {
             char format = template.charAt(i);
-            System.err.println("DEBUG: unpack main loop i=" + i + ", format='" + format + "' (code " + (int) format + "), template='" + template + "', remaining='" + template.substring(i) + "'");
+            // DEBUG: unpack main loop i=" + i + ", format='" + format + "' (code " + (int) format + "), template='" + template + "', remaining='" + template.substring(i) + "'
             boolean isChecksum = false;
             int checksumBits = 16; // default
 
@@ -142,7 +142,7 @@ public class Unpack {
 
             // Handle commas (skip with warning)
             if (format == ',') {
-                System.err.println("WARNING: Invalid type ',' in unpack");
+                // WARNING: Invalid type ',' in unpack
                 i++;
                 continue;
             }
@@ -249,7 +249,7 @@ public class Unpack {
             FormatHandler handler = getHandler(format, startsWithU);
             if (handler != null) {
                 if (format == '@') {
-                    System.err.println("DEBUG: Calling @ handler with count=" + count);
+                    // DEBUG: Calling @ handler with count=" + count
                 } else if (format == '.') {
                     // Special handling for '.' with '!' modifier
                     if (hasShriek) {
