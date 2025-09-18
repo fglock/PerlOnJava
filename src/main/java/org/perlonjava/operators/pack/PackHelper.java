@@ -2,6 +2,7 @@ package org.perlonjava.operators.pack;
 
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.RuntimeList;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -605,4 +606,111 @@ public class PackHelper {
         }
         return hasUnicodeInNormalMode;
     }
+
+    /**
+     * Handles a Unicode format.
+     * 
+     * @param values The list of values to pack
+     * @param valueIndex The current index in the values list
+     * @param count The repeat count
+     * @param byteMode Whether we are in byte mode
+     * @param hasUnicodeInNormalMode Whether we have already used Unicode in normal mode
+     * @param output The output stream
+     * @return Whether we have used Unicode in normal mode
+     */
+    public static boolean handleUnicode(List<RuntimeScalar> values, int valueIndex, int count,
+                                         boolean byteMode, boolean hasUnicodeInNormalMode,
+                                         ByteArrayOutputStream output) {
+        for (int j = 0; j < count; j++) {
+            RuntimeScalar value;
+            if (valueIndex + j >= values.size()) {
+                // If no more arguments, use 0 as per Perl behavior
+                value = new RuntimeScalar(0);
+            } else {
+                value = values.get(valueIndex + j);
+            }
+            hasUnicodeInNormalMode = PackHelper.packU(value, byteMode, hasUnicodeInNormalMode, output);
+        }
+        return hasUnicodeInNormalMode;
+    }
+
+    /**
+     * Packs the length of a string according to the specified format.
+     * 
+     * @param output The output stream
+     * @param format The format character
+     * @param length The length to pack
+     * @param modifiers The modifiers for the format
+     */
+    public static void packLength(ByteArrayOutputStream output, char format, int length, ParsedModifiers modifiers) {
+        System.err.println("DEBUG: packing length " + length + " with format '" + format + "'");
+
+        switch (format) {
+            case 'A':
+                // For A format as length, pack as ASCII decimal string with spaces
+                String lengthStrA = String.valueOf(length);
+                byte[] lengthBytesA = lengthStrA.getBytes(StandardCharsets.US_ASCII);
+                output.write(lengthBytesA, 0, lengthBytesA.length);
+                // Pad with spaces to make it fixed width if needed
+                break;
+            case 'a':
+                // For a format as length, pack as ASCII decimal string with nulls
+                String lengthStrLower = String.valueOf(length);
+                byte[] lengthBytesLower = lengthStrLower.getBytes(StandardCharsets.US_ASCII);
+                output.write(lengthBytesLower, 0, lengthBytesLower.length);
+                break;
+            case 'n':
+                PackWriter.writeShortBigEndian(output, length);
+                break;
+            case 'N':
+                PackWriter.writeIntBigEndian(output, length);
+                break;
+            case 'v':
+                PackWriter.writeShortLittleEndian(output, length);
+                break;
+            case 'V':
+                PackWriter.writeIntLittleEndian(output, length);
+                break;
+            case 'w':
+                PackWriter.writeBER(output, length);
+                break;
+            case 'C':
+                output.write(length & 0xFF);
+                break;
+            case 's':
+                if (modifiers.bigEndian) {
+                    PackWriter.writeShortBigEndian(output, length);
+                } else {
+                    PackWriter.writeShortLittleEndian(output, length);
+                }
+                break;
+            case 'S':
+                if (modifiers.bigEndian) {
+                    PackWriter.writeShortBigEndian(output, length);
+                } else {
+                    PackWriter.writeShort(output, length);
+                }
+                break;
+            case 'i':
+            case 'I':
+            case 'l':
+            case 'L':
+                if (modifiers.bigEndian) {
+                    PackWriter.writeIntBigEndian(output, length);
+                } else {
+                    PackWriter.writeIntLittleEndian(output, length);
+                }
+                break;
+            case 'Z':
+                // For Z*/, encode length as null-terminated decimal string
+                String lengthStr = String.valueOf(length);
+                byte[] lengthBytes = lengthStr.getBytes(StandardCharsets.US_ASCII);
+                output.write(lengthBytes, 0, lengthBytes.length);
+                output.write(0); // null terminator
+                break;
+            default:
+                throw new PerlCompilerException("Invalid length type '" + format + "' for '/'");
+        }
+    }
+
 }
