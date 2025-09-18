@@ -258,8 +258,11 @@ public class PackParser {
         
         // Hex formats (h, H) don't support any modifiers - this is a well-known restriction
         if (formatChar == 'h' || formatChar == 'H') {
-            if (modifiers.littleEndian || modifiers.bigEndian) {
-                throw new PerlCompilerException("'[<>]' allowed only after types");
+            if (modifiers.littleEndian) {
+                throw new PerlCompilerException("'<' allowed only after types");
+            }
+            if (modifiers.bigEndian) {
+                throw new PerlCompilerException("'>' allowed only after types");
             }
             if (modifiers.nativeSize) {
                 throw new PerlCompilerException("'!' allowed only after types");
