@@ -31,7 +31,7 @@ public class PointerFormatHandler implements FormatHandler {
                 ptr |= (b << (j * 8));
             }
 
-            System.err.println("DEBUG: unpack 'p' hashCode=" + ptr);
+            // DEBUG: unpack 'p' hashCode=" + ptr
 
             if (ptr == 0) {
                 result.add(new RuntimeScalar()); // undef

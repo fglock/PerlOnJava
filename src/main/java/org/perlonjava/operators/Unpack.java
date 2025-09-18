@@ -157,25 +157,12 @@ public class Unpack {
                 }
             }
 
-            // Handle endianness modifiers that might appear after certain formats
-            if ((format == '<' || format == '>') && i > 0) {
-                // This is likely a modifier for the previous format, skip it
-                i++;
-                continue;
+            // Check for standalone modifiers that should only appear after valid format characters
+            if (format == '<' || format == '>') {
+                throw new PerlCompilerException("'" + format + "' allowed only after types");
             }
-
-            // Handle '!' modifier that might appear after certain formats
-            if (format == '!' && i > 0) {
-                // This is likely a modifier for the previous format, skip it
-                // Also skip any following digit or '*' (e.g., !2, !4, !8, !*)
-                if (i + 1 < template.length()) {
-                    char nextChar = template.charAt(i + 1);
-                    if (Character.isDigit(nextChar) || nextChar == '*') {
-                        i++; // Skip the digit or '*' as well
-                    }
-                }
-                i++;
-                continue;
+            if (format == '!') {
+                throw new PerlCompilerException("'!' allowed only after types");
             }
 
             // Handle '/' for counted strings
@@ -311,6 +298,13 @@ public class Unpack {
                 // Check for standalone * which is invalid
                 if (format == '*') {
                     throw new PerlCompilerException("Invalid type '*' in unpack");
+                }
+                // Check for standalone modifiers that should only appear after valid format characters
+                if (format == '<' || format == '>') {
+                    throw new PerlCompilerException("'" + format + "' allowed only after types");
+                }
+                if (format == '!') {
+                    throw new PerlCompilerException("'!' allowed only after types");
                 }
                 throw new PerlCompilerException("unpack: unsupported format character: " + format);
             }
