@@ -110,7 +110,7 @@ public class UnpackHelper {
             int slashCount = ((RuntimeScalar) lastValue).getInt();
             values.removeLast(); // Remove the count value
 
-            System.err.println("DEBUG: Got slash count: " + slashCount);
+            // DEBUG: Got slash count: " + slashCount
 
             // Find the slash position
             int slashPos = PackHelper.checkForSlashConstruct(template, position);
@@ -131,7 +131,7 @@ public class UnpackHelper {
             }
 
             char stringFormat = template.charAt(i);
-            System.err.println("DEBUG: String format after '/' is: '" + stringFormat + "'");
+            // DEBUG: String format after '/' is: '" + stringFormat + "'
 
             // Check if it's a group
             if (stringFormat == '(') {

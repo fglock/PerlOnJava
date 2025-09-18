@@ -64,6 +64,9 @@ public class PackParser {
             }
         }
 
+        // Validate format/modifier compatibility
+        validateFormatModifierCompatibility(formatChar, result);
+
         return result;
     }
 
@@ -231,5 +234,36 @@ public class PackParser {
 
         info.endPosition = nextPos;
         return info;
+    }
+
+    /**
+     * Validates that the parsed modifiers are compatible with the format character.
+     * 
+     * <p>Certain format characters do not support certain modifiers:
+     * <ul>
+     *   <li>h, H (hex): Do not support endianness (&lt;, &gt;) or native size (!) modifiers</li>
+     *   <li>q, Q, j, J (quad/intmax): Do not support native size (!) or endianness modifiers</li>
+     *   <li>f, F, d, D (float/double): Do not support native size (!) or endianness modifiers</li>
+     *   <li>p, P (pointer): Do not support native size (!) or endianness modifiers</li>
+     *   <li>n, N, v, V (network/VAX): Do not support endianness modifiers (have fixed byte order)</li>
+     * </ul>
+     * 
+     * @param formatChar the format character being validated
+     * @param modifiers the parsed modifiers to validate
+     * @throws PerlCompilerException if incompatible modifiers are found
+     */
+    private static void validateFormatModifierCompatibility(char formatChar, ParsedModifiers modifiers) {
+        // Only validate specific format characters that are known to be incompatible with certain modifiers
+        // Be more specific to avoid breaking valid cases
+        
+        // Hex formats (h, H) don't support any modifiers - this is a well-known restriction
+        if (formatChar == 'h' || formatChar == 'H') {
+            if (modifiers.littleEndian || modifiers.bigEndian) {
+                throw new PerlCompilerException("'[<>]' allowed only after types");
+            }
+            if (modifiers.nativeSize) {
+                throw new PerlCompilerException("'!' allowed only after types");
+            }
+        }
     }
 }

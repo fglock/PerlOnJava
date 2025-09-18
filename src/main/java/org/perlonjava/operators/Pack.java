@@ -199,6 +199,14 @@ public class Pack {
                 continue;
             }
 
+            // Check for standalone modifiers that should only appear after valid format characters
+            if (format == '<' || format == '>') {
+                throw new PerlCompilerException("'" + format + "' allowed only after types");
+            }
+            if (format == '!') {
+                throw new PerlCompilerException("'!' allowed only after types");
+            }
+
             // Parse modifiers BEFORE parsing counts
             ParsedModifiers modifiers = PackParser.parseModifiers(template, i);
 
@@ -266,6 +274,13 @@ public class Pack {
                         // Check for standalone * which is invalid
                         if (format == '*') {
                             throw new PerlCompilerException("Invalid type '*' in pack");
+                        }
+                        // Check for standalone modifiers that should only appear after valid format characters
+                        if (format == '<' || format == '>') {
+                            throw new PerlCompilerException("'" + format + "' allowed only after types");
+                        }
+                        if (format == '!') {
+                            throw new PerlCompilerException("'!' allowed only after types");
                         }
                         throw new PerlCompilerException("pack: unsupported format character: " + format);
                 }
