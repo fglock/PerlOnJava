@@ -308,6 +308,10 @@ public class Unpack {
                     handler.unpack(state, values, count, isStarCount);
                 }
             } else {
+                // Check for standalone * which is invalid
+                if (format == '*') {
+                    throw new PerlCompilerException("Invalid type '*' in unpack");
+                }
                 throw new PerlCompilerException("unpack: unsupported format character: " + format);
             }
 

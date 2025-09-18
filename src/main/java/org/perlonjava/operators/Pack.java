@@ -263,6 +263,10 @@ public class Pack {
                         if (format == '[' || format == ']') {
                             throw new PerlCompilerException("Mismatched brackets in template");
                         }
+                        // Check for standalone * which is invalid
+                        if (format == '*') {
+                            throw new PerlCompilerException("Invalid type '*' in pack");
+                        }
                         throw new PerlCompilerException("pack: unsupported format character: " + format);
                 }
             }

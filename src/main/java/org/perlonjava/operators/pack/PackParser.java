@@ -96,7 +96,6 @@ public class PackParser {
         if (position + 1 < template.length()) {
             char nextChar = template.charAt(position + 1);
             if (nextChar == '[') {
-                System.err.println("DEBUG: PackParser found opening bracket at position " + (position + 1));
                 // Parse repeat count in brackets [n] or [template]
                 int j = position + 2;
                 int bracketDepth = 1;
@@ -104,7 +103,6 @@ public class PackParser {
                 // Find the matching ']' with proper bracket depth counting
                 while (j < template.length() && bracketDepth > 0) {
                     char ch = template.charAt(j);
-                    System.err.println("DEBUG: PackParser checking character '" + ch + "' at position " + j + ", bracketDepth=" + bracketDepth);
                     if (ch == '[') {
                         bracketDepth++;
                     } else if (ch == ']') {
@@ -116,31 +114,24 @@ public class PackParser {
                 }
 
                 if (j >= template.length() || bracketDepth > 0) {
-                    System.err.println("DEBUG: PackParser bracket parsing failed: j=" + j + ", template.length()=" + template.length() + ", bracketDepth=" + bracketDepth);
-                    System.err.println("DEBUG: PackParser template around position: '" + template.substring(Math.max(0, position - 5), Math.min(template.length(), position + 10)) + "'");
                     throw new PerlCompilerException("No group ending character ']' found in template");
                 }
 
                 String countStr = template.substring(position + 2, j);
-                System.err.println("DEBUG: PackParser bracket content: '" + countStr + "'");
 
                 // Check if it's purely numeric
                 if (countStr.matches("\\d+")) {
                     result.count = Integer.parseInt(countStr);
-                    System.err.println("DEBUG: PackParser parsed numeric count: " + result.count);
                 } else if (countStr.isEmpty()) {
                     // Empty brackets - treat as count 0
                     result.count = 0;
-                    System.err.println("DEBUG: PackParser empty brackets, using count 0");
                 } else {
                     // Template-based count - for now, use 1 as fallback
-                    System.err.println("DEBUG: PackParser template-based repeat count [" + countStr + "] - using count 1 as fallback");
                     result.count = 1;
                     // TODO: Implement proper template size calculation
                 }
 
                 result.endPosition = j;
-                System.err.println("DEBUG: PackParser after bracket parsing, endPosition=" + result.endPosition);
             } else if (Character.isDigit(nextChar)) {
                 int j = position + 1;
                 while (j < template.length() && Character.isDigit(template.charAt(j))) {
