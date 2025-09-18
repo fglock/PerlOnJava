@@ -120,10 +120,10 @@ $os_name =~ s/\s+/_/g;
     # Features available in PerlOnJava
     d_readlink => 'define',
     d_symlink => _check_symlink_support(),
-    d_fork => 'undef',  # No true fork in Java
-    d_alarm => 'undef', # No reliable alarm in Java
+    d_fork => undef,  # No true fork in Java
+    d_alarm => undef, # No reliable alarm in Java
     d_chown => _check_chown_support(),
-    d_chroot => 'undef',
+    d_chroot => undef,
     d_crypt => 'define',
     d_double_has_inf => 'define',
     d_double_has_nan => 'define',
@@ -191,14 +191,14 @@ sub _determine_byteorder {
 sub _check_symlink_support {
     # Check if the OS supports symbolic links
     my $os = lc(getProperty('os.name') || '');
-    return 'undef' if $os =~ /win/;
+    return undef if $os =~ /win/;
     return 'define';
 }
 
 sub _check_chown_support {
     # Check if the OS supports chown
     my $os = lc(getProperty('os.name') || '');
-    return 'undef' if $os =~ /win/;
+    return undef if $os =~ /win/;
     return 'define';
 }
 
