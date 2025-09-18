@@ -167,6 +167,13 @@ public class Unpack {
             // Handle '!' modifier that might appear after certain formats
             if (format == '!' && i > 0) {
                 // This is likely a modifier for the previous format, skip it
+                // Also skip any following digit or '*' (e.g., !2, !4, !8, !*)
+                if (i + 1 < template.length()) {
+                    char nextChar = template.charAt(i + 1);
+                    if (Character.isDigit(nextChar) || nextChar == '*') {
+                        i++; // Skip the digit or '*' as well
+                    }
+                }
                 i++;
                 continue;
             }
@@ -192,7 +199,6 @@ public class Unpack {
                 // Check if it's a group
                 if (stringFormat == '(') {
                     i = UnpackGroupProcessor.processSlashGroup(template, i, slashCount, state, values, startsWithU, modeStack);
-                    i++;
                     continue;
                 }
 
