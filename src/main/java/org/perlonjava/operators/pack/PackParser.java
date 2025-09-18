@@ -258,12 +258,21 @@ public class PackParser {
         
         // Hex formats (h, H) don't support any modifiers - this is a well-known restriction
         if (formatChar == 'h' || formatChar == 'H') {
+            // For combined modifiers like h<! or h>!, check endianness first to match test expectations
             if (modifiers.littleEndian) {
                 throw new PerlCompilerException("'<' allowed only after types");
             }
             if (modifiers.bigEndian) {
                 throw new PerlCompilerException("'>' allowed only after types");
             }
+            // Check nativeSize (!) after endianness
+            if (modifiers.nativeSize) {
+                throw new PerlCompilerException("'!' allowed only after types");
+            }
+        }
+        
+        // Quad formats (q, Q) don't support native size modifier - based on test expectations
+        if (formatChar == 'q' || formatChar == 'Q') {
             if (modifiers.nativeSize) {
                 throw new PerlCompilerException("'!' allowed only after types");
             }
