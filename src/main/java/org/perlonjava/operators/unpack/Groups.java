@@ -11,7 +11,84 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Stack;
 
+/**
+ * The Groups class handles the processing of grouped template patterns in Perl's unpack operation.
+ * 
+ * <p>In Perl's unpack function, parentheses are used to create groups that can be repeated.
+ * For example, the template "(a4 n)*" would unpack pairs of a 4-character string followed
+ * by a network-order short integer, repeating until all data is consumed.</p>
+ * 
+ * <p>This class provides functionality to:</p>
+ * <ul>
+ *   <li>Process grouped template patterns with repeat counts</li>
+ *   <li>Handle nested groups within groups</li>
+ *   <li>Manage mode switching (character vs byte mode) within groups</li>
+ *   <li>Process slash constructs (e.g., "n/a*" - unpack a count then that many strings)</li>
+ *   <li>Handle special positioning and counting operations</li>
+ * </ul>
+ * 
+ * <p>The class maintains state consistency across group iterations and ensures proper
+ * handling of various Perl unpack template modifiers and special cases.</p>
+ * 
+ * @see org.perlonjava.operators.Unpack
+ * @see org.perlonjava.operators.UnpackState
+ */
 public class Groups {
+    
+    /**
+     * Processes a grouped template pattern with the specified repeat count.
+     * 
+     * <p>This method handles the core logic for processing Perl unpack groups, which are
+     * template sections enclosed in parentheses that can be repeated. The method supports:</p>
+     * 
+     * <ul>
+     *   <li><strong>Repeat counts:</strong> Groups can be repeated a specific number of times
+     *       or indefinitely with '*'</li>
+     *   <li><strong>Nested groups:</strong> Groups can contain other groups, creating hierarchical
+     *       template structures</li>
+     *   <li><strong>Mode preservation:</strong> The method saves and restores the current unpacking
+     *       mode (character vs byte) around group processing</li>
+     *   <li><strong>Slash constructs:</strong> Handles patterns like "n/a*" where a numeric value
+     *       determines the count for subsequent string operations</li>
+     *   <li><strong>Position tracking:</strong> Monitors data consumption to handle '*' repeat
+     *       counts and prevent infinite loops</li>
+     * </ul>
+     * 
+     * <p><strong>Template Format Examples:</strong></p>
+     * <pre>
+     * "(a4 n)3"     - Unpack 3 pairs of 4-char string + network short
+     * "(C n/a*)*"   - Repeatedly unpack: byte, then count, then that many strings
+     * "(a4 (n C)2)" - Nested groups: 4-char string, then 2 pairs of short+byte
+     * </pre>
+     * 
+     * <p><strong>Special Handling:</strong></p>
+     * <ul>
+     *   <li><strong>Progress detection:</strong> For '*' repeat counts, stops if no data
+     *       is consumed in an iteration to prevent infinite loops</li>
+     *   <li><strong>Mode switching:</strong> Handles C0/U0 mode switches within groups</li>
+     *   <li><strong>Error handling:</strong> Validates parentheses matching and template syntax</li>
+     * </ul>
+     * 
+     * @param groupTemplate The template string for the group content (without outer parentheses)
+     * @param state The current unpack state containing data buffer and position information
+     * @param values The list to append unpacked values to
+     * @param repeatCount The number of times to repeat the group (Integer.MAX_VALUE for '*')
+     * @param startsWithU Whether the overall template starts with 'U' (affects default mode)
+     * @param modeStack Stack for tracking nested mode changes (currently unused but reserved
+     *                  for future nested mode handling)
+     * 
+     * @throws PerlCompilerException if the template contains syntax errors such as:
+     *         <ul>
+     *           <li>Unmatched parentheses in nested groups</li>
+     *           <li>Invalid format characters</li>
+     *           <li>Malformed slash constructs</li>
+     *           <li>Missing code after '/' operators</li>
+     *         </ul>
+     * 
+     * @see #processGroup(String, UnpackState, List, int, boolean, Stack) for recursive processing
+     * @see org.perlonjava.operators.Unpack#findMatchingParen(String, int) for parentheses matching
+     * @see org.perlonjava.operators.pack.PackHelper#isNumericFormat(char) for format validation
+     */
     public static void processGroup(String groupTemplate, UnpackState state, List<RuntimeBase> values,
                                     int repeatCount, boolean startsWithU, Stack<Boolean> modeStack) {
         // Save current mode
