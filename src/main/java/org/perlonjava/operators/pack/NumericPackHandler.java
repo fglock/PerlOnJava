@@ -101,12 +101,12 @@ public class NumericPackHandler implements PackFormatHandler {
                     break;
                 case 'q':
                     // Signed 64-bit quad
-                    System.err.println("DEBUG: Processing q (signed quad) format");
+                    // DEBUG: Processing q (signed quad) format
                     PackWriter.writeLong(output, (long) value.getDouble());
                     break;
                 case 'Q':
                     // Unsigned 64-bit quad
-                    System.err.println("DEBUG: Processing Q (unsigned quad) format");
+                    // DEBUG: Processing Q (unsigned quad) format
                     PackWriter.writeLong(output, (long) value.getDouble());
                     break;
                 case 'f':

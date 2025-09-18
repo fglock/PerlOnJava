@@ -21,10 +21,6 @@ public class StringFormatHandler implements FormatHandler {
     @Override
     public void unpack(UnpackState state, List<RuntimeBase> output, int count, boolean isStarCount) {
         if (state.isCharacterMode()) {
-            // Debug: check current position
-            System.err.println("DEBUG: StringFormatHandler in character mode, current position: " +
-                    state.getCurrentCodePointIndex());
-
             // In character mode, read characters directly
             StringBuilder sb = new StringBuilder();
             int charsToRead = Math.min(count, state.remainingCodePoints());
@@ -32,7 +28,6 @@ public class StringFormatHandler implements FormatHandler {
             for (int i = 0; i < charsToRead; i++) {
                 if (state.hasMoreCodePoints()) {
                     int cp = state.nextCodePoint();
-                    System.err.println("DEBUG: Read code point: " + cp + " ('" + (char) cp + "')");
                     sb.appendCodePoint(cp);
                 } else {
                     break;

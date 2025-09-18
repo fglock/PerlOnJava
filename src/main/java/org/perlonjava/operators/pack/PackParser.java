@@ -40,13 +40,20 @@ public class PackParser {
     public static ParsedModifiers parseModifiers(String template, int position) {
         ParsedModifiers result = new ParsedModifiers();
         result.endPosition = position;
+        char formatChar = template.charAt(position);
 
         while (result.endPosition + 1 < template.length()) {
             char modifier = template.charAt(result.endPosition + 1);
             if (modifier == '<') {
+                if (result.bigEndian) {
+                    throw new PerlCompilerException("Can't use both '<' and '>' after type '" + formatChar + "' in pack");
+                }
                 result.littleEndian = true;
                 result.endPosition++;
             } else if (modifier == '>') {
+                if (result.littleEndian) {
+                    throw new PerlCompilerException("Can't use both '<' and '>' after type '" + formatChar + "' in pack");
+                }
                 result.bigEndian = true;
                 result.endPosition++;
             } else if (modifier == '!') {
