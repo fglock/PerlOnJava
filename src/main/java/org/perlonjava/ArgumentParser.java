@@ -710,7 +710,8 @@ public class ArgumentParser {
                 || (pattern.startsWith("'") && pattern.endsWith("'"))) {
             return pattern;
         } else {
-            return "'" + pattern + "'";
+            // For -F switch, patterns should be treated as regex, so wrap in /pattern/
+            return "/" + pattern + "/";
         }
     }
 
@@ -980,12 +981,40 @@ public class ArgumentParser {
             autoSplit = " our @F = split(" + parsedArgs.splitPattern + "); ";
         }
         String chompCode = parsedArgs.lineEndingProcessing ? "chomp; " : "";
-        if (parsedArgs.processAndPrint) {
-            // Wrap the code in a loop that processes and prints each line
-            parsedArgs.code = "while (<>) { " + chompCode + autoSplit + parsedArgs.code + " } continue { print or die \"-p destination: $!\\n\"; }";
-        } else if (parsedArgs.processOnly) {
-            // Wrap the code in a loop that processes each line without printing
-            parsedArgs.code = "while (<>) { " + chompCode + autoSplit + parsedArgs.code + " }";
+        
+        // Handle -n and -p switches by wrapping code in while loop
+        if (parsedArgs.processAndPrint || parsedArgs.processOnly) {
+            // Separate __DATA__ or __END__ section from executable code
+            String executableCode = parsedArgs.code;
+            String dataSection = "";
+            
+            // Find __DATA__ or __END__ marker
+            int dataIndex = parsedArgs.code.indexOf("__DATA__");
+            int endIndex = parsedArgs.code.indexOf("__END__");
+            
+            // Use whichever marker appears first, or -1 if neither exists
+            int markerIndex = -1;
+            if (dataIndex != -1 && endIndex != -1) {
+                markerIndex = Math.min(dataIndex, endIndex);
+            } else if (dataIndex != -1) {
+                markerIndex = dataIndex;
+            } else if (endIndex != -1) {
+                markerIndex = endIndex;
+            }
+            
+            if (markerIndex != -1) {
+                // Split code at the marker
+                executableCode = parsedArgs.code.substring(0, markerIndex).trim();
+                dataSection = "\n" + parsedArgs.code.substring(markerIndex);
+            }
+            
+            if (parsedArgs.processAndPrint) {
+                // Wrap the executable code in a loop that processes and prints each line
+                parsedArgs.code = "while (<>) { " + chompCode + autoSplit + executableCode + " } continue { print or die \"-p destination: $!\\n\"; }" + dataSection;
+            } else if (parsedArgs.processOnly) {
+                // Wrap the executable code in a loop that processes each line without printing
+                parsedArgs.code = "while (<>) { " + chompCode + autoSplit + executableCode + " }" + dataSection;
+            }
         }
 
         StringBuilder useStatements = new StringBuilder();
