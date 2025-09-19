@@ -113,11 +113,11 @@ public class Variable {
                     case "[" -> {
                         if (isRegex) {
                             // In regex context, '[' might be a character class
-                            // Only treat as array access if followed by $ or number
-                            var tokenNext = parser.tokens.get(parser.tokenIndex + 1);
-                            parser.ctx.logDebug("str [ " + tokenNext);
-                            if (!tokenNext.text.equals("$") && !(tokenNext.type == LexerTokenType.NUMBER)) {
-                                return operand; // Stop parsing, let caller handle
+                            // Need sophisticated lookahead to distinguish:
+                            // $foo[$A] - array subscript (should interpolate)
+                            // $foo[$A-Z] - character class (should NOT interpolate)
+                            if (!isArraySubscriptInRegex(parser, parser.tokenIndex)) {
+                                return operand; // Stop parsing, let caller handle as character class
                             }
                         }
                         operand = ParseInfix.parseInfixOperation(parser, operand, 0);
@@ -200,14 +200,11 @@ public class Variable {
                     case "[" -> {
                         if (isRegex) {
                             // In regex context, '[' might be a character class
-                            // Only treat as array access if followed by $ or number
-                            if (parser.tokenIndex + 1 >= parser.tokens.size()) {
-                                break outerLoop;
-                            }
-                            var tokenNext = parser.tokens.get(parser.tokenIndex + 1);
-                            parser.ctx.logDebug("str [ " + tokenNext);
-                            if (!tokenNext.text.equals("$") && !(tokenNext.type == LexerTokenType.NUMBER)) {
-                                break outerLoop;
+                            // Need sophisticated lookahead to distinguish:
+                            // $foo[$A] - array subscript (should interpolate)
+                            // $foo[$A-Z] - character class (should NOT interpolate)
+                            if (!isArraySubscriptInRegex(parser, parser.tokenIndex)) {
+                                break outerLoop; // Stop parsing, let caller handle as character class
                             }
                         }
 
@@ -594,5 +591,60 @@ public class Variable {
         return "s".equals(identifier) || "m".equals(identifier) || "q".equals(identifier) ||
                 "qx".equals(identifier) || "qr".equals(identifier) || "y".equals(identifier) ||
                 "tr".equals(identifier) || "qq".equals(identifier) || "qw".equals(identifier);
+    }
+
+    /**
+     * Determines if a '[' in regex context should be treated as an array subscript
+     * rather than a character class by looking ahead for character class patterns.
+     * 
+     * @param parser the parser instance
+     * @param bracketIndex the index of the '[' token
+     * @return true if this should be treated as array subscript, false for character class
+     */
+    private static boolean isArraySubscriptInRegex(Parser parser, int bracketIndex) {
+        // Look ahead to distinguish between:
+        // $foo[$A] - array subscript (should interpolate)
+        // $foo[$A-Z] - character class (should NOT interpolate)
+        // $foo[0] - array subscript with number (should interpolate)
+        // $foo[a-z] - character class (should NOT interpolate)
+        
+        int index = bracketIndex + 1; // Skip the '['
+        if (index >= parser.tokens.size()) {
+            return false; // Incomplete, treat as character class
+        }
+        
+        var firstToken = parser.tokens.get(index);
+        
+        // If it doesn't start with $ or number, it's definitely a character class
+        if (!firstToken.text.equals("$") && firstToken.type != LexerTokenType.NUMBER) {
+            return false;
+        }
+        
+        // Look for character class patterns like:
+        // [$A-Z] - variable followed by dash (character class)
+        // [$A] - just variable (array subscript)
+        // [0-9] - number followed by dash (character class) 
+        // [0] - just number (array subscript)
+        
+        // Skip the variable/number token
+        index++;
+        if (index >= parser.tokens.size()) {
+            return true; // Just [$A] or [0] - treat as array subscript
+        }
+        
+        var nextToken = parser.tokens.get(index);
+        
+        // If followed by '-', it's likely a character class range
+        if (nextToken.text.equals("-")) {
+            return false; // Character class pattern like [$A-Z] or [0-9]
+        }
+        
+        // If followed by ']', it's a simple array subscript
+        if (nextToken.text.equals("]")) {
+            return true; // Array subscript like [$A] or [0]
+        }
+        
+        // For other cases, default to array subscript behavior
+        return true;
     }
 }
