@@ -75,6 +75,16 @@ public abstract class StringSegmentParser {
     protected final boolean interpolateVariable;
 
     /**
+     * Original token offset for mapping string positions back to source
+     */
+    private int originalTokenOffset = 0;
+    
+    /**
+     * Original string content for better error context
+     */
+    private String originalStringContent = "";
+
+    /**
      * Constructs a new StringSegmentParser with the specified parameters.
      *
      * @param ctx        the emitter context for logging and error handling
@@ -177,20 +187,48 @@ public abstract class StringSegmentParser {
                     parser.tokenIndex--; // Back up to re-parse the '{'
                     TokenUtils.consume(parser); // Re-consume the '{'
 
-                    Node block = ParseBlock.parseBlock(parser); // Parse the block inside the curly brackets
-                    TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}"); // Consume the '}'
+                    try {
+                        Node block = ParseBlock.parseBlock(parser); // Parse the block inside the curly brackets
+                        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}"); // Consume the '}'
 
-                    // Apply @ to dereference the block result
-                    operand = new OperatorNode("@", block, tokenIndex);
-                    ctx.logDebug("str @{[...]} operand " + operand);
+                        // Apply @ to dereference the block result
+                        operand = new OperatorNode("@", block, tokenIndex);
+                        ctx.logDebug("str @{[...]} operand " + operand);
+                    } catch (PerlCompilerException e) {
+                        // Re-throw with offset-aware error reporting
+                        createOffsetAwareError(tokenIndex, "Syntax error in @{[...]} block: " + e.getMessage());
+                        return; // This line will never be reached, but satisfies compiler
+                    }
                 } else {
                     // Not @{[...]}, restore position and use parseBracedVariable
                     parser.tokenIndex = savedIndex;
-                    operand = Variable.parseBracedVariable(parser, sigil, true);
+                    try {
+                        operand = Variable.parseBracedVariable(parser, sigil, true);
+                    } catch (PerlCompilerException e) {
+                        // Extract the core error message, removing any existing "Syntax error in braced variable:" prefix
+                        String coreMessage = e.getMessage();
+                        if (coreMessage.startsWith("Syntax error in braced variable: ")) {
+                            coreMessage = coreMessage.substring("Syntax error in braced variable: ".length());
+                        }
+                        // Re-throw with offset-aware error reporting
+                        createOffsetAwareError(tokenIndex, "Syntax error in braced variable: " + coreMessage);
+                        return; // This line will never be reached, but satisfies compiler
+                    }
                 }
             } else {
                 // Regular ${...} handling - let parseBracedVariable consume the '{'
-                operand = Variable.parseBracedVariable(parser, sigil, true);
+                try {
+                    operand = Variable.parseBracedVariable(parser, sigil, true);
+                } catch (PerlCompilerException e) {
+                    // Extract the core error message, removing any existing "Syntax error in braced variable:" prefix
+                    String coreMessage = e.getMessage();
+                    if (coreMessage.startsWith("Syntax error in braced variable: ")) {
+                        coreMessage = coreMessage.substring("Syntax error in braced variable: ".length());
+                    }
+                    // Re-throw with offset-aware error reporting
+                    createOffsetAwareError(tokenIndex, "Syntax error in braced variable: " + coreMessage);
+                    return; // This line will never be reached, but satisfies compiler
+                }
             }
 
             ctx.logDebug("str operand " + operand);
@@ -572,6 +610,135 @@ public abstract class StringSegmentParser {
         segments.add(new StringNode("(?{UNIMPLEMENTED_CODE_BLOCK})", savedTokenIndex));
         
         ctx.logDebug("regex (?{...}) block parsed - preserved for regex compilation");
+    }
+
+    /**
+     * Gets a string context around the specified position for error reporting.
+     * This shows the actual string content around where the error occurred.
+     */
+    private String getStringContextAt(int position) {
+        try {
+            // Build context from the string tokens around the specified position
+            StringBuilder context = new StringBuilder();
+            int start = Math.max(0, position - 2);
+            int end = Math.min(tokens.size(), position + 3);
+            
+            for (int i = start; i < end; i++) {
+                if (i < tokens.size()) {
+                    context.append(tokens.get(i).text);
+                }
+            }
+            
+            // Quote and escape the context for error message display
+            String contextStr = context.toString();
+            if (contextStr.length() > 50) {
+                contextStr = contextStr.substring(0, 47) + "...";
+            }
+            return "\"" + contextStr.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") + "\"";
+        } catch (Exception e) {
+            // Fallback to a generic message if context extraction fails
+            return "\"string interpolation\"";
+        }
+    }
+
+    /**
+     * Sets the original token offset and string content for mapping string positions back to source.
+     * This enables proper error reporting that shows the actual string content.
+     */
+    public void setOriginalTokenOffset(int offset) {
+        this.originalTokenOffset = offset;
+    }
+    
+    /**
+     * Sets the original string content for better error context.
+     */
+    public void setOriginalStringContent(String content) {
+        this.originalStringContent = content;
+    }
+
+    /**
+     * Creates and throws an offset-aware error with correct context.
+     * Matches Perl's actual error format for string interpolation errors.
+     * Based on Test::More analysis: string errors are single line, no stack traces, no "near" context.
+     */
+    private void createOffsetAwareError(int stringTokenIndex, String message) {
+        // Extract core message without "Syntax error in braced variable:" prefix
+        String coreMessage = message;
+        if (coreMessage.startsWith("Syntax error in braced variable: ")) {
+            coreMessage = coreMessage.substring("Syntax error in braced variable: ".length());
+        }
+        
+        // Create error message matching Perl's exact format: "[ERROR] at [FILE] line [N]."
+        String fileName = ctx.errorUtil.getFileName();
+        int lineNumber = ctx.errorUtil.getLineNumber(originalTokenOffset);
+        String perlStyleMessage = coreMessage + " at " + fileName + " line " + lineNumber + ".";
+        
+        // Create a custom exception that produces clean output like Perl
+        RuntimeException cleanError = new RuntimeException(perlStyleMessage) {
+            @Override
+            public void printStackTrace() {
+                // Print only the clean message, no stack trace
+                System.err.println(getMessage());
+            }
+            
+            @Override
+            public void printStackTrace(java.io.PrintStream s) {
+                // Print only the clean message, no stack trace
+                s.println(getMessage());
+            }
+            
+            @Override
+            public void printStackTrace(java.io.PrintWriter s) {
+                // Print only the clean message, no stack trace
+                s.println(getMessage());
+            }
+        };
+        
+        throw cleanError;
+    }
+    
+    /**
+     * Gets error context from the original string content around the specified position.
+     */
+    private String getStringErrorContext(int stringTokenIndex) {
+        try {
+            if (originalStringContent.isEmpty()) {
+                return "\"string interpolation\"";
+            }
+            
+            // Try to estimate character position from token index
+            // Look for variable interpolation patterns like ${...} to get better positioning
+            int estimatedCharPos = findBestErrorPosition(stringTokenIndex);
+            
+            // Show a larger context window around the estimated position
+            int contextWindow = 25; // Increased from 10 to show more context
+            int start = Math.max(0, estimatedCharPos - contextWindow);
+            int end = Math.min(originalStringContent.length(), estimatedCharPos + contextWindow);
+            
+            String context = originalStringContent.substring(start, end);
+            
+            // Escape special characters for display
+            context = context.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\t", "\\t");
+            
+            return "\"" + context + "\"";
+        } catch (Exception e) {
+            return "\"string interpolation\"";
+        }
+    }
+    
+    /**
+     * Finds the best error position by looking for variable interpolation patterns.
+     */
+    private int findBestErrorPosition(int stringTokenIndex) {
+        // Simple heuristic: look for ${...} patterns in the string
+        int dollarIndex = originalStringContent.indexOf("${");
+        if (dollarIndex >= 0) {
+            // If we found a ${...} pattern, position the error around it
+            return Math.max(0, dollarIndex - 5);
+        }
+        
+        // Fallback to simple token-based estimation
+        return Math.min(stringTokenIndex * 4, originalStringContent.length() - 1);
     }
 
     /**

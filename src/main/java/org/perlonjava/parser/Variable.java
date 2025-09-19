@@ -514,6 +514,45 @@ public class Variable {
             parser.tokenIndex = savedIndex;
         }
 
+        // Check for heredoc constructs like ${<<END} which should evaluate to empty string
+        // The challenge is distinguishing ${<<END} from ${<...>} where $< is a special variable
+        if (parser.tokenIndex < parser.tokens.size()) {
+            var currentToken = parser.tokens.get(parser.tokenIndex);
+            if (currentToken.text.equals("<")) {
+                // Look ahead to see if this is <<IDENTIFIER (heredoc) vs <...> (angle brackets)
+                if (parser.tokenIndex + 1 < parser.tokens.size()) {
+                    var nextToken = parser.tokens.get(parser.tokenIndex + 1);
+                    // If the next token after < is an identifier (not another <), this could be <<IDENTIFIER
+                    // We need to check if this pattern matches heredoc syntax
+                    if (nextToken.type == LexerTokenType.IDENTIFIER) {
+                        // This looks like <<IDENTIFIER - treat as heredoc in ${<<END} context
+                        
+                        // Skip the < token
+                        parser.tokenIndex++;
+                        
+                        // Get the identifier
+                        String identifier = nextToken.text;
+                        parser.tokenIndex++; // Skip identifier
+                        
+                        // Create a heredoc node and add it to the queue for later processing
+                        OperatorNode heredocNode = new OperatorNode("HEREDOC", null, parser.tokenIndex);
+                        heredocNode.setAnnotation("identifier", identifier);
+                        heredocNode.setAnnotation("delimiter", "\""); // Default to double-quoted
+                        parser.getHeredocNodes().add(heredocNode);
+                        
+                        // Consume the closing brace
+                        if (!TokenUtils.peek(parser).text.equals("}")) {
+                            throw new PerlCompilerException(parser.tokenIndex, "Missing closing brace in variable interpolation", parser.ctx.errorUtil);
+                        }
+                        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+                        
+                        // In ${<<END} context, this evaluates to empty string
+                        return new OperatorNode(sigil, new StringNode("", parser.tokenIndex), parser.tokenIndex);
+                    }
+                }
+            }
+        }
+
 // Fall back to parsing as a block
         try {
             Node block = ParseBlock.parseBlock(parser);
