@@ -201,9 +201,22 @@ public class EmitVariable {
                 }
                 return;
             case "&":
-                // `&$a`
-                emitterVisitor.ctx.logDebug("GETVAR `&$a`");
-                node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                // `&$a` or `&{sub ...}`
+                emitterVisitor.ctx.logDebug("GETVAR `&$a` or `&{sub ...}`");
+                
+                // Special handling for &{sub ...} - BlockNode containing SubroutineNode
+                if (node.operand instanceof BlockNode blockNode && 
+                    blockNode.elements.size() == 1 && 
+                    blockNode.elements.get(0) instanceof SubroutineNode) {
+                    
+                    emitterVisitor.ctx.logDebug("GETVAR `&{sub ...}` - emitting subroutine as RuntimeScalar");
+                    // Emit the subroutine directly as a RuntimeScalar (code reference)
+                    blockNode.elements.get(0).accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                } else {
+                    // Regular case: `&$a`
+                    node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                }
+                
                 mv.visitVarInsn(Opcodes.ALOAD, 1);  // push @_ to stack
                 emitterVisitor.pushCallContext();   // push call context to stack
                 mv.visitMethodInsn(
@@ -212,6 +225,18 @@ public class EmitVariable {
                         "apply",
                         "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeArray;I)Lorg/perlonjava/runtime/RuntimeList;",
                         false); // generate an .apply() call
+                
+                // Handle context conversion: RuntimeCode.apply() always returns RuntimeList
+                // but we need to convert based on the calling context
+                if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                    // VOID context: consume the stack
+                    mv.visitInsn(Opcodes.POP);
+                } else if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+                    // SCALAR context: convert RuntimeList to RuntimeScalar
+                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                }
+                // LIST context: RuntimeList is already correct, no conversion needed
+                
                 return;
         }
 
