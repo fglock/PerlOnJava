@@ -167,6 +167,7 @@ public class OperatorParser {
         return StringParser.parseRawString(parser, token.text);
     }
 
+
     static BinaryOperatorNode parsePrint(Parser parser, LexerToken token, int currentIndex) {
         Node handle;
         ListNode operand;

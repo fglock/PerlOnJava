@@ -242,7 +242,7 @@ public class StringParser {
         return ast;
     }
 
-    static Node parseRegexString(EmitterContext ctx, ParsedString rawStr) {
+    static Node parseRegexString(EmitterContext ctx, ParsedString rawStr, Parser parser) {
         Node parsed;
 
 //        System.out.println(rawStr);
@@ -252,10 +252,13 @@ public class StringParser {
             parsed = new StringNode(rawStr.buffers.getFirst(), rawStr.index);
         } else {
             // interpolate variables, but ignore the escapes, keep `\$` if present
-            parsed = StringDoubleQuoted.parseDoubleQuotedString(ctx, rawStr, false, true, true);
+            // Pass shared heredoc nodes to handle heredocs inside regex patterns
+            parsed = StringDoubleQuoted.parseDoubleQuotedString(ctx, rawStr, false, true, true, 
+                    parser != null ? parser.getHeredocNodes() : null);
         }
         return parsed;
     }
+
 
     public static ListNode parseWordsString(ParsedString rawStr) {
         // Use a regular expression to split the string.
@@ -270,7 +273,7 @@ public class StringParser {
 
     public static OperatorNode parseRegexReplace(EmitterContext ctx, ParsedString rawStr, Parser parser) {
         String operator = "replaceRegex";
-        Node parsed = parseRegexString(ctx, rawStr);
+        Node parsed = parseRegexString(ctx, rawStr, parser);
         String replaceStr = rawStr.buffers.get(1);
         String modifierStr = rawStr.buffers.get(2);
 
@@ -313,9 +316,9 @@ public class StringParser {
         return new OperatorNode(operator, list, rawStr.index);
     }
 
-    public static OperatorNode parseRegexMatch(EmitterContext ctx, String operator, ParsedString rawStr) {
+    public static OperatorNode parseRegexMatch(EmitterContext ctx, String operator, ParsedString rawStr, Parser parser) {
         operator = operator.equals("qr") ? "quoteRegex" : "matchRegex";
-        Node parsed = parseRegexString(ctx, rawStr);
+        Node parsed = parseRegexString(ctx, rawStr, parser);
         String modStr = rawStr.buffers.get(1);
         if (rawStr.startDelim == '?') {
             // `m?PAT?` matches exactly once
@@ -429,7 +432,7 @@ public class StringParser {
             case "/":
             case "//":
             case "/=":
-                return parseRegexMatch(parser.ctx, operator, rawStr);
+                return parseRegexMatch(parser.ctx, operator, rawStr, parser);
             case "s":
                 return parseRegexReplace(parser.ctx, rawStr, parser);
             case "\"":
