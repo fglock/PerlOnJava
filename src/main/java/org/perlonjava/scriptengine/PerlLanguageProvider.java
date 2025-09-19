@@ -7,6 +7,7 @@ import org.perlonjava.codegen.EmitterMethodCreator;
 import org.perlonjava.codegen.JavaClassInfo;
 import org.perlonjava.lexer.Lexer;
 import org.perlonjava.lexer.LexerToken;
+import org.perlonjava.parser.DataSection;
 import org.perlonjava.parser.Parser;
 import org.perlonjava.perlmodule.Strict;
 import org.perlonjava.runtime.*;
@@ -111,6 +112,10 @@ public class PerlLanguageProvider {
         ctx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
         Parser parser = new Parser(ctx, tokens); // Parse the tokens
         parser.isTopLevelScript = isTopLevelScript;
+        
+        // Create placeholder DATA filehandle early so it's available during BEGIN block execution
+        // This ensures *ARGV = *DATA aliasing works correctly in BEGIN blocks
+        DataSection.createPlaceholderDataHandle(parser);
 
         Node ast;
         if (isTopLevelScript) {

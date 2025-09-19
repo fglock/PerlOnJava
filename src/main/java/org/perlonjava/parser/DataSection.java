@@ -1,5 +1,6 @@
 package org.perlonjava.parser;
 
+import org.perlonjava.io.ScalarBackedIO;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.GlobalVariable;
@@ -18,6 +19,33 @@ public class DataSection {
     private static final Set<Parser> processedParsers = new HashSet<>();
 
     /**
+     * Set of parser instances that have already created placeholder DATA handles
+     */
+    private static final Set<Parser> placeholderCreated = new HashSet<>();
+
+    /**
+     * Creates a placeholder DATA filehandle for a package early in parsing.
+     * This ensures the DATA filehandle exists during BEGIN block execution.
+     *
+     * @param parser the parser instance
+     */
+    public static void createPlaceholderDataHandle(Parser parser) {
+        if (placeholderCreated.contains(parser)) {
+            return; // Already created placeholder for this parser
+        }
+        
+        placeholderCreated.add(parser);
+        String handleName = parser.ctx.symbolTable.getCurrentPackage() + "::DATA";
+
+        parser.ctx.logDebug("Creating placeholder DATA handle for package: " + handleName);
+
+        // Create an empty placeholder file handle that will be populated later
+        RuntimeScalar emptyContent = new RuntimeScalar("");
+        var fileHandle = RuntimeIO.open(emptyContent.createReference(), "<");
+        GlobalVariable.getGlobalIO(handleName).setIO(fileHandle);
+    }
+
+    /**
      * Creates or updates a DATA filehandle for a package.
      *
      * @param parser  the parser instance
@@ -26,14 +54,25 @@ public class DataSection {
     public static void createDataHandle(Parser parser, String content) {
         String handleName = parser.ctx.symbolTable.getCurrentPackage() + "::DATA";
 
-        // Create a scalar to hold the content
-        RuntimeScalar contentScalar = new RuntimeScalar(content);
+        parser.ctx.logDebug("Populating DATA handle for package: " + handleName + " with content: " + content);
 
-        parser.ctx.logDebug("Creating DATA handle for package: " + handleName + " with content: " + content);
-
-        // Create a read-only file handle backed by the scalar
-        var fileHandle = RuntimeIO.open(contentScalar.createReference(), "<");
-        GlobalVariable.getGlobalIO(handleName).setIO(fileHandle);
+        // Get the existing RuntimeIO (which should be the placeholder we created earlier)
+        RuntimeIO existingIO = GlobalVariable.getGlobalIO(handleName).getRuntimeIO();
+        
+        if (existingIO != null) {
+            // Update the existing IO handle with new content instead of replacing it
+            // This ensures that any aliased handles (like *ARGV = *DATA) continue to work
+            RuntimeScalar contentScalar = new RuntimeScalar(content);
+            ScalarBackedIO newScalarIO = new ScalarBackedIO(contentScalar);
+            existingIO.ioHandle = newScalarIO;
+            parser.ctx.logDebug("Updated existing DATA handle with new content");
+        } else {
+            // Fallback: create new handle if no placeholder exists
+            RuntimeScalar contentScalar = new RuntimeScalar(content);
+            var fileHandle = RuntimeIO.open(contentScalar.createReference(), "<");
+            GlobalVariable.getGlobalIO(handleName).setIO(fileHandle);
+            parser.ctx.logDebug("Created new DATA handle");
+        }
     }
 
     /**
