@@ -32,6 +32,9 @@ public class DiamondIO {
 
     // Flag to indicate if the reading process has started
     static boolean readingStarted = false;
+    
+    // Flag to track if @ARGV was initially empty (determines STDIN fallback behavior)
+    static boolean argvWasInitiallyEmpty = false;
 
     // Static field to store the in-place extension for the -i switch
     static String inPlaceExtension = null;
@@ -41,8 +44,26 @@ public class DiamondIO {
     static Path tempFilePath = null;
 
     public static void initialize(CompilerOptions compilerOptions) {
+        // Reset all static variables to ensure clean state between compiler runs
+        reset();
+        
         inPlaceExtension = compilerOptions.inPlaceExtension;
         inPlaceEdit = compilerOptions.inPlaceEdit;
+    }
+
+    /**
+     * Reset all static variables to their default values.
+     * This ensures clean state between compiler runs and prevents state leakage.
+     */
+    public static void reset() {
+        currentReader = null;
+        currentWriter = null;
+        eofReached = false;
+        readingStarted = false;
+        argvWasInitiallyEmpty = false;
+        inPlaceExtension = null;
+        inPlaceEdit = false;
+        tempFilePath = null;
     }
 
     /**
@@ -69,15 +90,15 @@ public class DiamondIO {
             // Initialize the reading process if it hasn't started yet
             if (!readingStarted) {
                 readingStarted = true;
-                // System.out.println("Reading started");
+                // Check if @ARGV was initially empty to determine STDIN fallback behavior
+                argvWasInitiallyEmpty = getGlobalArray("main::ARGV").isEmpty();
+                
                 RuntimeIO argv = getGlobalIO("main::ARGV").getRuntimeIO();
-                // System.out.println("ARGV: " + argv);
-                if (argv != null && !(argv.ioHandle instanceof ClosedIOHandle)) {
-                    // System.out.println("Reading from ARGV opened");
-                    // If ARGV is open, read from it directly (handles aliased filehandles like *ARGV = *DATA)
+                // Only use ARGV filehandle directly if @ARGV is empty (handles aliased filehandles like *ARGV = *DATA)
+                if (argv != null && !(argv.ioHandle instanceof ClosedIOHandle) && getGlobalArray("main::ARGV").isEmpty()) {
                     currentReader = argv;
-                } else if (getGlobalArray("main::ARGV").isEmpty()) {
-                    // If no files are specified, use standard input (represented by "-")
+                } else if (argvWasInitiallyEmpty) {
+                    // Only use STDIN if @ARGV was initially empty, not if it became empty after processing files
                     RuntimeArray.push(getGlobalArray("main::ARGV"), new RuntimeScalar("-"));
                 }
             }
@@ -151,9 +172,8 @@ public class DiamondIO {
         }
         
         if (isInPlaceEnabled) {
-            // Resolve paths relative to current working directory
-            Path currentDir = Paths.get(System.getProperty("user.dir"));
-            Path originalPath = currentDir.resolve(originalFileName);
+            // Use RuntimeIO's existing path resolution methods for consistency
+            Path originalPath = RuntimeIO.resolvePath(originalFileName);
             
             if (extension == null || extension.isEmpty()) {
                 // Create a temporary file for the original file
@@ -177,12 +197,11 @@ public class DiamondIO {
                     backupFileName = originalFileName + extension;
                 }
                 
-                // Resolve backup path relative to current working directory
-                Path backupPath = Paths.get(System.getProperty("user.dir")).resolve(backupFileName);
+                // Use RuntimeIO's existing path resolution for consistency
+                Path backupPath = RuntimeIO.resolvePath(backupFileName);
                 
                 // Rename the original file to the backup file if needed
                 try {
-                    
                     // Check if original file exists and is readable
                     if (!Files.exists(originalPath)) {
                         System.err.println("Error: Original file does not exist: " + originalPath.toAbsolutePath());
@@ -218,7 +237,8 @@ public class DiamondIO {
         }
 
         // Open the renamed file for reading
-        currentReader = RuntimeIO.open(tempFilePath != null ? tempFilePath.toString() : (backupFileName != null ? backupFileName : originalFileName));
+        String readerPath = tempFilePath != null ? tempFilePath.toString() : (backupFileName != null ? backupFileName : originalFileName);
+        currentReader = RuntimeIO.open(readerPath);
         getGlobalIO("main::ARGV").set(currentReader);
 
         return currentReader != null;
