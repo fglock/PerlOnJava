@@ -141,8 +141,13 @@ public class StringDoubleQuoted extends StringSegmentParser {
                 new Parser(ctx, tokens, sharedHeredocNodes) :
                 new Parser(ctx, tokens);
 
-        // Create and run the double-quoted string parser
+        // Create and run the double-quoted string parser with original token offset tracking
         var doubleQuotedParser = new StringDoubleQuoted(ctx, tokens, parser, tokenIndex, isRegex, parseEscapes, interpolateVariable, isRegexReplacement);
+        
+        // Set up offset tracking and original string content for proper error reporting
+        doubleQuotedParser.setOriginalTokenOffset(tokenIndex);
+        doubleQuotedParser.setOriginalStringContent(input);
+        
         return doubleQuotedParser.parse();
     }
 
