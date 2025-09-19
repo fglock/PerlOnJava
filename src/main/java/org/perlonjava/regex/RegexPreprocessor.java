@@ -288,14 +288,12 @@ public class RegexPreprocessor {
                 // Handle (?@...) which is not implemented
                 regexError(s, offset + 3, "Sequence (?@...) not implemented");
             } else if (c3 == '{') {
-                // Handle (?{ ... }) code blocks
-                int braceEnd = findClosingBrace(s, offset + 3, length);
-                if (braceEnd == -1) {
-                    regexErrorNoPosition("Missing right curly or square bracket");
+                // Check if this is our special unimplemented marker
+                if (s.startsWith("(?{UNIMPLEMENTED_CODE_BLOCK})", offset)) {
+                    regexError(s, offset + 2, "(?{...}) code blocks in regex not implemented");
                 }
-                // For now, just skip the code block
-                sb.append("(?:");  // Convert to non-capturing group
-                offset = braceEnd;
+                // Handle (?{ ... }) code blocks - not implemented
+                regexError(s, offset + 2, "(?{...}) code blocks in regex not implemented");
             } else if (c3 == '(') {
                 // Handle (?(condition)yes|no) conditionals
                 return handleConditionalPattern(s, offset, length, sb, regexFlags);

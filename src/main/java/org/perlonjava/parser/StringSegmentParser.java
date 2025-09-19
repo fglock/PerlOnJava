@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.perlonjava.parser.Variable.parseArrayHashAccess;
+import static org.perlonjava.parser.ParseBlock.parseBlock;
 
 /**
  * Base class for parsing strings with segments and variable interpolation.
@@ -511,8 +512,66 @@ public abstract class StringSegmentParser {
                 }
                 yield false;
             }
+            case "(" -> {
+                // Check for (?{...}) regex code blocks - only in regex context
+                if (isRegex && isRegexCodeBlock()) {
+                    parseRegexCodeBlock();
+                    yield true;
+                }
+                yield false;
+            }
             default -> false;
         };
+    }
+
+    /**
+     * Checks if the current position is at the start of a (?{...}) regex code block.
+     * This method looks ahead to see if we have the pattern (?{
+     * Only called when isRegex=true to avoid false matches in regular strings.
+     *
+     * @return true if this is a regex code block, false otherwise
+     */
+    private boolean isRegexCodeBlock() {
+        // Current token is "(", check if next tokens are "?" and "{"
+        int currentPos = parser.tokenIndex;
+        
+        if (currentPos + 1 < parser.tokens.size() && currentPos + 2 < parser.tokens.size()) {
+            LexerToken nextToken = parser.tokens.get(currentPos);
+            LexerToken afterNextToken = parser.tokens.get(currentPos + 1);
+            return "?".equals(nextToken.text) && "{".equals(afterNextToken.text);
+        }
+        return false;
+    }
+
+    /**
+     * Parses a (?{...}) regex code block by calling the Block parser.
+     * This ensures that Perl code inside regex constructs is properly parsed,
+     * including heredocs and other complex constructs.
+     * Only called when isRegex=true.
+     */
+    private void parseRegexCodeBlock() {
+        int savedTokenIndex = tokenIndex;
+        
+        // Consume the "?" token
+        TokenUtils.consume(parser); // consume "?"
+        
+        // Consume the "{" token
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
+        
+        // Parse the block content using the Block parser - this handles heredocs properly
+        Node block = parseBlock(parser);
+        
+        // Consume the closing "}"
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+        
+        // Consume the closing ")" that completes the (?{...}) construct
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
+        
+        // Instead of executing the block, preserve the (?{...}) structure for regex compilation
+        // This allows the RegexPreprocessor to handle the unimplemented error properly
+        segments.add(new StringNode("(?{UNIMPLEMENTED_CODE_BLOCK})", savedTokenIndex));
+        
+        ctx.logDebug("regex (?{...}) block parsed - preserved for regex compilation");
     }
 
     /**
