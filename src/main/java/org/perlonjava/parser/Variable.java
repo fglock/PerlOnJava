@@ -297,6 +297,22 @@ public class Variable {
     static Node parseCoderefVariable(Parser parser, LexerToken token) {
         int index = parser.tokenIndex;
 
+        // Special case: detect &{sub ...} and parse as code block
+        LexerToken nextToken = TokenUtils.peek(parser);
+        if (nextToken.text.equals("{")) {
+            int lookAheadIndex = parser.tokenIndex + 1;
+            if (lookAheadIndex < parser.tokens.size()) {
+                LexerToken afterBrace = parser.tokens.get(lookAheadIndex);
+                if (afterBrace.type == LexerTokenType.IDENTIFIER && afterBrace.text.equals("sub")) {
+                    // This is &{sub ...} - parse as code block
+                    TokenUtils.consume(parser); // consume '{'
+                    Node block = ParseBlock.parseBlock(parser);
+                    TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+                    return new OperatorNode("&", block, index);
+                }
+            }
+        }
+
         // Set a flag to allow parentheses after a variable, as in &$sub(...)
         parser.parsingForLoopVariable = true;
         // Parse the variable following the `&` sigil
