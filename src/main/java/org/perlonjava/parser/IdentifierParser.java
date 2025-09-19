@@ -79,6 +79,12 @@ public class IdentifierParser {
         LexerToken token = parser.tokens.get(parser.tokenIndex);
         LexerToken nextToken = parser.tokens.get(parser.tokenIndex + 1);
 
+        // Special case: Handle ellipsis inside braces - ${...} should be parsed as a block, not as ${.}
+        if (insideBraces && token.type == LexerTokenType.OPERATOR && token.text.equals("...")) {
+            // Return null to force fallback to block parsing for ellipsis inside braces
+            return null;
+        }
+
         // Special case for `$|`, because the tokenizer can generate $ |=
         char firstChar = token.text.charAt(0);
         if (token.type == LexerTokenType.OPERATOR && "!|/*+-<>&~.=%".indexOf(firstChar) >= 0) {
