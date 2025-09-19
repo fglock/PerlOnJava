@@ -133,16 +133,35 @@ public class DiamondIO {
         String originalFileName = fileName.toString();
         String backupFileName = null;
 
-        // Check if in-place editing is enabled
-        if (inPlaceEdit) {
-            String extension = inPlaceExtension;
+        // Check if in-place editing is enabled (either via -i switch or $^I variable)
+        boolean isInPlaceEnabled = inPlaceEdit;
+        String extension = inPlaceExtension;
+        
+        // Also check $^I variable for runtime in-place editing
+        if (!isInPlaceEnabled) {
+            try {
+                RuntimeScalar inPlaceVar = GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("I"));
+                if (inPlaceVar.getDefinedBoolean()) {
+                    isInPlaceEnabled = true;
+                    extension = inPlaceVar.toString();
+                }
+            } catch (Exception e) {
+                // If $^I is not accessible, continue without in-place editing
+            }
+        }
+        
+        if (isInPlaceEnabled) {
+            // Resolve paths relative to current working directory
+            Path currentDir = Paths.get(System.getProperty("user.dir"));
+            Path originalPath = currentDir.resolve(originalFileName);
+            
             if (extension == null || extension.isEmpty()) {
                 // Create a temporary file for the original file
                 try {
                     tempFilePath = Files.createTempFile("temp_", null);
                     backupFileName = tempFilePath.toString();
 
-                    Files.move(Paths.get(originalFileName), tempFilePath, StandardCopyOption.REPLACE_EXISTING);
+                    Files.move(originalPath, tempFilePath, StandardCopyOption.REPLACE_EXISTING);
 
                     // Schedule the file for deletion on JVM exit
                     tempFilePath.toFile().deleteOnExit();
@@ -157,19 +176,45 @@ public class DiamondIO {
                 } else {
                     backupFileName = originalFileName + extension;
                 }
+                
+                // Resolve backup path relative to current working directory
+                Path backupPath = Paths.get(System.getProperty("user.dir")).resolve(backupFileName);
+                
                 // Rename the original file to the backup file if needed
                 try {
-                    Files.move(Paths.get(originalFileName), Paths.get(backupFileName));
+                    
+                    // Check if original file exists and is readable
+                    if (!Files.exists(originalPath)) {
+                        System.err.println("Error: Original file does not exist: " + originalPath.toAbsolutePath());
+                        return false;
+                    }
+                    if (!Files.isReadable(originalPath)) {
+                        System.err.println("Error: Original file is not readable: " + originalFileName);
+                        return false;
+                    }
+                    
+                    // Check if backup file already exists
+                    if (Files.exists(backupPath)) {
+                        System.err.println("Warning: Backup file already exists, will overwrite: " + backupFileName);
+                    }
+                    
+                    Files.move(originalPath, backupPath, StandardCopyOption.REPLACE_EXISTING);
                 } catch (IOException e) {
-                    System.err.println("Error: Unable to create backup file " + backupFileName);
+                    System.err.println("Error: Unable to create backup file " + backupFileName + ": " + e.getMessage());
+                    e.printStackTrace();
                     return false;
                 }
             }
 
             // Open the original file for writing (this is the ARGVOUT equivalent)
-            currentWriter = RuntimeIO.open(originalFileName, ">");
+            // Use the resolved path to ensure we write to the correct location
+            currentWriter = RuntimeIO.open(originalPath.toString(), ">");
             getGlobalIO("main::ARGVOUT").set(currentWriter);
             RuntimeIO.lastAccesseddHandle = currentWriter;
+            
+            // CRITICAL: Update selectedHandle so print statements without explicit filehandle
+            // write to the original file during in-place editing
+            RuntimeIO.selectedHandle = currentWriter;
         }
 
         // Open the renamed file for reading
