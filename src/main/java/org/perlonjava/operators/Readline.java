@@ -44,6 +44,9 @@ public class Readline {
             throw new PerlCompilerException("readline is not supported for output streams");
         }
 
+        // Set this as the last accessed handle for $. (INPUT_LINE_NUMBER) special variable
+        RuntimeIO.lastAccesseddHandle = runtimeIO;
+
         // Get the input record separator (equivalent to Perl's $/)
         RuntimeScalar rsScalar = getGlobalVariable("main::/");
 
