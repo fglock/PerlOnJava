@@ -300,9 +300,14 @@ public class Variable {
         // Special case: detect &{sub ...} and parse as code block
         LexerToken nextToken = TokenUtils.peek(parser);
         if (nextToken.text.equals("{")) {
+            // Look ahead to see if there's 'sub' after the brace (skipping whitespace)
             int lookAheadIndex = parser.tokenIndex + 1;
-            if (lookAheadIndex < parser.tokens.size()) {
+            while (lookAheadIndex < parser.tokens.size()) {
                 LexerToken afterBrace = parser.tokens.get(lookAheadIndex);
+                if (afterBrace.type == LexerTokenType.WHITESPACE) {
+                    lookAheadIndex++;
+                    continue;
+                }
                 if (afterBrace.type == LexerTokenType.IDENTIFIER && afterBrace.text.equals("sub")) {
                     // This is &{sub ...} - parse as code block
                     TokenUtils.consume(parser); // consume '{'
@@ -310,6 +315,7 @@ public class Variable {
                     TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
                     return new OperatorNode("&", block, index);
                 }
+                break; // Not whitespace and not 'sub', so exit
             }
         }
 
