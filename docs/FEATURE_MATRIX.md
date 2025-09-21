@@ -275,21 +275,21 @@ my @copy = @{$z};         # ERROR
 ### Missing Regular Expression Features
 
 - ❌  **Dynamically-scoped regex variables**: Regex variables are not dynamically-scoped.
-- ❌  **Underscore in named captures** `(?<test_field>test)` the name in named captures cannot have underscores.
 - ❌  **Recursive Patterns**: Features like `(?R)`, `(?0)` or `(??{ code })` for recursive matching are not supported.
 - ❌  **Backtracking Control**: Features like `(?>...)`, `(?(DEFINE)...)`, or `(?>.*)` to prevent or control backtracking are not supported.
 - ❌  **Lookbehind Assertions**: Variable-length negative or positive lookbehind assertions, e.g., `(?<=...)` or `(?<!...)`, are not supported.
 - ❌  **Branch Reset Groups**: Use of `(?|...)` to reset group numbering across branches is not supported.
 - ❌  **Advanced Subroutine Calls**: Sub-pattern calls with numbered or named references like `(?1)`, `(?&name)` are not supported.
 - ❌  **Conditional Expressions**: Use of `(?(condition)yes|no)` for conditional matching is not supported.
-- ❌  **Extended Unicode Regex Features**: Beyond basic Unicode escape support, extended Unicode regex functionalities are not supported.
+- ❌  **Extended Unicode Regex Features**: Some extended Unicode regex functionalities are not supported.
 - ❌  **Extended Grapheme Clusters**: Matching with `\X` for extended grapheme clusters is not supported.
-- ❌  **Regex Debugging**: Support for features like `use re 'debug';` to visualize the regex engine’s operation is not supported.
 - ❌  **Embedded Code in Regex**: Inline Perl code execution with `(?{ code })` or `(??{ code })` is not supported.
 - ❌  **Regex Debugging**: Debugging patterns with `use re 'debug';` to inspect regex engine operations is not supported.
 - ❌  **Regex Optimizations**: Using `use re 'eval';` for runtime regex compilation is not supported.
 - ❌  **Regex Compilation Flags**: Setting default regex flags with `use re '/flags';` is not supported.
-- ❌  **Duplicate named capture groups**: Java's regular expression engine does not support duplicate named capture groups. In Java, each named capturing group must have a unique name within a regular expression.
+- ❌  **Stricter named captures**
+  - ❌  **No underscore in named captures** `(?<test_field>test)` the name in named captures cannot have underscores.
+  - ❌  **No duplicate named capture groups**: In Java regular expression engine, each named capturing group must have a unique name within a regular expression.
 
 
 ## Statements and Special Operators
@@ -360,7 +360,6 @@ my @copy = @{$z};         # ERROR
 - ✅  **File test operators**: `-T` and `-B` (text/binary check) are implemented using a heuristic similar to Perl's approach.
 - ✅  **File test operators**: Time-based operators (`-M`, `-A`, `-C`) return the difference in days as a floating-point number.
 - ✅  **File test operators**: Using `_` as the argument reuses the last stat result.
-- 🚧  **File test operators**: The current implementation only works with file paths, not filehandles or dirhandles.
 - ✅  **File test operators**: Support stacked file test operators.
 - ✅  **Directory operators**: `readdir`, `opendir`, `closedir`, `telldir`, `seekdir`, `rewinddir`, `mkdir`, `rmdir`, `chdir`.
 - ✅  **`for` loop variable**: The `for` loop variable is aliased to list elements.
@@ -378,7 +377,6 @@ my @copy = @{$z};         # ERROR
 - ✅  **`...` ellipsis statement**: `...` is supported.
 - ✅  **`system` operator**: `system` is implemented.
 - ✅  **`exec` operator**: `exec` is implemented.
-- ❌  **`system` operator**: Indirect object notation for `system` and `exec` is not implemented.
 - ✅  **User/Group operators, Network info operators**: `getlogin`, `getpwnam`, `getpwuid`, `getgrnam`, `getgrgid`, `getpwent`, `getgrent`, `setpwent`, `setgrent`, `endpwent`, `endgrent`, `gethostbyname`, `gethostbyaddr`, `getservbyname`, `getservbyport`, `getprotobyname`, `getprotobynumber`.
 
 ## I/O Operations
@@ -515,6 +513,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ❌  **bignum, bigint, and bigrat** pragmas
 - ❌  **encoding** pragma
 - ❌  **integer** pragma
+- ❌  **bytes** pragma
 - ❌  **locale** pragma
 - ❌  **ops** pragma
 - 🚧  **re** pragma for regular expression options: Implemented `is_regexp`.
@@ -581,9 +580,9 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **XSLoader** module.
 - 🚧  **DynaLoader** placeholder module.
 - 🚧  **HTTP::Tiny** some features untested: proxy settings.
+- 🚧  **POSIX** module.
 - 🚧  **Unicode::Normalize** `normalize`, `NFC`, `NFD`, `NFKC`, `NFKD`.
 - ❌  **IO::Socket** module, and related modules or asynchronous I/O operations.
-- ❌  **POSIX** module.
 - ❌  **Safe** module.
 
 ### Non-core modules
@@ -631,7 +630,7 @@ The DBI module provides seamless integration with JDBC drivers:
   - Some modules that depend on `DESTROY`: `SelectSaver`, `File::Temp`.
   - `DESTROY` method in tied variables is also not implemented. DESTROY is called when the variable is `untie`.
 - ❌  **Perl `XS` code**: XS code interfacing with C is not supported on the JVM.
-- ❌  **Auto-close files**: File auto-close depends on handling of object destruction, may be incompatible with JVM garbage collection.
+- ❌  **Auto-close files**: File auto-close depends on handling of object destruction, may be incompatible with JVM garbage collection. All files are closed before the program ends.
 - ❌  **Low-level socket functions**: accept, bind, connect, getpeername, getsockname, getsockopt, listen, recv, send, setsockopt, shutdown, socket, socketpair
 - ❌  **System V interprocess communication functions**: msgctl, msgget, msgrcv, msgsnd, semctl, semget, semop, shmctl, shmget, shmread, shmwrite
 - ❌  **Fetching user and group info**: endhostent, endnetent
@@ -648,6 +647,7 @@ This section is being worked on.
 ## Optimizations
 
 - ✅  **Cached string/numeric conversions**: Numification caching is implemented.
+- 🚧  **Java segment size limitation**: Java bytecode segments are limited to 64k bytes.
 - ❌  **Inline "constant" subroutines optimization**: Optimization for inline constants is not yet implemented.
 - ❌  **Overload optimization**: Preprocessing in overload should be cached.
 - ❌  **I/O optimization**: Use low-level readline to optimize input.
