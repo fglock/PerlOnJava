@@ -52,10 +52,7 @@ public class RegexPreprocessor {
      */
     static String preProcessRegex(String s, RegexFlags regexFlags) {
         captureGroupCount = 0;
-        
-        // Pre-validate regex for Perl-specific errors before Java compilation
-        validatePerlRegexSyntax(s);
-        
+
         s = convertPythonStyleGroups(s);
         StringBuilder sb = new StringBuilder();
         handleRegex(s, 0, sb, regexFlags, false);
@@ -898,55 +895,6 @@ public class RegexPreprocessor {
         return end;
     }
 
-    /**
-     * Pre-validates regex syntax for Perl-specific errors that should be caught
-     * before Java regex compilation to provide proper Perl error messages.
-     * Only validates very specific patterns that are known to be invalid.
-     */
-    private static void validatePerlRegexSyntax(String s) {
-        // Only validate very specific invalid patterns to avoid false positives
-        validateSimpleInvalidPatterns(s);
-    }
-    
-    /**
-     * Validates only very specific invalid patterns that are known to cause
-     * the exact error messages expected by regexp.t tests.
-     */
-    private static void validateSimpleInvalidPatterns(String s) {
-        // Only validate the most obvious invalid patterns to avoid false positives
-        
-        // 1. Standalone backreferences that are clearly invalid
-        if (s.equals("\\1") || s.equals("\\2")) {
-            throw new PerlCompilerException("Reference to nonexistent group");
-        }
-        
-        // 2. \g0 patterns - invalid group 0 references  
-        if (s.equals("\\g0") || s.equals("\\g{0}") || s.equals("\\g{ 0 }") ||
-            s.equals("\\g{-0}") || s.equals("\\g{ -0 }")) {
-            throw new PerlCompilerException("Reference to invalid group 0");
-        }
-        
-        // 3. \g1, \g-1 patterns - standalone nonexistent group references
-        if (s.equals("\\g1") || s.equals("\\g-1") || s.equals("\\g{1}") || 
-            s.equals("\\g{-1}") || s.equals("\\g{ 1 }") || s.equals("\\g{ -1 }")) {
-            throw new PerlCompilerException("Reference to nonexistent group");
-        }
-        
-        // 4. Very obvious quantifier errors - only at start of pattern
-        if (s.matches("^[*+?].*")) {
-            throw new PerlCompilerException("Quantifier follows nothing");
-        }
-        
-        // 5. Simple invalid character class ranges
-        if (s.equals("a[b-a]")) {
-            throw new PerlCompilerException("Invalid [] range");
-        }
-        
-        // 6. Very obvious nested quantifiers (but not possessive quantifiers like a++)
-        if (s.equals("a**")) {
-            throw new PerlCompilerException("Nested quantifiers");
-        }
-    }
 
     private static String convertPythonStyleGroups(String pattern) {
         // Convert (?P<name>...) to (?<name>...)
