@@ -82,7 +82,7 @@ public class UnpackHelper {
                 // Any valid format can follow '/', not just string types
                 FormatHandler formatHandler = Unpack.getHandler(stringFormat, startsWithU);
                 if (formatHandler == null) {
-                    System.err.println("DEBUG: No handler found for format '" + stringFormat + "'");
+                    // DEBUG: No handler found for format '" + stringFormat + "'
                     throw new PerlCompilerException("'/' must be followed by a valid format or group");
                 }
 
@@ -94,7 +94,7 @@ public class UnpackHelper {
                 }
 
                 // Unpack the format with the count
-                System.err.println("DEBUG: Unpacking format '" + stringFormat + "' " + slashCount + " times");
+                // DEBUG: Unpacking format '" + stringFormat + "' " + slashCount + " times
                 formatHandler.unpack(state, values, slashCount, hasStarAfterSlash);
 
                 return i;
@@ -154,7 +154,7 @@ public class UnpackHelper {
                 // Any valid format can follow '/', not just string types
                 FormatHandler formatHandler = Unpack.getHandler(stringFormat, startsWithU);
                 if (formatHandler == null) {
-                    System.err.println("DEBUG: No handler found for format '" + stringFormat + "'");
+                    // DEBUG: No handler found for format '" + stringFormat + "'
                     throw new PerlCompilerException("'/' must be followed by a valid format or group");
                 }
 
@@ -166,7 +166,7 @@ public class UnpackHelper {
                 }
 
                 // Unpack the format with the count
-                System.err.println("DEBUG: Unpacking format '" + stringFormat + "' " + slashCount + " times");
+                // DEBUG: Unpacking format '" + stringFormat + "' " + slashCount + " times
                 formatHandler.unpack(state, values, slashCount, hasStarAfterSlash);
 
                 return i;

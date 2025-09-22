@@ -79,7 +79,7 @@ public class UnpackParser {
                     count = Integer.parseInt(bracketContent);
                 } else {
                     // Template-based count - calculate the packed size of the template
-                    System.err.println("DEBUG: Template-based repeat count [" + bracketContent + "] - using default count 1");
+                    // DEBUG: Template-based repeat count [" + bracketContent + "] - using default count 1
                     // For now, just use count = 1 to avoid errors
                     count = 1;
                     // TODO: Implement pack size calculation for the template

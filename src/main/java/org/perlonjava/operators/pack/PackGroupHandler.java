@@ -62,7 +62,7 @@ public class PackGroupHandler {
 
         // Extract group content
         String groupContent = template.substring(openPos + 1, closePos);
-        System.err.println("DEBUG: found group at positions " + openPos + " to " + closePos + ", content: '" + groupContent + "'");
+        // DEBUG: found group at positions " + openPos + " to " + closePos + ", content: '" + groupContent + "'
 
         // Parse group modifiers and repeat count
         GroupInfo groupInfo = PackParser.parseGroupInfo(template, closePos);
@@ -117,7 +117,7 @@ public class PackGroupHandler {
 
                 // Collect values for this group iteration
                 int groupValueCount = PackHelper.countValuesNeeded(groupContent);
-                System.err.println("DEBUG: group '" + groupContent + "' needs " + groupValueCount + " values, valueIndex=" + valueIndex + ", remaining=" + (values.size() - valueIndex));
+                // DEBUG: group '" + groupContent + "' needs " + groupValueCount + " values, valueIndex=" + valueIndex + ", remaining=" + (values.size() - valueIndex)
 
                 // Handle * groups
                 if (groupInfo.repeatCount == Integer.MAX_VALUE) {
@@ -206,7 +206,7 @@ public class PackGroupHandler {
                                             List<RuntimeScalar> values, int valueIndex,
                                             ByteArrayOutputStream output, ParsedModifiers modifiers,
                                             PackFunction packFunction) {
-        System.err.println("DEBUG: handling " + format + "/ construct at position " + position);
+        // DEBUG: handling " + format + "/ construct at position " + position
 
         // Skip whitespace after '/'
         int stringPos = slashPos + 1;
@@ -219,7 +219,7 @@ public class PackGroupHandler {
         }
 
         char stringFormat = template.charAt(stringPos);
-        System.err.println("DEBUG: string format after '/' is '" + stringFormat + "'");
+        // DEBUG: string format after '/' is '" + stringFormat + "'
 
         // Parse string count
         ParsedCount stringCountInfo = PackParser.parseRepeatCount(template, stringPos);
