@@ -685,15 +685,368 @@ The phases below implement sublanguages following the **mandatory lexer→parser
 ### Phase 6: Transliteration Parser (Week 5)
 **Prerequisites**: Phase 2 complete (establishes escape and range tokenization pattern)
 
-### Phase 2: Regex Implementation (Week 2)
-**Prerequisites: Phase 1 must be complete**
+## 🏗️ **BREAKTHROUGH: Enhanced StringParser Architecture**
 
-1. **Implement `RegexLexer` extending `SublanguageLexer`**
-   - Proper tokenization of regex patterns
-   - Must use base class patterns, not custom implementation
-   
-2. **Create `RegexParser` extending `SublanguageParser`**
-   - Semantic validation using token stream
+### **💡 Critical Insight: No Re-tokenization Needed!**
+
+**BREAKTHROUGH DISCOVERY**: `parseRawStringWithDelimiter()` already performs sophisticated token-level parsing:
+
+- **Character-by-character processing** of existing `LexerToken` objects
+- **State machine parsing**: START → STRING → ESCAPE → END_TOKEN  
+- **Delimiter handling** with nesting levels and paired delimiters
+- **Escape sequence detection** (already has ESCAPE state!)
+- **Complex infrastructure**: heredoc processing, position tracking
+
+**Key Realization**: Instead of creating separate tokenization layers, we can **enhance the existing state machine** with sublanguage-specific processing.
+
+### **🎯 Revised Architecture: Enhanced Token Processing**
+
+**No separate tokenization needed!** Enhance existing `parseRawStringWithDelimiter()`:
+
+```java
+// BEFORE: Complex 3-layer architecture with re-tokenization
+String rawString = extractFromTokens(tokens);
+SublanguageLexer lexer = new SublanguageLexer(rawString);
+List<SublanguageToken> newTokens = lexer.tokenize();
+SublanguageParser parser = new RegexParser(newTokens);
+
+// AFTER: Enhanced existing method
+public static ParsedString parseRawStringWithDelimiterEnhanced(
+    EmitterContext ctx, 
+    List<LexerToken> tokens, 
+    int index, 
+    boolean redo, 
+    Parser parser,
+    SublanguageType sublanguageType  // NEW: specify sublanguage
+) {
+    // Existing state machine + sublanguage-specific enhancements
+    switch (state) {
+        case ESCAPE:
+            if (sublanguageType == REGEX) {
+                processRegexEscape(ch, buffer, astBuilder);
+            } else if (sublanguageType == PACK) {
+                processPackFormat(ch, buffer, astBuilder);
+            }
+            // ... existing logic
+    }
+}
+```
+
+### **Benefits of Enhanced Architecture**
+
+1. **Massive Simplification**: No separate tokenization layer needed
+2. **Better Performance**: Single-pass parsing, no re-tokenization overhead  
+3. **Leverage Existing Code**: Reuse 200+ lines of proven parsing logic
+4. **Easier Integration**: Minimal changes, backward compatible
+5. **Proven Infrastructure**: Delimiter handling, escape detection already work
+
+### **🎯 Final Refined Architecture: In-Place AST Enhancement**
+
+**KEY INSIGHT**: No new architecture needed! The existing `parseRawString()` flow is perfect:
+
+```java
+parseRawString(parser, operator) 
+  ↓
+parseRawStrings() // extracts content using parseRawStringWithDelimiter()
+  ↓
+switch (operator) {
+    case "m", "qr", "/", "//", "/=" -> parseRegexMatch(ctx, operator, rawStr, parser);
+    case "s" -> parseRegexReplace(ctx, rawStr, parser);
+    case "\"", "qq" -> StringDoubleQuoted.parseDoubleQuotedString(...);
+    // etc.
+}
+```
+
+**APPROACH**: Simply enhance existing operator-specific methods with AST building.
+
+#### **Step 1: Enhance parseRegexMatch() and parseRegexReplace()**
+```java
+// In parseRegexMatch() - where content is already extracted
+public static Node parseRegexMatch(EmitterContext ctx, String operator, ParsedString rawStr, Parser parser) {
+    String regexContent = rawStr.buffers.get(0);
+    
+    // NEW: Build AST from extracted content
+    try {
+        SublanguageASTNode regexAST = RegexASTBuilder.buildAST(regexContent, rawStr.sourceOffset);
+        // Use AST for optimized code generation and validation
+        return generateOptimizedRegexMatch(regexAST, operator, rawStr);
+    } catch (Exception e) {
+        // Fail compilation on syntax errors
+        throw new PerlCompilerException(rawStr.sourceOffset, "Invalid regex: " + e.getMessage(), ctx.errorUtil);
+    }
+}
+```
+
+#### **Step 2: Enhance Pack/Sprintf Parsing**
+```java
+// Where pack() and sprintf() content is extracted
+String template = extractedContent;
+
+// NEW: Build AST and validate
+try {
+    SublanguageASTNode ast = PackASTBuilder.buildAST(template, sourceOffset);
+    return generateOptimizedCode(ast);
+} catch (Exception e) {
+    throw new PerlCompilerException(sourceOffset, "Invalid template: " + e.getMessage(), ctx.errorUtil);
+}
+```
+
+#### **Step 3: AST Builders**
+```java
+public class RegexASTBuilder {
+    public static SublanguageASTNode buildAST(String content, int sourceOffset) {
+        // Parse regex content into AST: literals, character classes, quantifiers, groups
+        // Fail on syntax errors with position info
+    }
+}
+
+public class PackASTBuilder {
+    public static SublanguageASTNode buildAST(String content, int sourceOffset) {
+        // Parse pack template into AST: format specifiers, modifiers, repeat counts
+        // Fail on invalid formats with position info
+    }
+}
+```
+}
+
+public class DoubleQuotedParser extends SublanguageParser {
+    // Uses common library: parseEscapeSequence(), parseCaseModifier(), parseInterpolation()
+    // Focuses on: string interpolation, case modification state machine
+}
+```
+
+### **🚀 Revised Implementation Plan: In-Place AST Enhancement**
+
+**Benefits of This Approach:**
+1. **No New Architecture** - Just enhance existing methods
+2. **No Switch Statements** - Operator context already handled perfectly
+3. **Minimal Changes** - Target specific methods where content is extracted
+4. **Backward Compatible** - Existing flow unchanged, AST building added
+5. **In-Place Enhancement** - AST building happens where content is already available
+
+**Commit 1: Create AST Builders (~300 lines)**
+- Create `RegexASTBuilder.buildAST()` for regex parsing and validation
+- Create `PackASTBuilder.buildAST()` for pack template parsing and validation  
+- Create `SprintfASTBuilder.buildAST()` for sprintf format parsing and validation
+- All builders use existing `SublanguageASTNode` infrastructure
+- Comprehensive error handling with position tracking
+
+**Commit 2: Enhance Regex Methods (~200 lines)**
+- Enhance `parseRegexMatch()` and `parseRegexReplace()` with AST building
+- Add AST-driven code generation for optimized regex handling
+- Maintain backward compatibility with fallback to existing implementation
+- Fail compilation on syntax errors with proper position info
+
+**Commit 3: Enhance Pack/Sprintf Methods (~200 lines)**
+- Enhance pack() and sprintf() parsing locations with AST building
+- Add AST-driven code generation for optimized template handling
+- Fail compilation on syntax errors with proper position info
+- Integration with existing error handling patterns
+
+**Commit 4: Testing and Optimization (~100 lines)**
+- Comprehensive tests for all AST builders and enhanced methods
+- Performance benchmarks vs existing implementations
+- Documentation and examples
+- Optional compiler flags for enabling/disabling AST validation
+
+## 📋 **ORIGINAL COMPREHENSIVE IMPLEMENTATION PLAN (ARCHIVED)**
+
+### **Phase 1: Foundation Infrastructure ✅ COMPLETED**
+- Base classes and interfaces implemented and verified
+
+### **Phase 2: Three-Layer Architecture Implementation (SUPERSEDED)**
+
+#### **Commit 1: Unified SublanguageLexer (~400 lines)**
+**Assignable Work Unit**: Complete tokenization layer
+- Comprehensive token types for all sublanguages
+- Shared tokenization: escapes, numbers, strings, variables, whitespace
+- Sublanguage-specific tokens: regex operators, pack formats, sprintf flags, case modifiers
+- Position tracking and source offset mapping
+- **Deliverable**: Single lexer that can tokenize any sublanguage input
+
+#### **Commit 2: Common Parser Library (~500 lines)**
+**Assignable Work Unit**: Reusable parsing components
+- `parseEscapeSequence()` - handles \n, \t, \x41, \x{263A}, \o{100}, \cA, \N{NAME}
+- `parseNumber()` - handles 123, 0x41, 077, ranges, counts with validation
+- `parseRange()` - handles A-Z, 0-9, \0-\377 with complex validation logic
+- `parseCaseModifier()` - handles \U, \L, \u, \l, \E with state machine
+- `parseInterpolation()` - handles $var, @array, ${complex} variable parsing
+- Shared validation methods and error handling
+- **Deliverable**: Rich library of parsing components usable by all specialized parsers
+
+#### **Commit 3: RegexParser (~300 lines)**
+**Assignable Work Unit**: Regex-specific parsing logic
+- Uses common library for escapes and ranges
+- Implements precedence parsing: | > concatenation > quantifiers
+- Handles groups, anchors, character classes
+- Regex-specific validation and error messages
+- **Deliverable**: Complete regex parser with AST generation
+
+#### **Commit 4: PackParser (~300 lines)**
+**Assignable Work Unit**: Pack/Unpack-specific parsing logic
+- Uses common library for numbers and escapes
+- Left-to-right format parsing: A, C, N, v, V formats
+- Modifier and count validation
+- Pack-specific error messages for test compliance
+- **Deliverable**: Complete pack parser addressing test failures
+
+#### **Commit 5: SprintfParser (~250 lines)**
+**Assignable Work Unit**: Sprintf-specific parsing logic
+- Uses common library for number parsing
+- Format specifier parsing: %, flags, width, precision, conversion
+- Argument count validation
+- Sprintf-specific error messages
+- **Deliverable**: Complete sprintf parser with validation
+
+#### **Commit 6: DoubleQuotedParser (~350 lines)**
+**Assignable Work Unit**: Double-quoted string parsing logic
+- Uses common library for escapes, case modifiers, interpolation
+- String interpolation state machine
+- Case modification conflict detection
+- \Q...\E quotemeta handling
+- **Deliverable**: Complete double-quoted string parser
+
+### **Phase 3: Integration and Migration**
+
+#### **Commit 7-10: Integration Layer (~200 lines each)**
+**Assignable Work Units**: Backward-compatible integration
+- StringDoubleQuoted integration with fallback
+- RegexPreprocessor integration with fallback
+- Pack/Unpack integration with fallback
+- SprintfOperator integration with fallback
+- **Deliverable**: New parsers integrated with existing code, zero breaking changes
+
+#### **Commit 11+: Gradual Migration (~100-300 lines each)**
+**Assignable Work Units**: Method-by-method replacement
+- Replace individual methods with AST-based implementations
+- Maintain string-based APIs for backward compatibility
+- Performance testing and validation
+- **Deliverable**: Incremental migration with continuous validation
+
+## ✅ **Work Splitting Benefits**
+
+### **Parallel Development Possible:**
+- **Team Member A**: Unified lexer (Commit 1)
+- **Team Member B**: Common parser library (Commit 2)  
+- **Team Member C**: RegexParser (Commit 3) - can start after Commits 1-2
+- **Team Member D**: PackParser (Commit 4) - can start after Commits 1-2
+- **Team Member E**: Integration work (Commits 7-10)
+
+### **Clear Dependencies:**
+- Commits 1-2 must complete before 3-6
+- Commits 3-6 can be developed in parallel
+- Commits 7+ can start once corresponding parser is complete
+
+### **Measurable Progress:**
+- Each commit is 200-500 lines with clear deliverables
+- Each commit compiles and passes tests independently
+- Progress can be tracked and validated incrementally
+
+This comprehensive plan enables **efficient parallel development** while maintaining **architectural integrity** and **backward compatibility**! 🎉
+
+## ⚠️ **COMPREHENSIVE RISK MITIGATION PLAN**
+
+### **Critical Risk Assessment**
+
+After analyzing existing error/warning systems, we identified **sophisticated error handling complexity**:
+
+- **Sprintf**: 4 error types, overlapping specifiers, positional parameters, vector formats
+- **Pack**: Runtime exceptions, Unicode state tracking, endianness conflicts  
+- **Regex**: 52+ error cases, Java compatibility transformations
+- **All sublanguages**: Complex validation rules and edge cases
+
+### **Risk Mitigation Strategies**
+
+#### **Commit -1: Risk Mitigation Phase (~300 lines)**
+**MANDATORY before implementation begins**
+
+1. **Enhanced Error Compatibility**
+   ```java
+   // Extend SublanguageValidationResult to support existing error types
+   public enum ErrorBehavior {
+       APPEND_INVALID,    // sprintf INVALID_APPEND_ERROR
+       NO_APPEND,         // sprintf INVALID_NO_APPEND  
+       RUNTIME_EXCEPTION, // pack runtime exceptions
+       WARNING_ONLY       // sprintf overlapping specifiers
+   }
+   ```
+
+2. **Error Compatibility Layer**
+   ```java
+   // Map new error system to existing error messages and behavior
+   public class ErrorCompatibilityMapper {
+       public static String mapToExistingError(SublanguageError error);
+       public static boolean shouldAppendInvalid(SublanguageError error);
+       public static boolean shouldThrowException(SublanguageError error);
+   }
+   ```
+
+3. **Performance Baseline Framework**
+   ```java
+   // Measure current parsing performance before migration
+   public class ParsingBenchmark {
+       public static void benchmarkSprintfParsing();
+       public static void benchmarkPackParsing();
+       public static void benchmarkRegexParsing();
+   }
+   ```
+
+4. **Comprehensive Test Catalog**
+   - Document all existing edge cases from current parsers
+   - Create test migration checklist
+   - Regression test framework
+
+5. **Feature Flag System**
+   ```java
+   // Gradual rollout with monitoring
+   public class SublanguageFeatureFlags {
+       public static boolean useNewSprintfParser();
+       public static boolean useNewPackParser();
+       public static boolean useNewRegexParser();
+   }
+   ```
+
+#### **Special Cases Requiring Attention**
+
+1. **Sprintf Overlapping Specifiers**
+   - Complex logic for detecting overlapping format specifiers
+   - Warning generation without breaking functionality
+   - Position tracking across overlaps
+
+2. **Pack Unicode State Tracking**
+   - `byteMode` vs `hasUnicodeInNormalMode` state management
+   - UTF-8 encoding error handling
+   - Unicode code point validation
+
+3. **Regex Java Compatibility**
+   - Octal sequence transformation (`\120` → `\0120`)
+   - Character class mapping (`[:ascii:]` → `\p{ASCII}`)
+   - Inline comment removal (`(?#...)`)
+   - `\G` anchor handling
+
+#### **Validation Gates for Each Commit**
+
+1. **Performance Gate**: No regression > 10% in parsing speed
+2. **Error Compatibility Gate**: All existing error messages preserved
+3. **Test Coverage Gate**: 100% of existing edge cases covered
+4. **Integration Gate**: Fallback mechanism works correctly
+
+#### **Rollback Strategy**
+
+1. **Feature flags** can disable new parsers immediately
+2. **Monitoring alerts** for error rate increases
+3. **Automated rollback** if performance degrades
+4. **Clear rollback procedures** documented
+
+### **Success Criteria**
+
+- ✅ **Zero breaking changes** to existing functionality
+- ✅ **All existing error messages preserved** with same behavior
+- ✅ **Performance maintained or improved**
+- ✅ **100% test coverage** of existing edge cases
+- ✅ **Gradual rollout** with monitoring and rollback capability
+
+This risk mitigation ensures our architecture can handle the **full complexity** of existing error/warning systems while providing a **safe migration path**.
    - AST generation for transformation
    
 3. **Replace current regex preprocessing gradually**
