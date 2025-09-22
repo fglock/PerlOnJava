@@ -306,10 +306,12 @@ public class Unpack {
                 }
                 // Check for standalone modifiers that should only appear after valid format characters
                 if (format == '<' || format == '>') {
-                    throw new PerlCompilerException("'" + format + "' allowed only after types in unpack");
+                    throw new PerlCompilerException("'" + format + "' allowed only after types " + 
+                        FormatModifierValidator.getValidFormatsForModifier(FormatModifierValidator.Modifier.LITTLE_ENDIAN) + " in unpack");
                 }
                 if (format == '!') {
-                    throw new PerlCompilerException("'!' allowed only after types in unpack");
+                    throw new PerlCompilerException("'!' allowed only after types " + 
+                        FormatModifierValidator.getValidFormatsForModifier(FormatModifierValidator.Modifier.NATIVE_SIZE) + " in unpack");
                 }
                 throw new PerlCompilerException("unpack: unsupported format character: " + format);
             }
