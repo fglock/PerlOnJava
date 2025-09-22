@@ -73,10 +73,36 @@ public class UnpackParser {
         int i = position;
 
         // First, parse and validate any modifiers (<, >, !) after the format character
-        i = parseAndValidateModifiers(template, i);
-        
+        // and detect if '!' modifier is present
         boolean hasShriek = false;
-        // Note: hasShriek is kept for compatibility, but validation is now handled above
+        while (i + 1 < template.length()) {
+            char modifier = template.charAt(i + 1);
+            if (modifier == '<' || modifier == '>' || modifier == '!') {
+                if (modifier == '!') {
+                    hasShriek = true;
+                }
+                i++;
+            } else {
+                break;
+            }
+        }
+        
+        // Validate modifiers using centralized validator
+        char formatChar = template.charAt(position);
+        List<Character> modifiers = new ArrayList<>();
+        int tempI = position;
+        while (tempI + 1 < template.length()) {
+            char modifier = template.charAt(tempI + 1);
+            if (modifier == '<' || modifier == '>' || modifier == '!') {
+                modifiers.add(modifier);
+                tempI++;
+            } else {
+                break;
+            }
+        }
+        if (!modifiers.isEmpty()) {
+            FormatModifierValidator.validateFormatModifiers(formatChar, modifiers, "unpack");
+        }
 
         if (i + 1 < template.length()) {
             char nextChar = template.charAt(i + 1);
