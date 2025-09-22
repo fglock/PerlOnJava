@@ -7,6 +7,7 @@ import org.perlonjava.io.ScalarBackedIO;
 import org.perlonjava.parser.StringParser;
 import org.perlonjava.runtime.*;
 import org.perlonjava.runtime.PerlCompilerException;
+import org.perlonjava.runtime.PerlJavaUnimplementedException;
 
 import java.io.File;
 import java.io.IOException;
@@ -58,7 +59,7 @@ public class IOOperator {
             }
 
             // Full select implementation not yet supported
-            throw new PerlCompilerException("not implemented: select RBITS,WBITS,EBITS,TIMEOUT");
+            throw new PerlJavaUnimplementedException("not implemented: select RBITS,WBITS,EBITS,TIMEOUT");
         }
         // select FILEHANDLE (returns/sets current filehandle)
         RuntimeScalar fh = new RuntimeScalar(RuntimeIO.selectedHandle);
@@ -199,7 +200,7 @@ public class IOOperator {
 
         RuntimeScalar fileHandle = args[0].scalar();
         if (args.length < 2) {
-            throw new PerlCompilerException("1 argument open is not implemented");
+            throw new PerlJavaUnimplementedException("1 argument open is not implemented");
         }
         String mode = args[1].toString();
         RuntimeList runtimeList = new RuntimeList(Arrays.copyOfRange(args, 1, args.length));

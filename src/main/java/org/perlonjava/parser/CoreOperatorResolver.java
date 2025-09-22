@@ -4,6 +4,7 @@ import org.perlonjava.astnode.*;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.PerlCompilerException;
+import org.perlonjava.runtime.PerlJavaUnimplementedException;
 
 import static org.perlonjava.parser.ParserTables.CORE_PROTOTYPES;
 import static org.perlonjava.parser.PrototypeArgs.consumeArgsWithPrototype;
@@ -99,20 +100,20 @@ public class CoreOperatorResolver {
             case "q", "qq", "qx", "qw", "qr", "tr", "y", "s", "m" ->
                     OperatorParser.parseSpecialQuoted(parser, token, startIndex);
             case "dump", "format", "dbmclose", "dbmopen" ->
-                    throw new PerlCompilerException(parser.tokenIndex, "Not implemented: operator: " + token.text, parser.ctx.errorUtil);
+                    throw new PerlJavaUnimplementedException(parser.tokenIndex, "Not implemented: operator: " + token.text, parser.ctx.errorUtil);
             case "accept", "bind", "connect", "getpeername", "getsockname", "getsockopt",
                  "listen", "recv", "send", "setsockopt", "shutdown", "socketpair" ->
-                    throw new PerlCompilerException(parser.tokenIndex, "Not implemented: socket operator: " + token.text, parser.ctx.errorUtil);
+                    throw new PerlJavaUnimplementedException(parser.tokenIndex, "Not implemented: socket operator: " + token.text, parser.ctx.errorUtil);
             case "msgctl", "msgget", "msgrcv", "msgsnd", "semctl", "semget", "semop",
                  "shmctl", "shmget", "shmread", "shmwrite" ->
-                    throw new PerlCompilerException(parser.tokenIndex, "Not implemented: System V IPC operator: " + token.text, parser.ctx.errorUtil);
+                    throw new PerlJavaUnimplementedException(parser.tokenIndex, "Not implemented: System V IPC operator: " + token.text, parser.ctx.errorUtil);
             case "endhostent", "endnetent" ->
-                    throw new PerlCompilerException(parser.tokenIndex, "Not implemented: User/Group info operator: " + token.text, parser.ctx.errorUtil);
+                    throw new PerlJavaUnimplementedException(parser.tokenIndex, "Not implemented: User/Group info operator: " + token.text, parser.ctx.errorUtil);
             case "endprotoent", "endservent", "gethostent",
                  "getnetbyaddr", "getnetbyname", "getnetent",
                  "getprotoent", "getservent", "sethostent",
                  "setnetent", "setprotoent", "setservent" ->
-                    throw new PerlCompilerException(parser.tokenIndex, "Not implemented: Network info operator: " + token.text, parser.ctx.errorUtil);
+                    throw new PerlJavaUnimplementedException(parser.tokenIndex, "Not implemented: Network info operator: " + token.text, parser.ctx.errorUtil);
             default -> parseWithPrototype(parser, token, currentIndex);
         };
     }
