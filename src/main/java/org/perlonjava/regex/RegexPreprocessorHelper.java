@@ -66,10 +66,13 @@ public class RegexPreprocessorHelper {
                                 sb.setLength(sb.length() - 1); // Remove the backslash
                                 sb.append("\\").append(absoluteRef);
                             } else {
-                                RegexPreprocessor.regexError(s, offset - 2, "Reference to nonexistent group");
+                                RegexPreprocessor.regexError(s, offset - 2, "Reference to nonexistent or unclosed group");
                             }
                         } else {
-                            // Positive numeric reference
+                            // Positive numeric reference - validate it exists
+                            if (groupNum > RegexPreprocessor.captureGroupCount) {
+                                RegexPreprocessor.regexError(s, offset - 2, "Reference to nonexistent group");
+                            }
                             sb.setLength(sb.length() - 1); // Remove the backslash
                             sb.append("\\").append(groupNum);
                         }
@@ -92,6 +95,8 @@ public class RegexPreprocessorHelper {
 
                 if (groupNum == 0) {
                     RegexPreprocessor.regexError(s, offset, "Reference to invalid group 0");
+                } else if (groupNum > RegexPreprocessor.captureGroupCount) {
+                    RegexPreprocessor.regexError(s, offset, "Reference to nonexistent group");
                 }
 
                 sb.setLength(sb.length() - 1); // Remove the backslash
