@@ -154,7 +154,7 @@ public class FormatModifierValidator {
      * @param modifier The modifier to get valid formats for
      * @return String containing all valid format characters for this modifier
      */
-    private static String getValidFormatsForModifier(Modifier modifier) {
+    public static String getValidFormatsForModifier(Modifier modifier) {
         switch (modifier) {
             case NATIVE_SIZE:
                 return NATIVE_SIZE_VALID_FORMATS;
