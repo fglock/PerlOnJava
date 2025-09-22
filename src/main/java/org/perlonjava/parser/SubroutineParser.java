@@ -45,6 +45,12 @@ public class SubroutineParser {
             throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
         }
 
+        // Check if this is a standard filehandle that should be treated as a bareword, not a subroutine call
+        if (!isMethod && (subName.equals("STDIN") || subName.equals("STDOUT") || subName.equals("STDERR"))) {
+            // Return as a simple identifier node, not a subroutine call
+            return new IdentifierNode(subName, currentIndex);
+        }
+
         // Normalize the subroutine name to include the current package
         String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
 
