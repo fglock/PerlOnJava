@@ -109,8 +109,6 @@ public class SystemOperator {
     private static CommandResult executeCommand(String command, boolean captureOutput) {
         StringBuilder output = new StringBuilder();
         Process process = null;
-        BufferedReader reader = null;
-        BufferedReader errorReader = null;
         int exitCode = -1;
 
         try {
@@ -130,29 +128,82 @@ public class SystemOperator {
             String userDir = System.getProperty("user.dir");
             processBuilder.directory(new File(userDir));
 
-            process = processBuilder.start();
-            String line;
-            reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-
-            if (captureOutput) {
-                // For backticks: capture stdout, stderr goes to terminal
-                while ((line = reader.readLine()) != null) {
-                    output.append(line).append("\n");
-                }
+            // CRITICAL FIX: Check if stderr is redirected to stdout (2>&1)
+            boolean stderrRedirected = command.contains("2>&1");
+            
+            if (stderrRedirected) {
+                // When stderr is redirected to stdout, merge the streams in ProcessBuilder
+                // This prevents the deadlock caused by trying to read from an empty stderr stream
+                processBuilder.redirectErrorStream(true);
+            }
+            
+            // CRITICAL FIX: Handle stdin properly to prevent subprocess from waiting for input
+            // Check if stdin is redirected from /dev/null or if no stdin is expected
+            if (command.contains("</dev/null") || command.contains("<nul")) {
+                // Stdin is explicitly redirected to null - this is handled by the shell
+                // No additional action needed
             } else {
-                // For system(): pipe stdout and stderr to terminal
-                while ((line = reader.readLine()) != null) {
-                    System.out.println(line);
+                // No explicit stdin redirection - close stdin to prevent subprocess from waiting
+                // This prevents the subprocess from hanging while waiting for stdin input
+                processBuilder.redirectInput(ProcessBuilder.Redirect.from(new java.io.File("/dev/null")));
+            }
+
+            process = processBuilder.start();
+
+            final Process finalProcess = process;
+            final StringBuilder finalOutput = output;
+            final Object outputLock = new Object();
+            
+            // Create thread for stdout reading
+            Thread stdoutThread = new Thread(() -> {
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(finalProcess.getInputStream()))) {
+                    String line;
+                    if (captureOutput) {
+                        // For backticks: capture stdout (includes stderr if redirected)
+                        while ((line = reader.readLine()) != null) {
+                            synchronized (outputLock) {
+                                finalOutput.append(line).append("\n");
+                            }
+                        }
+                    } else {
+                        // For system(): pipe stdout to terminal (includes stderr if redirected)
+                        while ((line = reader.readLine()) != null) {
+                            System.out.println(line);
+                        }
+                    }
+                } catch (IOException e) {
+                    // Stream closed - this is normal when process terminates
                 }
+            });
+
+            Thread stderrThread = null;
+            
+            if (!stderrRedirected) {
+                // Only create stderr thread if stderr is not redirected to stdout
+                stderrThread = new Thread(() -> {
+                    try (BufferedReader errorReader = new BufferedReader(new InputStreamReader(finalProcess.getErrorStream()))) {
+                        String line;
+                        while ((line = errorReader.readLine()) != null) {
+                            System.err.println(line);
+                        }
+                    } catch (IOException e) {
+                        // Stream closed - this is normal when process terminates
+                    }
+                });
+                stderrThread.start();
             }
 
-            // pipe stderr to terminal
-            errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
-            while ((line = errorReader.readLine()) != null) {
-                System.err.println(line);
-            }
+            // Start stdout reading thread
+            stdoutThread.start();
 
+            // Wait for process to complete
             exitCode = process.waitFor();
+
+            // Wait for stream reading threads to complete
+            stdoutThread.join();
+            if (stderrThread != null) {
+                stderrThread.join();
+            }
         } catch (IOException e) {
             // Command failed to start - return -1 as per Perl spec
             setGlobalVariable("main::!", e.getMessage());
@@ -161,8 +212,7 @@ public class SystemOperator {
             Thread.currentThread().interrupt();
             throw new PerlCompilerException("Command execution interrupted: " + e.getMessage());
         } finally {
-            closeQuietly(reader);
-            closeQuietly(errorReader);
+            // Readers are closed automatically by try-with-resources in threads
             if (process != null) {
                 process.destroy();
             }
