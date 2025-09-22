@@ -153,13 +153,25 @@ public class FileHandle {
 
         // Check if this is a known file handle in the global I/O table
         // This helps distinguish between file handles and other barewords
-        if (GlobalVariable.existsGlobalIO(name)) {
+        if (GlobalVariable.existsGlobalIO(name) || isStandardFilehandle(name)) {
             // Create a GLOB reference for the file handle, like `\*FH`
             return new OperatorNode("\\",
                     new OperatorNode("*",
                             new IdentifierNode(name, parser.tokenIndex), parser.tokenIndex), parser.tokenIndex);
         }
         return null;
+    }
+
+    /**
+     * Checks if a normalized name represents a standard filehandle.
+     *
+     * @param normalizedName The normalized filehandle name (e.g., "main::STDOUT")
+     * @return true if the name is a standard filehandle
+     */
+    private static boolean isStandardFilehandle(String normalizedName) {
+        return "main::STDOUT".equals(normalizedName) || 
+               "main::STDERR".equals(normalizedName) || 
+               "main::STDIN".equals(normalizedName);
     }
 
     public static String normalizeBarewordHandle(Parser parser, String name) {
