@@ -95,7 +95,12 @@ public class RuntimeRegex implements RuntimeScalarReference {
             } catch (Exception e) {
                 if (GlobalVariable.getGlobalHash("main::ENV").get("JPERL_UNIMPLEMENTED").toString().equals("warn")
                 ) {
-                    // Temporarily warn instead of die, and return an invalid pattern so we can run Perl tests
+                    // For known invalid patterns (PerlCompilerException from targeted validation), always throw
+                    // Only warn for unimplemented features (Java regex compilation errors)
+                    if (e instanceof PerlCompilerException) {
+                        throw e; // Always throw for known invalid patterns
+                    }
+                    // Warn for unimplemented features and return invalid pattern
                     WarnDie.warn(new RuntimeScalar("Regex compilation failed: " + e.getMessage()), new RuntimeScalar());
                     regex.pattern = Pattern.compile(Character.toString(0) + "ERROR" + Character.toString(0), Pattern.DOTALL);
                 } else {
@@ -630,4 +635,5 @@ public class RuntimeRegex implements RuntimeScalarReference {
     public boolean getBooleanRef() {
         return true;
     }
+
 }
