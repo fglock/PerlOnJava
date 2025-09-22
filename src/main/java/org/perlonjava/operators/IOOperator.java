@@ -141,7 +141,14 @@ public class IOOperator {
         return fileHandle;
     }
 
-    public static RuntimeScalar fileno(RuntimeScalar fileHandle) {
+    public static RuntimeScalar fileno(int ctx, RuntimeBase... args) {
+        RuntimeScalar fileHandle;
+        if (args.length < 1) {
+            throw new PerlCompilerException("Not enough arguments for fileno");
+        } else {
+            fileHandle = args[0].scalar();
+        }
+        
         RuntimeIO fh = fileHandle.getRuntimeIO();
 
         if (fh instanceof TieHandle tieHandle) {

@@ -74,7 +74,7 @@ public class CoreOperatorResolver {
             case "chomp", "chop", "reverse", "splice", "unlink", "mkdir", "die", "warn" ->
                     OperatorParser.parseReverse(parser, token, currentIndex);
             case "system", "exec" -> OperatorParser.parseSystem(parser, token, currentIndex);
-            case "readline", "eof", "tell", "fileno", "truncate" ->
+            case "readline", "eof", "tell", "truncate" ->
                     OperatorParser.parseReadline(parser, token, currentIndex);
             case "binmode" -> OperatorParser.parseBinmodeOperator(parser, token, currentIndex);
             case "seek" -> OperatorParser.parseSeek(parser, token, currentIndex);

@@ -107,7 +107,7 @@ public record OperatorHandler(String className, String methodName, int methodTyp
         put("readline", "readline", "org/perlonjava/operators/Readline", "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeBase;");
         put("close", "close", "org/perlonjava/operators/IOOperator", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("tell", "tell", "org/perlonjava/operators/IOOperator", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
-        put("fileno", "fileno", "org/perlonjava/operators/IOOperator", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("fileno", "fileno", "org/perlonjava/operators/IOOperator", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("getc", "getc", "org/perlonjava/operators/IOOperator", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("binmode", "binmode", "org/perlonjava/operators/IOOperator", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("seek", "seek", "org/perlonjava/operators/IOOperator", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;");
