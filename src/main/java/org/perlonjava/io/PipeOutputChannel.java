@@ -222,11 +222,13 @@ public class PipeOutputChannel implements IOHandle {
      *
      * @param maxBytes the maximum number of bytes to read (ignored)
      * @param charset  the character encoding (ignored)
-     * @return RuntimeScalar with error
+     * @return RuntimeScalar with empty string to signal EOF/error
      */
     @Override
     public RuntimeScalar doRead(int maxBytes, Charset charset) {
-        return handleIOException(new IOException("Cannot read from output pipe"), "read from output pipe failed");
+        // Set error in $! but return empty string to signal EOF
+        handleIOException(new IOException("Cannot read from output pipe"), "read from output pipe failed");
+        return new RuntimeScalar(""); // Return empty string to break readline loop
     }
 
     /**
@@ -267,13 +269,15 @@ public class PipeOutputChannel implements IOHandle {
     }
 
     /**
-     * EOF is not meaningful for output pipes.
+     * EOF for output pipes - always true since you can't read from write-only pipes.
      *
-     * @return RuntimeScalar with false
+     * @return RuntimeScalar with true (always EOF for read operations on write-only pipes)
      */
     @Override
     public RuntimeScalar eof() {
-        return new RuntimeScalar(isClosed);
+        // For write-only pipes, reading should always be considered EOF
+        // This ensures readline operations terminate properly
+        return new RuntimeScalar(true);
     }
 
     /**
