@@ -121,6 +121,6 @@ public class ControlPackHandler implements PackFormatHandler {
                 output.write(currentData, 0, newSize);
             }
         }
-        System.err.println("DEBUG: handleBackup finished, new size=" + output.size());
+        // DEBUG: handleBackup finished, new size=" + output.size()
     }
 }

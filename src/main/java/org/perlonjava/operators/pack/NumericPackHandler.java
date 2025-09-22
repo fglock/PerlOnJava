@@ -121,7 +121,7 @@ public class NumericPackHandler implements PackFormatHandler {
                     break;
                 case 'D':
                     // Long double - treat as regular double in Java since we don't have long double
-                    System.err.println("DEBUG: Processing D (long double) format as regular double");
+                    // DEBUG: Processing D (long double) format as regular double
                     PackWriter.writeDouble(output, value.getDouble());
                     break;
                 default:

@@ -42,6 +42,9 @@ public class PackParser {
         result.endPosition = position;
         char formatChar = template.charAt(position);
 
+        // Track the order of modifiers for error precedence
+        StringBuilder modifierOrder = new StringBuilder();
+
         while (result.endPosition + 1 < template.length()) {
             char modifier = template.charAt(result.endPosition + 1);
             if (modifier == '<') {
@@ -49,23 +52,26 @@ public class PackParser {
                     throw new PerlCompilerException("Can't use both '<' and '>' after type '" + formatChar + "' in pack");
                 }
                 result.littleEndian = true;
+                modifierOrder.append('<');
                 result.endPosition++;
             } else if (modifier == '>') {
                 if (result.littleEndian) {
                     throw new PerlCompilerException("Can't use both '<' and '>' after type '" + formatChar + "' in pack");
                 }
                 result.bigEndian = true;
+                modifierOrder.append('>');
                 result.endPosition++;
             } else if (modifier == '!') {
                 result.nativeSize = true;
+                modifierOrder.append('!');
                 result.endPosition++;
             } else {
                 break;
             }
         }
 
-        // Validate format/modifier compatibility
-        validateFormatModifierCompatibility(formatChar, result);
+        // Validate format/modifier compatibility with order-aware precedence
+        validateFormatModifierCompatibility(formatChar, result, modifierOrder.toString());
 
         return result;
     }
@@ -250,31 +256,71 @@ public class PackParser {
      * 
      * @param formatChar the format character being validated
      * @param modifiers the parsed modifiers to validate
+     * @param modifierOrder the order in which modifiers appeared in the template
      * @throws PerlCompilerException if incompatible modifiers are found
      */
-    private static void validateFormatModifierCompatibility(char formatChar, ParsedModifiers modifiers) {
+    private static void validateFormatModifierCompatibility(char formatChar, ParsedModifiers modifiers, String modifierOrder) {
         // Only validate specific format characters that are known to be incompatible with certain modifiers
         // Be more specific to avoid breaking valid cases
         
         // Hex formats (h, H) don't support any modifiers - this is a well-known restriction
         if (formatChar == 'h' || formatChar == 'H') {
-            // For combined modifiers like h<! or h>!, check endianness first to match test expectations
-            if (modifiers.littleEndian) {
-                throw new PerlCompilerException("'<' allowed only after types");
-            }
-            if (modifiers.bigEndian) {
-                throw new PerlCompilerException("'>' allowed only after types");
-            }
-            // Check nativeSize (!) after endianness
-            if (modifiers.nativeSize) {
-                throw new PerlCompilerException("'!' allowed only after types");
+            // For hex formats, error precedence depends on the order of modifiers in the template
+            // Check modifiers in the order they appear to match Perl's error precedence
+            for (char modifier : modifierOrder.toCharArray()) {
+                if (modifier == '<') {
+                    throw new PerlCompilerException("'<' allowed only after types");
+                } else if (modifier == '>') {
+                    throw new PerlCompilerException("'>' allowed only after types");
+                } else if (modifier == '!') {
+                    throw new PerlCompilerException("'!' allowed only after types");
+                }
             }
         }
         
-        // Quad formats (q, Q) don't support native size modifier - based on test expectations
-        if (formatChar == 'q' || formatChar == 'Q') {
-            if (modifiers.nativeSize) {
-                throw new PerlCompilerException("'!' allowed only after types");
+        // Quad formats (q, Q) and intmax formats (j, J) don't support native size modifier (!) - based on test expectations
+        if (formatChar == 'q' || formatChar == 'Q' || formatChar == 'j' || formatChar == 'J') {
+            // For these formats, only reject the '!' modifier, endianness is allowed
+            // Check modifiers in the order they appear to match Perl's error precedence
+            for (char modifier : modifierOrder.toCharArray()) {
+                if (modifier == '!') {
+                    throw new PerlCompilerException("'!' allowed only after types");
+                }
+            }
+        }
+        
+        // Floating-point formats (f, F, d, D) don't support native size modifier (!) - based on test expectations
+        if (formatChar == 'f' || formatChar == 'F' || formatChar == 'd' || formatChar == 'D') {
+            // For these formats, only reject the '!' modifier, endianness is allowed
+            // Check modifiers in the order they appear to match Perl's error precedence
+            for (char modifier : modifierOrder.toCharArray()) {
+                if (modifier == '!') {
+                    throw new PerlCompilerException("'!' allowed only after types");
+                }
+            }
+        }
+        
+        // Pointer formats (p, P) don't support native size modifier (!) - based on test expectations
+        if (formatChar == 'p' || formatChar == 'P') {
+            // For these formats, only reject the '!' modifier, endianness is allowed
+            // Check modifiers in the order they appear to match Perl's error precedence
+            for (char modifier : modifierOrder.toCharArray()) {
+                if (modifier == '!') {
+                    throw new PerlCompilerException("'!' allowed only after types");
+                }
+            }
+        }
+        
+        // Network byte order formats (n, N, v, V) don't support endianness modifiers - based on test expectations
+        if (formatChar == 'n' || formatChar == 'N' || formatChar == 'v' || formatChar == 'V') {
+            // For these formats, reject endianness modifiers but allow '!' for signed variants
+            // Check modifiers in the order they appear to match Perl's error precedence
+            for (char modifier : modifierOrder.toCharArray()) {
+                if (modifier == '<') {
+                    throw new PerlCompilerException("'<' allowed only after types");
+                } else if (modifier == '>') {
+                    throw new PerlCompilerException("'>' allowed only after types");
+                }
             }
         }
     }
