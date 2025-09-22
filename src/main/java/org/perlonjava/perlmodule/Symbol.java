@@ -51,7 +51,7 @@ public class Symbol extends PerlModuleBase {
     public static RuntimeList gensym(RuntimeArray args, int ctx) {
         // Placeholder for gensym functionality
         // return new RuntimeScalar(new RuntimeGlob("GEN" + System.nanoTime())).getList();
-        throw new PerlCompilerException("not implemented");
+        throw new PerlJavaUnimplementedException("not implemented");
     }
 
     /**
@@ -95,7 +95,7 @@ public class Symbol extends PerlModuleBase {
     public static RuntimeList geniosym(RuntimeArray args, int ctx) {
         // Placeholder for geniosym functionality
         // return new RuntimeScalar(new RuntimeGlob("IO" + System.nanoTime())).getList();
-        throw new PerlCompilerException("not implemented");
+        throw new PerlJavaUnimplementedException("not implemented");
     }
 
     /**

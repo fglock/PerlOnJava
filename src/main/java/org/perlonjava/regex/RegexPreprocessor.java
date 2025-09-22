@@ -942,8 +942,8 @@ public class RegexPreprocessor {
             throw new PerlCompilerException("Invalid [] range");
         }
         
-        // 6. Very obvious nested quantifiers
-        if (s.equals("a**") || s.equals("a++") || s.equals("a??")) {
+        // 6. Very obvious nested quantifiers (but not possessive quantifiers like a++)
+        if (s.equals("a**")) {
             throw new PerlCompilerException("Nested quantifiers");
         }
     }
