@@ -3,6 +3,7 @@ package org.perlonjava.operators;
 import org.perlonjava.operators.pack.PackHelper;
 import org.perlonjava.operators.unpack.*;
 import org.perlonjava.runtime.*;
+import org.perlonjava.operators.FormatModifierValidator;
 
 import java.util.*;
 
@@ -159,10 +160,14 @@ public class Unpack {
 
             // Check for standalone modifiers that should only appear after valid format characters
             if (format == '<' || format == '>') {
-                throw new PerlCompilerException("'" + format + "' allowed only after types");
+                // For unpack, we need to provide a generic format character since we don't have context
+                // The tests expect "allowed only after types \S+ in unpack" format
+                throw new PerlCompilerException("'" + format + "' allowed only after types " + 
+                    FormatModifierValidator.getValidFormatsForModifier(FormatModifierValidator.Modifier.LITTLE_ENDIAN) + " in unpack");
             }
             if (format == '!') {
-                throw new PerlCompilerException("'!' allowed only after types");
+                throw new PerlCompilerException("'!' allowed only after types " + 
+                    FormatModifierValidator.getValidFormatsForModifier(FormatModifierValidator.Modifier.NATIVE_SIZE) + " in unpack");
             }
 
             // Handle '/' for counted strings
@@ -301,10 +306,10 @@ public class Unpack {
                 }
                 // Check for standalone modifiers that should only appear after valid format characters
                 if (format == '<' || format == '>') {
-                    throw new PerlCompilerException("'" + format + "' allowed only after types");
+                    throw new PerlCompilerException("'" + format + "' allowed only after types in unpack");
                 }
                 if (format == '!') {
-                    throw new PerlCompilerException("'!' allowed only after types");
+                    throw new PerlCompilerException("'!' allowed only after types in unpack");
                 }
                 throw new PerlCompilerException("unpack: unsupported format character: " + format);
             }

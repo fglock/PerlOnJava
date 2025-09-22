@@ -1,6 +1,10 @@
 package org.perlonjava.operators.unpack;
 
 import org.perlonjava.runtime.PerlCompilerException;
+import org.perlonjava.operators.pack.PackParser;
+import org.perlonjava.operators.FormatModifierValidator;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Parser utilities for unpack template processing.
@@ -25,6 +29,37 @@ public class UnpackParser {
     }
 
     /**
+     * Parse modifiers for unpack format character and validate them
+     * 
+     * @param template The template string
+     * @param position Current position in template (should point to format character)
+     * @return New position after parsing modifiers
+     */
+    public static int parseAndValidateModifiers(String template, int position) {
+        char formatChar = template.charAt(position);
+        List<Character> modifiers = new ArrayList<>();
+        int i = position;
+        
+        // Parse modifiers that follow the format character
+        while (i + 1 < template.length()) {
+            char modifier = template.charAt(i + 1);
+            if (modifier == '<' || modifier == '>' || modifier == '!') {
+                modifiers.add(modifier);
+                i++;
+            } else {
+                break;
+            }
+        }
+        
+        // Validate modifiers using centralized validator
+        if (!modifiers.isEmpty()) {
+            FormatModifierValidator.validateFormatModifiers(formatChar, modifiers, "unpack");
+        }
+        
+        return i;
+    }
+
+    /**
      * Parse repeat count from template at given position
      * Handles numeric counts, star notation, and bracket notation
      * 
@@ -37,17 +72,11 @@ public class UnpackParser {
         boolean isStarCount = false;
         int i = position;
 
-        // First, skip any modifiers (<, >, !) after the format character
+        // First, parse and validate any modifiers (<, >, !) after the format character
+        i = parseAndValidateModifiers(template, i);
+        
         boolean hasShriek = false;
-        while (i + 1 < template.length() &&
-                (template.charAt(i + 1) == '!' ||
-                        template.charAt(i + 1) == '<' ||
-                        template.charAt(i + 1) == '>')) {
-            if (template.charAt(i + 1) == '!') {
-                hasShriek = true;
-            }
-            i++; // Skip modifiers - for unpack, we ignore them for now
-        }
+        // Note: hasShriek is kept for compatibility, but validation is now handled above
 
         if (i + 1 < template.length()) {
             char nextChar = template.charAt(i + 1);
