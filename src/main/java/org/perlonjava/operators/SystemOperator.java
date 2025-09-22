@@ -128,81 +128,56 @@ public class SystemOperator {
             String userDir = System.getProperty("user.dir");
             processBuilder.directory(new File(userDir));
 
-            // CRITICAL FIX: Check if stderr is redirected to stdout (2>&1)
-            boolean stderrRedirected = command.contains("2>&1");
+            // CORRECT PERL BEHAVIOR: Handle streams according to Perl documentation
+            // - system(): Both stdout and stderr go to terminal
+            // - backticks: Only stdout is captured, stderr goes to terminal
             
-            if (stderrRedirected) {
-                // When stderr is redirected to stdout, merge the streams in ProcessBuilder
-                // This prevents the deadlock caused by trying to read from an empty stderr stream
-                processBuilder.redirectErrorStream(true);
+            // Always inherit stderr (goes to terminal in both cases)
+            processBuilder.redirectError(ProcessBuilder.Redirect.INHERIT);
+            
+            // Handle stdout based on operation type
+            if (!captureOutput) {
+                // For system(): stdout also goes to terminal
+                processBuilder.redirectOutput(ProcessBuilder.Redirect.INHERIT);
             }
+            // For backticks: stdout will be captured (default behavior)
             
-            // CRITICAL FIX: Handle stdin properly to prevent subprocess from waiting for input
-            // Check if stdin is redirected from /dev/null or if no stdin is expected
-            if (command.contains("</dev/null") || command.contains("<nul")) {
-                // Stdin is explicitly redirected to null - this is handled by the shell
-                // No additional action needed
-            } else {
-                // No explicit stdin redirection - close stdin to prevent subprocess from waiting
-                // This prevents the subprocess from hanging while waiting for stdin input
+            // Always redirect stdin from /dev/null to prevent subprocess blocking
+            // This prevents the subprocess from waiting for input that will never come
+            try {
                 processBuilder.redirectInput(ProcessBuilder.Redirect.from(new java.io.File("/dev/null")));
+            } catch (Exception e) {
+                // Fallback for systems where /dev/null might not be available
+                // This should be rare, but provides robustness
             }
 
             process = processBuilder.start();
 
             final Process finalProcess = process;
             final StringBuilder finalOutput = output;
-            final Object outputLock = new Object();
             
-            // Create thread for stdout reading
-            Thread stdoutThread = new Thread(() -> {
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(finalProcess.getInputStream()))) {
-                    String line;
-                    if (captureOutput) {
-                        // For backticks: capture stdout (includes stderr if redirected)
+            if (captureOutput) {
+                // For backticks: capture stdout only, stderr already goes to terminal
+                Thread stdoutThread = new Thread(() -> {
+                    try (BufferedReader reader = new BufferedReader(new InputStreamReader(finalProcess.getInputStream()))) {
+                        String line;
                         while ((line = reader.readLine()) != null) {
-                            synchronized (outputLock) {
+                            synchronized (finalOutput) {
                                 finalOutput.append(line).append("\n");
                             }
-                        }
-                    } else {
-                        // For system(): pipe stdout to terminal (includes stderr if redirected)
-                        while ((line = reader.readLine()) != null) {
-                            System.out.println(line);
-                        }
-                    }
-                } catch (IOException e) {
-                    // Stream closed - this is normal when process terminates
-                }
-            });
-
-            Thread stderrThread = null;
-            
-            if (!stderrRedirected) {
-                // Only create stderr thread if stderr is not redirected to stdout
-                stderrThread = new Thread(() -> {
-                    try (BufferedReader errorReader = new BufferedReader(new InputStreamReader(finalProcess.getErrorStream()))) {
-                        String line;
-                        while ((line = errorReader.readLine()) != null) {
-                            System.err.println(line);
                         }
                     } catch (IOException e) {
                         // Stream closed - this is normal when process terminates
                     }
                 });
-                stderrThread.start();
-            }
 
-            // Start stdout reading thread
-            stdoutThread.start();
-
-            // Wait for process to complete
-            exitCode = process.waitFor();
-
-            // Wait for stream reading threads to complete
-            stdoutThread.join();
-            if (stderrThread != null) {
-                stderrThread.join();
+                stdoutThread.start();
+                exitCode = process.waitFor();
+                stdoutThread.join();
+            } else {
+                // For system(): both stdout and stderr go to terminal (inherited)
+                // Just wait for process completion
+                exitCode = process.waitFor();
             }
         } catch (IOException e) {
             // Command failed to start - return -1 as per Perl spec
