@@ -884,4 +884,24 @@ public class RuntimeIO implements RuntimeScalarReference {
     public RuntimeScalar accept() {
         return ioHandle.accept();
     }
+
+    /**
+     * Duplicates a filehandle for <& and >& operations.
+     * 
+     * @param sourceHandle the source filehandle to duplicate
+     * @param mode the duplication mode ("<&" for read, ">&" for write)
+     * @return RuntimeIO handle that shares the same underlying resource, or null on error
+     */
+    public static RuntimeIO duplicateHandle(RuntimeIO sourceHandle, String mode) {
+        if (sourceHandle == null || sourceHandle.ioHandle == null) {
+            handleIOError("Cannot duplicate invalid filehandle");
+            return null;
+        }
+
+        // For now, return the original handle directly to avoid sharing issues
+        // This is a simplified implementation - in a full implementation,
+        // we would create a proper duplicate that shares the underlying file descriptor
+        // but has separate buffering and close semantics
+        return sourceHandle;
+    }
 }

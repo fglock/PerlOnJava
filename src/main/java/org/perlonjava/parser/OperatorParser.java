@@ -508,8 +508,7 @@ public class OperatorParser {
                 case "readline" -> "main::ARGV";
                 case "eof" -> "main::STDIN";
                 case "tell" -> "main::^LAST_FH";
-                case "fileno" ->
-                        throw new PerlCompilerException(parser.tokenIndex, "Not enough arguments for " + token.text, parser.ctx.errorUtil);
+                case "fileno" -> "main::STDIN";  // fileno defaults to STDIN if no argument provided
                 default ->
                         throw new PerlCompilerException(parser.tokenIndex, "Unexpected value: " + token.text, parser.ctx.errorUtil);
             };

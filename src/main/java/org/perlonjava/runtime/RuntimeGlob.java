@@ -79,6 +79,17 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 return value;
             case UNDEF:
                 return value;
+            case INTEGER:
+            case DOUBLE:
+            case STRING:
+            case BYTE_STRING:
+            case BOOLEAN:
+            case VSTRING:
+            case DUALVAR:
+                // Handle scalar value assignments to typeglobs
+                // This assigns the scalar value to the scalar slot of the typeglob
+                GlobalVariable.getGlobalVariable(this.globName).set(value);
+                return value;
         }
         throw new IllegalStateException("typeglob assignment not implemented for " + value.type);
     }

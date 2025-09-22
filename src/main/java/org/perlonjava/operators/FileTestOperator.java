@@ -1,6 +1,9 @@
 package org.perlonjava.operators;
 
 import org.perlonjava.io.ClosedIOHandle;
+import org.perlonjava.io.PipeInputChannel;
+import org.perlonjava.io.PipeOutputChannel;
+import org.perlonjava.io.ScalarBackedIO;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeIO;
 import org.perlonjava.runtime.RuntimeScalar;
@@ -90,6 +93,35 @@ public class FileTestOperator {
                 // Check if the file handle is a TTY
                 // For now, return false for all file handles as we don't have TTY detection
                 return scalarFalse;
+            }
+
+            // Special handling for -f operator on file handles
+            if (operator.equals("-f")) {
+                // For filehandles, -f should return true if it's a regular file
+                // Check if it's a pipe or special handle
+                if (fh.ioHandle instanceof PipeInputChannel || fh.ioHandle instanceof PipeOutputChannel) {
+                    // Pipes are not regular files
+                    getGlobalVariable("main::!").set(0); // Clear error
+                    return scalarFalse;
+                }
+                
+                // Check if it's a directory handle
+                if (fh.directoryIO != null) {
+                    // Directory handles are not regular files
+                    getGlobalVariable("main::!").set(0); // Clear error
+                    return scalarFalse;
+                }
+                
+                // Check if it's an in-memory scalar handle
+                if (fh.ioHandle instanceof ScalarBackedIO) {
+                    // In-memory scalar handles are not regular files
+                    getGlobalVariable("main::!").set(0); // Clear error
+                    return scalarFalse;
+                }
+                
+                // For most other filehandles (file I/O), assume it's a regular file
+                getGlobalVariable("main::!").set(0); // Clear error
+                return scalarTrue;
             }
 
             // For most other operators on file handles, return undef and set EBADF

@@ -6,6 +6,7 @@ import org.perlonjava.io.LayeredIOHandle;
 import org.perlonjava.io.ScalarBackedIO;
 import org.perlonjava.parser.StringParser;
 import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.PerlCompilerException;
 
 import java.io.File;
 import java.io.IOException;
@@ -205,8 +206,29 @@ public class IOOperator {
             // 3-argument open
             RuntimeScalar secondArg = args[2].scalar();
 
-            // Check if the second argument is a scalar reference (for in-memory operations)
-            if (secondArg.type == RuntimeScalarType.REFERENCE) {
+            // Check for filehandle duplication modes (<& and >&)
+            if (mode.equals("<&") || mode.equals(">&")) {
+                // Handle filehandle duplication
+                String argStr = secondArg.toString();
+                
+                // Check if it's a GLOB or GLOBREFERENCE
+                if (secondArg.type == RuntimeScalarType.GLOB || secondArg.type == RuntimeScalarType.GLOBREFERENCE) {
+                    try {
+                        RuntimeIO sourceHandle = secondArg.getRuntimeIO();
+                        if (sourceHandle != null && sourceHandle.ioHandle != null) {
+                            // For now, return the same handle (simplified duplication)
+                            fh = sourceHandle;
+                        } else {
+                            throw new PerlCompilerException("Bad filehandle: " + extractFilehandleName(argStr));
+                        }
+                    } catch (Exception ex) {
+                        throw new PerlCompilerException("Bad filehandle: " + extractFilehandleName(argStr));
+                    }
+                } else {
+                    // For non-GLOB types, provide proper "Bad filehandle" error messages
+                    throw new PerlCompilerException("Bad filehandle: " + extractFilehandleName(argStr));
+                }
+            } else if (secondArg.type == RuntimeScalarType.REFERENCE) {
                 // Open to in-memory scalar
                 fh = RuntimeIO.open(secondArg, mode);
             } else {
@@ -832,5 +854,25 @@ public class IOOperator {
             // Permission denied or other error
             return false;
         }
+    }
+
+    /**
+     * Extracts a clean filehandle name from a string representation.
+     * Removes prefixes like "*main::" and GLOB references for cleaner error messages.
+     */
+    private static String extractFilehandleName(String argStr) {
+        if (argStr == null) return "unknown";
+        
+        // Remove *main:: prefix if present
+        if (argStr.startsWith("*main::")) {
+            return argStr.substring(7);
+        }
+        
+        // Handle GLOB(0x...) format - extract just the reference part
+        if (argStr.startsWith("GLOB(") && argStr.endsWith(")")) {
+            return argStr; // Keep the GLOB reference as is for now
+        }
+        
+        return argStr;
     }
 }
