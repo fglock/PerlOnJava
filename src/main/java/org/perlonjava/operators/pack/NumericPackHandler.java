@@ -64,9 +64,41 @@ public class NumericPackHandler implements PackFormatHandler {
                     }
                     break;
                 case 'l':
-                    PackWriter.writeIntLittleEndian(output, (long) value.getDouble());
+                    // Signed long - use native size if specified
+                    if (modifiers.nativeSize) {
+                        // Native long (8 bytes on 64-bit systems)
+                        if (modifiers.bigEndian) {
+                            PackWriter.writeLongBigEndian(output, (long) value.getDouble());
+                        } else {
+                            PackWriter.writeLongLittleEndian(output, (long) value.getDouble());
+                        }
+                    } else {
+                        // Standard long (4 bytes)
+                        if (modifiers.bigEndian) {
+                            PackWriter.writeIntBigEndian(output, (long) value.getDouble());
+                        } else {
+                            PackWriter.writeIntLittleEndian(output, (long) value.getDouble());
+                        }
+                    }
                     break;
                 case 'L':
+                    // Unsigned long - use native size if specified
+                    if (modifiers.nativeSize) {
+                        // Native long (8 bytes on 64-bit systems)
+                        if (modifiers.bigEndian) {
+                            PackWriter.writeLongBigEndian(output, (long) value.getDouble());
+                        } else {
+                            PackWriter.writeLongLittleEndian(output, (long) value.getDouble());
+                        }
+                    } else {
+                        // Standard long (4 bytes)
+                        if (modifiers.bigEndian) {
+                            PackWriter.writeIntBigEndian(output, (long) value.getDouble());
+                        } else {
+                            PackWriter.writeIntLittleEndian(output, (long) value.getDouble());
+                        }
+                    }
+                    break;
                 case 'J':
                     PackWriter.writeLong(output, (long) value.getDouble());
                     break;

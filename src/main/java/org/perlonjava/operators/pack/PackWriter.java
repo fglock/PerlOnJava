@@ -212,7 +212,7 @@ public class PackWriter {
     }
 
     /**
-     * Writes a long integer to the output stream in little-endian order.
+     * Writes a long integer to the output stream in little-endian order (4 bytes).
      *
      * @param output The ByteArrayOutputStream to write to.
      * @param value  The long value to write.
@@ -222,6 +222,40 @@ public class PackWriter {
         output.write((int) ((value >> 8) & 0xFF));
         output.write((int) ((value >> 16) & 0xFF));
         output.write((int) ((value >> 24) & 0xFF));
+    }
+
+    /**
+     * Writes a 64-bit long integer to the output stream in little-endian order (8 bytes).
+     *
+     * @param output The ByteArrayOutputStream to write to.
+     * @param value  The long value to write.
+     */
+    public static void writeLongLittleEndian(ByteArrayOutputStream output, long value) {
+        output.write((int) (value & 0xFF));
+        output.write((int) ((value >> 8) & 0xFF));
+        output.write((int) ((value >> 16) & 0xFF));
+        output.write((int) ((value >> 24) & 0xFF));
+        output.write((int) ((value >> 32) & 0xFF));
+        output.write((int) ((value >> 40) & 0xFF));
+        output.write((int) ((value >> 48) & 0xFF));
+        output.write((int) ((value >> 56) & 0xFF));
+    }
+
+    /**
+     * Writes a 64-bit long integer to the output stream in big-endian order (8 bytes).
+     *
+     * @param output The ByteArrayOutputStream to write to.
+     * @param value  The long value to write.
+     */
+    public static void writeLongBigEndian(ByteArrayOutputStream output, long value) {
+        output.write((int) ((value >> 56) & 0xFF));
+        output.write((int) ((value >> 48) & 0xFF));
+        output.write((int) ((value >> 40) & 0xFF));
+        output.write((int) ((value >> 32) & 0xFF));
+        output.write((int) ((value >> 24) & 0xFF));
+        output.write((int) ((value >> 16) & 0xFF));
+        output.write((int) ((value >> 8) & 0xFF));
+        output.write((int) (value & 0xFF));
     }
 
     /**

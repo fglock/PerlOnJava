@@ -248,6 +248,9 @@ public class Unpack {
                         // .! means byte offset instead of character offset
                         handler = new DotShriekFormatHandler();
                     }
+                } else if ((format == 'l' || format == 'L') && hasShriek) {
+                    // Special handling for 'l!' and 'L!' - native size (8 bytes)
+                    handler = new NativeLongFormatHandler(format == 'l');
                 }
                 // For 'p' format, check and consume endianness modifiers
                 if (format == 'p' && i + 1 < template.length()) {
@@ -260,11 +263,36 @@ public class Unpack {
                 }
 
                 if (isChecksum) {
-                    // Handle checksum calculation
+                    // Handle checksum calculation - process ALL remaining data
                     List<RuntimeBase> tempValues = new ArrayList<>();
-                    handler.unpack(state, tempValues, count, isStarCount);
+                    
+                    // For checksums, we need to ensure we use the correct handler
+                    // especially for native size formats like l! and L!
+                    FormatHandler checksumHandler = handler;
+                    if ((format == 'l' || format == 'L') && hasShriek) {
+                        // Force use of NativeLongFormatHandler for checksum calculation
+                        checksumHandler = new NativeLongFormatHandler(format == 'l');
+                    }
+                    
+                    // For checksums, we need to consume ALL remaining data in the buffer
+                    // The count and star flag are ignored - we process everything
+                    int remainingBytes = state.remainingBytes();
+                    
+                    // Check if this format has native size modifier
+                    boolean hasNativeSize = (format == 'l' || format == 'L') && hasShriek;
+                    
+                    int formatSize = getFormatSize(format, hasNativeSize);
+                    
+                    if (formatSize > 0) {
+                        int remainingCount = remainingBytes / formatSize;
+                        // Process all remaining values of this format using the correct handler
+                        checksumHandler.unpack(state, tempValues, remainingCount, false);
+                    } else {
+                        // For variable-size formats, process what we can
+                        checksumHandler.unpack(state, tempValues, count, isStarCount);
+                    }
 
-                    // Calculate checksum based on format
+                    // Calculate checksum based on format (accumulate without masking like Perl)
                     long checksum = 0;
                     if (format == 'b' || format == 'B') {
                         // For binary formats, count 1 bits
@@ -279,15 +307,14 @@ public class Unpack {
                     } else {
                         // For other formats, sum the numeric values
                         for (RuntimeBase value : tempValues) {
-                            checksum += ((RuntimeScalar) value).getInt();
+                            checksum += ((RuntimeScalar) value).getLong();
                         }
                     }
 
-                    // Apply bit mask based on checksumBits
-                    if (checksumBits == 16) {
-                        checksum &= 0xFFFF;
-                    } else if (checksumBits == 32) {
-                        checksum &= 0xFFFFFFFFL;
+                    // Apply bit mask at the very end like Perl (not during accumulation)
+                    if (checksumBits > 0 && checksumBits < 64) {
+                        long mask = (1L << checksumBits) - 1;
+                        checksum &= mask;
                     }
 
                     // For 32-bit checksums that would be negative as int, convert to long
@@ -331,6 +358,29 @@ public class Unpack {
         return handlers.get(format);
     }
 
-
+    /**
+     * Get the byte size of a format character for checksum calculations
+     * @param format The format character
+     * @param hasNativeSize Whether the format has native size modifier (!)
+     * @return The size in bytes, or 0 for variable-size formats
+     */
+    private static int getFormatSize(char format, boolean hasNativeSize) {
+        switch (format) {
+            case 'c': case 'C': case 'x': case 'X': case 'a': case 'A': case 'Z':
+                return 1;
+            case 's': case 'S': case 'n': case 'v':
+                return 2;
+            case 'i': case 'I': case 'f': case 'N': case 'V':
+                return 4;
+            case 'l': case 'L':
+                return hasNativeSize ? 8 : 4; // Native long is 8 bytes, regular long is 4
+            case 'q': case 'Q': case 'd': case 'j': case 'J':
+                return 8;
+            case 'w': case 'u': case 'U': case 'p': case 'P': case 'b': case 'B': case 'h': case 'H':
+                return 0; // Variable size
+            default:
+                return 0; // Unknown or variable size
+        }
+    }
 
 }

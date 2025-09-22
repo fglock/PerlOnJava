@@ -125,17 +125,17 @@ public class FormatModifierValidator {
      * @throws PerlCompilerException if validation fails
      */
     public static void validateFormatModifiers(char formatChar, List<Character> modifiers, String context) {
-        ValidationRule rule = VALIDATION_TABLE.get(formatChar);
-        if (rule == null) {
-            // No specific validation rule - allow all modifiers for this format
-            return;
-        }
-        
-        // Check for conflicting endianness modifiers
+        // Check for conflicting endianness modifiers FIRST (applies to all formats)
         boolean hasLittleEndian = modifiers.contains('<');
         boolean hasBigEndian = modifiers.contains('>');
         if (hasLittleEndian && hasBigEndian) {
             throw new PerlCompilerException("Can't use both '<' and '>' after type '" + formatChar + "' in " + context);
+        }
+        
+        ValidationRule rule = VALIDATION_TABLE.get(formatChar);
+        if (rule == null) {
+            // No specific validation rule - allow all modifiers for this format
+            return;
         }
         
         // Validate each modifier in order (for proper error precedence)
