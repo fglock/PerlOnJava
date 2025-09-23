@@ -263,8 +263,12 @@ public class Unpack {
                 }
 
                 if (isChecksum) {
-                    // Handle checksum calculation - process ALL remaining data
-                    List<RuntimeBase> tempValues = new ArrayList<>();
+                    // Special case: 'u' format checksums always return 0 in Perl
+                    if (format == 'u') {
+                        values.add(new RuntimeScalar(0));
+                    } else {
+                        // Handle checksum calculation - process ALL remaining data
+                        List<RuntimeBase> tempValues = new ArrayList<>();
                     
                     // For checksums, we need to ensure we use the correct handler
                     // especially for native size formats like l! and L!
@@ -322,6 +326,7 @@ public class Unpack {
                         values.add(new RuntimeScalar(checksum));
                     } else {
                         values.add(new RuntimeScalar((int) checksum));
+                    }
                     }
                 } else {
                     handler.unpack(state, values, count, isStarCount);

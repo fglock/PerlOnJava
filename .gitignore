@@ -27,3 +27,10 @@ t/
 !t/README.md
 !t/test.pl
 
+# Ignore temporary analysis and debug files
+*_failures.txt
+debug_*.pl
+pack_test_*.log
+out.json
+logs/
+
