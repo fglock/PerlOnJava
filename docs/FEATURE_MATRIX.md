@@ -378,6 +378,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **`system` operator**: `system` is implemented.
 - ✅  **`exec` operator**: `exec` is implemented.
 - ✅  **User/Group operators, Network info operators**: `getlogin`, `getpwnam`, `getpwuid`, `getgrnam`, `getgrgid`, `getpwent`, `getgrent`, `setpwent`, `setgrent`, `endpwent`, `endgrent`, `gethostbyname`, `gethostbyaddr`, `getservbyname`, `getservbyport`, `getprotobyname`, `getprotobynumber`.
+- ✅  **`format` operator**: `format` and `write` functions for report generation are implemented.
 
 ## I/O Operations
 
@@ -620,7 +621,6 @@ The DBI module provides seamless integration with JDBC drivers:
 
 
 ## Non-strict and Obsolete Features
-- ❌  **`format` operator**: `format` and `write` functions for report generation are not implemented.
 - ❌  **DBM file support**: `dbmclose`, `dbmopen` are not implemented.
 - ❌  **Calling a class name** `package Test; Test->()` gives `Undefined subroutine &Test::Test called`.
 

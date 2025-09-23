@@ -92,10 +92,10 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 return value;
             case FORMAT:
                 // Handle format assignments to typeglobs
+                // Share the same format reference instead of copying content
                 if (value.value instanceof RuntimeFormat) {
                     RuntimeFormat sourceFormat = (RuntimeFormat) value.value;
-                    RuntimeFormat targetFormat = GlobalVariable.getGlobalFormatRef(this.globName);
-                    targetFormat.setTemplate(sourceFormat.getTemplate());
+                    GlobalVariable.setGlobalFormatRef(this.globName, sourceFormat);
                 }
                 return value;
         }
@@ -134,10 +134,10 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         this.set(GlobalVariable.getGlobalVariable(globName).createReference());
 
         // Set the current scalar to the global format reference associated with the glob name.
+        // Share the same format reference instead of copying content
         RuntimeFormat sourceFormat = GlobalVariable.getGlobalFormatRef(globName);
-        RuntimeFormat targetFormat = GlobalVariable.getGlobalFormatRef(this.globName);
         if (sourceFormat.isFormatDefined()) {
-            targetFormat.setTemplate(sourceFormat.getTemplate());
+            GlobalVariable.setGlobalFormatRef(this.globName, sourceFormat);
         }
 
         // Return the scalar value associated with the provided RuntimeGlob.

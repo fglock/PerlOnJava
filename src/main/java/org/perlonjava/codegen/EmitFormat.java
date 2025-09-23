@@ -25,27 +25,10 @@ public class EmitFormat {
         
         ctx.logDebug("FORMAT start: " + node.formatName);
 
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            return;
-        }
+        // Always generate format bytecode, even in VOID context
+        // The side effect of storing the format is important
 
-        // Create a new RuntimeFormat instance
-        // new RuntimeFormat(formatName)
-        mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeFormat");
-        mv.visitInsn(Opcodes.DUP);
-        
-        // Push format name as string
-        mv.visitLdcInsn(node.formatName);
-        
-        // Call RuntimeFormat constructor
-        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeFormat", 
-                          "<init>", "(Ljava/lang/String;)V", false);
-
-        // Set the compiled format lines
-        // format.setCompiledLines(templateLines)
-        mv.visitInsn(Opcodes.DUP); // Duplicate RuntimeFormat reference
-        
-        // Create ArrayList for template lines
+        // Create ArrayList for template lines first
         mv.visitTypeInsn(Opcodes.NEW, "java/util/ArrayList");
         mv.visitInsn(Opcodes.DUP);
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/util/ArrayList", "<init>", "()V", false);
@@ -63,13 +46,14 @@ public class EmitFormat {
             mv.visitInsn(Opcodes.POP); // Pop the boolean return value
         }
         
-        // Store the format directly in the global format table
-        // Get the global format reference first
+        // Now get the global format reference and call setCompiledLines on it
+        // Format name is already normalized by FormatParser using NameNormalizer
+        // GlobalVariable.getGlobalFormatRef(formatName)
         mv.visitLdcInsn(node.formatName);
         mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/GlobalVariable", 
                           "getGlobalFormatRef", "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeFormat;", false);
         
-        // Swap so we have: [globalFormatRef, compiledFormatLines]
+        // Swap so we have: [formatRef, compiledLines]
         mv.visitInsn(Opcodes.SWAP);
         
         // Call setCompiledLines on the global format reference

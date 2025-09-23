@@ -98,6 +98,7 @@ public class ScalarUtil extends PerlModuleBase {
             case HASHREFERENCE -> "HASH";
             case CODE -> "CODE";
             case GLOB -> "GLOB";
+            case FORMAT -> "FORMAT";
             default -> "";
         };
         return new RuntimeScalar(type).getList();

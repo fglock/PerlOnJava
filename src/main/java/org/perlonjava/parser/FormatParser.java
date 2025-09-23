@@ -3,6 +3,7 @@ package org.perlonjava.parser;
 import org.perlonjava.astnode.*;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
+import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.PerlCompilerException;
 
 import java.util.ArrayList;
@@ -40,6 +41,10 @@ public class FormatParser {
         if (formatName == null || formatName.isEmpty()) {
             formatName = "STDOUT";
         }
+        
+        // Normalize format name to fully qualified name for consistent storage
+        // This ensures EmitFormat and typeglob access use the same key
+        formatName = NameNormalizer.normalizeVariableName(formatName, parser.ctx.symbolTable.getCurrentPackage());
         
         parser.ctx.logDebug("Parsing format declaration: " + formatName);
         
