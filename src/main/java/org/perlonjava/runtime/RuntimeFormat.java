@@ -6,6 +6,7 @@ import java.util.Iterator;
 import java.util.List;
 
 import static org.perlonjava.runtime.RuntimeScalarType.*;
+import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 
 /**
  * Represents a runtime format in Perl. Formats are used with the write() function
@@ -69,8 +70,11 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
     public RuntimeFormat setTemplate(String template) {
         this.formatTemplate = template;
         this.isDefined = true;
-        this.isCompiled = false; // Reset compilation status
-        this.compiledLines = null;
+        // Only reset compilation status if we don't already have compiled lines
+        if (this.compiledLines == null || this.compiledLines.isEmpty()) {
+            this.isCompiled = false;
+            this.compiledLines = null;
+        }
         return this;
     }
 
@@ -324,16 +328,22 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
 
                 // Execute the picture line with arguments
                 String formattedLine = executePictureLine(pictureLine, argLine, argList, argIndex);
-                output.append(formattedLine).append("\n");
+                output.append(formattedLine);
+                if (i < compiledLines.size() - 1) {
+                    output.append("\n");
+                }
 
                 // Update argument index based on fields used
                 if (argLine != null) {
                     argIndex += argLine.expressions.size();
                 }
-            } else if (line instanceof ArgumentLine) {
-                // Standalone argument line (shouldn't happen in well-formed formats)
-                // Skip it as it should be processed with its picture line
-                continue;
+            } else if (line instanceof ArgumentLine argLine) {
+                // Standalone argument line - treat as literal text for now
+                // This handles simple text lines that were incorrectly classified
+                output.append(line.content);
+                if (i < compiledLines.size() - 1) {
+                    output.append("\n");
+                }
             }
         }
 
@@ -360,13 +370,19 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
             return template;
         }
 
-        // Get argument values for this line
+        // Get argument values for this line by evaluating expressions
         List<RuntimeScalar> lineArgs = new ArrayList<>();
         if (argLine != null && !argLine.expressions.isEmpty()) {
-            // For now, use the provided arguments directly
-            // In a full implementation, we would evaluate the expressions
-            for (int i = 0; i < argLine.expressions.size() && startIndex + i < args.size(); i++) {
-                lineArgs.add(args.get(startIndex + i));
+            // Evaluate each expression in the argument line to get actual values
+            for (Node expression : argLine.expressions) {
+                try {
+                    // Evaluate the expression node to get its runtime value
+                    RuntimeScalar value = evaluateExpression(expression);
+                    lineArgs.add(value);
+                } catch (Exception e) {
+                    // If evaluation fails, use a placeholder
+                    lineArgs.add(new RuntimeScalar("<eval_error>"));
+                }
             }
         }
 
@@ -400,6 +416,68 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
         }
 
         return result.toString();
+    }
+
+    /**
+     * Evaluate an expression node to get its runtime value.
+     * This is a simplified implementation that handles basic variable access.
+     */
+    private RuntimeScalar evaluateExpression(Node expression) {
+        if (expression instanceof StringNode stringNode) {
+            // Handle the case where expressions are stored as StringNode with serialized AST data
+            // This is a workaround for the parsing issue in FormatParser.parseArgumentExpressions()
+            String content = stringNode.value;
+            
+            // Parse simple variable expressions from the serialized AST data
+            if (content.contains("OperatorNode: $") && content.contains("IdentifierNode:")) {
+                // Extract variable name from serialized AST: "OperatorNode: $  pos:3\nIdentifierNode: 'name'"
+                String[] lines = content.split("\\n");
+                for (String line : lines) {
+                    if (line.trim().startsWith("IdentifierNode:")) {
+                        // Extract variable name: "IdentifierNode: 'name'" -> "name"
+                        String varName = line.substring(line.indexOf("'") + 1, line.lastIndexOf("'"));
+                        String fullName = "main::" + varName;
+                        RuntimeScalar result = getGlobalVariable(fullName).scalar();
+                        return result;
+                    }
+                }
+            }
+            
+            // If we can't parse it, return the raw content as a fallback
+            return new RuntimeScalar(content);
+        } else if (expression instanceof OperatorNode opNode) {
+            // Handle variable access operators like $ (scalar dereference)
+            if ("$".equals(opNode.operator) && opNode.operand != null) {
+                if (opNode.operand instanceof IdentifierNode idNode) {
+                    String varName = idNode.name;
+                    String fullName = "main::" + varName;
+                    RuntimeScalar result = getGlobalVariable(fullName).scalar();
+                    return result;
+                }
+            }
+        } else if (expression instanceof IdentifierNode idNode) {
+            // Handle variable access like $name, $version
+            String varName = idNode.name;
+            
+            // Variables in Perl start with sigils ($, @, %)
+            // For format expressions, we're typically dealing with scalars ($)
+            if (varName.startsWith("$")) {
+                // Remove the $ sigil and normalize the variable name
+                String cleanName = varName.substring(1);
+                if (!cleanName.contains("::")) {
+                    cleanName = "main::" + cleanName;
+                }
+                RuntimeScalar result = getGlobalVariable(cleanName).scalar();
+                return result;
+            } else {
+                // Handle bare identifiers as scalar variables
+                String fullName = "main::" + varName;
+                return getGlobalVariable(fullName).scalar();
+            }
+        }
+        
+        // For unsupported expression types, return a placeholder
+        return new RuntimeScalar("<unsupported_expr>");
     }
 
     /**

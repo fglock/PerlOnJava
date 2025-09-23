@@ -879,35 +879,42 @@ public class IOOperator {
      * @return A RuntimeScalar indicating success (1) or failure (0)
      */
     public static RuntimeScalar write(int ctx, RuntimeBase... args) {
-        RuntimeScalar fileHandle;
+        String formatName;
+        RuntimeIO fh = RuntimeIO.stdout; // Default output handle
         
         if (args.length == 0) {
-            // No filehandle specified, use currently selected handle
-            fileHandle = new RuntimeScalar(RuntimeIO.selectedHandle);
-        } else {
-            fileHandle = args[0].scalar();
-        }
-        
-        RuntimeIO fh = fileHandle.getRuntimeIO();
-        
-        if (fh == null) {
-            getGlobalVariable("main::!").set("Bad file descriptor");
-            return scalarFalse;
-        }
-        
-        // Determine the format name
-        String formatName;
-        if (fh == RuntimeIO.stdout) {
+            // No arguments: write() - use STDOUT format to STDOUT handle
             formatName = "STDOUT";
-        } else if (fh == RuntimeIO.stderr) {
-            formatName = "STDERR";
-        } else if (fh == RuntimeIO.stdin) {
-            formatName = "STDIN";
         } else {
-            // For other filehandles, try to determine name from global variables
-            // This is a simplified approach - in a full implementation we'd need
-            // to reverse-lookup the filehandle name from the global symbol table
-            formatName = "STDOUT"; // Default fallback
+            // One argument: write FORMAT_NAME - use named format to STDOUT handle
+            RuntimeScalar arg = args[0].scalar();
+            
+            // Check if argument is a glob reference (which contains the format name)
+            if (arg.type == RuntimeScalarType.GLOBREFERENCE && arg.value instanceof RuntimeGlob) {
+                RuntimeGlob glob = (RuntimeGlob) arg.value;
+                formatName = glob.globName;
+            } else {
+                // Check if argument is a filehandle or format name
+                RuntimeIO argFh = arg.getRuntimeIO();
+                if (argFh != null) {
+                    // Argument is a filehandle - determine format name from handle
+                    fh = argFh;
+                    if (fh == RuntimeIO.stdout) {
+                        formatName = "STDOUT";
+                    } else if (fh == RuntimeIO.stderr) {
+                        formatName = "STDERR";
+                    } else if (fh == RuntimeIO.stdin) {
+                        formatName = "STDIN";
+                    } else {
+                        formatName = "STDOUT"; // Default fallback
+                    }
+                } else {
+                    // Argument is a format name string (most common case)
+                    formatName = arg.toString();
+                    // Normalize the format name
+                    formatName = NameNormalizer.normalizeVariableName(formatName, "main");
+                }
+            }
         }
         
         // Look up the format
@@ -915,18 +922,21 @@ public class IOOperator {
         
         if (format == null || !format.isFormatDefined()) {
             // Format not found or not defined
-            getGlobalVariable("main::!").set("Undefined format \"" + formatName + "\" called");
-            return scalarFalse;
+            String errorMsg = "Undefined format \"" + formatName + "\" called";
+            getGlobalVariable("main::!").set(errorMsg);
+            throw new RuntimeException(errorMsg);
         }
         
         try {
-            // Execute the format with empty arguments for now
+            // Execute the format with arguments from current scope
+            // For now, we'll pass empty arguments and let the format execution handle variable lookup
             // In a full implementation, this would collect format variables from the current scope
             RuntimeList formatArgs = new RuntimeList();
             
             // TODO: Collect format variables from current scope
             // This would involve scanning for variables referenced in the format's argument lines
-            // and collecting their current values
+            // and collecting their current values from the symbol table
+            // For now, the format execution will need to handle variable lookup internally
             
             String formattedOutput = format.execute(formatArgs);
             

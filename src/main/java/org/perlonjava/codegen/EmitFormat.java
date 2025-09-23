@@ -2,6 +2,7 @@ package org.perlonjava.codegen;
 
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
+import org.perlonjava.astnode.FormatLine;
 import org.perlonjava.astnode.FormatNode;
 import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.runtime.RuntimeContextType;
@@ -46,13 +47,29 @@ public class EmitFormat {
             mv.visitInsn(Opcodes.POP); // Pop the boolean return value
         }
         
-        // Now get the global format reference and call setCompiledLines on it
+        // Now get the global format reference and set both template and compiled lines
         // Format name is already normalized by FormatParser using NameNormalizer
         // GlobalVariable.getGlobalFormatRef(formatName)
         mv.visitLdcInsn(node.formatName);
         mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/GlobalVariable", 
                           "getGlobalFormatRef", "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeFormat;", false);
         
+        // Duplicate the format reference for the second method call
+        mv.visitInsn(Opcodes.DUP);
+        
+        // Set the template string first
+        // Reconstruct template from format lines
+        StringBuilder templateBuilder = new StringBuilder();
+        for (FormatLine line : node.templateLines) {
+            templateBuilder.append(line.content).append("\n");
+        }
+        String template = templateBuilder.toString();
+        mv.visitLdcInsn(template);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeFormat", 
+                          "setTemplate", "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeFormat;", false);
+        mv.visitInsn(Opcodes.POP); // Pop the result
+        
+        // Now set the compiled lines
         // Swap so we have: [formatRef, compiledLines]
         mv.visitInsn(Opcodes.SWAP);
         
