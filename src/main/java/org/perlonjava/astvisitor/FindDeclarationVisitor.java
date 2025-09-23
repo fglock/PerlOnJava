@@ -9,6 +9,16 @@ import org.perlonjava.astnode.*;
  * and by EmitLogicalOperator for handling variable declarations in logical operations.
  */
 public class FindDeclarationVisitor implements Visitor {
+
+    @Override
+    public void visit(FormatLine node) {
+        // Default implementation - no action needed for format lines
+    }
+
+    @Override
+    public void visit(FormatNode node) {
+        // Default implementation - no action needed for format nodes
+    }
     /**
      * Tracks whether the target operator has been found
      */

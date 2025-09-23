@@ -1,6 +1,9 @@
 package org.perlonjava.runtime;
 
+import org.perlonjava.astnode.*;
+import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 
 import static org.perlonjava.runtime.RuntimeScalarType.*;
 
@@ -19,6 +22,12 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
     
     // Whether this format is defined
     private boolean isDefined;
+    
+    // Compiled format lines for execution
+    private List<FormatLine> compiledLines;
+    
+    // Whether the format has been compiled
+    private boolean isCompiled = false;
 
     /**
      * Constructor for RuntimeFormat.
@@ -59,6 +68,22 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
      */
     public RuntimeFormat setTemplate(String template) {
         this.formatTemplate = template;
+        this.isDefined = true;
+        this.isCompiled = false; // Reset compilation status
+        this.compiledLines = null;
+        return this;
+    }
+
+    /**
+     * Sets the compiled format lines directly.
+     * This is used when the format is created from parsed AST nodes.
+     *
+     * @param lines The compiled format lines.
+     * @return This RuntimeFormat instance.
+     */
+    public RuntimeFormat setCompiledLines(List<FormatLine> lines) {
+        this.compiledLines = new ArrayList<>(lines);
+        this.isCompiled = true;
         this.isDefined = true;
         return this;
     }
@@ -252,5 +277,251 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
     @Override
     public void dynamicRestoreState() {
         // Format state is immutable once created, no need to restore state
+    }
+
+    /**
+     * Executes the format with the given arguments and returns the formatted output.
+     * This is the main method for format execution, similar to Perl's write() function.
+     *
+     * @param args The arguments to use for format field values
+     * @return The formatted output as a string
+     */
+    public String execute(RuntimeList args) {
+        if (!isDefined) {
+            throw new RuntimeException("Undefined format: " + formatName);
+        }
+
+        // Ensure format is compiled
+        if (!isCompiled) {
+            compileFormat();
+        }
+
+        if (compiledLines == null || compiledLines.isEmpty()) {
+            return "";
+        }
+
+        StringBuilder output = new StringBuilder();
+        List<RuntimeScalar> argList = new ArrayList<>();
+        for (RuntimeBase element : args.elements) {
+            argList.add(element.scalar());
+        }
+        int argIndex = 0;
+
+        // Process format lines in pairs (picture line + argument line)
+        for (int i = 0; i < compiledLines.size(); i++) {
+            FormatLine line = compiledLines.get(i);
+
+            if (line instanceof CommentLine) {
+                // Skip comment lines
+                continue;
+            } else if (line instanceof PictureLine pictureLine) {
+                // Look for the corresponding argument line
+                ArgumentLine argLine = null;
+                if (i + 1 < compiledLines.size() && compiledLines.get(i + 1) instanceof ArgumentLine) {
+                    argLine = (ArgumentLine) compiledLines.get(i + 1);
+                    i++; // Skip the argument line in the next iteration
+                }
+
+                // Execute the picture line with arguments
+                String formattedLine = executePictureLine(pictureLine, argLine, argList, argIndex);
+                output.append(formattedLine).append("\n");
+
+                // Update argument index based on fields used
+                if (argLine != null) {
+                    argIndex += argLine.expressions.size();
+                }
+            } else if (line instanceof ArgumentLine) {
+                // Standalone argument line (shouldn't happen in well-formed formats)
+                // Skip it as it should be processed with its picture line
+                continue;
+            }
+        }
+
+        return output.toString();
+    }
+
+    /**
+     * Execute a picture line with its corresponding argument line.
+     *
+     * @param pictureLine The picture line containing format fields
+     * @param argLine The argument line containing expressions (may be null)
+     * @param args The list of all arguments
+     * @param startIndex The starting index in the argument list
+     * @return The formatted line
+     */
+    private String executePictureLine(PictureLine pictureLine, ArgumentLine argLine, 
+                                     List<RuntimeScalar> args, int startIndex) {
+        StringBuilder result = new StringBuilder();
+        String template = pictureLine.content;
+        List<FormatField> fields = pictureLine.fields;
+
+        if (fields.isEmpty()) {
+            // No fields, just return the literal text
+            return template;
+        }
+
+        // Get argument values for this line
+        List<RuntimeScalar> lineArgs = new ArrayList<>();
+        if (argLine != null && !argLine.expressions.isEmpty()) {
+            // For now, use the provided arguments directly
+            // In a full implementation, we would evaluate the expressions
+            for (int i = 0; i < argLine.expressions.size() && startIndex + i < args.size(); i++) {
+                lineArgs.add(args.get(startIndex + i));
+            }
+        }
+
+        // Process each field in the picture line
+        int lastPos = 0;
+        int argIdx = 0;
+
+        for (FormatField field : fields) {
+            // Add literal text before this field
+            if (field.startPosition > lastPos) {
+                result.append(template, lastPos, field.startPosition);
+            }
+
+            // Get the argument value for this field
+            Object fieldValue = null;
+            if (argIdx < lineArgs.size()) {
+                fieldValue = lineArgs.get(argIdx).toString();
+                argIdx++;
+            }
+
+            // Format the field value
+            String formattedValue = field.formatValue(fieldValue);
+            result.append(formattedValue);
+
+            lastPos = field.startPosition + field.width;
+        }
+
+        // Add any remaining literal text
+        if (lastPos < template.length()) {
+            result.append(template.substring(lastPos));
+        }
+
+        return result.toString();
+    }
+
+    /**
+     * Compile the format template into executable format lines.
+     * This is a simplified version that parses the template string.
+     */
+    private void compileFormat() {
+        if (formatTemplate == null || formatTemplate.isEmpty()) {
+            compiledLines = new ArrayList<>();
+            isCompiled = true;
+            return;
+        }
+
+        // For now, this is a basic implementation
+        // In a full implementation, this would use the FormatParser
+        compiledLines = new ArrayList<>();
+        String[] lines = formatTemplate.split("\n");
+
+        for (String line : lines) {
+            if (line.trim().startsWith("#")) {
+                // Comment line
+                String comment = line.trim().substring(1).trim();
+                compiledLines.add(new CommentLine(line, comment, 0));
+            } else if (containsFormatFields(line)) {
+                // Picture line - parse format fields
+                List<FormatField> fields = parseFormatFields(line);
+                String literalText = extractLiteralText(line);
+                compiledLines.add(new PictureLine(line, fields, literalText, 0));
+            } else if (!line.trim().isEmpty()) {
+                // Argument line - create simple expressions
+                List<Node> expressions = new ArrayList<>();
+                expressions.add(new StringNode(line.trim(), 0));
+                compiledLines.add(new ArgumentLine(line, expressions, 0));
+            }
+        }
+
+        isCompiled = true;
+    }
+
+    /**
+     * Check if a line contains format field definitions.
+     */
+    private boolean containsFormatFields(String line) {
+        return line.matches(".*[@^][<>|#*]+.*");
+    }
+
+    /**
+     * Parse format fields from a picture line (simplified version).
+     */
+    private List<FormatField> parseFormatFields(String line) {
+        List<FormatField> fields = new ArrayList<>();
+        // This is a simplified implementation
+        // In practice, this would use the full FormatParser logic
+        
+        for (int i = 0; i < line.length(); i++) {
+            char c = line.charAt(i);
+            if (c == '@' || c == '^') {
+                boolean isSpecial = (c == '^');
+                int start = i + 1;
+                int width = 0;
+                
+                // Count field characters
+                while (start + width < line.length()) {
+                    char fieldChar = line.charAt(start + width);
+                    if (fieldChar == '<' || fieldChar == '>' || fieldChar == '|' || 
+                        fieldChar == '#' || fieldChar == '*') {
+                        width++;
+                    } else {
+                        break;
+                    }
+                }
+                
+                if (width > 0) {
+                    String fieldSpec = line.substring(start, start + width);
+                    FormatField field = createFormatField(fieldSpec, i, isSpecial);
+                    if (field != null) {
+                        fields.add(field);
+                    }
+                    i = start + width - 1; // Skip processed characters
+                }
+            }
+        }
+        
+        return fields;
+    }
+
+    /**
+     * Create a FormatField based on field specification (simplified version).
+     */
+    private FormatField createFormatField(String fieldSpec, int startPos, boolean isSpecialField) {
+        int width = fieldSpec.length();
+        
+        // Multiline fields
+        if (fieldSpec.equals("*")) {
+            MultilineFormatField.MultilineType type = isSpecialField ? 
+                MultilineFormatField.MultilineType.FILL_MODE : 
+                MultilineFormatField.MultilineType.CONSUME_ALL;
+            return new MultilineFormatField(width, startPos, isSpecialField, type);
+        }
+        
+        // Text fields with justification
+        if (fieldSpec.matches("<+")) {
+            return new TextFormatField(width, startPos, isSpecialField, TextFormatField.Justification.LEFT);
+        } else if (fieldSpec.matches(">+")) {
+            return new TextFormatField(width, startPos, isSpecialField, TextFormatField.Justification.RIGHT);
+        } else if (fieldSpec.matches("\\|+")) {
+            return new TextFormatField(width, startPos, isSpecialField, TextFormatField.Justification.CENTER);
+        }
+        
+        // Numeric fields
+        if (fieldSpec.matches("#+")) {
+            return new NumericFormatField(width, startPos, isSpecialField, width, 0);
+        }
+        
+        // Default to left-justified text field
+        return new TextFormatField(width, startPos, isSpecialField, TextFormatField.Justification.LEFT);
+    }
+
+    /**
+     * Extract literal text from a picture line, replacing format fields with placeholders.
+     */
+    private String extractLiteralText(String line) {
+        return line.replaceAll("[@^][<>|#*]+", "{}");
     }
 }

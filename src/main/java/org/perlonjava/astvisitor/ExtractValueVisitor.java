@@ -6,6 +6,16 @@ import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.runtime.RuntimeScalarType;
 
 public class ExtractValueVisitor implements Visitor {
+
+    @Override
+    public void visit(FormatLine node) {
+        // Default implementation - no action needed for format lines
+    }
+
+    @Override
+    public void visit(FormatNode node) {
+        // Default implementation - no action needed for format nodes
+    }
     private final RuntimeList values = new RuntimeList();
 
     public static RuntimeList getValues(Node node) {

@@ -1,5 +1,6 @@
 package org.perlonjava.parser;
 
+import org.perlonjava.astnode.FormatNode;
 import org.perlonjava.astnode.Node;
 import org.perlonjava.astnode.OperatorNode;
 import org.perlonjava.codegen.EmitterContext;
@@ -31,6 +32,10 @@ public class Parser {
     public boolean isTopLevelScript = false;
     // List to store heredoc nodes encountered during parsing.
     private List<OperatorNode> heredocNodes = new ArrayList<>();
+    // List to store format nodes encountered during parsing.
+    private List<FormatNode> formatNodes = new ArrayList<>();
+    // List to store completed format nodes after template parsing.
+    private List<FormatNode> completedFormatNodes = new ArrayList<>();
 
     /**
      * Constructs a Parser with the given context and tokens.
@@ -63,6 +68,24 @@ public class Parser {
      */
     public List<OperatorNode> getHeredocNodes() {
         return heredocNodes;
+    }
+
+    /**
+     * Returns the list of format nodes encountered during parsing.
+     *
+     * @return The list of format nodes.
+     */
+    public List<FormatNode> getFormatNodes() {
+        return formatNodes;
+    }
+
+    /**
+     * Returns the list of completed format nodes after template parsing.
+     *
+     * @return The list of completed format nodes.
+     */
+    public List<FormatNode> getCompletedFormatNodes() {
+        return completedFormatNodes;
     }
 
     /**

@@ -91,6 +91,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
             allKeys.addAll(GlobalVariable.globalHashes.keySet());
             allKeys.addAll(GlobalVariable.globalCodeRefs.keySet());
             allKeys.addAll(GlobalVariable.globalIORefs.keySet());
+            allKeys.addAll(GlobalVariable.globalFormatRefs.keySet());
 
             // Process each key to extract the namespace part
             Set<String> uniqueKeys = new HashSet<>(); // Set to track unique keys
@@ -147,7 +148,8 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                     containsNamespace(GlobalVariable.globalArrays, prefix) ||
                     containsNamespace(GlobalVariable.globalHashes, prefix) ||
                     containsNamespace(GlobalVariable.globalCodeRefs, prefix) ||
-                    containsNamespace(GlobalVariable.globalIORefs, prefix)) {
+                    containsNamespace(GlobalVariable.globalIORefs, prefix) ||
+                    containsNamespace(GlobalVariable.globalFormatRefs, prefix)) {
                 return new RuntimeStashEntry(prefix, true);
             }
             return new RuntimeStashEntry(prefix, false);

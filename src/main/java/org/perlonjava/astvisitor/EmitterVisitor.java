@@ -168,4 +168,15 @@ public class EmitterVisitor implements Visitor {
     public void visit(CompilerFlagNode node) {
         EmitCompilerFlag.emitCompilerFlag(ctx, node);
     }
+
+    @Override
+    public void visit(FormatNode node) {
+        EmitFormat.emitFormat(this, node);
+    }
+
+    @Override
+    public void visit(FormatLine node) {
+        // FormatLine nodes are handled as part of FormatNode processing
+        // No separate emission needed
+    }
 }

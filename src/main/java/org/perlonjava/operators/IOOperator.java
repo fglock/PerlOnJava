@@ -865,6 +865,116 @@ public class IOOperator {
     }
 
     /**
+     * Executes a Perl format against a filehandle.
+     * write FILEHANDLE
+     * write
+     * 
+     * This function looks up the format associated with the filehandle name,
+     * executes it with the current values of format variables, and writes
+     * the formatted output to the filehandle.
+     *
+     * @param ctx The runtime context
+     * @param args Optional filehandle argument (defaults to currently selected handle)
+     * @return A RuntimeScalar indicating success (1) or failure (0)
+     */
+    public static RuntimeScalar write(int ctx, RuntimeBase... args) {
+        RuntimeScalar fileHandle;
+        
+        if (args.length == 0) {
+            // No filehandle specified, use currently selected handle
+            fileHandle = new RuntimeScalar(RuntimeIO.selectedHandle);
+        } else {
+            fileHandle = args[0].scalar();
+        }
+        
+        RuntimeIO fh = fileHandle.getRuntimeIO();
+        
+        if (fh == null) {
+            getGlobalVariable("main::!").set("Bad file descriptor");
+            return scalarFalse;
+        }
+        
+        // Determine the format name
+        String formatName;
+        if (fh == RuntimeIO.stdout) {
+            formatName = "STDOUT";
+        } else if (fh == RuntimeIO.stderr) {
+            formatName = "STDERR";
+        } else if (fh == RuntimeIO.stdin) {
+            formatName = "STDIN";
+        } else {
+            // For other filehandles, try to determine name from global variables
+            // This is a simplified approach - in a full implementation we'd need
+            // to reverse-lookup the filehandle name from the global symbol table
+            formatName = "STDOUT"; // Default fallback
+        }
+        
+        // Look up the format
+        RuntimeFormat format = GlobalVariable.getGlobalFormatRef(formatName);
+        
+        if (format == null || !format.isFormatDefined()) {
+            // Format not found or not defined
+            getGlobalVariable("main::!").set("Undefined format \"" + formatName + "\" called");
+            return scalarFalse;
+        }
+        
+        try {
+            // Execute the format with empty arguments for now
+            // In a full implementation, this would collect format variables from the current scope
+            RuntimeList formatArgs = new RuntimeList();
+            
+            // TODO: Collect format variables from current scope
+            // This would involve scanning for variables referenced in the format's argument lines
+            // and collecting their current values
+            
+            String formattedOutput = format.execute(formatArgs);
+            
+            // Write the formatted output to the filehandle
+            RuntimeScalar writeResult = fh.write(formattedOutput);
+            
+            return writeResult;
+            
+        } catch (Exception e) {
+            getGlobalVariable("main::!").set("Format execution failed: " + e.getMessage());
+            return scalarFalse;
+        }
+    }
+    
+    /**
+     * Executes a Perl format with explicit arguments.
+     * This is a helper method for testing and advanced format usage.
+     *
+     * @param formatName The name of the format to execute
+     * @param args The arguments to pass to the format
+     * @param fileHandle The filehandle to write to
+     * @return A RuntimeScalar indicating success (1) or failure (0)
+     */
+    public static RuntimeScalar writeFormat(String formatName, RuntimeList args, RuntimeScalar fileHandle) {
+        RuntimeIO fh = fileHandle.getRuntimeIO();
+        
+        if (fh == null) {
+            getGlobalVariable("main::!").set("Bad file descriptor");
+            return scalarFalse;
+        }
+        
+        // Look up the format
+        RuntimeFormat format = GlobalVariable.getGlobalFormatRef(formatName);
+        
+        if (format == null || !format.isFormatDefined()) {
+            getGlobalVariable("main::!").set("Undefined format \"" + formatName + "\" called");
+            return scalarFalse;
+        }
+        
+        try {
+            String formattedOutput = format.execute(args);
+            return fh.write(formattedOutput);
+        } catch (Exception e) {
+            getGlobalVariable("main::!").set("Format execution failed: " + e.getMessage());
+            return scalarFalse;
+        }
+    }
+
+    /**
      * Extracts a clean filehandle name from a string representation.
      * Removes prefixes like "*main::" and GLOB references for cleaner error messages.
      */

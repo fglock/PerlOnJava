@@ -16,6 +16,16 @@ import java.util.List;
  */
 public class ConstantFoldingVisitor implements Visitor {
 
+    @Override
+    public void visit(FormatLine node) {
+        // Default implementation - no action needed for format lines
+    }
+
+    @Override
+    public void visit(FormatNode node) {
+        // Default implementation - no action needed for format nodes
+    }
+
     private Node result;
     private boolean isConstant;
 

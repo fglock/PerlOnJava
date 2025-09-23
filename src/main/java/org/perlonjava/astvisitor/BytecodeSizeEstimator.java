@@ -17,6 +17,16 @@ import org.perlonjava.astnode.*;
  * Uses official JVM bytecode instruction sizes with empirically derived calibration.
  */
 public class BytecodeSizeEstimator implements Visitor {
+
+    @Override
+    public void visit(FormatLine node) {
+        // Default implementation - no action needed for format lines
+    }
+
+    @Override
+    public void visit(FormatNode node) {
+        // Default implementation - no action needed for format nodes
+    }
     
     private int estimatedSize = 0;
     

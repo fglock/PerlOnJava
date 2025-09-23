@@ -16,6 +16,16 @@ import static org.perlonjava.symbols.ScopedSymbolTable.stringifyWarningFlags;
  *   return printVisitor.getResult();
  */
 public class PrintVisitor implements Visitor {
+
+    @Override
+    public void visit(FormatLine node) {
+        // Default implementation - no action needed for format lines
+    }
+
+    @Override
+    public void visit(FormatNode node) {
+        // Default implementation - no action needed for format nodes
+    }
     private final StringBuilder sb = new StringBuilder();
     private int indentLevel = 0;
 

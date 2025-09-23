@@ -100,6 +100,27 @@ public class StatementResolver {
                     yield null;
                 }
 
+                case "format" -> {
+                    consume(parser); // consume "format"
+                    String formatName = null;
+                    
+                    // Check if format name is provided
+                    LexerToken nextToken = peek(parser);
+                    if (nextToken.type == LexerTokenType.IDENTIFIER) {
+                        formatName = consume(parser).text;
+                    }
+                    
+                    // Expect '=' after format name (or after "format" if no name)
+                    if (peek(parser).text.equals("=")) {
+                        consume(parser); // consume "="
+                        yield FormatParser.parseFormatDeclaration(parser, formatName);
+                    } else {
+                        // Not a format declaration, backtrack
+                        parser.tokenIndex = currentIndex;
+                        yield null;
+                    }
+                }
+
                 default -> null;
             };
 

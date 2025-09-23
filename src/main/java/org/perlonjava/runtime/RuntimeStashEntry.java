@@ -81,6 +81,10 @@ public class RuntimeStashEntry extends RuntimeGlob {
                 InheritanceResolver.invalidateCache();
 
                 return value;
+            case FORMAT:
+                // Handle format assignments to typeglobs
+                GlobalVariable.getGlobalFormatRef(this.globName).set(value);
+                return value;
             case GLOB:
                 if (value.value instanceof RuntimeIO) {
                     // *STDOUT = $new_handle
@@ -128,6 +132,9 @@ public class RuntimeStashEntry extends RuntimeGlob {
 
         // Set the current scalar to a reference of the global variable associated with the glob name.
         this.set(GlobalVariable.getGlobalVariable(globName).createReference());
+
+        // Set the current scalar to the global format reference associated with the glob name.
+        this.set(GlobalVariable.getGlobalFormatRef(globName));
 
         // Return the scalar value associated with the provided RuntimeGlob.
         return value.scalar();
@@ -177,6 +184,9 @@ public class RuntimeStashEntry extends RuntimeGlob {
     public RuntimeStashEntry undefine() {
         // Undefine CODE
         GlobalVariable.getGlobalCodeRef(this.globName).set(new RuntimeScalar());
+
+        // Undefine FORMAT
+        GlobalVariable.getGlobalFormatRef(this.globName).undefineFormat();
 
         // Invalidate the method resolution cache
         InheritanceResolver.invalidateCache();

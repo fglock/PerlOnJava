@@ -99,8 +99,12 @@ public class CoreOperatorResolver {
             }
             case "q", "qq", "qx", "qw", "qr", "tr", "y", "s", "m" ->
                     OperatorParser.parseSpecialQuoted(parser, token, startIndex);
-            case "dump", "format", "dbmclose", "dbmopen" ->
+            case "dump", "dbmclose", "dbmopen" ->
                     throw new PerlJavaUnimplementedException(parser.tokenIndex, "Not implemented: operator: " + token.text, parser.ctx.errorUtil);
+            case "format" ->
+                    // Format statements should be handled by StatementResolver, not as operators
+                    // Return null to allow StatementResolver to handle it
+                    null;
             case "accept", "bind", "connect", "getpeername", "getsockname", "getsockopt",
                  "listen", "recv", "send", "setsockopt", "shutdown", "socketpair" ->
                     throw new PerlJavaUnimplementedException(parser.tokenIndex, "Not implemented: socket operator: " + token.text, parser.ctx.errorUtil);
