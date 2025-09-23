@@ -14,6 +14,7 @@ public class RuntimeScalarType {
     public static final int JAVAOBJECT = 9;
     public static final int TIED_SCALAR = 10;
     public static final int DUALVAR = 11;
+    public static final int FORMAT = 12;
     // Reference types (with high bit set)
     private static final int REFERENCE_BIT = 0x8000;
     // References with bit pattern

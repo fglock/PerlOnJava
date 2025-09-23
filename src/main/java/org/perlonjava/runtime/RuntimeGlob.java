@@ -90,6 +90,14 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 // This assigns the scalar value to the scalar slot of the typeglob
                 GlobalVariable.getGlobalVariable(this.globName).set(value);
                 return value;
+            case FORMAT:
+                // Handle format assignments to typeglobs
+                if (value.value instanceof RuntimeFormat) {
+                    RuntimeFormat sourceFormat = (RuntimeFormat) value.value;
+                    RuntimeFormat targetFormat = GlobalVariable.getGlobalFormatRef(this.globName);
+                    targetFormat.setTemplate(sourceFormat.getTemplate());
+                }
+                return value;
         }
         throw new IllegalStateException("typeglob assignment not implemented for " + value.type);
     }
@@ -124,6 +132,13 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
 
         // Set the current scalar to a reference of the global variable associated with the glob name.
         this.set(GlobalVariable.getGlobalVariable(globName).createReference());
+
+        // Set the current scalar to the global format reference associated with the glob name.
+        RuntimeFormat sourceFormat = GlobalVariable.getGlobalFormatRef(globName);
+        RuntimeFormat targetFormat = GlobalVariable.getGlobalFormatRef(this.globName);
+        if (sourceFormat.isFormatDefined()) {
+            targetFormat.setTemplate(sourceFormat.getTemplate());
+        }
 
         // Return the scalar value associated with the provided RuntimeGlob.
         return value.scalar();
@@ -162,6 +177,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             case "SCALAR" -> GlobalVariable.getGlobalVariable(this.globName);
             case "ARRAY" -> GlobalVariable.getGlobalArray(this.globName).createReference();
             case "HASH" -> GlobalVariable.getGlobalHash(this.globName).createReference();
+            case "FORMAT" -> GlobalVariable.getGlobalFormatRef(this.globName);
             default -> new RuntimeScalar();
         };
     }
@@ -387,6 +403,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // Invalidate the method resolution cache
         InheritanceResolver.invalidateCache();
 
+        // Undefine FORMAT
+        GlobalVariable.getGlobalFormatRef(this.globName).undefineFormat();
+
         // XXX TODO undefine scalar, array, hash
         return this;
     }
@@ -400,6 +419,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         GlobalVariable.getGlobalArray(this.globName).dynamicSaveState();
         GlobalVariable.getGlobalHash(this.globName).dynamicSaveState();
         GlobalVariable.getGlobalVariable(this.globName).dynamicSaveState();
+        GlobalVariable.getGlobalFormatRef(this.globName).dynamicSaveState();
         this.IO.dynamicSaveState();
     }
 
@@ -413,5 +433,6 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         GlobalVariable.getGlobalHash(this.globName).dynamicRestoreState();
         GlobalVariable.getGlobalArray(this.globName).dynamicRestoreState();
         GlobalVariable.getGlobalCodeRef(this.globName).dynamicRestoreState();
+        GlobalVariable.getGlobalFormatRef(this.globName).dynamicRestoreState();
     }
 }
