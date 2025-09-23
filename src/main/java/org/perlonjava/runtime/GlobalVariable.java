@@ -29,6 +29,7 @@ public class GlobalVariable {
     public static final Map<String, Boolean> isSubs = new HashMap<>();
     static final Map<String, RuntimeScalar> globalCodeRefs = new HashMap<>();
     static final Map<String, RuntimeGlob> globalIORefs = new HashMap<>();
+    static final Map<String, RuntimeFormat> globalFormatRefs = new HashMap<>();
 
     // Flags used by operator override
     // globalGlobs: Tracks typeglob assignments (e.g., *CORE::GLOBAL::hex = sub {...})
@@ -50,6 +51,7 @@ public class GlobalVariable {
         globalHashes.clear();
         globalCodeRefs.clear();
         globalIORefs.clear();
+        globalFormatRefs.clear();
         globalGlobs.clear();
         isSubs.clear();
         clearPackageCache();
@@ -301,6 +303,48 @@ public class GlobalVariable {
      */
     public static boolean existsGlobalIO(String key) {
         return globalIORefs.containsKey(key);
+    }
+
+    /**
+     * Retrieves a global format reference by its key, initializing it if necessary.
+     *
+     * @param key The key of the global format reference.
+     * @return The RuntimeFormat representing the global format reference.
+     */
+    public static RuntimeFormat getGlobalFormatRef(String key) {
+        RuntimeFormat format = globalFormatRefs.get(key);
+        if (format == null) {
+            format = new RuntimeFormat(key);
+            globalFormatRefs.put(key, format);
+        }
+        return format;
+    }
+
+    /**
+     * Checks if a global format reference exists.
+     *
+     * @param key The key of the global format reference.
+     * @return True if the global format reference exists, false otherwise.
+     */
+    public static boolean existsGlobalFormat(String key) {
+        return globalFormatRefs.containsKey(key);
+    }
+
+    public static RuntimeScalar existsGlobalFormatAsScalar(String key) {
+        return globalFormatRefs.containsKey(key) ? scalarTrue : scalarFalse;
+    }
+
+    public static RuntimeScalar existsGlobalFormatAsScalar(RuntimeScalar key) {
+        return existsGlobalFormatAsScalar(key.toString());
+    }
+
+    public static RuntimeScalar definedGlobalFormatAsScalar(String key) {
+        return globalFormatRefs.containsKey(key) ? 
+            (globalFormatRefs.get(key).isFormatDefined() ? scalarTrue : scalarFalse) : scalarFalse;
+    }
+
+    public static RuntimeScalar definedGlobalFormatAsScalar(RuntimeScalar key) {
+        return definedGlobalFormatAsScalar(key.toString());
     }
 
     /**
