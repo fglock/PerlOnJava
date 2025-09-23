@@ -7,6 +7,7 @@ import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Stack;
 import java.util.Map;
 
 /**
@@ -126,6 +127,60 @@ public class Pack {
      * @throws PerlCompilerException if there are not enough arguments, invalid format characters,
      *                              mismatched brackets, or other template parsing errors
      */
+    
+    /**
+     * Validates bracket matching in a template using proper stack-based algorithm.
+     * Returns null if brackets are properly matched, or error message if mismatched.
+     *
+     * @param template the template string to validate
+     * @return null if valid, error message if invalid
+     */
+    private static String validateBracketMatching(String template) {
+        Stack<Character> stack = new Stack<>();
+        
+        for (int i = 0; i < template.length(); i++) {
+            char ch = template.charAt(i);
+            
+            // Push opening brackets onto stack
+            if (ch == '[' || ch == '(') {
+                stack.push(ch);
+            }
+            // Check closing brackets
+            else if (ch == ']' || ch == ')') {
+                if (stack.isEmpty()) {
+                    return "Mismatched brackets in template";
+                }
+                
+                char top = stack.pop();
+                
+                // Check if bracket types match
+                if ((ch == ']' && top != '[') || (ch == ')' && top != '(')) {
+                    return "Mismatched brackets in template";
+                }
+            }
+        }
+        
+        // Check for unmatched opening brackets
+        if (!stack.isEmpty()) {
+            // If stack contains only '[' characters, use specific message
+            boolean onlySquareBrackets = true;
+            for (Character c : stack) {
+                if (c != '[') {
+                    onlySquareBrackets = false;
+                    break;
+                }
+            }
+            
+            if (onlySquareBrackets) {
+                return "No group ending character ']' found in template";
+            } else {
+                return "Mismatched brackets in template";
+            }
+        }
+        
+        return null; // All brackets properly matched
+    }
+    
     public static RuntimeScalar pack(RuntimeList args) {
         if (args.isEmpty()) {
             throw new PerlCompilerException("pack: not enough arguments");
@@ -133,6 +188,12 @@ public class Pack {
 
         RuntimeScalar templateScalar = args.getFirst();
         String template = templateScalar.toString();
+
+        // Validate bracket matching using proper stack-based algorithm
+        String bracketError = validateBracketMatching(template);
+        if (bracketError != null) {
+            throw new PerlCompilerException(bracketError);
+        }
 
         // Flatten the remaining arguments into a RuntimeArray
         List<RuntimeBase> remainingArgs = args.elements.subList(1, args.elements.size());
@@ -165,11 +226,9 @@ public class Pack {
                 continue;
             }
 
-            // Check for misplaced brackets
-            if (format == '[') {
-                throw new PerlCompilerException("Mismatched brackets in template");
-            }
-            if (format == ']') {
+            // Check for misplaced brackets - this should not happen since we validate at the beginning
+            // but kept as a safety check
+            if (format == '[' || format == ']') {
                 throw new PerlCompilerException("Mismatched brackets in template");
             }
 
