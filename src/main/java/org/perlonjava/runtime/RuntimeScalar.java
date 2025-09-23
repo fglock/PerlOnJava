@@ -740,6 +740,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return switch (type) {
             // case BOOLEAN -> (boolean) value;
             case CODE -> ((RuntimeCode) value).defined();
+            case FORMAT -> ((RuntimeFormat) value).getDefinedBoolean();
             case TIED_SCALAR -> this.tiedFetch().getDefinedBoolean();
             case DUALVAR -> ((DualVar) this.value).stringValue().getDefinedBoolean();
             default -> type != UNDEF;

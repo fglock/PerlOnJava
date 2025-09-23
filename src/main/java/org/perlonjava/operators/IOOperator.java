@@ -6,6 +6,7 @@ import org.perlonjava.io.LayeredIOHandle;
 import org.perlonjava.io.ScalarBackedIO;
 import org.perlonjava.parser.StringParser;
 import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.PerlJavaUnimplementedException;
 

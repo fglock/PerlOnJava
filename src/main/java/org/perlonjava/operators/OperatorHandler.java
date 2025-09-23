@@ -255,6 +255,12 @@ public record OperatorHandler(String className, String methodName, int methodTyp
                         Opcodes.INVOKEVIRTUAL,
                         "()Lorg/perlonjava/runtime/RuntimeArray;"));
 
+        // Format-related operators
+        operatorHandlers.put("write",
+                new OperatorHandler("org/perlonjava/operators/IOOperator",
+                        "write",
+                        Opcodes.INVOKESTATIC,
+                        "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;"));
 
     }
 

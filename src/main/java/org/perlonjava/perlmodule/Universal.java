@@ -109,12 +109,14 @@ public class Universal extends PerlModuleBase {
             case REFERENCE:
             case ARRAYREFERENCE:
             case HASHREFERENCE:
+            case FORMAT:
                 int blessId = ((RuntimeBase) object.value).blessId;
                 if (blessId == 0) {
                     return getScalarBoolean(
                             type == ARRAYREFERENCE && argString.equals("ARRAY")
                                     || type == HASHREFERENCE && argString.equals("HASH")
                                     || type == REFERENCE && argString.equals("SCALAR")
+                                    || type == FORMAT && argString.equals("FORMAT")
                     ).getList();
                 }
                 perlClassName = NameNormalizer.getBlessStr(blessId);

@@ -321,6 +321,17 @@ public class GlobalVariable {
     }
 
     /**
+     * Sets a global format reference to share the same format object.
+     * Used for typeglob format assignments like *COPIED = *ORIGINAL.
+     *
+     * @param key The key of the global format reference.
+     * @param format The RuntimeFormat object to set.
+     */
+    public static void setGlobalFormatRef(String key, RuntimeFormat format) {
+        globalFormatRefs.put(key, format);
+    }
+
+    /**
      * Checks if a global format reference exists.
      *
      * @param key The key of the global format reference.
