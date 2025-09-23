@@ -128,5 +128,21 @@ public interface Visitor {
     void visit(LabelNode node);
 
     void visit(CompilerFlagNode node);
+
+    /**
+     * Visit a FormatNode.
+     *
+     * @param node the FormatNode to visit
+     */
+    void visit(FormatNode node);
+
+    /**
+     * Visit a FormatLine.
+     *
+     * @param node the FormatLine to visit
+     */
+    default void visit(FormatLine node) {
+        // Default implementation does nothing
+    }
 }
 
