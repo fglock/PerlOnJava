@@ -95,10 +95,11 @@ public class RuntimeRegex implements RuntimeScalarReference {
             } catch (Exception e) {
                 if (GlobalVariable.getGlobalHash("main::ENV").get("JPERL_UNIMPLEMENTED").toString().equals("warn")
                 ) {
-                    // Always throw known invalid Perl syntax errors (PerlCompilerException from targeted validation)
-                    if (e instanceof PerlCompilerException && !(e instanceof PerlJavaUnimplementedException)) {
-                        throw e; // Always throw for known invalid patterns
-                    }
+//                    // Always throw known invalid Perl syntax errors (PerlCompilerException from targeted validation)
+//                    if (e instanceof PerlCompilerException && !(e instanceof PerlJavaUnimplementedException)) {
+//                        throw e; // Always throw for known invalid patterns
+//                    }
+
                     // Warn for unimplemented features and Java regex compilation errors
                     String errorMessage = (e instanceof PerlJavaUnimplementedException) ? e.getMessage() : "Regex compilation failed: " + e.getMessage();
                     WarnDie.warn(new RuntimeScalar(errorMessage), new RuntimeScalar());
