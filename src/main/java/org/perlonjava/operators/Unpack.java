@@ -232,6 +232,8 @@ public class Unpack {
             int count = parsedCount.count();
             boolean isStarCount = parsedCount.isStarCount();
             boolean hasShriek = parsedCount.hasShriek();
+            boolean hasLittleEndian = parsedCount.hasLittleEndian();
+            boolean hasBigEndian = parsedCount.hasBigEndian();
             i = parsedCount.endPosition();
             
             if (isStarCount) {
@@ -252,14 +254,11 @@ public class Unpack {
                     // Special handling for 'l!' and 'L!' - native size (8 bytes)
                     handler = new NativeLongFormatHandler(format == 'l');
                 }
-                // For 'p' format, check and consume endianness modifiers
-                if (format == 'p' && i + 1 < template.length()) {
-                    char nextChar = template.charAt(i + 1);
-                    if (nextChar == '<' || nextChar == '>') {
-                        i++; // consume the modifier
-                        // Note: For our simple implementation, we ignore endianness
-                        // since we're using hashCode which is already platform-specific
-                    }
+                // For 'p' format, create endianness-aware handler based on parsed modifiers
+                if (format == 'p' && (hasLittleEndian || hasBigEndian)) {
+                    // Create endianness-aware PointerFormatHandler
+                    boolean bigEndian = hasBigEndian;
+                    handler = new PointerFormatHandler(bigEndian);
                 }
 
                 if (isChecksum) {
