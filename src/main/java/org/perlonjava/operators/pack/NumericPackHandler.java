@@ -5,6 +5,7 @@ import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.runtime.ScalarUtils;
 
 import java.io.ByteArrayOutputStream;
+import java.math.BigInteger;
 import java.util.List;
 
 /**
@@ -149,7 +150,20 @@ public class NumericPackHandler implements PackFormatHandler {
                         throw new PerlCompilerException("Can only compress unsigned integers");
                     }
                     
-                    PackWriter.writeBER(output, (long) doubleValue);
+                    // Check if the value is too large for long and needs BigInteger
+                    if (doubleValue > Long.MAX_VALUE || stringValue.length() > 18) {
+                        // Use BigInteger for very large values to avoid overflow
+                        try {
+                            BigInteger bigValue = new BigInteger(stringValue);
+                            PackWriter.writeBER(output, bigValue);
+                        } catch (NumberFormatException e) {
+                            // If string parsing fails, fall back to double conversion
+                            PackWriter.writeBER(output, (long) doubleValue);
+                        }
+                    } else {
+                        // Small enough for long
+                        PackWriter.writeBER(output, (long) doubleValue);
+                    }
                     break;
                 case 'j':
                     // Perl internal signed integer - treat as long
