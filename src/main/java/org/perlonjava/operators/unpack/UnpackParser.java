@@ -73,13 +73,19 @@ public class UnpackParser {
         int i = position;
 
         // First, parse and validate any modifiers (<, >, !) after the format character
-        // and detect if '!' modifier is present
+        // and detect modifiers present
         boolean hasShriek = false;
+        boolean hasLittleEndian = false;
+        boolean hasBigEndian = false;
         while (i + 1 < template.length()) {
             char modifier = template.charAt(i + 1);
             if (modifier == '<' || modifier == '>' || modifier == '!') {
                 if (modifier == '!') {
                     hasShriek = true;
+                } else if (modifier == '<') {
+                    hasLittleEndian = true;
+                } else if (modifier == '>') {
+                    hasBigEndian = true;
                 }
                 i++;
             } else {
@@ -152,12 +158,12 @@ public class UnpackParser {
             }
         }
 
-        return new ParsedCount(count, isStarCount, i, hasShriek);
+        return new ParsedCount(count, isStarCount, i, hasShriek, hasLittleEndian, hasBigEndian);
     }
 
     /**
      * Record to hold parsed count information
      */
-    public record ParsedCount(int count, boolean isStarCount, int endPosition, boolean hasShriek) {
+    public record ParsedCount(int count, boolean isStarCount, int endPosition, boolean hasShriek, boolean hasLittleEndian, boolean hasBigEndian) {
     }
 }
