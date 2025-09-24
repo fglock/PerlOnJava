@@ -3,6 +3,7 @@ package org.perlonjava.operators.pack;
 import org.perlonjava.runtime.PerlCompilerException;
 
 import java.io.ByteArrayOutputStream;
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 
 public class PackWriter {
@@ -141,6 +142,41 @@ public class PackWriter {
             while (remaining > 0) {
                 bytes.add((int) (remaining & 0x7F));
                 remaining >>= 7;
+            }
+            
+            // Write bytes in reverse order (most significant first)
+            // All bytes except the last have continuation bit set
+            for (int i = bytes.size() - 1; i >= 0; i--) {
+                int byteValue = bytes.get(i);
+                if (i > 0) {
+                    // Not the last byte - set continuation bit
+                    byteValue |= 0x80;
+                }
+                output.write(byteValue);
+            }
+        }
+    }
+
+    /**
+     * Write a BER compressed integer using BigInteger for very large values
+     */
+    public static void writeBER(ByteArrayOutputStream output, BigInteger value) {
+        if (value.signum() < 0) {
+            throw new PerlCompilerException("Cannot compress negative numbers");
+        }
+
+        if (value.compareTo(BigInteger.valueOf(128)) < 0) {
+            // Values < 128 are written directly without continuation bit
+            output.write(value.intValue());
+        } else {
+            // Build bytes from least significant to most significant
+            java.util.List<Integer> bytes = new java.util.ArrayList<>();
+            BigInteger remaining = value;
+            
+            // Extract 7-bit chunks
+            while (remaining.signum() > 0) {
+                bytes.add(remaining.and(BigInteger.valueOf(0x7F)).intValue());
+                remaining = remaining.shiftRight(7);
             }
             
             // Write bytes in reverse order (most significant first)
