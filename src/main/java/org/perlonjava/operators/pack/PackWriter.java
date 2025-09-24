@@ -130,12 +130,29 @@ public class PackWriter {
         }
 
         if (value < 128) {
+            // Values < 128 are written directly without continuation bit
             output.write((int) value);
         } else {
-            // Recursively write high-order bytes with continuation bit set
-            writeBER(output, value >> 7);
-            // Write low-order 7 bits with continuation bit set
-            output.write((int) ((value & 0x7F) | 0x80));
+            // Build bytes from least significant to most significant
+            java.util.List<Integer> bytes = new java.util.ArrayList<>();
+            long remaining = value;
+            
+            // Extract 7-bit chunks
+            while (remaining > 0) {
+                bytes.add((int) (remaining & 0x7F));
+                remaining >>= 7;
+            }
+            
+            // Write bytes in reverse order (most significant first)
+            // All bytes except the last have continuation bit set
+            for (int i = bytes.size() - 1; i >= 0; i--) {
+                int byteValue = bytes.get(i);
+                if (i > 0) {
+                    // Not the last byte - set continuation bit
+                    byteValue |= 0x80;
+                }
+                output.write(byteValue);
+            }
         }
     }
 
