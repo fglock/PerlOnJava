@@ -11,6 +11,8 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
 
 import static org.perlonjava.runtime.RuntimeIO.handleIOException;
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
@@ -28,6 +30,9 @@ public class SocketIO implements IOHandle {
     private OutputStream outputStream;
     private boolean isEOF;
     private CharsetDecoderHelper decoderHelper;
+    
+    // Socket options storage: key is "level:optname", value is the option value
+    private Map<String, Integer> socketOptions;
 
     /**
      * Constructs a SocketIO instance for a client socket.
@@ -36,6 +41,7 @@ public class SocketIO implements IOHandle {
      */
     public SocketIO(Socket socket) {
         this.socket = socket;
+        this.socketOptions = new HashMap<>();
         try {
             if (this.socket != null) {
                 this.inputStream = this.socket.getInputStream();
@@ -53,6 +59,7 @@ public class SocketIO implements IOHandle {
      */
     public SocketIO(ServerSocket serverSocket) {
         this.serverSocket = serverSocket;
+        this.socketOptions = new HashMap<>();
     }
 
     /**
@@ -259,5 +266,102 @@ public class SocketIO implements IOHandle {
         } catch (IOException e) {
             return handleIOException(e, "close operation failed");
         }
+    }
+
+    /**
+     * Get the local socket address (getsockname equivalent)
+     * Returns a packed sockaddr_in structure
+     */
+    public RuntimeScalar getsockname() {
+        try {
+            InetSocketAddress localAddress = null;
+            
+            if (socket != null && socket.getLocalSocketAddress() instanceof InetSocketAddress) {
+                localAddress = (InetSocketAddress) socket.getLocalSocketAddress();
+            } else if (serverSocket != null && serverSocket.getLocalSocketAddress() instanceof InetSocketAddress) {
+                localAddress = (InetSocketAddress) serverSocket.getLocalSocketAddress();
+            }
+            
+            if (localAddress != null) {
+                return packSockaddrIn(localAddress);
+            }
+            
+            return scalarUndef;
+        } catch (Exception e) {
+            return scalarUndef;
+        }
+    }
+
+    /**
+     * Get the remote socket address (getpeername equivalent)
+     * Returns a packed sockaddr_in structure
+     */
+    public RuntimeScalar getpeername() {
+        try {
+            if (socket != null && socket.getRemoteSocketAddress() instanceof InetSocketAddress) {
+                InetSocketAddress remoteAddress = (InetSocketAddress) socket.getRemoteSocketAddress();
+                return packSockaddrIn(remoteAddress);
+            }
+            
+            return scalarUndef;
+        } catch (Exception e) {
+            return scalarUndef;
+        }
+    }
+
+    /**
+     * Pack an InetSocketAddress into a Perl-compatible sockaddr_in structure
+     * Format: 2 bytes family (AF_INET=2), 2 bytes port (network order), 4 bytes IP, 8 bytes padding
+     */
+    private RuntimeScalar packSockaddrIn(InetSocketAddress address) {
+        try {
+            byte[] sockaddr = new byte[16];
+            
+            // Family: AF_INET = 2 (network byte order)
+            sockaddr[0] = 0;
+            sockaddr[1] = 2;
+            
+            // Port (network byte order - big endian)
+            int port = address.getPort();
+            sockaddr[2] = (byte) ((port >> 8) & 0xFF);
+            sockaddr[3] = (byte) (port & 0xFF);
+            
+            // IP address (4 bytes)
+            byte[] ipBytes = address.getAddress().getAddress();
+            System.arraycopy(ipBytes, 0, sockaddr, 4, 4);
+            
+            // Padding (8 bytes of zeros)
+            for (int i = 8; i < 16; i++) {
+                sockaddr[i] = 0;
+            }
+            
+            return new RuntimeScalar(new String(sockaddr, "ISO-8859-1"));
+        } catch (Exception e) {
+            return scalarUndef;
+        }
+    }
+    
+    /**
+     * Sets a socket option value.
+     *
+     * @param level the socket level (e.g., SOL_SOCKET)
+     * @param optname the option name (e.g., SO_REUSEADDR)
+     * @param value the option value
+     */
+    public void setSocketOption(int level, int optname, int value) {
+        String key = level + ":" + optname;
+        socketOptions.put(key, value);
+    }
+    
+    /**
+     * Gets a socket option value.
+     *
+     * @param level the socket level (e.g., SOL_SOCKET)
+     * @param optname the option name (e.g., SO_REUSEADDR)
+     * @return the option value, or 0 if not set
+     */
+    public int getSocketOption(int level, int optname) {
+        String key = level + ":" + optname;
+        return socketOptions.getOrDefault(key, 0);
     }
 }

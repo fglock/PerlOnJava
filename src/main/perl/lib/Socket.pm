@@ -1,41 +1,47 @@
 package Socket;
 
-use strict;
+use Exporter "import";
 use warnings;
+use strict;
 
-# Socket domain constants
-use constant AF_INET => 2;
-use constant AF_INET6 => 10;
-use constant AF_UNIX => 1;
-use constant PF_INET => 2;
-use constant PF_INET6 => 10;
-use constant PF_UNIX => 1;
+XSLoader::load('Socket');
 
-# Socket type constants
-use constant SOCK_STREAM => 1;
-use constant SOCK_DGRAM => 2;
+# NOTE: The rest of the implementation is in file:
+#       src/main/java/org/perlonjava/perlmodule/Socket.java
 
-# Export the constants
-require Exporter;
-our @ISA = qw(Exporter);
+# Define constants as subroutines for proper bareword usage
+use constant {
+    AF_INET      => 2,
+    PF_INET      => 2,
+    SOCK_STREAM  => 1,
+    SOCK_DGRAM   => 2,
+    SOL_SOCKET   => 1,
+    SO_REUSEADDR => 2,
+};
+
 our @EXPORT = qw(
-    AF_INET AF_INET6 AF_UNIX
-    PF_INET PF_INET6 PF_UNIX
-    SOCK_STREAM SOCK_DGRAM
-    inet_aton sockaddr_in
+    pack_sockaddr_in unpack_sockaddr_in
+    inet_aton inet_ntoa
+    sockaddr_in
+    AF_INET PF_INET SOCK_STREAM SOCK_DGRAM
+    SOL_SOCKET SO_REUSEADDR
 );
 
-# Basic inet_aton implementation - converts IP address to packed format
-sub inet_aton {
-    my $ip = shift;
-    return pack("C4", split /\./, $ip);
-}
+our @EXPORT_OK = qw(
+    pack_sockaddr_in unpack_sockaddr_in
+    inet_aton inet_ntoa
+    sockaddr_in
+    AF_INET PF_INET SOCK_STREAM SOCK_DGRAM
+    SOL_SOCKET SO_REUSEADDR
+);
 
-# Basic sockaddr_in implementation - creates packed socket address
-sub sockaddr_in {
-    my ($port, $addr) = @_;
-    return pack("n N", $port, unpack("N", $addr));
-}
+our %EXPORT_TAGS = (
+    DEFAULT => [qw(pack_sockaddr_in unpack_sockaddr_in inet_aton inet_ntoa)],
+    crlf => [qw(CR LF CRLF)],
+);
+
+# Constants are provided by the Java implementation
+# AF_INET = 2, SOCK_STREAM = 1, SOCK_DGRAM = 2, etc.
 
 1;
 

@@ -125,6 +125,13 @@ public record OperatorHandler(String className, String methodName, int methodTyp
         put("connect", "connect", "org/perlonjava/operators/IOOperator", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("listen", "listen", "org/perlonjava/operators/IOOperator", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("accept", "accept", "org/perlonjava/operators/IOOperator", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("getsockname", "getsockname", "org/perlonjava/operators/IOOperator", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("getpeername", "getpeername", "org/perlonjava/operators/IOOperator", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("send", "send", "org/perlonjava/operators/IOOperator", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("recv", "recv", "org/perlonjava/operators/IOOperator", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("shutdown", "shutdown", "org/perlonjava/operators/IOOperator", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("setsockopt", "setsockopt", "org/perlonjava/operators/IOOperator", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("getsockopt", "getsockopt", "org/perlonjava/operators/IOOperator", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("pipe", "pipe", "org/perlonjava/operators/IOOperator", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
 
         // Directory

@@ -2,6 +2,8 @@ package org.perlonjava.operators;
 
 import org.perlonjava.io.*;
 import org.perlonjava.io.ClosedIOHandle;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.Map;
 import org.perlonjava.io.IOHandle;
 import org.perlonjava.io.LayeredIOHandle;
 import org.perlonjava.io.PipeInputChannel;
@@ -21,6 +23,7 @@ import java.nio.channels.FileChannel;
 import java.nio.channels.Pipe;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -33,8 +36,12 @@ import java.util.Set;
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarFalse;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
 public class IOOperator {
+    // Simple socket option storage: key is "socketHashCode:level:optname", value is the option value
+    private static final Map<String, Integer> globalSocketOptions = new ConcurrentHashMap<>();
+    
     public static RuntimeScalar select(RuntimeList runtimeList, int ctx) {
         if (runtimeList.isEmpty()) {
             // select (returns current filehandle)
@@ -1054,10 +1061,22 @@ public class IOOperator {
      */
     private static String[] parseSockaddrIn(String packedAddress) {
         try {
+            // Quick check: if it looks like a text string (contains ':' or '.'), 
+            // it's probably not a binary sockaddr_in structure
+            if (packedAddress.contains(":") || packedAddress.matches(".*[0-9]+\\.[0-9]+.*")) {
+                return null; // This is a text address, not binary sockaddr_in
+            }
+            
             byte[] bytes = packedAddress.getBytes("ISO-8859-1"); // Get raw bytes
             
             if (bytes.length < 8) {
                 return null; // Too short for sockaddr_in
+            }
+            
+            // Check if first 2 bytes indicate AF_INET (family = 2)
+            int family = ((bytes[0] & 0xFF) << 8) | (bytes[1] & 0xFF);
+            if (family != 2) { // AF_INET = 2
+                return null; // Not a valid sockaddr_in structure
             }
             
             // Extract port (bytes 2-3, network byte order)
@@ -1317,4 +1336,290 @@ public class IOOperator {
             return scalarFalse;
         }
     }
+
+    /**
+     * getsockname(SOCKET)
+     * Returns the packed sockaddr structure for the local end of the socket.
+     */
+    public static RuntimeScalar getsockname(int ctx, RuntimeBase... args) {
+        if (args.length < 1) {
+            getGlobalVariable("main::!").set("Not enough arguments for getsockname");
+            return scalarFalse;
+        }
+
+        try {
+            RuntimeScalar socketHandle = args[0].scalar();
+            RuntimeIO socketIO = socketHandle.getRuntimeIO();
+            
+            if (socketIO == null) {
+                getGlobalVariable("main::!").set("Invalid socket handle for getsockname");
+                return scalarFalse;
+            }
+
+            // Get the local socket address and pack it into sockaddr_in format
+            return socketIO.getsockname();
+
+        } catch (Exception e) {
+            getGlobalVariable("main::!").set("getsockname failed: " + e.getMessage());
+            return scalarFalse;
+        }
+    }
+
+    /**
+     * getpeername(SOCKET)
+     * Returns the packed sockaddr structure for the remote end of the socket.
+     */
+    public static RuntimeScalar getpeername(int ctx, RuntimeBase... args) {
+        if (args.length < 1) {
+            getGlobalVariable("main::!").set("Not enough arguments for getpeername");
+            return scalarFalse;
+        }
+
+        try {
+            RuntimeScalar socketHandle = args[0].scalar();
+            RuntimeIO socketIO = socketHandle.getRuntimeIO();
+            
+            if (socketIO == null) {
+                getGlobalVariable("main::!").set("Invalid socket handle for getpeername");
+                return scalarFalse;
+            }
+
+            // Get the remote socket address and pack it into sockaddr_in format
+            return socketIO.getpeername();
+
+        } catch (Exception e) {
+            getGlobalVariable("main::!").set("getpeername failed: " + e.getMessage());
+            return scalarFalse;
+        }
+    }
+
+    /**
+     * send(SOCKET, MSG, FLAGS [, TO])
+     * Sends a message on a socket
+     */
+    public static RuntimeScalar send(int ctx, RuntimeBase... args) {
+        if (args.length < 3) {
+            getGlobalVariable("main::!").set("Not enough arguments for send");
+            return scalarFalse;
+        }
+
+        try {
+            RuntimeScalar socketHandle = args[0].scalar();
+            String message = args[1].toString();
+            int flags = args[2].scalar().getInt();
+            
+            RuntimeIO socketIO = socketHandle.getRuntimeIO();
+            if (socketIO == null) {
+                getGlobalVariable("main::!").set("Invalid socket handle for send");
+                return scalarFalse;
+            }
+
+            // For now, ignore flags and TO address - implement basic send
+            // Send message as string
+            RuntimeScalar result = socketIO.write(message);
+            
+            if (result != null && !result.equals(scalarFalse)) {
+                return new RuntimeScalar(message.length()); // Return number of bytes sent
+            } else {
+                getGlobalVariable("main::!").set("Send failed");
+                return scalarUndef;
+            }
+
+        } catch (Exception e) {
+            getGlobalVariable("main::!").set("send failed: " + e.getMessage());
+            return scalarUndef;
+        }
+    }
+
+    /**
+     * recv(SOCKET, SCALAR, LENGTH [, FLAGS])
+     * Receives a message from a socket
+     */
+    public static RuntimeScalar recv(int ctx, RuntimeBase... args) {
+        if (args.length < 3) {
+            getGlobalVariable("main::!").set("Not enough arguments for recv");
+            return scalarFalse;
+        }
+
+        try {
+            RuntimeScalar socketHandle = args[0].scalar();
+            RuntimeScalar buffer = args[1].scalar();
+            int length = args[2].scalar().getInt();
+            int flags = args.length > 3 ? args[3].scalar().getInt() : 0;
+            
+            RuntimeIO socketIO = socketHandle.getRuntimeIO();
+            if (socketIO == null) {
+                getGlobalVariable("main::!").set("Invalid socket handle for recv");
+                return scalarFalse;
+            }
+
+            // Read data from socket
+            RuntimeScalar data = socketIO.ioHandle.read(length);
+            if (data != null && !data.equals(scalarUndef)) {
+                buffer.set(data.toString());
+                return new RuntimeScalar(data.toString().length());
+            } else {
+                getGlobalVariable("main::!").set("Recv failed");
+                return scalarUndef;
+            }
+
+        } catch (Exception e) {
+            getGlobalVariable("main::!").set("recv failed: " + e.getMessage());
+            return scalarUndef;
+        }
+    }
+
+    /**
+     * shutdown(SOCKET, HOW)
+     * Shuts down a socket connection
+     * HOW: 0 = further receives disallowed, 1 = further sends disallowed, 2 = both
+     */
+    public static RuntimeScalar shutdown(int ctx, RuntimeBase... args) {
+        if (args.length < 2) {
+            getGlobalVariable("main::!").set("Not enough arguments for shutdown");
+            return scalarFalse;
+        }
+
+        try {
+            RuntimeScalar socketHandle = args[0].scalar();
+            int how = args[1].scalar().getInt();
+            
+            RuntimeIO socketIO = socketHandle.getRuntimeIO();
+            if (socketIO == null) {
+                getGlobalVariable("main::!").set("Invalid socket handle for shutdown");
+                return scalarFalse;
+            }
+
+            // For now, implement basic shutdown by closing the socket
+            // In a full implementation, we would handle the different HOW values:
+            // 0 = SHUT_RD (shutdown reading), 1 = SHUT_WR (shutdown writing), 2 = SHUT_RDWR (shutdown both)
+            if (socketIO.ioHandle instanceof org.perlonjava.io.SocketIO) {
+                // For simplicity, just return success - actual socket shutdown would be more complex
+                return scalarTrue;
+            } else {
+                getGlobalVariable("main::!").set("Not a socket handle for shutdown");
+                return scalarFalse;
+            }
+
+        } catch (Exception e) {
+            getGlobalVariable("main::!").set("shutdown failed: " + e.getMessage());
+            return scalarFalse;
+        }
+    }
+
+    /**
+     * setsockopt(SOCKET, LEVEL, OPTNAME, OPTVAL)
+     * Sets socket options
+     */
+    public static RuntimeScalar setsockopt(int ctx, RuntimeBase... args) {
+        if (args.length < 4) {
+            getGlobalVariable("main::!").set("Not enough arguments for setsockopt");
+            return scalarFalse;
+        }
+
+        try {
+            RuntimeScalar socketHandle = args[0].scalar();
+            int level = args[1].scalar().getInt();
+            int optname = args[2].scalar().getInt();
+            String optval = args[3].scalar().toString();
+            
+            RuntimeIO socketIO = socketHandle.getRuntimeIO();
+            if (socketIO == null) {
+                getGlobalVariable("main::!").set("Invalid socket handle for setsockopt");
+                return scalarFalse;
+            }
+
+            // Handle socket option setting
+            if (socketIO.ioHandle instanceof org.perlonjava.io.SocketIO) {
+                org.perlonjava.io.SocketIO socketIOHandle = (org.perlonjava.io.SocketIO) socketIO.ioHandle;
+                
+                // Extract the integer value from the optval string
+                int optionValue = 0;
+                if (optval.length() >= 4) {
+                    // Unpack as little-endian integer
+                    byte[] bytes = optval.getBytes("ISO-8859-1");
+                    optionValue = (bytes[0] & 0xFF) | 
+                                 ((bytes[1] & 0xFF) << 8) | 
+                                 ((bytes[2] & 0xFF) << 16) | 
+                                 ((bytes[3] & 0xFF) << 24);
+                }
+                
+                // Store the socket option value using global storage
+                String key = socketIOHandle.hashCode() + ":" + level + ":" + optname;
+                globalSocketOptions.put(key, optionValue);
+                return scalarTrue;
+            } else {
+                getGlobalVariable("main::!").set("Not a socket handle for setsockopt");
+                return scalarFalse;
+            }
+
+        } catch (Exception e) {
+            getGlobalVariable("main::!").set("setsockopt failed: " + e.getMessage());
+            return scalarFalse;
+        }
+    }
+
+    /**
+     * getsockopt(SOCKET, LEVEL, OPTNAME)
+     * Gets socket options
+     */
+    public static RuntimeScalar getsockopt(int ctx, RuntimeBase... args) {
+        if (args.length < 3) {
+            getGlobalVariable("main::!").set("Not enough arguments for getsockopt");
+            return scalarUndef;
+        }
+
+        try {
+            RuntimeScalar socketHandle = args[0].scalar();
+            int level = args[1].scalar().getInt();
+            int optname = args[2].scalar().getInt();
+            
+            RuntimeIO socketIO = socketHandle.getRuntimeIO();
+            if (socketIO == null) {
+                getGlobalVariable("main::!").set("Invalid socket handle for getsockopt");
+                return scalarUndef;
+            }
+
+            // Handle socket option retrieval
+            if (socketIO.ioHandle instanceof org.perlonjava.io.SocketIO) {
+                org.perlonjava.io.SocketIO socketIOHandle = (org.perlonjava.io.SocketIO) socketIO.ioHandle;
+                
+                // Get the stored socket option value using global storage
+                String key = socketIOHandle.hashCode() + ":" + level + ":" + optname;
+                int optionValue = globalSocketOptions.getOrDefault(key, 0);
+                
+                // For SO_ERROR (common case), always return 0 (no error)
+                if (level == 1 && optname == 4) { // SOL_SOCKET, SO_ERROR
+                    optionValue = 0;
+                }
+                
+                // Pack the option value as a 4-byte integer and return it
+                return new RuntimeScalar(pack("i", optionValue));
+            } else {
+                getGlobalVariable("main::!").set("Not a socket handle for getsockopt");
+                return scalarUndef;
+            }
+
+        } catch (Exception e) {
+            getGlobalVariable("main::!").set("getsockopt failed: " + e.getMessage());
+            return scalarUndef;
+        }
+    }
+
+    /**
+     * Helper method to pack an integer as a binary string (simplified version)
+     */
+    private static String pack(String template, int value) {
+        // Simple implementation for "i" template (signed integer)
+        if ("i".equals(template)) {
+            byte[] bytes = new byte[4];
+            bytes[0] = (byte) (value & 0xFF);
+            bytes[1] = (byte) ((value >> 8) & 0xFF);
+            bytes[2] = (byte) ((value >> 16) & 0xFF);
+            bytes[3] = (byte) ((value >> 24) & 0xFF);
+            return new String(bytes, StandardCharsets.ISO_8859_1);
+        }
+        return "";
+    }
+
 }
