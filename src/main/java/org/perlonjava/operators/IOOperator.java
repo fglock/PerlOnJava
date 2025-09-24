@@ -14,6 +14,7 @@ import org.perlonjava.parser.StringParser;
 import org.perlonjava.runtime.*;
 import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.PerlCompilerException;
+import org.perlonjava.runtime.ScalarUtils;
 import org.perlonjava.runtime.PerlJavaUnimplementedException;
 
 import java.io.File;
@@ -23,6 +24,8 @@ import java.nio.channels.FileChannel;
 import java.nio.channels.Pipe;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
+import java.nio.channels.SocketChannel;
+import java.nio.channels.ServerSocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
@@ -1028,11 +1031,11 @@ public class IOOperator {
             }
 
             if (type == 1) { // SOCK_STREAM (TCP)
-                // Create ServerSocket for Perl socket compatibility
-                // This allows the socket to be used for both server operations (bind/listen/accept)
-                // and client operations (connect) as needed
-                ServerSocket serverSocket = new ServerSocket();
-                SocketIO socketIOHandle = new SocketIO(serverSocket);
+                // Create ServerSocket using ServerSocketChannel for native socket option support
+                // This enables proper IPv4/IPv6 compatibility and Java's native socket options
+                ServerSocketChannel serverSocketChannel = ServerSocketChannel.open();
+                ServerSocket serverSocket = serverSocketChannel.socket();
+                SocketIO socketIOHandle = new SocketIO(serverSocket, serverSocketChannel);
                 RuntimeIO socketIO = new RuntimeIO(socketIOHandle);
                 socketHandle.set(socketIO);
                 return scalarTrue;
@@ -1521,7 +1524,8 @@ public class IOOperator {
             RuntimeScalar socketHandle = args[0].scalar();
             int level = args[1].scalar().getInt();
             int optname = args[2].scalar().getInt();
-            String optval = args[3].scalar().toString();
+            RuntimeScalar optvalScalar = args[3].scalar();
+            String optval = optvalScalar.toString();
             
             RuntimeIO socketIO = socketHandle.getRuntimeIO();
             if (socketIO == null) {
@@ -1533,21 +1537,54 @@ public class IOOperator {
             if (socketIO.ioHandle instanceof org.perlonjava.io.SocketIO) {
                 org.perlonjava.io.SocketIO socketIOHandle = (org.perlonjava.io.SocketIO) socketIO.ioHandle;
                 
-                // Extract the integer value from the optval string
+                // Extract the integer value from the optval - handle both integer and string representations
                 int optionValue = 0;
-                if (optval.length() >= 4) {
-                    // Unpack as little-endian integer
-                    byte[] bytes = optval.getBytes("ISO-8859-1");
-                    optionValue = (bytes[0] & 0xFF) | 
-                                 ((bytes[1] & 0xFF) << 8) | 
-                                 ((bytes[2] & 0xFF) << 16) | 
-                                 ((bytes[3] & 0xFF) << 24);
+                
+                // Use Perl's looksLikeNumber logic to determine how to handle the value
+                if (ScalarUtils.looksLikeNumber(optvalScalar)) {
+                    // This is a number - get it directly as an integer
+                    optionValue = optvalScalar.getInt();
+                } else if (optval.length() == 4) {
+                    // This might be a packed binary value - check if it contains non-printable characters
+                    boolean isPacked = false;
+                    for (int i = 0; i < optval.length(); i++) {
+                        char c = optval.charAt(i);
+                        if (c < 32 || c > 126) { // Non-printable ASCII characters suggest binary data
+                            isPacked = true;
+                            break;
+                        }
+                    }
+                    
+                    if (isPacked) {
+                        // Unpack as little-endian integer (packed format)
+                        byte[] bytes = optval.getBytes("ISO-8859-1");
+                        optionValue = (bytes[0] & 0xFF) | 
+                                     ((bytes[1] & 0xFF) << 8) | 
+                                     ((bytes[2] & 0xFF) << 16) | 
+                                     ((bytes[3] & 0xFF) << 24);
+                    } else {
+                        // Try to parse as string number
+                        try {
+                            optionValue = Integer.parseInt(optval.trim());
+                        } catch (NumberFormatException e) {
+                            // If it's not a parseable number, treat non-empty string as 1, empty as 0
+                            optionValue = optval.length() > 0 ? 1 : 0;
+                        }
+                    }
+                } else {
+                    // Try to parse as string number
+                    try {
+                        optionValue = Integer.parseInt(optval.trim());
+                    } catch (NumberFormatException e) {
+                        // If it's not a parseable number, treat non-empty string as 1, empty as 0
+                        optionValue = optval.length() > 0 ? 1 : 0;
+                    }
                 }
                 
-                // Store the socket option value using global storage
-                String key = socketIOHandle.hashCode() + ":" + level + ":" + optname;
-                globalSocketOptions.put(key, optionValue);
-                return scalarTrue;
+                // Use Java's native socket option support via SocketIO
+                boolean success = socketIOHandle.setSocketOption(level, optname, optionValue);
+                
+                return success ? scalarTrue : scalarFalse;
             } else {
                 getGlobalVariable("main::!").set("Not a socket handle for setsockopt");
                 return scalarFalse;
@@ -1584,9 +1621,8 @@ public class IOOperator {
             if (socketIO.ioHandle instanceof org.perlonjava.io.SocketIO) {
                 org.perlonjava.io.SocketIO socketIOHandle = (org.perlonjava.io.SocketIO) socketIO.ioHandle;
                 
-                // Get the stored socket option value using global storage
-                String key = socketIOHandle.hashCode() + ":" + level + ":" + optname;
-                int optionValue = globalSocketOptions.getOrDefault(key, 0);
+                // Use Java's native socket option support via SocketIO
+                int optionValue = socketIOHandle.getSocketOption(level, optname);
                 
                 // For SO_ERROR (common case), always return 0 (no error)
                 if (level == 1 && optname == 4) { // SOL_SOCKET, SO_ERROR
