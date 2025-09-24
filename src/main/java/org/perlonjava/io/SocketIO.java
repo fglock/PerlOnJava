@@ -9,6 +9,10 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketOption;
+import java.net.StandardSocketOptions;
+import java.nio.channels.SocketChannel;
+import java.nio.channels.ServerSocketChannel;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
@@ -26,6 +30,8 @@ import static org.perlonjava.runtime.RuntimeScalarCache.*;
 public class SocketIO implements IOHandle {
     private Socket socket;
     private ServerSocket serverSocket;
+    private SocketChannel socketChannel;
+    private ServerSocketChannel serverSocketChannel;
     private InputStream inputStream;
     private OutputStream outputStream;
     private boolean isEOF;
@@ -46,6 +52,8 @@ public class SocketIO implements IOHandle {
             if (this.socket != null) {
                 this.inputStream = this.socket.getInputStream();
                 this.outputStream = this.socket.getOutputStream();
+                // Get the socket channel for native socket option support
+                this.socketChannel = this.socket.getChannel();
             }
         } catch (IOException e) {
             handleIOException(e, "Failed to initialize socket streams");
@@ -59,6 +67,20 @@ public class SocketIO implements IOHandle {
      */
     public SocketIO(ServerSocket serverSocket) {
         this.serverSocket = serverSocket;
+        this.socketOptions = new HashMap<>();
+        // Get the server socket channel for native socket option support
+        this.serverSocketChannel = this.serverSocket.getChannel();
+    }
+
+    /**
+     * Constructs a SocketIO instance for a server socket with explicit channel.
+     *
+     * @param serverSocket the server socket to be used for accepting connections
+     * @param serverSocketChannel the server socket channel for native socket option support
+     */
+    public SocketIO(ServerSocket serverSocket, ServerSocketChannel serverSocketChannel) {
+        this.serverSocket = serverSocket;
+        this.serverSocketChannel = serverSocketChannel;
         this.socketOptions = new HashMap<>();
     }
 
@@ -342,26 +364,117 @@ public class SocketIO implements IOHandle {
     }
     
     /**
-     * Sets a socket option value.
+     * Sets a socket option value using Java's native socket option support.
+     * This provides better IPv4/IPv6 compatibility and proper socket handling.
      *
      * @param level the socket level (e.g., SOL_SOCKET)
      * @param optname the option name (e.g., SO_REUSEADDR)
      * @param value the option value
+     * @return true if the option was set successfully, false otherwise
      */
-    public void setSocketOption(int level, int optname, int value) {
-        String key = level + ":" + optname;
-        socketOptions.put(key, value);
+    public boolean setSocketOption(int level, int optname, int value) {
+        try {
+            // Try to use Java's native socket option support first
+            SocketOption<?> javaOption = mapToJavaSocketOption(level, optname);
+            if (javaOption != null && socketChannel != null) {
+                if (javaOption == StandardSocketOptions.SO_REUSEADDR) {
+                    socketChannel.setOption(StandardSocketOptions.SO_REUSEADDR, value != 0);
+                    return true;
+                } else if (javaOption == StandardSocketOptions.SO_KEEPALIVE) {
+                    socketChannel.setOption(StandardSocketOptions.SO_KEEPALIVE, value != 0);
+                    return true;
+                } else if (javaOption == StandardSocketOptions.TCP_NODELAY) {
+                    socketChannel.setOption(StandardSocketOptions.TCP_NODELAY, value != 0);
+                    return true;
+                } else if (javaOption == StandardSocketOptions.SO_RCVBUF) {
+                    socketChannel.setOption(StandardSocketOptions.SO_RCVBUF, value);
+                    return true;
+                } else if (javaOption == StandardSocketOptions.SO_SNDBUF) {
+                    socketChannel.setOption(StandardSocketOptions.SO_SNDBUF, value);
+                    return true;
+                }
+            }
+            
+            // Fall back to manual storage for unsupported options
+            String key = level + ":" + optname;
+            socketOptions.put(key, value);
+            return true;
+        } catch (Exception e) {
+            // Fall back to manual storage
+            String key = level + ":" + optname;
+            socketOptions.put(key, value);
+            return true;
+        }
     }
     
     /**
-     * Gets a socket option value.
+     * Gets a socket option value using Java's native socket option support.
+     * This provides better IPv4/IPv6 compatibility and proper socket handling.
      *
      * @param level the socket level (e.g., SOL_SOCKET)
      * @param optname the option name (e.g., SO_REUSEADDR)
      * @return the option value, or 0 if not set
      */
     public int getSocketOption(int level, int optname) {
+        try {
+            // Try to use Java's native socket option support first
+            SocketOption<?> javaOption = mapToJavaSocketOption(level, optname);
+            if (javaOption != null && socketChannel != null) {
+                if (javaOption == StandardSocketOptions.SO_REUSEADDR) {
+                    Boolean value = socketChannel.getOption(StandardSocketOptions.SO_REUSEADDR);
+                    return value != null && value ? 1 : 0;
+                } else if (javaOption == StandardSocketOptions.SO_KEEPALIVE) {
+                    Boolean value = socketChannel.getOption(StandardSocketOptions.SO_KEEPALIVE);
+                    return value != null && value ? 1 : 0;
+                } else if (javaOption == StandardSocketOptions.TCP_NODELAY) {
+                    Boolean value = socketChannel.getOption(StandardSocketOptions.TCP_NODELAY);
+                    return value != null && value ? 1 : 0;
+                } else if (javaOption == StandardSocketOptions.SO_RCVBUF) {
+                    Integer value = socketChannel.getOption(StandardSocketOptions.SO_RCVBUF);
+                    return value != null ? value : 0;
+                } else if (javaOption == StandardSocketOptions.SO_SNDBUF) {
+                    Integer value = socketChannel.getOption(StandardSocketOptions.SO_SNDBUF);
+                    return value != null ? value : 0;
+                }
+            }
+        } catch (Exception e) {
+            // Fall back to manual storage
+        }
+        
+        // Fall back to manual storage for unsupported options
         String key = level + ":" + optname;
         return socketOptions.getOrDefault(key, 0);
+    }
+
+    /**
+     * Maps Perl socket option constants to Java StandardSocketOptions.
+     * This enables native Java socket option handling with IPv4/IPv6 support.
+     *
+     * @param level the protocol level
+     * @param optname the option name
+     * @return the corresponding Java SocketOption, or null if not supported
+     */
+    private SocketOption<?> mapToJavaSocketOption(int level, int optname) {
+        // SOL_SOCKET = 1
+        if (level == 1) {
+            switch (optname) {
+                case 2:  // SO_REUSEADDR
+                    return StandardSocketOptions.SO_REUSEADDR;
+                case 9:  // SO_KEEPALIVE
+                    return StandardSocketOptions.SO_KEEPALIVE;
+                case 8:  // SO_RCVBUF
+                    return StandardSocketOptions.SO_RCVBUF;
+                case 7:  // SO_SNDBUF
+                    return StandardSocketOptions.SO_SNDBUF;
+            }
+        }
+        // IPPROTO_TCP = 6
+        else if (level == 6) {
+            switch (optname) {
+                case 1:  // TCP_NODELAY
+                    return StandardSocketOptions.TCP_NODELAY;
+            }
+        }
+        return null;
     }
 }
