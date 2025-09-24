@@ -313,6 +313,10 @@ The following areas are currently under active development to enhance the functi
 
 - **v5.42.2**: Next minor version
 
+  - Add socket operators: `socket`, `bind`, `listen`, `accept`, `connect`, `send`, `recv`, `shutdown`, `setsockopt`, `getsockopt`, `getsockname`, `getpeername`.
+  - Add Socket.pm module with socket constants and functions.
+  - Add `alarm` operator with `$SIG{ALRM}` signal handling.
+  - Fix `truncate` operator.
   - Add statement: `format`, and `write` operator
   - Add special variables: `@{^CAPTURE}`, `${^LAST_SUCCESSFUL_PATTERN}`.
   - Add pack format `x`.
