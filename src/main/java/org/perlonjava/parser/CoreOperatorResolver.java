@@ -105,8 +105,8 @@ public class CoreOperatorResolver {
                     // Format statements should be handled by StatementResolver, not as operators
                     // Return null to allow StatementResolver to handle it
                     null;
-            case "accept", "bind", "connect", "getpeername", "getsockname", "getsockopt",
-                 "listen", "recv", "send", "setsockopt", "shutdown", "socketpair" ->
+            case "getpeername", "getsockname", "getsockopt",
+                 "recv", "send", "setsockopt", "shutdown", "socketpair" ->
                     throw new PerlJavaUnimplementedException(parser.tokenIndex, "Not implemented: socket operator: " + token.text, parser.ctx.errorUtil);
             case "msgctl", "msgget", "msgrcv", "msgsnd", "semctl", "semget", "semop",
                  "shmctl", "shmget", "shmread", "shmwrite" ->

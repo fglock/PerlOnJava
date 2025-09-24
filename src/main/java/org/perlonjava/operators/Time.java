@@ -1,6 +1,7 @@
 package org.perlonjava.operators;
 
 import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.DynamicVariableManager;
 
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
@@ -10,6 +11,9 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledFuture;
 
 import static org.perlonjava.runtime.ErrorMessageUtil.stringifyException;
 import static org.perlonjava.runtime.GlobalVariable.getGlobalHash;
@@ -20,6 +24,10 @@ import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
  * The Time class provides utility methods for retrieving and formatting time-related information.
  */
 public class Time {
+
+    // Static scheduler for alarm functionality
+    private static final ScheduledExecutorService alarmScheduler = Executors.newSingleThreadScheduledExecutor();
+    private static ScheduledFuture<?> currentAlarm = null;
 
     /**
      * Returns the current time in seconds since the Unix epoch with second precision.
@@ -138,5 +146,58 @@ public class Time {
         long endTime = System.nanoTime();
         long actualSleepTime = endTime - startTime;
         return new RuntimeScalar(actualSleepTime / 1_000_000_000.0);
+    }
+
+    /**
+     * Sets an alarm to go off after the specified number of seconds.
+     * Returns the number of seconds remaining from a previous alarm, if any.
+     *
+     * @param ctx the runtime context
+     * @param args the arguments (seconds to wait)
+     * @return a RuntimeScalar representing the seconds remaining from previous alarm
+     */
+    public static RuntimeScalar alarm(int ctx, RuntimeBase... args) {
+        int seconds = 0;
+        if (args.length > 0) {
+            seconds = args[0].scalar().getInt();
+        }
+
+        // Get the remaining time from any previous alarm
+        int remainingSeconds = 0;
+        if (currentAlarm != null && !currentAlarm.isDone()) {
+            // Cancel the previous alarm and get remaining time
+            remainingSeconds = (int) Math.ceil(currentAlarm.getDelay(TimeUnit.SECONDS));
+            currentAlarm.cancel(false);
+            currentAlarm = null;
+        }
+
+        // Set new alarm if seconds > 0
+        if (seconds > 0) {
+            currentAlarm = alarmScheduler.schedule(() -> {
+                // Trigger SIGALRM handler using WarnDie pattern
+                RuntimeScalar alarmHandler = getGlobalHash("main::SIG").get("ALRM");
+                if (alarmHandler.getDefinedBoolean()) {
+                    try {
+                        RuntimeScalar sigHandler = new RuntimeScalar(alarmHandler);
+                        
+                        // Undefine $SIG{ALRM} before calling the handler to avoid infinite recursion
+                        int level = DynamicVariableManager.getLocalLevel();
+                        DynamicVariableManager.pushLocalVariable(alarmHandler);
+                        
+                        RuntimeArray alarmArgs = new RuntimeArray();
+                        alarmArgs.add(new RuntimeScalar("ALRM"));  // Signal name as argument
+                        RuntimeCode.apply(sigHandler, alarmArgs, RuntimeContextType.SCALAR);
+                        
+                        // Restore $SIG{ALRM}
+                        DynamicVariableManager.popToLocalLevel(level);
+                    } catch (Exception e) {
+                        // If no handler or handler fails, just continue
+                        System.err.println("Alarm signal handler error: " + e.getMessage());
+                    }
+                }
+            }, seconds, TimeUnit.SECONDS);
+        }
+
+        return new RuntimeScalar(remainingSeconds);
     }
 }

@@ -13,6 +13,10 @@ import org.perlonjava.io.*;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.net.DatagramSocket;
+import java.net.Socket;
+import java.nio.channels.ReadableByteChannel;
+import java.nio.channels.WritableByteChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -903,5 +907,16 @@ public class RuntimeIO implements RuntimeScalarReference {
         // we would create a proper duplicate that shares the underlying file descriptor
         // but has separate buffering and close semantics
         return sourceHandle;
+    }
+
+    /**
+     * Truncates the file to the specified length.
+     * Only valid for file handles.
+     *
+     * @param length the new length of the file
+     * @return RuntimeScalar indicating success/failure
+     */
+    public RuntimeScalar truncate(long length) {
+        return ioHandle.truncate(length);
     }
 }
