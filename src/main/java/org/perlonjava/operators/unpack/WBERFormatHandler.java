@@ -68,8 +68,21 @@ public class WBERFormatHandler implements FormatHandler {
                 RuntimeScalar scalar;
                 if (value.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) <= 0 &&
                         value.compareTo(BigInteger.valueOf(Long.MIN_VALUE)) >= 0) {
-                    // Fits in a long
-                    scalar = new RuntimeScalar(value.longValue());
+                    // Fits in a long, but check if it would lose precision in scientific notation
+                    long longValue = value.longValue();
+                    String longAsString = String.valueOf(longValue);
+                    
+                    // If the string representation would be in scientific notation, preserve as string
+                    if (longAsString.contains("E") || longAsString.contains("e") || longValue >= 1e15) {
+                        // Large number that would be formatted in scientific notation - preserve as string
+                        String strValue = value.toString();
+                        scalar = new RuntimeScalar(strValue);
+                        scalar.type = RuntimeScalarType.STRING;
+                        scalar.value = strValue;
+                    } else {
+                        // Small enough to preserve as long without precision loss
+                        scalar = new RuntimeScalar(longValue);
+                    }
                 } else {
                     // Too large for long - must preserve as numeric string
                     String strValue = value.toString();
