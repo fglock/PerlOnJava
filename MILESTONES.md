@@ -318,6 +318,7 @@ The following areas are currently under active development to enhance the functi
   - Add `alarm` operator with `$SIG{ALRM}` signal handling.
   - Fix `truncate` operator.
   - Add `pipe` operator.
+  - Add `socketpair` operator.
   - Add file descriptor duplication support in `open` (`<&`, `>&`, `<&=`, `>&=`).
   - Add statement: `format`, and `write` operator
   - Add special variables: `@{^CAPTURE}`, `${^LAST_SUCCESSFUL_PATTERN}`.
