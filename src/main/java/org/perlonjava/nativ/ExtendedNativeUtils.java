@@ -22,6 +22,16 @@ public class ExtendedNativeUtils extends NativeUtils {
     // Thread-local iterator state for *ent functions
     private static final ThreadLocal<Iterator<String>> userIterator = new ThreadLocal<>();
     private static final ThreadLocal<Iterator<String>> groupIterator = new ThreadLocal<>();
+    private static final ThreadLocal<Iterator<String>> hostIterator = new ThreadLocal<>();
+    private static final ThreadLocal<Iterator<String>> netIterator = new ThreadLocal<>();
+    private static final ThreadLocal<Iterator<String>> protoIterator = new ThreadLocal<>();
+    private static final ThreadLocal<Iterator<String>> servIterator = new ThreadLocal<>();
+
+    // System V IPC structures simulation
+    private static final Map<Integer, RuntimeArray> messageQueues = new ConcurrentHashMap<>();
+    private static final Map<Integer, RuntimeArray> semaphores = new ConcurrentHashMap<>();
+    private static final Map<Integer, RuntimeArray> sharedMemory = new ConcurrentHashMap<>();
+    private static int nextIpcId = 1000;
 
     // ================== User/Group Information Functions ==================
 
@@ -592,5 +602,493 @@ public class ExtendedNativeUtils extends NativeUtils {
         }
 
         return groups;
+    }
+
+    // ================== System V IPC Functions ==================
+
+    /**
+     * Message queue control operations
+     */
+    public static RuntimeScalar msgctl(int ctx, RuntimeBase... args) {
+        if (args.length < 3) return new RuntimeScalar(-1);
+        
+        int msqid = args[0].scalar().getInt();
+        int cmd = args[1].scalar().getInt();
+        RuntimeBase buf = args[2];
+        
+        // Simulate basic msgctl operations
+        switch (cmd) {
+            case 0: // IPC_STAT
+                if (messageQueues.containsKey(msqid)) {
+                    return new RuntimeScalar(0); // Success
+                }
+                break;
+            case 1: // IPC_SET
+                if (messageQueues.containsKey(msqid)) {
+                    return new RuntimeScalar(0); // Success
+                }
+                break;
+            case 2: // IPC_RMID
+                if (messageQueues.remove(msqid) != null) {
+                    return new RuntimeScalar(0); // Success
+                }
+                break;
+        }
+        return new RuntimeScalar(-1); // Error
+    }
+
+    /**
+     * Get message queue identifier
+     */
+    public static RuntimeScalar msgget(int ctx, RuntimeBase... args) {
+        if (args.length < 2) return new RuntimeScalar(-1);
+        
+        int key = args[0].scalar().getInt();
+        int msgflg = args[1].scalar().getInt();
+        
+        // Create or get existing message queue
+        int msqid = nextIpcId++;
+        RuntimeArray msgQueue = new RuntimeArray();
+        messageQueues.put(msqid, msgQueue);
+        
+        return new RuntimeScalar(msqid);
+    }
+
+    /**
+     * Receive message from queue
+     */
+    public static RuntimeScalar msgrcv(int ctx, RuntimeBase... args) {
+        if (args.length < 5) return new RuntimeScalar(-1);
+        
+        int msqid = args[0].scalar().getInt();
+        RuntimeBase msg = args[1];
+        int msgsz = args[2].scalar().getInt();
+        int msgtyp = args[3].scalar().getInt();
+        int msgflg = args[4].scalar().getInt();
+        
+        RuntimeArray msgQueue = messageQueues.get(msqid);
+        if (msgQueue == null || msgQueue.size() == 0) {
+            return new RuntimeScalar(-1); // No messages
+        }
+        
+        // Simulate receiving first message
+        RuntimeBase message = msgQueue.get(0);
+        msgQueue.elements.remove(0);
+        
+        return new RuntimeScalar(message.toString().length());
+    }
+
+    /**
+     * Send message to queue
+     */
+    public static RuntimeScalar msgsnd(int ctx, RuntimeBase... args) {
+        if (args.length < 3) return new RuntimeScalar(-1);
+        
+        int msqid = args[0].scalar().getInt();
+        RuntimeBase msgp = args[1];
+        int msgsz = args[2].scalar().getInt();
+        
+        RuntimeArray msgQueue = messageQueues.get(msqid);
+        if (msgQueue == null) {
+            return new RuntimeScalar(-1); // Queue doesn't exist
+        }
+        
+        // Add message to queue
+        RuntimeArray.push(msgQueue, msgp);
+        return new RuntimeScalar(0); // Success
+    }
+
+    /**
+     * Semaphore control operations
+     */
+    public static RuntimeScalar semctl(int ctx, RuntimeBase... args) {
+        if (args.length < 3) return new RuntimeScalar(-1);
+        
+        int semid = args[0].scalar().getInt();
+        int semnum = args[1].scalar().getInt();
+        int cmd = args[2].scalar().getInt();
+        
+        RuntimeArray semArray = semaphores.get(semid);
+        if (semArray == null) {
+            return new RuntimeScalar(-1); // Semaphore doesn't exist
+        }
+        
+        // Simulate basic semctl operations
+        switch (cmd) {
+            case 0: // GETVAL
+                if (semnum < semArray.size()) {
+                    return semArray.get(semnum).scalar();
+                }
+                break;
+            case 1: // SETVAL
+                if (args.length > 3 && semnum < semArray.size()) {
+                    semArray.elements.set(semnum, args[3].scalar());
+                    return new RuntimeScalar(0);
+                }
+                break;
+            case 2: // IPC_RMID
+                if (semaphores.remove(semid) != null) {
+                    return new RuntimeScalar(0);
+                }
+                break;
+        }
+        return new RuntimeScalar(-1);
+    }
+
+    /**
+     * Get semaphore identifier
+     */
+    public static RuntimeScalar semget(int ctx, RuntimeBase... args) {
+        if (args.length < 3) return new RuntimeScalar(-1);
+        
+        int key = args[0].scalar().getInt();
+        int nsems = args[1].scalar().getInt();
+        int semflg = args[2].scalar().getInt();
+        
+        // Create semaphore array
+        int semid = nextIpcId++;
+        RuntimeArray semArray = new RuntimeArray();
+        for (int i = 0; i < nsems; i++) {
+            RuntimeArray.push(semArray, new RuntimeScalar(0));
+        }
+        semaphores.put(semid, semArray);
+        
+        return new RuntimeScalar(semid);
+    }
+
+    /**
+     * Semaphore operations
+     */
+    public static RuntimeScalar semop(int ctx, RuntimeBase... args) {
+        if (args.length < 2) return new RuntimeScalar(-1);
+        
+        int semid = args[0].scalar().getInt();
+        RuntimeBase sops = args[1];
+        
+        RuntimeArray semArray = semaphores.get(semid);
+        if (semArray == null) {
+            return new RuntimeScalar(-1); // Semaphore doesn't exist
+        }
+        
+        // Simulate semaphore operation (simplified)
+        return new RuntimeScalar(0); // Success
+    }
+
+    /**
+     * Shared memory control operations
+     */
+    public static RuntimeScalar shmctl(int ctx, RuntimeBase... args) {
+        if (args.length < 3) return new RuntimeScalar(-1);
+        
+        int shmid = args[0].scalar().getInt();
+        int cmd = args[1].scalar().getInt();
+        RuntimeBase buf = args[2];
+        
+        RuntimeArray shmSeg = sharedMemory.get(shmid);
+        
+        switch (cmd) {
+            case 0: // IPC_STAT
+                if (shmSeg != null) {
+                    return new RuntimeScalar(0);
+                }
+                break;
+            case 1: // IPC_SET
+                if (shmSeg != null) {
+                    return new RuntimeScalar(0);
+                }
+                break;
+            case 2: // IPC_RMID
+                if (sharedMemory.remove(shmid) != null) {
+                    return new RuntimeScalar(0);
+                }
+                break;
+        }
+        return new RuntimeScalar(-1);
+    }
+
+    /**
+     * Get shared memory identifier
+     */
+    public static RuntimeScalar shmget(int ctx, RuntimeBase... args) {
+        if (args.length < 3) return new RuntimeScalar(-1);
+        
+        int key = args[0].scalar().getInt();
+        int size = args[1].scalar().getInt();
+        int shmflg = args[2].scalar().getInt();
+        
+        // Create shared memory segment
+        int shmid = nextIpcId++;
+        RuntimeArray shmSeg = new RuntimeArray();
+        // Initialize with zeros
+        for (int i = 0; i < size; i++) {
+            RuntimeArray.push(shmSeg, new RuntimeScalar(0));
+        }
+        sharedMemory.put(shmid, shmSeg);
+        
+        return new RuntimeScalar(shmid);
+    }
+
+    /**
+     * Read from shared memory
+     */
+    public static RuntimeScalar shmread(int ctx, RuntimeBase... args) {
+        if (args.length < 4) return new RuntimeScalar(-1);
+        
+        int shmid = args[0].scalar().getInt();
+        RuntimeBase var = args[1];
+        int pos = args[2].scalar().getInt();
+        int size = args[3].scalar().getInt();
+        
+        RuntimeArray shmSeg = sharedMemory.get(shmid);
+        if (shmSeg == null || pos < 0 || pos >= shmSeg.size()) {
+            return new RuntimeScalar(-1);
+        }
+        
+        // Read data from shared memory segment
+        StringBuilder data = new StringBuilder();
+        for (int i = pos; i < Math.min(pos + size, shmSeg.size()); i++) {
+            data.append((char) shmSeg.get(i).scalar().getInt());
+        }
+        
+        // Set the variable to the read data
+        if (var instanceof RuntimeScalar) {
+            ((RuntimeScalar) var).set(data.toString());
+        }
+        
+        return new RuntimeScalar(data.length());
+    }
+
+    /**
+     * Write to shared memory
+     */
+    public static RuntimeScalar shmwrite(int ctx, RuntimeBase... args) {
+        if (args.length < 4) return new RuntimeScalar(-1);
+        
+        int shmid = args[0].scalar().getInt();
+        String string = args[1].toString();
+        int pos = args[2].scalar().getInt();
+        int size = args[3].scalar().getInt();
+        
+        RuntimeArray shmSeg = sharedMemory.get(shmid);
+        if (shmSeg == null || pos < 0) {
+            return new RuntimeScalar(-1);
+        }
+        
+        // Write data to shared memory segment
+        byte[] bytes = string.getBytes();
+        int writeSize = Math.min(size, bytes.length);
+        
+        // Extend segment if necessary
+        while (shmSeg.size() <= pos + writeSize) {
+            RuntimeArray.push(shmSeg, new RuntimeScalar(0));
+        }
+        
+        for (int i = 0; i < writeSize; i++) {
+            shmSeg.elements.set(pos + i, new RuntimeScalar(bytes[i] & 0xFF));
+        }
+        
+        return new RuntimeScalar(writeSize);
+    }
+
+    // ================== Network Enumeration Functions ==================
+
+    /**
+     * End host entries enumeration
+     */
+    public static RuntimeScalar endhostent(int ctx, RuntimeBase... args) {
+        hostIterator.remove();
+        return new RuntimeScalar(1);
+    }
+
+    /**
+     * End network entries enumeration
+     */
+    public static RuntimeScalar endnetent(int ctx, RuntimeBase... args) {
+        netIterator.remove();
+        return new RuntimeScalar(1);
+    }
+
+    /**
+     * End protocol entries enumeration
+     */
+    public static RuntimeScalar endprotoent(int ctx, RuntimeBase... args) {
+        protoIterator.remove();
+        return new RuntimeScalar(1);
+    }
+
+    /**
+     * End service entries enumeration
+     */
+    public static RuntimeScalar endservent(int ctx, RuntimeBase... args) {
+        servIterator.remove();
+        return new RuntimeScalar(1);
+    }
+
+    /**
+     * Get next host entry
+     */
+    public static RuntimeArray gethostent(int ctx, RuntimeBase... args) {
+        Iterator<String> iterator = hostIterator.get();
+        if (iterator == null) {
+            List<String> hosts = getSystemHosts();
+            iterator = hosts.iterator();
+            hostIterator.set(iterator);
+        }
+
+        if (iterator.hasNext()) {
+            String hostname = iterator.next();
+            return gethostbyname(ctx, new RuntimeScalar(hostname));
+        }
+
+        return new RuntimeArray(); // End of entries
+    }
+
+    /**
+     * Get network by address
+     */
+    public static RuntimeArray getnetbyaddr(int ctx, RuntimeBase... args) {
+        if (args.length < 2) return new RuntimeArray();
+        
+        String addr = args[0].toString();
+        int addrtype = args[1].scalar().getInt();
+        
+        // Simplified network lookup
+        RuntimeArray result = new RuntimeArray();
+        RuntimeArray.push(result, new RuntimeScalar("loopback")); // name
+        RuntimeArray.push(result, new RuntimeArray()); // aliases
+        RuntimeArray.push(result, new RuntimeScalar(addrtype)); // addrtype
+        RuntimeArray.push(result, new RuntimeScalar("127.0.0.1")); // net
+        
+        return result;
+    }
+
+    /**
+     * Get network by name
+     */
+    public static RuntimeArray getnetbyname(int ctx, RuntimeBase... args) {
+        if (args.length < 1) return new RuntimeArray();
+        
+        String name = args[0].toString();
+        
+        // Simplified network lookup
+        RuntimeArray result = new RuntimeArray();
+        if (name.equals("loopback") || name.equals("localhost")) {
+            RuntimeArray.push(result, new RuntimeScalar(name)); // name
+            RuntimeArray.push(result, new RuntimeArray()); // aliases
+            RuntimeArray.push(result, new RuntimeScalar(2)); // addrtype (AF_INET)
+            RuntimeArray.push(result, new RuntimeScalar("127.0.0.1")); // net
+        }
+        
+        return result;
+    }
+
+    /**
+     * Get next network entry
+     */
+    public static RuntimeArray getnetent(int ctx, RuntimeBase... args) {
+        Iterator<String> iterator = netIterator.get();
+        if (iterator == null) {
+            List<String> networks = Arrays.asList("loopback", "localhost");
+            iterator = networks.iterator();
+            netIterator.set(iterator);
+        }
+
+        if (iterator.hasNext()) {
+            String netname = iterator.next();
+            return getnetbyname(ctx, new RuntimeScalar(netname));
+        }
+
+        return new RuntimeArray(); // End of entries
+    }
+
+    /**
+     * Get next protocol entry
+     */
+    public static RuntimeArray getprotoent(int ctx, RuntimeBase... args) {
+        Iterator<String> iterator = protoIterator.get();
+        if (iterator == null) {
+            List<String> protocols = Arrays.asList("tcp", "udp", "icmp", "ip");
+            iterator = protocols.iterator();
+            protoIterator.set(iterator);
+        }
+
+        if (iterator.hasNext()) {
+            String protoname = iterator.next();
+            return getprotobyname(ctx, new RuntimeScalar(protoname));
+        }
+
+        return new RuntimeArray(); // End of entries
+    }
+
+    /**
+     * Get next service entry
+     */
+    public static RuntimeArray getservent(int ctx, RuntimeBase... args) {
+        Iterator<String> iterator = servIterator.get();
+        if (iterator == null) {
+            List<String> services = Arrays.asList("http", "https", "ftp", "ssh", "telnet", "smtp", "dns", "pop3", "imap", "snmp");
+            iterator = services.iterator();
+            servIterator.set(iterator);
+        }
+
+        if (iterator.hasNext()) {
+            String servicename = iterator.next();
+            return getservbyname(ctx, new RuntimeScalar(servicename), new RuntimeScalar("tcp"));
+        }
+
+        return new RuntimeArray(); // End of entries
+    }
+
+    /**
+     * Set host entries enumeration
+     */
+    public static RuntimeScalar sethostent(int ctx, RuntimeBase... args) {
+        hostIterator.remove(); // Reset iterator
+        return new RuntimeScalar(1);
+    }
+
+    /**
+     * Set network entries enumeration
+     */
+    public static RuntimeScalar setnetent(int ctx, RuntimeBase... args) {
+        netIterator.remove(); // Reset iterator
+        return new RuntimeScalar(1);
+    }
+
+    /**
+     * Set protocol entries enumeration
+     */
+    public static RuntimeScalar setprotoent(int ctx, RuntimeBase... args) {
+        protoIterator.remove(); // Reset iterator
+        return new RuntimeScalar(1);
+    }
+
+    /**
+     * Set service entries enumeration
+     */
+    public static RuntimeScalar setservent(int ctx, RuntimeBase... args) {
+        servIterator.remove(); // Reset iterator
+        return new RuntimeScalar(1);
+    }
+
+    /**
+     * Get list of system hosts (simplified)
+     */
+    private static List<String> getSystemHosts() {
+        List<String> hosts = new ArrayList<>();
+        hosts.add("localhost");
+        hosts.add("127.0.0.1");
+        
+        try {
+            // Add local hostname
+            String hostname = java.net.InetAddress.getLocalHost().getHostName();
+            if (!hosts.contains(hostname)) {
+                hosts.add(hostname);
+            }
+        } catch (Exception e) {
+            // Ignore
+        }
+        
+        return hosts;
     }
 }

@@ -106,15 +106,11 @@ public class CoreOperatorResolver {
                     // Return null to allow StatementResolver to handle it
                     null;
             case "msgctl", "msgget", "msgrcv", "msgsnd", "semctl", "semget", "semop",
-                 "shmctl", "shmget", "shmread", "shmwrite" ->
-                    throw new PerlJavaUnimplementedException(parser.tokenIndex, "Not implemented: System V IPC operator: " + token.text, parser.ctx.errorUtil);
-            case "endhostent", "endnetent" ->
-                    throw new PerlJavaUnimplementedException(parser.tokenIndex, "Not implemented: User/Group info operator: " + token.text, parser.ctx.errorUtil);
-            case "endprotoent", "endservent", "gethostent",
+                 "shmctl", "shmget", "shmread", "shmwrite",
+                 "endhostent", "endnetent", "endprotoent", "endservent", "gethostent",
                  "getnetbyaddr", "getnetbyname", "getnetent",
                  "getprotoent", "getservent", "sethostent",
-                 "setnetent", "setprotoent", "setservent" ->
-                    throw new PerlJavaUnimplementedException(parser.tokenIndex, "Not implemented: Network info operator: " + token.text, parser.ctx.errorUtil);
+                 "setnetent", "setprotoent", "setservent" -> parseWithPrototype(parser, token, currentIndex);
             default -> parseWithPrototype(parser, token, currentIndex);
         };
     }
