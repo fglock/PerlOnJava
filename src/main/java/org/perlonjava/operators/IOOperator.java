@@ -5,6 +5,7 @@ import org.perlonjava.io.ClosedIOHandle;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
 import org.perlonjava.io.IOHandle;
+import org.perlonjava.io.InternalPipeHandle;
 import org.perlonjava.io.LayeredIOHandle;
 import org.perlonjava.io.PipeInputChannel;
 import org.perlonjava.io.PipeOutputChannel;
@@ -44,6 +45,9 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 public class IOOperator {
     // Simple socket option storage: key is "socketHashCode:level:optname", value is the option value
     private static final Map<String, Integer> globalSocketOptions = new ConcurrentHashMap<>();
+    
+    // File descriptor to RuntimeIO mapping for duplication support
+    private static final Map<Integer, RuntimeIO> fileDescriptorMap = new ConcurrentHashMap<>();
     
     public static RuntimeScalar select(RuntimeList runtimeList, int ctx) {
         if (runtimeList.isEmpty()) {
@@ -209,18 +213,41 @@ public class IOOperator {
             // 3-argument open
             RuntimeScalar secondArg = args[2].scalar();
 
-            // Check for filehandle duplication modes (<& and >&)
-            if (mode.equals("<&") || mode.equals(">&")) {
+            // Check for filehandle duplication modes (<&, >&, <&=, >&=)
+            if (mode.equals("<&") || mode.equals(">&") || mode.equals("<&=") || mode.equals(">&=")) {
                 // Handle filehandle duplication
                 String argStr = secondArg.toString();
+                boolean isParsimonious = mode.endsWith("="); // &= modes reuse file descriptor
                 
+                // Check if it's a numeric file descriptor
+                if (argStr.matches("^\\d+$")) {
+                    int fd = Integer.parseInt(argStr);
+                    // Handle numeric file descriptor duplication
+                    RuntimeIO sourceHandle = findFileHandleByDescriptor(fd);
+                    if (sourceHandle != null && sourceHandle.ioHandle != null) {
+                        if (isParsimonious) {
+                            // &= mode: reuse the same file descriptor (parsimonious)
+                            fh = sourceHandle;
+                        } else {
+                            // & mode: create a new handle that duplicates the original
+                            fh = duplicateFileHandle(sourceHandle);
+                        }
+                    } else {
+                        throw new PerlCompilerException("Bad file descriptor: " + fd);
+                    }
+                }
                 // Check if it's a GLOB or GLOBREFERENCE
-                if (secondArg.type == RuntimeScalarType.GLOB || secondArg.type == RuntimeScalarType.GLOBREFERENCE) {
+                else if (secondArg.type == RuntimeScalarType.GLOB || secondArg.type == RuntimeScalarType.GLOBREFERENCE) {
                     try {
                         RuntimeIO sourceHandle = secondArg.getRuntimeIO();
                         if (sourceHandle != null && sourceHandle.ioHandle != null) {
-                            // For now, return the same handle (simplified duplication)
-                            fh = sourceHandle;
+                            if (isParsimonious) {
+                                // &= mode: reuse the same file descriptor (parsimonious)
+                                fh = sourceHandle;
+                            } else {
+                                // & mode: create a new handle that duplicates the original
+                                fh = duplicateFileHandle(sourceHandle);
+                            }
                         } else {
                             throw new PerlCompilerException("Bad filehandle: " + extractFilehandleName(argStr));
                         }
@@ -1283,16 +1310,37 @@ public class IOOperator {
             RuntimeScalar readHandle = args[0].scalar();
             RuntimeScalar writeHandle = args[1].scalar();
 
-            // For now, use a simple implementation with PipedInputStream/PipedOutputStream
-            // This creates an internal pipe for communication between threads
+            // Create connected pipes using Java's PipedInputStream/PipedOutputStream
             java.io.PipedInputStream pipeIn = new java.io.PipedInputStream();
             java.io.PipedOutputStream pipeOut = new java.io.PipedOutputStream(pipeIn);
             
-            // Create simple IOHandle implementations for the pipe ends
-            // Note: This is a simplified implementation - in a full implementation,
-            // we would create proper IOHandle classes for pipes
-            getGlobalVariable("main::!").set("Internal pipes not yet fully implemented");
-            return scalarFalse;
+            // Create IOHandle implementations for the pipe ends
+            InternalPipeHandle readerHandle = InternalPipeHandle.createReader(pipeIn);
+            InternalPipeHandle writerHandle = InternalPipeHandle.createWriter(pipeOut);
+            
+            // Create RuntimeIO objects for the handles
+            RuntimeIO readerIO = new RuntimeIO();
+            readerIO.ioHandle = readerHandle;
+            
+            RuntimeIO writerIO = new RuntimeIO();
+            writerIO.ioHandle = writerHandle;
+            
+            // Vivify the bareword filehandles in the global symbol table
+            // This is the proper way to handle bareword filehandles like READER and WRITER
+            RuntimeGlob readGlob = GlobalVariable.getGlobalIO("main::READER");
+            readGlob.setIO(readerIO);
+            
+            RuntimeGlob writeGlob = GlobalVariable.getGlobalIO("main::WRITER");
+            writeGlob.setIO(writerIO);
+            
+            // Assign the vivified RuntimeGlob objects to the scalar handles
+            readHandle.type = RuntimeScalarType.GLOB;
+            readHandle.value = readGlob;
+            
+            writeHandle.type = RuntimeScalarType.GLOB;
+            writeHandle.value = writeGlob;
+            
+            return scalarTrue;
 
         } catch (Exception e) {
             getGlobalVariable("main::!").set("Pipe creation failed: " + e.getMessage());
@@ -1656,6 +1704,63 @@ public class IOOperator {
             return new String(bytes, StandardCharsets.ISO_8859_1);
         }
         return "";
+    }
+
+    /**
+     * Find a RuntimeIO handle by its file descriptor number.
+     * This is a simplified implementation that maps standard file descriptors.
+     */
+    private static RuntimeIO findFileHandleByDescriptor(int fd) {
+        // Check if we have it in our mapping
+        RuntimeIO handle = fileDescriptorMap.get(fd);
+        if (handle != null) {
+            return handle;
+        }
+        
+        // Handle standard file descriptors
+        switch (fd) {
+            case 0: // STDIN
+                return RuntimeIO.stdin;
+            case 1: // STDOUT
+                return RuntimeIO.stdout;
+            case 2: // STDERR
+                return RuntimeIO.stderr;
+            default:
+                return null; // Unknown file descriptor
+        }
+    }
+
+    /**
+     * Create a duplicate of a RuntimeIO handle.
+     * This creates a new RuntimeIO that shares the same underlying IOHandle.
+     */
+    private static RuntimeIO duplicateFileHandle(RuntimeIO original) {
+        if (original == null || original.ioHandle == null) {
+            return null;
+        }
+        
+        // Create a new RuntimeIO that shares the same IOHandle
+        RuntimeIO duplicate = new RuntimeIO();
+        duplicate.ioHandle = original.ioHandle;
+        duplicate.currentLineNumber = original.currentLineNumber;
+        
+        return duplicate;
+    }
+
+    /**
+     * Register a RuntimeIO handle with a file descriptor number for duplication support.
+     */
+    public static void registerFileDescriptor(int fd, RuntimeIO handle) {
+        if (handle != null) {
+            fileDescriptorMap.put(fd, handle);
+        }
+    }
+
+    /**
+     * Unregister a file descriptor when the handle is closed.
+     */
+    public static void unregisterFileDescriptor(int fd) {
+        fileDescriptorMap.remove(fd);
     }
 
 }

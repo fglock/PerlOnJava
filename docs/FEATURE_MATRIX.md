@@ -389,7 +389,7 @@ my @copy = @{$z};         # ERROR
   - 3-argument forms with explicit modes
   - In-memory files
   - support for pipe input and output like: `-|`, `|-`, `ls|`, `|sort`.
-  - ❌ file modes using `&=`, like `+<&=` (duplicate an existing file descriptor) is not supported.
+  - ✅ file descriptor duplication modes: `<&`, `>&`, `<&=`, `>&=` (duplicate existing file descriptors)
 
 - ✅  **`readline`**: Reading lines from filehandles
   - ✅  Paragraph mode ($/ = '' - empty string)
@@ -430,8 +430,9 @@ my @copy = @{$z};         # ERROR
 - ✅  **`getsockname`**: Local socket address retrieval
 - ✅  **`getpeername`**: Remote socket address retrieval
 
+- ✅  **`pipe`**: Internal pipe creation for inter-process communication
+
 ### Unimplemented I/O Operators
-- ❌  **`pipe`**: Unix pipes
 
 ### I/O Layers
 - ✅  **Layer support**: `open` and `binmode` support these I/O layers:
