@@ -313,12 +313,13 @@ The following areas are currently under active development to enhance the functi
 
 - **v5.42.2**: Next minor version
 
-  - Add socket operators: `socket`, `bind`, `listen`, `accept`, `connect`, `send`, `recv`, `shutdown`, `setsockopt`, `getsockopt`, `getsockname`, `getpeername`.
+  - Add System V IPC operators: `msgctl`, `msgget`, `msgrcv`, `msgsnd`, `semctl`, `semget`, `semop`, `shmctl`, `shmget`, `shmread`, `shmwrite`.
+  - Add network enumeration operators: `endhostent`, `endnetent`, `endprotoent`, `endservent`, `gethostent`, `getnetbyaddr`, `getnetbyname`, `getnetent`, `getprotoent`, `getservent`, `sethostent`, `setnetent`, `setprotoent`, `setservent`.
+  - Add socket operators: `socket`, `bind`, `listen`, `accept`, `connect`, `send`, `recv`, `shutdown`, `setsockopt`, `getsockopt`, `getsockname`, `getpeername`, `socketpair`.
   - Add Socket.pm module with socket constants and functions.
   - Add `alarm` operator with `$SIG{ALRM}` signal handling.
   - Fix `truncate` operator.
   - Add `pipe` operator.
-  - Add `socketpair` operator.
   - Add file descriptor duplication support in `open` (`<&`, `>&`, `<&=`, `>&=`).
   - Add statement: `format`, and `write` operator
   - Add special variables: `@{^CAPTURE}`, `${^LAST_SUCCESSFUL_PATTERN}`.
