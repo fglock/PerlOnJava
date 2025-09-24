@@ -163,6 +163,7 @@ public class GlobalContext {
         Encode.initialize();
         JavaSystem.initialize();
         PerlIO.initialize();
+        Version.initialize();   // Initialize version module for version objects
         XSLoader.initialize();  // XSLoader will load other classes on-demand
 
         // Reset method cache after initializing UNIVERSAL
