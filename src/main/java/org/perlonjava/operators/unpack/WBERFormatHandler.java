@@ -33,18 +33,32 @@ public class WBERFormatHandler implements FormatHandler {
                     value = value.shiftLeft(7).or(BigInteger.valueOf(b & 0x7F));
                 } while ((b & 0x80) != 0);
 
-                // Convert to RuntimeScalar
+                // Convert to RuntimeScalar, preserving exact value
                 RuntimeScalar scalar;
-
-                // For very large values that would lose precision as double
-                if (value.bitLength() > 53) {
-                    // Preserve as string
+                if (value.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) <= 0 &&
+                        value.compareTo(BigInteger.valueOf(Long.MIN_VALUE)) >= 0) {
+                    // Fits in a long, but check if it would lose precision in scientific notation
+                    long longValue = value.longValue();
+                    String longAsString = String.valueOf(longValue);
+                    
+                    // If the string representation would be in scientific notation, preserve as string
+                    if (longAsString.contains("E") || longAsString.contains("e") || longValue >= 1e15) {
+                        // Large number that would be formatted in scientific notation - preserve as string
+                        String strValue = value.toString();
+                        scalar = new RuntimeScalar(strValue);
+                        scalar.type = RuntimeScalarType.STRING;
+                        scalar.value = strValue;
+                    } else {
+                        // Small enough to preserve as long without precision loss
+                        scalar = new RuntimeScalar(longValue);
+                    }
+                } else {
+                    // Too large for long - must preserve as numeric string
                     String strValue = value.toString();
                     scalar = new RuntimeScalar(strValue);
-                } else {
-                    // Convert through long, which will automatically convert to DOUBLE
-                    // if the value is larger than Integer.MAX_VALUE
-                    scalar = new RuntimeScalar(value.longValue());
+                    // Force the scalar to remain a string
+                    scalar.type = RuntimeScalarType.STRING;
+                    scalar.value = strValue;
                 }
                 output.add(scalar);
             } else {

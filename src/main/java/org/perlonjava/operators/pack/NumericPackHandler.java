@@ -154,11 +154,19 @@ public class NumericPackHandler implements PackFormatHandler {
                     if (doubleValue > Long.MAX_VALUE || stringValue.length() > 18) {
                         // Use BigInteger for very large values to avoid overflow
                         try {
-                            BigInteger bigValue = new BigInteger(stringValue);
+                            BigInteger bigValue;
+                            // Handle scientific notation by converting through BigDecimal
+                            if (stringValue.contains("e") || stringValue.contains("E")) {
+                                // Convert scientific notation to integer via BigDecimal
+                                java.math.BigDecimal decimal = new java.math.BigDecimal(stringValue);
+                                bigValue = decimal.toBigInteger();
+                            } else {
+                                bigValue = new BigInteger(stringValue);
+                            }
                             PackWriter.writeBER(output, bigValue);
-                        } catch (NumberFormatException e) {
-                            // If string parsing fails, fall back to double conversion
-                            PackWriter.writeBER(output, (long) doubleValue);
+                        } catch (NumberFormatException | ArithmeticException e) {
+                            // If conversion fails, this means the number is not an integer
+                            throw new PerlCompilerException("Can only compress unsigned integers");
                         }
                     } else {
                         // Small enough for long
