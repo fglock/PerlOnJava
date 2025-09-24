@@ -132,9 +132,9 @@ public class PackWriter {
         if (value < 128) {
             output.write((int) value);
         } else {
-            // Write high-order bytes with continuation bit set
+            // Recursively write high-order bytes with continuation bit set
             writeBER(output, value >> 7);
-            // Write low-order 7 bits with continuation bit
+            // Write low-order 7 bits with continuation bit set
             output.write((int) ((value & 0x7F) | 0x80));
         }
     }
