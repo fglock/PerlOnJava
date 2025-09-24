@@ -132,6 +132,7 @@ public record OperatorHandler(String className, String methodName, int methodTyp
         put("shutdown", "shutdown", "org/perlonjava/operators/IOOperator", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("setsockopt", "setsockopt", "org/perlonjava/operators/IOOperator", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("getsockopt", "getsockopt", "org/perlonjava/operators/IOOperator", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("socketpair", "socketpair", "org/perlonjava/operators/IOOperator", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("pipe", "pipe", "org/perlonjava/operators/IOOperator", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
 
         // Directory

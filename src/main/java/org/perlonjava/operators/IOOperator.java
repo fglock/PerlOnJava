@@ -1307,8 +1307,13 @@ public class IOOperator {
         }
 
         try {
-            RuntimeScalar readHandle = args[0].scalar();
-            RuntimeScalar writeHandle = args[1].scalar();
+            // The arguments are references to RuntimeGlob objects that already exist
+            RuntimeScalar readRef = args[0].scalar();
+            RuntimeScalar writeRef = args[1].scalar();
+            
+            // Get the actual RuntimeGlob objects from the references
+            RuntimeGlob readGlob = (RuntimeGlob) readRef.value;
+            RuntimeGlob writeGlob = (RuntimeGlob) writeRef.value;
 
             // Create connected pipes using Java's PipedInputStream/PipedOutputStream
             java.io.PipedInputStream pipeIn = new java.io.PipedInputStream();
@@ -1325,20 +1330,9 @@ public class IOOperator {
             RuntimeIO writerIO = new RuntimeIO();
             writerIO.ioHandle = writerHandle;
             
-            // Vivify the bareword filehandles in the global symbol table
-            // This is the proper way to handle bareword filehandles like READER and WRITER
-            RuntimeGlob readGlob = GlobalVariable.getGlobalIO("main::READER");
+            // Set the IO handles directly on the existing globs
             readGlob.setIO(readerIO);
-            
-            RuntimeGlob writeGlob = GlobalVariable.getGlobalIO("main::WRITER");
             writeGlob.setIO(writerIO);
-            
-            // Assign the vivified RuntimeGlob objects to the scalar handles
-            readHandle.type = RuntimeScalarType.GLOB;
-            readHandle.value = readGlob;
-            
-            writeHandle.type = RuntimeScalarType.GLOB;
-            writeHandle.value = writeGlob;
             
             return scalarTrue;
 
@@ -1761,6 +1755,64 @@ public class IOOperator {
      */
     public static void unregisterFileDescriptor(int fd) {
         fileDescriptorMap.remove(fd);
+    }
+
+    /**
+     * Create a pair of connected sockets (socketpair operator)
+     * This creates two connected sockets that can communicate with each other
+     */
+    public static RuntimeScalar socketpair(int ctx, RuntimeBase... args) {
+        if (args.length < 5) {
+            throw new PerlCompilerException("Not enough arguments for socketpair");
+        }
+        
+        try {
+            // The first two arguments are references to RuntimeGlob objects that already exist
+            RuntimeScalar sock1Ref = args[0].scalar();
+            RuntimeScalar sock2Ref = args[1].scalar();
+            RuntimeBase domain = args[2];
+            RuntimeBase type = args[3];
+            RuntimeBase protocol = args[4];
+            
+            // Get the actual RuntimeGlob objects from the references
+            RuntimeGlob glob1 = (RuntimeGlob) sock1Ref.value;
+            RuntimeGlob glob2 = (RuntimeGlob) sock2Ref.value;
+            
+            // For simplicity, we'll create a local socket pair using ServerSocket and Socket
+            // This is similar to how socketpair works on Unix systems
+            
+            // Create a server socket on localhost with a random port
+            ServerSocket serverSocket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress());
+            int port = serverSocket.getLocalPort();
+            
+            // Create the first socket and connect it to the server
+            Socket socket1 = new Socket();
+            socket1.connect(new InetSocketAddress(InetAddress.getLoopbackAddress(), port));
+            
+            // Accept the connection on the server side to get the second socket
+            Socket socket2 = serverSocket.accept();
+            
+            // Close the server socket as we no longer need it
+            serverSocket.close();
+            
+            // Create RuntimeIO objects for both sockets
+            RuntimeIO io1 = new RuntimeIO();
+            io1.ioHandle = new SocketIO(socket1);
+            
+            RuntimeIO io2 = new RuntimeIO();
+            io2.ioHandle = new SocketIO(socket2);
+            
+            // Set the IO handles directly on the existing globs
+            glob1.setIO(io1);
+            glob2.setIO(io2);
+            
+            return scalarTrue;
+            
+        } catch (IOException e) {
+            // Set $! to the error message
+            getGlobalVariable("main::!").set(e.getMessage());
+            return scalarFalse;
+        }
     }
 
 }
