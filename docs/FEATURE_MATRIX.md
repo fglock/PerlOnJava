@@ -379,6 +379,8 @@ my @copy = @{$z};         # ERROR
 - ✅  **`system` operator**: `system` is implemented.
 - ✅  **`exec` operator**: `exec` is implemented.
 - ✅  **User/Group operators, Network info operators**: `getlogin`, `getpwnam`, `getpwuid`, `getgrnam`, `getgrgid`, `getpwent`, `getgrent`, `setpwent`, `setgrent`, `endpwent`, `endgrent`, `gethostbyname`, `gethostbyaddr`, `getservbyname`, `getservbyport`, `getprotobyname`, `getprotobynumber`.
+- ✅  **Network enumeration operators**: `endhostent`, `endnetent`, `endprotoent`, `endservent`, `gethostent`, `getnetbyaddr`, `getnetbyname`, `getnetent`, `getprotoent`, `getservent`, `sethostent`, `setnetent`, `setprotoent`, `setservent`.
+- ✅  **System V IPC operators**: `msgctl`, `msgget`, `msgrcv`, `msgsnd`, `semctl`, `semget`, `semop`, `shmctl`, `shmget`, `shmread`, `shmwrite`.
 - ✅  **`format` operator**: `format` and `write` functions for report generation are implemented.
 
 ## I/O Operations
@@ -645,9 +647,6 @@ The DBI module provides seamless integration with JDBC drivers:
   - `DESTROY` method in tied variables is also not implemented. DESTROY is called when the variable is `untie`.
 - ❌  **Perl `XS` code**: XS code interfacing with C is not supported on the JVM.
 - ❌  **Auto-close files**: File auto-close depends on handling of object destruction, may be incompatible with JVM garbage collection. All files are closed before the program ends.
-- ✅  **System V interprocess communication functions**: msgctl, msgget, msgrcv, msgsnd, semctl, semget, semop, shmctl, shmget, shmread, shmwrite
-- ✅  **Fetching user and group info**: endhostent, endnetent
-- ✅  **Network enumeration functions**: endprotoent, endservent, gethostent, getnetbyaddr, getnetbyname, getnetent, getprotoent, getservent, sethostent, setnetent, setprotoent, setservent (individual lookup functions like gethostbyname, getservbyname, getprotobyname are implemented)
 - ❌  **Keywords related to the control flow of the Perl program**: `dump` operator.
 - ❌  **Tail calls**: `goto` going to a different subroutine as a tail call is not supported.
 
