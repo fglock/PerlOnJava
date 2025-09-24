@@ -186,7 +186,8 @@ my @copy = @{$z};         # ERROR
 - ✅  **`crypt` operator**: `crypt` is implemented.
 - ✅  **`study`, `srand`**: `study`, `srand` are implemented.
 - ✅  **`chomp`**: `chomp` is implemented.
-- ✅  **`sleep`**: `sleep` is implemented. It takes fractional seconds. `$SIG{ALRM}` is also implemented.
+- ✅  **`sleep`**: `sleep` is implemented. It takes fractional seconds.
+- ✅  **`alarm`**: `alarm` is implemented with `$SIG{ALRM}` signal handling support.
 - ✅  **`stat`**: `stat`, `lstat` are implemented. Some fields are not available in JVM and return `undef`.
 - ✅  **Vectors**: `vec` is implemented.
 - ✅  **Lvalue `substr`**: Assignable Substring extraction is implemented.
@@ -413,14 +414,23 @@ my @copy = @{$z};         # ERROR
 - ✅  **`syswrite`**
 - ✅  **Tied Handles**: Tied file handles are not implemented.
 - ✅  **`DATA`**: `DATA` file handle works.
+- ✅  **`truncate`**: File truncation
+
+### Socket Operations
+- ✅  **`socket`**: Socket creation with domain, type, and protocol support
+- ✅  **`bind`**: Socket binding to addresses
+- ✅  **`listen`**: Socket listening for connections
+- ✅  **`accept`**: Connection acceptance
+- ✅  **`connect`**: Socket connection establishment
+- ✅  **`send`**: Data transmission over sockets
+- ✅  **`recv`**: Data reception from sockets
+- ✅  **`shutdown`**: Socket shutdown
+- ✅  **`setsockopt`**: Socket option configuration
+- ✅  **`getsockopt`**: Socket option retrieval
+- ✅  **`getsockname`**: Local socket address retrieval
+- ✅  **`getpeername`**: Remote socket address retrieval
 
 ### Unimplemented I/O Operators
-- ❌  **`socket`**: Socket creation
-- ❌  **`truncate`**: File truncation
-- ❌  **`bind`**: Socket binding
-- ❌  **`connect`**: Socket connection
-- ❌  **`accept`**: Connection acceptance
-- ❌  **`listen`**: Socket listening
 - ❌  **`pipe`**: Unix pipes
 
 ### I/O Layers
@@ -579,6 +589,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **Time::Local** module.
 - ✅  **UNIVERSAL**: `isa`, `can`, `DOES`, `VERSION` are implemented. `isa` operator is implemented.
 - ✅  **URI::Escape** module.
+- ✅  **Socket** module: socket constants and functions (`pack_sockaddr_in`, `unpack_sockaddr_in`, `sockaddr_in`, `inet_aton`, `inet_ntoa`, `gethostbyname`).
 - ✅  **XSLoader** module.
 - 🚧  **DynaLoader** placeholder module.
 - 🚧  **HTTP::Tiny** some features untested: proxy settings.
