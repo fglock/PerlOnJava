@@ -121,13 +121,25 @@ $os_name =~ s/\s+/_/g;
     d_readlink => 'define',
     d_symlink => _check_symlink_support(),
     d_fork => undef,  # No true fork in Java
-    d_alarm => undef, # No reliable alarm in Java
+    d_alarm => 'define', # We now have alarm support with signal queue
     d_chown => _check_chown_support(),
     d_chroot => undef,
     d_crypt => 'define',
     d_double_has_inf => 'define',
     d_double_has_nan => 'define',
     d_double_style_ieee => 'define',
+    
+    # Socket support - we have implemented socket operators
+    d_socket => 'define',
+    d_getpbyname => 'define',
+    d_gethbyname => 'define',
+    d_sockpair => undef,  # Not implemented yet
+    d_oldsock => undef,
+    
+    # Network functions
+    d_gethostbyname => 'define',
+    d_getprotobyname => 'define',
+    d_getservbyname => 'define',
 
     # Signal handling
     sig_name => 'HUP INT QUIT ILL TRAP ABRT BUS FPE KILL USR1 SEGV USR2 PIPE ALRM TERM',
@@ -168,6 +180,15 @@ $os_name =~ s/\s+/_/g;
 
     # Perl tests use this
     useperlio => 'define',
+    
+    # Extensions available in PerlOnJava
+    extensions => 'Socket IO::Socket',
+    dynamic_ext => 'Socket IO::Socket',
+    static_ext => '',
+    
+    # File operations
+    d_truncate => 'define',  # We have truncate support
+    d_ftruncate => 'define',
 );
 
 sub non_bincompat_options() {}

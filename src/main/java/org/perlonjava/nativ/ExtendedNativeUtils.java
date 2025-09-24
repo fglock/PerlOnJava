@@ -290,7 +290,16 @@ public class ExtendedNativeUtils extends NativeUtils {
 
         String cacheKey = "host:" + hostname;
         if (hostInfoCache.containsKey(cacheKey)) {
-            return hostInfoCache.get(cacheKey);
+            RuntimeArray cached = hostInfoCache.get(cacheKey);
+            // In scalar context, return the packed IP address (4th element)
+            if (ctx == SCALAR && cached.size() >= 5) {
+                // The packed IP address is now directly at index 4
+                RuntimeBase packedAddress = cached.get(4);
+                RuntimeArray scalarResult = new RuntimeArray();
+                RuntimeArray.push(scalarResult, packedAddress);
+                return scalarResult;
+            }
+            return cached;
         }
 
         RuntimeArray result = new RuntimeArray();
@@ -303,11 +312,18 @@ public class ExtendedNativeUtils extends NativeUtils {
             RuntimeArray.push(result, new RuntimeScalar(2)); // addrtype (AF_INET)
             RuntimeArray.push(result, new RuntimeScalar(4)); // length (IPv4 = 4 bytes)
 
-            RuntimeArray addresses = new RuntimeArray();
-            RuntimeArray.push(addresses, new RuntimeScalar(addr.getAddress())); // packed address
-            RuntimeArray.push(result, addresses);
+            // Add the packed IP addresses as individual elements (not as an array)
+            RuntimeScalar packedAddress = new RuntimeScalar(addr.getAddress());
+            RuntimeArray.push(result, packedAddress); // packed address
 
             hostInfoCache.put(cacheKey, result);
+            
+            // In scalar context, return the packed IP address
+            if (ctx == SCALAR) {
+                RuntimeArray scalarResult = new RuntimeArray();
+                RuntimeArray.push(scalarResult, packedAddress);
+                return scalarResult;
+            }
         } catch (Exception e) {
             // Return empty array on error
         }

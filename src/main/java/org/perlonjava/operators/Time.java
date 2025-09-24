@@ -2,6 +2,7 @@ package org.perlonjava.operators;
 
 import org.perlonjava.runtime.*;
 import org.perlonjava.runtime.DynamicVariableManager;
+import org.perlonjava.runtime.PerlSignalQueue;
 
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
@@ -25,9 +26,16 @@ import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
  */
 public class Time {
 
-    // Static scheduler for alarm functionality
-    private static final ScheduledExecutorService alarmScheduler = Executors.newSingleThreadScheduledExecutor();
-    private static ScheduledFuture<?> currentAlarm = null;
+    // Static scheduler for alarm functionality - using daemon threads to allow JVM exit
+    private static final ScheduledExecutorService alarmScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "PerlAlarmTimer");
+        t.setDaemon(true);  // Daemon thread won't prevent JVM shutdown
+        return t;
+    });
+    private static ScheduledFuture<?> currentAlarmTask = null;
+    private static long alarmStartTime;
+    private static int alarmDuration;
+    private static Thread alarmTargetThread;
 
     /**
      * Returns the current time in seconds since the Unix epoch with second precision.
@@ -162,42 +170,74 @@ public class Time {
             seconds = args[0].scalar().getInt();
         }
 
-        // Get the remaining time from any previous alarm
-        int remainingSeconds = 0;
-        if (currentAlarm != null && !currentAlarm.isDone()) {
-            // Cancel the previous alarm and get remaining time
-            remainingSeconds = (int) Math.ceil(currentAlarm.getDelay(TimeUnit.SECONDS));
-            currentAlarm.cancel(false);
-            currentAlarm = null;
+        // Calculate remaining time on previous timer
+        int remainingTime = 0;
+        if (currentAlarmTask != null && !currentAlarmTask.isDone()) {
+            long elapsedTime = (System.currentTimeMillis() - alarmStartTime) / 1000;
+            remainingTime = Math.max(0, alarmDuration - (int)elapsedTime);
+            currentAlarmTask.cancel(false);
         }
 
-        // Set new alarm if seconds > 0
-        if (seconds > 0) {
-            currentAlarm = alarmScheduler.schedule(() -> {
-                // Trigger SIGALRM handler using WarnDie pattern
-                RuntimeScalar alarmHandler = getGlobalHash("main::SIG").get("ALRM");
-                if (alarmHandler.getDefinedBoolean()) {
-                    try {
-                        RuntimeScalar sigHandler = new RuntimeScalar(alarmHandler);
-                        
-                        // Undefine $SIG{ALRM} before calling the handler to avoid infinite recursion
-                        int level = DynamicVariableManager.getLocalLevel();
-                        DynamicVariableManager.pushLocalVariable(alarmHandler);
-                        
-                        RuntimeArray alarmArgs = new RuntimeArray();
-                        alarmArgs.add(new RuntimeScalar("ALRM"));  // Signal name as argument
-                        RuntimeCode.apply(sigHandler, alarmArgs, RuntimeContextType.SCALAR);
-                        
-                        // Restore $SIG{ALRM}
-                        DynamicVariableManager.popToLocalLevel(level);
-                    } catch (Exception e) {
-                        // If no handler or handler fails, just continue
-                        System.err.println("Alarm signal handler error: " + e.getMessage());
-                    }
+        if (seconds == 0) {
+            currentAlarmTask = null;
+            return new RuntimeScalar(remainingTime);
+        }
+
+        // Set up new alarm
+        alarmStartTime = System.currentTimeMillis();
+        alarmDuration = seconds;
+        alarmTargetThread = Thread.currentThread();
+
+        currentAlarmTask = alarmScheduler.schedule(() -> {
+            RuntimeScalar sig = getGlobalHash("main::SIG").get("ALRM");
+            if (sig.getDefinedBoolean()) {
+                // Queue the signal for processing in the target thread
+                PerlSignalQueue.enqueue("ALRM", sig);
+                // Interrupt the target thread to break out of blocking operations
+                alarmTargetThread.interrupt();
+            }
+        }, seconds, TimeUnit.SECONDS);
+
+        return new RuntimeScalar(remainingTime);
+    }
+    
+    /**
+     * Check and process any pending signals.
+     * This method should be called at safe execution points in the interpreter.
+     */
+    public static void checkPendingSignals() {
+        // Process any queued signals
+        PerlSignalQueue.processSignals();
+        
+        // Clear interrupt flag if it was set by alarm
+        if (Thread.interrupted()) {
+            // The interrupt was handled via signal processing
+        }
+    }
+    
+    /**
+     * Shuts down the alarm scheduler to allow clean JVM exit.
+     * This method is called by the shutdown hook and can also be called manually.
+     */
+    public static void shutdownAlarmScheduler() {
+        if (currentAlarmTask != null && !currentAlarmTask.isDone()) {
+            currentAlarmTask.cancel(false);
+            currentAlarmTask = null;
+        }
+        
+        if (!alarmScheduler.isShutdown()) {
+            alarmScheduler.shutdown();
+            try {
+                // Wait a reasonable time for existing tasks to terminate
+                if (!alarmScheduler.awaitTermination(1, TimeUnit.SECONDS)) {
+                    alarmScheduler.shutdownNow();
                 }
-            }, seconds, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                // Re-cancel if current thread also interrupted
+                alarmScheduler.shutdownNow();
+                // Preserve interrupt status
+                Thread.currentThread().interrupt();
+            }
         }
-
-        return new RuntimeScalar(remainingSeconds);
     }
 }

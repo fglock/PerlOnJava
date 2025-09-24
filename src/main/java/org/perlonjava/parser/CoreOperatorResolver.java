@@ -75,7 +75,7 @@ public class CoreOperatorResolver {
             case "chomp", "chop", "reverse", "splice", "unlink", "mkdir", "die", "warn" ->
                     OperatorParser.parseReverse(parser, token, currentIndex);
             case "system", "exec" -> OperatorParser.parseSystem(parser, token, currentIndex);
-            case "readline", "eof", "tell", "truncate" ->
+            case "readline", "eof", "tell" ->
                     OperatorParser.parseReadline(parser, token, currentIndex);
             case "binmode" -> OperatorParser.parseBinmodeOperator(parser, token, currentIndex);
             case "seek" -> OperatorParser.parseSeek(parser, token, currentIndex);
@@ -105,8 +105,7 @@ public class CoreOperatorResolver {
                     // Format statements should be handled by StatementResolver, not as operators
                     // Return null to allow StatementResolver to handle it
                     null;
-            case "getpeername", "getsockname", "getsockopt",
-                 "recv", "send", "setsockopt", "shutdown", "socketpair" ->
+            case "socketpair" ->
                     throw new PerlJavaUnimplementedException(parser.tokenIndex, "Not implemented: socket operator: " + token.text, parser.ctx.errorUtil);
             case "msgctl", "msgget", "msgrcv", "msgsnd", "semctl", "semget", "semop",
                  "shmctl", "shmget", "shmread", "shmwrite" ->

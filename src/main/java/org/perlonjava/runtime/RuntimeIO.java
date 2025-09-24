@@ -18,6 +18,8 @@ import java.net.Socket;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
 import java.nio.charset.StandardCharsets;
+
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
@@ -918,5 +920,31 @@ public class RuntimeIO implements RuntimeScalarReference {
      */
     public RuntimeScalar truncate(long length) {
         return ioHandle.truncate(length);
+    }
+
+    /**
+     * Gets the local socket address (getsockname equivalent).
+     * Only valid for socket handles.
+     *
+     * @return RuntimeScalar containing packed sockaddr_in structure, or undef if not a socket
+     */
+    public RuntimeScalar getsockname() {
+        if (ioHandle instanceof org.perlonjava.io.SocketIO) {
+            return ((org.perlonjava.io.SocketIO) ioHandle).getsockname();
+        }
+        return scalarUndef;
+    }
+
+    /**
+     * Gets the remote socket address (getpeername equivalent).
+     * Only valid for socket handles.
+     *
+     * @return RuntimeScalar containing packed sockaddr_in structure, or undef if not a socket
+     */
+    public RuntimeScalar getpeername() {
+        if (ioHandle instanceof org.perlonjava.io.SocketIO) {
+            return ((org.perlonjava.io.SocketIO) ioHandle).getpeername();
+        }
+        return scalarUndef;
     }
 }
