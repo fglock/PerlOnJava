@@ -141,7 +141,7 @@ public class ScalarUtils {
             case INTEGER:
             case DOUBLE:
                 return true;
-            case STRING, VSTRING:
+            case STRING, BYTE_STRING, VSTRING:
                 String str = runtimeScalar.toString().trim();
                 if (str.isEmpty()) {
                     return false;
