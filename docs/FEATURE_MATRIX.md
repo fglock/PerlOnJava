@@ -429,6 +429,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **`getsockopt`**: Socket option retrieval
 - ✅  **`getsockname`**: Local socket address retrieval
 - ✅  **`getpeername`**: Remote socket address retrieval
+- ✅  **`socketpair`**: Connected socket pair creation
 
 - ✅  **`pipe`**: Internal pipe creation for inter-process communication
 
@@ -644,7 +645,6 @@ The DBI module provides seamless integration with JDBC drivers:
   - `DESTROY` method in tied variables is also not implemented. DESTROY is called when the variable is `untie`.
 - ❌  **Perl `XS` code**: XS code interfacing with C is not supported on the JVM.
 - ❌  **Auto-close files**: File auto-close depends on handling of object destruction, may be incompatible with JVM garbage collection. All files are closed before the program ends.
-- ❌  **socketpair**: `socketpair` is not yet implemented (other socket functions are fully implemented).
 - ❌  **System V interprocess communication functions**: msgctl, msgget, msgrcv, msgsnd, semctl, semget, semop, shmctl, shmget, shmread, shmwrite
 - ❌  **Fetching user and group info**: endhostent, endnetent
 - ❌  **Network enumeration functions**: endprotoent, endservent, gethostent, getnetbyaddr, getnetbyname, getnetent, getprotoent, getservent, sethostent, setnetent, setprotoent, setservent (individual lookup functions like gethostbyname, getservbyname, getprotobyname are implemented)
