@@ -343,6 +343,7 @@ The following areas are currently under active development to enhance the functi
     - `ungetc`
     - Auto-bless filehandle into IO::Handle subclass
   - Filter::Simple
+  - Math::BigInt
   - Text::ParseWords
   - Text::Tabs
   - Locale::Maketext::Simple
