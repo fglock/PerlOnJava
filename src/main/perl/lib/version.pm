@@ -62,14 +62,12 @@ sub import {
 
     if (exists($args{declare})) {
         *{$callpkg.'::declare'} =
-            sub {return $class->declare(shift) }
-            unless defined(&{$callpkg.'::declare'});
+            sub {return $class->declare(shift) };
     }
 
     if (exists($args{qv})) {
         *{$callpkg.'::qv'} =
-            sub {return $class->qv(shift) }
-            unless defined(&{$callpkg.'::qv'});
+            sub {return $class->qv(shift) };
     }
 
     if (exists($args{'UNIVERSAL::VERSION'})) {
@@ -83,13 +81,11 @@ sub import {
     }
 
     if (exists($args{'is_strict'})) {
-        *{$callpkg.'::is_strict'} = \&{$CLASS.'::is_strict'}
-            unless defined(&{$callpkg.'::is_strict'});
+        *{$callpkg.'::is_strict'} = \&{$CLASS.'::is_strict'};
     }
 
     if (exists($args{'is_lax'})) {
-        *{$callpkg.'::is_lax'} = \&{$CLASS.'::is_lax'}
-            unless defined(&{$callpkg.'::is_lax'});
+        *{$callpkg.'::is_lax'} = \&{$CLASS.'::is_lax'};
     }
 }
 
