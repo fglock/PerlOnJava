@@ -1,9 +1,13 @@
 package org.perlonjava.operators;
 
+import org.perlonjava.io.*;
 import org.perlonjava.io.ClosedIOHandle;
 import org.perlonjava.io.IOHandle;
 import org.perlonjava.io.LayeredIOHandle;
+import org.perlonjava.io.PipeInputChannel;
+import org.perlonjava.io.PipeOutputChannel;
 import org.perlonjava.io.ScalarBackedIO;
+import org.perlonjava.io.SocketIO;
 import org.perlonjava.parser.StringParser;
 import org.perlonjava.runtime.*;
 import org.perlonjava.runtime.NameNormalizer;
@@ -12,7 +16,11 @@ import org.perlonjava.runtime.PerlJavaUnimplementedException;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.*;
 import java.nio.channels.FileChannel;
+import java.nio.channels.Pipe;
+import java.nio.channels.ReadableByteChannel;
+import java.nio.channels.WritableByteChannel;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -160,30 +168,6 @@ public class IOOperator {
         return fh.fileno();
     }
 
-    public static RuntimeScalar truncate(RuntimeScalar fileHandle, RuntimeList runtimeList) {
-        long length = runtimeList.getFirst().getLong();
-        if (fileHandle.isString()) {
-            // Handle as filename
-            String filename = fileHandle.toString();
-            Path filePath = RuntimeIO.resolvePath(filename);
-            try (FileChannel channel1 = FileChannel.open(filePath, StandardOpenOption.WRITE)) {
-                channel1.truncate(length);
-                return scalarTrue;
-            } catch (IOException e) {
-                return RuntimeIO.handleIOException(e, "truncate failed");
-            }
-        } else if (fileHandle.type == RuntimeScalarType.GLOB || fileHandle.type == RuntimeScalarType.GLOBREFERENCE) {
-            // File handle
-            RuntimeIO runtimeIO = fileHandle.getRuntimeIO();
-            if (runtimeIO.ioHandle != null) {
-                return runtimeIO.ioHandle.truncate(length);
-            } else {
-                return RuntimeIO.handleIOError("No file handle available for truncate");
-            }
-        } else {
-            return RuntimeIO.handleIOError("Unsupported scalar type for truncate");
-        }
-    }
 
     /**
      * Opens a file and initialize a file handle.
@@ -725,21 +709,21 @@ public class IOOperator {
      * @param runtimeList The list containing filehandle, filename, mode, and optional perms
      * @return A RuntimeScalar indicating success (1) or failure (0)
      */
-    public static RuntimeScalar sysopen(RuntimeList runtimeList) {
+    public static RuntimeScalar sysopen(int ctx, RuntimeBase... args) {
         // sysopen FILEHANDLE,FILENAME,MODE
         // sysopen FILEHANDLE,FILENAME,MODE,PERMS
 
-        if (runtimeList.size() < 3) {
+        if (args.length < 3) {
             throw new PerlCompilerException("Not enough arguments for sysopen");
         }
 
-        RuntimeScalar fileHandle = runtimeList.elements.get(0).scalar();
-        String fileName = runtimeList.elements.get(1).toString();
-        int mode = runtimeList.elements.get(2).scalar().getInt();
+        RuntimeScalar fileHandle = args[0].scalar();
+        String fileName = args[1].toString();
+        int mode = args[2].scalar().getInt();
         int perms = 0666; // Default permissions (octal)
 
-        if (runtimeList.size() >= 4) {
-            perms = runtimeList.elements.get(3).scalar().getInt();
+        if (args.length >= 4) {
+            perms = args[3].scalar().getInt();
         }
 
         // Convert numeric flags to mode string for RuntimeIO
@@ -1003,5 +987,334 @@ public class IOOperator {
         }
         
         return argStr;
+    }
+
+    // Socket I/O operators implementation
+
+    /**
+     * socket(SOCKET, DOMAIN, TYPE, PROTOCOL)
+     * Creates a socket and associates it with SOCKET filehandle.
+     */
+    public static RuntimeScalar socket(int ctx, RuntimeBase... args) {
+        if (args.length < 4) {
+            getGlobalVariable("main::!").set("Not enough arguments for socket");
+            return scalarFalse;
+        }
+
+        try {
+            RuntimeScalar socketHandle = args[0].scalar();
+            int domain = args[1].scalar().getInt();
+            int type = args[2].scalar().getInt();
+            int protocol = args[3].scalar().getInt();
+
+            // Map Perl socket constants to Java
+            ProtocolFamily family;
+            if (domain == 2) { // AF_INET
+                family = StandardProtocolFamily.INET;
+            } else if (domain == 10) { // AF_INET6
+                family = StandardProtocolFamily.INET6;
+            } else if (domain == 1) { // AF_UNIX
+                family = StandardProtocolFamily.UNIX;
+            } else {
+                getGlobalVariable("main::!").set("Unsupported socket domain: " + domain);
+                return scalarFalse;
+            }
+
+            if (type == 1) { // SOCK_STREAM (TCP)
+                // Create ServerSocket for Perl socket compatibility
+                // This allows the socket to be used for both server operations (bind/listen/accept)
+                // and client operations (connect) as needed
+                ServerSocket serverSocket = new ServerSocket();
+                SocketIO socketIOHandle = new SocketIO(serverSocket);
+                RuntimeIO socketIO = new RuntimeIO(socketIOHandle);
+                socketHandle.set(socketIO);
+                return scalarTrue;
+            } else if (type == 2) { // SOCK_DGRAM (UDP)
+                // For UDP, we'll use DatagramSocket - note: SocketIO doesn't support UDP yet
+                // This is a placeholder implementation
+                getGlobalVariable("main::!").set("UDP sockets not yet fully implemented");
+                return scalarFalse;
+            } else {
+                getGlobalVariable("main::!").set("Unsupported socket type: " + type);
+                return scalarFalse;
+            }
+
+        } catch (Exception e) {
+            getGlobalVariable("main::!").set("Socket creation failed: " + e.getMessage());
+            return scalarFalse;
+        }
+    }
+
+    /**
+     * Parses a Perl sockaddr_in packed binary address.
+     * Format: 2-byte family + 2-byte port + 4-byte IP address + 8 bytes padding
+     * 
+     * @param packedAddress The packed binary socket address
+     * @return An array containing [host, port] or null if parsing fails
+     */
+    private static String[] parseSockaddrIn(String packedAddress) {
+        try {
+            byte[] bytes = packedAddress.getBytes("ISO-8859-1"); // Get raw bytes
+            
+            if (bytes.length < 8) {
+                return null; // Too short for sockaddr_in
+            }
+            
+            // Extract port (bytes 2-3, network byte order)
+            int port = ((bytes[2] & 0xFF) << 8) | (bytes[3] & 0xFF);
+            
+            // Extract IP address (bytes 4-7)
+            int ip1 = bytes[4] & 0xFF;
+            int ip2 = bytes[5] & 0xFF;
+            int ip3 = bytes[6] & 0xFF;
+            int ip4 = bytes[7] & 0xFF;
+            
+            String host = ip1 + "." + ip2 + "." + ip3 + "." + ip4;
+            
+            return new String[]{host, String.valueOf(port)};
+            
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * bind(SOCKET, NAME)
+     * Binds a socket to an address.
+     */
+    public static RuntimeScalar bind(int ctx, RuntimeBase... args) {
+        if (args.length < 2) {
+            getGlobalVariable("main::!").set("Not enough arguments for bind");
+            return scalarFalse;
+        }
+
+        try {
+            RuntimeScalar socketHandle = args[0].scalar();
+            RuntimeScalar address = args[1].scalar();
+            
+            RuntimeIO socketIO = socketHandle.getRuntimeIO();
+            if (socketIO == null) {
+                getGlobalVariable("main::!").set("Invalid socket handle for bind");
+                return scalarFalse;
+            }
+
+            // Parse Perl-style packed socket address (sockaddr_in format)
+            String addressStr = address.toString();
+            String[] parts = parseSockaddrIn(addressStr);
+            
+            // Fallback to "host:port" string format if binary parsing fails
+            if (parts == null) {
+                parts = addressStr.split(":");
+                if (parts.length != 2) {
+                    getGlobalVariable("main::!").set("Invalid address format for bind (expected sockaddr_in or host:port)");
+                    return scalarFalse;
+                }
+            }
+            
+            String host = parts[0];
+            int port;
+            try {
+                port = Integer.parseInt(parts[1]);
+            } catch (NumberFormatException e) {
+                getGlobalVariable("main::!").set("Invalid port number for bind");
+                return scalarFalse;
+            }
+            
+            // Delegate to RuntimeIO's bind method
+            return socketIO.bind(host, port);
+
+        } catch (Exception e) {
+            getGlobalVariable("main::!").set("Bind failed: " + e.getMessage());
+            return scalarFalse;
+        }
+    }
+
+    /**
+     * connect(SOCKET, NAME)
+     * Connects a socket to an address.
+     */
+    public static RuntimeScalar connect(int ctx, RuntimeBase... args) {
+        if (args.length < 2) {
+            getGlobalVariable("main::!").set("Not enough arguments for connect");
+            return scalarFalse;
+        }
+
+        try {
+            RuntimeScalar socketHandle = args[0].scalar();
+            RuntimeScalar address = args[1].scalar();
+            
+            RuntimeIO socketIO = socketHandle.getRuntimeIO();
+            if (socketIO == null) {
+                getGlobalVariable("main::!").set("Invalid socket handle for connect");
+                return scalarFalse;
+            }
+
+            // Parse Perl-style packed socket address (sockaddr_in format)
+            String addressStr = address.toString();
+            String[] parts = parseSockaddrIn(addressStr);
+            
+            // Fallback to "host:port" string format if binary parsing fails
+            if (parts == null) {
+                parts = addressStr.split(":");
+                if (parts.length != 2) {
+                    getGlobalVariable("main::!").set("Invalid address format for connect (expected sockaddr_in or host:port)");
+                    return scalarFalse;
+                }
+            }
+            
+            String host = parts[0];
+            int port;
+            try {
+                port = Integer.parseInt(parts[1]);
+            } catch (NumberFormatException e) {
+                getGlobalVariable("main::!").set("Invalid port number for connect");
+                return scalarFalse;
+            }
+            
+            // Delegate to RuntimeIO's connect method
+            return socketIO.connect(host, port);
+
+        } catch (Exception e) {
+            getGlobalVariable("main::!").set("Connect failed: " + e.getMessage());
+            return scalarFalse;
+        }
+    }
+
+    /**
+     * listen(SOCKET, QUEUESIZE)
+     * Puts a socket into listening mode.
+     */
+    public static RuntimeScalar listen(int ctx, RuntimeBase... args) {
+        if (args.length < 2) {
+            getGlobalVariable("main::!").set("Not enough arguments for listen");
+            return scalarFalse;
+        }
+
+        try {
+            RuntimeScalar socketHandle = args[0].scalar();
+            int queueSize = args[1].scalar().getInt();
+            
+            RuntimeIO socketIO = socketHandle.getRuntimeIO();
+            if (socketIO == null) {
+                getGlobalVariable("main::!").set("Invalid socket handle for listen");
+                return scalarFalse;
+            }
+
+            // Delegate to RuntimeIO's listen method
+            return socketIO.listen(queueSize);
+
+        } catch (Exception e) {
+            getGlobalVariable("main::!").set("Listen failed: " + e.getMessage());
+            return scalarFalse;
+        }
+    }
+
+    /**
+     * accept(NEWSOCKET, GENERICSOCKET)
+     * Accepts a connection on a listening socket.
+     */
+    public static RuntimeScalar accept(int ctx, RuntimeBase... args) {
+        if (args.length < 2) {
+            getGlobalVariable("main::!").set("Not enough arguments for accept");
+            return scalarFalse;
+        }
+
+        try {
+            RuntimeScalar newSocketHandle = args[0].scalar();
+            RuntimeScalar listenSocketHandle = args[1].scalar();
+            
+            RuntimeIO listenSocketIO = listenSocketHandle.getRuntimeIO();
+            if (listenSocketIO == null) {
+                getGlobalVariable("main::!").set("Invalid listening socket handle for accept");
+                return scalarFalse;
+            }
+
+            // Accept connection and create new socket handle
+            RuntimeScalar acceptResult = listenSocketIO.accept();
+            if (acceptResult.getDefinedBoolean()) {
+                // The accept() method in SocketIO returns the remote address string
+                // We need to create a new socket handle for the accepted connection
+                // For now, this is a simplified implementation
+                getGlobalVariable("main::!").set("Accept operation needs full socket handle creation");
+                return scalarFalse;
+            } else {
+                return scalarFalse;
+            }
+
+        } catch (Exception e) {
+            getGlobalVariable("main::!").set("Accept failed: " + e.getMessage());
+            return scalarFalse;
+        }
+    }
+
+    /**
+     * pipe(READHANDLE, WRITEHANDLE)
+     * Creates a pair of connected pipes.
+     */
+    public static RuntimeScalar pipe(int ctx, RuntimeBase... args) {
+        if (args.length < 2) {
+            getGlobalVariable("main::!").set("Not enough arguments for pipe");
+            return scalarFalse;
+        }
+
+        try {
+            RuntimeScalar readHandle = args[0].scalar();
+            RuntimeScalar writeHandle = args[1].scalar();
+
+            // For now, use a simple implementation with PipedInputStream/PipedOutputStream
+            // This creates an internal pipe for communication between threads
+            java.io.PipedInputStream pipeIn = new java.io.PipedInputStream();
+            java.io.PipedOutputStream pipeOut = new java.io.PipedOutputStream(pipeIn);
+            
+            // Create simple IOHandle implementations for the pipe ends
+            // Note: This is a simplified implementation - in a full implementation,
+            // we would create proper IOHandle classes for pipes
+            getGlobalVariable("main::!").set("Internal pipes not yet fully implemented");
+            return scalarFalse;
+
+        } catch (Exception e) {
+            getGlobalVariable("main::!").set("Pipe creation failed: " + e.getMessage());
+            return scalarFalse;
+        }
+    }
+
+    /**
+     * truncate(FILEHANDLE, LENGTH) or truncate(EXPR, LENGTH)
+     * Updated to use the new API signature pattern.
+     */
+    public static RuntimeScalar truncate(int ctx, RuntimeBase... args) {
+        if (args.length < 2) {
+            getGlobalVariable("main::!").set("Not enough arguments for truncate");
+            return scalarFalse;
+        }
+
+        try {
+            RuntimeBase firstArg = args[0];
+            long length = args[1].scalar().getLong();
+
+            // Check if first argument is a filehandle or a filename
+            if (firstArg.scalar().getRuntimeIO() != null) {
+                // First argument is a filehandle
+                RuntimeIO fh = firstArg.scalar().getRuntimeIO();
+                return fh.truncate(length);
+            } else {
+                // First argument is a filename
+                String filename = firstArg.scalar().toString();
+                try {
+                    Path path = Path.of(filename);
+                    FileChannel channel = FileChannel.open(path, StandardOpenOption.WRITE);
+                    channel.truncate(length);
+                    channel.close();
+                    return scalarTrue;
+                } catch (IOException e) {
+                    getGlobalVariable("main::!").set("Truncate failed: " + e.getMessage());
+                    return scalarFalse;
+                }
+            }
+
+        } catch (Exception e) {
+            getGlobalVariable("main::!").set("Truncate failed: " + e.getMessage());
+            return scalarFalse;
+        }
     }
 }
