@@ -80,19 +80,38 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
      */
     private RuntimeScalar getValueAsScalar() {
         try {
-            return switch (variableId) {
-                case CAPTURE -> new RuntimeScalar(RuntimeRegex.captureString(position));
-                case MATCH -> new RuntimeScalar(RuntimeRegex.matchString());
-                case PREMATCH -> new RuntimeScalar(RuntimeRegex.preMatchString());
-                case POSTMATCH -> new RuntimeScalar(RuntimeRegex.postMatchString());
+            System.err.println("DEBUG: ScalarSpecialVariable.getValueAsScalar() called for " + variableId);
+            RuntimeScalar result = switch (variableId) {
+                case CAPTURE -> {
+                    String capture = RuntimeRegex.captureString(position);
+                    yield capture != null ? new RuntimeScalar(capture) : scalarUndef;
+                }
+                case MATCH -> {
+                    String match = RuntimeRegex.matchString();
+                    yield match != null ? new RuntimeScalar(match) : scalarUndef;
+                }
+                case PREMATCH -> {
+                    String prematch = RuntimeRegex.preMatchString();
+                    yield prematch != null ? new RuntimeScalar(prematch) : scalarUndef;
+                }
+                case POSTMATCH -> {
+                    String postmatch = RuntimeRegex.postMatchString();
+                    yield postmatch != null ? new RuntimeScalar(postmatch) : scalarUndef;
+                }
                 case LAST_FH -> new RuntimeScalar(RuntimeIO.lastAccesseddHandle);
                 case INPUT_LINE_NUMBER -> RuntimeIO.lastAccesseddHandle == null
                         ? scalarUndef
                         : getScalarInt(RuntimeIO.lastAccesseddHandle.currentLineNumber);
-                case LAST_PAREN_MATCH -> new RuntimeScalar(RuntimeRegex.lastCaptureString());
+                case LAST_PAREN_MATCH -> {
+                    String lastCapture = RuntimeRegex.lastCaptureString();
+                    yield lastCapture != null ? new RuntimeScalar(lastCapture) : scalarUndef;
+                }
                 case LAST_SUCCESSFUL_PATTERN -> new RuntimeScalar(RuntimeRegex.lastSuccessfulPattern);
             };
+            System.err.println("DEBUG: ScalarSpecialVariable.getValueAsScalar() returning: " + (result.getDefinedBoolean() ? "'" + result.toString() + "'" : "UNDEF"));
+            return result;
         } catch (IllegalStateException e) {
+            System.err.println("DEBUG: ScalarSpecialVariable.getValueAsScalar() caught IllegalStateException: " + e.getMessage());
             return scalarUndef;
         }
     }

@@ -40,6 +40,15 @@ public class RuntimeRegex implements RuntimeScalarReference {
     // Global matcher used for regex operations
     public static Matcher globalMatcher;    // Provides Perl regex variables like %+, %-
     public static String globalMatchString; // Provides Perl regex variables like $&
+    // Store match information to avoid IllegalStateException from Matcher
+    public static String lastMatchedString = null;
+    public static int lastMatchStart = -1;
+    public static int lastMatchEnd = -1;
+    // Store match information from last successful pattern (persists across failed matches)
+    public static String lastSuccessfulMatchedString = null;
+    public static int lastSuccessfulMatchStart = -1;
+    public static int lastSuccessfulMatchEnd = -1;
+    public static String lastSuccessfulMatchString = null;
     // ${^LAST_SUCCESSFUL_PATTERN}
     public static RuntimeRegex lastSuccessfulPattern = null;
     // Indicates if \G assertion is used
@@ -330,7 +339,12 @@ public class RuntimeRegex implements RuntimeScalarReference {
 
         int capture = 1;
         int previousPos = startPos; // Track the previous position
+        // System.err.println("DEBUG: Resetting globalMatcher to null at start of matchRegex");
         globalMatcher = null;
+        // Reset stored match information (but preserve last successful match info)
+        lastMatchedString = null;
+        lastMatchStart = -1;
+        lastMatchEnd = -1;
 
         while (matcher.find()) {
             // If \G is used, ensure the match starts at the expected position
@@ -340,15 +354,22 @@ public class RuntimeRegex implements RuntimeScalarReference {
 
             found = true;
             int captureCount = matcher.groupCount();
+            
+            // Always initialize $1, $2, @+, @-, $`, $&, $' for every successful match
+            globalMatcher = matcher;
+            globalMatchString = inputStr;
+            // Store match information to avoid IllegalStateException later
+            lastMatchedString = matcher.group(0);
+            lastMatchStart = matcher.start();
+            lastMatchEnd = matcher.end();
+            // System.err.println("DEBUG: Set globalMatcher for match at position " + matcher.start() + "-" + matcher.end());
+            // System.err.println("DEBUG: Stored match info - matched: '" + lastMatchedString + "', start: " + lastMatchStart + ", end: " + lastMatchEnd);
+            
             if (regex.regexFlags.isGlobalMatch() && captureCount < 1 && ctx == RuntimeContextType.LIST) {
                 // Global match and no captures, in list context return the matched string
                 String matchedStr = matcher.group(0);
                 matchedGroups.add(new RuntimeScalar(matchedStr));
             } else {
-                // Initialize $1, $2, @+, @-
-                globalMatcher = matcher;
-                globalMatchString = inputStr;
-
                 // save captures in return list if needed
                 if (ctx == RuntimeContextType.LIST) {
                     for (int i = 1; i <= captureCount; i++) {
@@ -381,10 +402,32 @@ public class RuntimeRegex implements RuntimeScalarReference {
         if (!found && regex.regexFlags.isGlobalMatch() && !regex.regexFlags.keepCurrentPosition()) {
             posScalar.set(scalarUndef);
         }
+        
+        // Reset special variables on failed match (Perl behavior)
+        if (!found) {
+            lastSuccessfulPattern = null;
+            lastSuccessfulMatchedString = null;
+            lastSuccessfulMatchStart = -1;
+            lastSuccessfulMatchEnd = -1;
+            lastSuccessfulMatchString = null;
+        }
 
         if (found) {
             regex.matched = true; // Counter for m?PAT?
             lastSuccessfulPattern = regex;
+            // Store last successful match information (persists across failed matches)
+            lastSuccessfulMatchedString = lastMatchedString;
+            lastSuccessfulMatchStart = lastMatchStart;
+            lastSuccessfulMatchEnd = lastMatchEnd;
+            lastSuccessfulMatchString = globalMatchString;
+            
+            // Reset pos() after global match in LIST context (matches Perl behavior)
+            if (regex.regexFlags.isGlobalMatch() && ctx == RuntimeContextType.LIST) {
+                posScalar.set(scalarUndef);
+            }
+            // System.err.println("DEBUG: Match completed, globalMatcher is " + (globalMatcher == null ? "null" : "set"));
+        } else {
+            // System.err.println("DEBUG: No match found, globalMatcher is " + (globalMatcher == null ? "null" : "set"));
         }
 
         if (ctx == RuntimeContextType.LIST) {
@@ -423,6 +466,10 @@ public class RuntimeRegex implements RuntimeScalarReference {
         // Determine if the replacement is a code that needs to be evaluated
         boolean replacementIsCode = (replacement.type == RuntimeScalarType.CODE);
         globalMatcher = null;
+        // Reset stored match information
+        lastMatchedString = null;
+        lastMatchStart = -1;
+        lastMatchEnd = -1;
 
         // Perform the substitution
         while (matcher.find()) {
@@ -501,16 +548,66 @@ public class RuntimeRegex implements RuntimeScalarReference {
         }
     }
 
+    /**
+     * Initialize/reset all regex state including special variables.
+     * This should be called at the start of each script execution to ensure clean state.
+     */
+    public static void initialize() {
+        // Reset all match state
+        globalMatcher = null;
+        globalMatchString = null;
+        
+        // Reset current match information
+        lastMatchedString = null;
+        lastMatchStart = -1;
+        lastMatchEnd = -1;
+        
+        // Reset last successful match information
+        lastSuccessfulPattern = null;
+        lastSuccessfulMatchedString = null;
+        lastSuccessfulMatchStart = -1;
+        lastSuccessfulMatchEnd = -1;
+        lastSuccessfulMatchString = null;
+        
+        // Reset regex cache matched flags
+        reset();
+    }
+
     public static String matchString() {
-        return globalMatcher == null ? null : globalMatcher.group();
+        if (globalMatcher != null && lastMatchedString != null) {
+            // Current match data available
+            return lastMatchedString;
+        } else if (lastSuccessfulMatchedString != null) {
+            // Fall back to last successful match
+            return lastSuccessfulMatchedString;
+        }
+        return null;
     }
 
     public static String preMatchString() {
-        return globalMatcher == null ? null : globalMatchString.substring(0, globalMatcher.start());
+        if (globalMatcher != null && globalMatchString != null && lastMatchStart != -1) {
+            // Current match data available
+            String result = globalMatchString.substring(0, lastMatchStart);
+            return result;
+        } else if (lastSuccessfulMatchString != null && lastSuccessfulMatchStart != -1) {
+            // Fall back to last successful match
+            String result = lastSuccessfulMatchString.substring(0, lastSuccessfulMatchStart);
+            return result;
+        }
+        return null;
     }
 
     public static String postMatchString() {
-        return globalMatcher == null ? null : globalMatchString.substring(globalMatcher.end());
+        if (globalMatcher != null && globalMatchString != null && lastMatchEnd != -1) {
+            // Current match data available
+            String result = globalMatchString.substring(lastMatchEnd);
+            return result;
+        } else if (lastSuccessfulMatchString != null && lastSuccessfulMatchEnd != -1) {
+            // Fall back to last successful match
+            String result = lastSuccessfulMatchString.substring(lastSuccessfulMatchEnd);
+            return result;
+        }
+        return null;
     }
 
     public static String captureString(int group) {
