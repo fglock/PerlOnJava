@@ -98,7 +98,6 @@ public class EmitOperatorNode {
             case "die", "warn" -> EmitOperator.handleDieBuiltin(emitterVisitor, node);
 
             // Array operations
-            case "reverse", "unlink", "fork" -> EmitOperator.handleReverseBuiltin(emitterVisitor, node);
             case "splice" -> EmitOperator.handleSpliceBuiltin(emitterVisitor, node);
             case "pop", "shift" -> EmitOperator.handleArrayUnaryBuiltin(emitterVisitor, node, node.operator);
 

@@ -8,6 +8,8 @@ import com.sun.jna.platform.win32.WinNT;
 import org.perlonjava.nativ.PosixLibrary;
 import org.perlonjava.regex.RuntimeRegex;
 import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.TieArray;
+import org.perlonjava.runtime.PerlRange;
 
 import java.io.IOException;
 import java.nio.file.*;
@@ -330,38 +332,102 @@ public class Operator {
 
     }
 
-    public static RuntimeBase reverse(RuntimeBase value, int ctx) {
+    public static RuntimeBase reverse(int ctx, RuntimeBase... args) {
+        
         if (ctx == SCALAR) {
             StringBuilder sb = new StringBuilder();
-
-            RuntimeList list = value.getList();
-            if (list.isEmpty()) {
-                list.elements.add(GlobalVariable.getGlobalVariable("main::_"));
-            }
-
-            for (RuntimeScalar runtimeScalar : list) {
-                sb.append(runtimeScalar.toString());
+            if (args.length == 0) {
+                // In scalar context, reverse($_) if no arguments are provided.
+                sb.append(GlobalVariable.getGlobalVariable("main::_").toString());
+            } else {
+                for (RuntimeBase arg : args) {
+                    sb.append(arg.toString());
+                }
             }
             return new RuntimeScalar(sb.reverse().toString());
-        } else {
-            // Get the list first to validate it
-            RuntimeList inputList = value.getList();
-
-            // Check for autovivification before processing
-            inputList.validateNoAutovivification();
-
-            RuntimeList result = new RuntimeList();
-
-            // Collect all elements into the result list
-            for (RuntimeScalar runtimeScalar : inputList) {
-                result.elements.add(runtimeScalar);
-            }
-
-            // Use Java's built-in reverse
-            Collections.reverse(result.elements);
-
-            return result;
         }
+
+        // List context - avoid unnecessary copying to preserve element references
+        
+        // Create a RuntimeList from args to validate autovivification (like sort does)
+        RuntimeList argsList = new RuntimeList();
+        for (RuntimeBase arg : args) {
+            argsList.add(arg);
+        }
+        
+        // Check for autovivification arrays that should throw errors (like sort does)
+        argsList.validateNoAutovivification();
+        
+        // Handle single PerlRange argument (e.g., from 1..5)
+        if (args.length == 1 && args[0] instanceof PerlRange) {
+            PerlRange range = (PerlRange) args[0];
+            RuntimeList list = range.getList();
+            List<RuntimeBase> listElements = new ArrayList<>();
+            for (RuntimeScalar scalar : list) {
+                listElements.add(scalar);
+            }
+            Collections.reverse(listElements);
+            return new RuntimeList(listElements.toArray(new RuntimeBase[0]));
+        }
+
+        // Handle single RuntimeList argument (e.g., from range operator)
+        if (args.length == 1 && args[0] instanceof RuntimeList) {
+            RuntimeList list = (RuntimeList) args[0];
+            List<RuntimeBase> listElements = new ArrayList<>();
+            for (RuntimeScalar scalar : list) {
+                listElements.add(scalar);
+            }
+            Collections.reverse(listElements);
+            return new RuntimeList(listElements.toArray(new RuntimeBase[0]));
+        }
+
+        // Handle single RuntimeHash argument (e.g., from %hash expansion)
+        if (args.length == 1 && args[0] instanceof RuntimeHash) {
+            RuntimeHash hash = (RuntimeHash) args[0];
+            RuntimeList hashList = hash.getList(); // Get key-value pairs as RuntimeList
+            List<RuntimeBase> listElements = new ArrayList<>();
+            for (RuntimeScalar scalar : hashList) {
+                listElements.add(scalar);
+            }
+            Collections.reverse(listElements);
+            return new RuntimeList(listElements.toArray(new RuntimeBase[0]));
+        }
+
+        // Handle single RuntimeArray argument
+        if (args.length == 1 && args[0] instanceof RuntimeArray) {
+            RuntimeArray array = (RuntimeArray) args[0];
+            if (array.type == RuntimeArray.TIED_ARRAY) {
+                return reverseTiedArray(array);
+            } else {
+                return reversePlainArray(array);
+            }
+        }
+
+        // For multiple arguments or other cases, reverse directly without extra copying
+        RuntimeBase[] reversedArgs = new RuntimeBase[args.length];
+        for (int i = 0; i < args.length; i++) {
+            reversedArgs[i] = args[args.length - 1 - i];
+        }
+        return new RuntimeList(reversedArgs);
+    }
+
+    private static RuntimeList reverseTiedArray(RuntimeArray tiedArray) {
+        int size = TieArray.tiedFetchSize(tiedArray).getInt();
+        List<RuntimeBase> reversedElements = new ArrayList<>(Collections.nCopies(size, null));
+        int targetIndex = size - 1;
+        for (int i = 0; i < size; i++) {
+            if (TieArray.tiedExists(tiedArray, getScalarInt(i)).getBoolean()) {
+                reversedElements.set(targetIndex, TieArray.tiedFetch(tiedArray, getScalarInt(i)));
+            }
+            targetIndex--;
+        }
+        return new RuntimeList(reversedElements.toArray(new RuntimeBase[0]));
+    }
+
+    private static RuntimeList reversePlainArray(RuntimeArray array) {
+        List<RuntimeBase> newElements = new ArrayList<>(array.elements);
+        Collections.reverse(newElements);
+        return new RuntimeList(newElements.toArray(new RuntimeBase[0]));
     }
 
     public static RuntimeBase repeat(RuntimeBase value, RuntimeScalar timesScalar, int ctx) {

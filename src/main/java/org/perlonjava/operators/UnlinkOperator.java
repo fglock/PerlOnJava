@@ -20,20 +20,25 @@ import static org.perlonjava.runtime.RuntimeScalarCache.getScalarBoolean;
 public class UnlinkOperator {
 
     /**
-     * Deletes a list of files specified in the RuntimeList.
+     * Deletes a list of files specified in the RuntimeBase arguments.
      * Follows Perl's unlink operator behavior.
      *
-     * @param value The list of files to be deleted.
-     * @param ctx   The context (unused but part of operator signature)
+     * @param ctx   The context (SCALAR or LIST)
+     * @param args  The files to be deleted
      * @return A RuntimeScalar indicating the number of files successfully deleted.
      */
-    public static RuntimeBase unlink(RuntimeBase value, int ctx) {
+    public static RuntimeBase unlink(int ctx, RuntimeBase... args) {
         int successCount = 0;
-        RuntimeList fileList = value.getList();
+        RuntimeList fileList = new RuntimeList();
 
         // If no arguments provided, use $_
-        if (fileList.isEmpty()) {
+        if (args.length == 0) {
             fileList.elements.add(GlobalVariable.getGlobalVariable("main::_"));
+        } else {
+            // Convert args to RuntimeList
+            for (RuntimeBase arg : args) {
+                arg.addToList(fileList);
+            }
         }
 
         for (RuntimeScalar fileScalar : fileList) {

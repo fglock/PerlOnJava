@@ -52,10 +52,6 @@ public class CoreOperatorResolver {
                 handleEmptyParentheses(parser);
                 yield new OperatorNode(token.text, null, currentIndex);
             }
-            case "fork" -> {
-                handleEmptyParentheses(parser);
-                yield new OperatorNode(token.text, new ListNode(currentIndex), currentIndex);
-            }
             case "not" -> OperatorParser.parseNot(parser, token, currentIndex);
             case "abs", "caller", "chdir", "chr", "cos", "exit", "exp", "fc",
                  "glob", "gmtime", "hex", "int", "lc", "lcfirst", "length", "localtime", "log",
@@ -72,7 +68,7 @@ public class CoreOperatorResolver {
             case "sort" -> ParseMapGrepSort.parseSort(parser, token);
             case "map", "grep", "all", "any" -> ParseMapGrepSort.parseMapGrep(parser, token);
             case "pack" -> OperatorParser.parsePack(parser, token, currentIndex);
-            case "chomp", "chop", "reverse", "splice", "unlink", "mkdir", "die", "warn" ->
+            case "chomp", "chop", "splice", "mkdir", "die", "warn" ->
                     OperatorParser.parseReverse(parser, token, currentIndex);
             case "system", "exec" -> OperatorParser.parseSystem(parser, token, currentIndex);
             case "readline", "eof", "tell" ->
@@ -110,7 +106,7 @@ public class CoreOperatorResolver {
                  "endhostent", "endnetent", "endprotoent", "endservent", "gethostent",
                  "getnetbyaddr", "getnetbyname", "getnetent",
                  "getprotoent", "getservent", "sethostent",
-                 "setnetent", "setprotoent", "setservent" -> parseWithPrototype(parser, token, currentIndex);
+                 "setnetent", "setprotoent", "setservent", "reverse" -> parseWithPrototype(parser, token, currentIndex);
             default -> parseWithPrototype(parser, token, currentIndex);
         };
     }

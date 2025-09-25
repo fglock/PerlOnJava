@@ -411,9 +411,11 @@ public class SystemOperator {
      * Java's JVM architecture makes this impossible - the JVM is a single process with
      * multiple threads, and there's no way to "split" the JVM into two identical copies.
      *
+     * @param ctx  The context (unused)
+     * @param args The arguments (unused)
      * @return Always returns undef
      */
-    public static RuntimeScalar fork(RuntimeList args, int ctx) {
+    public static RuntimeScalar fork(int ctx, RuntimeBase... args) {
         // Set $! to indicate why fork failed
         setGlobalVariable("main::!", "fork() not supported on this platform (Java/JVM)");
 
