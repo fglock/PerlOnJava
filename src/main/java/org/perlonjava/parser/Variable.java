@@ -8,6 +8,7 @@ import org.perlonjava.runtime.GlobalVariable;
 import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.perlmodule.Strict;
 
 import static org.perlonjava.parser.ParsePrimary.parsePrimary;
 import static org.perlonjava.parser.ParserNodeUtils.atUnderscore;
