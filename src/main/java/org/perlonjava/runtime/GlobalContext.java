@@ -4,6 +4,7 @@ import org.perlonjava.CompilerOptions;
 import org.perlonjava.Configuration;
 import org.perlonjava.mro.InheritanceResolver;
 import org.perlonjava.perlmodule.*;
+import org.perlonjava.regex.RuntimeRegex;
 
 import java.util.List;
 import java.util.Map;
@@ -29,6 +30,9 @@ public class GlobalContext {
      * @param compilerOptions The compiler options used for initialization.
      */
     public static void initializeGlobals(CompilerOptions compilerOptions) {
+
+        // Initialize regex state and special variables
+        RuntimeRegex.initialize();
 
         // Initialize scalar variables
         for (char c = 'A'; c <= 'Z'; c++) {
