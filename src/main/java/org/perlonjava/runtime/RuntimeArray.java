@@ -201,15 +201,16 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             throw new PerlCompilerException("Can't use an undefined value as an ARRAY reference");
         }
 
-        // Create a defensive copy to avoid ConcurrentModificationException
-        List<RuntimeScalar> elementsCopy = new ArrayList<>(this.elements);
         List<RuntimeScalar> targetElements = array.elements;
 
-        for (RuntimeScalar arrElem : elementsCopy) {
-            // targetElements.add(new RuntimeScalar(arrElem));
-            RuntimeScalar v = new RuntimeScalar();
-            arrElem.addToScalar(v);
-            targetElements.add(v);
+        for (RuntimeScalar arrElem : this.elements) {
+            if (arrElem == null) {
+                targetElements.add(null);
+            } else {
+                RuntimeScalar v = new RuntimeScalar();
+                arrElem.addToScalar(v);
+                targetElements.add(v);
+            }
         }
     }
 
@@ -385,7 +386,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         RuntimeScalar element = elements.get(index);
         if (element == null) {
             // Lazy autovivification for null elements
-            return new RuntimeArrayProxyEntry(this, index);
+            return new RuntimeArrayProxyEntry(RuntimeArray.this, index);
         }
 
         return element;
@@ -419,7 +420,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         RuntimeScalar element = elements.get(index);
         if (element == null) {
             // Lazy autovivification for null elements
-            return new RuntimeArrayProxyEntry(this, index);
+            return new RuntimeArrayProxyEntry(RuntimeArray.this, index);
         }
 
         return element;
@@ -440,24 +441,28 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     /**
      * Replaces the whole array with the elements of a list.
      *
-     * @param value The list to set.
+     * @param list The list to set.
      * @return The updated RuntimeArray.
      */
-    public RuntimeArray setFromList(RuntimeList value) {
+    @Override
+    public RuntimeArray setFromList(RuntimeList list) {
         return switch (type) {
             case PLAIN_ARRAY -> {
                 this.elements.clear();
-                value.addToArray(this);
+                list.addToArray(this);
                 yield this;
             }
             case AUTOVIVIFY_ARRAY -> {
                 AutovivificationArray.vivify(this);
-                yield this.setFromList(value);
+                yield this.setFromList(list); // Recursive call after vivification
             }
             case TIED_ARRAY -> {
+                // For tied arrays, use proper tied array methods
                 TieArray.tiedClear(this);
-                for (RuntimeScalar runtimeScalar : value) {
-                    TieArray.tiedPush(this, runtimeScalar);
+                int index = 0;
+                for (RuntimeScalar element : list) {
+                    TieArray.tiedStore(this, getScalarInt(index), element);
+                    index++;
                 }
                 yield this;
             }

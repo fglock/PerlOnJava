@@ -241,17 +241,6 @@ public class EmitOperator {
         emitOperator(node, emitterVisitor);
     }
 
-    // Handles the 'reverse' built-in function, which reverses a list.
-    static void handleReverseBuiltin(EmitterVisitor emitterVisitor, OperatorNode node) {
-        // Handle:  reverse LIST
-        //   static RuntimeBase reverse(RuntimeBase value, int ctx)
-        emitterVisitor.ctx.logDebug("handleReverseBuiltin " + node);
-        // Accept the operand in LIST context.
-        node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
-        emitterVisitor.pushCallContext();
-        emitOperator(node, emitterVisitor);
-    }
-
     // Handles the 'system' and 'exec' built-in functions.
     static void handleSystemBuiltin(EmitterVisitor emitterVisitor, OperatorNode node) {
         // Handle:  reverse LIST
@@ -693,4 +682,6 @@ public class EmitOperator {
     static void emitUndef(MethodVisitor mv) {
         mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/operators/Operator", "undef", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
     }
+
+    // ... rest of the code remains the same ...
 }
