@@ -215,7 +215,23 @@ public class GlobalVariable {
         if (var == null) {
             var = new RuntimeScalar();
             var.type = RuntimeScalarType.CODE;  // value is null
-            var.value = new RuntimeCode(null, null);
+            RuntimeCode runtimeCode = new RuntimeCode(null, null);
+            
+            // Parse the key to extract package and subroutine names
+            // key format is typically "Package::SubroutineName"
+            int lastColonIndex = key.lastIndexOf("::");
+            if (lastColonIndex > 0) {
+                runtimeCode.packageName = key.substring(0, lastColonIndex);
+                runtimeCode.subName = key.substring(lastColonIndex + 2);
+            } else {
+                runtimeCode.packageName = "main";
+                runtimeCode.subName = key;
+            }
+            
+            // Note: We don't set isSymbolicReference here by default
+            // It will be set specifically for \&{string} patterns in createCodeReference
+            
+            var.value = runtimeCode;
             globalCodeRefs.put(key, var);
         }
         return var;
@@ -232,19 +248,70 @@ public class GlobalVariable {
     }
 
     public static RuntimeScalar existsGlobalCodeRefAsScalar(String key) {
-        return globalCodeRefs.containsKey(key) ? scalarTrue : scalarFalse;
+        RuntimeScalar var = globalCodeRefs.get(key);
+        if (var != null && var.type == RuntimeScalarType.CODE && var.value instanceof RuntimeCode runtimeCode) {
+            // Use the RuntimeCode.defined() method to check if the subroutine actually exists
+            // This checks methodHandle, constantValue, and compilerSupplier
+            return runtimeCode.defined() ? scalarTrue : scalarFalse;
+        }
+        return scalarFalse;
     }
 
     public static RuntimeScalar existsGlobalCodeRefAsScalar(RuntimeScalar key) {
+        // Handle RuntimeCode objects by extracting the subroutine name
+        if (key.type == RuntimeScalarType.CODE && key.value instanceof RuntimeCode runtimeCode) {
+            // Use the RuntimeCode.defined() method to check if the subroutine actually exists
+            return runtimeCode.defined() ? scalarTrue : scalarFalse;
+        }
         return existsGlobalCodeRefAsScalar(key.toString());
     }
 
+    public static RuntimeScalar existsGlobalCodeRefAsScalar(RuntimeScalar key, String packageName) {
+        // Use proper package name resolution like createCodeReference
+        String name = NameNormalizer.normalizeVariableName(key.toString(), packageName);
+        return existsGlobalCodeRefAsScalar(name);
+    }
+
     public static RuntimeScalar definedGlobalCodeRefAsScalar(String key) {
-        return globalCodeRefs.containsKey(key) ? globalCodeRefs.get(key).defined() : scalarFalse;
+        // For defined(&{string}) patterns, check actual subroutine existence to match standard Perl
+        // Standard Perl: defined(&{existing}) = true, defined(&{nonexistent}) = false
+        RuntimeScalar var = globalCodeRefs.get(key);
+        if (var != null && var.type == RuntimeScalarType.CODE && var.value instanceof RuntimeCode runtimeCode) {
+            // Check if the subroutine has actual implementation (not just a placeholder)
+            return (runtimeCode.methodHandle != null || runtimeCode.compilerSupplier != null) ? scalarTrue : scalarFalse;
+        }
+        return scalarFalse;
     }
 
     public static RuntimeScalar definedGlobalCodeRefAsScalar(RuntimeScalar key) {
         return definedGlobalCodeRefAsScalar(key.toString());
+    }
+
+    public static RuntimeScalar definedGlobalCodeRefAsScalar(RuntimeScalar key, String packageName) {
+        // Use proper package name resolution like createCodeReference
+        String name = NameNormalizer.normalizeVariableName(key.toString(), packageName);
+        return definedGlobalCodeRefAsScalar(name);
+    }
+
+
+    public static RuntimeScalar deleteGlobalCodeRefAsScalar(String key) {
+        RuntimeScalar deleted = globalCodeRefs.remove(key);
+        return deleted != null ? deleted : scalarFalse;
+    }
+
+    public static RuntimeScalar deleteGlobalCodeRefAsScalar(RuntimeScalar key) {
+        // Handle RuntimeCode objects by extracting the subroutine name
+        if (key.type == RuntimeScalarType.CODE && key.value instanceof RuntimeCode runtimeCode) {
+            String fullName = runtimeCode.packageName + "::" + runtimeCode.subName;
+            return deleteGlobalCodeRefAsScalar(fullName);
+        }
+        return deleteGlobalCodeRefAsScalar(key.toString());
+    }
+
+    public static RuntimeScalar deleteGlobalCodeRefAsScalar(RuntimeScalar key, String packageName) {
+        // Use proper package name resolution like createCodeReference
+        String name = NameNormalizer.normalizeVariableName(key.toString(), packageName);
+        return deleteGlobalCodeRefAsScalar(name);
     }
 
     /**

@@ -8,6 +8,7 @@ import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.GlobalVariable;
 import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.PerlCompilerException;
+import org.perlonjava.perlmodule.Strict;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -394,6 +395,12 @@ public class OperatorParser {
         parser.parsingTakeReference = true;    // don't call `&subr` while parsing "Take reference"
         operand = ListParser.parseZeroOrOneList(parser, 1);
         parser.parsingTakeReference = false;
+        
+        // Handle &{string} patterns for delete/exists operators (no transformation, direct handling)
+        if (operand instanceof ListNode listNode) {
+            transformCodeRefPatterns(parser, listNode, token.text);
+        }
+        
         return new OperatorNode(token.text, operand, currentIndex);
     }
 
@@ -426,6 +433,53 @@ public class OperatorParser {
         return new BinaryOperatorNode("bless", ref, className, currentIndex);
     }
 
+    /**
+     * Transforms &{string} patterns for defined/exists/delete operators based on standard Perl behavior.
+     * - defined: transforms &{string} to \&{string} (both patterns supported)
+     * - exists: keeps &{string} as-is (only &{string} supported, \&{string} should error)
+     * - delete: keeps &{string} as-is (only &{string} supported, \&{string} should error)
+     */
+    private static void transformCodeRefPatterns(Parser parser, ListNode operand, String operator) {
+        for (int i = 0; i < operand.elements.size(); i++) {
+            Node element = operand.elements.get(i);
+            
+            // Check for \&{string} patterns - these should error for exists/delete
+            if (element instanceof OperatorNode backslashOp && 
+                backslashOp.operator.equals("\\") &&
+                backslashOp.operand instanceof OperatorNode ampOp &&
+                ampOp.operator.equals("&") &&
+                ampOp.operand instanceof BlockNode blockNode &&
+                blockNode.elements.size() == 1 &&
+                blockNode.elements.get(0) instanceof StringNode) {
+                
+                if (operator.equals("exists") || operator.equals("delete")) {
+                    throw new PerlCompilerException(operator + " argument is not a HASH or ARRAY element" + 
+                        (operator.equals("exists") ? " or a subroutine" : ""));
+                }
+                // For defined, \&{string} is allowed as-is
+            }
+            
+            // Look for &{string} pattern: OperatorNode with "&" operator and BlockNode operand
+            if (element instanceof OperatorNode operatorNode && 
+                operatorNode.operator.equals("&") &&
+                operatorNode.operand instanceof BlockNode blockNode &&
+                blockNode.elements.size() == 1 &&
+                blockNode.elements.get(0) instanceof StringNode stringNode) {
+                
+                // Check strict refs at parse time - but only for defined operator
+                // Standard Perl allows &{string} with strict refs for exists/delete
+                if (operator.equals("defined") && parser.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_REFS)) {
+                    throw new PerlCompilerException("Can't use string (\"" + stringNode.value + "\") as a subroutine ref while \"strict refs\" in use");
+                }
+                
+                // Don't transform &{string} patterns - handle them directly in emitter
+                // This preserves the semantic difference between &{string} and \&{string}
+                // For all operators (defined/exists/delete), keep &{string} as-is and handle in emitter
+                // The emitter has proper logic to handle these patterns correctly
+            }
+        }
+    }
+
     static OperatorNode parseDefined(Parser parser, LexerToken token, int currentIndex) {
         ListNode operand;
         // Handle 'defined' operator with special parsing context
@@ -439,6 +493,10 @@ public class OperatorParser {
                     ParserNodeUtils.scalarUnderscore(parser)
             );
         }
+        
+        // Transform &{string} patterns to \&{string} patterns for defined operator
+        transformCodeRefPatterns(parser, operand, "defined");
+        
         return new OperatorNode(token.text, operand, currentIndex);
     }
 

@@ -67,6 +67,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // Method context information for next::method support
     public String packageName;
     public String subName;
+    // Flag to indicate this is a symbolic reference created by \&{string} that should always be "defined"
+    public boolean isSymbolicReference = false;
     // State variables
     public Map<String, Boolean> stateVariableInitialized = new HashMap<>();
     public Map<String, RuntimeScalar> stateVariable = new HashMap<>();
@@ -496,7 +498,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static RuntimeScalar createCodeReference(RuntimeScalar runtimeScalar, String packageName) {
         String name = NameNormalizer.normalizeVariableName(runtimeScalar.toString(), packageName);
         // System.out.println("Creating code reference: " + name + " got: " + GlobalContext.getGlobalCodeRef(name));
-        return GlobalVariable.getGlobalCodeRef(name);
+        RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(name);
+        
+        // Mark this as a symbolic reference created by \&{string} pattern
+        // This ensures defined(\&{nonexistent}) returns true to match standard Perl behavior
+        if (codeRef.type == RuntimeScalarType.CODE && codeRef.value instanceof RuntimeCode runtimeCode) {
+            runtimeCode.isSymbolicReference = true;
+        }
+        
+        return codeRef;
     }
 
     public static RuntimeScalar prototype(RuntimeScalar runtimeScalar, String packageName) {
@@ -543,6 +553,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     public boolean defined() {
+        // Symbolic references created by \&{string} are always considered "defined" to match standard Perl
+        if (this.isSymbolicReference) {
+            return true;
+        }
         return this.constantValue != null || this.compilerSupplier != null || this.methodHandle != null;
     }
 
