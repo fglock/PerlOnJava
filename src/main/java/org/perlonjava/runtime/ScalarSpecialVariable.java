@@ -80,7 +80,6 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
      */
     private RuntimeScalar getValueAsScalar() {
         try {
-            System.err.println("DEBUG: ScalarSpecialVariable.getValueAsScalar() called for " + variableId);
             RuntimeScalar result = switch (variableId) {
                 case CAPTURE -> {
                     String capture = RuntimeRegex.captureString(position);
@@ -108,10 +107,8 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                 }
                 case LAST_SUCCESSFUL_PATTERN -> new RuntimeScalar(RuntimeRegex.lastSuccessfulPattern);
             };
-            System.err.println("DEBUG: ScalarSpecialVariable.getValueAsScalar() returning: " + (result.getDefinedBoolean() ? "'" + result.toString() + "'" : "UNDEF"));
             return result;
         } catch (IllegalStateException e) {
-            System.err.println("DEBUG: ScalarSpecialVariable.getValueAsScalar() caught IllegalStateException: " + e.getMessage());
             return scalarUndef;
         }
     }
