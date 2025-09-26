@@ -27,7 +27,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
      *
      * @param array the RuntimeArray object to which this entity will be added
      */
-    abstract void addToArray(RuntimeArray array);
+    public abstract void addToArray(RuntimeArray array);
 
     /**
      * Retrieves a RuntimeScalar instance.
