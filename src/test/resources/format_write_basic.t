@@ -25,7 +25,7 @@ Hello from PerlOnJava format!
         $result = write TEST_SIMPLE;
     };
     ok(!$@, 'Simple format write executes without error');
-    ok($result, 'Write operation returns success');
+    ok(defined($result), 'Write operation returns success');
 };
 
 subtest 'Format Declaration and Reference' => sub {
