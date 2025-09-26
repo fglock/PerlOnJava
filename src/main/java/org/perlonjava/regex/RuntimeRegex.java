@@ -3,6 +3,7 @@ package org.perlonjava.regex;
 import org.perlonjava.operators.WarnDie;
 import org.perlonjava.runtime.*;
 
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,7 +23,7 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
  * This class provides methods to compile, cache, and apply regular expressions
  * with Perl-like syntax and behavior.
  */
-public class RuntimeRegex implements RuntimeScalarReference {
+public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference {
 
     // Constants for regex pattern flags
     private static final int CASE_INSENSITIVE = Pattern.CASE_INSENSITIVE;
@@ -732,6 +733,137 @@ public class RuntimeRegex implements RuntimeScalarReference {
      */
     public boolean getBooleanRef() {
         return true;
+    }
+
+    // Abstract methods from RuntimeBase that need to be implemented
+
+    @Override
+    public void addToArray(RuntimeArray array) {
+        array.add(new RuntimeScalar(this));
+    }
+
+    @Override
+    public RuntimeScalar scalar() {
+        return new RuntimeScalar(this);
+    }
+
+    @Override
+    public RuntimeList getList() {
+        RuntimeList list = new RuntimeList();
+        list.add(new RuntimeScalar(this));
+        return list;
+    }
+
+    @Override
+    public RuntimeArray setArrayOfAlias(RuntimeArray arr) {
+        // For regex objects, we don't support array aliasing
+        return arr;
+    }
+
+    @Override
+    public int countElements() {
+        return 1; // A regex object counts as 1 element
+    }
+
+    @Override
+    public boolean getBoolean() {
+        return true; // Regex objects are always true
+    }
+
+    @Override
+    public boolean getDefinedBoolean() {
+        return true; // Regex objects are always defined
+    }
+
+    @Override
+    public RuntimeScalar createReference() {
+        return new RuntimeScalar(this);
+    }
+
+    @Override
+    public RuntimeBase undefine() {
+        // Cannot undefine a regex object, return as-is
+        return this;
+    }
+
+    @Override
+    public RuntimeScalar addToScalar(RuntimeScalar scalar) {
+        return scalar.addToScalar(new RuntimeScalar(this));
+    }
+
+    @Override
+    public RuntimeArray setFromList(RuntimeList list) {
+        // Regex objects don't support setting from list
+        return new RuntimeArray();
+    }
+
+    @Override
+    public RuntimeArray keys() {
+        // Regex objects don't have keys
+        return new RuntimeArray();
+    }
+
+    @Override
+    public RuntimeArray values() {
+        RuntimeArray arr = new RuntimeArray();
+        arr.add(new RuntimeScalar(this));
+        return arr;
+    }
+
+    @Override
+    public RuntimeList each(int ctx) {
+        // Regex objects don't support each operation
+        return new RuntimeList();
+    }
+
+    @Override
+    public RuntimeScalar chop() {
+        // Cannot chop a regex object
+        return scalarUndef;
+    }
+
+    @Override
+    public RuntimeScalar chomp() {
+        // Cannot chomp a regex object
+        return scalarUndef;
+    }
+
+    @Override
+    public Iterator<RuntimeScalar> iterator() {
+        // Return a single-element iterator containing this regex as a scalar
+        return new Iterator<RuntimeScalar>() {
+            private boolean hasNext = true;
+
+            @Override
+            public boolean hasNext() {
+                return hasNext;
+            }
+
+            @Override
+            public RuntimeScalar next() {
+                if (hasNext) {
+                    hasNext = false;
+                    return new RuntimeScalar(RuntimeRegex.this);
+                }
+                throw new java.util.NoSuchElementException();
+            }
+        };
+    }
+
+    // DynamicState interface methods
+
+    @Override
+    public void dynamicSaveState() {
+        // For regex objects, we don't need to save state as they are immutable
+        // The only mutable state is the 'matched' flag for match-once regexes
+        // which is handled internally
+    }
+
+    @Override
+    public void dynamicRestoreState() {
+        // For regex objects, we don't need to restore state as they are immutable
+        // The only mutable state is the 'matched' flag for match-once regexes
+        // which is handled internally
     }
 
 }
