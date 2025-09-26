@@ -656,6 +656,16 @@ public class OperatorParser {
         return new OperatorNode(token.text, operand, currentIndex);
     }
 
+    static OperatorNode parseDieWarn(Parser parser, LexerToken token, int currentIndex) {
+        Node operand;
+        // Handle operators with any number of arguments
+        operand = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
+        var node = new OperatorNode(token.text, operand, currentIndex);
+        node.setAnnotation("line", parser.ctx.errorUtil.getLineNumber(currentIndex));
+        node.setAnnotation("file", parser.ctx.errorUtil.getFileName());
+        return node;
+    }
+
     static OperatorNode parseSystem(Parser parser, LexerToken token, int currentIndex) {
         Node operand;
         // Handle `system {$program} @args`
