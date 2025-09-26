@@ -201,10 +201,33 @@ public class Variable {
                     case "[" -> {
                         if (isRegex) {
                             // In regex context, '[' might be a character class
-                            // Need sophisticated lookahead to distinguish:
-                            // $foo[$A] - array subscript (should interpolate)
-                            // $foo[$A-Z] - character class (should NOT interpolate)
-                            if (!isArraySubscriptInRegex(parser, parser.tokenIndex)) {
+                            // Critical distinction:
+                            // 1. Scalar variables: $foo[$A-Z] -> character class (should NOT interpolate)
+                            // 2. Array variables: $X[-1] -> array element (should interpolate)
+                            
+                            // Enhanced parsing logic that considers strict mode context
+                            // Key insight: Strict mode affects how $foo[...] is parsed
+                            //
+                            // In NON-STRICT mode (like t/base/lex.t):
+                            //   - $foo[$A-Z] works as character class (barewords allowed)
+                            //   - $X[-1] works as array element access
+                            //
+                            // In STRICT mode:
+                            //   - $foo[$A-Z] may cause parsing issues (barewords not allowed)
+                            //   - Need more careful disambiguation
+                            
+                            boolean shouldTreatAsCharacterClass = false;
+                            
+                            if (operand instanceof OperatorNode opNode && "$".equals(opNode.operator)) {
+                                // This is a scalar variable access like $foo or $X
+                                // Use enhanced logic to distinguish array subscripts from character classes
+                                if (!isArraySubscriptInRegex(parser, parser.tokenIndex)) {
+                                    shouldTreatAsCharacterClass = true;
+                                }
+                            }
+                            
+                            if (shouldTreatAsCharacterClass) {
+                                // This is a character class pattern
                                 break outerLoop; // Stop parsing, let caller handle as character class
                             }
                         }
@@ -638,36 +661,61 @@ public class Variable {
         
         var firstToken = parser.tokens.get(index);
         
-        // If it doesn't start with $ or number, it's definitely a character class
-        if (!firstToken.text.equals("$") && firstToken.type != LexerTokenType.NUMBER) {
+        // Handle different token patterns:
+        // Array access (should interpolate):
+        //   [$A] -> tokens: $, A, ]
+        //   [0] -> tokens: 0, ]  
+        //   [-1] -> tokens: -, 1, ]
+        // Character class (should NOT interpolate):
+        //   [$A-Z] -> tokens: $, A, -, Z, ]
+        //   [0-9] -> tokens: 0, -, 9, ]
+        //   [a-z] -> tokens: a, -, z, ]
+        
+        if (firstToken.text.equals("$")) {
+            // Variable case: $A, need to skip both $ and A tokens
+            index++; // Skip the $ token
+            if (index >= parser.tokens.size()) {
+                return false; // Incomplete variable, treat as character class
+            }
+            var variableNameToken = parser.tokens.get(index);
+            index++; // Skip the variable name token
+        } else if (firstToken.type == LexerTokenType.NUMBER) {
+            // Number case: just skip the number token
+            index++;
+        } else if (firstToken.text.equals("-")) {
+            // Negative number case: skip the - and the following number
+            index++; // Skip the - token
+            if (index >= parser.tokens.size()) {
+                return false; // Incomplete, treat as character class
+            }
+            var numberToken = parser.tokens.get(index);
+            if (numberToken.type != LexerTokenType.NUMBER) {
+                return false; // Not a negative number, treat as character class
+            }
+            index++; // Skip the number token
+        } else {
+            // If it doesn't start with $, number, or -, it's definitely a character class
             return false;
         }
         
-        // Look for character class patterns like:
-        // [$A-Z] - variable followed by dash (character class)
-        // [$A] - just variable (array subscript)
-        // [0-9] - number followed by dash (character class) 
-        // [0] - just number (array subscript)
-        
-        // Skip the variable/number token
-        index++;
         if (index >= parser.tokens.size()) {
-            return true; // Just [$A] or [0] - treat as array subscript
+            return true; // Just [$A], [0], or [-1] - treat as array subscript
         }
         
         var nextToken = parser.tokens.get(index);
         
-        // If followed by '-', it's likely a character class range
+        // If followed by '-', it's a character class range
         if (nextToken.text.equals("-")) {
             return false; // Character class pattern like [$A-Z] or [0-9]
         }
         
         // If followed by ']', it's a simple array subscript
         if (nextToken.text.equals("]")) {
-            return true; // Array subscript like [$A] or [0]
+            return true; // Array subscript like [$A], [0], or [-1]
         }
         
         // For other cases, default to array subscript behavior
         return true;
     }
+
 }

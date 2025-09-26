@@ -132,6 +132,7 @@ subtest 'Variable Error Handling' => sub {
     plan tests => 2;
     
     # Test format with undefined variable reference
+    my $undefined_variable;  # Declare the variable (will be undef)
     format UNDEFINED_VAR =
 Undefined: @<<<<<<<<<<
            $undefined_variable
