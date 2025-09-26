@@ -657,11 +657,13 @@ public class OperatorParser {
     }
 
     static OperatorNode parseDieWarn(Parser parser, LexerToken token, int currentIndex) {
-        Node operand;
-        // Handle operators with any number of arguments
-        operand = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
-        var node = new OperatorNode(token.text, operand, currentIndex);
-        node.setAnnotation("line", parser.ctx.errorUtil.getLineNumber(currentIndex));
+        ListNode operand = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
+        return dieWarnNode(parser, token.text, operand);
+    }
+
+    static OperatorNode dieWarnNode(Parser parser, String operator, ListNode args) {
+        var node = new OperatorNode(operator, args, parser.tokenIndex);
+        node.setAnnotation("line", parser.ctx.errorUtil.getLineNumber(parser.tokenIndex));
         node.setAnnotation("file", parser.ctx.errorUtil.getFileName());
         return node;
     }

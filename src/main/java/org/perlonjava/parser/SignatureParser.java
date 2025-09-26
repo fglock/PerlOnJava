@@ -8,6 +8,7 @@ import org.perlonjava.runtime.PerlCompilerException;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.perlonjava.parser.OperatorParser.dieWarnNode;
 import static org.perlonjava.parser.ParserNodeUtils.atUnderscore;
 import static org.perlonjava.parser.PrototypeArgs.consumeArgsWithPrototype;
 
@@ -256,11 +257,8 @@ public class SignatureParser {
                                 new NumberNode(Integer.toString(maxParams), parser.tokenIndex),
                                 parser.tokenIndex)
                 ), parser.tokenIndex),
-                new OperatorNode("die",
-                        new ListNode(List.of(
-                                new StringNode("Bad number of arguments", parser.tokenIndex)
-                        ), parser.tokenIndex),
-                        parser.tokenIndex),
+                dieWarnNode(parser, "die", new ListNode(List.of(
+                                new StringNode("Bad number of arguments", parser.tokenIndex)), parser.tokenIndex)),
                 parser.tokenIndex);
     }
 
