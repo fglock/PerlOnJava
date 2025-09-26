@@ -773,7 +773,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
         }
 
-        // Cases 0-10 are listed in order from RuntimeScalarType, and compile to fast tableswitch
+        // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         switch (type) {
             case INTEGER -> // 0
                     this.value = (int) this.value + 1;
@@ -795,22 +795,24 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = 1;
             }
-            case REGEX -> { // 7
+            case JAVAOBJECT -> { // 7
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = 1;
             }
-            case JAVAOBJECT -> { // 8
-                this.type = RuntimeScalarType.INTEGER;
-                this.value = 1;
-            }
-            case TIED_SCALAR -> { // 9
+            case TIED_SCALAR -> { // 8
                 RuntimeScalar variable = this.tiedFetch();
                 variable.preAutoIncrement();
                 this.tiedStore(variable);
                 return variable;
             }
-            case DUALVAR -> // 10
-                    this.set(MathOperators.add(this, 1));
+            case DUALVAR -> { // 9
+                this.type = RuntimeScalarType.INTEGER;
+                this.value = this.getInt() + 1;
+            }
+            case FORMAT -> { // 10
+                this.type = RuntimeScalarType.INTEGER;
+                this.value = 1;
+            }
             default -> { // All reference types (CODE, REFERENCE, ARRAYREFERENCE, etc.)
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = 1;
@@ -847,7 +849,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
         }
 
-        // Cases 0-10 are listed in order from RuntimeScalarType, and compile to fast tableswitch
+        // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         switch (type) {
             case INTEGER -> // 0
                     this.value = (int) this.value + 1;
@@ -869,21 +871,23 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = 1;
             }
-            case REGEX -> { // 7
+            case JAVAOBJECT -> { // 7
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = 1;
             }
-            case JAVAOBJECT -> { // 8
-                this.type = RuntimeScalarType.INTEGER;
-                this.value = 1;
-            }
-            case TIED_SCALAR -> { // 9
+            case TIED_SCALAR -> { // 8
                 RuntimeScalar variable = new RuntimeScalar(old);
                 variable.preAutoIncrement();
                 this.tiedStore(variable);
             }
-            case DUALVAR -> // 10
-                    this.set(MathOperators.add(this, 1));
+            case DUALVAR -> { // 9
+                this.type = RuntimeScalarType.INTEGER;
+                this.value = old.getInt() + 1;
+            }
+            case FORMAT -> { // 10
+                this.type = RuntimeScalarType.INTEGER;
+                this.value = 1;
+            }
             default -> { // All reference types
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = 1;
@@ -918,7 +922,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
         }
 
-        // Cases 0-10 are listed in order from RuntimeScalarType, and compile to fast tableswitch
+        // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         switch (type) {
             case INTEGER -> // 0
                     this.value = (int) this.value - 1;
@@ -946,22 +950,24 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = -1;
             }
-            case REGEX -> { // 7
+            case JAVAOBJECT -> { // 7
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = -1;
             }
-            case JAVAOBJECT -> { // 8
-                this.type = RuntimeScalarType.INTEGER;
-                this.value = -1;
-            }
-            case TIED_SCALAR -> { // 9
+            case TIED_SCALAR -> { // 8
                 RuntimeScalar variable = this.tiedFetch();
                 variable.preAutoDecrement();
                 this.tiedStore(variable);
                 return variable;
             }
-            case DUALVAR -> // 10
-                    this.set(MathOperators.add(this, -1));
+            case DUALVAR -> { // 9
+                this.type = RuntimeScalarType.INTEGER;
+                this.value = this.getInt() - 1;
+            }
+            case FORMAT -> { // 10
+                this.type = RuntimeScalarType.INTEGER;
+                this.value = -1;
+            }
             default -> { // All reference types
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = -1;
@@ -1002,7 +1008,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
         }
 
-        // Cases 0-10 are listed in order from RuntimeScalarType, and compile to fast tableswitch
+        // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         switch (type) {
             case INTEGER -> // 0
                     this.value = (int) this.value - 1;
@@ -1030,21 +1036,23 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = -1;
             }
-            case REGEX -> { // 7
+            case JAVAOBJECT -> { // 7
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = -1;
             }
-            case JAVAOBJECT -> { // 8
-                this.type = RuntimeScalarType.INTEGER;
-                this.value = -1;
-            }
-            case TIED_SCALAR -> { // 9
+            case TIED_SCALAR -> { // 8
                 RuntimeScalar variable = new RuntimeScalar(old);
                 variable.preAutoDecrement();
                 this.tiedStore(variable);
             }
-            case DUALVAR -> // 10
-                    this.set(MathOperators.add(this, -1));
+            case DUALVAR -> { // 9
+                this.type = RuntimeScalarType.INTEGER;
+                this.value = old.getInt() - 1;
+            }
+            case FORMAT -> { // 10
+                this.type = RuntimeScalarType.INTEGER;
+                this.value = -1;
+            }
             default -> { // All reference types
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = -1;
