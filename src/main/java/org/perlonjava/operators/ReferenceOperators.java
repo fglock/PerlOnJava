@@ -53,13 +53,15 @@ public class ReferenceOperators {
                 str = ref(runtimeScalar.tiedFetch()).toString();
                 break;
             case CODE:
-                str = "CODE";
+                blessId = ((RuntimeBase) runtimeScalar.value).blessId;
+                str = blessId == 0 ? "CODE" : NameNormalizer.getBlessStr(blessId);
                 break;
             case GLOB:
                 str = "";
                 break;
             case REGEX:
-                str = "Regexp";
+                blessId = ((RuntimeBase) runtimeScalar.value).blessId;
+                str = blessId == 0 ? "Regexp" : NameNormalizer.getBlessStr(blessId);
                 break;
             case REFERENCE:
                 // Handle nested references
