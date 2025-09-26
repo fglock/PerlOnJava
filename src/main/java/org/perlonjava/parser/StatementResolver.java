@@ -7,6 +7,7 @@ import org.perlonjava.lexer.LexerTokenType;
 
 import java.util.List;
 
+import static org.perlonjava.parser.OperatorParser.dieWarnNode;
 import static org.perlonjava.parser.ParserNodeUtils.scalarUnderscore;
 import static org.perlonjava.parser.TokenUtils.consume;
 import static org.perlonjava.parser.TokenUtils.peek;
@@ -134,10 +135,8 @@ public class StatementResolver {
             Node result = switch (token.text) {
                 case "..." -> {
                     TokenUtils.consume(parser);
-                    yield new OperatorNode(
-                            "die",
-                            new StringNode("Unimplemented", parser.tokenIndex),
-                            parser.tokenIndex);
+                    yield dieWarnNode(parser, "die", new ListNode(List.of(
+                            new StringNode("Unimplemented", parser.tokenIndex)), parser.tokenIndex));
                 }
 
                 case "{" -> {
