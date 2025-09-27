@@ -230,7 +230,7 @@ public class EmitOperator {
         node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
 
         // Push the formatted line number as a message.
-        Node message = new StringNode(emitterVisitor.ctx.errorUtil.errorMessage(node.tokenIndex, ""), node.tokenIndex);
+        Node message = new StringNode(" at " + node.getAnnotation("file") + " line " + node.getAnnotation("line"), node.tokenIndex);
         message.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
 
         String fileName = emitterVisitor.ctx.errorUtil.getFileName();
