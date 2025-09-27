@@ -602,8 +602,12 @@ public class OperatorParser {
         separator = operand.elements.removeFirst();
 
         if (token.text.equals("push") || token.text.equals("unshift")) {
-            // assert that separator is an array
-            if (!(separator instanceof OperatorNode operatorNode && operatorNode.operator.equals("@"))) {
+            // assert that separator is an `@array` or `my @array`
+            var op = separator;
+            if (op instanceof OperatorNode operatorNode && operatorNode.operator.equals("my")) {
+                op = operatorNode.operand;
+            }
+            if (!(op instanceof OperatorNode operatorNode && operatorNode.operator.equals("@"))) {
                 parser.throwError("Type of arg 1 to " + operatorName + " must be array (not constant item)");
             }
         }
