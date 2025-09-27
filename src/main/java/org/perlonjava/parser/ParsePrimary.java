@@ -354,12 +354,17 @@ public class ParsePrimary {
         }
     }
 
-    private static OperatorNode parseFileTestOperator(Parser parser, LexerToken nextToken, Node operand) {
+    private static Node parseFileTestOperator(Parser parser, LexerToken nextToken, Node operand) {
         String operator;
         // File test operator: -f filename, -d $dir, etc.
         operator = "-" + nextToken.text;
         parser.tokenIndex++;
         nextToken = peek(parser);
+
+        if (nextToken.text.equals("=>")) {
+            // autoquote ` -X => ... `
+            return new StringNode(operator, parser.tokenIndex);
+        }
 
         var hasParenthesis = false;
         if (nextToken.text.equals("(")) {
