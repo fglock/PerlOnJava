@@ -233,6 +233,7 @@ sub run_single_test {
         | re/pat.t
         | op/pack.t
         | op/index.t
+        | re/reg_pmod.t
         | op/sprintf.t }x
         ? "warn" : "";
     local $ENV{JPERL_OPTS} = $test_file =~ m{ re/pat.t }x
