@@ -580,7 +580,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **Perl::OSType** module.
 - ✅  **Scalar::Util**: `blessed`, `reftype`, `set_prototype`, `dualvar` are implemented.
 - ✅  **Storable**: module.
-- ✅  **Symbol**: `qualify` and `qualify_to_ref` are implemented.
+- ✅  **Symbol**: `gensym`, `qualify` and `qualify_to_ref` are implemented.
 - ✅  **Term::ANSIColor** module.
 - ✅  **Test** module.
 - ✅  **Test::More** module.

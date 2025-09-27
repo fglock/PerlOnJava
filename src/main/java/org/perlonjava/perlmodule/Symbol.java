@@ -1,5 +1,6 @@
 package org.perlonjava.perlmodule;
 
+import org.perlonjava.codegen.EmitterMethodCreator;
 import org.perlonjava.runtime.*;
 
 import static org.perlonjava.runtime.RuntimeContextType.SCALAR;
@@ -49,9 +50,8 @@ public class Symbol extends PerlModuleBase {
      * @throws PerlCompilerException if the method is not implemented.
      */
     public static RuntimeList gensym(RuntimeArray args, int ctx) {
-        // Placeholder for gensym functionality
-        // return new RuntimeScalar(new RuntimeGlob("GEN" + System.nanoTime())).getList();
-        throw new PerlJavaUnimplementedException("not implemented");
+        return qualify_to_ref(
+                new RuntimeArray(new RuntimeScalar("PerlOnJava::__symbol" + EmitterMethodCreator.classCounter++)), SCALAR);
     }
 
     /**
