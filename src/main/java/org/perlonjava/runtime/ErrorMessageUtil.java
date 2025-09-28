@@ -109,7 +109,14 @@ public class ErrorMessageUtil {
         // If no Perl stack trace information is available, include JVM stack trace
         if (formattedLines.isEmpty()) {
             sb.append("JVM Stack Trace:\n");
-            StackTraceElement[] stackTrace = t.getStackTrace();
+
+            // Find the root cause
+            Throwable rootCause = t;
+            while (rootCause.getCause() != null && rootCause.getCause() != rootCause) {
+                rootCause = rootCause.getCause();
+            }
+
+            StackTraceElement[] stackTrace = rootCause.getStackTrace();
             for (int i = 0; i < Math.min(stackTrace.length, 5); i++) {
                 StackTraceElement element = stackTrace[i];
                 sb.append("        ")

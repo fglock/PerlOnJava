@@ -306,8 +306,9 @@ public class EmitterMethodCreator implements Opcodes {
         } catch (RuntimeException e) {
             throw new PerlCompilerException(
                     ast.getIndex(),
-                    "Unexpected runtime error during bytecode generation: " + e.getMessage(),
-                    ctx.errorUtil);
+                    "Unexpected runtime error during bytecode generation",
+                    ctx.errorUtil,
+                    e);
         }
 
     }

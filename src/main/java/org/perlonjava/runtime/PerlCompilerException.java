@@ -31,6 +31,12 @@ public class PerlCompilerException extends RuntimeException {
         this.errorMessage = errorMessageUtil.errorMessage(tokenIndex, message);
     }
 
+    public PerlCompilerException(int tokenIndex, String message, ErrorMessageUtil errorMessageUtil, Throwable cause) {
+        super(message, cause);
+        // Use the utility to format the error message with the token index
+        this.errorMessage = errorMessageUtil.errorMessage(tokenIndex, message);
+    }
+
     /**
      * Constructs a new PerlCompilerException using runtime information.
      * This constructor attempts to gather caller information such as package name,
