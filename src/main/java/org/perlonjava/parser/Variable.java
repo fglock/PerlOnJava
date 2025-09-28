@@ -598,11 +598,18 @@ public class Variable {
 
 // Fall back to parsing as a block
         try {
-            Node block = ParseBlock.parseBlock(parser);
+            BlockNode block = ParseBlock.parseBlock(parser);
             if (!TokenUtils.peek(parser).text.equals("}")) {
                 throw new PerlCompilerException(parser.tokenIndex, "Missing closing brace in variable interpolation", parser.ctx.errorUtil);
             }
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+            if (block.elements.size() == 1 && block.elements.getFirst() instanceof OperatorNode operatorNode && operatorNode.operator.equals("*")) {
+                // ${*F} is a fancy way to say $Package::F
+                if (operatorNode.operand instanceof IdentifierNode identifierNode) {
+                    identifierNode.name = NameNormalizer.normalizeVariableName(identifierNode.name, parser.ctx.symbolTable.getCurrentPackage());
+                }
+                return new OperatorNode(sigil, operatorNode.operand, parser.tokenIndex);
+            }
             return new OperatorNode(sigil, block, parser.tokenIndex);
         } catch (Exception e) {
             throw new PerlCompilerException(parser.tokenIndex, "Syntax error in braced variable: " + e.getMessage(), parser.ctx.errorUtil);
