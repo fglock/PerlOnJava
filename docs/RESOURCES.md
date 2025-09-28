@@ -4,6 +4,7 @@
 
 ### Early Work
 - Brian Jepson in TPJ, 1997 [JPL: The Java-Perl Library](https://www.foo.be/docs/tpj/issues/vol2_4/tpj0204-0003.html)
+- Brian Jepson, 1999 [JPL Tutorial](https://metacpan.org/release/ABERGMAN/ponie-2/view/perl/jpl/docs/Tutorial.pod)
 - Kuhn, Bradley M. (January 2001). [Considerations on Porting Perl to the Java Virtual Machine](http://www.ebb.org/bkuhn/writings/technical/thesis/) (MS thesis). University of Cincinnati
 - Bradley Kuhn, 2002 [perljvm: Using B to Facilitate a Perl Port To the Java Virtual Machine](https://www.ebb.org/bkuhn/articles/perljvm.html)
 
