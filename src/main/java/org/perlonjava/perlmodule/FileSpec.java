@@ -425,6 +425,14 @@ public class FileSpec extends PerlModuleBase {
         }
         String path = args.get(1).toString();
         String base = args.size() == 3 ? args.get(2).toString() : System.getProperty("user.dir");
+        
+        // If the path is already absolute, return it as-is (normalized)
+        if (Paths.get(path).isAbsolute()) {
+            String absPath = Paths.get(path).toAbsolutePath().normalize().toString();
+            return new RuntimeScalar(absPath).getList();
+        }
+        
+        // For relative paths, resolve against the base directory
         String absPath = Paths.get(base, path).toAbsolutePath().normalize().toString();
         return new RuntimeScalar(absPath).getList();
     }

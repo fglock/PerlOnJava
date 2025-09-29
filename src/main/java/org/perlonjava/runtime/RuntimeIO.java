@@ -511,6 +511,14 @@ public class RuntimeIO implements RuntimeScalarReference {
      * @return Path object for the file
      */
     public static Path resolvePath(String fileName) {
+        Path path = Paths.get(fileName);
+        
+        // If the path is already absolute, return it as-is
+        if (path.isAbsolute()) {
+            return path.toAbsolutePath();
+        }
+        
+        // For relative paths, resolve against current directory
         return Paths.get(System.getProperty("user.dir")).resolve(fileName).toAbsolutePath();
     }
 
