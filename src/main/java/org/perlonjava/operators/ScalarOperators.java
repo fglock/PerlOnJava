@@ -12,7 +12,7 @@ public class ScalarOperators {
 
         StringParser.assertNoWideCharacters(expr, "oct");
 
-        int result = 0;
+        long result = 0;
 
         // Remove leading and trailing whitespace
         expr = expr.trim();
@@ -78,7 +78,7 @@ public class ScalarOperators {
 
     public static RuntimeScalar hex(RuntimeScalar runtimeScalar) {
         String expr = runtimeScalar.toString();
-        int result = 0;
+        long result = 0;
 
         StringParser.assertNoWideCharacters(expr, "hex");
 
