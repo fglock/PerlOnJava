@@ -255,8 +255,31 @@ public class IOOperator {
                         throw new PerlCompilerException("Bad filehandle: " + extractFilehandleName(argStr));
                     }
                 } else {
-                    // For non-GLOB types, provide proper "Bad filehandle" error messages
-                    throw new PerlCompilerException("Bad filehandle: " + extractFilehandleName(argStr));
+                    // Handle string filehandle names (like "STDOUT", "STDERR", "STDIN")
+                    String handleName = secondArg.toString();
+                    if (handleName.equals("STDOUT") || handleName.equals("STDERR") || handleName.equals("STDIN")) {
+                        // Convert string to proper filehandle reference
+                        RuntimeScalar handleRef = GlobalVariable.getGlobalIO("main::" + handleName);
+                        if (handleRef != null && handleRef.value instanceof RuntimeGlob) {
+                            RuntimeIO sourceHandle = ((RuntimeGlob) handleRef.value).getIO().getRuntimeIO();
+                            if (sourceHandle != null && sourceHandle.ioHandle != null) {
+                                if (isParsimonious) {
+                                    // &= mode: reuse the same file descriptor (parsimonious)
+                                    fh = sourceHandle;
+                                } else {
+                                    // & mode: create a new handle that duplicates the original
+                                    fh = duplicateFileHandle(sourceHandle);
+                                }
+                            } else {
+                                throw new PerlCompilerException("Bad filehandle: " + extractFilehandleName(argStr));
+                            }
+                        } else {
+                            throw new PerlCompilerException("Bad filehandle: " + extractFilehandleName(argStr));
+                        }
+                    } else {
+                        // For other non-GLOB types, provide proper "Bad filehandle" error messages
+                        throw new PerlCompilerException("Bad filehandle: " + extractFilehandleName(argStr));
+                    }
                 }
             } else if (secondArg.type == RuntimeScalarType.REFERENCE) {
                 // Open to in-memory scalar
