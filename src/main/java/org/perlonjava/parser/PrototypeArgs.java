@@ -333,7 +333,7 @@ public class PrototypeArgs {
         if (needComma && !consumeCommaIfPresent(parser, isOptional)) {
             return null;
         }
-        return parseRequiredArgument(parser, isOptional, expectedType);
+        return parseRequiredArgument(parser, isOptional);
     }
 
     private static void handleScalarArgument(Parser parser, ListNode args, boolean isOptional, boolean needComma) {
@@ -432,7 +432,7 @@ public class PrototypeArgs {
             return false;
         }
 
-        Node codeRef = parseRequiredArgument(parser, isOptional, "code reference or block");
+        Node codeRef = parseRequiredArgument(parser, isOptional);
         if (codeRef != null) {
             // Code references are evaluated in SCALAR context
             codeRef.setAnnotation("context", "SCALAR");
@@ -533,7 +533,7 @@ public class PrototypeArgs {
         return true;
     }
 
-    private static Node parseRequiredArgument(Parser parser, boolean isOptional, String expectedType) {
+    private static Node parseRequiredArgument(Parser parser, boolean isOptional) {
         if (isArgumentTerminator(parser)) {
             if (isOptional) {
                 return null;
