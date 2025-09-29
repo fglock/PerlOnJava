@@ -179,6 +179,8 @@ public class CustomFileChannel implements IOHandle {
     @Override
     public RuntimeScalar close() {
         try {
+            // Ensure all data is flushed before closing
+            fileChannel.force(true); // Force both content and metadata
             fileChannel.close();
             return scalarTrue;
         } catch (IOException e) {
@@ -265,15 +267,15 @@ public class CustomFileChannel implements IOHandle {
      * Flushes any buffered data to the underlying storage device.
      *
      * <p>This method forces any buffered data to be written to the storage device,
-     * but does not update file metadata.
+     * including file metadata for reliability.
      *
      * @return RuntimeScalar with true on success
      */
     @Override
     public RuntimeScalar flush() {
         try {
-            // Force content to be written, but not metadata
-            fileChannel.force(false);
+            // Force both content and metadata to be written for reliability
+            fileChannel.force(true);
             return scalarTrue;
         } catch (IOException e) {
             return handleIOException(e, "flush failed");

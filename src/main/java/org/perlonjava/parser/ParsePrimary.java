@@ -358,6 +358,7 @@ public class ParsePrimary {
         String operator;
         // File test operator: -f filename, -d $dir, etc.
         operator = "-" + nextToken.text;
+        int startLineNumber = parser.ctx.errorUtil.getLineNumber(parser.tokenIndex - 1); // Save line number before peek() side effects
         parser.tokenIndex++;
         nextToken = peek(parser);
 
@@ -365,6 +366,7 @@ public class ParsePrimary {
             // autoquote ` -X => ... `
             return new StringNode(operator, parser.tokenIndex);
         }
+        
 
         var hasParenthesis = false;
         if (nextToken.text.equals("(")) {
@@ -392,6 +394,18 @@ public class ParsePrimary {
 
         if (hasParenthesis) {
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
+        }
+
+        // Check for ambiguous cases like -C- where we have a unary minus without operand
+        if (operand instanceof org.perlonjava.astnode.OperatorNode opNode && 
+            "unaryMinus".equals(opNode.operator) && opNode.operand == null) {
+            // This is an ambiguous case like -C- 
+            // Use the saved line number from before peek() side effects
+            String warningMsg = "Warning: Use of \"" + operator + "-\" without parentheses is ambiguous at " + 
+                              parser.ctx.errorUtil.getFileName() + " line " + startLineNumber + ".\n" +
+                              "syntax error at " + parser.ctx.errorUtil.getFileName() + " line " + startLineNumber + ", at EOF\n" +
+                              "Execution of " + parser.ctx.errorUtil.getFileName() + " aborted due to compilation errors.";
+            throw new org.perlonjava.runtime.PerlParserException(warningMsg);
         }
 
         return new OperatorNode(operator, operand, parser.tokenIndex);
