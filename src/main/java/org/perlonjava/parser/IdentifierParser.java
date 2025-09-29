@@ -110,8 +110,9 @@ public class IdentifierParser {
             if (!valid) {
                 String hex = cp > 255
                         ? "\\x{" + Integer.toHexString(cp) + "}"
-                        : String.format("\\x%02x", cp);
-                throw new PerlCompilerException("Unrecognized character " + hex + ";");
+                        : String.format("\\x%02X", cp);
+                // Use clean error message format to match Perl's exact format
+                parser.throwCleanError("Unrecognized character " + hex + "; marked by <-- HERE after ${ <-- HERE near column 4");
             }
         }
 
@@ -305,7 +306,7 @@ public class IdentifierParser {
 
     static void validateIdentifier(Parser parser, String varName, int startIndex) {
         if (varName.startsWith("0") && varName.length() > 1) {
-            parser.throwError("Numeric variables with more than one digit may not start with '0'");
+            parser.throwCleanError("Numeric variables with more than one digit may not start with '0'");
         }
 
         // Check for non-ASCII characters in variable names under 'no utf8'
