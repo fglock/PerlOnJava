@@ -198,6 +198,18 @@ public class Parser {
         throw new PerlCompilerException(this.tokenIndex, message, this.ctx.errorUtil);
     }
 
+    /**
+     * Throws a clean parser error that matches Perl's exact error message format
+     * without additional context or stack traces.
+     */
+    public void throwCleanError(String message) {
+        // Get current line number for clean error message
+        int lineNumber = this.ctx.errorUtil.getLineNumber(this.tokenIndex);
+        String fileName = this.ctx.errorUtil.getFileName();
+        String cleanMessage = message + " at " + fileName + " line " + lineNumber + ".";
+        throw new org.perlonjava.runtime.PerlParserException(cleanMessage);
+    }
+
     public void debugHeredocState(String location) {
         this.ctx.logDebug("HEREDOC_STATE [" + location + "] tokenIndex=" + tokenIndex +
                 " heredocCount=" + heredocNodes.size());

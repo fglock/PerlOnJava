@@ -408,6 +408,7 @@ public class Variable {
      * This method is shared between regular variable parsing and string interpolation.
      */
     public static Node parseBracedVariable(Parser parser, String sigil, boolean isStringInterpolation) {
+        int startLineNumber = parser.ctx.errorUtil.getLineNumber(parser.tokenIndex - 1); // Save line number before peek() side effects
         TokenUtils.consume(parser); // Consume the '{'
 
         // Check if this is an empty ${} construct
@@ -612,7 +613,12 @@ public class Variable {
             }
             return new OperatorNode(sigil, block, parser.tokenIndex);
         } catch (Exception e) {
-            throw new PerlCompilerException(parser.tokenIndex, "Syntax error in braced variable: " + e.getMessage(), parser.ctx.errorUtil);
+            // Use the saved line number from before peek() side effects
+            String fileName = parser.ctx.errorUtil.getFileName();
+            String multiLineError = "Missing right curly or square bracket at " + fileName + " line " + startLineNumber + ", at end of line\n" +
+                                  "syntax error at " + fileName + " line " + startLineNumber + ", at EOF\n" +
+                                  "Execution of " + fileName + " aborted due to compilation errors.";
+            throw new org.perlonjava.runtime.PerlParserException(multiLineError);
         }
     }
 

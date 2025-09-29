@@ -76,6 +76,15 @@ public class ErrorMessageUtil {
 
     public static String stringifyException(Throwable t, int skipLevels) {
 
+        // Check if this is a PerlParserException that should have clean output
+        if (t instanceof PerlParserException) {
+            String message = t.getMessage();
+            if (message != null && !message.endsWith("\n")) {
+                message += "\n";
+            }
+            return message != null ? message : "\n";
+        }
+
         // Use the custom formatter to print the Perl message and stack trace
         StringBuilder sb = new StringBuilder();
 
