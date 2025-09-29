@@ -4,6 +4,8 @@ import org.perlonjava.runtime.RuntimeArray;
 import org.perlonjava.runtime.RuntimeList;
 import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.runtime.RuntimeScalarType;
+import org.perlonjava.runtime.WarningFlags;
+import org.perlonjava.perlmodule.Warnings;
 
 /**
  * The Re class provides functionalities similar to the Perl re module.
@@ -24,6 +26,8 @@ public class Re extends PerlModuleBase {
         Re re = new Re();
         try {
             re.registerMethod("is_regexp", "isRegexp", "$");
+            re.registerMethod("import", "importRe", null);
+            re.registerMethod("unimport", "unimportRe", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing re method: " + e.getMessage());
         }
@@ -43,5 +47,40 @@ public class Re extends PerlModuleBase {
         return new RuntimeList(
                 new RuntimeScalar(args.get(0).type == RuntimeScalarType.REGEX)
         );
+    }
+
+    /**
+     * Handle `use re ...` import. Recognizes: 'strict'.
+     * Enables appropriate experimental warning categories so our regex preprocessor can emit them.
+     */
+    public static RuntimeList importRe(RuntimeArray args, int ctx) {
+        for (int i = 0; i < args.size(); i++) {
+            String opt = args.get(i).toString();
+            // Normalize quotes if present
+            opt = opt.replace("\"", "").replace("'", "").trim();
+            if (opt.equalsIgnoreCase("strict")) {
+                // Enable categories used by our preprocessor warnings
+                Warnings.warningManager.enableWarning("experimental::re_strict");
+                Warnings.warningManager.enableWarning("experimental::uniprop_wildcards");
+                Warnings.warningManager.enableWarning("experimental::vlb");
+            }
+        }
+        return new RuntimeList();
+    }
+
+    /**
+     * Handle `no re ...` unimport. Recognizes: 'strict'.
+     */
+    public static RuntimeList unimportRe(RuntimeArray args, int ctx) {
+        for (int i = 0; i < args.size(); i++) {
+            String opt = args.get(i).toString();
+            opt = opt.replace("\"", "").replace("'", "").trim();
+            if (opt.equalsIgnoreCase("strict")) {
+                Warnings.warningManager.disableWarning("experimental::re_strict");
+                Warnings.warningManager.disableWarning("experimental::uniprop_wildcards");
+                Warnings.warningManager.disableWarning("experimental::vlb");
+            }
+        }
+        return new RuntimeList();
     }
 }
