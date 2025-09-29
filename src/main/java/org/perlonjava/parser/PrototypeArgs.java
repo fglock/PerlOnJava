@@ -137,8 +137,8 @@ public class PrototypeArgs {
             return args;
         }
 
-        // Comma is forbidden here
-        if (prototype != null && !prototype.isEmpty() && isComma(TokenUtils.peek(parser))) {
+        // Comma is forbidden here, unless the prototype allows zero arguments
+        if (prototype != null && !prototype.isEmpty() && isComma(TokenUtils.peek(parser)) && !allowsZeroArguments(prototype)) {
             parser.throwError("syntax error");
         }
 
@@ -260,6 +260,16 @@ public class PrototypeArgs {
     private static void parsePrototypeArguments(Parser parser, ListNode args, String prototype) {
         boolean isOptional = false;
         boolean needComma = false;
+
+        // Check for consecutive commas which should always be a syntax error
+        if (isConsecutiveCommas(parser)) {
+            parser.throwError("syntax error");
+        }
+
+        // If prototype starts with ';' and we're at a terminator or single comma, all arguments are optional
+        if (prototype.startsWith(";") && (isArgumentTerminator(parser) || isComma(TokenUtils.peek(parser)))) {
+            return;
+        }
 
         for (int i = 0; i < prototype.length(); i++) {
             char prototypeChar = prototype.charAt(i);
@@ -537,5 +547,23 @@ public class PrototypeArgs {
             }
         }
         return expr;
+    }
+
+    /**
+     * Checks if there are consecutive commas (like ", ,") which should be a syntax error.
+     *
+     * @param parser The parser instance
+     * @return true if there are consecutive commas, false otherwise
+     */
+    private static boolean isConsecutiveCommas(Parser parser) {
+        if (!isComma(TokenUtils.peek(parser))) {
+            return false;
+        }
+        // Look ahead to see if the next token after the comma is also a comma
+        int savedIndex = parser.tokenIndex;
+        parser.tokenIndex++; // Move past the first comma
+        boolean hasConsecutiveComma = isComma(TokenUtils.peek(parser));
+        parser.tokenIndex = savedIndex; // Restore position
+        return hasConsecutiveComma;
     }
 }
