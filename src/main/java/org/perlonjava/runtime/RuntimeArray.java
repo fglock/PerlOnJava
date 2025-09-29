@@ -19,9 +19,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     public static final int PLAIN_ARRAY = 0;
     public static final int AUTOVIVIFY_ARRAY = 1;
     public static final int TIED_ARRAY = 2;
+    public static final int READONLY_ARRAY = 3;
     // Static stack to store saved "local" states of RuntimeArray instances
     private static final Stack<RuntimeArray> dynamicStateStack = new Stack<>();
-    // Internal type of array - PLAIN_ARRAY, AUTOVIVIFY_ARRAY, or TIED_ARRAY
+    // Internal type of array - PLAIN_ARRAY, AUTOVIVIFY_ARRAY, TIED_ARRAY, or READONLY_ARRAY
     public int type;
     // List to hold the elements of the array.
     public List<RuntimeScalar> elements;
@@ -167,6 +168,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * @return A scalar representing the new size of the array.
      */
     public static RuntimeScalar unshift(RuntimeArray runtimeArray, RuntimeBase value) {
+        
         return switch (runtimeArray.type) {
             case PLAIN_ARRAY -> {
                 RuntimeArray arr = new RuntimeArray();
@@ -179,6 +181,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 yield unshift(runtimeArray, value);
             }
             case TIED_ARRAY -> TieArray.tiedUnshift(runtimeArray, value);
+            case READONLY_ARRAY -> throw new PerlCompilerException("Modification of a read-only value attempted");
             default -> throw new IllegalStateException("Unknown array type: " + runtimeArray.type);
         };
     }

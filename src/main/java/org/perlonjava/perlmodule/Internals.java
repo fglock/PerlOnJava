@@ -1,6 +1,7 @@
 package org.perlonjava.perlmodule;
 
 import org.perlonjava.runtime.RuntimeArray;
+import org.perlonjava.runtime.RuntimeBase;
 import org.perlonjava.runtime.RuntimeList;
 import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.runtime.StateVariable;
@@ -23,7 +24,7 @@ public class Internals extends PerlModuleBase {
     public static void initialize() {
         Internals internals = new Internals();
         try {
-            internals.registerMethod("SvREADONLY", "svReadonly", "$;$");
+            internals.registerMethod("SvREADONLY", "svReadonly", "\\[$@%];$");
             internals.registerMethod("SvREFCNT", "svRefcount", "$;$");
             internals.registerMethod("initialize_state_variable", "initializeStateVariable", "$$");
             internals.registerMethod("initialize_state_array", "initializeStateArray", "$$");
@@ -73,17 +74,35 @@ public class Internals extends PerlModuleBase {
     }
 
     /**
-     * No-op, returns false.
+     * Sets or gets the read-only status of a variable.
      *
-     * @param args The arguments passed to the method.
+     * @param args The arguments passed to the method: variable, optional flag to set readonly
      * @param ctx  The context in which the method is called.
      * @return Empty list
      */
     public static RuntimeList svReadonly(RuntimeArray args, int ctx) {
-
-        // XXX TODO rewrite this to emit a RuntimeScalarReadOnly
-        // It needs to happen at the emitter, because the variable container needs to be replaced.
-
+        if (args.size() >= 2) {
+            RuntimeBase variable = args.get(0);
+            RuntimeBase flag = args.get(1);
+            
+            // If flag is true (non-zero), make the variable readonly
+            if (flag.getBoolean()) {
+                if (variable instanceof RuntimeArray) {
+                    RuntimeArray array = (RuntimeArray) variable;
+                    array.type = RuntimeArray.READONLY_ARRAY;
+                } else if (variable instanceof RuntimeScalar) {
+                    // Try to dereference as an array reference
+                    try {
+                        RuntimeScalar scalar = (RuntimeScalar) variable;
+                        RuntimeArray array = scalar.arrayDeref();
+                        array.type = RuntimeArray.READONLY_ARRAY;
+                    } catch (Exception e) {
+                        // Variable is not an array reference, ignore silently
+                    }
+                }
+                // TODO: Handle scalars and hashes when needed
+            }
+        }
         return new RuntimeList();
     }
 
