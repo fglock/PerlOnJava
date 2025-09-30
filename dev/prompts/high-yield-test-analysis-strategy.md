@@ -1,0 +1,432 @@
+# High-Yield Test Analysis and Debugging Strategy
+
+## Meta-Prompt Purpose
+This is a **living document** that captures effective strategies for finding and fixing high-yield bugs in PerlOnJava. When you learn new debugging techniques or discover better ways to analyze test failures, **UPDATE THIS FILE** with your findings.
+
+## Quick Start: Finding High-Yield Targets
+
+### Step 1: Analyze Test Results Data
+```bash
+# Get test results with pass rates
+jq -r '.results | to_entries[] | select(.value.ok_count > 50 and .value.not_ok_count > 15 and .value.not_ok_count < 100) | "\(.value.not_ok_count) failures / \(.value.ok_count) passing (\(.value.ok_count * 100 / .value.total_tests | floor)%) - \(.key)"' out.json | sort -rn | head -20
+```
+
+**Look for:**
+- **High pass rates (70-95%)** - Indicates focused bugs, not missing features
+- **Moderate failure counts (15-100)** - Sweet spot for impact vs. complexity
+- **Avoid very low pass rates (<50%)** - Usually indicates unimplemented features
+
+### Step 2: Investigate Failure Patterns
+```bash
+# Get first 20 failures to identify patterns
+./jperl t/op/TESTFILE.t 2>&1 | grep "^not ok" | head -20
+
+# Get error details for specific test
+./jperl t/op/TESTFILE.t 2>&1 | grep -A 5 "^not ok TEST_NUMBER"
+```
+
+**Look for:**
+- **Repeated keywords** - Same error message across many tests
+- **Numeric patterns** - Tests with similar numbers (e.g., all negative offsets)
+- **Format patterns** - Tests with similar format strings (e.g., %lld, %lli)
+
+### Step 3: Verify with Minimal Test Case
+Always create a minimal test case to verify the bug:
+```perl
+#!/usr/bin/perl
+use strict;
+use warnings;
+
+# Minimal reproduction of the bug
+my $result = some_operation();
+print "Result: $result\n";
+print "Expected: EXPECTED_VALUE\n";
+print "Test: ", ($result eq "EXPECTED_VALUE" ? "PASS" : "FAIL"), "\n";
+```
+
+Test with both Perl and PerlOnJava:
+```bash
+perl test_minimal.pl
+./jperl test_minimal.pl
+```
+
+## Proven High-Yield Strategies
+
+### Strategy 1: Pattern Recognition
+**When to use:** Many similar test failures
+
+**Example from this session:**
+- op/infnan.t: All failures had "Inf" or "NaN" in test names
+- op/read.t: All failures had "offset" in test names (offset=3, offset=-1, etc.)
+- op/hashassign.t: All failures mentioned "scalar context" or "list context"
+
+**Action:** Group failures by pattern, fix the root cause once
+
+### Strategy 2: Context-Aware Operations
+**When to use:** Tests fail in one context but pass in another
+
+**Key insight:** Many Perl operations behave differently in scalar vs. list context.
+
+**Check for:**
+- Methods that should accept `int ctx` parameter
+- Bytecode generation using `pushCallContext()`
+- Return values that differ based on context
+
+**Example:** Hash assignment returns different values in scalar vs. list context.
+
+### Strategy 3: EOF and Boundary Conditions
+**When to use:** Tests fail at end-of-file or with edge case inputs
+
+**Common issues:**
+- EOF handling without trailing newlines
+- Empty delimiters or empty inputs
+- Negative offsets or indices
+- Integer overflow at boundaries (2^31, 2^32)
+
+**Example from this session:** read() with offset at EOF was clearing buffer instead of padding.
+
+### Strategy 4: Existing Helper Methods
+**When to use:** Before implementing new validation logic
+
+**Action:** Search for existing methods that might already handle your case.
+
+**Example from this session:** 
+- Found `handleInfinity()` method already existed for pack Inf/NaN validation
+- Just needed to call it in the right place
+
+**Search techniques:**
+```bash
+# Search for method names
+grep -r "methodName" src/main/java/
+
+# Search for similar functionality
+grep -r "Infinity\|NaN" src/main/java/
+```
+
+### Strategy 5: Bytecode Disassembly
+**When to use:** Understanding how code is compiled and executed
+
+**Command:**
+```bash
+./jperl --disassemble -e 'CODE_HERE' 2>&1 | grep -A 10 "METHOD_NAME"
+```
+
+**Look for:**
+- Method signatures (parameter types)
+- Call sequences (what gets called when)
+- Context handling (pushCallContext calls)
+
+**Example:** Used to discover how `setFromList()` is called and what context information is available.
+
+## Debugging Techniques Learned
+
+### Technique 1: Strategic Debug Logging
+**Best practice:** Add targeted logging at decision points, not everywhere.
+
+**Template:**
+```java
+if (CONDITION_OF_INTEREST) {
+    System.err.println("DEBUG: key_variable=" + keyVariable + 
+                     ", state=" + currentState + 
+                     ", expected=" + expectedValue);
+}
+```
+
+**Remove after debugging** - Don't commit debug statements.
+
+### Technique 2: Comparative Testing
+**Pattern:** Test the same code with both Perl and PerlOnJava
+
+```bash
+# Test with standard Perl
+perl -e 'TEST_CODE'
+
+# Test with PerlOnJava  
+./jperl -e 'TEST_CODE'
+
+# Compare outputs
+diff <(perl -e 'TEST_CODE') <(./jperl -e 'TEST_CODE')
+```
+
+### Technique 3: Incremental Verification
+**Pattern:** Test each hypothesis immediately
+
+1. Form hypothesis about bug
+2. Create minimal test case
+3. Verify hypothesis
+4. If wrong, form new hypothesis
+5. Repeat until root cause found
+
+**Don't:** Make multiple changes without testing each one.
+
+### Technique 4: Test Count Analysis
+**Pattern:** Track test improvements to verify fixes
+
+```bash
+# Before fix
+./jperl t/op/TESTFILE.t 2>&1 | grep -c "^ok"
+./jperl t/op/TESTFILE.t 2>&1 | grep -c "^not ok"
+
+# After fix
+./jperl t/op/TESTFILE.t 2>&1 | grep -c "^ok"
+./jperl t/op/TESTFILE.t 2>&1 | grep -c "^not ok"
+
+# Calculate improvement
+```
+
+### Technique 5: Grep for Implementation
+**Pattern:** Find where functionality is implemented
+
+```bash
+# Find method definitions
+grep -r "public.*methodName" src/main/java/
+
+# Find method calls
+grep -r "methodName\(" src/main/java/
+
+# Find with context
+grep -B 5 -A 10 "pattern" file.java
+```
+
+## Common PerlOnJava Patterns
+
+### Pattern 1: Context Parameters
+Most operators accept `int ctx` for context-aware behavior:
+```java
+public ReturnType operationName(Parameters..., int ctx) {
+    return switch(ctx) {
+        case RuntimeContextType.SCALAR -> scalarBehavior();
+        case RuntimeContextType.LIST -> listBehavior();
+        case RuntimeContextType.VOID -> voidBehavior();
+        default -> defaultBehavior();
+    };
+}
+```
+
+### Pattern 2: Type Checking
+Check scalar type before operations:
+```java
+if (value.type == RuntimeScalarType.DOUBLE) {
+    double d = value.getDouble();
+    // Handle double-specific logic
+}
+```
+
+### Pattern 3: StringBuilder Operations
+**Important:** `StringBuilder.replace()` doesn't auto-truncate!
+```java
+StringBuilder sb = new StringBuilder("original");
+sb.replace(start, end, newData);
+sb.setLength(desiredLength);  // Must explicitly truncate!
+```
+
+### Pattern 4: EOF Handling
+Always handle EOF separately, especially with offsets:
+```java
+if (charsRead == 0) {
+    // EOF case - handle offset specially
+    if (offset != 0) {
+        // Pad or truncate buffer based on offset
+    }
+}
+```
+
+## Test File Complexity Assessment
+
+### Simple (Good targets for quick wins)
+- **Characteristics:** 
+  - High pass rate (>85%)
+  - Focused failure patterns
+  - Small number of failures (15-50)
+- **Examples:** op/hashassign.t, op/assignwarn.t
+
+### Moderate (Good for learning)
+- **Characteristics:**
+  - Medium pass rate (60-85%)
+  - Multiple related issues
+  - Medium failures (50-100)
+- **Examples:** op/heredoc.t, op/range.t
+
+### Complex (Defer or break down)
+- **Characteristics:**
+  - Low pass rate (<60%)
+  - Unimplemented features
+  - Large failures (>100)
+- **Examples:** re/regex_sets_compat.t, run/switches.t
+
+### Feature Gaps (Usually skip)
+- **Characteristics:**
+  - Very low pass rate (<30%)
+  - Missing entire subsystems
+  - Require architectural changes
+- **Examples:** sprintf %lld formats, warning system
+
+## Session Success Metrics
+
+### Excellent Session (This session achieved this!)
+- **Fixes:** 5-7 major bugs
+- **Tests improved:** 200-400
+- **Documentation:** 1-2 comprehensive prompts
+- **Learning:** New debugging techniques discovered
+
+### Good Session
+- **Fixes:** 3-5 bugs
+- **Tests improved:** 100-200
+- **Documentation:** 1 prompt or detailed investigation
+
+### Productive Session
+- **Fixes:** 1-2 bugs
+- **Tests improved:** 50-100
+- **Documentation:** Clear notes on findings
+
+## Lessons Learned (Update This Section!)
+
+### Session 2025-09-30: 7 Fixes, ~320 Tests
+
+**Key Discoveries:**
+
+1. **read() offset bug:** Both positive AND negative offsets need EOF handling
+   - Symptom: Tests with offset=0 pass, offset>0 fail
+   - Root cause: Early return at EOF cleared buffer instead of padding
+   - Fix: Handle offset in EOF case before returning
+
+2. **pack W/U Inf/NaN:** Existing `handleInfinity()` method wasn't being called
+   - Symptom: pack('W', Inf) returned 'I' instead of error
+   - Root cause: Inf string doesn't start with digit, went to character branch
+   - Fix: Call `handleInfinity()` BEFORE character/number branching
+
+3. **Hash assignment context:** `setFromList()` needs context awareness
+   - Symptom: Scalar context returns hash size, not source list size
+   - Root cause: Method doesn't know if it's in scalar or list context
+   - Solution: Add `int ctx` parameter (requires RuntimeBase hierarchy refactoring)
+
+4. **Prototype (&) unwrapping:** Needed at validation level, not parser level
+   - Symptom: `\(&code)` rejected when prototype expects `(&)`
+   - Root cause: Parser created REF node, prototype validation didn't unwrap
+   - Fix: Auto-unwrap REF to CODE in prototype validation
+
+5. **For loop $$f:** Complex double dereference needs while-loop transformation
+   - Symptom: JVM bytecode generation error
+   - Root cause: $$f too complex for direct for-loop bytecode
+   - Fix: Transform to while loop with explicit assignment
+
+**Debugging Insights:**
+
+- **Strategic logging beats guessing:** Add logging at decision points to trace execution
+- **Test paradoxes have explanations:** Isolated tests passing but suite failing = environmental difference
+- **Grep for existing solutions:** Search codebase before implementing new code
+- **Bytecode disassembly reveals truth:** Use `--disassemble` to understand compilation
+- **Context parameters are common:** Most operators accept `int ctx` for context-aware behavior
+
+**Productivity Factors:**
+
+- **High-yield targeting:** Focus on 70-95% pass rate tests
+- **Pattern recognition:** Group similar failures, fix root cause once
+- **Minimal test cases:** Always verify with simple reproduction
+- **Incremental testing:** Test each hypothesis immediately
+- **Documentation:** Create prompts for complex issues to defer
+
+## Tools and Commands Reference
+
+### Test Analysis
+```bash
+# Get test statistics
+jq '.results["TESTFILE.t"]' out.json
+
+# Run specific test
+./jperl t/op/TESTFILE.t
+
+# Count passes/failures
+./jperl t/op/TESTFILE.t 2>&1 | grep -c "^ok"
+./jperl t/op/TESTFILE.t 2>&1 | grep -c "^not ok"
+
+# Get failure details
+./jperl t/op/TESTFILE.t 2>&1 | grep -A 3 "^not ok NUMBER"
+
+# Run with special flags
+JPERL_LARGECODE=refactor ./jperl t/op/pack.t
+```
+
+### Code Search
+```bash
+# Find method definitions
+grep -r "public.*methodName" src/main/java/
+
+# Find method calls
+grep -r "methodName\(" src/main/java/
+
+# Search with regex
+grep -r "pattern.*regex" src/main/java/
+
+# Search in specific file types
+grep -r "pattern" --include="*.java" src/
+```
+
+### Bytecode Analysis
+```bash
+# Disassemble code
+./jperl --disassemble -e 'CODE'
+
+# Find specific method in bytecode
+./jperl --disassemble -e 'CODE' 2>&1 | grep -A 20 "methodName"
+```
+
+### Git Operations
+```bash
+# Check current changes
+git diff FILE
+
+# Commit with message
+git add FILE && git commit -m "MESSAGE"
+
+# Revert changes
+git checkout FILE
+```
+
+## Future Improvements to This Prompt
+
+**When you discover new techniques, add them here:**
+
+### Template for New Discoveries
+```markdown
+### Technique N: [Name]
+**When to use:** [Situation]
+
+**Pattern:** [Description]
+
+**Example:** [Concrete example from your session]
+
+**Commands:**
+```bash
+# Relevant commands
+```
+```
+
+### Template for New Lessons
+```markdown
+### Session YYYY-MM-DD: X Fixes, ~Y Tests
+
+**Key Discoveries:**
+1. [Bug description and fix]
+2. [Bug description and fix]
+
+**Debugging Insights:**
+- [New technique or insight]
+
+**Productivity Factors:**
+- [What worked well]
+```
+
+## Remember
+
+1. **Update this file** when you learn something new
+2. **Test incrementally** - verify each hypothesis
+3. **Document complex issues** - create prompts for future sessions
+4. **Focus on high-yield targets** - 70-95% pass rates
+5. **Use existing code** - search before implementing
+6. **Strategic logging** - targeted, not everywhere
+7. **Commit often** - small, focused commits
+
+---
+
+**This is a living document. Keep it updated with your learnings!** 🚀
