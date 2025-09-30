@@ -303,8 +303,27 @@ public class Readline {
         int charsRead = readData.length();
 
         if (charsRead == 0) {
-            // EOF or error - clear the scalar when reading 0 characters
-            scalar.set("");
+            // EOF or error - handle based on offset
+            if (offsetValue > 0) {
+                // Pad buffer to offset position when reading 0 bytes with offset
+                StringBuilder scalarValue = new StringBuilder(scalar.toString());
+                if (offsetValue < 0) {
+                    offsetValue = scalarValue.length() + offsetValue;
+                    if (offsetValue < 0) {
+                        offsetValue = 0;
+                    }
+                }
+                // Ensure buffer is large enough for offset
+                while (scalarValue.length() < offsetValue) {
+                    scalarValue.append('\0');
+                }
+                // Truncate to offset
+                scalarValue.setLength(offsetValue);
+                scalar.set(scalarValue.toString());
+            } else {
+                // No offset - just clear the scalar
+                scalar.set("");
+            }
             return new RuntimeScalar(0);
         }
 
@@ -320,25 +339,21 @@ public class Readline {
 
         int newLength = offsetValue + charsRead;
 
-        // Ensure the buffer is the correct length
-        if (newLength > scalarValue.length()) {
-            // Pad with null characters
-            while (scalarValue.length() < newLength) {
-                scalarValue.append('\0');
-            }
-        } else if (newLength < scalarValue.length()) {
-            // Truncate the buffer
-            scalarValue.setLength(newLength);
+        // Ensure the buffer is large enough for the offset
+        while (scalarValue.length() < offsetValue) {
+            scalarValue.append('\0');
         }
 
-        // Replace the data from offsetValue to newLength
-        scalarValue.replace(offsetValue, newLength, readData);
+        // Replace the data from offsetValue onwards with the new data
+        scalarValue.replace(offsetValue, scalarValue.length(), readData);
+
+        // Truncate to the correct final length
+        scalarValue.setLength(newLength);
 
         // Update the scalar with the new value
         scalar.set(scalarValue.toString());
 
         // Return the number of characters read
         return new RuntimeScalar(charsRead);
-
     }
 }
