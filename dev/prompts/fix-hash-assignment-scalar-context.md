@@ -268,12 +268,113 @@ Run a broader test to ensure the changes don't break other functionality:
 5. **Use RuntimeContextType constants** - Don't use magic numbers
 6. **Check bytecode signature** - The `I` in the signature means integer parameter
 
+## Technical Investigation Results (2025-09-30)
+
+### Actual Bug Discovered
+
+**Initial assumption was WRONG.** The document focused on scalar context, but investigation revealed:
+- ✅ **Scalar context works correctly** in PerlOnJava (returns 8)
+- ❌ **List context is broken** in PerlOnJava (returns original list instead of deduplicated hash)
+
+### Root Cause Analysis
+
+**The Bytecode Flow:**
+1. `setFromList()` is called and returns `RuntimeArray` containing the hash
+2. In **list context**: `RuntimeList.add(RuntimeArray)` is called
+3. In **scalar context**: `RuntimeArray.scalar()` is called
+
+**The Problem:**
+`RuntimeList.add(RuntimeArray)` at line 128-130 adds the array as a **single element**:
+```java
+public void add(RuntimeArray value) {
+    this.elements.add(value);  // Adds array itself, not its contents!
+}
+```
+
+Compare with `RuntimeList` handling at lines 117-118:
+```java
+if (value instanceof RuntimeList list) {
+    this.elements.addAll(list.elements);  // Flattens list!
+}
+```
+
+### Why Simple Fixes Don't Work
+
+**Attempted Fix 1:** Flatten arrays in `RuntimeList.add(RuntimeArray)`
+```java
+public void add(RuntimeArray value) {
+    for (RuntimeScalar element : value) {
+        this.elements.add(element);  // Flatten
+    }
+}
+```
+
+**Result:**
+- ✅ List context: Works (returns deduplicated pairs)
+- ❌ Scalar context: Breaks (returns 2 instead of 8)
+
+**Why it fails:** By flattening, the `RuntimeArray` now has 2 elements, so `.scalar()` returns 2 instead of the source list count (8).
+
+### Why Context Parameter is THE Solution
+
+**The Fundamental Issue:**
+`setFromList()` needs to return **different values** based on context:
+- **Scalar context:** Return source list (for element count: 8)
+- **List context:** Return deduplicated hash (for key-value pairs: 1, 5)
+
+**This is impossible without context information!**
+
+A single return value cannot satisfy both requirements:
+- If we return `new RuntimeArray(value)` → scalar context gets wrong count
+- If we return `new RuntimeArray(this)` → list context gets wrong elements (current behavior)
+
+**The Only Clean Solution:**
+```java
+public RuntimeArray setFromList(RuntimeList value, int ctx) {
+    RuntimeHash hash = createHash(value);
+    this.elements = hash.elements;
+    
+    // Return value depends on context:
+    return (ctx == RuntimeContextType.SCALAR) 
+        ? new RuntimeArray(value)      // Source list for count
+        : new RuntimeArray(this);       // Deduplicated hash for iteration
+}
+```
+
+### Why This Requires Large Refactoring
+
+`setFromList()` is defined in `RuntimeBase` and implemented by 11+ classes. Changing the signature requires:
+1. Update `RuntimeBase.setFromList()` signature
+2. Update all 11+ implementing classes
+3. Update all calling code (5+ files)
+4. Update bytecode emitter to pass context
+
+**Total impact:** 16+ files
+
+### Alternative Approaches Considered
+
+1. **Store source list size in RuntimeArray** - Requires modifying RuntimeArray structure
+2. **Return special wrapper object** - Breaks existing code expecting RuntimeArray
+3. **Use thread-local context** - Fragile, hard to maintain
+4. **Flatten in RuntimeList.add()** - Breaks scalar context (tested and failed)
+
+**Conclusion:** Context parameter is the cleanest, most maintainable solution.
+
 ## Reference Files
 
-- **Test case:** `test_hash_assign_scalar.pl`
-- **Main test suite:** `t/op/hashassign.t`
+- **Test case:** `test_hash_assign_scalar.pl`, `test_hash_context_detailed.pl`
+- **Main test suite:** `t/op/hashassign.t` (273 passing, 26 failing - 88% pass rate)
 - **Key implementation:** `src/main/java/org/perlonjava/runtime/RuntimeHash.java`
+- **Problem location:** `src/main/java/org/perlonjava/runtime/RuntimeList.java` (line 128-130)
 - **Bytecode emitter:** `src/main/java/org/perlonjava/codegen/EmitVariable.java`
 - **Context constants:** `src/main/java/org/perlonjava/runtime/RuntimeContextType.java`
+
+## Recommendation
+
+This is a **high-impact fix** (26 tests) but requires **significant refactoring** (16+ files). 
+
+**Estimated effort:** 1-2 hours for careful implementation and testing.
+
+**Priority:** DEFER - Create this prompt document for future work when time allows for large refactoring.
 
 Good luck! This is a high-impact fix that will improve Perl compatibility significantly. 🚀

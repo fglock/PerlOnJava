@@ -103,7 +103,46 @@ grep -r "methodName" src/main/java/
 grep -r "Infinity\|NaN" src/main/java/
 ```
 
-### Strategy 5: Bytecode Disassembly
+### Strategy 5: Create Prompt Documents for Complex Issues
+**When to use:** Bug requires >1 hour of refactoring or affects many files
+
+**Pattern:** Document the issue comprehensively and move to simpler targets
+
+**When to create a prompt document:**
+- Bug requires changing 10+ files
+- Bug requires architectural refactoring
+- Bug needs context-aware changes across entire hierarchy
+- Estimated effort >1 hour of careful work
+
+**What to include in prompt document:**
+1. **Objective** - Clear statement of what needs fixing
+2. **Root Cause Analysis** - Detailed technical investigation
+3. **Why Simple Fixes Don't Work** - Document attempted solutions
+4. **Implementation Strategy** - Step-by-step plan with phases
+5. **Testing Strategy** - How to verify the fix
+6. **Expected Impact** - Test count improvement estimate
+7. **Recommendation** - Priority and effort estimate
+
+**Example from this session:**
+- Hash assignment bug: 26 tests, requires 16+ files, 1-2 hours
+- Created `dev/prompts/fix-hash-assignment-scalar-context.md` with full analysis
+- Moved to simpler high-yield target instead
+- ROI: 26 tests / 2 hours = 13 tests/hour (moderate)
+
+**Where to save prompt documents:**
+- **Directory:** `dev/prompts/` (all problem-specific prompts go here)
+- **Naming:** Use descriptive names like `fix-[problem-description].md`
+- **Format:** Follow the template structure shown above
+- **Update this strategy:** Add lessons learned to this document
+
+**Benefits:**
+- Preserves investigation work for future
+- Allows focusing on higher ROI targets
+- Provides clear implementation plan when time allows
+- Prevents wasting time on complex issues during high-velocity sessions
+- Centralizes all problem-specific documentation in one location
+
+### Strategy 6: Bytecode Disassembly
 **When to use:** Understanding how code is compiled and executed
 
 **Command:**
@@ -281,7 +320,56 @@ if (charsRead == 0) {
 
 ## Lessons Learned (Update This Section!)
 
-### Session 2025-09-30: 7 Fixes, ~320 Tests
+### Session 2025-09-30 (Part 2): Hash Assignment Investigation
+
+**Key Discoveries:**
+
+1. **Complex bugs need dedicated prompt documents:**
+   - Hash assignment bug affects 26 tests (high-yield target)
+   - Investigation revealed it requires large refactoring (16+ files)
+   - Created detailed prompt document for future work: `fix-hash-assignment-scalar-context.md`
+   - **Lesson:** When a bug requires >1 hour of refactoring, document it and move on
+
+2. **Initial assumptions can be wrong:**
+   - Document assumed scalar context was broken
+   - Investigation revealed list context was actually broken
+   - Scalar context worked correctly all along
+   - **Lesson:** Always verify assumptions with minimal test cases
+
+3. **Bytecode disassembly reveals execution flow:**
+   - Used `--disassemble` to understand how hash assignment works
+   - Discovered `RuntimeList.add(RuntimeArray)` doesn't flatten arrays
+   - Traced exact bytecode flow: setFromList → add → scalar/getList
+   - **Lesson:** Bytecode analysis is essential for understanding runtime behavior
+
+4. **Simple fixes can have hidden costs:**
+   - Tried flattening arrays in `RuntimeList.add(RuntimeArray)`
+   - Fixed list context but broke scalar context
+   - Single return value cannot satisfy both contexts
+   - **Lesson:** Test both contexts when fixing context-aware operations
+
+5. **Architecture matters for maintainability:**
+   - Context parameter is the clean solution
+   - Alternative hacks (thread-local, special wrappers) are fragile
+   - Large refactoring is sometimes necessary for correctness
+   - **Lesson:** Choose architectural solutions over quick hacks
+
+**Strategic Decisions:**
+
+- **DEFER complex refactoring:** 26 tests vs 1-2 hours of careful work
+- **Document for future:** Comprehensive prompt with technical analysis
+- **Move to next target:** Focus on simpler high-yield bugs
+- **ROI calculation:** 26 tests / 2 hours = 13 tests/hour (moderate ROI)
+
+**Productivity Factors:**
+
+- **Minimal test cases:** Created 5 test files to isolate the bug
+- **Comparative testing:** perl vs ./jperl side-by-side
+- **Bytecode analysis:** Used --disassemble to understand flow
+- **Attempted fixes:** Tried simple solutions before accepting complexity
+- **Documentation:** Created detailed prompt for future work
+
+### Session 2025-09-30 (Part 1): 7 Fixes, ~320 Tests
 
 **Key Discoveries:**
 
