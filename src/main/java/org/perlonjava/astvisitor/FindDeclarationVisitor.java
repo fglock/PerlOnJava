@@ -56,9 +56,11 @@ public class FindDeclarationVisitor implements Visitor {
     public void visit(BlockNode node) {
         if (!containsLocalOperator) {
             for (Node element : node.elements) {
-                element.accept(this);
-                if (containsLocalOperator) {
-                    break;
+                if (element != null) {
+                    element.accept(this);
+                    if (containsLocalOperator) {
+                        break;
+                    }
                 }
             }
         }
