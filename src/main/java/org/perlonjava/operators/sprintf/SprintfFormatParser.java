@@ -525,13 +525,8 @@ public class SprintfFormatParser {
             if (spec.lengthModifier != null) {
                 String combo = spec.lengthModifier + spec.conversionChar;
 
-                // Check for quad formats (unsupported in Perl without quads)
-                if (("ll".equals(spec.lengthModifier) || "L".equals(spec.lengthModifier)) &&
-                        "diuDIU".indexOf(spec.conversionChar) >= 0) {
-                    spec.isValid = false;
-                    spec.errorMessage = "INVALID";
-                    return;
-                }
+                // Note: PerlOnJava supports quad formats (ll, L) since pack "q" is supported
+                // Java's long is 64-bit, so we can handle these formats natively
 
                 // h with floating point is invalid
                 if ("hf".equals(combo) || "hF".equals(combo) || "hg".equals(combo) ||
