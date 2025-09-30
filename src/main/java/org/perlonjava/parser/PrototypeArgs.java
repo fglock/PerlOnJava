@@ -434,6 +434,19 @@ public class PrototypeArgs {
 
         Node codeRef = parseRequiredArgument(parser, isOptional);
         if (codeRef != null) {
+            // Unwrap reference to code reference: \(&code) should be treated as &code
+            // This matches Perl's behavior where prototype (&) unwraps REF to CODE
+            if (codeRef instanceof OperatorNode opNode && opNode.operator.equals("\\")) {
+                // Check if it's a ListNode containing a single & operator
+                if (opNode.operand instanceof ListNode listNode && !listNode.elements.isEmpty()) {
+                    Node firstElement = listNode.elements.get(0);
+                    if (firstElement instanceof OperatorNode innerOp && innerOp.operator.equals("&")) {
+                        // Unwrap: use the inner &code node instead of \&code
+                        codeRef = innerOp;
+                    }
+                }
+            }
+            
             // Code references are evaluated in SCALAR context
             codeRef.setAnnotation("context", "SCALAR");
             args.elements.add(codeRef);
