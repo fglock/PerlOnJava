@@ -320,6 +320,93 @@ if (charsRead == 0) {
 
 ## Lessons Learned (Update This Section!)
 
+### Session 2025-09-30 (Part 4): Complete Session - 5 Fixes + 2 Prompt Docs (+48 tests)
+
+**Session Overview:**
+- **Duration:** ~3 hours
+- **Fixes:** 5 high-impact fixes
+- **Tests improved:** +48 tests
+- **ROI:** 16 tests/hour
+- **Prompt documents:** 2 comprehensive analysis documents
+- **Strategy:** Mix of quick wins and deep analysis with documentation
+
+**Key Discoveries:**
+
+1. **Bytecode analysis is invaluable:**
+   - Used `--disassemble` to debug reverse() flattening issue
+   - Revealed that arrays passed as RuntimeArray objects, not flattened at compile time
+   - **Lesson:** When behavior is unclear, check the bytecode to see what's actually happening
+
+2. **Overload handling requires special checks:**
+   - XOR with blessed objects was using numeric XOR instead of string XOR
+   - `isString()` returns false for blessed objects even though they stringify
+   - **Solution:** Check `isBlessed()` in addition to `isString()`
+   - **Lesson:** Blessed objects need explicit type checking in operators
+
+3. **Iterator flattening happens AFTER operations:**
+   - RuntimeList iterator flattens nested structures automatically
+   - But for reverse(), need to flatten BEFORE reversing to get correct order
+   - **Lesson:** Understand when flattening happens in the execution flow
+
+4. **Prompt documents preserve investigation value:**
+   - Created docs for hash.t (~1400 tests) and pack.t (~5787 tests)
+   - Documents complex issues without blocking progress
+   - **Lesson:** When complexity > 2 hours, document and move on
+
+5. **Balance quick wins with deep dives:**
+   - Quick fixes: Foldcase escape (+6), XOR overload (+6)
+   - Deep dives: Range operator (+6), Sprintf quad (+24), Reverse flattening (+6)
+   - **Lesson:** Mix of both keeps momentum while solving complex issues
+
+**Strategic Decisions:**
+
+- **Know when to document vs fix:** Complex issues (hash buckets, pack.t) → prompt docs
+- **Use comparative testing:** perl vs ./jperl side-by-side reveals exact differences
+- **Leverage memories:** Previous pack.t work context helped understand current state
+- **Clean commits:** Each fix committed separately with detailed messages
+
+**Productivity Factors:**
+
+- **Bytecode analysis:** `--disassemble` revealed runtime behavior
+- **Overload debugging:** Created minimal test cases with blessed objects
+- **Pattern recognition:** Grouped similar failures for bulk analysis
+- **Documentation discipline:** Prompt docs for future high-value work
+
+**New Techniques Discovered:**
+
+1. **Bytecode disassembly for debugging:**
+   ```bash
+   ./jperl --disassemble -e 'CODE' 2>&1 | grep -A 20 "methodName"
+   ```
+   - Shows exact bytecode generation
+   - Reveals how arguments are passed
+   - Essential for understanding runtime behavior
+
+2. **Overload testing pattern:**
+   ```perl
+   package MyClass;
+   use overload '""' => 'stringify', fallback => 1;
+   # Test operators with blessed objects
+   ```
+   - Create minimal overloaded class
+   - Test operator behavior with blessed objects
+   - Compare with standard Perl
+
+3. **Prompt document structure:**
+   - Objective and current status
+   - Problem analysis with patterns
+   - Implementation strategy (phased)
+   - Success criteria and complexity assessment
+   - Preserves investigation value for future work
+
+**Recommendations for Future Sessions:**
+
+1. **Start with bytecode when behavior is unclear**
+2. **Always test with overloaded objects for operators**
+3. **Create prompt docs for issues > 2 hours complexity**
+4. **Mix quick wins with deep dives for sustained momentum**
+5. **Use memories to understand previous work context**
+
 ### Session 2025-09-30 (Part 3): Range + Sprintf Deep Dives (+30 tests)
 
 **Key Discoveries:**
@@ -536,6 +623,114 @@ git checkout FILE
 - [What worked well]
 ```
 
+## Efficiency Recommendations (Based on Today's Session)
+
+### Quick Decision Framework
+
+**When to fix immediately:**
+- ✅ Pass rate > 90% with < 30 failures
+- ✅ Clear error pattern (same message repeated)
+- ✅ Estimated effort < 1 hour
+- ✅ Single root cause identified
+- ✅ Similar to previously fixed issues
+
+**When to create prompt document:**
+- 📝 Estimated effort > 2 hours
+- 📝 Multiple root causes (requires systematic approach)
+- 📝 Requires architectural changes
+- 📝 Complex runtime/memory management issues
+- 📝 High potential impact but unclear path forward
+
+**When to skip:**
+- ⏭️ Pass rate < 50% (likely missing features)
+- ⏭️ Requires unimplemented subsystems
+- ⏭️ Edge cases with minimal impact
+- ⏭️ Already documented in existing prompt
+
+### Optimal Session Structure
+
+**Hour 1: Quick Wins (Target: 2-3 fixes, 10-20 tests)**
+- Start with 90%+ pass rate tests
+- Look for validation/parsing bugs
+- Fix obvious inconsistencies
+- Build momentum with early successes
+
+**Hour 2: Deep Dive (Target: 1-2 fixes, 20-30 tests)**
+- Tackle one complex issue with high impact
+- Use bytecode analysis if needed
+- Create minimal test cases
+- Verify fix thoroughly
+
+**Hour 3: Documentation (Target: 1-2 prompt docs)**
+- Analyze remaining high-value targets
+- Create prompt documents for complex issues
+- Update strategy document with learnings
+- Commit all work with clean messages
+
+### Essential Tools Checklist
+
+Before starting a fix, have these ready:
+- ✅ `jq` for analyzing out.json test results
+- ✅ `--disassemble` for bytecode analysis
+- ✅ Minimal test case template
+- ✅ Comparative testing (perl vs ./jperl)
+- ✅ grep/search for finding implementations
+- ✅ Memory context from previous work
+
+### Pattern Recognition Shortcuts
+
+**Validation bugs (High ROI):**
+- Error: "Invalid type", "can't use", "not allowed"
+- Fix: Add/remove validation checks
+- Impact: Often 10-100 tests per fix
+
+**Parsing bugs (High ROI):**
+- Error: "unsupported format", "syntax error"
+- Fix: Add missing parser cases
+- Impact: Often 5-50 tests per fix
+
+**Type checking bugs (Medium ROI):**
+- Error: Wrong behavior with blessed objects
+- Fix: Add `isBlessed()` checks
+- Impact: Often 5-10 tests per fix
+
+**Iterator bugs (Medium ROI):**
+- Error: NoSuchElementException, wrong order
+- Fix: Add bounds checking, fix flattening
+- Impact: Often 2-10 tests per fix
+
+### Commit Message Template
+
+```
+[Component] Brief description (+N tests)
+
+Fixed [specific bug] that caused [symptom].
+
+Root Cause:
+- [What was wrong]
+- [Why it was wrong]
+
+Solution:
+- [What was changed]
+- [Why this fixes it]
+
+Test Results:
+- Before: X passing / Y failing (Z% pass rate)
+- After: X2 passing / Y2 failing (Z2% pass rate)
+- Improvement: +N tests
+
+Files Modified:
+- path/to/file.java - [what changed]
+```
+
+### Productivity Multipliers
+
+1. **Use memories effectively:** Check for previous work on the same area
+2. **Batch tool calls:** Read multiple files in parallel when possible
+3. **Create test artifacts:** Save minimal test cases for future reference
+4. **Update strategy immediately:** Don't wait until end of session
+5. **Clean as you go:** Remove test files before committing
+
 ## Remember
 
 1. **Update this file** when you learn something new
@@ -545,6 +740,9 @@ git checkout FILE
 5. **Use existing code** - search before implementing
 6. **Strategic logging** - targeted, not everywhere
 7. **Commit often** - small, focused commits
+8. **Use bytecode analysis** - when behavior is unclear
+9. **Test with overloaded objects** - for operator implementations
+10. **Balance quick wins and deep dives** - maintain momentum
 
 ---
 
