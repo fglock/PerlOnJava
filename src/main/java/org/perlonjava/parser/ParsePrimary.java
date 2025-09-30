@@ -338,6 +338,12 @@ public class ParsePrimary {
                 }
                 // Regular unary minus
                 operand = parser.parseExpression(parser.getPrecedence(token.text) + 1);
+                
+                // Check for missing operand - this is a syntax error
+                if (operand == null) {
+                    parser.throwError("Syntax error: unary minus operator requires an operand");
+                }
+                
                 if (operand instanceof IdentifierNode identifierNode) {
                     // Special case: -bareword becomes "-bareword" (string)
                     return new StringNode("-" + identifierNode.name, parser.tokenIndex);
