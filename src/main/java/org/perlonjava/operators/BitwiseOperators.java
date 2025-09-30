@@ -80,17 +80,28 @@ public class BitwiseOperators {
 
     /**
      * Performs a bitwise XOR operation on two RuntimeScalar objects.
-     * If both arguments are strings, it performs the operation character by character.
+     * 
+     * Perl's XOR behavior:
+     * - If both operands are pure numeric types (INTEGER/DOUBLE), use numeric XOR
+     * - Otherwise (strings, blessed objects, etc.), use string XOR
+     * 
+     * Note: isString() returns true for STRING types, but blessed objects need
+     * special handling - they should use string XOR after stringification.
      *
      * @param runtimeScalar The first operand.
      * @param arg2          The second operand.
      * @return A new RuntimeScalar with the result of the bitwise XOR operation.
      */
     public static RuntimeScalar bitwiseXor(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
-        if (runtimeScalar.isString() && arg2.isString()) {
-            return bitwiseXorDot(runtimeScalar, arg2);
+        // Use numeric XOR only if BOTH operands are pure numeric types (not strings)
+        // For everything else (strings, blessed objects, etc.), use string XOR
+        if (!runtimeScalar.isString() && !arg2.isString() && 
+            !runtimeScalar.isBlessed() && !arg2.isBlessed()) {
+            // Both are pure numbers (INTEGER or DOUBLE), use numeric XOR
+            return bitwiseXorBinary(runtimeScalar, arg2);
         }
-        return bitwiseXorBinary(runtimeScalar, arg2);
+        // At least one is a string or blessed object, use string XOR
+        return bitwiseXorDot(runtimeScalar, arg2);
     }
 
     /**
