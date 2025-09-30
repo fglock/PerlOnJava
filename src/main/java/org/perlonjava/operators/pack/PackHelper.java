@@ -3,6 +3,7 @@ package org.perlonjava.operators.pack;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.runtime.RuntimeList;
+import org.perlonjava.runtime.RuntimeScalarType;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -231,6 +232,9 @@ public class PackHelper {
      */
     public static void packW(RuntimeScalar value, ByteArrayOutputStream output) {
         // Pack an unsigned char value (can be greater than 255)
+        // Check for Inf/NaN first, before any other processing
+        handleInfinity(value, 'W');
+        
         int intValue;
         String strValue = value.toString();
         if (!strValue.isEmpty() && !Character.isDigit(strValue.charAt(0))) {
@@ -241,15 +245,12 @@ public class PackHelper {
             intValue = value.getInt();
         }
 
-        // DEBUG: packW intValue=" + intValue
-
         try {
             if (Character.isValidCodePoint(intValue)) {
                 // Valid Unicode - encode as UTF-8
                 String unicodeChar = new String(Character.toChars(intValue));
                 byte[] utf8Bytes = unicodeChar.getBytes(StandardCharsets.UTF_8);
                 output.write(utf8Bytes);
-                // DEBUG: packW wrote " + utf8Bytes.length + " UTF-8 bytes for Unicode " + intValue
             } else {
                 // Beyond Unicode range - for now, wrap to valid range
                 // This is a compromise until we can handle extended values properly
@@ -260,10 +261,175 @@ public class PackHelper {
                 String unicodeChar = new String(Character.toChars(wrappedValue));
                 byte[] utf8Bytes = unicodeChar.getBytes(StandardCharsets.UTF_8);
                 output.write(utf8Bytes);
-                // DEBUG: packW wrapped " + intValue + " to " + wrappedValue + ", wrote " + utf8Bytes.length + " bytes
             }
         } catch (IOException e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * Pack a Unicode character using the 'U' format.
+     * 
+     * <p>The 'U' format packs Unicode code points as UTF-8 encoded bytes.
+     * This method handles both character and numeric inputs, validates
+     * Unicode code points, and tracks whether Unicode is used in normal
+     * (non-byte) mode for proper string conversion.</p>
+     * 
+     * <p>Processing steps:</p>
+     * <ul>
+     *   <li>Extract code point from character or numeric input</li>
+     *   <li>Validate that code point is within Unicode range</li>
+     *   <li>Encode as UTF-8 and write to output stream</li>
+     *   <li>Track Unicode usage in normal mode</li>
+     * </ul>
+     * 
+     * @param value the scalar value containing the Unicode code point
+     * @param byteMode true if operating in byte mode
+     * @param hasUnicodeInNormalMode current state of Unicode usage tracking
+     * @param output the output stream to write UTF-8 encoded bytes
+     * @return updated Unicode usage state for normal mode
+     * @throws PerlCompilerException if the code point is invalid
+     * @throws RuntimeException if I/O error occurs during writing
+     */
+    public static boolean packU(RuntimeScalar value, boolean byteMode, boolean hasUnicodeInNormalMode, ByteArrayOutputStream output) {
+        // Pack a Unicode character number as UTF-8
+        // Check for Inf/NaN first, before any other processing
+        handleInfinity(value, 'U');
+        
+        int codePoint1;
+        String strValue1 = value.toString();
+        if (!strValue1.isEmpty() && !Character.isDigit(strValue1.charAt(0))) {
+            // If it's a character, get its code point
+            codePoint1 = strValue1.codePointAt(0);
+        } else {
+            // If it's a number, use it directly
+            codePoint1 = value.getInt();
+        }
+
+        // Track if U is used in character mode (not byte mode)
+        if (!byteMode) {
+            hasUnicodeInNormalMode = true;
+        }
+
+        // U format always writes UTF-8 encoded bytes
+        // The difference between modes is handled at the final string conversion
+        if (Character.isValidCodePoint(codePoint1)) {
+            String unicodeChar1 = new String(Character.toChars(codePoint1));
+            byte[] utf8Bytes1 = unicodeChar1.getBytes(StandardCharsets.UTF_8);
+            try {
+                output.write(utf8Bytes1);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        } else {
+            throw new PerlCompilerException("pack: invalid Unicode code point: " + codePoint1);
+        }
+        return hasUnicodeInNormalMode;
+    }
+
+    /**
+     * Handles a Unicode format.
+     * 
+     * @param values The list of values to pack
+     * @param valueIndex The current index in the values list
+     * @param count The repeat count
+     * @param byteMode Whether we are in byte mode
+     * @param hasUnicodeInNormalMode Whether we have already used Unicode in normal mode
+     * @param output The output stream
+     * @return Whether we have used Unicode in normal mode
+     */
+    public static boolean handleUnicode(List<RuntimeScalar> values, int valueIndex, int count,
+                                         boolean byteMode, boolean hasUnicodeInNormalMode,
+                                         ByteArrayOutputStream output) {
+        for (int j = 0; j < count; j++) {
+            RuntimeScalar value;
+            if (valueIndex + j >= values.size()) {
+                // If no more arguments, use 0 as per Perl behavior
+                value = new RuntimeScalar(0);
+            } else {
+                value = values.get(valueIndex + j);
+            }
+            hasUnicodeInNormalMode = PackHelper.packU(value, byteMode, hasUnicodeInNormalMode, output);
+        }
+        return hasUnicodeInNormalMode;
+    }
+
+    /**
+     * Packs the length of a string according to the specified format.
+     * 
+     * @param output The output stream
+     * @param format The format character
+     * @param length The length to pack
+     * @param modifiers The modifiers for the format
+     */
+    public static void packLength(ByteArrayOutputStream output, char format, int length, ParsedModifiers modifiers) {
+        // DEBUG: packing length " + length + " with format '" + format + "'"
+
+        switch (format) {
+            case 'A':
+                // For A format as length, pack as ASCII decimal string with spaces
+                String lengthStrA = String.valueOf(length);
+                byte[] lengthBytesA = lengthStrA.getBytes(StandardCharsets.US_ASCII);
+                output.write(lengthBytesA, 0, lengthBytesA.length);
+                // Pad with spaces to make it fixed width if needed
+                break;
+            case 'a':
+                // For a format as length, pack as ASCII decimal string with nulls
+                String lengthStrLower = String.valueOf(length);
+                byte[] lengthBytesLower = lengthStrLower.getBytes(StandardCharsets.US_ASCII);
+                output.write(lengthBytesLower, 0, lengthBytesLower.length);
+                break;
+            case 'n':
+                PackWriter.writeShortBigEndian(output, length);
+                break;
+            case 'N':
+                PackWriter.writeIntBigEndian(output, length);
+                break;
+            case 'v':
+                PackWriter.writeShortLittleEndian(output, length);
+                break;
+            case 'V':
+                PackWriter.writeIntLittleEndian(output, length);
+                break;
+            case 'w':
+                PackWriter.writeBER(output, length);
+                break;
+            case 'C':
+                output.write(length & 0xFF);
+                break;
+            case 's':
+                if (modifiers.bigEndian) {
+                    PackWriter.writeShortBigEndian(output, length);
+                } else {
+                    PackWriter.writeShortLittleEndian(output, length);
+                }
+                break;
+            case 'S':
+                if (modifiers.bigEndian) {
+                    PackWriter.writeShortBigEndian(output, length);
+                } else {
+                    PackWriter.writeShort(output, length);
+                }
+                break;
+            case 'i':
+            case 'I':
+            case 'l':
+            case 'L':
+                if (modifiers.bigEndian) {
+                    PackWriter.writeIntBigEndian(output, length);
+                } else {
+                    PackWriter.writeIntLittleEndian(output, length);
+                }
+                break;
+            case 'Z':
+                // For Z*/, encode length as null-terminated decimal string
+                String lengthStr = String.valueOf(length);
+                byte[] lengthBytes = lengthStr.getBytes(StandardCharsets.US_ASCII);
+                output.write(lengthBytes, 0, lengthBytes.length);
+                output.write(0); // null terminator
+                break;
+            default:
+                throw new PerlCompilerException("Invalid length type '" + format + "' for '/'");
         }
     }
 
@@ -548,169 +714,6 @@ public class PackHelper {
                     true;
             default -> false;
         };
-    }
-
-    /**
-     * Pack a Unicode character using the 'U' format.
-     * 
-     * <p>The 'U' format packs Unicode code points as UTF-8 encoded bytes.
-     * This method handles both character and numeric inputs, validates
-     * Unicode code points, and tracks whether Unicode is used in normal
-     * (non-byte) mode for proper string conversion.</p>
-     * 
-     * <p>Processing steps:</p>
-     * <ul>
-     *   <li>Extract code point from character or numeric input</li>
-     *   <li>Validate that code point is within Unicode range</li>
-     *   <li>Encode as UTF-8 and write to output stream</li>
-     *   <li>Track Unicode usage in normal mode</li>
-     * </ul>
-     * 
-     * @param value the scalar value containing the Unicode code point
-     * @param byteMode true if operating in byte mode
-     * @param hasUnicodeInNormalMode current state of Unicode usage tracking
-     * @param output the output stream to write UTF-8 encoded bytes
-     * @return updated Unicode usage state for normal mode
-     * @throws PerlCompilerException if the code point is invalid
-     * @throws RuntimeException if I/O error occurs during writing
-     */
-    public static boolean packU(RuntimeScalar value, boolean byteMode, boolean hasUnicodeInNormalMode, ByteArrayOutputStream output) {
-        // Pack a Unicode character number as UTF-8
-        int codePoint1;
-        String strValue1 = value.toString();
-        if (!strValue1.isEmpty() && !Character.isDigit(strValue1.charAt(0))) {
-            // If it's a character, get its code point
-            codePoint1 = strValue1.codePointAt(0);
-        } else {
-            // If it's a number, use it directly
-            codePoint1 = value.getInt();
-        }
-
-        // Track if U is used in character mode (not byte mode)
-        if (!byteMode) {
-            hasUnicodeInNormalMode = true;
-        }
-
-        // U format always writes UTF-8 encoded bytes
-        // The difference between modes is handled at the final string conversion
-        if (Character.isValidCodePoint(codePoint1)) {
-            String unicodeChar1 = new String(Character.toChars(codePoint1));
-            byte[] utf8Bytes1 = unicodeChar1.getBytes(StandardCharsets.UTF_8);
-            try {
-                output.write(utf8Bytes1);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        } else {
-            throw new PerlCompilerException("pack: invalid Unicode code point: " + codePoint1);
-        }
-        return hasUnicodeInNormalMode;
-    }
-
-    /**
-     * Handles a Unicode format.
-     * 
-     * @param values The list of values to pack
-     * @param valueIndex The current index in the values list
-     * @param count The repeat count
-     * @param byteMode Whether we are in byte mode
-     * @param hasUnicodeInNormalMode Whether we have already used Unicode in normal mode
-     * @param output The output stream
-     * @return Whether we have used Unicode in normal mode
-     */
-    public static boolean handleUnicode(List<RuntimeScalar> values, int valueIndex, int count,
-                                         boolean byteMode, boolean hasUnicodeInNormalMode,
-                                         ByteArrayOutputStream output) {
-        for (int j = 0; j < count; j++) {
-            RuntimeScalar value;
-            if (valueIndex + j >= values.size()) {
-                // If no more arguments, use 0 as per Perl behavior
-                value = new RuntimeScalar(0);
-            } else {
-                value = values.get(valueIndex + j);
-            }
-            hasUnicodeInNormalMode = PackHelper.packU(value, byteMode, hasUnicodeInNormalMode, output);
-        }
-        return hasUnicodeInNormalMode;
-    }
-
-    /**
-     * Packs the length of a string according to the specified format.
-     * 
-     * @param output The output stream
-     * @param format The format character
-     * @param length The length to pack
-     * @param modifiers The modifiers for the format
-     */
-    public static void packLength(ByteArrayOutputStream output, char format, int length, ParsedModifiers modifiers) {
-        // DEBUG: packing length " + length + " with format '" + format + "'"
-
-        switch (format) {
-            case 'A':
-                // For A format as length, pack as ASCII decimal string with spaces
-                String lengthStrA = String.valueOf(length);
-                byte[] lengthBytesA = lengthStrA.getBytes(StandardCharsets.US_ASCII);
-                output.write(lengthBytesA, 0, lengthBytesA.length);
-                // Pad with spaces to make it fixed width if needed
-                break;
-            case 'a':
-                // For a format as length, pack as ASCII decimal string with nulls
-                String lengthStrLower = String.valueOf(length);
-                byte[] lengthBytesLower = lengthStrLower.getBytes(StandardCharsets.US_ASCII);
-                output.write(lengthBytesLower, 0, lengthBytesLower.length);
-                break;
-            case 'n':
-                PackWriter.writeShortBigEndian(output, length);
-                break;
-            case 'N':
-                PackWriter.writeIntBigEndian(output, length);
-                break;
-            case 'v':
-                PackWriter.writeShortLittleEndian(output, length);
-                break;
-            case 'V':
-                PackWriter.writeIntLittleEndian(output, length);
-                break;
-            case 'w':
-                PackWriter.writeBER(output, length);
-                break;
-            case 'C':
-                output.write(length & 0xFF);
-                break;
-            case 's':
-                if (modifiers.bigEndian) {
-                    PackWriter.writeShortBigEndian(output, length);
-                } else {
-                    PackWriter.writeShortLittleEndian(output, length);
-                }
-                break;
-            case 'S':
-                if (modifiers.bigEndian) {
-                    PackWriter.writeShortBigEndian(output, length);
-                } else {
-                    PackWriter.writeShort(output, length);
-                }
-                break;
-            case 'i':
-            case 'I':
-            case 'l':
-            case 'L':
-                if (modifiers.bigEndian) {
-                    PackWriter.writeIntBigEndian(output, length);
-                } else {
-                    PackWriter.writeIntLittleEndian(output, length);
-                }
-                break;
-            case 'Z':
-                // For Z*/, encode length as null-terminated decimal string
-                String lengthStr = String.valueOf(length);
-                byte[] lengthBytes = lengthStr.getBytes(StandardCharsets.US_ASCII);
-                output.write(lengthBytes, 0, lengthBytes.length);
-                output.write(0); // null terminator
-                break;
-            default:
-                throw new PerlCompilerException("Invalid length type '" + format + "' for '/'");
-        }
     }
 
 }
