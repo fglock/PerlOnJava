@@ -403,12 +403,31 @@ public class Operator {
             }
         }
 
-        // For multiple arguments or other cases, reverse directly without extra copying
-        RuntimeBase[] reversedArgs = new RuntimeBase[args.length];
-        for (int i = 0; i < args.length; i++) {
-            reversedArgs[i] = args[args.length - 1 - i];
+        // For multiple arguments or other cases, flatten any RuntimeList/RuntimeArray arguments first
+        // This handles cases like: reverse(1, ('A', 'B', 'C')) or reverse(1, @array)
+        // where ('A', 'B', 'C') becomes a RuntimeList and @array is a RuntimeArray
+        List<RuntimeBase> flattenedArgs = new ArrayList<>();
+        for (RuntimeBase arg : args) {
+            if (arg instanceof RuntimeList) {
+                // Flatten RuntimeList into individual elements
+                RuntimeList list = (RuntimeList) arg;
+                for (RuntimeScalar scalar : list) {
+                    flattenedArgs.add(scalar);
+                }
+            } else if (arg instanceof RuntimeArray) {
+                // Flatten RuntimeArray into individual elements
+                RuntimeArray array = (RuntimeArray) arg;
+                for (RuntimeScalar scalar : array.elements) {
+                    flattenedArgs.add(scalar);
+                }
+            } else {
+                flattenedArgs.add(arg);
+            }
         }
-        return new RuntimeList(reversedArgs);
+        
+        // Now reverse the flattened list
+        Collections.reverse(flattenedArgs);
+        return new RuntimeList(flattenedArgs.toArray(new RuntimeBase[0]));
     }
 
     private static RuntimeList reverseTiedArray(RuntimeArray tiedArray) {
