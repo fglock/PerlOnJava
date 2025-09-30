@@ -198,7 +198,104 @@ diff <(perl -e 'TEST_CODE') <(./jperl -e 'TEST_CODE')
 
 **Don't:** Make multiple changes without testing each one.
 
-### Technique 4: Test Count Analysis
+### Technique 4: Extracting Failing Tests from Large Suites
+**When to use:** Your minimal test passes but the full test suite fails with the same feature.
+
+**The Problem:**
+- Simple standalone tests work correctly 
+- Full test suite (e.g., pack.t with 2000+ lines) fails 
+- Debugging large files is difficult and confusing
+- Easy to get misled by incorrect assumptions
+
+**The Solution - Extract and Simplify:**
+
+1. **Identify the exact failing test:**
+   ```bash
+   # Find which specific test is failing
+   JPERL_LARGECODE=refactor ./jperl t/op/pack.t 2>&1 | grep -A 3 "^not ok NUMBER"
+   ```
+
+2. **Find the test code in the source:**
+   ```bash
+   # Locate the test function or data
+   grep -n "test_data_or_function" t/op/pack.t
+   ```
+
+3. **Extract minimal reproduction:**
+   - Copy the test file header (use strict, imports, etc.)
+   - Copy the relevant test function(s)
+   - Copy the specific test data that fails
+   - Copy helper functions (like `is()`, `ok()`, `pass()`, `fail()`)
+   - Remove everything else
+
+4. **Test the extraction:**
+   ```bash
+   # Should reproduce the same failure
+   ./jperl test_extracted.t
+   ```
+
+5. **Iteratively simplify:**
+   - Remove unneeded helper functions
+   - Simplify test data if possible
+   - Remove extra test cases
+   - Keep only what's needed to reproduce the bug
+
+**Example from pack.t checksum debugging:**
+
+```perl
+# Original: t/op/pack.t (2068 lines) - fails
+# Extracted: test_pack_checksum_full.t (135 lines) - still fails!
+# This proves the bug is in the checksum logic, not test file size
+
+# The extraction included:
+# - Helper functions (is, ok, pass, fail)
+# - numbers_with_total() function
+# - numbers() function  
+# - The exact failing test: numbers('l!', -2147483648, -1, 0, 1, 2147483647)
+```
+
+**Benefits:**
+- Faster iteration (small file compiles quickly)
+- Easier to add debug output
+- No interference from unrelated tests
+- Can compare extracted test vs minimal test to find differences
+- Proves the bug is reproducible outside full suite
+
+**Red Flags:**
+- If extraction works but full suite fails → test interaction or state issue
+- If extraction fails differently → you extracted the wrong test
+- If extraction passes → file size/compilation issue (e.g., JPERL_LARGECODE)
+
+**Template for extraction:**
+```perl
+#!/usr/bin/perl
+use strict;
+use warnings;
+use Config;  # If needed
+
+print "1..N\n";  # TAP output
+
+# Helper functions
+sub is { ... }
+sub ok { ... }
+sub pass { ... }
+sub fail { ... }
+
+# Test-specific helpers
+sub test_helper { ... }
+
+# The actual failing test
+test_function_that_fails();
+
+print "# Tests completed\n";
+```
+
+**Remember:** 
+- PerlOnJava doesn't cache code between runs (no stale bytecode)
+- Always rebuild after code changes: `./gradlew clean shadowJar`
+- Use `JPERL_LARGECODE=refactor` if original test needed it
+
+### Technique 5: Test Count Analysis
 **Pattern:** Track test improvements to verify fixes
 
 ```bash
@@ -213,7 +310,7 @@ diff <(perl -e 'TEST_CODE') <(./jperl -e 'TEST_CODE')
 # Calculate improvement
 ```
 
-### Technique 5: Grep for Implementation
+### Technique 6: Grep for Implementation
 **Pattern:** Find where functionality is implemented
 
 ```bash
@@ -355,7 +452,7 @@ if (charsRead == 0) {
 
 5. **Balance quick wins with deep dives:**
    - Quick fixes: Foldcase escape (+6), XOR overload (+6)
-   - Deep dives: Range operator (+6), Sprintf quad (+24), Reverse flattening (+6)
+   - Deep dives: Range (+6), Sprintf quad (+24), Reverse flattening (+6)
    - **Lesson:** Mix of both keeps momentum while solving complex issues
 
 **Strategic Decisions:**
@@ -526,7 +623,7 @@ if (charsRead == 0) {
 
 **Productivity Factors:**
 
-- **High-yield targeting:** Focus on 70-95% pass rate tests
+- **High-yield targeting:** Focus on 70-95% pass rates
 - **Pattern recognition:** Group similar failures, fix root cause once
 - **Minimal test cases:** Always verify with simple reproduction
 - **Incremental testing:** Test each hypothesis immediately
@@ -549,8 +646,9 @@ jq '.results["TESTFILE.t"]' out.json
 # Get failure details
 ./jperl t/op/TESTFILE.t 2>&1 | grep -A 3 "^not ok NUMBER"
 
-# Run with special flags
-JPERL_LARGECODE=refactor ./jperl t/op/pack.t
+# Run with special environment variables
+JPERL_LARGECODE=refactor ./jperl t/op/pack.t      # Handle large methods by refactoring blocks
+JPERL_UNIMPLEMENTED=warn ./jperl t/op/TESTFILE.t  # Warn on unimplemented features instead of dying
 ```
 
 ### Code Search
@@ -628,24 +726,24 @@ git checkout FILE
 ### Quick Decision Framework
 
 **When to fix immediately:**
-- ✅ Pass rate > 90% with < 30 failures
-- ✅ Clear error pattern (same message repeated)
-- ✅ Estimated effort < 1 hour
-- ✅ Single root cause identified
-- ✅ Similar to previously fixed issues
+- Pass rate > 90% with < 30 failures
+- Clear error pattern (same message repeated)
+- Estimated effort < 1 hour
+- Single root cause identified
+- Similar to previously fixed issues
 
 **When to create prompt document:**
-- 📝 Estimated effort > 2 hours
-- 📝 Multiple root causes (requires systematic approach)
-- 📝 Requires architectural changes
-- 📝 Complex runtime/memory management issues
-- 📝 High potential impact but unclear path forward
+- Estimated effort > 2 hours
+- Multiple root causes (requires systematic approach)
+- Requires architectural changes
+- Complex runtime/memory management issues
+- High potential impact but unclear path forward
 
 **When to skip:**
-- ⏭️ Pass rate < 50% (likely missing features)
-- ⏭️ Requires unimplemented subsystems
-- ⏭️ Edge cases with minimal impact
-- ⏭️ Already documented in existing prompt
+- Pass rate < 50% (likely missing features)
+- Requires unimplemented subsystems
+- Edge cases with minimal impact
+- Already documented in existing prompt
 
 ### Optimal Session Structure
 
@@ -670,12 +768,12 @@ git checkout FILE
 ### Essential Tools Checklist
 
 Before starting a fix, have these ready:
-- ✅ `jq` for analyzing out.json test results
-- ✅ `--disassemble` for bytecode analysis
-- ✅ Minimal test case template
-- ✅ Comparative testing (perl vs ./jperl)
-- ✅ grep/search for finding implementations
-- ✅ Memory context from previous work
+- `jq` for analyzing out.json test results
+- `--disassemble` for bytecode analysis
+- Minimal test case template
+- Comparative testing (perl vs ./jperl)
+- grep/search for finding implementations
+- Memory context from previous work
 
 ### Pattern Recognition Shortcuts
 
@@ -746,4 +844,4 @@ Files Modified:
 
 ---
 
-**This is a living document. Keep it updated with your learnings!** 🚀
+**This is a living document. Keep it updated with your learnings!** 
