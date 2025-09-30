@@ -65,10 +65,15 @@ public class PerlRange extends RuntimeBase implements Iterable<RuntimeScalar> {
             return scalarEmptyString.iterator();
         } else if (!startString.matches("^[a-zA-Z]*[0-9]*\\z")) {
             return start.iterator();
-        } else if (startString.length() > endString.length()
-                || startString.compareTo(endString) >= 0) {
+        } else if (startString.length() > endString.length()) {
+            // If start is longer than end, only return start
+            // Example: "abc" .. "z" returns only "abc"
             return start.iterator();
         }
+        // For all other cases, use the string iterator which will handle:
+        // - Normal ranges: "a" .. "z"
+        // - Wraparound ranges: "09" .. "08" (continues to "99")
+        // - Equal start/end: "a" .. "a" (returns just "a")
         return new PerlRangeStringIterator();
     }
 
@@ -299,9 +304,15 @@ public class PerlRange extends RuntimeBase implements Iterable<RuntimeScalar> {
         PerlRangeStringIterator() {
             current = start.toString();
             endString = end.toString();
-            hasNext = current.length() < endString.length() ||
-                    (current.length() == endString.length() &&
-                            current.compareTo(endString) <= 0);
+            
+            // For string ranges, we always have at least the start element
+            // The range continues as long as:
+            // 1. Current string is shorter than end string, OR
+            // 2. Current string has same length and is <= end string, OR  
+            // 3. Current string is > end string but will eventually wrap around
+            //    (e.g., '09' .. '08' continues through '10', '11', ..., '99', '00', ..., '08')
+            // For simplicity, we start with hasNext = true and let the next() method determine when to stop
+            hasNext = true;
         }
 
         /**
@@ -326,13 +337,27 @@ public class PerlRange extends RuntimeBase implements Iterable<RuntimeScalar> {
                 throw new NoSuchElementException();
             }
             RuntimeScalar res = new RuntimeScalar(current);
-            if (current.length() < endString.length() ||
-                    (current.length() == endString.length() &&
-                            current.compareTo(endString) < 0)) {
-                // Increment the current string to the next in the sequence
-                current = ScalarUtils.incrementPlainString(current);
-            } else {
+            
+            // Check if we've reached the end
+            if (current.equals(endString)) {
                 hasNext = false;
+            } else {
+                // Increment the current string to the next in the sequence
+                String next = ScalarUtils.incrementPlainString(current);
+                
+                // Perl's range behavior: continue until the next increment would make
+                // the string longer than the end string.
+                // Examples:
+                // - '09'..'08': continues to '99' because '99'++ = '100' (3 chars > 2 chars)
+                // - 'a'..'\xFF': stops at 'z' because 'z'++ = 'aa' (2 chars > 1 char)
+                // - 'az'..'ba': continues to 'ba' because 'az'++ = 'ba' (same length)
+                if (next.length() > endString.length()) {
+                    // Next increment would be too long, stop here
+                    hasNext = false;
+                } else {
+                    // Continue with the incremented value
+                    current = next;
+                }
             }
             return res;
         }
