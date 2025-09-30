@@ -303,7 +303,9 @@ public class PrintVisitor implements Visitor {
         }
 
         for (Node element : node.elements) {
-            element.accept(this);
+            if (element != null) {
+                element.accept(this);
+            }
         }
         indentLevel--;
     }
@@ -322,7 +324,9 @@ public class PrintVisitor implements Visitor {
             indentLevel--;
         }
         for (Node element : node.elements) {
-            element.accept(this);
+            if (element != null) {
+                element.accept(this);
+            }
         }
         indentLevel--;
     }
@@ -334,7 +338,9 @@ public class PrintVisitor implements Visitor {
         printAnnotations(node);
         indentLevel++;
         for (Node element : node.elements) {
-            element.accept(this);
+            if (element != null) {
+                element.accept(this);
+            }
         }
         indentLevel--;
     }
@@ -346,7 +352,9 @@ public class PrintVisitor implements Visitor {
         printAnnotations(node);
         indentLevel++;
         for (Node element : node.elements) {
-            element.accept(this);
+            if (element != null) {
+                element.accept(this);
+            }
         }
         indentLevel--;
     }

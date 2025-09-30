@@ -11,6 +11,17 @@ import org.perlonjava.runtime.RuntimeContextType;
 public class EmitForeach {
     public static void emitFor1(EmitterVisitor emitterVisitor, For1Node node) {
         emitterVisitor.ctx.logDebug("FOR1 start");
+        
+        // Check if the loop variable is a complex lvalue expression like $$f
+        // If so, emit as while loop with explicit assignment
+        if (node.variable instanceof OperatorNode opNode && 
+            opNode.operand instanceof OperatorNode nestedOpNode &&
+            opNode.operator.equals("$") && nestedOpNode.operator.equals("$")) {
+            
+            emitterVisitor.ctx.logDebug("FOR1 emitting complex lvalue $$var as while loop");
+            emitFor1AsWhileLoop(emitterVisitor, node);
+            return;
+        }
 
         MethodVisitor mv = emitterVisitor.ctx.mv;
         Label loopStart = new Label();
@@ -109,7 +120,7 @@ public class EmitForeach {
             mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeScalar");
 
             if (loopVariableIsGlobal) {
-                // For global variables, alias the global to point to the iterator value
+                // Regular global variable assignment
                 mv.visitLdcInsn(globalVarName);
                 mv.visitInsn(Opcodes.SWAP); // Stack: globalVarName, iteratorValue
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC,
@@ -163,5 +174,58 @@ public class EmitForeach {
         }
 
         emitterVisitor.ctx.logDebug("FOR1 end");
+    }
+
+    private static void emitFor1AsWhileLoop(EmitterVisitor emitterVisitor, For1Node node) {
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        Label loopStart = new Label();
+        Label loopEnd = new Label();
+
+        // Obtain the iterator for the list
+        node.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "iterator", "()Ljava/util/Iterator;", false);
+
+        mv.visitLabel(loopStart);
+
+        // Check if iterator has more elements
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "hasNext", "()Z", true);
+        mv.visitJumpInsn(Opcodes.IFEQ, loopEnd);
+
+        // Get next value
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "next", "()Ljava/lang/Object;", true);
+        mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeScalar");
+
+        // Assign to variable $$f
+        node.variable.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        // Stack: iteratorValue, dereferenced_var
+        mv.visitInsn(Opcodes.SWAP);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", 
+                "set", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        mv.visitInsn(Opcodes.POP);
+
+        emitterVisitor.ctx.javaClassInfo.incrementStackLevel(1);
+
+        Label redoLabel = new Label();
+        mv.visitLabel(redoLabel);
+
+        emitterVisitor.ctx.javaClassInfo.pushLoopLabels(
+                node.labelName,
+                new Label(),
+                redoLabel,
+                loopEnd,
+                RuntimeContextType.VOID);
+
+        node.body.accept(emitterVisitor.with(RuntimeContextType.VOID));
+
+        emitterVisitor.ctx.javaClassInfo.popLoopLabels();
+
+        mv.visitJumpInsn(Opcodes.GOTO, loopStart);
+
+        mv.visitLabel(loopEnd);
+
+        emitterVisitor.ctx.javaClassInfo.decrementStackLevel(1);
+        mv.visitInsn(Opcodes.POP);
     }
 }
