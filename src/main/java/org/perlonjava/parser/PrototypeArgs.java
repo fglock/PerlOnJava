@@ -437,12 +437,35 @@ public class PrototypeArgs {
             // Unwrap reference to code reference: \(&code) should be treated as &code
             // This matches Perl's behavior where prototype (&) unwraps REF to CODE
             if (codeRef instanceof OperatorNode opNode && opNode.operator.equals("\\")) {
-                // Check if it's a ListNode containing a single & operator
-                if (opNode.operand instanceof ListNode listNode && !listNode.elements.isEmpty()) {
+                // Check for direct OperatorNode operand (e.g., \@array, \%hash, \$scalar)
+                if (opNode.operand instanceof OperatorNode innerOp) {
+                    if (innerOp.operator.equals("&")) {
+                        // This is actually a direct \&code, not wrapped in parens - leave as is
+                    } else if (innerOp.operator.equals("@") || innerOp.operator.equals("%") || innerOp.operator.equals("$")) {
+                        // Reject non-code references like \@array, \%hash, \$scalar
+                        String subName = parser.ctx.symbolTable.getCurrentSubroutine();
+                        if (subName != null && !subName.isEmpty()) {
+                            parser.throwError("Type of arg 1 to " + subName + " must be block or sub {} (not single ref constructor)");
+                        } else {
+                            parser.throwError("Type of arg 1 must be block or sub {} (not single ref constructor)");
+                        }
+                    }
+                }
+                // Check if it's a ListNode containing operators (e.g., \(&code))
+                else if (opNode.operand instanceof ListNode listNode && !listNode.elements.isEmpty()) {
                     Node firstElement = listNode.elements.get(0);
                     if (firstElement instanceof OperatorNode innerOp && innerOp.operator.equals("&")) {
                         // Unwrap: use the inner &code node instead of \&code
                         codeRef = innerOp;
+                    } else if (firstElement instanceof OperatorNode innerOp && 
+                               (innerOp.operator.equals("@") || innerOp.operator.equals("%") || innerOp.operator.equals("$"))) {
+                        // Reject non-code references
+                        String subName = parser.ctx.symbolTable.getCurrentSubroutine();
+                        if (subName != null && !subName.isEmpty()) {
+                            parser.throwError("Type of arg 1 to " + subName + " must be block or sub {} (not single ref constructor)");
+                        } else {
+                            parser.throwError("Type of arg 1 must be block or sub {} (not single ref constructor)");
+                        }
                     }
                 }
             }
