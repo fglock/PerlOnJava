@@ -116,6 +116,9 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 // Create a new hash from the provided list and replace our elements
                 RuntimeHash hash = createHash(value);
                 this.elements = hash.elements;
+                // Return the hash as a RuntimeArray so it gets flattened properly in list context
+                // When RuntimeList.add() is called with this RuntimeArray, it will iterate over
+                // the hash and add the deduplicated key-value pairs
                 yield new RuntimeArray(this);
             }
             case AUTOVIVIFY_HASH -> {
