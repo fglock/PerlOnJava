@@ -320,6 +320,37 @@ if (charsRead == 0) {
 
 ## Lessons Learned (Update This Section!)
 
+### Session 2025-09-30 (Part 3): Range + Sprintf Deep Dives (+30 tests)
+
+**Key Discoveries:**
+
+1. **Range operator length-based semantics:**
+   - Perl ranges continue until next increment would increase string length
+   - Not based on lexicographic comparison alone
+   - Example: '09'..'08' continues to '99' because '99'++ = '100' (3 chars > 2 chars)
+   - **Lesson:** Deep dive with minimal test cases reveals subtle operator semantics
+
+2. **Sprintf quad format inconsistency:**
+   - PerlOnJava supports `pack "q"` but rejected `%lld` in sprintf
+   - Single validation check blocked 24 tests
+   - **Lesson:** When one feature works (pack), related features should work (sprintf)
+
+3. **Single-line fixes can have massive impact:**
+   - Sprintf fix: 1 line removed = +24 tests
+   - **Lesson:** Validation/parsing bugs often have high ROI
+
+**Strategic Decisions:**
+
+- **Deep dive approach:** Create minimal test cases to understand exact behavior
+- **Pattern recognition:** All 24 failures had same root cause (quad format rejection)
+- **Commit discipline:** Clean commits with only essential files (no test garbage)
+
+**Productivity Factors:**
+
+- **Test-driven investigation:** Compare perl vs ./jperl behavior systematically
+- **Focused targets:** 98% pass rate = focused bugs, not missing features
+- **Quick wins:** Range (+6 tests) + Sprintf (+24 tests) = 30 tests in one session
+
 ### Session 2025-09-30 (Part 2): Hash Assignment Investigation
 
 **Key Discoveries:**
