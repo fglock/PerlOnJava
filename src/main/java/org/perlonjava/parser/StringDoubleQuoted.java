@@ -261,6 +261,7 @@ public class StringDoubleQuoted extends StringSegmentParser {
         String operator = switch (modifier.type) {
             case "U" -> "uc";       // \U - uppercase
             case "L" -> "lc";       // \L - lowercase
+            case "F" -> "fc";       // \F - foldcase
             case "u" -> "ucfirst";  // \\u - uppercase first
             case "l" -> "lcfirst";  // \l - lowercase first
             case "Q" -> "quotemeta"; // \Q - quote metacharacters
@@ -377,6 +378,7 @@ public class StringDoubleQuoted extends StringSegmentParser {
             // Case modifiers
             case "U" -> startCaseModifier("U", false);  // Uppercase until \E
             case "L" -> startCaseModifier("L", false);  // Lowercase until \E
+            case "F" -> startCaseModifier("F", false);  // Foldcase until \E
             case "u" -> startCaseModifier("u", true);   // Uppercase next char
             case "l" -> startCaseModifier("l", true);   // Lowercase next char
 
@@ -463,6 +465,7 @@ public class StringDoubleQuoted extends StringSegmentParser {
             // Case modifiers
             case "U" -> startCaseModifier("U", false);  // Uppercase until \E
             case "L" -> startCaseModifier("L", false);  // Lowercase until \E
+            case "F" -> startCaseModifier("F", false);  // Foldcase until \E
             case "u" -> startCaseModifier("u", true);   // Uppercase next char
             case "l" -> startCaseModifier("l", true);   // Lowercase next char
 
