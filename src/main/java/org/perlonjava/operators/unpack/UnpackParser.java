@@ -139,11 +139,14 @@ public class UnpackParser {
                     // Simple numeric count
                     count = Integer.parseInt(bracketContent);
                 } else {
-                    // Template-based count - calculate the packed size of the template
-                    // DEBUG: Template-based repeat count [" + bracketContent + "] - using default count 1
+                    // Template-based count - validate first
+                    // '*' is not allowed inside x[template] brackets
+                    if (bracketContent.contains("*")) {
+                        throw new PerlCompilerException("Within []-length '*' not allowed in unpack");
+                    }
                     // For now, just use count = 1 to avoid errors
+                    // TODO: Implement proper pack size calculation for the template
                     count = 1;
-                    // TODO: Implement pack size calculation for the template
                 }
 
                 i = j; // Position at ']'
