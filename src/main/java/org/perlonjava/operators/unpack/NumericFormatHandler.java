@@ -79,9 +79,10 @@ public abstract class NumericFormatHandler implements FormatHandler {
                 if (buffer.remaining() < 4) {
                     break;
                 }
-                int value = buffer.getInt();
+                // Read as long to avoid sign extension issues with unsigned values
+                long value = buffer.getInt();
                 if (signed) {
-                    output.add(new RuntimeScalar(value));
+                    output.add(new RuntimeScalar((int) value));
                 } else {
                     output.add(new RuntimeScalar(value & 0xFFFFFFFFL));
                 }

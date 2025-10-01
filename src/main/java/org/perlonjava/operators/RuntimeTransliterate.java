@@ -223,9 +223,12 @@ public class RuntimeTransliterate {
                 // Direct mapping using the mapping index, not i
                 translationMap.put(searchChar, replaceChars.get(mappingIndex));
                 mappingIndex++;
-            } else if (deleteUnmatched || replaceLen == 0) {
-                // Delete this character
+            } else if (deleteUnmatched) {
+                // Delete this character (only when 'd' modifier is present)
                 deleteSet.add(searchChar);
+            } else if (replaceLen == 0) {
+                // Empty replacement: map to itself (count only, don't modify)
+                translationMap.put(searchChar, searchChar);
             } else {
                 // Map to last character in replacement
                 translationMap.put(searchChar, replaceChars.get(replaceLen - 1));

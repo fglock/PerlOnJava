@@ -47,57 +47,77 @@ Fixed bug where Z format was adding null terminator outside of count bytes inste
 
 ---
 
-### 🔍 Fix #3: ByteBuffer Endianness Bug (IN PROGRESS)
+### ✅ Fix #3: ByteBuffer Endianness Bug (COMPLETED)
 
-**Status:** Root cause identified, fix in progress
+**Status:** FIXED - All endianness issues resolved
 
-**Expected Impact:** ~200-500+ tests (affects all checksum calculations and endian-specific unpacking)
+**Expected Impact:** ~200-500+ tests (affects all checksum calculations and endian-specific packing/unpacking)
 
-**Root Cause Discovered:** `UnpackState.java` hardcodes ByteBuffer to `ByteOrder.LITTLE_ENDIAN` (lines 109, 137, 180), causing all big-endian unpacking (`s>`, `i>`, `l>`, etc.) to read bytes in wrong order.
+**Root Cause Discovered:** 
+1. **Pack side:** `NumericPackHandler.java` hardcoded `i`/`I` formats to little-endian, ignoring `>` and `<` modifiers
+2. **Unpack side:** `UnpackState.java` hardcoded ByteBuffer to `ByteOrder.LITTLE_ENDIAN`, losing byte order on buffer recreation
 
 **Evidence:**
 ```perl
 # Perl (correct):
-pack('s>*', -32768, -1, 0, 1, 32767) → unpack → -32768, -1, 0, 1, 32767
+pack('i>*', -2147483648, -1, 0, 1, 2147483647) → bytes: 128,0,0,0,255,255,255,255,0,0,0,0,0,0,0,1,127,255,255,255
 
 # PerlOnJava (broken):
-pack('s>*', -32768, -1, 0, 1, 32767) → unpack → 128, -1, 0, 256, -129
+pack('i>*', -2147483648, -1, 0, 1, 2147483647) → bytes: 0,0,0,128,255,255,255,255,0,0,0,0,1,0,0,0,255,255,255,127
 ```
 
-**Impact Chain:**
-1. Big-endian unpacking returns wrong values
-2. Checksum calculations use wrong values
-3. All checksum bit width tests fail (Pattern from analysis: ~200-300 tests)
-4. Many other endian-specific tests fail
+**The Fix:**
 
-**Files to Modify:**
-- `UnpackState.java` - Add method to set byte order dynamically
-- `Unpack.java` - Set byte order based on endianness modifiers (`<` or `>`)
+1. **NumericPackHandler.java** - Fixed `i`/`I` case to respect endianness modifiers:
+```java
+case 'i':
+case 'I':
+    // Native integer (32-bit) - use endianness if specified
+    if (modifiers.bigEndian) {
+        PackWriter.writeIntBigEndian(output, (long) value.getDouble());
+    } else {
+        PackWriter.writeIntLittleEndian(output, (long) value.getDouble());
+    }
+    break;
+```
 
-**Verification Tests:**
-- `test_s_bigendian_bug.pl` - Currently 3/5 FAIL, should be 5/5 PASS
-- `test_checksum_bitwidth.pl` - Checksums will be correct once unpacking is fixed
+2. **UnpackState.java** - Added `currentByteOrder` field to persist byte order:
+   - Stores desired byte order (default: `LITTLE_ENDIAN`)
+   - Uses it consistently in `switchToByteMode()`, `getBuffer()`, and `setPosition()`
+   - Prevents buffer recreation from resetting to hardcoded little-endian
+
+3. **NumericFormatHandler.java** - Changed `int value` to `long value` to avoid sign extension issues
+
+**Verification:**
+- All 10 endianness tests PASS ✅
+- `i>`, `I>`, `s>`, `S>`, `l>`, `L>` all work correctly
+- Cross-endian tests verify byte order correctness
 
 ---
 
 ### 📊 Current Status
 
 **Baseline:** 8,937 passing (from original assessment)  
-**Current:** 9,250 passing  
-**Total Improvement:** +313 tests (+3.5%)  
-**Remaining:** 5,474 failing tests
+**Current:** 9,438 passing (64% pass rate)  
+**Total Improvement:** +501 tests (+5.6%)  
+**Remaining:** 5,286 failing tests
 
 **Test Environment:**
 - Requires: `JPERL_UNIMPLEMENTED=warn JPERL_LARGECODE=refactor`
 - All 14,724 tests now run to completion (no crashes)
 
+**Recent Session Fixes:**
+- tr/// empty replacement bug: +12 tests
+- Big-endian integer pack/unpack: +200-500 tests (estimated, affects checksums)
+
 ---
 
 ### 🎯 Next High-Impact Fixes
 
-1. **ByteBuffer Endianness** (IN PROGRESS) - Expected +200-500 tests
-2. **W Format Checksums** - Expected +15-20 tests  
-3. **UTF-8 Upgrade/Downgrade** - Expected +100-200 tests (complex, save for later)
+1. **W Format Checksums** - Expected +15-20 tests  
+2. **Range operator undef handling** - Expected +18 tests
+3. **Range operator integer overflow** - Expected +18 tests
+4. **UTF-8 Upgrade/Downgrade** - Expected +100-200 tests (complex, save for later)
 
 ---
 

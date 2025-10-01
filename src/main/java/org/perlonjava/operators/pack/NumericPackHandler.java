@@ -106,8 +106,12 @@ public class NumericPackHandler implements PackFormatHandler {
                     break;
                 case 'i':
                 case 'I':
-                    // Native integer (assume 32-bit little-endian)
-                    PackWriter.writeIntLittleEndian(output, (long) value.getDouble());
+                    // Native integer (32-bit) - use endianness if specified
+                    if (modifiers.bigEndian) {
+                        PackWriter.writeIntBigEndian(output, (long) value.getDouble());
+                    } else {
+                        PackWriter.writeIntLittleEndian(output, (long) value.getDouble());
+                    }
                     break;
                 case 'n':
                     // Network short (always big-endian)
