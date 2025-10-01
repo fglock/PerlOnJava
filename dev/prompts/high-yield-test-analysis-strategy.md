@@ -875,6 +875,91 @@ Files Modified:
 4. **Update strategy immediately:** Don't wait until end of session
 5. **Clean as you go:** Remove test files before committing
 
+## Key Learnings from Recent Fixes
+
+### x[template] Fix: The Power of Leveraging Existing Code (+541 tests!)
+
+**Problem:** Needed to calculate packed size for templates in `x[template]` construct.
+
+**Failed Approach:** Static size calculation
+- Tried to calculate sizes for each format type manually
+- Failed for bit/hex strings where count means bits/digits, not bytes
+- Failed for variable-length formats
+- Complex, error-prone, caused regressions
+
+**Brilliant Solution:** Pack dummy data and measure the result!
+```java
+// Instead of calculating size statically...
+RuntimeList args = new RuntimeList();
+args.add(new RuntimeScalar(template));
+// Add dummy values...
+RuntimeScalar result = Pack.pack(args);
+return result.toString().length(); // Measure actual size!
+```
+
+**Why This Works:**
+- Leverages existing pack logic (no reimplementation)
+- Handles ALL format types automatically
+- Perfect accuracy for all cases
+- Handles bit strings (b,B), hex strings (h,H), groups, modifiers, etc.
+- Simple, maintainable, correct
+
+**Key Insight:** When you need to calculate something complex, check if you can **use the actual operation** instead of reimplementing its logic. This is especially powerful when:
+- The operation already exists and is well-tested
+- The calculation would be complex and error-prone
+- You need to handle many edge cases
+- Accuracy is critical
+
+**Result:** +541 tests improvement (9,593 → 10,134 passing tests)
+
+### Pack Group Bug: Return Multiple Values from Methods
+
+**Problem:** `handleGroup()` was incrementing `valueIndex` locally but not returning it, causing values to be lost.
+
+**Solution:** Created `GroupResult` record to return both position and valueIndex:
+```java
+public record GroupResult(int position, int valueIndex) {}
+
+public static GroupResult handleGroup(...) {
+    // ... process group ...
+    return new GroupResult(position, valueIndex);
+}
+```
+
+**Key Insight:** When a method needs to return multiple related values, use a record or result object instead of:
+- Modifying parameters (doesn't work with primitives in Java)
+- Using arrays or lists (type-unsafe)
+- Making multiple method calls (inefficient)
+
+Records are perfect for this pattern in modern Java.
+
+### Regression Investigation: Compare Before/After Logs
+
+**Strategy:**
+1. Generate baseline test log (before changes)
+2. Generate current test log (after changes)
+3. Use `comm` to find newly failing and newly passing tests
+4. Analyze patterns in the differences
+
+**Commands:**
+```bash
+# Find newly failing tests
+comm -13 /tmp/baseline_failures.txt /tmp/current_failures.txt
+
+# Find newly passing tests  
+comm -23 /tmp/baseline_failures.txt /tmp/current_failures.txt
+
+# Count differences
+wc -l on each
+```
+
+**Key Insight:** Don't just look at the net change in test count. A -131 regression might actually be:
+- 2,208 newly failing tests
+- 2,128 newly passing tests
+- Net: -80 tests
+
+Understanding the full picture helps identify the root cause.
+
 ## Remember
 
 1. **Update this file** when you learn something new
@@ -887,6 +972,9 @@ Files Modified:
 8. **Use bytecode analysis** - when behavior is unclear
 9. **Test with overloaded objects** - for operator implementations
 10. **Balance quick wins and deep dives** - maintain momentum
+11. **Leverage existing operations** - pack dummy data instead of reimplementing logic
+12. **Use records for multiple return values** - cleaner than arrays or multiple calls
+13. **Compare before/after logs** - understand full regression picture, not just net change
 
 ---
 
