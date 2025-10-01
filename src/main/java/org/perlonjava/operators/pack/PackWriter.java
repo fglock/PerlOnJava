@@ -362,7 +362,10 @@ public class PackWriter {
 
         // For Z format, null terminator must be within count bytes
         if (format == 'Z') {
-            if (bytes.length > count) {
+            if (count == 0) {
+                // Z0 format: write nothing
+                return;
+            } else if (bytes.length > count) {
                 // String is longer than count: truncate to (count-1) bytes + null
                 output.write(bytes, 0, count - 1);
                 output.write(0);
