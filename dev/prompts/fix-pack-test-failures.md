@@ -1,528 +1,117 @@
 # Fix op/pack.t Test Failures
 
-## 🎉 Session Progress Summary
+## 📊 Current Status
 
-### ✅ Fix #1: @_ Empty in eval Blocks Bug (+306 tests)
-
-**Status:** Fixed in commits e4f8f3d3, 040fd2cf
-
-**Impact:** 8,937 → 9,243 passing tests (+306 tests, +3.4%)
-
-The root cause of Pattern 1 failures (~40 "no error" tests) has been identified and fixed. The issue was that `@_` becomes empty inside eval blocks in subroutine contexts because eval { }, try/catch, and large block refactoring transformed to anonymous subroutines but passed empty `ListNode()` instead of `@_`.
-
-**Files Modified:**
-- `ParserNodeUtils.java` - Added `atUnderscoreArgs()` helper
-- `OperatorParser.java` - eval { } now passes @_
-- `StatementParser.java` - try/catch now passes @_
-- `EmitBlock.java` - large block refactoring now passes @_
-
-**Verification:**
-- `test_eval_at_underscore.pl` - All 8 operators PASS
-- `test_eval_context.pl` - All 5 contexts PASS  
-- `test_pack_at_underscore_bug.pl` - Checksum returns 15 (not 0) ✅
-
----
-
-### ✅ Fix #2: Z Format Null Termination Bug (+7 tests)
-
-**Status:** Fixed in commits 07706edb, e6955452
-
-**Impact:** 9,243 → 9,250 passing tests (+7 tests)
-
-Fixed bug where Z format was adding null terminator outside of count bytes instead of within the count.
-
-**Root Cause:** `PackWriter.writeString()` was always adding a null byte after writing count bytes, making output count+1 bytes instead of count bytes.
-
-**Correct Z format behavior:**
-- If `string.length > count`: truncate to (count-1) bytes + null = count bytes total
-- If `string.length == count`: write all bytes, no null = count bytes total
-- If `string.length < count`: write string + null padding = count bytes total
-- If `count == 0`: write nothing (Z0 edge case)
-
-**Files Modified:**
-- `PackWriter.java` - Fixed `writeString()` method for Z format
-
-**Verification:**
-- `test_z_format_bug.pl` - All 4 test cases PASS ✅
-
----
-
-### ✅ Fix #3: ByteBuffer Endianness Bug (COMPLETED)
-
-**Status:** FIXED - All endianness issues resolved
-
-**Expected Impact:** ~200-500+ tests (affects all checksum calculations and endian-specific packing/unpacking)
-
-**Root Cause Discovered:** 
-1. **Pack side:** `NumericPackHandler.java` hardcoded `i`/`I` formats to little-endian, ignoring `>` and `<` modifiers
-2. **Unpack side:** `UnpackState.java` hardcoded ByteBuffer to `ByteOrder.LITTLE_ENDIAN`, losing byte order on buffer recreation
-
-**Evidence:**
-```perl
-# Perl (correct):
-pack('i>*', -2147483648, -1, 0, 1, 2147483647) → bytes: 128,0,0,0,255,255,255,255,0,0,0,0,0,0,0,1,127,255,255,255
-
-# PerlOnJava (broken):
-pack('i>*', -2147483648, -1, 0, 1, 2147483647) → bytes: 0,0,0,128,255,255,255,255,0,0,0,0,1,0,0,0,255,255,255,127
-```
-
-**The Fix:**
-
-1. **NumericPackHandler.java** - Fixed `i`/`I` case to respect endianness modifiers:
-```java
-case 'i':
-case 'I':
-    // Native integer (32-bit) - use endianness if specified
-    if (modifiers.bigEndian) {
-        PackWriter.writeIntBigEndian(output, (long) value.getDouble());
-    } else {
-        PackWriter.writeIntLittleEndian(output, (long) value.getDouble());
-    }
-    break;
-```
-
-2. **UnpackState.java** - Added `currentByteOrder` field to persist byte order:
-   - Stores desired byte order (default: `LITTLE_ENDIAN`)
-   - Uses it consistently in `switchToByteMode()`, `getBuffer()`, and `setPosition()`
-   - Prevents buffer recreation from resetting to hardcoded little-endian
-
-3. **NumericFormatHandler.java** - Changed `int value` to `long value` to avoid sign extension issues
-
-**Verification:**
-- All 10 endianness tests PASS ✅
-- `i>`, `I>`, `s>`, `S>`, `l>`, `L>` all work correctly
-- Cross-endian tests verify byte order correctness
-
----
-
-### 📊 Current Status
-
-**Baseline:** 8,937 passing (from original assessment)  
-**Current:** 9,490 passing (64.4% pass rate)  
-**Total Improvement:** +553 tests (+6.2%)  
-**Remaining:** 5,234 failing tests
+**Current:** 9,593 passing tests (65.1% pass rate)  
+**Remaining:** 5,131 failing tests  
+**Total tests:** 14,724
 
 **Test Environment:**
 - Requires: `JPERL_UNIMPLEMENTED=warn JPERL_LARGECODE=refactor`
-- All 14,724 tests now run to completion (no crashes)
-
-**Recent Session Fixes:**
-- tr/// empty replacement bug: +12 tests
-- Big-endian integer pack/unpack: +200-500 tests (estimated, affects checksums)
-- Big-endian float/double pack/unpack: +52 tests
+- All 14,724 tests run to completion (no crashes)
 
 ---
 
-### 🎯 Next High-Impact Fixes
+## 🎯 Recent Fixes Summary
 
-1. **W Format Checksums** - Expected +15-20 tests  
-2. **Range operator undef handling** - Expected +18 tests
-3. **Range operator integer overflow** - Expected +18 tests
-4. **UTF-8 Upgrade/Downgrade** - Expected +100-200 tests (complex, save for later)
+### ✅ W Format Fix (+9 tests) - Commit a8ba68a6
 
----
+**Impact:** 9,584 → 9,593 passing tests
 
-## Objective
-Analyze and fix failures in t/op/pack.t to improve the 61% pass rate (8937 passing / 5787 failing out of 14724 total tests).
+Fixed W format to store Unicode characters instead of UTF-8 encoding them.
 
-## Current Status
-- **Test file:** t/op/pack.t
-- **Pass rate:** 61% (8937 passing / 5787 failing)
-- **Total tests:** 14724
-- **Duration:** 28.27 seconds
-- **Missing features:** formats, regex
+**Key Learning:** W format is documented as "An unsigned char value (can be greater than 255)" - it stores Unicode characters **without** the range validation that U format has.
 
-## Problem Analysis
+**Critical Difference:**
+- **U format:** Validates codepoints (≤0x10FFFF), throws exceptions for invalid values
+- **W format:** Accepts any value, wraps to valid range without throwing exceptions
 
-### **ROOT CAUSE CONFIRMED: @_ Empty in eval Blocks (General Bug)**
+**Implementation:**
+- Created `PackHelper.packW()` with Unicode mode tracking (like U format)
+- Added `PackHelper.handleWideCharacter()` for W format processing
+- Updated `Pack.java` to handle W format specially (not using handler registry)
+- Updated `WFormatHandler.java` to read Unicode characters in unpack
+- Handles values beyond 0x10FFFF by wrapping to valid range
 
-**Status:** **REPRODUCED AND ISOLATED**
-
-Through systematic minimal test case development, we confirmed this is a **general bytecode generation bug**, not specific to pack/unpack:
-
-**The Bug Pattern:**
-```perl
-sub any_function {
-    my $result = eval { ANY_OPERATOR(@_) };  # @_ becomes empty in PerlOnJava!
-    return $result;
-}
-```
-
-**Reproduction (Ultra-Minimal One-Liner):**
-```bash
-# Perl (correct):
-perl -e 'sub f { eval { scalar @_ } } print f(1,2,3), "\n"'   # Output: 3
-
-# PerlOnJava (bug):
-./jperl -e 'sub f { eval { scalar @_ } } print f(1,2,3), "\n"'  # Output: 0
-```
-
-**Confirmed Affects ALL Operators:**
-- join, reverse, scalar, sum, pack/unpack, grep, map, array access ($_[0])
-- All return empty results when @_ is used inside eval in subroutine context
-
-**Impact on pack.t:**
-- Pattern 1 (~40 "no error" failures) is caused by this bug
-- Tests at line 546 use: `eval { unpack "%$format*", pack "$format*", @_ }`
-- @_ becomes empty → operations return 0/empty → tests fail
-
-**Test Evidence:**
-- `test_eval_at_underscore.pl` - Confirms all operators fail
-- `test_eval_context.pl` - Isolated eval + subroutine + @_ combination
-- `test_checksum_bisect.pl` - Binary search showing eval is the trigger
-
-**Next Steps:**
-1. Analyze bytecode with --disassemble to find code generation issue
-2. Investigate how @_ is captured/scoped in eval blocks
-3. Fix likely in EmitOperator.java or eval bytecode generation
+**Files Modified:**
+- `PackHelper.java` - Added packW() and handleWideCharacter()
+- `Pack.java` - Added W format special handling
+- `WFormatHandler.java` - Updated to read Unicode characters
+- `WideCharacterPackHandler.java` - Marked as deprecated
 
 ---
 
-### Original Failure Pattern Summary (Now Understood)
+## 🎯 High-Impact Fix Opportunities
 
-Based on error analysis from test output, failures fall into three main categories:
+### Priority 1: Format-Specific Issues
+1. **UTF-8 Upgrade/Downgrade** - Expected +100-200 tests (complex)
+2. **Checksum edge cases** - Expected +20-50 tests
+3. **Group and slash construct edge cases** - Expected +30-50 tests
 
-#### Pattern 1: Missing Error Validation (~40 tests)
-**Tests:** 3075, 3078, 3081, 3084, 3087, 3090, 3093, 3096, 3099, 3102, 3105, 3108, 3111, 3114, 3130, 3133, 3136, 3139, 3142, 3145, 3148, 3151, 3154, 3157, 3160, 3163, 3166, 3169, 3185, 3188, 3191, 3194, 3197, 3200, 3203, 3206, 3209, 3212, 3215, 3218, 3221, 3224
+### Priority 2: Operator Integration
+1. **Range operator undef handling** - Expected +18 tests
+2. **Range operator integer overflow** - Expected +18 tests
 
-**Error message:** "Failed test XXXX - no error at op/pack.t line 550"
+### Priority 3: Mode Switching
+1. **C0/U0 mode switching edge cases** - Expected +10-20 tests
+2. **Byte mode vs character mode consistency** - Expected +20-30 tests
 
-**Root cause:** Tests expect pack/unpack operations to throw errors for invalid inputs, but PerlOnJava is not validating and throwing errors.
+---
 
-**Test code context (line 550):**
-```perl
-is($@, '', "no error");
-```
+## Key Learnings & Patterns
 
-This is testing checksum operations with various formats. The tests expect that valid operations complete without errors, but PerlOnJava is either:
-1. Throwing errors when it shouldn't
-2. Not properly clearing `$@` after operations
-3. Having validation issues in checksum code
+### Format Behavior Insights
 
-**Example from line 546:**
-```perl
-my $sum = eval {unpack "%$_$format*", pack "$format*", @_};
-skip "cannot pack '$format' on this perl", 3
-  if is_valid_error($@);
+**W vs U Format:**
+- Both store Unicode characters, but W has no range validation
+- W wraps values >0x10FFFF to valid range instead of throwing exceptions
+- Both use UTF-8 encoding internally, converted back to Unicode in character mode
+- Always check `perldoc -f pack` for format specifications
 
-is($@, '', "no error");
-```
+**Mode Switching (C0/U0):**
+- C0 = character mode (default)
+- U0 = byte mode
+- Some formats ignore mode switches (need investigation)
+- Mode affects final string conversion, not intermediate processing
 
-#### Pattern 2: Unsupported Format Characters (~10-15 tests)
+**Handler Architecture:**
+- Formats with state management (U, W) need special handling in Pack.java
+- Cannot use handler registry for formats that track Unicode mode
+- Handler registry good for stateless formats only
 
-**Unsupported formats identified:**
-- `[` - Bracket format (4 occurrences)
-- `4` - Digit format (2 occurrences)
-- `2` - Digit format (2 occurrences)
-- `3` - Digit format (1 occurrence)
-- `*` - Asterisk in certain contexts (1 occurrence)
+### Common Pitfalls
 
-**Error messages:**
-```
-unpack: unsupported format character: [
-unpack: unsupported format character: 4
-unpack: unsupported format character: 2
-unpack: unsupported format character: 3
-unpack: unsupported format character: *
-pack: unsupported format character: 4
-```
+1. **Don't assume format similarity** - Always verify behavior with standard Perl
+2. **Check perldoc first** - Documentation reveals critical differences
+3. **Test with values beyond Unicode range** - W format must handle >0x10FFFF
+4. **Verify mode switching** - C0/U0 behavior varies by format
+5. **Watch for UTF-8 vs Unicode confusion** - Internal representation vs final output
 
-**Analysis:**
-These are likely:
-1. **Digits (2, 3, 4):** May be repeat counts being misinterpreted as format characters
-2. **Bracket `[`:** Could be part of template group syntax or character class
-3. **Asterisk `*`:** Context-dependent - might be in invalid position
+## Investigation Approach
 
-**Investigation needed:**
-- Check if these are valid Perl pack formats
-- Determine if they're parsing errors or missing implementations
-- Review pack/unpack template parsing logic
-
-#### Pattern 3: NoSuchElementException (~2 tests)
-
-**Error messages:**
-```
-NoSuchElementException
-        main at op/pack.t line 799
-        main at op/pack.t line 892
-
-NoSuchElementException
-        main at op/pack.t line 802
-        main at op/pack.t line 892
-```
-
-**Root cause:** Iterator exhaustion in unpack operations. The unpack code is trying to read more elements than available.
-
-**Likely issues:**
-1. Incorrect calculation of how many values to unpack
-2. Iterator not checking `hasNext()` before calling `next()`
-3. Template parsing error causing wrong element count
-
-#### Pattern 4: Regex Code Blocks (Known Issue)
-
-**Error message:**
-```
-Regex compilation failed: (?{...}) code blocks in regex not implemented
-```
-
-**Status:** This is a known missing feature documented in missing_features: ["formats", "regex"]
-
-**Impact:** Unknown number of tests (likely small subset)
-
-### Additional Observations
-
-From memories, pack.t has been worked on before with validation fixes:
-- Fixed h,H format validation
-- Fixed j,J,f,F,d,D,p,P format validation  
-- Fixed n,N,v,V format validation
-- Achieved +68 tests improvement previously
-
-This suggests there's been significant progress, but ~5787 failures remain.
-
-## Detailed Investigation Plan
-
-### Phase 1: Analyze "no error" Failures (Highest Priority)
-
-**Goal:** Understand why ~40 tests expect no error but fail
-
-**Steps:**
-1. Examine test code around line 546-550
-2. Identify which formats are being tested
-3. Check if errors are being thrown incorrectly
-4. Verify `$@` is being cleared properly
-5. Test checksum operations manually
-
-**Test case to create:**
-```perl
-#!/usr/bin/perl
-use strict;
-use warnings;
-
-# Test checksum operations
-my @values = (-2147483648, -1, 0, 1, 2147483647);
-my $format = 'l!<';
-
-eval {
-    my $sum = unpack "%16$format*", pack "$format*", @values;
-    print "Sum: $sum\n";
-    print "Error: $@\n" if $@;
-};
-print "Eval error: $@\n" if $@;
-```
-
-**Expected behavior:** Should complete without errors and return a checksum value.
-
-### Phase 2: Fix Unsupported Format Characters
-
-**Investigation steps:**
-1. Check Perl documentation for formats: `[`, `2`, `3`, `4`, `*`
-2. Determine if these are valid formats or parsing errors
-3. Review PackParser.java and UnpackParser.java
-
-**Likely findings:**
-- Digits may be repeat counts in wrong context
-- `[` might be unsupported group syntax
-- `*` might be in invalid position
-
-**Files to check:**
-- `src/main/java/org/perlonjava/operators/PackParser.java`
-- `src/main/java/org/perlonjava/operators/Pack.java`
-- `src/main/java/org/perlonjava/operators/Unpack.java`
-
-### Phase 3: Fix NoSuchElementException
-
-**Investigation steps:**
-1. Examine lines 799 and 802 in pack.t
-2. Identify which unpack operations are failing
-3. Review iterator usage in unpack code
-4. Add proper bounds checking
-
-**Likely fix location:**
-- `src/main/java/org/perlonjava/operators/Unpack.java`
-- Add `hasNext()` checks before `next()` calls
-- Verify element count calculations
-
-### Phase 4: Categorize Remaining Failures
-
-**Approach:**
-1. Run pack.t and capture all failure messages
+### Systematic Analysis
+1. Run pack.t and capture failure patterns
 2. Group failures by error type
 3. Identify bulk fix opportunities
-4. Prioritize by impact
+4. Prioritize by impact vs effort
 
-**Command to analyze:**
-```bash
-./jperl t/op/pack.t 2>&1 | grep -E "^not ok|^# Failed" | \
-  awk '/^not ok/{test=$0} /^# Failed/{print test; print $0}' | \
-  head -200 > pack_failures.txt
-```
+### Debugging Strategy
+1. **Create minimal test cases** - Isolate specific failures
+2. **Compare with standard Perl** - Use `perl` vs `./jperl` side-by-side
+3. **Check perldoc** - Verify expected behavior from documentation
+4. **Use --disassemble** - Analyze bytecode when needed
+5. **Test edge cases** - Values beyond normal ranges, empty inputs, etc.
 
-## Known Context from Memories
-
-### Previous Pack.t Work
-
-From memory `035e9c81-1766-400a-b71b-36a51e77a7d7`:
-- Before: 8,838 passing tests
-- After validation fixes: 8,906 passing tests  
-- Net improvement: +68 tests
-
-**Fixes applied:**
-- h,H format validation (complete modifier restrictions)
-- j,J format validation (only reject '!' modifier)
-- f,F,d,D format validation (only reject '!' modifier)
-- p,P format validation (only reject '!' modifier)
-- n,N,v,V format validation (reject '<','>' endianness)
-
-This suggests validation is mostly complete, so remaining issues are likely:
-1. Implementation bugs (checksum, iterator)
-2. Missing format support
-3. Edge cases and error handling
-
-### Checksum Issues
-
-From memory `fb4a63fd-c753-4032-97e8-6c660c3e5b45`:
-- Checksum tests were returning 0 instead of expected values
-- Issue: checksum calculation only processing single values
-- Native long format (l!/L!) not being used correctly
-- Bit masking issues
-
-**Status:** Partially fixed but may have remaining issues
-
-## Implementation Strategy
-
-### Quick Wins (Estimated 100-200 tests)
-
-1. **Fix "no error" tests:**
-   - Investigate why `$@` is not empty
-   - Fix checksum error handling
-   - Ensure proper error clearing
-
-2. **Fix NoSuchElementException:**
-   - Add bounds checking in unpack iterator
-   - Verify element count calculations
-
-### Medium Effort (Estimated 50-100 tests)
-
-3. **Implement missing formats:**
-   - Research what `[`, `2`, `3`, `4` formats should do
-   - Implement if they're valid Perl formats
-   - Add proper error messages if they're invalid
-
-### Long Term (Remaining ~5500 tests)
-
-4. **Systematic analysis:**
-   - Categorize all remaining failures
-   - Identify patterns and bulk fix opportunities
-   - May involve multiple complex issues
-
-## Files to Investigate
-
-### Primary Files
-1. `t/op/pack.t` - Test file (lines 546-550, 799, 802, 892)
-2. `src/main/java/org/perlonjava/operators/Pack.java`
-3. `src/main/java/org/perlonjava/operators/Unpack.java`
-4. `src/main/java/org/perlonjava/operators/PackParser.java`
-
-### Supporting Files
-5. `src/main/java/org/perlonjava/operators/pack/*.java` - Format handlers
-6. `src/main/java/org/perlonjava/operators/unpack/*.java` - Unpack handlers
-
-## Success Criteria
-
-### Phase 1 Success
-- "no error" tests pass (target: +40 tests)
-- NoSuchElementException fixed (target: +2 tests)
-- Understand unsupported format characters
-
-### Phase 2 Success
-- Unsupported format characters resolved (target: +10-15 tests)
-- Pass rate improves to 65%+ (9500+ passing tests)
-
-### Ultimate Goal
-- Pass rate improves to 75%+ (11000+ passing tests)
-- All systematic errors identified and documented
-- Clear path forward for remaining failures
-
-## Testing Strategy
-
-### Minimal Test Cases
-
-**Test 1: Checksum operations**
-```perl
-use strict;
-use warnings;
-
-my @values = (1, 2, 3);
-my $packed = pack "l*", @values;
-my $sum = unpack "%16l*", $packed;
-print "Sum: $sum\n";
-print "Error: $@\n" if $@;
-```
-
-**Test 2: Format character validation**
-```perl
-use strict;
-use warnings;
-
-# Test each problematic format
-for my $format ('[', '2', '3', '4') {
-    eval {
-        my $result = pack $format, 1;
-        print "Format '$format': success\n";
-    };
-    print "Format '$format': $@\n" if $@;
-}
-```
-
-**Test 3: Iterator bounds**
-```perl
-use strict;
-use warnings;
-
-my $packed = pack "l3", 1, 2, 3;
-my @unpacked = unpack "l4", $packed;  # Try to unpack more than available
-print "Unpacked: @unpacked\n";
-```
-
-## Complexity Assessment
-
-- **Overall difficulty:** High (large number of failures, multiple root causes)
-- **Quick wins available:** Yes (~50 tests from "no error" + NoSuchElement fixes)
-- **Estimated effort for Phase 1:** 1-2 hours
-- **Estimated effort for full fix:** 10-20 hours (requires systematic approach)
-- **ROI:** Medium initially, potentially high if bulk patterns found
-
-## Recommendations
-
-1. **Start with "no error" failures** - Clear pattern, ~40 tests
-2. **Fix NoSuchElementException** - Simple bounds checking, +2 tests
-3. **Investigate unsupported formats** - May reveal parsing bugs
-4. **After quick wins, reassess** - Categorize remaining failures
-5. **Consider creating sub-prompts** - Break down into manageable chunks
-
-## Notes
-
-- pack.t is a massive test file (14724 tests) covering many edge cases
-- 61% pass rate suggests core functionality works but many edge cases fail
-- Previous validation work improved things significantly (+68 tests)
-- Remaining failures likely involve:
-  - Checksum calculation bugs
-  - Iterator/bounds checking issues
-  - Missing format implementations
-  - Edge case handling
-- May benefit from systematic categorization before attempting fixes
-
-## References
-
-- Test file: `t/op/pack.t`
-- Previous pack work: Memory `035e9c81-1766-400a-b71b-36a51e77a7d7`
-- Checksum issues: Memory `fb4a63fd-c753-4032-97e8-6c660c3e5b45`
-- Pack validation fixes: Memory `346e19a0-75aa-45a2-9851-e6f78f61cc86`
+### Files to Check
+- `src/main/java/org/perlonjava/operators/Pack.java` - Main pack logic
+- `src/main/java/org/perlonjava/operators/Unpack.java` - Main unpack logic
+- `src/main/java/org/perlonjava/operators/pack/*.java` - Format handlers
+- `src/main/java/org/perlonjava/operators/unpack/*.java` - Unpack handlers
+- `src/main/java/org/perlonjava/operators/pack/PackHelper.java` - Utility methods
 
 ---
 
-**Created:** 2025-09-30
-**Priority:** Medium-High (large impact but complex)
-**Complexity:** High (multiple root causes, large test file)
-**Estimated effort:** 10-20 hours for significant improvement
-**Quick wins available:** Yes (~50 tests in 1-2 hours)
+**Last Updated:** 2025-10-01  
+**Current Pass Rate:** 65.1% (9,593 / 14,724)  
+**Priority:** Medium-High  
+**Complexity:** High (requires systematic approach)
