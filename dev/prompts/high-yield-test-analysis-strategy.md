@@ -3,6 +3,9 @@
 ## Meta-Prompt Purpose
 This is a **living document** that captures effective strategies for finding and fixing high-yield bugs in PerlOnJava. When you learn new debugging techniques or discover better ways to analyze test failures, **UPDATE THIS FILE** with your findings.
 
+**Last Updated:** 2025-10-01  
+**Recent Additions:** W format fix learnings, perldoc verification strategy
+
 ## Quick Start: Finding High-Yield Targets
 
 ### Step 1: Use Automated Analysis Tools
@@ -94,7 +97,30 @@ perl test_minimal.pl
 
 **Example:** Hash assignment returns different values in scalar vs. list context.
 
-### Strategy 3: EOF and Boundary Conditions
+### Strategy 3: Verify with perldoc First
+**When to use:** Implementing or fixing pack/unpack formats or any Perl built-in
+
+**Critical lesson from W format fix:**
+- **Don't assume format similarity** - W and U formats look similar but have critical differences
+- **Check `perldoc -f pack` first** - Documentation reveals W accepts values >0x10FFFF, U doesn't
+- **Test with edge cases** - Values beyond normal ranges (>0x10FFFF for Unicode)
+- **Compare side-by-side** - Run `perl` and `./jperl` with same test case
+
+**Example:**
+```bash
+# Check documentation
+perldoc -f pack | grep -A 10 "W  "
+
+# Test edge case with standard Perl
+perl -e 'my $p = pack("W", 305419896); print length($p), "\n";'
+
+# Compare with PerlOnJava
+./jperl -e 'my $p = pack("W", 305419896); print length($p), "\n";'
+```
+
+**Key insight:** W format wraps values to valid range, U format throws exceptions. This difference prevented using shared code path.
+
+### Strategy 4: EOF and Boundary Conditions
 **When to use:** Tests fail at end-of-file or with edge case inputs
 
 **Common issues:**
