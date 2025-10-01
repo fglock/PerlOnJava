@@ -261,6 +261,17 @@ public class Unpack {
                 } else if ((format == 'l' || format == 'L') && hasShriek) {
                     // Special handling for 'l!' and 'L!' - native size (8 bytes)
                     handler = new NativeLongFormatHandler(format == 'l');
+                } else if ((format == 'n' || format == 'v' || format == 'N' || format == 'V') && hasShriek) {
+                    // Special handling for network/VAX formats with '!' - makes them signed
+                    if (format == 'n') {
+                        handler = new NumericFormatHandler.NetworkShortHandler(true); // signed
+                    } else if (format == 'v') {
+                        handler = new NumericFormatHandler.VAXShortHandler(true); // signed
+                    } else if (format == 'N') {
+                        handler = new NumericFormatHandler.NetworkLongHandler(true); // signed
+                    } else if (format == 'V') {
+                        handler = new NumericFormatHandler.VAXLongHandler(true); // signed
+                    }
                 }
                 // For 'p' format, create endianness-aware handler based on parsed modifiers
                 if (format == 'p' && (hasLittleEndian || hasBigEndian)) {

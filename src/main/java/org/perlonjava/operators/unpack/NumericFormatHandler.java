@@ -154,6 +154,16 @@ public abstract class NumericFormatHandler implements FormatHandler {
     }
 
     public static class NetworkShortHandler extends NumericFormatHandler {
+        private final boolean signed;
+
+        public NetworkShortHandler() {
+            this(false); // Default to unsigned
+        }
+
+        public NetworkShortHandler(boolean signed) {
+            this.signed = signed;
+        }
+
         @Override
         public void unpack(UnpackState state, List<RuntimeBase> output, int count, boolean isStarCount) {
             // Save current mode
@@ -172,7 +182,15 @@ public abstract class NumericFormatHandler implements FormatHandler {
                 }
                 int b1 = buffer.get() & 0xFF;
                 int b2 = buffer.get() & 0xFF;
-                output.add(new RuntimeScalar((b1 << 8) | b2));
+                int value = (b1 << 8) | b2;
+                
+                if (signed) {
+                    // Convert to signed short (sign extend from 16 bits)
+                    output.add(new RuntimeScalar((short) value));
+                } else {
+                    // Unsigned
+                    output.add(new RuntimeScalar(value));
+                }
             }
 
             // Restore original mode
@@ -188,6 +206,16 @@ public abstract class NumericFormatHandler implements FormatHandler {
     }
 
     public static class NetworkLongHandler extends NumericFormatHandler {
+        private final boolean signed;
+
+        public NetworkLongHandler() {
+            this(false); // Default to unsigned
+        }
+
+        public NetworkLongHandler(boolean signed) {
+            this.signed = signed;
+        }
+
         @Override
         public void unpack(UnpackState state, List<RuntimeBase> output, int count, boolean isStarCount) {
             // Save current mode
@@ -208,7 +236,14 @@ public abstract class NumericFormatHandler implements FormatHandler {
                 for (int j = 0; j < 4; j++) {
                     value = (value << 8) | (buffer.get() & 0xFF);
                 }
-                output.add(new RuntimeScalar(value));
+                
+                if (signed) {
+                    // Convert to signed int (sign extend from 32 bits)
+                    output.add(new RuntimeScalar((int) value));
+                } else {
+                    // Unsigned
+                    output.add(new RuntimeScalar(value));
+                }
             }
 
             // Restore original mode
@@ -224,6 +259,16 @@ public abstract class NumericFormatHandler implements FormatHandler {
     }
 
     public static class VAXShortHandler extends NumericFormatHandler {
+        private final boolean signed;
+
+        public VAXShortHandler() {
+            this(false); // Default to unsigned
+        }
+
+        public VAXShortHandler(boolean signed) {
+            this.signed = signed;
+        }
+
         @Override
         public void unpack(UnpackState state, List<RuntimeBase> output, int count, boolean isStarCount) {
             // Save current mode
@@ -242,7 +287,15 @@ public abstract class NumericFormatHandler implements FormatHandler {
                 }
                 int b1 = buffer.get() & 0xFF;
                 int b2 = buffer.get() & 0xFF;
-                output.add(new RuntimeScalar(b1 | (b2 << 8)));
+                int value = b1 | (b2 << 8);
+                
+                if (signed) {
+                    // Convert to signed short (sign extend from 16 bits)
+                    output.add(new RuntimeScalar((short) value));
+                } else {
+                    // Unsigned
+                    output.add(new RuntimeScalar(value));
+                }
             }
 
             // Restore original mode
@@ -258,6 +311,16 @@ public abstract class NumericFormatHandler implements FormatHandler {
     }
 
     public static class VAXLongHandler extends NumericFormatHandler {
+        private final boolean signed;
+
+        public VAXLongHandler() {
+            this(false); // Default to unsigned
+        }
+
+        public VAXLongHandler(boolean signed) {
+            this.signed = signed;
+        }
+
         @Override
         public void unpack(UnpackState state, List<RuntimeBase> output, int count, boolean isStarCount) {
             // Save current mode
@@ -278,7 +341,14 @@ public abstract class NumericFormatHandler implements FormatHandler {
                 for (int j = 0; j < 4; j++) {
                     value |= (long) (buffer.get() & 0xFF) << (j * 8);
                 }
-                output.add(new RuntimeScalar(value));
+                
+                if (signed) {
+                    // Convert to signed int (sign extend from 32 bits)
+                    output.add(new RuntimeScalar((int) value));
+                } else {
+                    // Unsigned
+                    output.add(new RuntimeScalar(value));
+                }
             }
 
             // Restore original mode
