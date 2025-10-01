@@ -139,6 +139,22 @@ public class UnpackState {
         return buffer;
     }
 
+    /**
+     * Sets the byte order for the ByteBuffer used in unpacking.
+     * This must be called based on endianness modifiers in the pack template.
+     * 
+     * @param bigEndian true for big-endian ('>'), false for little-endian ('<')
+     */
+    public void setByteOrder(boolean bigEndian) {
+        ByteOrder order = bigEndian ? ByteOrder.BIG_ENDIAN : ByteOrder.LITTLE_ENDIAN;
+        if (buffer != null) {
+            // If buffer exists, update its byte order
+            buffer.order(order);
+        }
+        // Note: if buffer is null, it will be created with the default LITTLE_ENDIAN
+        // and the caller should call setByteOrder again after getBuffer()
+    }
+
     public boolean hasMoreCodePoints() {
         return codePointIndex < codePoints.length;
     }

@@ -242,6 +242,14 @@ public class Unpack {
             // Get handler and unpack
             FormatHandler handler = getHandler(format, startsWithU);
             if (handler != null) {
+                // Set byte order based on endianness modifiers
+                if (hasLittleEndian || hasBigEndian) {
+                    state.setByteOrder(hasBigEndian);
+                    // Ensure buffer is created with correct byte order
+                    state.getBuffer();
+                    state.setByteOrder(hasBigEndian);
+                }
+                
                 if (format == '@') {
                     // DEBUG: Calling @ handler with count=" + count
                 } else if (format == '.') {
