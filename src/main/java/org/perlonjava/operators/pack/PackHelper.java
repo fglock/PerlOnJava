@@ -230,31 +230,47 @@ public class PackHelper {
      * @param output the output stream to write packed data
      * @throws RuntimeException if I/O error occurs during writing
      */
-    public static void packW(RuntimeScalar value, ByteArrayOutputStream output) {
-        // Pack an unsigned char value (can be greater than 255)
+    /**
+     * Pack a wide character using the 'W' format.
+     * W format is like U format but without Unicode range validation.
+     * It accepts any integer value and stores it as UTF-8 bytes.
+     * 
+     * @param value the scalar value to pack
+     * @param byteMode whether we are in byte mode
+     * @param hasUnicodeInNormalMode whether we have already used Unicode in normal mode
+     * @param output the output stream to write packed data
+     * @return whether we have used Unicode in normal mode
+     */
+    public static boolean packW(RuntimeScalar value, boolean byteMode, boolean hasUnicodeInNormalMode, ByteArrayOutputStream output) {
         // Check for Inf/NaN first, before any other processing
         handleInfinity(value, 'W');
         
-        int intValue;
+        int codePoint;
         String strValue = value.toString();
         if (!strValue.isEmpty() && !Character.isDigit(strValue.charAt(0))) {
             // If it's a character, get its code point
-            intValue = strValue.codePointAt(0);
+            codePoint = strValue.codePointAt(0);
         } else {
             // If it's a number, use it directly
-            intValue = value.getInt();
+            codePoint = value.getInt();
         }
 
+        // Track if W is used in character mode (not byte mode)
+        if (!byteMode) {
+            hasUnicodeInNormalMode = true;
+        }
+
+        // W format always writes UTF-8 encoded bytes
+        // The difference between modes is handled at the final string conversion
+        // Unlike U format, W doesn't validate the Unicode range
         try {
-            if (Character.isValidCodePoint(intValue)) {
-                // Valid Unicode - encode as UTF-8
-                String unicodeChar = new String(Character.toChars(intValue));
+            if (Character.isValidCodePoint(codePoint)) {
+                String unicodeChar = new String(Character.toChars(codePoint));
                 byte[] utf8Bytes = unicodeChar.getBytes(StandardCharsets.UTF_8);
                 output.write(utf8Bytes);
             } else {
-                // Beyond Unicode range - for now, wrap to valid range
-                // This is a compromise until we can handle extended values properly
-                int wrappedValue = intValue & 0x1FFFFF; // 21 bits
+                // Beyond Unicode range - wrap to valid range without throwing exception
+                int wrappedValue = codePoint & 0x1FFFFF; // 21 bits
                 if (wrappedValue > 0x10FFFF) {
                     wrappedValue = wrappedValue % 0x110000; // Modulo to fit in Unicode range
                 }
@@ -265,6 +281,7 @@ public class PackHelper {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+        return hasUnicodeInNormalMode;
     }
 
     /**
@@ -350,6 +367,34 @@ public class PackHelper {
                 value = values.get(valueIndex + j);
             }
             hasUnicodeInNormalMode = PackHelper.packU(value, byteMode, hasUnicodeInNormalMode, output);
+        }
+        return hasUnicodeInNormalMode;
+    }
+
+    /**
+     * Handles a wide character format (W).
+     * W format is like U format but without Unicode range validation.
+     * 
+     * @param values The list of values to pack
+     * @param valueIndex The current index in the values list
+     * @param count The repeat count
+     * @param byteMode Whether we are in byte mode
+     * @param hasUnicodeInNormalMode Whether we have already used Unicode in normal mode
+     * @param output The output stream
+     * @return Whether we have used Unicode in normal mode
+     */
+    public static boolean handleWideCharacter(List<RuntimeScalar> values, int valueIndex, int count,
+                                               boolean byteMode, boolean hasUnicodeInNormalMode,
+                                               ByteArrayOutputStream output) {
+        for (int j = 0; j < count; j++) {
+            RuntimeScalar value;
+            if (valueIndex + j >= values.size()) {
+                // If no more arguments, use 0 as per Perl behavior
+                value = new RuntimeScalar(0);
+            } else {
+                value = values.get(valueIndex + j);
+            }
+            hasUnicodeInNormalMode = PackHelper.packW(value, byteMode, hasUnicodeInNormalMode, output);
         }
         return hasUnicodeInNormalMode;
     }

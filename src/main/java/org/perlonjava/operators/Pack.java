@@ -64,7 +64,8 @@ public class Pack {
         handlers.put('u', new UuencodePackHandler());
         handlers.put('p', new PointerPackHandler());
         handlers.put('P', new PointerPackHandler());
-        handlers.put('W', new WideCharacterPackHandler());
+        // W format is handled specially like U format (see switch statement below)
+        // handlers.put('W', new WideCharacterPackHandler());
         handlers.put('x', new ControlPackHandler('x'));
         handlers.put('X', new ControlPackHandler('X'));
         handlers.put('@', new ControlPackHandler('@'));
@@ -323,6 +324,11 @@ public class Pack {
                     case 'U':
                         // Unicode format needs special handling for state management
                         hasUnicodeInNormalMode = PackHelper.handleUnicode(values, valueIndex, count, byteMode, hasUnicodeInNormalMode, output);
+                        valueIndex += count;
+                        break;
+                    case 'W':
+                        // Wide character format - like U but without Unicode range validation
+                        hasUnicodeInNormalMode = PackHelper.handleWideCharacter(values, valueIndex, count, byteMode, hasUnicodeInNormalMode, output);
                         valueIndex += count;
                         break;
                     default:
