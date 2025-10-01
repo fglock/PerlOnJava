@@ -5,7 +5,27 @@ This is a **living document** that captures effective strategies for finding and
 
 ## Quick Start: Finding High-Yield Targets
 
-### Step 1: Analyze Test Results Data
+### Step 1: Use Automated Analysis Tools
+
+**NEW: Failure Categorization Script**
+```bash
+# Analyze pack.t failures with automatic categorization
+./dev/tools/analyze_pack_failures.pl
+```
+
+This script automatically:
+- Runs pack.t and captures all test results
+- Categorizes failures by type (endianness, formats, modifiers, etc.)
+- Calculates priority scores based on test count and complexity
+- Provides actionable recommendations sorted by impact
+
+**Benefits:**
+- Identifies patterns across thousands of tests
+- Prioritizes fixes by impact (test count × complexity)
+- Shows examples from each category
+- Tracks progress as you fix issues
+
+### Step 2: Analyze Test Results Data (Alternative Method)
 ```bash
 # Get test results with pass rates
 jq -r '.results | to_entries[] | select(.value.ok_count > 50 and .value.not_ok_count > 15 and .value.not_ok_count < 100) | "\(.value.not_ok_count) failures / \(.value.ok_count) passing (\(.value.ok_count * 100 / .value.total_tests | floor)%) - \(.key)"' out.json | sort -rn | head -20
