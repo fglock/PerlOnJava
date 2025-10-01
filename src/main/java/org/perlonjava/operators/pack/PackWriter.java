@@ -360,22 +360,31 @@ public class PackWriter {
             bytes = str.getBytes(StandardCharsets.UTF_8);
         }
 
-        int length = Math.min(bytes.length, count);
-        output.write(bytes, 0, length);
-
-        // Pad with nulls or spaces
-        byte padByte = (format == 'A') ? (byte) ' ' : (byte) 0;
-        for (int i = length; i < count; i++) {
-            output.write(padByte);
-        }
-
-        // Add null terminator for 'Z' format if not already present
+        // For Z format, null terminator must be within count bytes
         if (format == 'Z') {
-            byte[] currentOutput = output.toByteArray();
-            boolean needsNullTerminator = currentOutput.length <= 0 || currentOutput[currentOutput.length - 1] != 0;
-
-            if (needsNullTerminator) {
+            if (bytes.length > count) {
+                // String is longer than count: truncate to (count-1) bytes + null
+                output.write(bytes, 0, count - 1);
                 output.write(0);
+            } else if (bytes.length == count) {
+                // String fits exactly: write all bytes, no null needed
+                output.write(bytes, 0, count);
+            } else {
+                // String is shorter: write string + null padding to count bytes
+                output.write(bytes, 0, bytes.length);
+                for (int i = bytes.length; i < count; i++) {
+                    output.write(0);
+                }
+            }
+        } else {
+            // For 'a' and 'A' formats
+            int length = Math.min(bytes.length, count);
+            output.write(bytes, 0, length);
+
+            // Pad with nulls or spaces
+            byte padByte = (format == 'A') ? (byte) ' ' : (byte) 0;
+            for (int i = length; i < count; i++) {
+                output.write(padByte);
             }
         }
     }
