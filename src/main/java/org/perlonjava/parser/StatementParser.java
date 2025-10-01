@@ -16,6 +16,7 @@ import java.util.List;
 
 import static org.perlonjava.operators.VersionHelper.normalizeVersion;
 import static org.perlonjava.parser.NumberParser.parseNumber;
+import static org.perlonjava.parser.ParserNodeUtils.atUnderscoreArgs;
 import static org.perlonjava.parser.ParserNodeUtils.scalarUnderscore;
 import static org.perlonjava.parser.SpecialBlockParser.runSpecialBlock;
 import static org.perlonjava.parser.SpecialBlockParser.setCurrentScope;
@@ -270,13 +271,12 @@ public class StatementParser {
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
         }
 
-        // return new TryNode(tryBlock, catchParameter, catchBlock, finallyBlock, parser.tokenIndex);
         return new BinaryOperatorNode("->",
                 new SubroutineNode(null, null, null,
                         new BlockNode(List.of(
                                 new TryNode(tryBlock, catchParameter, catchBlock, finallyBlock, index)), index),
                         false, index),
-                new ListNode(index),
+                atUnderscoreArgs(parser),
                 index);
     }
 

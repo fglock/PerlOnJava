@@ -107,4 +107,24 @@ public class ParserNodeUtils {
         return new OperatorNode("@",
                 new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex);
     }
+
+    /**
+     * Creates a ListNode containing @_ for passing as arguments to subroutine calls.
+     * <p>
+     * This is used when transforming blocks into anonymous subroutines that need to
+     * receive the outer subroutine's @_ parameter. For example:
+     * <ul>
+     *   <li>eval { } blocks are transformed to sub { }->(@_)</li>
+     *   <li>try { } blocks are transformed to sub { }->(@_)</li>
+     *   <li>Large code blocks are refactored to sub { }->(@_)</li>
+     * </ul>
+     *
+     * @param parser The parser instance, used to get the current token index
+     * @return A ListNode containing a single element: the @_ operator
+     */
+    static ListNode atUnderscoreArgs(Parser parser) {
+        ListNode args = new ListNode(parser.tokenIndex);
+        args.elements.add(atUnderscore(parser));
+        return args;
+    }
 }
