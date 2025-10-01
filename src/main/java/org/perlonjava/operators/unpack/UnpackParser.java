@@ -144,9 +144,8 @@ public class UnpackParser {
                     if (bracketContent.contains("*")) {
                         throw new PerlCompilerException("Within []-length '*' not allowed in unpack");
                     }
-                    // For now, just use count = 1 to avoid errors
-                    // TODO: Implement proper pack size calculation for the template
-                    count = 1;
+                    // Calculate the packed size of the template
+                    count = PackParser.calculatePackedSize(bracketContent);
                 }
 
                 i = j; // Position at ']'
