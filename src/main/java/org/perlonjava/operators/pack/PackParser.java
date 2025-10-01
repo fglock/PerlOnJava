@@ -262,4 +262,121 @@ public class PackParser {
      * @param modifierOrder the order in which modifiers appeared in the template
      * @throws PerlCompilerException if incompatible modifiers are found
      */
+
+    /**
+     * Calculates the packed size in bytes for a given template.
+     * This is used for x[template] constructs in unpack to determine how many bytes to skip.
+     * 
+     * @param template the pack template string
+     * @return the number of bytes the template would produce when packed
+     * @throws PerlCompilerException if the template contains invalid formats
+     */
+    public static int calculatePackedSize(String template) {
+        int totalSize = 0;
+        int i = 0;
+        
+        while (i < template.length()) {
+            char format = template.charAt(i);
+            
+            // Skip whitespace and comments
+            if (Character.isWhitespace(format)) {
+                i++;
+                continue;
+            }
+            if (format == '#') {
+                i = skipComment(template, i);
+                i++;
+                continue;
+            }
+            
+            // Check for formats that are not allowed inside x[template]
+            if (format == '@' || format == '.' || format == '/' || format == 'u') {
+                throw new PerlCompilerException("Within []-length '" + format + "' not allowed in unpack");
+            }
+            
+            // Handle parentheses (groups)
+            if (format == '(') {
+                // Find matching closing paren
+                int depth = 1;
+                int j = i + 1;
+                while (j < template.length() && depth > 0) {
+                    if (template.charAt(j) == '(') depth++;
+                    else if (template.charAt(j) == ')') depth--;
+                    j++;
+                }
+                if (depth != 0) {
+                    throw new PerlCompilerException("Unmatched '(' in template");
+                }
+                
+                // Extract group content and parse group info
+                String groupContent = template.substring(i + 1, j - 1);
+                GroupInfo groupInfo = parseGroupInfo(template, j - 1);
+                
+                // Calculate size of group content
+                int groupSize = calculatePackedSize(groupContent);
+                
+                // Multiply by repeat count
+                totalSize += groupSize * groupInfo.repeatCount;
+                
+                i = groupInfo.endPosition;
+                continue;
+            }
+            
+            // Skip closing paren (handled by group processing)
+            if (format == ')') {
+                i++;
+                continue;
+            }
+            
+            // Parse modifiers
+            ParsedModifiers modifiers = parseModifiers(template, i);
+            i = modifiers.endPosition;
+            
+            // Parse count
+            ParsedCount countInfo = parseRepeatCount(template, i);
+            int count = countInfo.count;
+            i = countInfo.endPosition;
+            
+            // '*' should have been validated before calling this method
+            if (countInfo.hasStar) {
+                throw new PerlCompilerException("Within []-length '*' not allowed in unpack");
+            }
+            
+            // Calculate size for this format
+            int formatSize = getFormatSize(format, modifiers.nativeSize);
+            
+            // X is a backward skip, so it subtracts from the total
+            if (format == 'X') {
+                totalSize -= formatSize * count;
+            } else {
+                totalSize += formatSize * count;
+            }
+            
+            i++;
+        }
+        
+        return totalSize;
+    }
+    
+    /**
+     * Returns the size in bytes for a given format character.
+     * 
+     * @param format the format character
+     * @param nativeSize whether the ! modifier is present
+     * @return the size in bytes
+     */
+    private static int getFormatSize(char format, boolean nativeSize) {
+        return switch (format) {
+            case 'c', 'C', 'x', 'a', 'A', 'Z' -> 1;
+            case 's', 'S', 'v', 'n' -> 2;
+            case 'i', 'I', 'V', 'N', 'f', 'F' -> 4;
+            case 'l', 'L' -> nativeSize ? 8 : 4; // Native long is 8 bytes with !
+            case 'q', 'Q', 'j', 'J', 'd', 'D' -> 8;
+            case 'p', 'P' -> 8; // Pointer size (always 8 on modern 64-bit systems)
+            case 'w' -> 1; // BER compressed integer - variable but use 1 as base
+            case 'b', 'B', 'h', 'H' -> 1; // Bit/hex strings - 1 byte per 2 chars (approximation)
+            case 'X' -> 1; // Backward skip
+            default -> 1; // Default to 1 byte for unknown formats
+        };
+    }
 }
