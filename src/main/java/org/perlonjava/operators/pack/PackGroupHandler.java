@@ -37,6 +37,12 @@ public class PackGroupHandler {
     }
 
     /**
+     * Result of processing a group, containing both the template position and updated value index.
+     */
+    public record GroupResult(int position, int valueIndex) {
+    }
+
+    /**
      * Handles a group in the template string, starting from the given position.
      * 
      * <p>Groups are enclosed in parentheses and can have modifiers and repeat counts.
@@ -49,10 +55,10 @@ public class PackGroupHandler {
      * @param output The output stream
      * @param valueIndex The current index in the values list
      * @param packFunction Function to call for recursive packing
-     * @return The position after the group
+     * @return GroupResult containing the position after the group and updated value index
      * @throws PerlCompilerException if parentheses are unmatched or endianness conflicts
      */
-    public static int handleGroup(String template, int openPos, List<RuntimeScalar> values,
+    public static GroupResult handleGroup(String template, int openPos, List<RuntimeScalar> values,
                                    ByteArrayOutputStream output, int valueIndex, PackFunction packFunction) {
         // Find matching closing parenthesis
         int closePos = PackHelper.findMatchingParen(template, openPos);
@@ -137,7 +143,7 @@ public class PackGroupHandler {
             }
         }
 
-        return groupInfo.endPosition - 1; // -1 because loop will increment
+        return new GroupResult(groupInfo.endPosition - 1, valueIndex); // -1 because loop will increment
     }
 
     /**
