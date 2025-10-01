@@ -242,8 +242,9 @@ public class Pack {
 
             // Handle parentheses for grouping
             if (format == '(') {
-                i = PackGroupHandler.handleGroup(template, i, values, output, valueIndex, Pack::pack);
-                valueIndex = PackGroupHandler.getValueIndexAfterGroup(template, i, values, valueIndex);
+                PackGroupHandler.GroupResult result = PackGroupHandler.handleGroup(template, i, values, output, valueIndex, Pack::pack);
+                i = result.position();
+                valueIndex = result.valueIndex();
                 continue;
             }
 
