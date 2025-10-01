@@ -30,10 +30,10 @@ public class Unpack {
         handlers.put('n', new NumericFormatHandler.NetworkShortHandler());
         handlers.put('V', new NumericFormatHandler.VAXLongHandler());
         handlers.put('v', new NumericFormatHandler.VAXShortHandler());
-        handlers.put('q', new NumericFormatHandler.LongHandler(true));   // signed 64-bit quad
-        handlers.put('Q', new NumericFormatHandler.LongHandler(false));  // unsigned 64-bit quad
-        handlers.put('j', new NumericFormatHandler.LongHandler(true));   // signed Perl IV
-        handlers.put('J', new NumericFormatHandler.LongHandler(false));  // unsigned Perl UV
+        handlers.put('q', new NumericFormatHandler.QuadHandler(true));   // signed 64-bit quad
+        handlers.put('Q', new NumericFormatHandler.QuadHandler(false));  // unsigned 64-bit quad
+        handlers.put('j', new NumericFormatHandler.QuadHandler(true));   // signed Perl IV
+        handlers.put('J', new NumericFormatHandler.QuadHandler(false));  // unsigned Perl UV
         handlers.put('f', new NumericFormatHandler.FloatHandler());
         handlers.put('F', new NumericFormatHandler.DoubleHandler());  // F is double-precision like d
         handlers.put('d', new NumericFormatHandler.DoubleHandler());

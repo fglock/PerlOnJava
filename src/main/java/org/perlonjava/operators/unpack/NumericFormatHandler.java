@@ -100,6 +100,59 @@ public abstract class NumericFormatHandler implements FormatHandler {
         }
     }
 
+    /**
+     * Handler for 64-bit long formats (j, J, q, Q).
+     */
+    public static class QuadHandler extends NumericFormatHandler {
+        private final boolean signed;
+
+        public QuadHandler(boolean signed) {
+            this.signed = signed;
+        }
+
+        @Override
+        public void unpack(UnpackState state, List<RuntimeBase> output, int count, boolean isStarCount) {
+            // Save current mode
+            boolean wasCharacterMode = state.isCharacterMode();
+
+            // Switch to byte mode for numeric reading
+            if (wasCharacterMode) {
+                state.switchToByteMode();
+            }
+
+            ByteBuffer buffer = state.getBuffer();
+
+            for (int i = 0; i < count; i++) {
+                if (buffer.remaining() < 8) {
+                    break;
+                }
+                // Read 8 bytes for quad/Perl IV formats
+                long value = buffer.getLong();
+                if (signed) {
+                    output.add(new RuntimeScalar(value));
+                } else {
+                    // For unsigned, handle conversion properly
+                    if (value < 0) {
+                        // Convert to unsigned representation
+                        output.add(new RuntimeScalar(Long.toUnsignedString(value)));
+                    } else {
+                        output.add(new RuntimeScalar(value));
+                    }
+                }
+            }
+
+            // Restore original mode
+            if (wasCharacterMode) {
+                state.switchToCharacterMode();
+            }
+        }
+
+        @Override
+        public int getFormatSize() {
+            return 8; // j, J, q, Q are all 8-byte formats
+        }
+    }
+
     public static class NetworkShortHandler extends NumericFormatHandler {
         @Override
         public void unpack(UnpackState state, List<RuntimeBase> output, int count, boolean isStarCount) {
