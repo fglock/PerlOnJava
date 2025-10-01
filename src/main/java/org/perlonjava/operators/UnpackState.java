@@ -17,6 +17,7 @@ public class UnpackState {
     private int codePointIndex = 0;
     private boolean characterMode;
     private ByteBuffer buffer;
+    private ByteOrder currentByteOrder = ByteOrder.LITTLE_ENDIAN; // Default to little-endian
 
     public UnpackState(String dataString, boolean startsWithU) {
         this.dataString = dataString;
@@ -106,7 +107,7 @@ public class UnpackState {
             characterMode = false;
             // Need to synchronize byte position with consumed code points
             if (buffer == null) {
-                buffer = ByteBuffer.wrap(originalBytes).order(ByteOrder.LITTLE_ENDIAN);
+                buffer = ByteBuffer.wrap(originalBytes).order(currentByteOrder);
             }
             // Calculate byte position based on consumed code points
             int bytePos = 0;
@@ -134,7 +135,7 @@ public class UnpackState {
 
     public ByteBuffer getBuffer() {
         if (buffer == null) {
-            buffer = ByteBuffer.wrap(originalBytes).order(ByteOrder.LITTLE_ENDIAN);
+            buffer = ByteBuffer.wrap(originalBytes).order(currentByteOrder);
         }
         return buffer;
     }
@@ -146,13 +147,11 @@ public class UnpackState {
      * @param bigEndian true for big-endian ('>'), false for little-endian ('<')
      */
     public void setByteOrder(boolean bigEndian) {
-        ByteOrder order = bigEndian ? ByteOrder.BIG_ENDIAN : ByteOrder.LITTLE_ENDIAN;
+        currentByteOrder = bigEndian ? ByteOrder.BIG_ENDIAN : ByteOrder.LITTLE_ENDIAN;
         if (buffer != null) {
             // If buffer exists, update its byte order
-            buffer.order(order);
+            buffer.order(currentByteOrder);
         }
-        // Note: if buffer is null, it will be created with the default LITTLE_ENDIAN
-        // and the caller should call setByteOrder again after getBuffer()
     }
 
     public boolean hasMoreCodePoints() {
@@ -193,7 +192,7 @@ public class UnpackState {
             if (originalBytes != null && originalBytes.length > 0) {
                 int bytePos = Math.min(newPosition, originalBytes.length);
                 buffer = ByteBuffer.wrap(originalBytes, bytePos, originalBytes.length - bytePos);
-                buffer.order(ByteOrder.LITTLE_ENDIAN);
+                buffer.order(currentByteOrder);
                 // DEBUG: Reset buffer to position " + bytePos
             }
         }
