@@ -1,5 +1,25 @@
 # Fix op/pack.t Test Failures
 
+## ✅ RESOLVED: @_ Empty in eval Blocks Bug
+
+**Status:** Fixed in commit e4f8f3d3
+
+The root cause of Pattern 1 failures (~40 "no error" tests) has been identified and fixed. The issue was that `@_` becomes empty inside eval blocks in subroutine contexts because eval { }, try/catch, and large block refactoring transformed to anonymous subroutines but passed empty `ListNode()` instead of `@_`.
+
+**Files Modified:**
+- `ParserNodeUtils.java` - Added `atUnderscoreArgs()` helper
+- `OperatorParser.java` - eval { } now passes @_
+- `StatementParser.java` - try/catch now passes @_
+- `EmitBlock.java` - large block refactoring now passes @_
+
+**Verification:**
+All minimal test cases pass:
+- `test_eval_at_underscore.pl` - All 8 operators PASS
+- `test_eval_context.pl` - All 5 contexts PASS  
+- `test_pack_at_underscore_bug.pl` - Checksum returns 15 (not 0) 
+
+---
+
 ## Objective
 Analyze and fix failures in t/op/pack.t to improve the 61% pass rate (8937 passing / 5787 failing out of 14724 total tests).
 
@@ -12,7 +32,51 @@ Analyze and fix failures in t/op/pack.t to improve the 61% pass rate (8937 passi
 
 ## Problem Analysis
 
-### Failure Pattern Summary
+### **ROOT CAUSE CONFIRMED: @_ Empty in eval Blocks (General Bug)**
+
+**Status:** **REPRODUCED AND ISOLATED**
+
+Through systematic minimal test case development, we confirmed this is a **general bytecode generation bug**, not specific to pack/unpack:
+
+**The Bug Pattern:**
+```perl
+sub any_function {
+    my $result = eval { ANY_OPERATOR(@_) };  # @_ becomes empty in PerlOnJava!
+    return $result;
+}
+```
+
+**Reproduction (Ultra-Minimal One-Liner):**
+```bash
+# Perl (correct):
+perl -e 'sub f { eval { scalar @_ } } print f(1,2,3), "\n"'   # Output: 3
+
+# PerlOnJava (bug):
+./jperl -e 'sub f { eval { scalar @_ } } print f(1,2,3), "\n"'  # Output: 0
+```
+
+**Confirmed Affects ALL Operators:**
+- join, reverse, scalar, sum, pack/unpack, grep, map, array access ($_[0])
+- All return empty results when @_ is used inside eval in subroutine context
+
+**Impact on pack.t:**
+- Pattern 1 (~40 "no error" failures) is caused by this bug
+- Tests at line 546 use: `eval { unpack "%$format*", pack "$format*", @_ }`
+- @_ becomes empty → operations return 0/empty → tests fail
+
+**Test Evidence:**
+- `test_eval_at_underscore.pl` - Confirms all operators fail
+- `test_eval_context.pl` - Isolated eval + subroutine + @_ combination
+- `test_checksum_bisect.pl` - Binary search showing eval is the trigger
+
+**Next Steps:**
+1. Analyze bytecode with --disassemble to find code generation issue
+2. Investigate how @_ is captured/scoped in eval blocks
+3. Fix likely in EmitOperator.java or eval bytecode generation
+
+---
+
+### Original Failure Pattern Summary (Now Understood)
 
 Based on error analysis from test output, failures fall into three main categories:
 
@@ -264,18 +328,18 @@ From memory `fb4a63fd-c753-4032-97e8-6c660c3e5b45`:
 ## Success Criteria
 
 ### Phase 1 Success
-- ✅ "no error" tests pass (target: +40 tests)
-- ✅ NoSuchElementException fixed (target: +2 tests)
-- ✅ Understand unsupported format characters
+- "no error" tests pass (target: +40 tests)
+- NoSuchElementException fixed (target: +2 tests)
+- Understand unsupported format characters
 
 ### Phase 2 Success
-- ✅ Unsupported format characters resolved (target: +10-15 tests)
-- ✅ Pass rate improves to 65%+ (9500+ passing tests)
+- Unsupported format characters resolved (target: +10-15 tests)
+- Pass rate improves to 65%+ (9500+ passing tests)
 
 ### Ultimate Goal
-- ✅ Pass rate improves to 75%+ (11000+ passing tests)
-- ✅ All systematic errors identified and documented
-- ✅ Clear path forward for remaining failures
+- Pass rate improves to 75%+ (11000+ passing tests)
+- All systematic errors identified and documented
+- Clear path forward for remaining failures
 
 ## Testing Strategy
 
