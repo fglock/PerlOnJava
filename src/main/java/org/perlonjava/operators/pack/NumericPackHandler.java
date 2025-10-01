@@ -101,9 +101,6 @@ public class NumericPackHandler implements PackFormatHandler {
                         }
                     }
                     break;
-                case 'J':
-                    PackWriter.writeLong(output, (long) value.getDouble());
-                    break;
                 case 'i':
                 case 'I':
                     // Native integer (32-bit) - use endianness if specified
@@ -197,18 +194,36 @@ public class NumericPackHandler implements PackFormatHandler {
                     }
                     break;
                 case 'j':
-                    // Perl internal signed integer - treat as long
-                    PackWriter.writeLong(output, (long) value.getDouble());
+                    // Perl internal signed integer (8 bytes) - use endianness if specified
+                    if (modifiers.bigEndian) {
+                        PackWriter.writeLongBigEndian(output, (long) value.getDouble());
+                    } else {
+                        PackWriter.writeLongLittleEndian(output, (long) value.getDouble());
+                    }
+                    break;
+                case 'J':
+                    // Perl internal unsigned integer (8 bytes) - use endianness if specified
+                    if (modifiers.bigEndian) {
+                        PackWriter.writeLongBigEndian(output, (long) value.getDouble());
+                    } else {
+                        PackWriter.writeLongLittleEndian(output, (long) value.getDouble());
+                    }
                     break;
                 case 'q':
-                    // Signed 64-bit quad
-                    // DEBUG: Processing q (signed quad) format
-                    PackWriter.writeLong(output, (long) value.getDouble());
+                    // Signed 64-bit quad - use endianness if specified
+                    if (modifiers.bigEndian) {
+                        PackWriter.writeLongBigEndian(output, (long) value.getDouble());
+                    } else {
+                        PackWriter.writeLongLittleEndian(output, (long) value.getDouble());
+                    }
                     break;
                 case 'Q':
-                    // Unsigned 64-bit quad
-                    // DEBUG: Processing Q (unsigned quad) format
-                    PackWriter.writeLong(output, (long) value.getDouble());
+                    // Unsigned 64-bit quad - use endianness if specified
+                    if (modifiers.bigEndian) {
+                        PackWriter.writeLongBigEndian(output, (long) value.getDouble());
+                    } else {
+                        PackWriter.writeLongLittleEndian(output, (long) value.getDouble());
+                    }
                     break;
                 case 'f':
                     // Float (4 bytes) - use endianness if specified
