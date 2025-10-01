@@ -18,6 +18,18 @@ All minimal test cases pass:
 - `test_eval_context.pl` - All 5 contexts PASS  
 - `test_pack_at_underscore_bug.pl` - Checksum returns 15 (not 0) 
 
+**Current Test Status:**
+- **IMPORTANT:** pack.t requires `JPERL_LARGECODE=refactor` environment variable to run (otherwise hits "Method too large" error at line 1428)
+- With flag: Test runs but appears incomplete (stops at ~3726 tests out of 14724 total)
+- Without flag: Crashes immediately with "Method too large" error
+- Baseline comparison not yet available due to incomplete test run
+- Need to investigate why test stops early (may be hitting another error or timeout)
+
+**Next Steps:**
+- Investigate why pack.t stops at test 4422 (3726 ok + 696 not ok)
+- Compare results with baseline once test completes fully
+- Pattern 2 (unsupported format characters) and Pattern 3 (NoSuchElementException) remain to be addressed
+
 ---
 
 ## Objective
