@@ -1,8 +1,12 @@
 # Fix op/pack.t Test Failures
 
-## ✅ RESOLVED: @_ Empty in eval Blocks Bug
+## 🎉 Session Progress Summary
 
-**Status:** Fixed in commit e4f8f3d3
+### ✅ Fix #1: @_ Empty in eval Blocks Bug (+306 tests)
+
+**Status:** Fixed in commits e4f8f3d3, 040fd2cf
+
+**Impact:** 8,937 → 9,243 passing tests (+306 tests, +3.4%)
 
 The root cause of Pattern 1 failures (~40 "no error" tests) has been identified and fixed. The issue was that `@_` becomes empty inside eval blocks in subroutine contexts because eval { }, try/catch, and large block refactoring transformed to anonymous subroutines but passed empty `ListNode()` instead of `@_`.
 
@@ -13,22 +17,87 @@ The root cause of Pattern 1 failures (~40 "no error" tests) has been identified 
 - `EmitBlock.java` - large block refactoring now passes @_
 
 **Verification:**
-All minimal test cases pass:
 - `test_eval_at_underscore.pl` - All 8 operators PASS
 - `test_eval_context.pl` - All 5 contexts PASS  
-- `test_pack_at_underscore_bug.pl` - Checksum returns 15 (not 0) 
+- `test_pack_at_underscore_bug.pl` - Checksum returns 15 (not 0) ✅
 
-**Current Test Status:**
-- **IMPORTANT:** pack.t requires `JPERL_LARGECODE=refactor` environment variable to run (otherwise hits "Method too large" error at line 1428)
-- With flag: Test runs but appears incomplete (stops at ~3726 tests out of 14724 total)
-- Without flag: Crashes immediately with "Method too large" error
-- Baseline comparison not yet available due to incomplete test run
-- Need to investigate why test stops early (may be hitting another error or timeout)
+---
 
-**Next Steps:**
-- Investigate why pack.t stops at test 4422 (3726 ok + 696 not ok)
-- Compare results with baseline once test completes fully
-- Pattern 2 (unsupported format characters) and Pattern 3 (NoSuchElementException) remain to be addressed
+### ✅ Fix #2: Z Format Null Termination Bug (+7 tests)
+
+**Status:** Fixed in commits 07706edb, e6955452
+
+**Impact:** 9,243 → 9,250 passing tests (+7 tests)
+
+Fixed bug where Z format was adding null terminator outside of count bytes instead of within the count.
+
+**Root Cause:** `PackWriter.writeString()` was always adding a null byte after writing count bytes, making output count+1 bytes instead of count bytes.
+
+**Correct Z format behavior:**
+- If `string.length > count`: truncate to (count-1) bytes + null = count bytes total
+- If `string.length == count`: write all bytes, no null = count bytes total
+- If `string.length < count`: write string + null padding = count bytes total
+- If `count == 0`: write nothing (Z0 edge case)
+
+**Files Modified:**
+- `PackWriter.java` - Fixed `writeString()` method for Z format
+
+**Verification:**
+- `test_z_format_bug.pl` - All 4 test cases PASS ✅
+
+---
+
+### 🔍 Fix #3: ByteBuffer Endianness Bug (IN PROGRESS)
+
+**Status:** Root cause identified, fix in progress
+
+**Expected Impact:** ~200-500+ tests (affects all checksum calculations and endian-specific unpacking)
+
+**Root Cause Discovered:** `UnpackState.java` hardcodes ByteBuffer to `ByteOrder.LITTLE_ENDIAN` (lines 109, 137, 180), causing all big-endian unpacking (`s>`, `i>`, `l>`, etc.) to read bytes in wrong order.
+
+**Evidence:**
+```perl
+# Perl (correct):
+pack('s>*', -32768, -1, 0, 1, 32767) → unpack → -32768, -1, 0, 1, 32767
+
+# PerlOnJava (broken):
+pack('s>*', -32768, -1, 0, 1, 32767) → unpack → 128, -1, 0, 256, -129
+```
+
+**Impact Chain:**
+1. Big-endian unpacking returns wrong values
+2. Checksum calculations use wrong values
+3. All checksum bit width tests fail (Pattern from analysis: ~200-300 tests)
+4. Many other endian-specific tests fail
+
+**Files to Modify:**
+- `UnpackState.java` - Add method to set byte order dynamically
+- `Unpack.java` - Set byte order based on endianness modifiers (`<` or `>`)
+
+**Verification Tests:**
+- `test_s_bigendian_bug.pl` - Currently 3/5 FAIL, should be 5/5 PASS
+- `test_checksum_bitwidth.pl` - Checksums will be correct once unpacking is fixed
+
+---
+
+### 📊 Current Status
+
+**Baseline:** 8,937 passing (from original assessment)  
+**Current:** 9,250 passing  
+**Total Improvement:** +313 tests (+3.5%)  
+**Remaining:** 5,474 failing tests
+
+**Test Environment:**
+- Requires: `JPERL_UNIMPLEMENTED=warn JPERL_LARGECODE=refactor`
+- All 14,724 tests now run to completion (no crashes)
+
+---
+
+### 🎯 Next High-Impact Fixes
+
+1. **ByteBuffer Endianness** (IN PROGRESS) - Expected +200-500 tests
+2. **W Format Checksums** - Expected +15-20 tests  
+3. **UTF-8 Upgrade/Downgrade** - Expected +100-200 tests (complex, save for later)
 
 ---
 
