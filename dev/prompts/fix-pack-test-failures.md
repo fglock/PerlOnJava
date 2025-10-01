@@ -98,9 +98,9 @@ case 'I':
 ### 📊 Current Status
 
 **Baseline:** 8,937 passing (from original assessment)  
-**Current:** 9,438 passing (64% pass rate)  
-**Total Improvement:** +501 tests (+5.6%)  
-**Remaining:** 5,286 failing tests
+**Current:** 9,490 passing (64.4% pass rate)  
+**Total Improvement:** +553 tests (+6.2%)  
+**Remaining:** 5,234 failing tests
 
 **Test Environment:**
 - Requires: `JPERL_UNIMPLEMENTED=warn JPERL_LARGECODE=refactor`
@@ -109,6 +109,7 @@ case 'I':
 **Recent Session Fixes:**
 - tr/// empty replacement bug: +12 tests
 - Big-endian integer pack/unpack: +200-500 tests (estimated, affects checksums)
+- Big-endian float/double pack/unpack: +52 tests
 
 ---
 
