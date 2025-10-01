@@ -211,19 +211,37 @@ public class NumericPackHandler implements PackFormatHandler {
                     PackWriter.writeLong(output, (long) value.getDouble());
                     break;
                 case 'f':
-                    PackWriter.writeFloat(output, (float) value.getDouble());
+                    // Float (4 bytes) - use endianness if specified
+                    if (modifiers.bigEndian) {
+                        PackWriter.writeFloatBigEndian(output, (float) value.getDouble());
+                    } else {
+                        PackWriter.writeFloatLittleEndian(output, (float) value.getDouble());
+                    }
                     break;
                 case 'F':
-                    // F is double-precision float in native format (8 bytes)
-                    PackWriter.writeDouble(output, value.getDouble());
+                    // F is double-precision float in native format (8 bytes) - use endianness if specified
+                    if (modifiers.bigEndian) {
+                        PackWriter.writeDoubleBigEndian(output, value.getDouble());
+                    } else {
+                        PackWriter.writeDoubleLittleEndian(output, value.getDouble());
+                    }
                     break;
                 case 'd':
-                    PackWriter.writeDouble(output, value.getDouble());
+                    // Double (8 bytes) - use endianness if specified
+                    if (modifiers.bigEndian) {
+                        PackWriter.writeDoubleBigEndian(output, value.getDouble());
+                    } else {
+                        PackWriter.writeDoubleLittleEndian(output, value.getDouble());
+                    }
                     break;
                 case 'D':
                     // Long double - treat as regular double in Java since we don't have long double
-                    // DEBUG: Processing D (long double) format as regular double
-                    PackWriter.writeDouble(output, value.getDouble());
+                    // Use endianness if specified
+                    if (modifiers.bigEndian) {
+                        PackWriter.writeDoubleBigEndian(output, value.getDouble());
+                    } else {
+                        PackWriter.writeDoubleLittleEndian(output, value.getDouble());
+                    }
                     break;
                 default:
                     throw new PerlCompilerException("pack: unsupported format character: " + format);

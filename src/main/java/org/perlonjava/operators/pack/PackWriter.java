@@ -341,6 +341,64 @@ public class PackWriter {
     }
 
     /**
+     * Writes a float to the output stream in big-endian order.
+     *
+     * @param output The ByteArrayOutputStream to write to.
+     * @param value  The float value to write.
+     */
+    public static void writeFloatBigEndian(ByteArrayOutputStream output, float value) {
+        int intBits = Float.floatToIntBits(value);
+        writeIntBigEndian(output, (long) intBits);
+    }
+
+    /**
+     * Writes a float to the output stream in little-endian order.
+     *
+     * @param output The ByteArrayOutputStream to write to.
+     * @param value  The float value to write.
+     */
+    public static void writeFloatLittleEndian(ByteArrayOutputStream output, float value) {
+        int intBits = Float.floatToIntBits(value);
+        writeIntLittleEndian(output, (long) intBits);
+    }
+
+    /**
+     * Writes a double to the output stream in big-endian order.
+     *
+     * @param output The ByteArrayOutputStream to write to.
+     * @param value  The double value to write.
+     */
+    public static void writeDoubleBigEndian(ByteArrayOutputStream output, double value) {
+        long longBits = Double.doubleToLongBits(value);
+        output.write((int) ((longBits >> 56) & 0xFF));
+        output.write((int) ((longBits >> 48) & 0xFF));
+        output.write((int) ((longBits >> 40) & 0xFF));
+        output.write((int) ((longBits >> 32) & 0xFF));
+        output.write((int) ((longBits >> 24) & 0xFF));
+        output.write((int) ((longBits >> 16) & 0xFF));
+        output.write((int) ((longBits >> 8) & 0xFF));
+        output.write((int) (longBits & 0xFF));
+    }
+
+    /**
+     * Writes a double to the output stream in little-endian order.
+     *
+     * @param output The ByteArrayOutputStream to write to.
+     * @param value  The double value to write.
+     */
+    public static void writeDoubleLittleEndian(ByteArrayOutputStream output, double value) {
+        long longBits = Double.doubleToLongBits(value);
+        output.write((int) (longBits & 0xFF));
+        output.write((int) ((longBits >> 8) & 0xFF));
+        output.write((int) ((longBits >> 16) & 0xFF));
+        output.write((int) ((longBits >> 24) & 0xFF));
+        output.write((int) ((longBits >> 32) & 0xFF));
+        output.write((int) ((longBits >> 40) & 0xFF));
+        output.write((int) ((longBits >> 48) & 0xFF));
+        output.write((int) ((longBits >> 56) & 0xFF));
+    }
+
+    /**
      * Writes a string to the output stream based on the specified format and count.
      *
      * @param output   The ByteArrayOutputStream to write to.
