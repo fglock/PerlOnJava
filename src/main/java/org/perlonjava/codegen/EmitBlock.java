@@ -30,8 +30,10 @@ public class EmitBlock {
                 && !node.getBooleanAnnotation("blockIsSubroutine")
                 && GlobalVariable.getGlobalHash("main::ENV").get("JPERL_LARGECODE").toString().equals("refactor")
         ) {
-            // Create sub {...}->()
+            // Create sub {...}->(@_)
             int index = node.tokenIndex;
+            ListNode args = new ListNode(index);
+            args.elements.add(new OperatorNode("@", new IdentifierNode("_", index), index));
             BinaryOperatorNode subr = new BinaryOperatorNode(
                     "->",
                     new SubroutineNode(
@@ -40,7 +42,7 @@ public class EmitBlock {
                             false,
                             index
                     ),
-                    new ListNode(index),
+                    args,
                     index
             );
             subr.accept(emitterVisitor);
