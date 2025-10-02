@@ -229,8 +229,8 @@ public class BytecodeSizeEstimator implements Visitor {
     
     @Override
     public void visit(SubroutineNode node) {
-        // Mirror EmitSubroutine.emitSubroutine() patterns
-        if (node.block != null) node.block.accept(this);
+        // Subroutine body is not part of the current block
+        // if (node.block != null) node.block.accept(this);
         estimatedSize += OBJECT_CREATION + METHOD_CALL_OVERHEAD; // Subroutine creation
     }
     
