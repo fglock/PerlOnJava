@@ -3,6 +3,7 @@ package org.perlonjava.codegen;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.perlonjava.astnode.*;
+import org.perlonjava.astvisitor.ControlFlowDetectorVisitor;
 import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.runtime.GlobalVariable;
 import org.perlonjava.runtime.RuntimeContextType;
@@ -13,6 +14,9 @@ public class EmitBlock {
     // Blocks with too many statements are emitted as a separate subroutine
     // in order to avoid "Method too large" error test: in t/re/pat.t
     final static int LARGE_BLOCK = 16;
+    
+    // Reusable visitor for control flow detection
+    private static final ControlFlowDetectorVisitor controlFlowDetector = new ControlFlowDetectorVisitor();
 
     /**
      * Emits bytecode for a block of statements.
@@ -27,13 +31,10 @@ public class EmitBlock {
         // Check for control flow that would break if refactored
         boolean hasUnsafeControlFlow = false;
         if (node.elements.size() > LARGE_BLOCK && !node.getBooleanAnnotation("blockIsSubroutine")) {
-            // Convert block to string and check for control flow keywords
-            String blockString = node.toString();
-            // Check for next, last, redo, goto that might jump outside the block
-            if (blockString.contains(" next ") || blockString.contains(" last ") || 
-                blockString.contains(" redo ") || blockString.contains(" goto ")) {
-                hasUnsafeControlFlow = true;
-            }
+            // Use visitor pattern to check for unsafe control flow
+            controlFlowDetector.reset();
+            node.accept(controlFlowDetector);
+            hasUnsafeControlFlow = controlFlowDetector.hasUnsafeControlFlow();
         }
         
         if (node.elements.size() > LARGE_BLOCK
