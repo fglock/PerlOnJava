@@ -114,6 +114,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
                     // Warn for unimplemented features and Java regex compilation errors
                     String errorMessage = (e instanceof PerlJavaUnimplementedException) ? e.getMessage() : "Regex compilation failed: " + e.getMessage();
+                    // Ensure error message ends with newline to prevent running into test output
+                    if (!errorMessage.endsWith("\n")) {
+                        errorMessage += "\n";
+                    }
                     WarnDie.warn(new RuntimeScalar(errorMessage), new RuntimeScalar());
                     regex.pattern = Pattern.compile(Character.toString(0) + "ERROR" + Character.toString(0), Pattern.DOTALL);
                 } else {
