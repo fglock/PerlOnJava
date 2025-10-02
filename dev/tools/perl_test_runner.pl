@@ -44,7 +44,7 @@ unless (-x $jperl_path) {
 # Global state
 my %results;
 my %summary = (
-    pass => 0, fail => 0, error => 0, timeout => 0,
+    pass => 0, fail => 0, error => 0, timeout => 0, incomplete => 0,
     total_ok => 0, total_not_ok => 0, total_tests => 0,
     total_skipped => 0, total_todo => 0
 );
@@ -212,7 +212,7 @@ sub process_test_result {
 
     # Print result
     my %status_chars = (
-        pass => '✓', fail => '✗', error => '!', timeout => 'T'
+        pass => '✓', fail => '✗', error => '!', timeout => 'T', incomplete => 'I'
     );
     my $char = $status_chars{$result->{status}} || '?';
 
@@ -297,6 +297,7 @@ sub run_single_test {
         return {
             status => 'timeout',
             ok_count => 0, not_ok_count => 0, total_tests => 0,
+            planned_tests => 0, actual_tests_run => 0, incomplete_tests => 0,
             skip_count => 0, todo_count => 0,
             errors => ['Test timed out'], missing_features => []
         };
@@ -352,6 +353,8 @@ sub parse_tap_output {
     my ($ok_count, $not_ok_count, $total_tests) = (0, 0, 0);
     my ($skip_count, $todo_count) = (0, 0);
     my (@errors, @missing_features);
+    my $planned_tests = 0;  # From 1..N line
+    my $actual_tests_run = 0;  # Actual ok + not ok count
 
     # Parse TAP output
     for my $line (@lines) {
@@ -360,6 +363,7 @@ sub parse_tap_output {
 
         # Test plan
         if ($line =~ /^1\.\.(\d+)/) {
+            $planned_tests = $1;
             $total_tests = $1;
             next;
         }
@@ -367,6 +371,7 @@ sub parse_tap_output {
         # Test results
         if ($line =~ /^ok\s+\d+/) {
             $ok_count++;
+            $actual_tests_run++;
             $skip_count++ if $line =~ /#\s*skip/i;
             $todo_count++ if $line =~ /#\s*todo/i;
             next;
@@ -374,7 +379,14 @@ sub parse_tap_output {
 
         if ($line =~ /^not ok\s+\d+/) {
             $not_ok_count++;
+            $actual_tests_run++;
             next;
+        }
+
+        # Detect "Looks like you planned N tests but ran M" message
+        if ($line =~ /looks like you planned (\d+) tests but ran (\d+)/i) {
+            $planned_tests = $1 unless $planned_tests;
+            $actual_tests_run = $2 unless $actual_tests_run;
         }
 
         # Look for errors and missing features
@@ -394,12 +406,29 @@ sub parse_tap_output {
         }
     }
 
+    # Calculate actual tests run if not already set
+    $actual_tests_run = $ok_count + $not_ok_count unless $actual_tests_run;
+
+    # Calculate incomplete tests (tests that were blocked/never ran)
+    my $incomplete_tests = 0;
+    if ($planned_tests > 0 && $actual_tests_run < $planned_tests) {
+        $incomplete_tests = $planned_tests - $actual_tests_run;
+    }
+
     # If no test plan found, use count
     $total_tests = $ok_count + $not_ok_count if $total_tests == 0;
 
+    # Add incomplete tests to not_ok_count for visibility in pass rate
+    # These are tests that were planned but never ran due to crashes
+    $not_ok_count += $incomplete_tests;
+    $total_tests = $planned_tests if $planned_tests > $total_tests;
+
     # Determine status
     my $status;
-    if ($ok_count == 0 && $not_ok_count == 0) {
+    if ($incomplete_tests > 0) {
+        # Incomplete run is a special high-priority case
+        $status = 'incomplete';
+    } elsif ($ok_count == 0 && $not_ok_count == 0) {
         $status = $exit_code == 0 ? 'pass' : 'error';
     } elsif ($not_ok_count == 0 && $ok_count > 0) {
         $status = 'pass';
@@ -418,6 +447,9 @@ sub parse_tap_output {
         ok_count => $ok_count,
         not_ok_count => $not_ok_count,
         total_tests => $total_tests,
+        planned_tests => $planned_tests,
+        actual_tests_run => $actual_tests_run,
+        incomplete_tests => $incomplete_tests,
         skip_count => $skip_count,
         todo_count => $todo_count,
         errors => \@errors,
@@ -428,11 +460,12 @@ sub parse_tap_output {
 
 sub print_summary {
     print "\nTEST SUMMARY:\n";
-    printf "  Total files: %d\n", $summary{pass} + $summary{fail} + $summary{error} + $summary{timeout};
+    printf "  Total files: %d\n", $summary{pass} + $summary{fail} + $summary{error} + $summary{timeout} + $summary{incomplete};
     printf "  Passed:      %d\n", $summary{pass};
     printf "  Failed:      %d\n", $summary{fail};
     printf "  Errors:      %d\n", $summary{error};
     printf "  Timeouts:    %d\n", $summary{timeout};
+    printf "  Incomplete:  %d\n", $summary{incomplete};
     print "\n";
     printf "  Total tests: %d\n", $summary{total_tests};
     printf "  OK:          %d\n", $summary{total_ok};
@@ -443,6 +476,63 @@ sub print_summary {
     if ($summary{total_tests} > 0) {
         my $pass_rate = ($summary{total_ok} / $summary{total_tests}) * 100;
         printf "  Pass rate:   %.1f%%\n", $pass_rate;
+    }
+    
+    # Show incomplete test opportunities
+    print_incomplete_opportunities();
+}
+
+sub print_incomplete_opportunities {
+    # Find all incomplete tests and sort by blocked test count
+    my @incomplete_tests;
+    for my $file (keys %results) {
+        my $result = $results{$file};
+        if ($result->{status} eq 'incomplete' && $result->{incomplete_tests} > 0) {
+            push @incomplete_tests, {
+                file => $file,
+                incomplete => $result->{incomplete_tests},
+                planned => $result->{planned_tests},
+                actual => $result->{actual_tests_run},
+                errors => $result->{errors},
+            };
+        }
+    }
+    
+    return unless @incomplete_tests;
+    
+    # Sort by blocked test count (descending)
+    @incomplete_tests = sort { $b->{incomplete} <=> $a->{incomplete} } @incomplete_tests;
+    
+    print "\n🎯 HIGH-PRIORITY OPPORTUNITIES (Incomplete Test Runs):\n";
+    print "(Tests that crashed/failed before completion - fixing these unlocks many tests at once)\n\n";
+    
+    my $total_blocked = 0;
+    for my $test (@incomplete_tests) {
+        $total_blocked += $test->{incomplete};
+    }
+    
+    printf "  Total incomplete tests: %d files, %d blocked tests\n\n", scalar(@incomplete_tests), $total_blocked;
+    
+    # Show top 10 or all if fewer
+    my $show_count = @incomplete_tests > 10 ? 10 : scalar(@incomplete_tests);
+    print "  Top $show_count incomplete test files (by blocked test count):\n\n";
+    
+    for my $i (0 .. $show_count - 1) {
+        my $test = $incomplete_tests[$i];
+        printf "  %2d. %-40s  Blocked: %4d tests (%d/%d ran)\n",
+               $i + 1,
+               $test->{file},
+               $test->{incomplete},
+               $test->{actual},
+               $test->{planned};
+        
+        # Show first error if available
+        if ($test->{errors} && @{$test->{errors}} > 0) {
+            my $error = $test->{errors}[0];
+            # Truncate long errors
+            $error = substr($error, 0, 80) . "..." if length($error) > 80;
+            print "      Error: $error\n";
+        }
     }
 }
 
