@@ -65,6 +65,36 @@ Time Spent | Root Cause Found | Fix Complexity | Action
 > 90 min   | Any              | Any            | STOP - Create prompt
 ```
 
+**Flexibility Rule: Upgrading Problem Complexity**
+
+If you're working on an **Easy** or **Medium** problem and discover:
+- The fix would have high impact (many tests fixed)
+- You're close to a solution but need more time
+- The learning value is significant
+
+**You can upgrade the complexity classification:**
+```
+Easy (15-30 min) → Medium (30-60 min)
+Medium (30-60 min) → Hard (60-90 min)
+```
+
+**When to upgrade:**
+- At the checkpoint, you understand the problem well
+- The fix affects more tests than initially estimated
+- You've found the root cause but implementation is complex
+- The issue reveals a systematic problem worth fixing
+
+**Example:**
+```
+Started: Easy problem (15 min budget)
+At 15 min: Found it affects 20 tests, not just 1
+Decision: Upgrade to Medium, continue for 30 more minutes
+At 45 min: Have working fix, just needs testing
+Decision: Complete the fix (worth the time investment)
+```
+
+This flexibility prevents abandoning valuable fixes due to rigid time limits while still maintaining discipline.
+
 ## Quick Start: Finding High-Yield Targets
 
 ### Step 1: Use Automated Analysis Tools
@@ -781,6 +811,36 @@ Minimal reproductions and how to test the fix.
 
 ### Temporary Debug Tests
 For quick debugging (files in project root), simple scripts without Test::More are fine. These should be cleaned up after use.
+
+### Technique 20: Preserving Test Files Between Sessions
+**IMPORTANT:** If you need to preserve test files for continuation in another session:
+
+```bash
+# Save important test files to dev/sandbox
+mv test_*.pl dev/sandbox/
+cp important_test.pl dev/sandbox/issue_name_test.pl
+
+# Document in the continuation prompt
+echo "Test files saved in dev/sandbox/:
+- issue_name_test.pl - reproduces the bug
+- debug_output.txt - contains diagnostic output" >> dev/prompts/fix-issue.md
+```
+
+**Best Practice:**
+1. Use `dev/sandbox/` directory for files that need to persist
+2. Name files descriptively: `issue_readonly_undef_test.pl`
+3. **Add to continuation prompt:** "Clean up dev/sandbox/issue_* files after fix"
+4. Don't commit sandbox files unless they become permanent tests
+
+**Example in continuation prompt:**
+```markdown
+## Cleanup Checklist
+- [ ] Remove dev/sandbox/readonly_undef_*.pl test files
+- [ ] Move useful tests to src/test/resources/ if needed
+- [ ] Clear any debug output files in dev/sandbox/
+```
+
+This prevents accumulation of temporary files while preserving important debugging context.
 
 ## Common PerlOnJava Patterns
 
