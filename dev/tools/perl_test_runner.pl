@@ -251,8 +251,6 @@ sub run_single_test {
           re/pat.t
         | op/repeat.t }x
         ? "-Xss256m" : "";
-    local $ENV{JPERL_LARGECODE} = $test_file =~ m{ re/pat.t | re/pat_advanced.t | op/signatures.t | t/op/pack.t }x
-        ? "refactor" : "";
 
     # Skip memory-intensive tests (e.g., Long Monsters in re/pat.t with 300KB strings)
     # These tests can crash the JVM with StackOverflowError during regex backtracking

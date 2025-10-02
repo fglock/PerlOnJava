@@ -7,7 +7,7 @@
 **Total tests:** 14,724
 
 **Test Environment:**
-- Requires: `JPERL_UNIMPLEMENTED=warn JPERL_LARGECODE=refactor`
+- Requires: `JPERL_UNIMPLEMENTED=warn`
 - All 14,724 tests run to completion (no crashes)
 
 ---
