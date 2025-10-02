@@ -56,7 +56,7 @@ PerlOnJava implements most core Perl features with some key differences:
 - ✅  **Perl-like runtime error messages**: Runtime errors are formatted similarly to Perl's.
 - ✅  **Comments**: Support for comments and POD (documentation) in code is implemented.
 - ✅  **Environment**: Support for `PERL5LIB`, `PERL5OPT` environment variables.
-- ❌  **Perl-like warnings**: Internal support for most warnings is missing. Warnings need to be formatted to resemble Perl's output.
+- 🚧  **Perl-like warnings**: Warnings is work in progress. Some warnings need to be formatted to resemble Perl's output.
 - ❌  **Perl debugger**: The built-in Perl debugger (`perl -d`) is not implemented..
 
 
