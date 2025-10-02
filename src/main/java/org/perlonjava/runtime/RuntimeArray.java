@@ -451,8 +451,35 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     public RuntimeArray setFromList(RuntimeList list) {
         return switch (type) {
             case PLAIN_ARRAY -> {
-                this.elements.clear();
-                list.addToArray(this);
+                // Check if the list contains references to this array's elements
+                // If so, we need to save the values before clearing
+                boolean needsCopy = false;
+                for (RuntimeBase elem : list.elements) {
+                    if (elem instanceof RuntimeArray && elem == this) {
+                        needsCopy = true;
+                        break;
+                    }
+                }
+                
+                if (needsCopy) {
+                    // Make a defensive copy of the list before clearing
+                    RuntimeList listCopy = new RuntimeList();
+                    for (RuntimeBase elem : list.elements) {
+                        if (elem instanceof RuntimeArray && elem == this) {
+                            // Copy this array's current contents
+                            for (RuntimeScalar s : this.elements) {
+                                listCopy.elements.add(s);
+                            }
+                        } else {
+                            listCopy.elements.add(elem);
+                        }
+                    }
+                    this.elements.clear();
+                    listCopy.addToArray(this);
+                } else {
+                    this.elements.clear();
+                    list.addToArray(this);
+                }
                 yield this;
             }
             case AUTOVIVIFY_ARRAY -> {

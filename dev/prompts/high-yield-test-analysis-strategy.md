@@ -370,6 +370,34 @@ grep -r "methodName\(" src/main/java/
 grep -B 5 -A 10 "pattern" file.java
 ```
 
+### Technique 7: Killing Hanging Test Processes
+**Pattern:** When a test hangs (infinite loop or deadlock), find and kill the process
+
+```bash
+# Find hanging jperl processes
+ps aux | grep "jperl test_name"
+
+# Find Java processes running tests (more reliable)
+ps aux | grep -E "java.*test_name|PerlOnJava.*test"
+
+# Kill the process (use PID from ps output)
+kill -9 <PID>
+
+# Alternative: Kill by pattern (be careful!)
+pkill -f "jperl test_name"
+```
+
+**Red Flags of a hanging test:**
+- Test doesn't complete after several seconds
+- High CPU usage (>100% in ps output)
+- List context operations that depend on `undef` to terminate
+- Infinite loops in regex or string operations
+
+**Common causes:**
+- Changing `undef` returns to empty strings breaks list context loops
+- Incorrect EOF handling in IO operations
+- Regex engine infinite loops with certain patterns
+
 ## Common PerlOnJava Patterns
 
 ### Pattern 1: Context Parameters
