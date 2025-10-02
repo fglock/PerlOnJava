@@ -1,6 +1,7 @@
 package org.perlonjava.regex;
 
 import org.perlonjava.runtime.PerlCompilerException;
+import org.perlonjava.runtime.PerlJavaUnimplementedException;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -605,6 +606,26 @@ public class RegexPreprocessor {
     }
 
     /**
+     * Throws PerlJavaUnimplementedException with proper error formatting including marker and context.
+     * Used for regex features that are valid Perl but not yet implemented in PerlOnJava.
+     */
+    static void regexUnimplemented(String s, int offset, String errMsg) {
+        if (offset > s.length()) {
+            offset = s.length();
+        }
+
+        // "Error message in regex; marked by <-- HERE in m/regex <-- HERE remaining/"
+        String before = s.substring(0, offset);
+        String after = s.substring(offset);
+
+        // When marker is at the end, no space before <-- HERE
+        String marker = after.isEmpty() ? " <-- HERE" : " <-- HERE ";
+
+        throw new PerlJavaUnimplementedException(errMsg + " in regex; marked by <-- HERE in m/" +
+                before + marker + after + "/");
+    }
+
+    /**
      * Calculates the maximum length a pattern can match.
      * Returns -1 if the pattern can match unlimited length.
      */
@@ -783,21 +804,21 @@ public class RegexPreprocessor {
         // Check for specific invalid patterns
         if (condition.equals("??{}") || condition.equals("?[")) {
             // Marker should be after the first ?
-            regexError(s, condStart + 1, "Unknown switch condition (?(...))");
+            regexUnimplemented(s, condStart + 1, "Unknown switch condition (?(...))");
         }
 
         if (condition.startsWith("?")) {
             // Marker should be after the first ?
-            regexError(s, condStart + 1, "Unknown switch condition (?(...))");
+            regexUnimplemented(s, condStart + 1, "Unknown switch condition (?(...))");
         }
 
         // Check for non-numeric conditions that aren't valid
         if (!condition.matches("\\d+") && !condition.matches("<[^>]+>") && !condition.matches("'[^']+'")) {
             // For single character conditions like "x", marker should be after the character
             if (condition.length() == 1) {
-                regexError(s, condStart + 1, "Unknown switch condition (?(...))");
+                regexUnimplemented(s, condStart + 1, "Unknown switch condition (?(...))");
             } else {
-                regexError(s, condStart, "Unknown switch condition (?(...))");
+                regexUnimplemented(s, condStart, "Unknown switch condition (?(...))");
             }
         }
 
