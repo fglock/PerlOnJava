@@ -267,8 +267,28 @@ public class RegexPreprocessor {
 
         // Check for (*...) verb patterns FIRST, before checking (?
         if (c2 == '*') {
-            // (*...) is interpreted as a verb pattern, which we don't support
-            regexError(s, offset + 2, "Unknown verb");
+            // (*...) control verbs like (*ACCEPT), (*FAIL), (*COMMIT), etc.
+            // These are Perl-specific and not supported by Java regex
+            
+            // Find the end of the verb
+            int verbEnd = offset + 2;
+            while (verbEnd < length && s.codePointAt(verbEnd) != ')') {
+                verbEnd++;
+            }
+            if (verbEnd < length) {
+                verbEnd++; // Include the closing paren
+            }
+            
+            // Extract the verb name for error reporting
+            String verb = s.substring(offset, Math.min(verbEnd, length));
+            
+            // Replace with empty non-capturing group as placeholder
+            sb.append("(?:)");
+            
+            // Throw error that can be caught by JPERL_UNIMPLEMENTED=warn
+            regexError(s, offset + 2, "Regex control verb " + verb + " not implemented");
+            
+            return verbEnd; // Skip past the entire verb construct
         }
 
         // Handle (?

@@ -88,7 +88,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         if (regex == null) {
             regex = new RuntimeRegex();
             
-            if (patternString.contains("\\Q")) {
+            if (patternString != null && patternString.contains("\\Q")) {
                 patternString = escapeQ(patternString);
             }
 
