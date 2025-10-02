@@ -3,8 +3,67 @@
 ## Meta-Prompt Purpose
 This is a **living document** that captures effective strategies for finding and fixing high-yield bugs in PerlOnJava. When you learn new debugging techniques or discover better ways to analyze test failures, **UPDATE THIS FILE** with your findings.
 
-**Last Updated:** 2025-10-01  
-**Recent Additions:** W format fix learnings, perldoc verification strategy
+**Last Updated:** 2025-10-02  
+**Recent Additions:** Time management strategy, debugging techniques, continuation prompts
+
+## Time Management for Debugging Sessions
+
+**START EVERY SESSION:** Note the current time and set expectations
+```bash
+# At session start
+echo "Debug session started at: $(date '+%Y-%m-%d %H:%M')"
+echo "Target: [describe what you're investigating]"
+```
+
+**Time Guidelines by Problem Complexity:**
+
+| Complexity | Time Budget | When to Stop | Action if Exceeded |
+|------------|-------------|--------------|-------------------|
+| **Easy** | 15-30 min | Clear fix identified | Implement immediately |
+| **Medium** | 30-60 min | Root cause found | Consider creating prompt if implementation > 1hr |
+| **Hard** | 60-90 min | Still investigating | Create continuation prompt |
+| **Unknown** | 30 min initial | No clear pattern | Re-evaluate or seek different approach |
+
+**Time Check Points:**
+- **15 minutes:** Have I reproduced the issue?
+- **30 minutes:** Do I understand the root cause?
+- **45 minutes:** Is the fix clear and simple?
+- **60 minutes:** Should I create a continuation prompt?
+
+**Red Flags to Stop and Create Prompt:**
+- Requires changes to multiple subsystems
+- Need to understand unfamiliar architecture
+- Fix requires new Java methods/classes
+- AST or compilation changes needed
+- "Just 5 more minutes" said 3 times
+
+**Quick Time Check:**
+```bash
+# Use this to track your debugging session
+START_TIME=$(date +%s)
+echo "Starting: investigating $1"
+
+# ... after debugging work ...
+
+END_TIME=$(date +%s)
+ELAPSED=$((END_TIME - START_TIME))
+echo "Time spent: $((ELAPSED / 60)) minutes"
+
+if [ $ELAPSED -gt 3600 ]; then
+    echo "WARNING: Over 1 hour - create continuation prompt!"
+fi
+```
+
+**Decision Matrix:**
+```
+Time Spent | Root Cause Found | Fix Complexity | Action
+-----------|------------------|----------------|--------
+< 30 min   | Yes              | Simple         | Implement now
+< 30 min   | Yes              | Complex        | Create prompt
+< 60 min   | Yes              | Any            | Create prompt if > 1hr work
+> 60 min   | No               | Unknown        | Create prompt & move on
+> 90 min   | Any              | Any            | STOP - Create prompt
+```
 
 ## Quick Start: Finding High-Yield Targets
 
