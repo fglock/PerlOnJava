@@ -563,9 +563,12 @@ public abstract class StringSegmentParser {
                 yield false;
             }
             case "(" -> {
-                // Check for (?{...}) regex code blocks - only in regex context
+                // Check for (?{...}) and (??{...}) regex code blocks - only in regex context
                 if (isRegex && isRegexCodeBlock()) {
-                    parseRegexCodeBlock();
+                    parseRegexCodeBlock(false);  // (?{...}) - code execution
+                    yield true;
+                } else if (isRegex && isRegexRecursiveBlock()) {
+                    parseRegexCodeBlock(true);   // (??{...}) - recursive pattern
                     yield true;
                 }
                 yield false;
@@ -592,6 +595,25 @@ public abstract class StringSegmentParser {
         }
         return false;
     }
+    
+    /**
+     * Checks if the current tokens form a (??{...}) recursive regex pattern.
+     * This is similar to (?{...}) but uses the result as a regex pattern.
+     *
+     * @return true if this is a recursive regex pattern, false otherwise
+     */
+    private boolean isRegexRecursiveBlock() {
+        // Current token is "(", check if next tokens are "?", "?" and "{"
+        int currentPos = parser.tokenIndex;
+        
+        if (currentPos + 2 < parser.tokens.size() && currentPos + 3 < parser.tokens.size()) {
+            LexerToken token1 = parser.tokens.get(currentPos);
+            LexerToken token2 = parser.tokens.get(currentPos + 1);
+            LexerToken token3 = parser.tokens.get(currentPos + 2);
+            return "?".equals(token1.text) && "?".equals(token2.text) && "{".equals(token3.text);
+        }
+        return false;
+    }
 
     /**
      * Parses a (?{...}) regex code block by calling the Block parser and applying constant folding.
@@ -613,15 +635,18 @@ public abstract class StringSegmentParser {
      * 
      * <p>Only called when isRegex=true.</p>
      */
-    private void parseRegexCodeBlock() {
+    private void parseRegexCodeBlock(boolean isRecursive) {
         // Flush any accumulated text before adding the code block capture group
         // This ensures segments are added in the correct order (critical fix!)
         flushCurrentSegment();
         
         int savedTokenIndex = tokenIndex;
         
-        // Consume the "?" token
-        TokenUtils.consume(parser); // consume "?"
+        // Consume the "?" token(s)
+        TokenUtils.consume(parser); // consume first "?"
+        if (isRecursive) {
+            TokenUtils.consume(parser); // consume second "?" for (??{...})
+        }
         
         // Consume the "{" token
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
@@ -652,29 +677,42 @@ public abstract class StringSegmentParser {
             org.perlonjava.astvisitor.ConstantFoldingVisitor.getConstantValue(folded);
         
         if (constantValue != null) {
-            String captureName;
-            
-            // Check if it's undef (needs special encoding)
-            if (constantValue == org.perlonjava.runtime.RuntimeScalarCache.scalarUndef) {
-                captureName = String.format("cb%03du", codeBlockCaptureCounter++);
+            if (isRecursive) {
+                // For (??{...}), the constant becomes a pattern to match
+                // Extract the string value and insert it directly as a pattern
+                String patternString = constantValue.toString();
+                // Insert the pattern string directly - it will be compiled as a regex
+                segments.add(new StringNode(patternString, savedTokenIndex));
             } else {
-                // Use CaptureNameEncoder to encode the value in the capture name
-                captureName = org.perlonjava.regex.CaptureNameEncoder.encodeCodeBlockValue(
-                    codeBlockCaptureCounter++, constantValue
-                );
-            }
-            
-            if (captureName == null) {
-                // Encoding failed (e.g., name too long) - use fallback
-                segments.add(new StringNode("(?{UNIMPLEMENTED_CODE_BLOCK})", savedTokenIndex));
-            } else {
-                // Encoding succeeded - create capture group
-                StringNode captureNode = new StringNode("(?<" + captureName + ">)", savedTokenIndex);
-                segments.add(captureNode);
+                // For (?{...}), encode the value in a capture group for $^R
+                String captureName;
+                
+                // Check if it's undef (needs special encoding)
+                if (constantValue == org.perlonjava.runtime.RuntimeScalarCache.scalarUndef) {
+                    captureName = String.format("cb%03du", codeBlockCaptureCounter++);
+                } else {
+                    // Use CaptureNameEncoder to encode the value in the capture name
+                    captureName = org.perlonjava.regex.CaptureNameEncoder.encodeCodeBlockValue(
+                        codeBlockCaptureCounter++, constantValue
+                    );
+                }
+                
+                if (captureName == null) {
+                    // Encoding failed (e.g., name too long) - use fallback
+                    segments.add(new StringNode("(?{UNIMPLEMENTED_CODE_BLOCK})", savedTokenIndex));
+                } else {
+                    // Encoding succeeded - create capture group
+                    StringNode captureNode = new StringNode("(?<" + captureName + ">)", savedTokenIndex);
+                    segments.add(captureNode);
+                }
             }
         } else {
             // Not a constant - use unimplemented marker
-            segments.add(new StringNode("(?{UNIMPLEMENTED_CODE_BLOCK})", savedTokenIndex));
+            if (isRecursive) {
+                segments.add(new StringNode("(??{UNIMPLEMENTED_RECURSIVE_PATTERN})", savedTokenIndex));
+            } else {
+                segments.add(new StringNode("(?{UNIMPLEMENTED_CODE_BLOCK})", savedTokenIndex));
+            }
         }
     }
 
