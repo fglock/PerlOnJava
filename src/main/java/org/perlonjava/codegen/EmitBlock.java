@@ -24,12 +24,22 @@ public class EmitBlock {
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
         // Check if we can emit this as a subroutine, to avoid "Method too large" error.
-        // TODO: Check for possible goto's, then don't move the block to subroutine
+        // Check for control flow that would break if refactored
+        boolean hasUnsafeControlFlow = false;
+        if (node.elements.size() > LARGE_BLOCK && !node.getBooleanAnnotation("blockIsSubroutine")) {
+            // Convert block to string and check for control flow keywords
+            String blockString = node.toString();
+            // Check for next, last, redo, goto that might jump outside the block
+            if (blockString.contains(" next ") || blockString.contains(" last ") || 
+                blockString.contains(" redo ") || blockString.contains(" goto ")) {
+                hasUnsafeControlFlow = true;
+            }
+        }
+        
         if (node.elements.size() > LARGE_BLOCK
                 && !emitterVisitor.ctx.javaClassInfo.gotoLabelStack.isEmpty()
                 && !node.getBooleanAnnotation("blockIsSubroutine")
-                && GlobalVariable.getGlobalHash("main::ENV").get("JPERL_LARGECODE").toString().equals("refactor")
-        ) {
+                && !hasUnsafeControlFlow) {
             // Create sub {...}->(@_)
             int index = node.tokenIndex;
             ListNode args = new ListNode(index);
