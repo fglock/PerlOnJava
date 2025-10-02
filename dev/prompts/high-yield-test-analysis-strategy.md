@@ -347,7 +347,7 @@ diff <(perl -e 'TEST_CODE') <(./jperl -e 'TEST_CODE')
 1. **Identify the exact failing test:**
    ```bash
    # Find which specific test is failing
-   JPERL_LARGECODE=refactor ./jperl t/op/pack.t 2>&1 | grep -A 3 "^not ok NUMBER"
+   ./jperl t/op/pack.t 2>&1 | grep -A 3 "^not ok NUMBER"
    ```
 
 2. **Find the test code in the source:**
@@ -399,7 +399,7 @@ diff <(perl -e 'TEST_CODE') <(./jperl -e 'TEST_CODE')
 **Red Flags:**
 - If extraction works but full suite fails → test interaction or state issue
 - If extraction fails differently → you extracted the wrong test
-- If extraction passes → file size/compilation issue (e.g., JPERL_LARGECODE)
+- If extraction passes → file size/compilation issue
 
 **Template for extraction:**
 ```perl
@@ -428,7 +428,7 @@ print "# Tests completed\n";
 **Remember:** 
 - PerlOnJava doesn't cache code between runs (no stale bytecode)
 - Always rebuild after code changes: `./gradlew clean shadowJar`
-- Use `JPERL_LARGECODE=refactor` if original test needed it
+- Use `git add -a files` one by one
 
 ### Technique 5: Test Count Analysis
 **Pattern:** Track test improvements to verify fixes
@@ -1165,7 +1165,6 @@ jq '.results["TESTFILE.t"]' out.json
 ./jperl t/op/TESTFILE.t 2>&1 | grep -A 3 "^not ok NUMBER"
 
 # Run with special environment variables
-JPERL_LARGECODE=refactor ./jperl t/op/pack.t      # Handle large methods by refactoring blocks
 JPERL_UNIMPLEMENTED=warn ./jperl t/op/TESTFILE.t  # Warn on unimplemented features instead of dying
 ```
 

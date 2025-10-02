@@ -55,25 +55,25 @@
 ### Basic Run Command
 ```bash
 # Run with all necessary flags
-PERL_SKIP_BIG_MEM_TESTS=1 JPERL_UNIMPLEMENTED=warn JPERL_LARGECODE=refactor ./jperl t/re/pat.t
+PERL_SKIP_BIG_MEM_TESTS=1 JPERL_UNIMPLEMENTED=warn ./jperl t/re/pat.t
 ```
 
 ### Check Where Test Stops
 ```bash
 # See last 20 test results
-PERL_SKIP_BIG_MEM_TESTS=1 JPERL_UNIMPLEMENTED=warn JPERL_LARGECODE=refactor ./jperl t/re/pat.t 2>&1 | grep -E "(^ok |^not ok |planned.*ran)" | tail -20
+PERL_SKIP_BIG_MEM_TESTS=1 JPERL_UNIMPLEMENTED=warn ./jperl t/re/pat.t 2>&1 | grep -E "(^ok |^not ok |planned.*ran)" | tail -20
 ```
 
 ### See Error Details
 ```bash
 # Show last 30 lines including errors
-PERL_SKIP_BIG_MEM_TESTS=1 JPERL_UNIMPLEMENTED=warn JPERL_LARGECODE=refactor ./jperl t/re/pat.t 2>&1 | tail -30
+PERL_SKIP_BIG_MEM_TESTS=1 JPERL_UNIMPLEMENTED=warn ./jperl t/re/pat.t 2>&1 | tail -30
 ```
 
 ### Debug Specific Test
 ```bash
 # Extract specific test number (replace 294 with test number)
-PERL_SKIP_BIG_MEM_TESTS=1 JPERL_UNIMPLEMENTED=warn JPERL_LARGECODE=refactor ./jperl t/re/pat.t 2>&1 | grep -A 10 "^not ok 294"
+PERL_SKIP_BIG_MEM_TESTS=1 JPERL_UNIMPLEMENTED=warn ./jperl t/re/pat.t 2>&1 | grep -A 10 "^not ok 294"
 ```
 
 ## Known Issues and Patterns
@@ -112,7 +112,6 @@ PERL_SKIP_BIG_MEM_TESTS=1 JPERL_UNIMPLEMENTED=warn JPERL_LARGECODE=refactor ./jp
 
 - `PERL_SKIP_BIG_MEM_TESTS=1` - Skip memory-intensive tests (Long Monsters)
 - `JPERL_UNIMPLEMENTED=warn` - Warn on unimplemented features instead of dying
-- `JPERL_LARGECODE=refactor` - Handle large methods by refactoring code blocks
 
 ## Quick Wins to Continue
 

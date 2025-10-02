@@ -7,7 +7,7 @@ print "=== Pack.t Failure Analysis Tool ===\n\n";
 
 # Run pack.t and capture output
 print "Running pack.t tests...\n";
-my $output = `JPERL_UNIMPLEMENTED=warn JPERL_LARGECODE=refactor ./jperl t/op/pack.t 2>&1`;
+my $output = `JPERL_UNIMPLEMENTED=warn ./jperl t/op/pack.t 2>&1`;
 
 # Parse test results
 my @lines = split /\n/, $output;
