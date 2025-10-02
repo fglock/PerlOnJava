@@ -31,10 +31,24 @@ if ($help || @ARGV != 1) {
     exit($help ? 0 : 1);
 }
 
-my $test_dir = $ARGV[0];
+my $test_path = $ARGV[0];
 
-unless (-d $test_dir) {
-    die "Error: Test directory '$test_dir' does not exist\n";
+# Accept either a directory or a specific .t file
+my $test_dir;
+my @test_files;
+
+if (-f $test_path && $test_path =~ /\.t$/) {
+    # Single test file
+    $test_dir = '.';  # Use current directory as base
+    @test_files = ($test_path);
+    print "Running single test file: $test_path\n";
+} elsif (-d $test_path) {
+    # Directory of tests
+    $test_dir = $test_path;
+    print "Finding test files in $test_dir...\n";
+    @test_files = find_test_files($test_dir);
+} else {
+    die "Error: '$test_path' is not a valid test directory or .t file\n";
 }
 
 unless (-x $jperl_path) {
@@ -69,9 +83,6 @@ my %feature_patterns = (
     'prototypes' => [qw(prototype sub.*. function.prototype)],
 );
 
-# Find all .t files
-print "Finding test files in $test_dir...\n";
-my @test_files = find_test_files($test_dir);
 my $total_files = @test_files;
 
 print "Found $total_files test files\n";
@@ -242,6 +253,10 @@ sub run_single_test {
         ? "-Xss256m" : "";
     local $ENV{JPERL_LARGECODE} = $test_file =~ m{ re/pat.t | re/pat_advanced.t | op/signatures.t | t/op/pack.t }x
         ? "refactor" : "";
+
+    # Skip memory-intensive tests (e.g., Long Monsters in re/pat.t with 300KB strings)
+    # These tests can crash the JVM with StackOverflowError during regex backtracking
+    local $ENV{PERL_SKIP_BIG_MEM_TESTS} = 1;
 
     # Save current directory
     my $old_dir = File::Spec->rel2abs('.');

@@ -296,6 +296,33 @@ public class RegexPreprocessor {
                 }
                 // Handle (?{ ... }) code blocks - try constant folding
                 offset = handleCodeBlock(s, offset, length, sb, regexFlags);
+            } else if (c3 == '?' && c4 == '{') {
+                // Check if this is our special unimplemented recursive pattern marker
+                if (s.startsWith("(??{UNIMPLEMENTED_RECURSIVE_PATTERN})", offset)) {
+                    regexError(s, offset + 2, "(??{...}) recursive regex patterns not implemented");
+                }
+                // Handle (??{ ... }) recursive/dynamic regex patterns
+                // These insert a regex pattern at runtime based on code execution
+                // For now, replace with a placeholder that will be caught later
+                sb.append("(?:");  // Non-capturing group as placeholder
+                
+                // Skip the (??{ part
+                offset += 4;
+                
+                // Find the closing }
+                int braceCount = 1;
+                while (offset < length && braceCount > 0) {
+                    int ch = s.codePointAt(offset);
+                    if (ch == '{') {
+                        braceCount++;
+                    } else if (ch == '}') {
+                        braceCount--;
+                    }
+                    offset++;
+                }
+                
+                // Throw error that can be caught by JPERL_UNIMPLEMENTED=warn
+                regexError(s, offset - 1, "(??{...}) recursive regex patterns not implemented");
             } else if (c3 == '(') {
                 // Handle (?(condition)yes|no) conditionals
                 return handleConditionalPattern(s, offset, length, sb, regexFlags);
