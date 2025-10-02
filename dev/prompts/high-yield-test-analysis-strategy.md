@@ -398,6 +398,44 @@ pkill -f "jperl test_name"
 - Incorrect EOF handling in IO operations
 - Regex engine infinite loops with certain patterns
 
+## Testing Best Practices
+
+### Creating Permanent Tests
+**IMPORTANT:** When creating permanent test files in `src/test/resources`, always follow these guidelines:
+
+1. **Use Test::More** - All permanent tests should use the Test::More module
+2. **Use subtests** - Organize related tests into subtests for better structure
+3. **Example structure:**
+```perl
+#!/usr/bin/perl
+use strict;
+use warnings;
+use Test::More;
+
+subtest 'basic functionality' => sub {
+    plan tests => 3;
+    is($result, $expected, 'description');
+    ok($condition, 'another test');
+    like($string, qr/pattern/, 'regex test');
+};
+
+subtest 'edge cases' => sub {
+    plan tests => 2;
+    # edge case tests here
+};
+
+done_testing();
+```
+
+**Benefits:**
+- Better test organization and reporting
+- Easier to identify which group of tests failed
+- Compatible with Perl's test infrastructure
+- Professional test structure
+
+### Temporary Debug Tests
+For quick debugging (files in project root), simple scripts without Test::More are fine. These should be cleaned up after use.
+
 ## Common PerlOnJava Patterns
 
 ### Pattern 1: Context Parameters
