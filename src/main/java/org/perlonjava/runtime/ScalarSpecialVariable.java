@@ -106,6 +106,15 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                     yield lastCapture != null ? new RuntimeScalar(lastCapture) : scalarUndef;
                 }
                 case LAST_SUCCESSFUL_PATTERN -> new RuntimeScalar(RuntimeRegex.lastSuccessfulPattern);
+                case LAST_REGEXP_CODE_RESULT -> {
+                    // $^R - Result of last (?{...}) code block
+                    // Get the last matched regex and retrieve its code block result
+                    if (RuntimeRegex.lastSuccessfulPattern != null) {
+                        RuntimeScalar codeBlockResult = RuntimeRegex.lastSuccessfulPattern.getLastCodeBlockResult();
+                        yield codeBlockResult != null ? codeBlockResult : scalarUndef;
+                    }
+                    yield scalarUndef;
+                }
             };
             return result;
         } catch (IllegalStateException e) {
@@ -203,5 +212,6 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
         INPUT_LINE_NUMBER, // Represents the current line number in an input operation.
         LAST_PAREN_MATCH, // The highest capture variable ($1, $2, ...) which has a defined value.
         LAST_SUCCESSFUL_PATTERN, // ${^LAST_SUCCESSFUL_PATTERN}
+        LAST_REGEXP_CODE_RESULT, // $^R - Result of last (?{...}) code block in regex
     }
 }
