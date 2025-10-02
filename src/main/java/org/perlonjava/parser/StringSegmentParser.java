@@ -955,10 +955,15 @@ public abstract class StringSegmentParser {
         if (!hexStr.isEmpty()) {
             try {
                 var hexValue = Integer.parseInt(hexStr.toString(), 16);
-                var result = hexValue <= 0xFFFF
-                        ? String.valueOf((char) hexValue)
-                        : new String(Character.toChars(hexValue));
-                appendToCurrentSegment(result);
+                if (!Character.isValidCodePoint(hexValue)) {
+                    // Invalid Unicode code point (outside 0x0 to 0x10FFFF range), treat as null
+                    appendToCurrentSegment("\0");
+                } else {
+                    var result = hexValue <= 0xFFFF
+                            ? String.valueOf((char) hexValue)
+                            : new String(Character.toChars(hexValue));
+                    appendToCurrentSegment(result);
+                }
             } catch (NumberFormatException e) {
                 // Invalid hex sequence, treat as literal
                 appendToCurrentSegment("\0");
