@@ -638,7 +638,8 @@ public abstract class StringSegmentParser {
         // Try to apply constant folding to the block
         Node folded = org.perlonjava.astvisitor.ConstantFoldingVisitor.foldConstants(block);
         
-        // If it's a BlockNode, try to extract the single expression inside
+        // If it's a BlockNode with a single element, extract it
+        // This handles both empty blocks (BlockNode with empty ListNode) and single-expression blocks
         if (folded instanceof org.perlonjava.astnode.BlockNode) {
             org.perlonjava.astnode.BlockNode blockNode = (org.perlonjava.astnode.BlockNode) folded;
             if (blockNode.elements.size() == 1) {

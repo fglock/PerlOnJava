@@ -261,6 +261,16 @@ public class ConstantFoldingVisitor implements Visitor {
                 scalar.type = RuntimeScalarType.VSTRING;
             }
             return scalar;
+        } else if (node instanceof BlockNode blockNode) {
+            // Handle empty blocks - they return undef in Perl
+            if (blockNode.elements.isEmpty()) {
+                return RuntimeScalarCache.scalarUndef;
+            }
+        } else if (node instanceof ListNode listNode) {
+            // Handle empty list/statement - returns undef in scalar context
+            if (listNode.elements.isEmpty()) {
+                return RuntimeScalarCache.scalarUndef;
+            }
         } else if (node instanceof OperatorNode opNode) {
             // Handle undef
             if ("undef".equals(opNode.operator) && opNode.operand == null) {

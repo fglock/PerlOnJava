@@ -21,10 +21,22 @@ public class ControlPackHandler implements PackFormatHandler {
                     ParsedModifiers modifiers, ByteArrayOutputStream output) {
         switch (format) {
             case 'x':
-                handleNullPadding(count, output);
+                // When nativeSize is true (x!N), align to N-byte boundary
+                // Otherwise, just add N null bytes
+                if (modifiers.nativeSize && count > 0) {
+                    handleAlignment(count, output);
+                } else {
+                    handleNullPadding(count, output);
+                }
                 break;
             case 'X':
-                handleBackup(count, output);
+                // When nativeSize is true (X!N), back up to N-byte aligned boundary
+                // Otherwise, just back up by N bytes
+                if (modifiers.nativeSize && count > 0) {
+                    handleBackupToAlignment(count, output);
+                } else {
+                    handleBackup(count, output);
+                }
                 break;
             case '@':
                 handleAbsolutePosition(count, output);
@@ -60,6 +72,22 @@ public class ControlPackHandler implements PackFormatHandler {
                 break;
         }
         return valueIndex;
+    }
+
+    /**
+     * Handles alignment to a boundary.
+     * Pads with null bytes to align the current position to the specified boundary.
+     * 
+     * @param alignment The alignment boundary (e.g., 8 for 8-byte alignment)
+     * @param output The output stream
+     */
+    private static void handleAlignment(int alignment, ByteArrayOutputStream output) {
+        int currentPosition = output.size();
+        // Calculate padding needed: (alignment - (position % alignment)) % alignment
+        int padding = (alignment - (currentPosition % alignment)) % alignment;
+        for (int j = 0; j < padding; j++) {
+            output.write(0);
+        }
     }
 
     /**
@@ -122,5 +150,28 @@ public class ControlPackHandler implements PackFormatHandler {
             }
         }
         // DEBUG: handleBackup finished, new size=" + output.size()
+    }
+
+    /**
+     * Handles backup to an alignment boundary.
+     * Backs up to the previous N-byte aligned position.
+     * 
+     * @param alignment The alignment boundary (e.g., 4 for 4-byte alignment)
+     * @param output The output stream
+     */
+    private static void handleBackupToAlignment(int alignment, ByteArrayOutputStream output) {
+        int currentSize = output.size();
+        // Calculate the position of the previous alignment boundary
+        // For position P and alignment A: aligned_pos = (P / A) * A
+        int alignedPosition = (currentSize / alignment) * alignment;
+        
+        if (alignedPosition < currentSize) {
+            // Truncate to the aligned position
+            byte[] currentData = output.toByteArray();
+            output.reset();
+            if (alignedPosition > 0) {
+                output.write(currentData, 0, alignedPosition);
+            }
+        }
     }
 }
