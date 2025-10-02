@@ -86,6 +86,7 @@ public class GlobalContext {
         GlobalVariable.globalVariables.put("main::+", new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_PAREN_MATCH));
         GlobalVariable.globalVariables.put(encodeSpecialVar("LAST_SUCCESSFUL_PATTERN"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_SUCCESSFUL_PATTERN));
         GlobalVariable.globalVariables.put(encodeSpecialVar("LAST_FH"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_FH)); // $^LAST_FH
+        GlobalVariable.globalVariables.put(encodeSpecialVar("R"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_REGEXP_CODE_RESULT)); // $^R
 
         // Aliases
         GlobalVariable.aliasGlobalVariable(encodeSpecialVar("PREMATCH"), "main::`");

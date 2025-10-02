@@ -54,15 +54,6 @@ public class StringDoubleQuoted extends StringSegmentParser {
     private final Stack<CaseModifier> caseModifiers = new Stack<>();
 
     /**
-     * Flag indicating whether escape sequences should be processed.
-     *
-     * <p>When true, escape sequences like \n are converted to their actual values.
-     * When false (for regex contexts), escape sequences are preserved literally
-     * to be processed by the regex engine.
-     */
-    private final boolean parseEscapes;
-
-    /**
      * Flag indicating whether we're inside a \Q...\E quotemeta region.
      *
      * <p>When true, all special characters (including $ and @) are treated as literals,
@@ -83,8 +74,7 @@ public class StringDoubleQuoted extends StringSegmentParser {
      * @param parseEscapes True to process escape sequences, false to preserve them
      */
     private StringDoubleQuoted(EmitterContext ctx, List<LexerToken> tokens, Parser parser, int tokenIndex, boolean isRegex, boolean parseEscapes, boolean interpolateVariable, boolean isRegexReplacement) {
-        super(ctx, tokens, parser, tokenIndex, isRegex, interpolateVariable, isRegexReplacement);
-        this.parseEscapes = parseEscapes;
+        super(ctx, tokens, parser, tokenIndex, isRegex, parseEscapes, interpolateVariable, isRegexReplacement);
     }
 
     /**

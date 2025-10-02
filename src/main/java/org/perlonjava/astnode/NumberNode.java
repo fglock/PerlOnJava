@@ -30,16 +30,12 @@ public class NumberNode extends AbstractNode {
     }
 
     /**
-     * Accepts a visitor that performs some operation on this node.
-     * This method is part of the Visitor design pattern, which allows
-     * for defining new operations on the AST nodes without changing
-     * the node classes.
+     * Accepts a visitor to process this NumberNode.
      *
-     * @param visitor the visitor that will perform the operation on this node
+     * @param visitor the visitor to process this node
      */
     @Override
     public void accept(Visitor visitor) {
         visitor.visit(this);
     }
 }
-

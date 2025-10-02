@@ -42,4 +42,3 @@ public interface Node {
 
     Object getAnnotation(String key);
 }
-

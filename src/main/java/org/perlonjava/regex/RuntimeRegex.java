@@ -3,6 +3,7 @@ package org.perlonjava.regex;
 import org.perlonjava.operators.WarnDie;
 import org.perlonjava.runtime.*;
 
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -84,6 +85,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         RuntimeRegex regex = regexCache.get(cacheKey);
         if (regex == null) {
             regex = new RuntimeRegex();
+            
             if (patternString.contains("\\Q")) {
                 patternString = escapeQ(patternString);
             }
@@ -99,7 +101,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 String javaPattern = preProcessRegex(patternString, regex.regexFlags);
 
                 regex.patternString = patternString;
-
+                
                 // Compile the regex pattern
                 regex.pattern = Pattern.compile(javaPattern, regex.patternFlags);
             } catch (Exception e) {
@@ -866,4 +868,53 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // which is handled internally
     }
 
+    /**
+     * Gets the last matched code block constant value for $^R.
+     * The value is encoded in the capture group name itself (e.g., cb00000340032).
+     *
+     * @return The constant value for $^R, or null if no code block was matched
+     */
+    public RuntimeScalar getLastCodeBlockResult() {
+        Matcher matcher = globalMatcher;
+        if (matcher == null) {
+            return null;
+        }
+        
+        // Get named groups from the pattern (same as %CAPTURE does)
+        Map<String, Integer> namedGroups = matcher.pattern().namedGroups();
+        if (namedGroups == null) {
+            return null;
+        }
+        
+        // Find the code block capture with the HIGHEST counter that matched
+        // For multiple code blocks like a(?{1})b(?{2})c, we want cb011 (counter 11), not cb010 (counter 10)
+        String lastMatchedCapture = null;
+        int maxCounter = -1;
+        
+        for (String groupName : namedGroups.keySet()) {
+            if (CaptureNameEncoder.isCodeBlockCapture(groupName)) {
+                try {
+                    String value = matcher.group(groupName);
+                    // If this group matched (even if empty string)
+                    if (value != null) {
+                        // Extract counter from name: cb010... -> 10
+                        int counter = Integer.parseInt(groupName.substring(2, 5));
+                        if (counter > maxCounter) {
+                            maxCounter = counter;
+                            lastMatchedCapture = groupName;
+                        }
+                    }
+                } catch (Exception e) {
+                    // Group doesn't exist or didn't match, or parse error
+                }
+            }
+        }
+        
+        // Decode the value from the capture name using CaptureNameEncoder
+        if (lastMatchedCapture != null) {
+            return CaptureNameEncoder.decodeCodeBlockValue(lastMatchedCapture);
+        }
+        
+        return null;
+    }
 }

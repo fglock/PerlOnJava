@@ -4,6 +4,7 @@ import org.perlonjava.astnode.*;
 import org.perlonjava.operators.BitwiseOperators;
 import org.perlonjava.operators.MathOperators;
 import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.RuntimeScalarCache;
 import org.perlonjava.runtime.RuntimeScalarType;
 
 import java.util.ArrayList;
@@ -244,7 +245,14 @@ public class ConstantFoldingVisitor implements Visitor {
         return node instanceof NumberNode || node instanceof StringNode;
     }
 
-    private RuntimeScalar getConstantValue(Node node) {
+    /**
+     * Gets the constant value from a node if it represents a constant.
+     * Supports NumberNode, StringNode, and undef OperatorNode.
+     *
+     * @param node The node to extract a constant value from
+     * @return A RuntimeScalar representation of the constant, or null if not a constant
+     */
+    public static RuntimeScalar getConstantValue(Node node) {
         if (node instanceof NumberNode) {
             return new RuntimeScalar(((NumberNode) node).value);
         } else if (node instanceof StringNode strNode) {
@@ -253,6 +261,11 @@ public class ConstantFoldingVisitor implements Visitor {
                 scalar.type = RuntimeScalarType.VSTRING;
             }
             return scalar;
+        } else if (node instanceof OperatorNode opNode) {
+            // Handle undef
+            if ("undef".equals(opNode.operator) && opNode.operand == null) {
+                return RuntimeScalarCache.scalarUndef;
+            }
         }
         return null;
     }
@@ -567,6 +580,7 @@ public class ConstantFoldingVisitor implements Visitor {
         try {
             switch (operator) {
                 case "-":
+                case "unaryMinus":
                     // Unary minus
                     RuntimeScalar result = MathOperators.unaryMinus(value);
                     return new NumberNode(result.toString(), tokenIndex);
