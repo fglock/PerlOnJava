@@ -722,12 +722,38 @@ grep -r "pattern" --include="*.java" src/
 ```
 
 ### Git Operations
+
+**⚠️ IMPORTANT: Clean Commit Practices**
+- **NEVER use `git add -A` or `git add .`** - This adds ALL files including test garbage
+- **ALWAYS stage only the files you actually modified**
+- **ALWAYS check what's staged with `git status` before committing**
+- **Remove temporary test files before committing**
+
 ```bash
+# CORRECT way to stage files
+git add src/main/java/path/to/Modified.java
+git add src/main/java/path/to/AnotherModified.java
+
+# WRONG way (adds everything including test files)
+# git add -A  # DON'T DO THIS
+# git add .   # DON'T DO THIS
+
+# Check what's staged
+git status
+
+# If you accidentally staged everything
+git reset  # Unstages all files
+
+# Then stage only what you need
+git add specific/file.java
+
+# Commit with descriptive message
+git commit -m "[Component] Fix description (+N tests)
+
+Detailed explanation..."
+
 # Check current changes
 git diff FILE
-
-# Commit with message
-git add FILE && git commit -m "MESSAGE"
 
 # Revert changes
 git checkout FILE
@@ -873,7 +899,11 @@ Files Modified:
 2. **Batch tool calls:** Read multiple files in parallel when possible
 3. **Create test artifacts:** Save minimal test cases for future reference
 4. **Update strategy immediately:** Don't wait until end of session
-5. **Clean as you go:** Remove test files before committing
+5. **Clean commits:** 
+   - Remove test files before committing
+   - NEVER use `git add -A` or `git add .`
+   - Always stage specific files: `git add path/to/file.java`
+   - Check with `git status` before committing
 
 ## Key Learnings from Recent Fixes
 
@@ -969,6 +999,9 @@ Understanding the full picture helps identify the root cause.
 5. **Use existing code** - search before implementing
 6. **Strategic logging** - targeted, not everywhere
 7. **Commit often** - small, focused commits
+   - Stage ONLY modified source files, never use `git add -A`
+   - Check `git status` before every commit
+   - Remove test files before committing
 8. **Use bytecode analysis** - when behavior is unclear
 9. **Test with overloaded objects** - for operator implementations
 10. **Balance quick wins and deep dives** - maintain momentum
