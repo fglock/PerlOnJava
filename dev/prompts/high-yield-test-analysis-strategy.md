@@ -436,6 +436,293 @@ done_testing();
 ### Temporary Debug Tests
 For quick debugging (files in project root), simple scripts without Test::More are fine. These should be cleaned up after use.
 
+## Advanced Debugging Techniques
+
+### Technique 8: Using --disassemble for Deep Analysis
+**Pattern:** Understand how operators are compiled to bytecode
+
+```bash
+# Create minimal test case
+echo 'my $x; $x *= 2;' > test.pl
+
+# Examine bytecode generation
+./jperl --disassemble test.pl | grep -A 10 "multiply\|divide\|INVOKESTATIC"
+```
+
+**What to look for:**
+- AST macro expansions (operators expanded at compile time)
+- Direct method calls vs expanded operations
+- Missing method invocations that should handle warnings
+
+### Technique 9: Rapid Hypothesis Testing Workflow
+**Pattern:** Quickly test theories about bugs
+
+```bash
+# Step 1: Create minimal reproduction
+cat > test_hypothesis.pl << 'EOF'
+#!/usr/bin/perl
+use strict;
+use warnings;
+# Minimal code to test hypothesis
+EOF
+
+# Step 2: Compare Perl vs PerlOnJava
+perl test_hypothesis.pl > perl_output.txt
+./jperl test_hypothesis.pl > jperl_output.txt
+diff perl_output.txt jperl_output.txt
+
+# Step 3: Clean up
+rm test_hypothesis.pl *_output.txt
+```
+
+### Technique 10: Pattern Matching Across Failures
+**Pattern:** Find common root causes
+
+```bash
+# Extract all error messages from failing tests
+./jperl t/op/test.t 2>&1 | grep -oE "at .* line [0-9]+" | sort | uniq -c
+
+# Find tests with similar failure patterns
+grep -l "specific_error_pattern" t/op/*.t
+
+# Check if multiple tests fail at similar operations
+for test in t/op/*.t; do
+    echo "=== $test ==="
+    ./jperl $test 2>&1 | grep "assignment\|chop\|chomp" | head -3
+done
+```
+
+### Technique 11: Self-Assignment and Circular Reference Detection
+**Pattern:** Identify operations that reference themselves
+
+Common bug patterns:
+- `@arr = @arr` - Array clearing itself before copying
+- `@x = (@x, 1, 2)` - Array appearing in its own assignment
+- `$x = chop($x = $y)` - Nested self-modifying operations
+
+Test template:
+```perl
+# Test self-assignment
+my @arr = (1, 2, 3);
+@arr = @arr;  # Should preserve values
+
+# Test circular reference
+my @x = (1, 2);
+@x = (@x, 3, 4);  # Should append, not clear
+```
+
+### Technique 12: Warning Capture Pattern
+**Pattern:** Test if warnings are properly generated
+
+```perl
+my $warning = '';
+local $SIG{__WARN__} = sub { $warning = $_[0]; };
+
+# Operation that should warn
+my $x;
+$x *= 2;
+
+if ($warning =~ /uninitialized/) {
+    print "Warning correctly generated\n";
+} else {
+    print "MISSING WARNING - bug found!\n";
+}
+```
+
+### Technique 13: AST vs Runtime Issues
+**How to identify:**
+- **AST/Compile-time:** Error happens even with `perl -c` or during parsing
+- **Runtime:** Error only happens during execution
+- **Macro expansion:** Check with `--disassemble` if operator becomes multiple operations
+
+```bash
+# Test if compile-time or runtime
+./jperl -c test.pl  # Compile only
+./jperl test.pl     # Full execution
+
+# If -c succeeds but execution fails: runtime issue
+# If -c fails: parsing/AST issue
+```
+
+### Technique 14: Finding Implementation Locations
+**Pattern:** Quickly locate where operators/features are implemented
+
+```bash
+# Find operator implementation
+grep -r "\"multiply\|\"divide" src/main/java --include="*.java"
+
+# Find method that handles specific Perl function
+grep -r "public.*chop\|public.*chomp" src/main/java --include="*.java"
+
+# Find where error messages are generated
+grep -r "exact_error_text" src/main/java --include="*.java"
+
+# Find AST node handlers
+grep -r "visit.*OperatorNode\|emit.*Operator" src/main/java --include="*.java"
+```
+
+### Technique 15: Perl Reference Behavior Testing
+**Pattern:** Always verify behavior against standard Perl
+
+```bash
+# Create comparison script
+cat > compare.pl << 'EOF'
+#!/usr/bin/perl
+use strict;
+use warnings;
+use Data::Dumper;
+
+# Test case here
+my @arr = (1, 2, 3);
+@arr = @arr;
+print Dumper(\@arr);
+EOF
+
+# Run both and compare
+perl compare.pl 2>&1 | tee perl_behavior.txt
+./jperl compare.pl 2>&1 | tee jperl_behavior.txt
+
+# Visual diff
+diff -u perl_behavior.txt jperl_behavior.txt
+```
+
+### Technique 16: Progressive Test Reduction
+**Pattern:** Reduce complex failing tests to minimal reproductions
+
+```perl
+# Start with failing test from test suite
+# Progressively remove code until minimal failure remains
+
+# Original complex test
+sub complex_test {
+    my @data = generate_test_data();
+    my $result = process_data(@data);
+    validate_result($result);
+}
+
+# Reduced to essence
+my @arr = (1, 2, 3);
+@arr = @arr;  # This line fails
+print "@arr\n";  # Shows the bug
+```
+
+### Technique 17: Quick Operator Testing Template
+**Pattern:** Rapid operator behavior verification
+
+```bash
+# Create reusable template
+cat > test_operator_template.pl << 'EOF'
+#!/usr/bin/perl -w
+use strict;
+use warnings;
+
+print "=== Testing OPERATOR_NAME ===\n\n";
+
+# Test with defined value
+{
+    my $x = 5;
+    # OPERATION HERE
+    print "Defined: result=$x\n";
+}
+
+# Test with undefined value
+{
+    my $warning = '';
+    local $SIG{__WARN__} = sub { $warning = $_[0]; };
+    
+    my $x;
+    # OPERATION HERE
+    
+    print "Undefined: result=" . ($x // 'undef') . "\n";
+    print "Warning: " . ($warning ? "YES" : "NO") . "\n";
+    if ($warning) { print "  $warning"; }
+}
+EOF
+```
+
+### Technique 18: Memory and Performance Debugging
+**Pattern:** Identify performance issues or memory leaks
+
+```bash
+# Check for ConcurrentModificationException or memory issues
+./jperl -Xmx256m test.pl  # Limit memory to find leaks faster
+
+# Time comparison
+time perl test.pl
+time ./jperl test.pl
+
+# Profile which tests are slowest
+for t in t/op/*.t; do
+    echo -n "$t: "
+    time ./jperl $t 2>&1 | tail -1
+done | sort -t: -k2 -n
+```
+
+### Technique 19: Creating Continuation Prompts
+**CRITICAL:** When a debugging session reveals a complex issue that will take significant time to fix, create a prompt document to enable seamless continuation later.
+
+**When to create a prompt:**
+- Issue requires architectural changes (like AST modifications)
+- Fix would take more than 1-2 hours
+- Multiple interconnected systems need changes
+- You've identified the root cause but implementation is complex
+
+**Prompt document structure (`dev/prompts/fix-[issue-name].md`):**
+```markdown
+# Fix [Issue Name]
+
+## Objective
+Clear statement of what needs to be fixed and why.
+
+## Problem Statement
+What's broken, how many tests affected, user-visible impact.
+
+## Current Status
+- Test file: path/to/test.t
+- Failures: X tests
+- Pass rate: Y%
+
+## Root Cause Analysis
+### Investigation Done
+- What you discovered
+- Why it's happening
+- Evidence (test outputs, code snippets)
+
+### Current Implementation
+- How it works now (with code examples)
+- Why this approach causes the problem
+
+## Proposed Solution
+Step-by-step fix approach with code examples.
+
+## Test Cases to Verify
+Minimal reproductions and how to test the fix.
+
+## Implementation Checklist
+- [ ] Specific tasks to complete
+- [ ] Files to modify
+- [ ] Tests to run
+
+## Expected Impact
+- Tests that will be fixed
+- Potential side effects
+- Performance implications
+```
+
+**Examples from this session:**
+- `fix-compound-assignment-operators.md` - Architecture change needed
+- `fix-dynamic-eval-warning-handler.md` - Complex compilation issue
+- `fix-empty-file-slurp-mode.md` - Requires investigation
+
+**Benefits:**
+- No context loss between sessions
+- Anyone can pick up where you left off
+- Documents the "why" along with the "how"
+- Creates a knowledge base of complex issues
+
+### Temporary Debug Tests
+For quick debugging (files in project root), simple scripts without Test::More are fine. These should be cleaned up after use.
+
 ## Common PerlOnJava Patterns
 
 ### Pattern 1: Context Parameters
