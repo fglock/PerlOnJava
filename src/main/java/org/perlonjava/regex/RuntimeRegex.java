@@ -2,6 +2,7 @@ package org.perlonjava.regex;
 
 import org.perlonjava.operators.WarnDie;
 import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.GlobalContext; // Add this import
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -65,6 +66,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     private RuntimeScalar replacement = null;
     // Tracks if a match has occurred: this is used as a counter for m?PAT?
     private boolean matched = false;
+    private boolean hasCodeBlockCaptures = false;  // True if regex has (?{...}) code blocks
 
     public RuntimeRegex() {
         this.regexFlags = null;
@@ -104,6 +106,18 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 
                 // Compile the regex pattern
                 regex.pattern = Pattern.compile(javaPattern, regex.patternFlags);
+                
+                // Check if pattern has code block captures for $^R optimization
+                // Code blocks are encoded as named captures like (?<cb010...>)
+                Map<String, Integer> namedGroups = regex.pattern.namedGroups();
+                if (namedGroups != null) {
+                    for (String groupName : namedGroups.keySet()) {
+                        if (CaptureNameEncoder.isCodeBlockCapture(groupName)) {
+                            regex.hasCodeBlockCaptures = true;
+                            break;
+                        }
+                    }
+                }
             } catch (Exception e) {
                 if (GlobalVariable.getGlobalHash("main::ENV").get("JPERL_UNIMPLEMENTED").toString().equals("warn")
                 ) {
@@ -427,6 +441,14 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             lastSuccessfulMatchStart = lastMatchStart;
             lastSuccessfulMatchEnd = lastMatchEnd;
             lastSuccessfulMatchString = globalMatchString;
+            
+            // Update $^R if this regex has code block captures (performance optimization)
+            if (regex.hasCodeBlockCaptures) {
+                RuntimeScalar codeBlockResult = regex.getLastCodeBlockResult();
+                // Set $^R to the code block result (or undef if no code blocks matched)
+                GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("R"))
+                    .set(codeBlockResult != null ? codeBlockResult : RuntimeScalarCache.scalarUndef);
+            }
             
             // Reset pos() after global match in LIST context (matches Perl behavior)
             if (regex.regexFlags.isGlobalMatch() && ctx == RuntimeContextType.LIST) {

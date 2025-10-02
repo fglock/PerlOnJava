@@ -86,7 +86,11 @@ public class GlobalContext {
         GlobalVariable.globalVariables.put("main::+", new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_PAREN_MATCH));
         GlobalVariable.globalVariables.put(encodeSpecialVar("LAST_SUCCESSFUL_PATTERN"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_SUCCESSFUL_PATTERN));
         GlobalVariable.globalVariables.put(encodeSpecialVar("LAST_FH"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_FH)); // $^LAST_FH
-        GlobalVariable.globalVariables.put(encodeSpecialVar("R"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_REGEXP_CODE_RESULT)); // $^R
+        // $^R is writable, not read-only - initialize as regular variable instead of ScalarSpecialVariable
+        // GlobalVariable.globalVariables.put(encodeSpecialVar("R"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_REGEXP_CODE_RESULT)); // $^R
+        GlobalVariable.getGlobalVariable(encodeSpecialVar("R"));    // initialize $^R to "undef" - writable variable
+        GlobalVariable.globalVariables.put(encodeSpecialVar("LAST_SUCCESSFUL_PATTERN"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_SUCCESSFUL_PATTERN));
+        GlobalVariable.globalVariables.put(encodeSpecialVar("LAST_FH"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_FH)); // $^LAST_FH
 
         // Aliases
         GlobalVariable.aliasGlobalVariable(encodeSpecialVar("PREMATCH"), "main::`");
@@ -180,4 +184,3 @@ public class GlobalContext {
         return "main::" + (char) (name.charAt(0) - 'A' + 1) + name.substring(1);
     }
 }
-
