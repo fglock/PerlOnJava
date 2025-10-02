@@ -30,7 +30,7 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
                 modifiers.contains("c"),
                 modifiers.contains("r"),
                 modifiers.contains("?"),
-                patternString.contains("\\G"),
+                patternString != null && patternString.contains("\\G"),
                 modifiers.contains("xx"),
                 modifiers.contains("n"),
                 modifiers.contains("o"),
