@@ -3,6 +3,7 @@ package org.perlonjava.codegen;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
 import org.perlonjava.astvisitor.EmitterVisitor;
+import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
 
 /**
@@ -49,6 +50,23 @@ public class EmitRegex {
      * @param node           The binary operator node representing the non-binding regex operation.
      */
     static void handleNotBindRegex(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
+        // Check if using !~ with tr///r or y///r (which doesn't make sense)
+        if (node.right instanceof OperatorNode operatorNode 
+                && (operatorNode.operator.equals("tr") || operatorNode.operator.equals("transliterate"))
+                && operatorNode.operand instanceof ListNode listNode
+                && listNode.elements.size() >= 3) {
+            // Check if the modifiers (third element) contain 'r'
+            Node modifiersNode = listNode.elements.get(2);
+            if (modifiersNode instanceof StringNode stringNode) {
+                String modifiers = stringNode.value;
+                if (modifiers.contains("r")) {
+                    throw new PerlCompilerException(node.tokenIndex, 
+                        "Using !~ with tr///r doesn't make sense", 
+                        emitterVisitor.ctx.errorUtil);
+                }
+            }
+        }
+        
         emitterVisitor.visit(
                 new OperatorNode("not",
                         new BinaryOperatorNode(
