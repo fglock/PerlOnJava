@@ -18,7 +18,7 @@ public class HashUtil extends PerlModuleBase {
      * Constructor initializes the module.
      */
     public HashUtil() {
-        super("Hash::Util");
+        super("Hash::Util", false);  // false because loaded via XSLoader
     }
     
     /**
@@ -26,6 +26,7 @@ public class HashUtil extends PerlModuleBase {
      */
     public static void initialize() {
         HashUtil hashUtil = new HashUtil();
+        
         try {
             // Register the bucket_ratio method
             hashUtil.registerMethod("bucket_ratio", "bucket_ratio", "\\%");
@@ -36,7 +37,12 @@ public class HashUtil extends PerlModuleBase {
             hashUtil.registerMethod("lock_hash", "lock_hash", "\\%");
             hashUtil.registerMethod("unlock_hash", "unlock_hash", "\\%");
             hashUtil.registerMethod("hash_seed", "hash_seed", null);
+            
+            // Additional methods not yet implemented:
+            // lock_value, unlock_value, lock_keys_plus, hash_value, 
+            // bucket_info, bucket_stats, bucket_array
         } catch (NoSuchMethodException e) {
+            // This should not happen if all methods are properly implemented
             System.err.println("Warning: Missing HashUtil method: " + e.getMessage());
         }
     }
@@ -47,7 +53,7 @@ public class HashUtil extends PerlModuleBase {
      * - used: number of buckets with at least one entry
      * - total: total number of buckets allocated
      */
-    public static RuntimeScalar bucket_ratio(RuntimeArray args, int ctx) {
+    public static RuntimeList bucket_ratio(RuntimeArray args, int ctx) {
         if (args.size() == 0) {
             throw new IllegalArgumentException("bucket_ratio requires a hash argument");
         }
@@ -65,7 +71,7 @@ public class HashUtil extends PerlModuleBase {
         
         // Get bucket statistics
         String ratio = calculateBucketRatio(hash);
-        return new RuntimeScalar(ratio);
+        return new RuntimeScalar(ratio).getList();
     }
     
     /**
@@ -170,40 +176,40 @@ public class HashUtil extends PerlModuleBase {
     
     // Placeholder implementations for other Hash::Util functions
     
-    public static RuntimeScalar lock_keys(RuntimeArray args, int ctx) {
+    public static RuntimeList lock_keys(RuntimeArray args, int ctx) {
         // TODO: Implement hash key locking
         if (args.size() > 0) {
-            return args.get(0);  // Return the hash reference
+            return args.get(0).getList();  // Return the hash reference
         }
-        return RuntimeScalarCache.scalarUndef;
+        return RuntimeScalarCache.scalarUndef.getList();
     }
     
-    public static RuntimeScalar unlock_keys(RuntimeArray args, int ctx) {
+    public static RuntimeList unlock_keys(RuntimeArray args, int ctx) {
         // TODO: Implement hash key unlocking
         if (args.size() > 0) {
-            return args.get(0);  // Return the hash reference
+            return args.get(0).getList();  // Return the hash reference
         }
-        return RuntimeScalarCache.scalarUndef;
+        return RuntimeScalarCache.scalarUndef.getList();
     }
     
-    public static RuntimeScalar lock_hash(RuntimeArray args, int ctx) {
+    public static RuntimeList lock_hash(RuntimeArray args, int ctx) {
         // TODO: Implement full hash locking
         if (args.size() > 0) {
-            return args.get(0);  // Return the hash reference
+            return args.get(0).getList();  // Return the hash reference
         }
-        return RuntimeScalarCache.scalarUndef;
+        return RuntimeScalarCache.scalarUndef.getList();
     }
     
-    public static RuntimeScalar unlock_hash(RuntimeArray args, int ctx) {
+    public static RuntimeList unlock_hash(RuntimeArray args, int ctx) {
         // TODO: Implement full hash unlocking
         if (args.size() > 0) {
-            return args.get(0);  // Return the hash reference
+            return args.get(0).getList();  // Return the hash reference
         }
-        return RuntimeScalarCache.scalarUndef;
+        return RuntimeScalarCache.scalarUndef.getList();
     }
     
-    public static RuntimeScalar hash_seed(RuntimeArray args, int ctx) {
+    public static RuntimeList hash_seed(RuntimeArray args, int ctx) {
         // Return a constant seed value for now
-        return new RuntimeScalar(0);
+        return new RuntimeScalar(0).getList();
     }
 }
