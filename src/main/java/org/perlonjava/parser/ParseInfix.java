@@ -179,10 +179,22 @@ public class ParseInfix {
             case "{":
                 // Handle hash subscripts
                 right = new HashLiteralNode(parseHashSubscript(parser), parser.tokenIndex);
+                // Check if left is $$var and transform to $var->{...}
+                if (left instanceof OperatorNode leftOp && leftOp.operator.equals("$") 
+                        && leftOp.operand instanceof OperatorNode innerOp && innerOp.operator.equals("$")) {
+                    // Transform $$var{...} to $var->{...}
+                    return new BinaryOperatorNode("->", innerOp, right, parser.tokenIndex);
+                }
                 return new BinaryOperatorNode(token.text, left, right, parser.tokenIndex);
             case "[":
                 // Handle array subscripts
                 right = new ArrayLiteralNode(parseArraySubscript(parser), parser.tokenIndex);
+                // Check if left is $$var and transform to $var->[...]
+                if (left instanceof OperatorNode leftOp && leftOp.operator.equals("$") 
+                        && leftOp.operand instanceof OperatorNode innerOp && innerOp.operator.equals("$")) {
+                    // Transform $$var[...] to $var->[...]
+                    return new BinaryOperatorNode("->", innerOp, right, parser.tokenIndex);
+                }
                 return new BinaryOperatorNode(token.text, left, right, parser.tokenIndex);
             case "--":
             case "++":
