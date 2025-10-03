@@ -167,6 +167,9 @@ public class SpecialBlockParser {
             }
 
             String message = t.getMessage();
+            if (message == null) {
+                message = t.getClass().getSimpleName() + " during " + blockPhase;
+            }
             if (!message.endsWith("\n")) {
                 message += "\n";
             }
