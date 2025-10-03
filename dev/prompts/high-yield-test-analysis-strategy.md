@@ -101,14 +101,26 @@ This flexibility prevents abandoning valuable fixes due to rigid time limits whi
 **NEW INSIGHT from 2025-10-03:** Blocked tests often indicate missing features that affect hundreds of tests.
 
 ```bash
-# Run test analysis to find blocked/incomplete tests
-perl dev/tools/perl_test_runner.pl t 2>&1 | grep -A 15 "incomplete test files"
+# Run test analysis and SAVE TO LOGS for later reference
+perl dev/tools/perl_test_runner.pl t 2>&1 | tee logs/test_$(date +%Y%m%d_%H%M%S)
+
+# Then analyze blocked/incomplete tests
+grep -A 15 "incomplete test files" logs/test_*
+
+# Or run and analyze in one command
+perl dev/tools/perl_test_runner.pl t 2>&1 | tee logs/test_$(date +%Y%m%d_%H%M%S) | grep -A 15 "incomplete test files"
 
 # Look for patterns like:
 # - "operator not implemented" → Missing operator
 # - "Variable does not contain" → Syntax parsing issue  
 # - "compilation failed" → AST/parser problem
 ```
+
+**PRO TIP:** Always save test runner output to `logs/` directory for:
+- Tracking progress over time
+- Comparing before/after fixes
+- Referencing specific errors without re-running tests
+- Building historical context of improvements
 
 **Why this works:**
 - One missing operator can block an entire test file (415 tests in op/index.t!)
