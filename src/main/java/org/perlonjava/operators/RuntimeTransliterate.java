@@ -159,8 +159,16 @@ public class RuntimeTransliterate {
             return new RuntimeScalar(resultString);
         }
 
-        // Modify the original string
-        originalString.set(resultString);
+        // Determine if we need to call set() which will trigger read-only error if applicable
+        // We must call set() if:
+        // 1. The string actually changed, OR
+        // 2. It's an empty string AND we have a replacement operation (not just counting)
+        boolean hasReplacement = !replacementChars.isEmpty() || deleteUnmatched;
+        boolean needsSet = !input.equals(resultString) || (input.isEmpty() && hasReplacement);
+        
+        if (needsSet) {
+            originalString.set(resultString);
+        }
 
         // Return the count of matched characters
         return new RuntimeScalar(count);
