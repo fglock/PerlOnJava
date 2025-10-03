@@ -33,16 +33,39 @@ BEGIN {
     # If XSLoader fails, we'll provide basic implementations
 }
 
-# Basic bucket_ratio implementation
+# bucket_ratio implementation - uses Java backend for accuracy
 sub bucket_ratio (\%) {
     my $hashref = shift;
+    
+    # Try to use Java implementation if available
+    if (defined &HashUtil::bucket_ratio) {
+        return HashUtil::bucket_ratio($hashref);
+    }
+    
+    # Fallback to Perl approximation
     my $keys = keys %$hashref;
     
-    # Simple implementation - in a real implementation this would
-    # return actual bucket statistics from the hash table
-    # For now, return a reasonable ratio based on key count
-    my $buckets = $keys > 0 ? int($keys * 1.5) + 8 : 8;
-    my $used = $keys > 0 ? int($keys * 0.75) : 0;
+    if ($keys == 0) {
+        return "0/8";  # Empty hash has 8 initial buckets, 0 used
+    }
+    
+    # Calculate bucket count (next power of 2 >= keys * 1.3)
+    my $min_buckets = int($keys * 1.3);
+    my $buckets = 8;
+    while ($buckets < $min_buckets) {
+        $buckets *= 2;
+    }
+    
+    # Estimate used buckets
+    my $used;
+    if ($keys <= 8) {
+        $used = $keys;
+    } else {
+        $used = int($keys * 0.63) + 1;
+        $used = int($buckets * 0.75) if $used > int($buckets * 0.75);
+    }
+    
+    $used = $buckets if $used > $buckets;
     
     return "$used/$buckets";
 }
