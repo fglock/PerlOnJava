@@ -311,6 +311,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **`eval` block**: `eval` blocks are implemented.
 - ✅  **`do` block**: `do` blocks are supported.
 - ✅  **`do` file**: File execution using `do` is implemented.
+- ✅  **`do \&subroutine`**: is implemented.
 - ✅  **`print` operators**: `print`, `printf` and `say` statements are implemented, with support for file handles.
 - ✅  **`printf` and `sprintf`**: String formatting is implemented.
 - ✅  **Short-circuit and, or**: Short-circuit logical operators are supported.
