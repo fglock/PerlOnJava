@@ -17,6 +17,8 @@ import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.ScalarUtils;
 import org.perlonjava.runtime.PerlJavaUnimplementedException;
+import org.perlonjava.astnode.FormatLine;
+import org.perlonjava.astnode.PictureLine;
 
 import java.io.File;
 import java.io.IOException;
@@ -33,8 +35,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.PosixFilePermission;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
@@ -1026,6 +1030,65 @@ public class IOOperator {
         } catch (Exception e) {
             getGlobalVariable("main::!").set("Format execution failed: " + e.getMessage());
             return scalarFalse;
+        }
+    }
+
+    /**
+     * Implements the formline operator.
+     * Formats text according to a format template and appends to $^A.
+     * 
+     * @param ctx The runtime context
+     * @param args The arguments: format template followed by values
+     * @return The current value of $^A after appending
+     */
+    public static RuntimeScalar formline(int ctx, RuntimeBase... args) {
+        if (args.length < 1) {
+            throw new PerlCompilerException("Not enough arguments for formline");
+        }
+        
+        // Get the format template
+        String formatTemplate = args[0].scalar().toString();
+        
+        // For simple cases (like constants in index.t), if there are no format fields,
+        // just append the template string directly to $^A
+        if (!formatTemplate.contains("@") && !formatTemplate.contains("^")) {
+            // Simple case: no format fields, just append the string
+            RuntimeScalar accumulator = getGlobalVariable(GlobalContext.encodeSpecialVar("A"));
+            String currentValue = accumulator.toString();
+            accumulator.set(currentValue + formatTemplate);
+            return scalarTrue;
+        }
+        
+        // Create arguments list for format processing
+        RuntimeList formatArgs = new RuntimeList();
+        for (int i = 1; i < args.length; i++) {
+            formatArgs.add(args[i]);
+        }
+        
+        // For complex format templates with @ or ^ fields, use RuntimeFormat
+        // Note: This is a simplified implementation - full format support would require
+        // parsing the format template properly
+        try {
+            // Create a temporary RuntimeFormat to process the template
+            RuntimeFormat tempFormat = new RuntimeFormat("FORMLINE_TEMP", formatTemplate);
+            
+            // Parse the format template as picture lines
+            List<FormatLine> lines = new ArrayList<>();
+            lines.add(new PictureLine(formatTemplate, new ArrayList<>(), formatTemplate, 0));
+            tempFormat.setCompiledLines(lines);
+            
+            // Execute the format and get the result
+            String formattedOutput = tempFormat.execute(formatArgs);
+            
+            // Append to $^A
+            RuntimeScalar accumulator = getGlobalVariable(GlobalContext.encodeSpecialVar("A"));
+            String currentValue = accumulator.toString();
+            accumulator.set(currentValue + formattedOutput);
+            
+            // Return success (1)
+            return scalarTrue;
+        } catch (Exception e) {
+            throw new PerlCompilerException("formline failed: " + e.getMessage());
         }
     }
 
