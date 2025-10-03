@@ -382,6 +382,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **Network enumeration operators**: `endhostent`, `endnetent`, `endprotoent`, `endservent`, `gethostent`, `getnetbyaddr`, `getnetbyname`, `getnetent`, `getprotoent`, `getservent`, `sethostent`, `setnetent`, `setprotoent`, `setservent`.
 - ✅  **System V IPC operators**: `msgctl`, `msgget`, `msgrcv`, `msgsnd`, `semctl`, `semget`, `semop`, `shmctl`, `shmget`, `shmread`, `shmwrite`.
 - ✅  **`format` operator**: `format` and `write` functions for report generation are implemented.
+- ✅  **`formline` operator**: `formline` and `$^A` accumulator variable are implemented.
 
 ## I/O Operations
 
