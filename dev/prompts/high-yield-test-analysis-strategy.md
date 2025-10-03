@@ -3,8 +3,8 @@
 ## Meta-Prompt Purpose
 This is a **living document** that captures effective strategies for finding and fixing high-yield bugs in PerlOnJava. When you learn new debugging techniques or discover better ways to analyze test failures, **UPDATE THIS FILE** with your findings.
 
-**Last Updated:** 2025-10-02  
-**Recent Additions:** Time management strategy, debugging techniques, continuation prompts
+**Last Updated:** 2025-10-03  
+**Recent Additions:** AST transformation techniques, operator implementation patterns, syntax debugging with --parse
 
 ## Time Management for Debugging Sessions
 
@@ -97,6 +97,31 @@ This flexibility prevents abandoning valuable fixes due to rigid time limits whi
 
 ## Quick Start: Finding High-Yield Targets
 
+### Step 0: Check for Blocked Tests (HIGHEST IMPACT!)
+**NEW INSIGHT from 2025-10-03:** Blocked tests often indicate missing features that affect hundreds of tests.
+
+```bash
+# Run test analysis to find blocked/incomplete tests
+perl dev/tools/perl_test_runner.pl t 2>&1 | grep -A 15 "incomplete test files"
+
+# Look for patterns like:
+# - "operator not implemented" → Missing operator
+# - "Variable does not contain" → Syntax parsing issue  
+# - "compilation failed" → AST/parser problem
+```
+
+**Why this works:**
+- One missing operator can block an entire test file (415 tests in op/index.t!)
+- Syntax issues affect many test patterns ($$arrayref[index] blocked 347 tests)
+- These are often simple fixes with massive impact
+
+**Action plan:**
+1. Find test with 0 tests running (completely blocked)
+2. Run the test to see the error
+3. If "operator not implemented" → implement it
+4. If syntax error → use --parse to debug
+5. If missing variable → check GlobalContext initialization
+
 ### Step 1: Use Automated Analysis Tools
 
 **NEW: Failure Categorization Script**
@@ -186,7 +211,53 @@ perl test_minimal.pl
 
 **Example:** Hash assignment returns different values in scalar vs. list context.
 
-### Strategy 3: Verify with perldoc First
+### Strategy 3: Implementing Missing Operators (Quick Win Pattern!)
+**When to use:** Test fails with "operator not implemented" or test file is completely blocked
+
+**Checklist from formline success (415 tests unblocked!):**
+
+1. **Check if operator is parsed:**
+   ```bash
+   echo 'formline "test"' | ./jperl --parse
+   # If it shows in AST, parsing works
+   ```
+
+2. **Search for existing infrastructure:**
+   ```bash
+   # Look for related functionality
+   grep -r "format\|Format" src/main/java --include="*.java"
+   # Found RuntimeFormat.execute() - perfect for formline!
+   ```
+
+3. **Implementation steps:**
+   - Add operator to OperatorHandler.java registry
+   - Create implementation (often in IOOperator or similar)
+   - Check if special variables needed (like $^A for formline)
+   - Leverage existing code when possible
+
+4. **Example - formline implementation:**
+   ```java
+   // Added to OperatorHandler.java:
+   put("formline", "formline", "org/perlonjava/operators/IOOperator", 
+       "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
+   
+   // Implementation in IOOperator.java:
+   public static RuntimeScalar formline(int ctx, RuntimeBase... args) {
+       // Leveraged existing RuntimeFormat!
+       RuntimeFormat tempFormat = new RuntimeFormat("TEMP", template);
+       String result = tempFormat.execute(formatArgs);
+       // Append to $^A
+   }
+   ```
+
+5. **Test immediately:**
+   ```bash
+   echo 'formline "test"; print ${^A}' | ./jperl
+   ```
+
+**Key insight:** Missing operators often just need wiring to existing functionality!
+
+### Strategy 4: Verify with perldoc First
 **When to use:** Implementing or fixing pack/unpack formats or any Perl built-in
 
 **Critical lesson from W format fix:**
@@ -459,7 +530,31 @@ grep -r "methodName\(" src/main/java/
 grep -B 5 -A 10 "pattern" file.java
 ```
 
-### Technique 7: Killing Hanging Test Processes
+### Technique 7: Using --parse for Syntax Debugging
+**Pattern:** When syntax doesn't work as expected, examine the AST
+**CRITICAL INSIGHT:** This technique helped unblock 347 tests in one fix!
+
+```bash
+# Compare how problematic syntax parses
+echo '$$test[0]' | ./jperl --parse
+
+# Compare with working syntax
+echo '$test->[0]' | ./jperl --parse
+
+# Look for structural differences in the AST
+```
+
+**What to look for:**
+- Different operator types (BinaryOp '[' vs BinaryOp '->')
+- Nested structure differences
+- Incorrect operator precedence
+
+**When to use:**
+- Syntax that works in Perl but not PerlOnJava
+- Unexpected parsing behavior
+- Before diving into code generation issues
+
+### Technique 8: Killing Hanging Test Processes
 **Pattern:** When a test hangs (infinite loop or deadlock), find and kill the process
 
 ```bash
@@ -913,11 +1008,17 @@ if (charsRead == 0) {
   - Very low pass rate (<30%)
   - Missing entire subsystems
   - Require architectural changes
-- **Examples:** sprintf %lld formats, warning system
+- **Examples:** Complex regex features, some warning system aspects
 
 ## Session Success Metrics
 
-### Excellent Session (This session achieved this!)
+### Exceptional Session (Like 2025-10-03!)
+- **Fixes:** 3-5 high-impact fixes
+- **Tests unblocked:** 500+ tests
+- **ROI:** 200+ tests/hour
+- **Key indicators:** Blocked tests unblocked, syntax fixes, missing operators implemented
+
+### Excellent Session
 - **Fixes:** 5-7 major bugs
 - **Tests improved:** 200-400
 - **Documentation:** 1-2 comprehensive prompts
@@ -934,6 +1035,104 @@ if (charsRead == 0) {
 - **Documentation:** Clear notes on findings
 
 ## Lessons Learned (Update This Section!)
+
+### Session 2025-10-03: Massive Impact - 3 Major Fixes (+1200 tests unblocked!)
+
+**Session Overview:**
+- **Duration:** ~2 hours
+- **Fixes:** 3 high-impact fixes (formline operator, pack fixes, dereference syntax)
+- **Tests unblocked:** ~1200 tests total
+- **ROI:** 600 tests/hour (exceptional!)
+- **Strategy:** Identified blocked tests, syntax issues, and leveraged existing infrastructure
+
+**Key Discoveries:**
+
+1. **Using --parse to diagnose syntax issues:**
+   ```bash
+   echo '$$test[0]' | ./jperl --parse  # Shows AST structure
+   echo '$test->[0]' | ./jperl --parse  # Compare with working syntax
+   ```
+   - Revealed $$test[0] parsed as BinaryOp '[' instead of '->'
+   - Led to AST transformation solution in parser
+   - **Lesson:** When syntax doesn't work as expected, examine the AST first
+
+2. **AST transformation for syntax fixes:**
+   - Fixed in parser (ParseInfix.java) rather than code generation
+   - Transform incorrect AST to correct AST on the fly
+   - Pattern: Detect problematic structure → Transform to correct structure
+   ```java
+   if (left instanceof OperatorNode leftOp && leftOp.operator.equals("$") 
+           && leftOp.operand instanceof OperatorNode innerOp && innerOp.operator.equals("$")) {
+       // Transform $$var[...] to $var->[...]
+       return new BinaryOperatorNode("->", innerOp, right, parser.tokenIndex);
+   }
+   ```
+   - **Result:** 347 tests unblocked with simple parser fix!
+
+3. **Finding unimplemented operators via test analysis:**
+   - op/index.t completely blocked → checked error → formline operator missing
+   - Searched codebase → found format infrastructure already existed
+   - Leveraged existing RuntimeFormat for implementation
+   - **Lesson:** Blocked tests often indicate missing operators/features
+
+4. **Leveraging existing infrastructure:**
+   - formline needed format processing → RuntimeFormat already did this
+   - Created temporary RuntimeFormat to process formline templates
+   - Reused existing code instead of reimplementing
+   - **Lesson:** Always search for existing similar functionality first
+
+5. **Comprehensive test creation with Test::More:**
+   - Created dereference_syntax.t with 7 subtests
+   - Used Test::More and subtest for professional structure
+   - Tests both basic functionality and edge cases
+   - **Lesson:** Permanent tests should use Test::More with subtests
+
+**Strategic Insights:**
+
+1. **Check test runner output for high-impact opportunities:**
+   ```bash
+   perl dev/tools/perl_test_runner.pl t 2>&1 | tail -100
+   ```
+   - Shows blocked tests and incomplete test runs
+   - Blocked tests = missing features = high impact fixes
+
+2. **Syntax issues have multiplicative impact:**
+   - One syntax fix can unblock hundreds of tests
+   - $$arrayref[index] pattern is used throughout test suites
+   - Worth spending time on parser/AST fixes
+
+3. **Missing operators are quick wins:**
+   - Usually just need to wire up existing functionality
+   - formline: Added operator + $^A variable = 415 tests unblocked
+   - Look for "operator not implemented" errors
+
+**Productivity Factors:**
+
+- **--parse for debugging:** Immediately showed syntax parsing issue
+- **Test-driven discovery:** Let failing tests guide to missing features
+- **Existing code reuse:** RuntimeFormat for formline saved hours
+- **Clean test creation:** Test::More subtests for permanent tests
+
+**New Techniques Discovered:**
+
+1. **AST debugging with --parse:**
+   ```bash
+   # Compare how different syntaxes parse
+   echo 'syntax1' | ./jperl --parse
+   echo 'syntax2' | ./jperl --parse
+   # Diff the outputs to see structural differences
+   ```
+
+2. **Parser-level syntax fixes:**
+   - Fix in parser before code generation
+   - Transform AST nodes during parsing
+   - More efficient than fixing in code generation
+
+3. **Operator implementation pattern:**
+   - Check if operator is parsed (--parse shows it)
+   - Find where similar operators are implemented
+   - Add to OperatorHandler registry
+   - Implement using existing infrastructure when possible
 
 ### Session 2025-09-30 (Part 4): Complete Session - 5 Fixes + 2 Prompt Docs (+48 tests)
 
@@ -1463,22 +1662,26 @@ Understanding the full picture helps identify the root cause.
 
 ## Remember
 
-1. **Update this file** when you learn something new
-2. **Test incrementally** - verify each hypothesis
-3. **Document complex issues** - create prompts for future sessions
-4. **Focus on high-yield targets** - 70-95% pass rates
-5. **Use existing code** - search before implementing
-6. **Strategic logging** - targeted, not everywhere
-7. **Commit often** - small, focused commits
+1. **Check for blocked tests first** - highest impact opportunities (0 tests running = missing features)
+2. **Use --parse for syntax issues** - compare AST structures to find parsing problems
+3. **Update this file** when you learn something new
+4. **Test incrementally** - verify each hypothesis
+5. **Document complex issues** - create prompts for future sessions
+6. **Focus on high-yield targets** - blocked tests, then 70-95% pass rates
+7. **Use existing code** - search before implementing (formline used RuntimeFormat!)
+8. **Strategic logging** - targeted, not everywhere
+9. **Commit often** - small, focused commits
    - Stage ONLY modified source files, never use `git add -A`
    - Check `git status` before every commit
    - Remove test files before committing
-8. **Use bytecode analysis** - when behavior is unclear
-9. **Test with overloaded objects** - for operator implementations
-10. **Balance quick wins and deep dives** - maintain momentum
-11. **Leverage existing operations** - pack dummy data instead of reimplementing logic
-12. **Use records for multiple return values** - cleaner than arrays or multiple calls
-13. **Compare before/after logs** - understand full regression picture, not just net change
+10. **Use bytecode analysis** - when behavior is unclear
+11. **Test with overloaded objects** - for operator implementations
+12. **Balance quick wins and deep dives** - maintain momentum
+13. **Leverage existing operations** - pack dummy data instead of reimplementing logic
+14. **Use records for multiple return values** - cleaner than arrays or multiple calls
+15. **Compare before/after logs** - understand full regression picture, not just net change
+16. **Create permanent tests with Test::More** - use subtests for organization
+17. **Parser fixes have multiplicative impact** - one syntax fix can unblock hundreds of tests
 
 ---
 
