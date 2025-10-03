@@ -57,7 +57,8 @@ public class RegexPreprocessor {
         s = convertPythonStyleGroups(s);
         StringBuilder sb = new StringBuilder();
         handleRegex(s, 0, sb, regexFlags, false);
-        return sb.toString();
+        String result = sb.toString();
+        return result;
     }
 
     /**
@@ -345,6 +346,8 @@ public class RegexPreprocessor {
                 regexError(s, offset - 1, "(??{...}) recursive regex patterns not implemented");
             } else if (c3 == '(') {
                 // Handle (?(condition)yes|no) conditionals
+                // handleConditionalPattern processes the entire conditional including its closing )
+                // so we need to return directly without further processing
                 return handleConditionalPattern(s, offset, length, sb, regexFlags);
             } else if (c3 == ';') {
                 // (?;...) is not recognized - marker should be after ;
@@ -873,6 +876,7 @@ public class RegexPreprocessor {
         int pos = condEnd + 1;  // Skip past the closing )
         int pipeCount = 0;
         int branchStart = pos;
+        int pipePos = -1;
         parenDepth = 0;
 
         // First, check if we have any content after the condition
@@ -893,6 +897,9 @@ public class RegexPreprocessor {
                 parenDepth--;
             } else if (ch == '|' && parenDepth == 0) {
                 pipeCount++;
+                if (pipeCount == 1) {
+                    pipePos = pos;
+                }
                 if (pipeCount > 1) {
                     // Mark the error right after this pipe character
                     regexError(s, pos + 1, "Switch (?(condition)... contains too many branches");
@@ -908,9 +915,25 @@ public class RegexPreprocessor {
             regexError(s, pos, "Switch (?(condition)... not terminated");
         }
 
-        // For now, just convert to a non-capturing group
+        // Convert conditional pattern to alternatives
+        // (?(1)yes|no) becomes (?:yes|no) - not semantically correct but will parse
+        // TODO: Implement proper conditional regex support
+        
         sb.append("(?:");
-        return handleRegex(s, branchStart, sb, regexFlags, true);
+        
+        // Process the branches - they're already preprocessed strings
+        if (pipePos > 0) {
+            // We have yes|no branches
+            sb.append(s.substring(branchStart, pipePos));
+            sb.append("|");
+            sb.append(s.substring(pipePos + 1, pos));
+        } else {
+            // Only one branch (yes branch only)
+            sb.append(s.substring(branchStart, pos));
+        }
+        
+        sb.append(")");
+        return pos + 1; // Skip past the closing ) of the conditional
     }
 
     private static int handleQuantifier(String s, int offset, StringBuilder sb) {
