@@ -3,20 +3,12 @@ package org.perlonjava.codegen;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.perlonjava.astnode.*;
-import org.perlonjava.astvisitor.ControlFlowDetectorVisitor;
 import org.perlonjava.astvisitor.EmitterVisitor;
-import org.perlonjava.runtime.GlobalVariable;
 import org.perlonjava.runtime.RuntimeContextType;
 
 import java.util.List;
 
 public class EmitBlock {
-    // Blocks with too many statements are emitted as a separate subroutine
-    // in order to avoid "Method too large" error test: in t/re/pat.t
-    final static int LARGE_BLOCK = 16;
-    
-    // Reusable visitor for control flow detection
-    private static final ControlFlowDetectorVisitor controlFlowDetector = new ControlFlowDetectorVisitor();
 
     /**
      * Emits bytecode for a block of statements.
@@ -26,37 +18,10 @@ public class EmitBlock {
      */
     public static void emitBlock(EmitterVisitor emitterVisitor, BlockNode node) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
-
-        // Check if we can emit this as a subroutine, to avoid "Method too large" error.
-        // Check for control flow that would break if refactored
-        boolean hasUnsafeControlFlow = false;
-        if (node.elements.size() > LARGE_BLOCK && !node.getBooleanAnnotation("blockIsSubroutine")) {
-            // Use visitor pattern to check for unsafe control flow
-            controlFlowDetector.reset();
-            node.accept(controlFlowDetector);
-            hasUnsafeControlFlow = controlFlowDetector.hasUnsafeControlFlow();
-        }
         
-        if (node.elements.size() > LARGE_BLOCK
-                && !emitterVisitor.ctx.javaClassInfo.gotoLabelStack.isEmpty()
-                && !node.getBooleanAnnotation("blockIsSubroutine")
-                && !hasUnsafeControlFlow) {
-            // Create sub {...}->(@_)
-            int index = node.tokenIndex;
-            ListNode args = new ListNode(index);
-            args.elements.add(new OperatorNode("@", new IdentifierNode("_", index), index));
-            BinaryOperatorNode subr = new BinaryOperatorNode(
-                    "->",
-                    new SubroutineNode(
-                            null, null, null,
-                            new BlockNode(List.of(node), index),
-                            false,
-                            index
-                    ),
-                    args,
-                    index
-            );
-            subr.accept(emitterVisitor);
+        // Try to refactor large blocks using the helper class
+        if (LargeBlockRefactorer.processBlock(emitterVisitor, node)) {
+            // Block was refactored and emitted by the helper
             return;
         }
 
@@ -126,5 +91,24 @@ public class EmitBlock {
 
         emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
         emitterVisitor.ctx.logDebug("generateCodeBlock end");
+    }
+
+    private static BinaryOperatorNode refactorBlockToSub(BlockNode node) {
+        // Create sub {...}->(@_)
+        int index = node.tokenIndex;
+        ListNode args = new ListNode(index);
+        args.elements.add(new OperatorNode("@", new IdentifierNode("_", index), index));
+        BinaryOperatorNode subr = new BinaryOperatorNode(
+                "->",
+                new SubroutineNode(
+                        null, null, null,
+                        new BlockNode(List.of(node), index),
+                        false,
+                        index
+                ),
+                args,
+                index
+        );
+        return subr;
     }
 }
