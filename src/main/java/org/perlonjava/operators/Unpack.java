@@ -5,6 +5,7 @@ import org.perlonjava.operators.unpack.*;
 import org.perlonjava.runtime.*;
 import org.perlonjava.operators.FormatModifierValidator;
 
+import java.math.BigInteger;
 import java.util.*;
 
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
@@ -314,36 +315,79 @@ public class Unpack {
                         checksumHandler.unpack(state, tempValues, count, isStarCount);
                     }
 
-                    // Calculate checksum based on format (accumulate without masking like Perl)
-                    long checksum = 0;
-                    if (format == 'b' || format == 'B') {
-                        // For binary formats, count 1 bits
-                        for (RuntimeBase value : tempValues) {
-                            String binary = value.toString();
-                            for (int j = 0; j < binary.length(); j++) {
-                                if (binary.charAt(j) == '1') {
-                                    checksum++;
+                    // Calculate checksum - use BigInteger for 64+ bit checksums to handle unsigned values
+                    if (checksumBits >= 64) {
+                        // Use BigInteger for 64+ bit checksums to handle unsigned values correctly
+                        BigInteger bigChecksum = BigInteger.ZERO;
+                        
+                        if (format == 'b' || format == 'B') {
+                            // For binary formats, count 1 bits
+                            for (RuntimeBase value : tempValues) {
+                                String binary = value.toString();
+                                for (int j = 0; j < binary.length(); j++) {
+                                    if (binary.charAt(j) == '1') {
+                                        bigChecksum = bigChecksum.add(BigInteger.ONE);
+                                    }
+                                }
+                            }
+                        } else {
+                            // For other formats, sum the numeric values
+                            for (RuntimeBase value : tempValues) {
+                                long val = ((RuntimeScalar) value).getLong();
+                                // Handle negative values as unsigned
+                                if (val < 0) {
+                                    bigChecksum = bigChecksum.add(BigInteger.valueOf(val).add(BigInteger.ONE.shiftLeft(64)));
+                                } else {
+                                    bigChecksum = bigChecksum.add(BigInteger.valueOf(val));
                                 }
                             }
                         }
-                    } else {
-                        // For other formats, sum the numeric values
-                        for (RuntimeBase value : tempValues) {
-                            checksum += ((RuntimeScalar) value).getLong();
+                        
+                        // Apply bit mask for 64-bit (not for 65+ as they overflow anyway)
+                        if (checksumBits == 64) {
+                            // 64-bit mask: 2^64 - 1 = 0xFFFFFFFFFFFFFFFF
+                            BigInteger mask = BigInteger.ONE.shiftLeft(64).subtract(BigInteger.ONE);
+                            bigChecksum = bigChecksum.and(mask);
                         }
-                    }
-
-                    // Apply bit mask at the very end like Perl (not during accumulation)
-                    if (checksumBits > 0 && checksumBits < 64) {
-                        long mask = (1L << checksumBits) - 1;
-                        checksum &= mask;
-                    }
-
-                    // For 32-bit checksums that would be negative as int, convert to long
-                    if (checksumBits == 32 && checksum > Integer.MAX_VALUE) {
-                        values.add(new RuntimeScalar(checksum));
+                        // For checksumBits > 64, Perl treats it as no mask (full value)
+                        
+                        // Convert BigInteger to long - this will wrap around for unsigned values > Long.MAX_VALUE
+                        // which matches Perl's behavior on 64-bit systems
+                        values.add(new RuntimeScalar(bigChecksum.longValue()));
                     } else {
-                        values.add(new RuntimeScalar((int) checksum));
+                        // Use long for checksums < 64 bits
+                        long checksum = 0;
+                        if (format == 'b' || format == 'B') {
+                            // For binary formats, count 1 bits
+                            for (RuntimeBase value : tempValues) {
+                                String binary = value.toString();
+                                for (int j = 0; j < binary.length(); j++) {
+                                    if (binary.charAt(j) == '1') {
+                                        checksum++;
+                                    }
+                                }
+                            }
+                        } else {
+                            // For other formats, sum the numeric values
+                            for (RuntimeBase value : tempValues) {
+                                checksum += ((RuntimeScalar) value).getLong();
+                            }
+                        }
+
+                        // Apply bit mask at the very end like Perl (not during accumulation)
+                        if (checksumBits > 0 && checksumBits < 64) {
+                            long mask = (1L << checksumBits) - 1;
+                            checksum &= mask;
+                        }
+
+                        // Return the checksum value:
+                        // - For checksums that fit in an int, return as int
+                        // - For larger values or checksums with more than 32 bits, return as long
+                        if (checksumBits > 32 || checksum > Integer.MAX_VALUE || checksum < Integer.MIN_VALUE) {
+                            values.add(new RuntimeScalar(checksum));
+                        } else {
+                            values.add(new RuntimeScalar((int) checksum));
+                        }
                     }
                     }
                 } else {
