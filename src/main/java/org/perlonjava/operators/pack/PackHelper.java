@@ -755,6 +755,7 @@ public class PackHelper {
     public static boolean isNumericFormat(char format) {
         return switch (format) {
             case 'c', 'C', 's', 'S', 'l', 'L', 'i', 'I', 'n', 'N', 'v', 'V', 'w', 'W', 'q', 'Q', 'j', 'J',
+                 'f', 'F', 'd', 'D',  // Float and double formats
                  'Z' ->  // Z can be used as a count
                     true;
             default -> false;

@@ -138,9 +138,8 @@ public class PackParser {
                     // Empty brackets - treat as count 0
                     result.count = 0;
                 } else {
-                    // Template-based count - for now, use 1 as fallback
-                    result.count = 1;
-                    // TODO: Implement proper template size calculation
+                    // Template-based count - calculate the size of the template
+                    result.count = calculateTemplateSize(countStr);
                 }
 
                 result.endPosition = j;
@@ -327,6 +326,58 @@ public class PackParser {
             }
         }
         return Math.max(count, 10); // Ensure we have at least 10 values
+    }
+    
+    /**
+     * Calculates the total size in bytes of a template string.
+     * For use with x[template] and X[template] formats.
+     * 
+     * This method uses the actual Pack.pack method to pack dummy data
+     * and measure the resulting size, which handles all complex cases
+     * including groups, modifiers, and nested templates correctly.
+     * 
+     * @param template the template string
+     * @return the total size in bytes
+     */
+    private static int calculateTemplateSize(String template) {
+        // Use the actual pack method to calculate the size by packing dummy data
+        // This handles all complex cases including groups, modifiers, etc.
+        try {
+            // Create a RuntimeList with the template and dummy values
+            org.perlonjava.runtime.RuntimeList args = new org.perlonjava.runtime.RuntimeList();
+            args.add(new org.perlonjava.runtime.RuntimeScalar(template));
+            
+            // Count how many values the template needs and add dummy values
+            int valueCount = countValuesNeeded(template);
+            for (int j = 0; j < valueCount; j++) {
+                // Add dummy values - use 0 for numeric formats
+                args.add(new org.perlonjava.runtime.RuntimeScalar(0));
+            }
+            
+            // Pack with the template and measure the result
+            org.perlonjava.runtime.RuntimeScalar result = org.perlonjava.operators.Pack.pack(args);
+            return result.toString().length();
+        } catch (Exception e) {
+            // If packing fails for any reason, fall back to simple calculation
+            // This might happen for templates with special requirements
+            return calculateTemplateSizeSimple(template);
+        }
+    }
+    
+    /**
+     * Simple fallback calculation for template size.
+     * This is used when the pack method fails for some reason.
+     */
+    private static int calculateTemplateSizeSimple(String template) {
+        // For simple fallback, just count format characters and use default sizes
+        int size = 0;
+        for (int i = 0; i < template.length(); i++) {
+            char c = template.charAt(i);
+            if (Character.isLetter(c) && c != 'X') {  // X is backward, doesn't add size
+                size += getFormatSize(c, false);
+            }
+        }
+        return Math.max(size, 1);  // Return at least 1
     }
     
     /**
