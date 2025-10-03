@@ -50,10 +50,9 @@ public class ControlPackHandler implements PackFormatHandler {
                 valueIndex++;
                 int targetPos = (int) posValue.getDouble();
 
-                // DEBUG: '.' format - current size: " + output.size() + ", target position: " + targetPos
-
+                // Handle negative positions: treat as 0 (truncate to beginning)
                 if (targetPos < 0) {
-                    throw new PerlCompilerException("pack: negative position for '.'");
+                    targetPos = 0;
                 }
 
                 int currentSize = output.size();
