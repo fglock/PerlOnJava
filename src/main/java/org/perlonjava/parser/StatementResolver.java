@@ -76,16 +76,56 @@ public class StatementResolver {
                     yield null;
                 }
 
+                case "field" -> {
+                    if (parser.ctx.symbolTable.isFeatureCategoryEnabled("class")) {
+                        yield FieldParser.parseFieldDeclaration(parser);
+                    }
+                    yield null;
+                }
+
                 case "method" -> {
                     if (parser.ctx.symbolTable.isFeatureCategoryEnabled("class")) {
-                        parser.tokenIndex++;
-                        if (peek(parser).type == LexerTokenType.IDENTIFIER) {
-                            Node node = SubroutineParser.parseSubroutineDefinition(parser, true, "our");
-                            node.setAnnotation("isMethod", true);
-                            yield node;
+                        // Parse method more directly
+                        parser.tokenIndex++;  // consume "method"
+                        
+                        // Get method name
+                        LexerToken nameToken = peek(parser);
+                        String methodName = null;
+                        if (nameToken.type == LexerTokenType.IDENTIFIER) {
+                            methodName = nameToken.text;
+                            consume(parser);
                         }
-                        // Otherwise backtrack
-                        parser.tokenIndex = currentIndex;
+                        
+                        // Parse signature if present (optional)
+                        String prototype = null;
+                        if (peek(parser).text.equals("(")) {
+                            // For now, just skip the signature by finding the matching )
+                            int parenCount = 0;
+                            do {
+                                LexerToken t = consume(parser);
+                                if (t.text.equals("(")) parenCount++;
+                                if (t.text.equals(")")) parenCount--;
+                            } while (parenCount > 0);
+                        }
+                        
+                        // Parse block
+                        if (peek(parser).text.equals("{")) {
+                            consume(parser, LexerTokenType.OPERATOR, "{");
+                            BlockNode block = ParseBlock.parseBlock(parser);
+                            consume(parser, LexerTokenType.OPERATOR, "}");
+                            
+                            // Create subroutine node
+                            SubroutineNode method = new SubroutineNode(
+                                methodName, 
+                                prototype,
+                                null,  // attributes
+                                block,
+                                false, // useTryCatch
+                                parser.tokenIndex
+                            );
+                            method.setAnnotation("isMethod", true);
+                            yield method;
+                        }
                     }
                     yield null;
                 }

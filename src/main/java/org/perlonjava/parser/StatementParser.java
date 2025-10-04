@@ -512,6 +512,11 @@ public class StatementParser {
 
             // Insert packageNode as first statement in block
             block.elements.addFirst(packageNode);
+            
+            // Transform class blocks
+            if (packageNode.getBooleanAnnotation("isClass")) {
+                block = ClassTransformer.transformClassBlock(block, nameNode.name);
+            }
 
             parser.ctx.symbolTable.exitScope(scopeIndex);
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
