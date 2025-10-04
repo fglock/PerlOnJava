@@ -357,6 +357,8 @@ public class EmitVariable {
                     );
                 }
 
+                // For declared references, we need special handling
+                // The my operator needs to be processed to create the variables first
                 node.left.accept(emitterVisitor.with(RuntimeContextType.LIST));   // emit the variable
                 mv.visitInsn(Opcodes.SWAP); // move the target first
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "setFromList", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeArray;", false);
@@ -440,8 +442,32 @@ public class EmitVariable {
                 if (element instanceof OperatorNode && "undef".equals(((OperatorNode) element).operator)) {
                     continue; // skip "undef"
                 }
-                OperatorNode myNode = new OperatorNode(operator, element, listNode.tokenIndex);
-                myNode.accept(emitterVisitor.with(RuntimeContextType.VOID));
+                
+                // Check if this element is a backslash operator (declared reference)
+                // This handles cases like my(\$x) where the backslash is inside the parentheses
+                if (element instanceof OperatorNode operatorNode && 
+                    operatorNode.operator.equals("\\") && 
+                    operatorNode.operand instanceof OperatorNode varNode) {
+                    // This is a declared reference: my(\$x), my(\@arr), my(\%hash)
+                    // Declared references always create scalar variables
+                    OperatorNode scalarVarNode = varNode;
+                    if (varNode.operator.equals("@") || varNode.operator.equals("%")) {
+                        // Create a scalar version of the variable for emission
+                        scalarVarNode = new OperatorNode("$", varNode.operand, varNode.tokenIndex);
+                        // Transfer the isDeclaredReference annotation
+                        scalarVarNode.setAnnotation("isDeclaredReference", true);
+                    }
+                    // Create a my node for the scalar variable with the isDeclaredReference flag
+                    OperatorNode myNode = new OperatorNode(operator, scalarVarNode, listNode.tokenIndex);
+                    // Transfer the isDeclaredReference annotation
+                    if (scalarVarNode.annotations != null && Boolean.TRUE.equals(scalarVarNode.annotations.get("isDeclaredReference"))) {
+                        myNode.setAnnotation("isDeclaredReference", true);
+                    }
+                    myNode.accept(emitterVisitor.with(RuntimeContextType.VOID));
+                } else {
+                    OperatorNode myNode = new OperatorNode(operator, element, listNode.tokenIndex);
+                    myNode.accept(emitterVisitor.with(RuntimeContextType.VOID));
+                }
             }
             if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
                 listNode.accept(emitterVisitor);
@@ -466,6 +492,10 @@ public class EmitVariable {
                     }
                     int varIndex = emitterVisitor.ctx.symbolTable.addVariable(var, operator, sigilNode);
                     // TODO optimization - SETVAR+MY can be combined
+
+                    // Check if this is a declared reference (my \$x)
+                    boolean isDeclaredReference = node.annotations != null && 
+                        Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"));
 
                     // Determine the class name based on the sigil
                     String className = EmitterMethodCreator.getVariableClassName(sigil);
@@ -553,11 +583,22 @@ public class EmitVariable {
                         // Create and fetch a global variable
                         fetchGlobalVariable(emitterVisitor.ctx, true, sigil, name, node.getIndex());
                     }
-                    if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
+                    // For declared references in non-void context, we need different handling
+                    if (isDeclaredReference && emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
+                        // Duplicate the variable for storage
                         emitterVisitor.ctx.mv.visitInsn(Opcodes.DUP);
+                        // Store in a JVM local variable
+                        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, varIndex);
+                        // The original is still on the stack for the assignment
+                    } else {
+                        // Normal handling for non-declared references
+                        if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
+                            emitterVisitor.ctx.mv.visitInsn(Opcodes.DUP);
+                        }
+                        // Store in a JVM local variable
+                        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, varIndex);
                     }
-                    // Store in a JVM local variable
-                    emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, varIndex);
+                    
                     if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR && !sigil.equals("$")) {
                         // scalar context: transform the value in the stack to scalar
                         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
