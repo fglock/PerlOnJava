@@ -4,6 +4,7 @@ import org.perlonjava.astnode.BlockNode;
 import org.perlonjava.astnode.LabelNode;
 import org.perlonjava.astnode.ListNode;
 import org.perlonjava.astnode.Node;
+import org.perlonjava.astnode.SubroutineNode;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 

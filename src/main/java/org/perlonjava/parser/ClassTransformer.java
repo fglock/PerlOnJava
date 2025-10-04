@@ -69,7 +69,11 @@ public class ClassTransformer {
         List<OperatorNode> fields = new ArrayList<>();
         List<Node> otherStatements = new ArrayList<>();
         List<SubroutineNode> methods = new ArrayList<>();
-        List<BlockNode> adjustBlocks = new ArrayList<>();  // ADJUST blocks for post-construction
+        
+        // Get ADJUST blocks from parser (they were stored as anonymous subs by SpecialBlockParser)
+        List<Node> adjustNodes = new ArrayList<>(parser.classAdjustBlocks);
+        parser.classAdjustBlocks.clear(); // Clear for next class
+        
         SubroutineNode existingConstructor = null;
         
         // Scan the block for fields, methods, and existing constructor
@@ -87,13 +91,6 @@ public class ClassTransformer {
                 } else {
                     otherStatements.add(element); // Regular subroutines
                 }
-            } else if (element instanceof OperatorNode opNode && "ADJUST".equals(opNode.operator)) {
-                // ADJUST blocks are special blocks that run after construction
-                // They should have a BlockNode as operand
-                if (opNode.operand instanceof BlockNode adjustBlock) {
-                    adjustBlocks.add(adjustBlock);
-                }
-                // Don't add ADJUST blocks to otherStatements - they're merged into constructor
             } else {
                 otherStatements.add(element);
             }
@@ -110,7 +107,7 @@ public class ClassTransformer {
         
         // Generate constructor if not present
         if (existingConstructor == null && !fields.isEmpty()) {
-            SubroutineNode constructor = generateConstructor(fields, className, adjustBlocks);
+            SubroutineNode constructor = generateConstructor(fields, className, adjustNodes);
             block.elements.add(constructor);
             // Register the constructor using the same logic as named subroutines
             // This handles all the bytecode generation automatically
@@ -160,7 +157,7 @@ public class ClassTransformer {
      * @param adjustBlocks List of ADJUST blocks to run after field initialization
      * @return A SubroutineNode representing the constructor
      */
-    private static SubroutineNode generateConstructor(List<OperatorNode> fields, String className, List<BlockNode> adjustBlocks) {
+    private static SubroutineNode generateConstructor(List<OperatorNode> fields, String className, List<Node> adjustNodes) {
         List<Node> bodyElements = new ArrayList<>();
         BlockNode body = new BlockNode(bodyElements, 0);
         
@@ -214,7 +211,23 @@ public class ClassTransformer {
             }
         }
         
-        // Step 3: return $self;
+        // Step 4: Run ADJUST blocks after field initialization
+        // ADJUST blocks are anonymous subs that need to be called with $self
+        // They run in the order they appear in the class
+        for (Node adjustNode : adjustNodes) {
+            // Each ADJUST block is an anonymous sub that needs to be called with $self
+            // Generate: $adjustSub->($self)
+            
+            // Create the argument list: ($self)
+            ListNode args = new ListNode(0);
+            args.elements.add(new OperatorNode("$", new IdentifierNode("self", 0), 0));
+            
+            // Create the call: $adjustSub->($self)
+            BinaryOperatorNode adjustCall = new BinaryOperatorNode("->", adjustNode, args, 0);
+            body.elements.add(adjustCall);
+        }
+        
+        // Step 5: return $self;
         body.elements.add(new OperatorNode("return", 
             new OperatorNode("$", new IdentifierNode("self", 0), 0), 0));
         

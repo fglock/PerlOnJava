@@ -508,7 +508,20 @@ public class StatementParser {
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
             int scopeIndex = parser.ctx.symbolTable.enterScope();
             parser.ctx.symbolTable.setCurrentPackage(nameNode.name, packageNode.getBooleanAnnotation("isClass"));
-            BlockNode block = ParseBlock.parseBlock(parser);
+            
+            // Set flag if we're entering a class block
+            boolean wasInClassBlock = parser.isInClassBlock;
+            if (packageNode.getBooleanAnnotation("isClass")) {
+                parser.isInClassBlock = true;
+            }
+            
+            BlockNode block;
+            try {
+                block = ParseBlock.parseBlock(parser);
+            } finally {
+                // Always restore the previous state
+                parser.isInClassBlock = wasInClassBlock;
+            }
 
             // Insert packageNode as first statement in block
             block.elements.addFirst(packageNode);

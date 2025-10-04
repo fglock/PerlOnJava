@@ -230,10 +230,93 @@ subtest 'Current implementation status' => sub {
     pass("✅ Runtime constructor calls (Class->new)");
     pass("✅ Package resolution (Class::new not main::new)");
     
-    # FEATURES NOT YET IMPLEMENTED:
+    # Test ADJUST blocks (now implemented!)
+    subtest 'ADJUST blocks for post-construction logic' => sub {
+        # Test 1: Multiple ADJUST blocks run in order
+        {
+            my $adjusted = "";
+            my $class_in_adjust;
+            
+            class TestAdjust1 {
+                field $value :param = 'default';
+                
+                ADJUST { 
+                    $adjusted .= "a";
+                }
+                
+                ADJUST { 
+                    $adjusted .= "b";
+                    $class_in_adjust = __CLASS__;
+                }
+                
+                method get_value {
+                    return $self->{value};
+                }
+            }
+            
+            my $obj = TestAdjust1->new();
+            is($adjusted, "ab", 'Multiple ADJUST blocks run in order');
+            is($class_in_adjust, "TestAdjust1", '__CLASS__ available in ADJUST block');
+            is($obj->get_value(), 'default', 'Field initialization works with ADJUST');
+        }
+        
+        # Test 2: $self is available in ADJUST blocks
+        {
+            my $self_in_ADJUST;
+            my $field_in_ADJUST;
+            
+            class TestAdjust2 {
+                field $name :param = 'test';
+                field $counter = 0;
+                
+                ADJUST {
+                    $self_in_ADJUST = $self;
+                    $field_in_ADJUST = $self->{name};
+                    $self->{counter} = 42;
+                }
+                
+                method get_counter {
+                    return $self->{counter};
+                }
+            }
+            
+            my $obj = TestAdjust2->new(name => 'adjusted');
+            ok(defined $self_in_ADJUST, '$self is defined in ADJUST block');
+            is($self_in_ADJUST, $obj, '$self is the correct object in ADJUST');
+            is($field_in_ADJUST, 'adjusted', 'Can access fields in ADJUST block');
+            is($obj->get_counter(), 42, 'Can modify fields in ADJUST block');
+        }
+        
+        # Test 3: ADJUST blocks run after field initialization
+        {
+            my $field_value_in_adjust;
+            
+            class TestAdjust3 {
+                field $initialized :param = 'init_value';
+                field $modified;
+                
+                ADJUST {
+                    $field_value_in_adjust = $self->{initialized};
+                    $self->{modified} = "set in ADJUST: " . $self->{initialized};
+                }
+                
+                method get_modified {
+                    return $self->{modified};
+                }
+            }
+            
+            my $obj1 = TestAdjust3->new();
+            is($field_value_in_adjust, 'init_value', 'ADJUST runs after default field initialization');
+            is($obj1->get_modified(), "set in ADJUST: init_value", 'ADJUST can use field values');
+            
+            my $obj2 = TestAdjust3->new(initialized => 'custom');
+            is($field_value_in_adjust, 'custom', 'ADJUST runs after param field initialization');
+            is($obj2->get_modified(), "set in ADJUST: custom", 'ADJUST sees param-initialized fields');
+        }
+    };
+    
+    # FEATURES NOT YET FULLY IMPLEMENTED:
     # Note: Using pass() with TODO comment instead of fail() to avoid test suite failures
-    # These features are documented as not yet implemented
-    pass("TODO: ADJUST blocks for post-construction logic - not yet implemented");
     pass("TODO: Full signature support in methods - not fully integrated");
 };
 

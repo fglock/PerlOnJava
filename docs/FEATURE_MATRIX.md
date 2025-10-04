@@ -163,7 +163,7 @@ my @copy = @{$z};         # ERROR
 - ❌  **`field`**: `field` token is not yet supported.
 - ❌  **`:param`**: `:param` field attribute is not yet supported.
 - ❌  **`:reader`**: `:reader` field attribute is not yet supported.
-- ❌  **`ADJUST`**: `ADJUST` block is not yet supported.
+- ✅  **`ADJUST`**: `ADJUST` block is fully supported with closure variable capture.
 
 ## Operators
 - ✅  **Simple arithmetic**: Operators like `+`, `-`, `*`, and `%` are supported.
