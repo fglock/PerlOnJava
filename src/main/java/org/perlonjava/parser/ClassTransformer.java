@@ -106,7 +106,8 @@ public class ClassTransformer {
         }
         
         // Generate constructor if not present
-        if (existingConstructor == null && !fields.isEmpty()) {
+        // ALL classes need a constructor, even if they have no fields or ADJUST blocks
+        if (existingConstructor == null) {
             SubroutineNode constructor = generateConstructor(fields, className, adjustNodes);
             block.elements.add(constructor);
             // Register the constructor using the same logic as named subroutines

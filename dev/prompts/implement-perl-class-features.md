@@ -10,7 +10,14 @@ After initial implementation, we simplified the approach:
 - **Reuse existing nodes** - Generate standard SubroutineNode for constructors/accessors
 - **Test with --parse** - Verify transformations before bytecode generation
 
-## IMPLEMENTATION STATUS (2025-10-04 17:00)
+## IMPLEMENTATION STATUS (2025-10-04 23:30)
+
+### 🔧 CRITICAL FIX (Oct 2024):
+**Constructor Generation** - ALL classes now get constructors
+- Previously only generated for classes with fields
+- Fixed to generate for: classes with ADJUST blocks only
+- Fixed again to generate for: ALL classes (even empty ones)
+- This fixes `phasers.t` and `class.t` test failures
 
 ### ✅ Successfully Implemented:
 1. **Field declarations** - `field $x :param :reader = default_value`
@@ -34,10 +41,15 @@ After initial implementation, we simplified the approach:
    - Implicit `$self = shift` injected at start
    - Full method body preserved
 
-5. **ADJUST blocks** - Post-construction initialization
-   - Collected during class parsing
-   - Appended to constructor after field initialization
-   - Run in order of appearance with $self available
+5. **ADJUST blocks** - Post-construction initialization ✅ (FULLY IMPLEMENTED Oct 2024)
+   - Compiled as anonymous SubroutineNodes with full closure support
+   - Stored in `parser.classAdjustBlocks` during parsing
+   - ClassTransformer retrieves them and adds calls in constructor
+   - Constructor calls each ADJUST: `$adjustSub->($self)`
+   - Multiple ADJUST blocks run in declaration order
+   - Full lexical variable capture (closures) working
+   - `$self` and `__CLASS__` available in ADJUST context
+   - Only allowed inside class blocks (error outside)
 
 6. **Class transformation** - Complete AST transformation
    - Fields collected and removed from class body
