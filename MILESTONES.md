@@ -309,20 +309,13 @@ The following areas are currently under active development to enhance the functi
   - Documenting preliminary results in [docs/GRAALVM.md](docs/GRAALVM.md).
 
 
-## Recent Achievements (October 2024)
-
-- **Perl 5.38+ Class Features - ADJUST Blocks**
-  - ✅ Fully implemented ADJUST blocks for post-construction initialization
-  - ✅ Multiple ADJUST blocks run in order
-  - ✅ Complete closure variable capture support
-  - ✅ `$self` and `__CLASS__` available in ADJUST context
-  - ✅ ADJUST blocks run after field initialization
-  - ✅ Integrated with automatic constructor generation
-
 ## Upcoming Milestones
 
 - **v5.42.2**: Next minor version
 
+  - Add Perl 5.38+ Class Features
+    - Fully implemented ADJUST blocks for post-construction initialization
+    - `$self` and `__CLASS__` available in ADJUST context
   - Add System V IPC operators: `msgctl`, `msgget`, `msgrcv`, `msgsnd`, `semctl`, `semget`, `semop`, `shmctl`, `shmget`, `shmread`, `shmwrite`.
   - Add network enumeration operators: `endhostent`, `endnetent`, `endprotoent`, `endservent`, `gethostent`, `getnetbyaddr`, `getnetbyname`, `getnetent`, `getprotoent`, `getservent`, `sethostent`, `setnetent`, `setprotoent`, `setservent`.
   - Add socket operators: `socket`, `bind`, `listen`, `accept`, `connect`, `send`, `recv`, `shutdown`, `setsockopt`, `getsockopt`, `getsockname`, `getpeername`, `socketpair`.
