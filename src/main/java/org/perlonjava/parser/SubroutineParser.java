@@ -139,7 +139,24 @@ public class SubroutineParser {
             if (peek(parser).text.equals("->")) {
                 // method call without parentheses
                 arguments = new ListNode(parser.tokenIndex);
+            } else if (isMethod) {
+                // FUNDAMENTAL PERL RULE: Method calls NEVER check prototypes!
+                // This applies to ALL method calls (using ->), not just constructors.
+                // Prototypes are only enforced for direct subroutine calls.
+                // Parse arguments directly without any prototype restrictions.
+                if (peek(parser).text.equals("(")) {
+                    TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
+                    // ListParser.parseList returns List<Node>, wrap it in ListNode
+                    // IMPORTANT: parseList consumes the closing delimiter ")" internally
+                    List<Node> argList = ListParser.parseList(parser, ")", 0);
+                    arguments = new ListNode(argList, parser.tokenIndex);
+                    // DO NOT consume ")" again - parseList already did it
+                } else {
+                    // No parentheses, no arguments
+                    arguments = new ListNode(parser.tokenIndex);
+                }
             } else {
+                // Direct subroutine calls DO check prototypes
                 arguments = consumeArgsWithPrototype(parser, prototype);
             }
 
