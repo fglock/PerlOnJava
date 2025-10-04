@@ -58,9 +58,10 @@ public class ClassTransformer {
      * 
      * @param block The class block to transform
      * @param className The name of the class
+     * @param parser The parser context for bytecode generation
      * @return The transformed block with generated methods
      */
-    public static BlockNode transformClassBlock(BlockNode block, String className) {
+    public static BlockNode transformClassBlock(BlockNode block, String className, Parser parser) {
         // Pre-declare the constructor immediately so it's visible to the parser
         // This is like doing "sub new;" in Perl
         predeclareConstructor(className);
@@ -111,8 +112,10 @@ public class ClassTransformer {
         if (existingConstructor == null && !fields.isEmpty()) {
             SubroutineNode constructor = generateConstructor(fields, className, adjustBlocks);
             block.elements.add(constructor);
-            // Evaluate the constructor to register it in runtime
-            evaluateGeneratedSubroutine(constructor, className);
+            // Register the constructor using the same logic as named subroutines
+            // This handles all the bytecode generation automatically
+            SubroutineParser.handleNamedSub(parser, constructor.name, constructor.prototype, 
+                                           constructor.attributes, (BlockNode) constructor.block);
         }
         
         // Generate reader methods for fields with :reader attribute
@@ -120,8 +123,9 @@ public class ClassTransformer {
             if (field.getAnnotation("attr:reader") != null) {
                 SubroutineNode reader = generateReaderMethod(field);
                 block.elements.add(reader);
-                // Evaluate the reader to register it in runtime
-                evaluateGeneratedSubroutine(reader, className);
+                // Register the reader using the same logic as named subroutines
+                SubroutineParser.handleNamedSub(parser, reader.name, reader.prototype,
+                                               reader.attributes, (BlockNode) reader.block);
             }
         }
         
@@ -129,6 +133,9 @@ public class ClassTransformer {
         for (SubroutineNode method : methods) {
             transformMethod(method);
             block.elements.add(method);
+            // Register the method in the runtime, just like constructor and reader methods
+            SubroutineParser.handleNamedSub(parser, method.name, method.prototype,
+                                           method.attributes, (BlockNode) method.block);
         }
         
         // Add all other statements back
@@ -157,20 +164,83 @@ public class ClassTransformer {
         List<Node> bodyElements = new ArrayList<>();
         BlockNode body = new BlockNode(bodyElements, 0);
         
-        // my $class = shift;
+        // MINIMAL CONSTRUCTOR - Start with just bless {} and return
+        // We'll add statements back one by one to identify the bytecode issue
+        
+        // Step 1: my $class = shift;  # Get class name from first argument
         ListNode myClassDecl = new ListNode(0);
         OperatorNode myClass = new OperatorNode("my", 
             new OperatorNode("$", new IdentifierNode("class", 0), 0), 0);
         myClassDecl.elements.add(myClass);
-        BinaryOperatorNode classAssign = new BinaryOperatorNode("=", myClassDecl,
-            new OperatorNode("shift", null, 0), 0);
+        OperatorNode shiftOp = new OperatorNode("shift", 
+            new OperatorNode("@", new IdentifierNode("_", 0), 0), 0);
+        BinaryOperatorNode classAssign = new BinaryOperatorNode("=", myClassDecl, shiftOp, 0);
         body.elements.add(classAssign);
         
-        // my %args = @_;
+        // Step 2: my %args = @_;  # Now @_ contains only the named parameters
         ListNode myArgsDecl = new ListNode(0);
         OperatorNode myArgs = new OperatorNode("my", 
             new OperatorNode("%", new IdentifierNode("args", 0), 0), 0);
         myArgsDecl.elements.add(myArgs);
+        BinaryOperatorNode argsAssign = new BinaryOperatorNode("=", myArgsDecl,
+            new OperatorNode("@", new IdentifierNode("_", 0), 0), 0);
+        body.elements.add(argsAssign);
+        
+        // Step 3: my $self = bless {}, $class;
+        ListNode mySelfDecl = new ListNode(0);
+        OperatorNode mySelf = new OperatorNode("my", 
+            new OperatorNode("$", new IdentifierNode("self", 0), 0), 0);
+        mySelfDecl.elements.add(mySelf);
+        
+        // Create empty hash
+        ListNode emptyList = new ListNode(0);
+        HashLiteralNode emptyHash = new HashLiteralNode(emptyList.elements, 0);
+        
+        // Use $class variable instead of hardcoded class name
+        OperatorNode classVar = new OperatorNode("$", new IdentifierNode("class", 0), 0);
+        
+        // bless {}, $class - as BinaryOperatorNode
+        BinaryOperatorNode blessCall = new BinaryOperatorNode("bless", emptyHash, classVar, 0);
+        
+        // my $self = bless {}, $class;
+        BinaryOperatorNode selfAssign = new BinaryOperatorNode("=", mySelfDecl, blessCall, 0);
+        body.elements.add(selfAssign);
+        
+        // Step 3: Add field initialization
+        for (OperatorNode field : fields) {
+            Node fieldInit = generateFieldInitialization(field);
+            if (fieldInit != null) {
+                body.elements.add(fieldInit);
+            }
+        }
+        
+        // Step 3: return $self;
+        body.elements.add(new OperatorNode("return", 
+            new OperatorNode("$", new IdentifierNode("self", 0), 0), 0));
+        
+        /* COMMENTED OUT FOR DEBUGGING - Add back one by one
+        // my $class = $_[0];  
+        // Use $_[0] instead of shift to avoid bytecode verification issues
+        ListNode myClassDecl = new ListNode(0);
+        OperatorNode myClass = new OperatorNode("my", 
+            new OperatorNode("$", new IdentifierNode("class", 0), 0), 0);
+        myClassDecl.elements.add(myClass);
+        // Create $_[0] access: $ _ [ 0 ]
+        OperatorNode underscore = new OperatorNode("$", new IdentifierNode("_", 0), 0);
+        List<Node> zeroList = new ArrayList<>();
+        zeroList.add(new NumberNode("0", 0));
+        ArrayLiteralNode indexZero = new ArrayLiteralNode(zeroList, 0);
+        BinaryOperatorNode arrayAccess = new BinaryOperatorNode("[", underscore, indexZero, 0);
+        BinaryOperatorNode classAssign = new BinaryOperatorNode("=", myClassDecl, arrayAccess, 0);
+        body.elements.add(classAssign);
+        
+        // my %args = @_[1..$#_];  
+        // Get remaining arguments (skip first which is class name)
+        ListNode myArgsDecl = new ListNode(0);
+        OperatorNode myArgs = new OperatorNode("my", 
+            new OperatorNode("%", new IdentifierNode("args", 0), 0), 0);
+        myArgsDecl.elements.add(myArgs);
+        // For simplicity, just use @_ for now - it will include class name but that's ok
         BinaryOperatorNode argsAssign = new BinaryOperatorNode("=", myArgsDecl,
             new OperatorNode("@", new IdentifierNode("_", 0), 0), 0);
         body.elements.add(argsAssign);
@@ -209,6 +279,7 @@ public class ClassTransformer {
         // return $self;
         body.elements.add(new OperatorNode("return", 
             new OperatorNode("$", new IdentifierNode("self", 0), 0), 0));
+        */
         
         // Create the subroutine node
         SubroutineNode constructor = new SubroutineNode(
@@ -233,24 +304,44 @@ public class ClassTransformer {
         boolean hasDefault = field.getBooleanAnnotation("hasDefault");
         Node defaultValue = field.operand; // The default value if hasDefault is true
         
+        // Handle null default values - use undef if not specified
+        if (hasDefault && defaultValue == null) {
+            defaultValue = new OperatorNode("undef", null, 0);
+        }
+        
         // $self->{fieldname} = ...
+        // Use the correct AST structure: $self -> HashLiteralNode([IdentifierNode])
         OperatorNode selfVar = new OperatorNode("$", new IdentifierNode("self", 0), 0);
-        ListNode hashKey = new ListNode(0);
-        hashKey.elements.add(new StringNode(name, 0));
-        BinaryOperatorNode arrow = new BinaryOperatorNode("->", selfVar, 
-            new HashLiteralNode(hashKey.elements, 0), 0);
+        List<Node> keyList = new ArrayList<>();
+        keyList.add(new IdentifierNode(name, 0));  // Use IdentifierNode, not StringNode!
+        HashLiteralNode hashSubscript = new HashLiteralNode(keyList, 0);
+        BinaryOperatorNode selfField = new BinaryOperatorNode("->", selfVar, hashSubscript, 0);
         
         Node value;
         if (hasParam) {
             // $args{fieldname} // default_or_undef
-            OperatorNode argsHash = new OperatorNode("%", new IdentifierNode("args", 0), 0);
-            BinaryOperatorNode argsAccess = new BinaryOperatorNode("{", argsHash,
-                new StringNode(name, 0), 0);
+            // Use correct structure: %args becomes $args in hash access
+            OperatorNode argsVar = new OperatorNode("$", new IdentifierNode("args", 0), 0);
+            List<Node> argKeyList = new ArrayList<>();
+            argKeyList.add(new IdentifierNode(name, 0));  // Use IdentifierNode, not StringNode!
+            HashLiteralNode argHashSubscript = new HashLiteralNode(argKeyList, 0);
+            BinaryOperatorNode argsAccess = new BinaryOperatorNode("{", argsVar, argHashSubscript, 0);
             
             if (hasDefault) {
-                // Use // operator for default value
+                // Use // operator for explicit default value
                 value = new BinaryOperatorNode("//", argsAccess, defaultValue, 0);
+            } else if ("@".equals(sigil)) {
+                // Array field without explicit default should default to []
+                ListNode emptyList = new ListNode(0);
+                Node emptyArray = new ArrayLiteralNode(emptyList.elements, 0);
+                value = new BinaryOperatorNode("//", argsAccess, emptyArray, 0);
+            } else if ("%".equals(sigil)) {
+                // Hash field without explicit default should default to {}
+                ListNode emptyList = new ListNode(0);
+                Node emptyHash = new HashLiteralNode(emptyList.elements, 0);
+                value = new BinaryOperatorNode("//", argsAccess, emptyHash, 0);
             } else {
+                // Scalar fields can be undef if not provided
                 value = argsAccess;
             }
         } else if (hasDefault) {
@@ -264,11 +355,11 @@ public class ClassTransformer {
                 ListNode emptyList = new ListNode(0);
                 value = new HashLiteralNode(emptyList.elements, 0); // {}
             } else {
-                value = new IdentifierNode("undef", 0);
+                value = new OperatorNode("undef", null, 0);
             }
         }
         
-        return new BinaryOperatorNode("=", arrow, value, 0);
+        return new BinaryOperatorNode("=", selfField, value, 0);
     }
     
     /**
@@ -286,14 +377,18 @@ public class ClassTransformer {
         BlockNode body = new BlockNode(bodyElements, 0);
         
         // $_[0]->{fieldname}
-        OperatorNode arg0 = new OperatorNode("$", 
-            new BinaryOperatorNode("[", 
-                new OperatorNode("@", new IdentifierNode("_", 0), 0),
-                new NumberNode("0", 0), 0), 0);
-        ListNode hashKey = new ListNode(0);
-        hashKey.elements.add(new StringNode(name, 0));
-        BinaryOperatorNode fieldAccess = new BinaryOperatorNode("->", arg0,
-            new HashLiteralNode(hashKey.elements, 0), 0);
+        // Correct structure: BinaryOperatorNode("[", $_, ArrayLiteralNode([0]))
+        OperatorNode underscore = new OperatorNode("$", new IdentifierNode("_", 0), 0);
+        List<Node> zeroList = new ArrayList<>();
+        zeroList.add(new NumberNode("0", 0));
+        ArrayLiteralNode indexZero = new ArrayLiteralNode(zeroList, 0);
+        BinaryOperatorNode arg0 = new BinaryOperatorNode("[", underscore, indexZero, 0);
+        
+        // Now create the hash subscript
+        List<Node> keyList = new ArrayList<>();
+        keyList.add(new IdentifierNode(name, 0));  // Use IdentifierNode for hash keys
+        HashLiteralNode hashSubscript = new HashLiteralNode(keyList, 0);
+        BinaryOperatorNode fieldAccess = new BinaryOperatorNode("->", arg0, hashSubscript, 0);
         
         body.elements.add(fieldAccess);
         
@@ -329,53 +424,32 @@ public class ClassTransformer {
         OperatorNode mySelf = new OperatorNode("my", 
             new OperatorNode("$", new IdentifierNode("self", 0), 0), 0);
         mySelfDecl.elements.add(mySelf);
-        BinaryOperatorNode selfAssign = new BinaryOperatorNode("=", mySelfDecl,
-            new OperatorNode("shift", null, 0), 0);
+        // shift @_ explicitly to avoid null operand
+        OperatorNode shiftOp = new OperatorNode("shift",
+            new OperatorNode("@", new IdentifierNode("_", 0), 0), 0);
+        BinaryOperatorNode selfAssign = new BinaryOperatorNode("=", mySelfDecl, shiftOp, 0);
         
         methodBody.elements.addFirst(selfAssign);
+        
+        // If the method has a signature, add parameter declarations after $self = shift
+        ListNode signatureAST = (ListNode) method.getAnnotation("signatureAST");
+        if (signatureAST != null && !signatureAST.elements.isEmpty()) {
+            // The signature AST contains parameter declarations like my ($w, $h) = @_;
+            // Insert them after the $self assignment (at position 1)
+            int insertPos = 1;
+            for (Node sigElement : signatureAST.elements) {
+                methodBody.elements.add(insertPos++, sigElement);
+            }
+        }
         
         // TODO: Transform field access within the method body
         // This would require walking the AST and converting $fieldname to $self->{fieldname}
         // For now, methods will need to use explicit $self->{fieldname} syntax
     }
     
-    /**
-     * Evaluate a generated subroutine to register it in the runtime.
-     * This follows the same pattern as handleNamedSub in SubroutineParser.
-     */
-    private static void evaluateGeneratedSubroutine(SubroutineNode subNode, String packageName) {
-        if (subNode.name == null) {
-            return; // Anonymous subroutines not supported here
-        }
-        
-        // Create the fully qualified name
-        String fullName = packageName + "::" + subNode.name;
-        
-        // Get or create the code reference in the global namespace
-        RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName);
-        
-        // Initialize as a code reference if needed
-        if (codeRef.value == null) {
-            codeRef.type = RuntimeScalarType.CODE;
-            codeRef.value = new RuntimeCode(subNode.name, subNode.attributes);
-        }
-        
-        // Set up the RuntimeCode object
-        RuntimeCode code = (RuntimeCode) codeRef.value;
-        code.prototype = subNode.prototype;
-        code.attributes = subNode.attributes;
-        code.subName = subNode.name;
-        code.packageName = packageName;
-        
-        // For now, we mark the code as having a constant value
-        // This is a simplified approach - ideally we'd store the AST
-        // and compile it when first called, like handleNamedSub does
-        // TODO: Implement proper lazy compilation with compilerSupplier
-        code.constantValue = new RuntimeList();
-        
-        // The actual implementation will need to be compiled when called
-        // For now this at least registers the method in the runtime
-    }
+    // Removed evaluateGeneratedSubroutine - no longer needed
+    // We now use SubroutineParser.handleNamedSub directly which is much simpler
+    // and ensures generated methods go through the exact same path as regular named subroutines
     
     /**
      * Pre-declare the constructor for a class.

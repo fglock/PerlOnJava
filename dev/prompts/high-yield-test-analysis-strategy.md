@@ -1048,6 +1048,76 @@ if (charsRead == 0) {
 
 ## Lessons Learned (Update This Section!)
 
+### Session 2025-10-04: Critical Testing Lessons - Breaking the Build
+
+**Session Overview:**
+- **Duration:** ~1.5 hours debugging test failures
+- **Issue:** Tests failing after 10 commits of class features work
+- **Discovery:** One commit broke tests but wasn't caught immediately
+- **Resolution:** Git bisect to find breaking commit, created clean branch
+
+**CRITICAL LESSONS About Testing During Development:**
+
+1. **TEST AFTER EVERY SINGLE COMMIT - No Exceptions!**
+   ```bash
+   # ALWAYS do this after EVERY commit:
+   ./gradlew clean test
+   # Or at minimum:
+   ./gradlew test
+   ```
+   - We made 10 commits for Perl 5.38+ class features
+   - Commit #3 (71ebe270) broke tests but we didn't notice
+   - Subsequent commits built on broken foundation
+   - Could have saved hours if we'd tested after each commit
+   - **Lesson:** NEVER trust that "simple" changes won't break tests
+
+2. **Create Backup Branches Before Major Features:**
+   ```bash
+   # ALWAYS do this before starting major work:
+   git branch feature-backup
+   ```
+   - Saved our work when we needed to investigate test failures
+   - Allowed us to experiment with fixes without losing commits
+   - Essential for recovery when things go wrong
+
+3. **Git Bisect is Invaluable for Finding Breaking Commits:**
+   ```bash
+   git bisect start
+   git bisect bad                    # Current state is bad
+   git bisect good origin/master     # Known good state
+   # Test at each step, mark good/bad
+   # Git finds the exact breaking commit!
+   ```
+   - Found commit 71ebe270 broke tests in just 4 steps
+   - Much faster than manually checking each commit
+   - Provides certainty about where problem started
+
+4. **Fundamental Language Rules Trump Clever Workarounds:**
+   - Problem: Tried to hack prototype checking for constructors
+   - Real fix: Method calls NEVER check prototypes in Perl (fundamental rule)
+   - Workaround caused bytecode verification errors
+   - **Lesson:** Fix root causes, not symptoms
+
+5. **The Cost of Not Testing:**
+   - 10 commits of work in jeopardy
+   - 1.5 hours to diagnose and fix
+   - Risk of losing valuable implementation
+   - Stress and confusion about what worked
+
+**Proper Development Workflow:**
+1. Write code
+2. **Test locally** (`./gradlew test`)
+3. Commit ONLY if tests pass
+4. Push ONLY tested commits
+5. Create backup branches for experimental work
+
+**Red Flags That Should Trigger Immediate Testing:**
+- Changes to parser code
+- Changes to method resolution
+- Changes to prototype handling  
+- Changes to bytecode generation
+- ANY change that "shouldn't affect anything"
+
 ### Session 2025-10-03: Massive Impact - 3 Major Fixes (+1200 tests unblocked!)
 
 **Session Overview:**
