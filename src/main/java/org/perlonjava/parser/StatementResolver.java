@@ -35,7 +35,7 @@ public class StatementResolver {
 
         if (token.type == LexerTokenType.IDENTIFIER) {
             Node result = switch (token.text) {
-                case "CHECK", "INIT", "UNITCHECK", "BEGIN", "END" -> SpecialBlockParser.parseSpecialBlock(parser);
+                case "CHECK", "INIT", "UNITCHECK", "BEGIN", "END", "ADJUST" -> SpecialBlockParser.parseSpecialBlock(parser);
 
                 case "AUTOLOAD", "DESTROY" -> {
                     parser.tokenIndex++;
