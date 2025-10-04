@@ -30,6 +30,10 @@ public class Parser {
     public boolean parsingTakeReference = false;
     // Are we parsing the top level script?
     public boolean isTopLevelScript = false;
+    // Are we parsing inside a class block?
+    public boolean isInClassBlock = false;
+    // List to store ADJUST blocks for the current class
+    public List<Node> classAdjustBlocks = new ArrayList<>();
     // List to store heredoc nodes encountered during parsing.
     private List<OperatorNode> heredocNodes = new ArrayList<>();
     // List to store format nodes encountered during parsing.
