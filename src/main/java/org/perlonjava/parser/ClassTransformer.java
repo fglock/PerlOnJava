@@ -6,23 +6,69 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * ClassTransformer transforms Perl class syntax into standard Perl OO code.
- * It collects fields and generates constructors, accessors, and transforms methods.
+ * ClassTransformer transforms Perl 5.38+ class syntax into standard Perl OO code.
+ * 
+ * This class is responsible for transforming the modern Perl class syntax
+ * (introduced in Perl 5.38) into traditional Perl object-oriented code.
+ * The transformation happens at parse time, converting:
+ * - field declarations into instance variable initialization
+ * - automatic constructor generation with named parameters
+ * - reader method generation for fields with :reader attribute
+ * - method declarations with implicit $self injection
+ * - ADJUST blocks for post-construction initialization (TODO)
+ * 
+ * Example transformation:
+ * <pre>
+ * class Point {
+ *     field $x :param :reader;
+ *     field $y :param :reader = 0;
+ *     method distance { ... }
+ * }
+ * </pre>
+ * 
+ * Becomes equivalent to:
+ * <pre>
+ * package Point;
+ * sub new {
+ *     my $class = shift;
+ *     my %args = @_;
+ *     my $self = bless {}, $class;
+ *     $self->{x} = $args{x};
+ *     $self->{y} = $args{y} // 0;
+ *     return $self;
+ * }
+ * sub x { $_[0]->{x} }
+ * sub y { $_[0]->{y} }
+ * sub distance { my $self = shift; ... }
+ * </pre>
+ * 
+ * @author PerlOnJava team
+ * @since 2024
  */
 public class ClassTransformer {
     
     /**
      * Transform a class block by processing fields, generating constructor and accessors.
+     * This method performs the following transformations:
+     * 1. Collects all field declarations and removes them from the block
+     * 2. Pre-declares a constructor to make it visible to the parser
+     * 3. Generates a constructor if one doesn't exist
+     * 4. Generates reader methods for fields with :reader attribute
+     * 5. Transforms regular methods to inject implicit $self
      * 
      * @param block The class block to transform
      * @param className The name of the class
-     * @return The transformed block
+     * @return The transformed block with generated methods
      */
     public static BlockNode transformClassBlock(BlockNode block, String className) {
+        // Pre-declare the constructor immediately so it's visible to the parser
+        // This is like doing "sub new;" in Perl
+        predeclareConstructor(className);
         // Collect field nodes and other statements
         List<OperatorNode> fields = new ArrayList<>();
         List<Node> otherStatements = new ArrayList<>();
         List<SubroutineNode> methods = new ArrayList<>();
+        List<BlockNode> adjustBlocks = new ArrayList<>();  // ADJUST blocks for post-construction
         SubroutineNode existingConstructor = null;
         
         // Scan the block for fields, methods, and existing constructor
@@ -40,6 +86,13 @@ public class ClassTransformer {
                 } else {
                     otherStatements.add(element); // Regular subroutines
                 }
+            } else if (element instanceof OperatorNode opNode && "ADJUST".equals(opNode.operator)) {
+                // ADJUST blocks are special blocks that run after construction
+                // They should have a BlockNode as operand
+                if (opNode.operand instanceof BlockNode adjustBlock) {
+                    adjustBlocks.add(adjustBlock);
+                }
+                // Don't add ADJUST blocks to otherStatements - they're merged into constructor
             } else {
                 otherStatements.add(element);
             }
@@ -56,7 +109,7 @@ public class ClassTransformer {
         
         // Generate constructor if not present
         if (existingConstructor == null && !fields.isEmpty()) {
-            SubroutineNode constructor = generateConstructor(fields, className);
+            SubroutineNode constructor = generateConstructor(fields, className, adjustBlocks);
             block.elements.add(constructor);
             // Evaluate the constructor to register it in runtime
             evaluateGeneratedSubroutine(constructor, className);
@@ -86,8 +139,21 @@ public class ClassTransformer {
     
     /**
      * Generate a constructor (new) method from field declarations.
+     * 
+     * The generated constructor:
+     * 1. Accepts the class name as first argument (for inheritance)
+     * 2. Takes remaining arguments as named parameters (%args)
+     * 3. Blesses an empty hashref into the class
+     * 4. Initializes all fields from parameters or defaults
+     * 5. Runs ADJUST blocks for post-construction initialization
+     * 6. Returns the blessed object
+     * 
+     * @param fields List of field declarations with their attributes
+     * @param className The name of the class
+     * @param adjustBlocks List of ADJUST blocks to run after field initialization
+     * @return A SubroutineNode representing the constructor
      */
-    private static SubroutineNode generateConstructor(List<OperatorNode> fields, String className) {
+    private static SubroutineNode generateConstructor(List<OperatorNode> fields, String className, List<BlockNode> adjustBlocks) {
         List<Node> bodyElements = new ArrayList<>();
         BlockNode body = new BlockNode(bodyElements, 0);
         
@@ -130,6 +196,14 @@ public class ClassTransformer {
             if (fieldInit != null) {
                 body.elements.add(fieldInit);
             }
+        }
+        
+        // Run ADJUST blocks after field initialization
+        // ADJUST blocks run in the order they appear in the class
+        // Each block runs with $self available in scope
+        for (BlockNode adjustBlock : adjustBlocks) {
+            // Add all statements from the ADJUST block to the constructor
+            body.elements.addAll(adjustBlock.elements);
         }
         
         // return $self;
@@ -301,5 +375,33 @@ public class ClassTransformer {
         
         // The actual implementation will need to be compiled when called
         // For now this at least registers the method in the runtime
+    }
+    
+    /**
+     * Pre-declare the constructor for a class.
+     * This is equivalent to "sub new;" in Perl - it registers the subroutine
+     * in the global namespace before it's actually defined, making it visible
+     * to the parser when parsing method calls like Class->new().
+     * 
+     * @param className The name of the class
+     */
+    private static void predeclareConstructor(String className) {
+        // Create the fully qualified constructor name
+        String fullName = className + "::new";
+        
+        // Get or create the code reference in the global namespace
+        // This registers the constructor even before it's generated
+        RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName);
+        
+        // Initialize as a code reference if needed
+        if (codeRef.value == null) {
+            codeRef.type = RuntimeScalarType.CODE;
+            RuntimeCode code = new RuntimeCode("new", null);
+            code.packageName = className;
+            code.subName = "new";
+            // No prototype for constructors - they accept any arguments
+            code.prototype = null;
+            codeRef.value = code;
+        }
     }
 }

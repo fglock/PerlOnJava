@@ -22,6 +22,7 @@ After initial implementation, we simplified the approach:
 2. **Constructor generation** - Automatic `new` method
    - Accepts named parameters for `:param` fields
    - Initializes all fields with defaults or undef
+   - Runs ADJUST blocks after field initialization
    - Returns blessed object
 
 3. **Reader methods** - Automatic accessors for `:reader` fields
@@ -33,10 +34,16 @@ After initial implementation, we simplified the approach:
    - Implicit `$self = shift` injected at start
    - Full method body preserved
 
-5. **Class transformation** - Complete AST transformation
+5. **ADJUST blocks** - Post-construction initialization
+   - Collected during class parsing
+   - Appended to constructor after field initialization
+   - Run in order of appearance with $self available
+
+6. **Class transformation** - Complete AST transformation
    - Fields collected and removed from class body
    - Constructor and readers generated
    - Methods transformed with $self injection
+   - ADJUST blocks integrated into constructor
    - All done during parsing phase
 
 ### ⚠️ Known Limitations:
