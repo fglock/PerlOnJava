@@ -56,10 +56,12 @@ public class SubroutineParser {
 
         // Check if we are parsing a method;
         // Otherwise, check that the subroutine exists in the global namespace - then fetch prototype and attributes
-        boolean subExists = !isMethod && GlobalVariable.existsGlobalCodeRef(fullName);
+        // Special case: For method calls to 'new', don't require existence check (for generated constructors)
+        boolean isNewMethod = isMethod && subName.equals("new");
+        boolean subExists = isNewMethod || (!isMethod && GlobalVariable.existsGlobalCodeRef(fullName));
         String prototype = null;
         List<String> attributes = null;
-        if (subExists) {
+        if (!isNewMethod && subExists) {
             // Fetch the subroutine reference
             RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName);
             if (codeRef.value == null) {
