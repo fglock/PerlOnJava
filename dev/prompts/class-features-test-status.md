@@ -130,5 +130,25 @@ class Test {
 - Methods: Transformed with implicit `$self = shift`
 - ADJUST blocks: Stored as anonymous subs, called in constructor
 
+### IMPORTANT IMPLEMENTATION NOTE - Field Aliases in Methods
+**USE ALIASES** (recently implemented feature!) for field access in methods:
+
+Instead of copying values:
+```perl
+my $field1 = $self->{field1};  # WRONG - creates a copy
+```
+
+Use aliases to create direct references:
+```perl
+# CREATE ALIAS - modifications to $field1 will affect $self->{field1}
+# Implementation should inject field aliases at method start
+```
+
+This ensures that:
+- Field modifications within methods work correctly
+- Performance is optimized (no copying)
+- Semantics match Perl's class field behavior
+- Both read and write access work as expected
+
 ## Summary
 The Perl 5.38+ class features implementation in PerlOnJava has made significant progress with ADJUST blocks fully working and constructor generation fixed. The main remaining issue is field variable scoping in methods, which affects several tests. Once this is resolved, basic class functionality will be largely complete, with inheritance being the next major feature to implement.
