@@ -233,6 +233,8 @@ public class OperatorParser {
                                             + " masks earlier declaration in same ctx.symbolTable"));
                 }
                 int varIndex = ctx.symbolTable.addVariable(var, operator, node);
+                // Note: the isDeclaredReference flag is stored in node.annotations
+                // and will be used during code generation
             }
         }
     }
@@ -254,16 +256,44 @@ public class OperatorParser {
             }
         }
 
+        // Check if this is a declared reference (my \$x, our \@array, etc.)
+        boolean isDeclaredReference = false;
+        if (peek(parser).type == LexerTokenType.OPERATOR && peek(parser).text.equals("\\")) {
+            isDeclaredReference = true;
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "\\");
+        }
+
         // Create OperatorNode ($, @, %), ListNode (includes undef), SubroutineNode
         Node operand = ParsePrimary.parsePrimary(parser);
-        parser.ctx.logDebug("parseVariableDeclaration " + operator + ": " + operand);
+        parser.ctx.logDebug("parseVariableDeclaration " + operator + ": " + operand + " (ref=" + isDeclaredReference + ")");
 
         // Add variables to the scope
         if (operand instanceof ListNode listNode) { // my ($a, $b)  our ($a, $b)
             // process each item of the list; then returns the list
             for (Node element : listNode.elements) {
                 if (element instanceof OperatorNode operandNode) {
-                    addVariableToScope(parser.ctx, operator, operandNode);
+                    // Check if this element is a reference operator (backslash)
+                    // This handles cases like my(\$x) where the backslash is inside the parentheses
+                    if (operandNode.operator.equals("\\") && operandNode.operand instanceof OperatorNode varNode) {
+                        // This is a declared reference inside parentheses: my(\$x), my(\@arr), my(\%hash)
+                        // Declared references always create scalar variables
+                        // Convert the variable to a scalar if it's an array or hash
+                        OperatorNode scalarVarNode = varNode;
+                        if (varNode.operator.equals("@") || varNode.operator.equals("%")) {
+                            // Create a scalar version of the variable
+                            scalarVarNode = new OperatorNode("$", varNode.operand, varNode.tokenIndex);
+                        }
+                        scalarVarNode.setAnnotation("isDeclaredReference", true);
+                        addVariableToScope(parser.ctx, operator, scalarVarNode);
+                        // Also mark the original nodes
+                        varNode.setAnnotation("isDeclaredReference", true);
+                        operandNode.setAnnotation("isDeclaredReference", true);
+                    } else {
+                        if (isDeclaredReference) {
+                            operandNode.setAnnotation("isDeclaredReference", true);
+                        }
+                        addVariableToScope(parser.ctx, operator, operandNode);
+                    }
                 }
             }
         } else if (operand instanceof OperatorNode operandNode) {
@@ -275,10 +305,16 @@ public class OperatorParser {
                 }
             }
 
+            if (isDeclaredReference) {
+                operandNode.setAnnotation("isDeclaredReference", true);
+            }
             addVariableToScope(parser.ctx, operator, operandNode);
         }
 
         OperatorNode decl = new OperatorNode(operator, operand, currentIndex);
+        if (isDeclaredReference) {
+            decl.setAnnotation("isDeclaredReference", true);
+        }
 
         // Initialize a list to store any attributes the declaration might have.
         List<String> attributes = new ArrayList<>();
