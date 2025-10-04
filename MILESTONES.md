@@ -20,6 +20,7 @@
   - Add readline modes depending on `$/` special variable.
   - Add `PERL5OPT` environment variable.
   - Add regex extended character classes `(?[...])`
+  - Add declared references: `my \$x`, `my(\@arr)`, `my(\%hash)`.
   - Bugfix: fixed vstring with codepoints above 65535.
 
 
