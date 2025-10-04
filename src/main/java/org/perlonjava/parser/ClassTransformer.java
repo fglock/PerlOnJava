@@ -1,6 +1,7 @@
 package org.perlonjava.parser;
 
 import org.perlonjava.astnode.*;
+import org.perlonjava.runtime.*;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -57,6 +58,8 @@ public class ClassTransformer {
         if (existingConstructor == null && !fields.isEmpty()) {
             SubroutineNode constructor = generateConstructor(fields, className);
             block.elements.add(constructor);
+            // Evaluate the constructor to register it in runtime
+            evaluateGeneratedSubroutine(constructor, className);
         }
         
         // Generate reader methods for fields with :reader attribute
@@ -64,6 +67,8 @@ public class ClassTransformer {
             if (field.getAnnotation("attr:reader") != null) {
                 SubroutineNode reader = generateReaderMethod(field);
                 block.elements.add(reader);
+                // Evaluate the reader to register it in runtime
+                evaluateGeneratedSubroutine(reader, className);
             }
         }
         
@@ -258,5 +263,43 @@ public class ClassTransformer {
         // TODO: Transform field access within the method body
         // This would require walking the AST and converting $fieldname to $self->{fieldname}
         // For now, methods will need to use explicit $self->{fieldname} syntax
+    }
+    
+    /**
+     * Evaluate a generated subroutine to register it in the runtime.
+     * This follows the same pattern as handleNamedSub in SubroutineParser.
+     */
+    private static void evaluateGeneratedSubroutine(SubroutineNode subNode, String packageName) {
+        if (subNode.name == null) {
+            return; // Anonymous subroutines not supported here
+        }
+        
+        // Create the fully qualified name
+        String fullName = packageName + "::" + subNode.name;
+        
+        // Get or create the code reference in the global namespace
+        RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName);
+        
+        // Initialize as a code reference if needed
+        if (codeRef.value == null) {
+            codeRef.type = RuntimeScalarType.CODE;
+            codeRef.value = new RuntimeCode(subNode.name, subNode.attributes);
+        }
+        
+        // Set up the RuntimeCode object
+        RuntimeCode code = (RuntimeCode) codeRef.value;
+        code.prototype = subNode.prototype;
+        code.attributes = subNode.attributes;
+        code.subName = subNode.name;
+        code.packageName = packageName;
+        
+        // For now, we mark the code as having a constant value
+        // This is a simplified approach - ideally we'd store the AST
+        // and compile it when first called, like handleNamedSub does
+        // TODO: Implement proper lazy compilation with compilerSupplier
+        code.constantValue = new RuntimeList();
+        
+        // The actual implementation will need to be compiled when called
+        // For now this at least registers the method in the runtime
     }
 }
