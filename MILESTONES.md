@@ -20,7 +20,6 @@
   - Add readline modes depending on `$/` special variable.
   - Add `PERL5OPT` environment variable.
   - Add regex extended character classes `(?[...])`
-  - Add declared references: `my \$x`, `my(\@arr)`, `my(\%hash)`.
   - Bugfix: fixed vstring with codepoints above 65535.
 
 
@@ -330,6 +329,7 @@ The following areas are currently under active development to enhance the functi
   - Add `do filehandle`.
   - Add module `Storable`.
   - Dereferencing using `$$var{...}` and `$$var[...]` works.
+  - Add declared references: `my \$x`, `my(\@arr)`, `my(\%hash)`.
   - Bugfix in regex `/r`.
   - Bugfix in transliterate with octal values.
   - Bugfix in nested heredocs.
