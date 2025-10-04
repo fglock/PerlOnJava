@@ -514,8 +514,9 @@ public class StatementParser {
             block.elements.addFirst(packageNode);
             
             // Transform class blocks
+            // Pass parser for bytecode generation of generated methods
             if (packageNode.getBooleanAnnotation("isClass")) {
-                block = ClassTransformer.transformClassBlock(block, nameNode.name);
+                block = ClassTransformer.transformClassBlock(block, nameNode.name, parser);
             }
 
             parser.ctx.symbolTable.exitScope(scopeIndex);

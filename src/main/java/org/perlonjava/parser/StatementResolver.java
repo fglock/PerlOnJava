@@ -98,14 +98,11 @@ public class StatementResolver {
                         
                         // Parse signature if present (optional)
                         String prototype = null;
+                        ListNode signatureAST = null;
                         if (peek(parser).text.equals("(")) {
-                            // For now, just skip the signature by finding the matching )
-                            int parenCount = 0;
-                            do {
-                                LexerToken t = consume(parser);
-                                if (t.text.equals("(")) parenCount++;
-                                if (t.text.equals(")")) parenCount--;
-                            } while (parenCount > 0);
+                            // Parse the signature properly to generate parameter declarations
+                            signatureAST = SignatureParser.parseSignature(parser);
+                            // Note: SignatureParser consumes the closing )
                         }
                         
                         // Parse block
@@ -124,6 +121,12 @@ public class StatementResolver {
                                 parser.tokenIndex
                             );
                             method.setAnnotation("isMethod", true);
+                            
+                            // If we have a signature, store it in the method for ClassTransformer to handle
+                            // The signature AST needs to go AFTER $self = shift (added by ClassTransformer)
+                            if (signatureAST != null && !signatureAST.elements.isEmpty()) {
+                                method.setAnnotation("signatureAST", signatureAST);
+                            }
                             yield method;
                         }
                     }
