@@ -41,8 +41,10 @@ After initial implementation, we simplified the approach:
 
 ### ⚠️ Known Limitations:
 1. **Runtime constructor calls** - Parser doesn't see generated constructors
-   - Issue: `Class->new(...)` fails at parse time
-   - Workaround: Need runtime resolution of generated methods
+   - Issue: `Class->new(...)` fails at parse time  
+   - Root cause: Constructor exists only in AST, not in runtime GlobalVariable.globalCodeRefs
+   - The generated SubroutineNode cannot be registered as RuntimeCode until bytecode generation
+   - Workaround: Use explicit constructor definition or factory methods for now
 
 2. **Method signatures** - Currently skipped
    - Methods with parameters work but signatures not fully processed
