@@ -3,6 +3,120 @@
 ## Overview
 This document outlines the implementation strategy for Perl's new class syntax features (introduced in Perl 5.38+) in PerlOnJava, focusing on AST transformation approach for simplicity.
 
+## REVISED APPROACH (Updated 2025-10-04)
+After initial implementation, we simplified the approach:
+- **No FieldNode class needed** - Use AST annotations on existing OperatorNode
+- **Transform at parse time** - Convert class syntax to standard Perl during parsing
+- **Reuse existing nodes** - Generate standard SubroutineNode for constructors/accessors
+- **Test with --parse** - Verify transformations before bytecode generation
+
+## IMPLEMENTATION STATUS (2025-10-04 17:00)
+
+### ✅ Successfully Implemented:
+1. **Field declarations** - `field $x :param :reader = default_value`
+   - Parsing with sigil support ($, @, %)
+   - Attributes: `:param`, `:reader`
+   - Default values
+   - Stored as annotations on OperatorNode
+
+2. **Constructor generation** - Automatic `new` method
+   - Accepts named parameters for `:param` fields
+   - Initializes all fields with defaults or undef
+   - Returns blessed object
+
+3. **Reader methods** - Automatic accessors for `:reader` fields
+   - Generated as simple getter methods
+   - Return field value from object hash
+
+4. **Method declarations** - `method name { ... }`
+   - Parsed directly with simplified approach
+   - Implicit `$self = shift` injected at start
+   - Full method body preserved
+
+5. **Class transformation** - Complete AST transformation
+   - Fields collected and removed from class body
+   - Constructor and readers generated
+   - Methods transformed with $self injection
+   - All done during parsing phase
+
+### ⚠️ Known Limitations:
+1. **Runtime constructor calls** - Parser doesn't see generated constructors
+   - Issue: `Class->new(...)` fails at parse time
+   - Workaround: Need runtime resolution of generated methods
+
+2. **Method signatures** - Currently skipped
+   - Methods with parameters work but signatures not fully processed
+   - Would need SignatureParser integration
+
+3. **ADJUST blocks** - Not implemented yet
+   - Would need special handling in class transformation
+
+4. **Field access in methods** - Manual $self->{field} required
+   - No automatic field variable transformation
+   - Methods must use explicit hash access
+
+## Implementation Files
+
+### Core Implementation:
+- `src/main/java/org/perlonjava/parser/FieldParser.java` - Parses field declarations
+- `src/main/java/org/perlonjava/parser/ClassTransformer.java` - Transforms classes to OO
+- `src/main/java/org/perlonjava/parser/StatementResolver.java` - Added field/method parsing
+- `src/main/java/org/perlonjava/parser/StatementParser.java` - Hooks class transformation
+
+### Test Files:
+- `src/test/resources/class_features.t` - Test suite (skipped until runtime fix)
+- `demo_class_features.pl` - Demonstration of working features
+
+## Next Steps
+
+### Priority 1: Fix Runtime Constructor Recognition
+The generated `new()` method isn't visible to the parser at parse time, causing runtime failures.
+Possible solutions:
+1. Register generated methods in symbol table during transformation
+2. Implement runtime method resolution for blessed references
+3. Special-case `->new()` calls for classes
+
+### Priority 2: Add ADJUST Blocks
+```perl
+class Foo {
+    field $x;
+    ADJUST {
+        $x = calculate_initial_value();
+    }
+}
+```
+Implementation: Collect ADJUST blocks during parsing, append to constructor after field init.
+
+### Priority 3: Integrate SignatureParser for Methods
+Currently method signatures are skipped. Should integrate with existing SignatureParser.
+
+### Priority 4: Field Variable Transformation
+Transform bare field variables to `$self->{field}` within method bodies:
+```perl
+method foo {
+    $x = 10;  # Should become $self->{x} = 10
+}
+```
+
+## Testing Strategy
+1. Parse-level testing with `--parse` flag works perfectly
+2. Runtime testing blocked by constructor recognition issue
+3. Full test suite in `src/test/resources/class_features.t` ready to enable
+
+## Commit Summary
+```
+Implement Perl 5.38+ class features via AST transformation
+
+- Add field declarations with :param and :reader attributes
+- Generate constructors automatically with named parameters
+- Generate reader methods for fields marked with :reader
+- Parse methods with implicit $self injection
+- Transform entire class block at parse time to standard Perl OO
+
+Known limitation: Runtime constructor calls fail due to parser visibility.
+Next step: Fix runtime method resolution for generated constructors.
+```
+
 ## Feature Pragma Requirement
 The class syntax is only available when explicitly enabled:
 ```perl
