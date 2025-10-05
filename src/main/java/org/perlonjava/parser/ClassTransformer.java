@@ -493,8 +493,8 @@ public class ClassTransformer {
         
         // TODO: Add argument validation for reader methods
         // Readers should only accept the object itself (no additional arguments)
-        // Temporarily disabled due to operator implementation issues
-        // Will revisit with simpler implementation
+        // Currently disabled due to if operator implementation issues
+        // Will need alternative approach for validation
         
         // $_[0]->{fieldname}
         // Correct structure: BinaryOperatorNode("[", $_, ArrayLiteralNode([0]))
