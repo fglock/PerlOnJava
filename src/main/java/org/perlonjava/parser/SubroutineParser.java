@@ -358,6 +358,12 @@ public class SubroutineParser {
         ArrayList<Object> paramList = new ArrayList<>();
         for (SymbolTable.SymbolEntry entry : outerVars.values()) {
             if (!entry.name().equals("@_") && !entry.decl().isEmpty()) {
+                // Skip field declarations - they are not closure variables
+                // Fields have "field" as their declaration type
+                if (entry.decl().equals("field")) {
+                    continue;
+                }
+                
                 String sigil = entry.name().substring(0, 1);
                 String variableName = null;
                 if (entry.decl().equals("our")) {

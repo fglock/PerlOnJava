@@ -114,7 +114,7 @@ public class Variable {
             if (isFieldInClassHierarchy(parser, varName) 
                 && parser.ctx.symbolTable.getVariableIndexInCurrentScope(localVar) == -1) {
                 // This is a field and not shadowed by a local variable
-                // Transform to $self->{fieldname}
+                // Transform field access based on sigil type
                 
                 // Create $self
                 OperatorNode selfVar = new OperatorNode("$", 
@@ -125,8 +125,18 @@ public class Variable {
                 keyList.add(new IdentifierNode(varName, parser.tokenIndex));
                 HashLiteralNode hashSubscript = new HashLiteralNode(keyList, parser.tokenIndex);
                 
-                // Return $self->{fieldname}
-                return new BinaryOperatorNode("->", selfVar, hashSubscript, parser.tokenIndex);
+                // Create $self->{fieldname} 
+                Node fieldAccess = new BinaryOperatorNode("->", selfVar, hashSubscript, parser.tokenIndex);
+                
+                // For array and hash fields, we need to dereference the reference
+                if (sigil.equals("@") || sigil.equals("%")) {
+                    // @field becomes @{$self->{field}}
+                    // %field becomes %{$self->{field}}
+                    return new OperatorNode(sigil, fieldAccess, parser.tokenIndex);
+                } else {
+                    // Scalar fields: $field becomes $self->{field}
+                    return fieldAccess;
+                }
             }
             
             // Create a normal Variable node

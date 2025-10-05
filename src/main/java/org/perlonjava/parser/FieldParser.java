@@ -83,13 +83,22 @@ public class FieldParser {
         
         // Parse default value (optional)
         token = TokenUtils.peek(parser);
-        if (token.type == LexerTokenType.OPERATOR && token.text.equals("=")) {
-            TokenUtils.consume(parser); // consume '='
+        if (token.type == LexerTokenType.OPERATOR) {
+            String operator = token.text;
             
-            // Parse the default value expression
-            Node defaultValue = parser.parseExpression(parser.getPrecedence(","));
-            fieldPlaceholder.operand = defaultValue;
-            fieldPlaceholder.setAnnotation("hasDefault", true);
+            // Support different assignment operators:
+            // = for standard assignment
+            // //= for defined-or assignment (assign if undefined)
+            // ||= for logical-or assignment (assign if false/empty)
+            if (operator.equals("=") || operator.equals("//=") || operator.equals("||=")) {
+                TokenUtils.consume(parser); // consume the operator
+                
+                // Parse the default value expression
+                Node defaultValue = parser.parseExpression(parser.getPrecedence(","));
+                fieldPlaceholder.operand = defaultValue;
+                fieldPlaceholder.setAnnotation("hasDefault", true);
+                fieldPlaceholder.setAnnotation("defaultOperator", operator);
+            }
         }
         
         // Consume statement terminator
