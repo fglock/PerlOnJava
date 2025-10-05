@@ -344,6 +344,19 @@ public class ClassTransformer {
             defaultValue = new OperatorNode("undef", null, 0);
         }
         
+        // For array and hash fields, if the default is a ListNode (from qw()),
+        // we need to wrap it in the appropriate literal node to create a reference
+        if (hasDefault && defaultValue instanceof ListNode listNode) {
+            if ("@".equals(sigil)) {
+                // Wrap ListNode in ArrayLiteralNode to create arrayref
+                defaultValue = new ArrayLiteralNode(listNode.elements, 0);
+            } else if ("%".equals(sigil)) {
+                // Wrap ListNode in HashLiteralNode to create hashref
+                defaultValue = new HashLiteralNode(listNode.elements, 0);
+            }
+            // For scalar fields, keep the ListNode as-is (though this would be unusual)
+        }
+        
         // $self->{fieldname} = ...
         // Use the correct AST structure: $self -> HashLiteralNode([IdentifierNode])
         OperatorNode selfVar = new OperatorNode("$", new IdentifierNode("self", 0), 0);
@@ -402,12 +415,13 @@ public class ClassTransformer {
      */
     private static SubroutineNode generateReaderMethod(OperatorNode field) {
         String name = (String) field.getAnnotation("name");
+        String sigil = (String) field.getAnnotation("sigil");
         String readerName = (String) field.getAnnotation("attr:reader");
         if (readerName == null || readerName.isEmpty()) {
             readerName = name; // Use field name as method name
         }
         
-        // Create method body: return $_[0]->{fieldname}
+        // Create method body
         List<Node> bodyElements = new ArrayList<>();
         BlockNode body = new BlockNode(bodyElements, 0);
         
@@ -425,7 +439,22 @@ public class ClassTransformer {
         HashLiteralNode hashSubscript = new HashLiteralNode(keyList, 0);
         BinaryOperatorNode fieldAccess = new BinaryOperatorNode("->", arg0, hashSubscript, 0);
         
-        body.elements.add(fieldAccess);
+        // For array and hash fields, we need to dereference the scalar ref
+        Node returnValue;
+        if ("@".equals(sigil)) {
+            // Return @{$_[0]->{fieldname}} for array fields
+            // Apply the @ operator directly to dereference the arrayref
+            returnValue = new OperatorNode("@", fieldAccess, 0);
+        } else if ("%".equals(sigil)) {
+            // Return %{$_[0]->{fieldname}} for hash fields  
+            // Apply the % operator directly to dereference the hashref
+            returnValue = new OperatorNode("%", fieldAccess, 0);
+        } else {
+            // Return $_[0]->{fieldname} for scalar fields
+            returnValue = fieldAccess;
+        }
+        
+        body.elements.add(returnValue);
         
         // Create the subroutine node
         SubroutineNode reader = new SubroutineNode(
