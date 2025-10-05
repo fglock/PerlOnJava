@@ -50,8 +50,19 @@ public class SpecialBlockParser {
 
         // Consume the opening brace '{'
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
+        
+        // ADJUST blocks have implicit $self, so set isInMethod flag
+        boolean wasInMethod = parser.isInMethod;
+        if ("ADJUST".equals(blockName) && parser.isInClassBlock) {
+            parser.isInMethod = true;
+        }
+        
         // Parse the block content
         BlockNode block = ParseBlock.parseBlock(parser);
+        
+        // Restore the isInMethod flag
+        parser.isInMethod = wasInMethod;
+        
         // Consume the closing brace '}'
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
