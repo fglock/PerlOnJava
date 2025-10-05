@@ -46,7 +46,17 @@ public class CoreOperatorResolver {
             }
             case "__CLASS__" -> {
                 handleEmptyParentheses(parser);
-                yield new StringNode(parser.ctx.symbolTable.getCurrentPackage(), parser.tokenIndex);
+                // In methods, __CLASS__ should return the runtime class of $self
+                // Outside methods, it returns the compile-time package
+                if (parser.isInMethod) {
+                    // Generate: ref($self)
+                    OperatorNode selfVar = new OperatorNode("$", 
+                        new IdentifierNode("self", parser.tokenIndex), parser.tokenIndex);
+                    yield new OperatorNode("ref", selfVar, parser.tokenIndex);
+                } else {
+                    // Outside methods, return the compile-time package name
+                    yield new StringNode(parser.ctx.symbolTable.getCurrentPackage(), parser.tokenIndex);
+                }
             }
             case "__SUB__", "time", "times", "wait", "wantarray" -> {
                 handleEmptyParentheses(parser);
