@@ -437,7 +437,7 @@ public class StringParser {
                 return parseRegexReplace(parser.ctx, rawStr, parser);
             case "\"":
             case "qq":
-                return StringDoubleQuoted.parseDoubleQuotedString(parser.ctx, rawStr, true, true, false, parser.getHeredocNodes());
+                return StringDoubleQuoted.parseDoubleQuotedString(parser.ctx, rawStr, true, true, false, parser.getHeredocNodes(), parser);
             case "qw":
                 return parseWordsString(rawStr);
             case "tr":

@@ -28,7 +28,7 @@ public class Variable {
      * @param fieldName The name of the field to check (without sigil)
      * @return true if the field exists in the class hierarchy
      */
-    private static boolean isFieldInClassHierarchy(Parser parser, String fieldName) {
+    public static boolean isFieldInClassHierarchy(Parser parser, String fieldName) {
         // Get the current package/class name
         String currentClass = parser.ctx.symbolTable.getCurrentPackage();
         
@@ -60,6 +60,7 @@ public class Variable {
     public static Node parseVariable(Parser parser, String sigil) {
         Node operand;
         var nextToken = peek(parser);
+        
 
         // Special handling for $ followed by {
         if (nextToken.text.equals("$")) {
@@ -115,6 +116,7 @@ public class Variable {
             // Check if this is a field (in current or parent class) and not a locally declared variable
             // Note: We check if the variable is NOT defined locally (only in current scope)
             // but we DO check for fields in all scopes (fields are in parent scope)
+            
             if (parser.isInMethod 
                 && isFieldInClassHierarchy(parser, varName) 
                 && parser.ctx.symbolTable.getVariableIndexInCurrentScope(localVar) == -1) {
