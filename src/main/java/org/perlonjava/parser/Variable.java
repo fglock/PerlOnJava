@@ -10,6 +10,9 @@ import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.perlmodule.Strict;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import static org.perlonjava.parser.ParsePrimary.parsePrimary;
 import static org.perlonjava.parser.ParserNodeUtils.atUnderscore;
 import static org.perlonjava.parser.TokenUtils.peek;
@@ -71,7 +74,34 @@ public class Variable {
                 GlobalVariable.getGlobalIO(fullName);
             }
 
-            // Create a Variable node
+            // Check if we're in a method and this variable is a field
+            // Only transform to $self->{field} if:
+            // 1. We're inside a method (TODO: need to track method context)
+            // 2. The field exists in the symbol table
+            // 3. The variable is not locally shadowed
+            String fieldSymbol = "field:" + varName;
+            String localVar = sigil + varName;
+            
+            // Check if this is a field and not a locally declared variable
+            if (parser.ctx.symbolTable.getVariableIndex(fieldSymbol) != -1 
+                && parser.ctx.symbolTable.getVariableIndexInCurrentScope(localVar) == -1) {
+                // This is a field and not shadowed by a local variable
+                // Transform to $self->{fieldname}
+                
+                // Create $self
+                OperatorNode selfVar = new OperatorNode("$", 
+                    new IdentifierNode("self", parser.tokenIndex), parser.tokenIndex);
+                
+                // Create hash subscript for field access
+                List<Node> keyList = new ArrayList<>();
+                keyList.add(new IdentifierNode(varName, parser.tokenIndex));
+                HashLiteralNode hashSubscript = new HashLiteralNode(keyList, parser.tokenIndex);
+                
+                // Return $self->{fieldname}
+                return new BinaryOperatorNode("->", selfVar, hashSubscript, parser.tokenIndex);
+            }
+            
+            // Create a normal Variable node
             return new OperatorNode(sigil, new IdentifierNode(varName, parser.tokenIndex), parser.tokenIndex);
         } else if (peek(parser).text.equals("{")) {
             // Handle curly brackets - use parseBracedVariable instead of parseBlock

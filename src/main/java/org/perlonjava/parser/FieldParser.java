@@ -66,6 +66,12 @@ public class FieldParser {
         fieldPlaceholder.setAnnotation("sigil", sigil);
         fieldPlaceholder.setAnnotation("name", fieldName);
         
+        // Register field in symbol table with special "field:" prefix
+        // This allows us to track fields separately from regular variables
+        // and avoid shadowing issues
+        String fieldSymbol = "field:" + fieldName;
+        parser.ctx.symbolTable.addVariable(fieldSymbol, "field", fieldPlaceholder);
+        
         // Parse attributes (optional)
         while (TokenUtils.peek(parser).text.equals(":")) {
             parseFieldAttribute(parser, fieldPlaceholder);
