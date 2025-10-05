@@ -33,6 +33,20 @@ public class FieldRegistry {
     }
     
     /**
+     * Get all fields from a class (not including inherited fields)
+     */
+    public static Set<String> getClassFields(String className) {
+        return classFields.getOrDefault(className, new HashSet<>());
+    }
+    
+    /**
+     * Get the parent class of a given class
+     */
+    public static String getParentClass(String className) {
+        return classParents.get(className);
+    }
+    
+    /**
      * Check if a field exists in the class hierarchy
      * This works if parent classes were parsed before child classes
      */

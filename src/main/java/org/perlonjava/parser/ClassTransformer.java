@@ -172,10 +172,11 @@ public class ClassTransformer {
      * The generated constructor:
      * 1. Accepts the class name as first argument (for inheritance)
      * 2. Takes remaining arguments as named parameters (%args)
-     * 3. Blesses an empty hashref into the class
-     * 4. Initializes all fields from parameters or defaults
-     * 5. Runs ADJUST blocks for post-construction initialization
-     * 6. Returns the blessed object
+     * 3. If there's a parent class, calls SUPER::new() to get the blessed object
+     * 4. Otherwise, blesses an empty hashref into the class
+     * 5. Initializes only THIS class's fields from parameters or defaults
+     * 6. Runs ADJUST blocks for post-construction initialization
+     * 7. Returns the blessed object
      * 
      * @param fields List of field declarations with their attributes
      * @param className The name of the class
@@ -208,24 +209,45 @@ public class ClassTransformer {
             new OperatorNode("@", new IdentifierNode("_", 0), 0), 0);
         body.elements.add(argsAssign);
         
-        // Step 3: my $self = bless {}, $class;
+        // Step 3: Create $self - either by calling SUPER::new or blessing empty hash
         ListNode mySelfDecl = new ListNode(0);
         OperatorNode mySelf = new OperatorNode("my", 
             new OperatorNode("$", new IdentifierNode("self", 0), 0), 0);
         mySelfDecl.elements.add(mySelf);
         
-        // Create empty hash
-        ListNode emptyList = new ListNode(0);
-        HashLiteralNode emptyHash = new HashLiteralNode(emptyList.elements, 0);
+        // Check if this class has a parent (from :isa attribute)
+        String parentClass = FieldRegistry.getParentClass(className);
         
-        // Use $class variable instead of hardcoded class name
-        OperatorNode classVar = new OperatorNode("$", new IdentifierNode("class", 0), 0);
+        Node selfValue;
+        if (parentClass != null) {
+            // Call SUPER::new() to get the blessed object with parent fields initialized
+            // my $self = $class->SUPER::new(%args);
+            OperatorNode classVar = new OperatorNode("$", new IdentifierNode("class", 0), 0);
+            
+            // Create SUPER::new as a method call
+            // First create the method name with arguments
+            ListNode methodArgs = new ListNode(0);
+            methodArgs.elements.add(new OperatorNode("%", new IdentifierNode("args", 0), 0));
+            
+            // Create SUPER::new(args) as a subroutine call
+            OperatorNode superNewCall = new OperatorNode("&", 
+                new IdentifierNode("SUPER::new", 0), 0);
+            BinaryOperatorNode superNewWithArgs = new BinaryOperatorNode("(", 
+                superNewCall, methodArgs, 0);
+            
+            // Now create the method call: $class->SUPER::new(%args)
+            selfValue = new BinaryOperatorNode("->", classVar, superNewWithArgs, 0);
+        } else {
+            // No parent - bless an empty hash
+            // bless {}, $class
+            ListNode emptyList = new ListNode(0);
+            HashLiteralNode emptyHash = new HashLiteralNode(emptyList.elements, 0);
+            OperatorNode classVar = new OperatorNode("$", new IdentifierNode("class", 0), 0);
+            selfValue = new BinaryOperatorNode("bless", emptyHash, classVar, 0);
+        }
         
-        // bless {}, $class - as BinaryOperatorNode
-        BinaryOperatorNode blessCall = new BinaryOperatorNode("bless", emptyHash, classVar, 0);
-        
-        // my $self = bless {}, $class;
-        BinaryOperatorNode selfAssign = new BinaryOperatorNode("=", mySelfDecl, blessCall, 0);
+        // my $self = <selfValue>;
+        BinaryOperatorNode selfAssign = new BinaryOperatorNode("=", mySelfDecl, selfValue, 0);
         body.elements.add(selfAssign);
         
         // Step 3: Add field initialization
