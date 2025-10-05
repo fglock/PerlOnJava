@@ -546,7 +546,16 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return A string in the format "HASH(hashCode)".
      */
     public String toStringRef() {
-        String ref = "HASH(0x" + Integer.toHexString(this.hashCode()) + ")";
+        // Check if this is a Perl 5.38+ class instance
+        String refType = "HASH";
+        if (blessId != 0) {
+            String className = NameNormalizer.getBlessStr(blessId);
+            if (ClassRegistry.isClass(className)) {
+                refType = "OBJECT";
+            }
+        }
+        
+        String ref = refType + "(0x" + Integer.toHexString(this.hashCode()) + ")";
         return (blessId == 0
                 ? ref
                 : NameNormalizer.getBlessStr(blessId) + "=" + ref);

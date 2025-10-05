@@ -479,6 +479,11 @@ public class StatementParser {
         IdentifierNode nameNode = new IdentifierNode(packageName, parser.tokenIndex);
         OperatorNode packageNode = new OperatorNode(token.text, nameNode, parser.tokenIndex);
         packageNode.setAnnotation("isClass", isClass);
+        
+        // Register this as a Perl 5.38+ class for proper stringification
+        if (isClass) {
+            org.perlonjava.runtime.ClassRegistry.registerClass(packageName);
+        }
 
         // Parse Version string
         // XXX use the Version string
