@@ -362,6 +362,7 @@ public class ClassTransformer {
         String name = (String) field.getAnnotation("name");
         boolean hasParam = field.getAnnotation("attr:param") != null;
         boolean hasDefault = field.getBooleanAnnotation("hasDefault");
+        String defaultOperator = (String) field.getAnnotation("defaultOperator"); // =, //=, or ||=
         Node defaultValue = field.operand; // The default value if hasDefault is true
         
         // Handle null default values - use undef if not specified
@@ -401,8 +402,18 @@ public class ClassTransformer {
             BinaryOperatorNode argsAccess = new BinaryOperatorNode("{", argsVar, argHashSubscript, 0);
             
             if (hasDefault) {
-                // Use // operator for explicit default value
-                value = new BinaryOperatorNode("//", argsAccess, defaultValue, 0);
+                // Handle different default operators:
+                // = means always use default if param not provided
+                // //= means use default only if param is undefined
+                // ||= means use default only if param is false/empty
+                if ("=".equals(defaultOperator)) {
+                    // Standard default - use // operator (defined-or)
+                    value = new BinaryOperatorNode("//", argsAccess, defaultValue, 0);
+                } else {
+                    // For //= and ||=, the value itself acts as the default
+                    // We'll handle this differently below
+                    value = argsAccess;
+                }
             } else if ("@".equals(sigil)) {
                 // Array field without explicit default should default to []
                 ListNode emptyList = new ListNode(0);
@@ -432,7 +443,19 @@ public class ClassTransformer {
             }
         }
         
-        return new BinaryOperatorNode("=", selfField, value, 0);
+        // Handle different assignment operators for field initialization
+        if (hasDefault && "//=".equals(defaultOperator)) {
+            // For //= operator: $self->{field} //= default
+            // This assigns the default only if the field is undefined
+            return new BinaryOperatorNode("//=", selfField, defaultValue, 0);
+        } else if (hasDefault && "||=".equals(defaultOperator)) {
+            // For ||= operator: $self->{field} ||= default
+            // This assigns the default only if the field is false/empty
+            return new BinaryOperatorNode("||=", selfField, defaultValue, 0);
+        } else {
+            // Standard assignment: $self->{field} = value
+            return new BinaryOperatorNode("=", selfField, value, 0);
+        }
     }
     
     /**
