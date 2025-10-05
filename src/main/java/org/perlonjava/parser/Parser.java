@@ -32,6 +32,8 @@ public class Parser {
     public boolean isTopLevelScript = false;
     // Are we parsing inside a class block?
     public boolean isInClassBlock = false;
+    // Are we parsing inside a method?
+    public boolean isInMethod = false;
     // List to store ADJUST blocks for the current class
     public List<Node> classAdjustBlocks = new ArrayList<>();
     // List to store heredoc nodes encountered during parsing.
