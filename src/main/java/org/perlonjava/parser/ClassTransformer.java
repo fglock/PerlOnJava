@@ -127,9 +127,9 @@ public class ClassTransformer {
             }
         }
         
-        // Transform methods to inject $self and add them back
+        // Transform methods to inject $self and field aliases
         for (SubroutineNode method : methods) {
-            transformMethod(method);
+            transformMethod(method, fields);
             block.elements.add(method);
             // Register the method in the runtime, just like constructor and reader methods
             SubroutineParser.handleNamedSub(parser, method.name, method.prototype,
@@ -420,10 +420,10 @@ public class ClassTransformer {
     }
     
     /**
-     * Transform a method to inject implicit $self.
+     * Transform a method to inject implicit $self and field aliases.
      * This modifies the method in place.
      */
-    private static void transformMethod(SubroutineNode method) {
+    private static void transformMethod(SubroutineNode method, List<OperatorNode> fields) {
         if (method.block == null || !(method.block instanceof BlockNode)) {
             return;
         }
@@ -445,6 +445,11 @@ public class ClassTransformer {
         
         methodBody.elements.addFirst(selfAssign);
         
+        // NOTE: Field variables are NOT automatically available in methods
+        // Fields must be accessed explicitly using $self->{fieldname}
+        // Automatic field variable injection would break lexical scoping
+        // (e.g., if a method declares "my $x", it shouldn't refer to field $x)
+        
         // If the method has a signature, add parameter declarations after $self = shift
         ListNode signatureAST = (ListNode) method.getAnnotation("signatureAST");
         if (signatureAST != null && !signatureAST.elements.isEmpty()) {
@@ -464,6 +469,14 @@ public class ClassTransformer {
     // Removed evaluateGeneratedSubroutine - no longer needed
     // We now use SubroutineParser.handleNamedSub directly which is much simpler
     // and ensures generated methods go through the exact same path as regular named subroutines
+    
+    
+    /**
+     * Helper method to extract field name from a field OperatorNode.
+     */
+    private static String getFieldName(OperatorNode field) {
+        return (String) field.getAnnotation("name");
+    }
     
     /**
      * Pre-declare the constructor for a class.
