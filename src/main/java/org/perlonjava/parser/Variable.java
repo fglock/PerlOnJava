@@ -18,6 +18,39 @@ import static org.perlonjava.parser.ParserNodeUtils.atUnderscore;
 import static org.perlonjava.parser.TokenUtils.peek;
 
 public class Variable {
+    
+    /**
+     * Check if a field exists in the current class or any parent class.
+     * This method walks the inheritance hierarchy looking for field declarations.
+     * 
+     * @param parser The parser instance
+     * @param fieldName The name of the field to check (without sigil)
+     * @return true if the field exists in the class hierarchy
+     */
+    private static boolean isFieldInClassHierarchy(Parser parser, String fieldName) {
+        // Get the current package/class name
+        String currentClass = parser.ctx.symbolTable.getCurrentPackage();
+        
+        // Check field in current class
+        String fieldSymbol = "field:" + fieldName;
+        if (parser.ctx.symbolTable.getVariableIndex(fieldSymbol) != -1) {
+            return true;
+        }
+        
+        // Check parent classes by looking at @ISA
+        // For now, we'll check parent classes by looking for their field symbols
+        // This is a simplified approach - a full implementation would walk @ISA
+        
+        // Try checking if we have a parent class stored (from :isa attribute)
+        // We would need to walk the @ISA hierarchy here
+        // For now, just check the immediate parent if we can find it
+        
+        // TODO: Implement full @ISA hierarchy walking
+        // This would require accessing GlobalVariable.getGlobalArray(currentClass + "::ISA")
+        // and checking each parent class for the field
+        
+        return false;
+    }
     /**
      * Parses a variable from the given lexer token.
      *
@@ -77,13 +110,12 @@ public class Variable {
             // Check if we're in a method and this variable is a field
             // Only transform to $self->{field} if:
             // 1. We're inside a method (TODO: need to track method context)
-            // 2. The field exists in the symbol table
+            // 2. The field exists in the current class or parent classes
             // 3. The variable is not locally shadowed
-            String fieldSymbol = "field:" + varName;
             String localVar = sigil + varName;
             
-            // Check if this is a field and not a locally declared variable
-            if (parser.ctx.symbolTable.getVariableIndex(fieldSymbol) != -1 
+            // Check if this is a field (in current or parent class) and not a locally declared variable
+            if (isFieldInClassHierarchy(parser, varName) 
                 && parser.ctx.symbolTable.getVariableIndexInCurrentScope(localVar) == -1) {
                 // This is a field and not shadowed by a local variable
                 // Transform to $self->{fieldname}
