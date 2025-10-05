@@ -12,6 +12,7 @@ import org.perlonjava.operators.VersionHelper;
 import org.perlonjava.perlmodule.Universal;
 import org.perlonjava.runtime.*;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.perlonjava.operators.VersionHelper.normalizeVersion;
@@ -494,6 +495,20 @@ public class StatementParser {
 
         StatementResolver.parseStatementTerminator(parser);
         parser.ctx.symbolTable.setCurrentPackage(nameNode.name, isClass);
+        
+        // For unit class syntax (class Name;), we need to generate a minimal class
+        // with just a constructor, even though there's no block
+        if (isClass) {
+            // Create an empty block for the class
+            BlockNode emptyBlock = new BlockNode(new ArrayList<>(), parser.tokenIndex);
+            emptyBlock.elements.add(packageNode);
+            
+            // Transform it to generate constructor
+            emptyBlock = ClassTransformer.transformClassBlock(emptyBlock, nameNode.name, parser);
+            
+            return emptyBlock;
+        }
+        
         return packageNode;
     }
 
