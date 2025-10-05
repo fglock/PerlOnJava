@@ -37,17 +37,23 @@ public class Variable {
             return true;
         }
         
-        // Check parent classes by looking at @ISA
-        // For now, we'll check parent classes by looking for their field symbols
-        // This is a simplified approach - a full implementation would walk @ISA
+        // For inherited fields, we need to check if we're in a class context
+        // and if the parser is currently inside a class block
+        // Since we're at parse time, we can't access runtime @ISA arrays
+        // Instead, we need to check if the field was registered during parent class parsing
         
-        // Try checking if we have a parent class stored (from :isa attribute)
-        // We would need to walk the @ISA hierarchy here
-        // For now, just check the immediate parent if we can find it
+        // Check if we're in a class (not just a regular package)
+        if (!parser.ctx.symbolTable.currentPackageIsClass()) {
+            return false;
+        }
         
-        // TODO: Implement full @ISA hierarchy walking
-        // This would require accessing GlobalVariable.getGlobalArray(currentClass + "::ISA")
-        // and checking each parent class for the field
+        // At parse time, we can't easily access parent class fields because
+        // @ISA is populated at runtime. However, we can check if there's a
+        // parent class annotation stored during :isa() parsing
+        
+        // For now, return false for inherited fields
+        // A complete solution would require tracking parent class fields
+        // at parse time or deferring field resolution to runtime
         
         return false;
     }
