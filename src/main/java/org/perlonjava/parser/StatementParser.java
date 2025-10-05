@@ -555,6 +555,9 @@ public class StatementParser {
                 // Store parent class in annotations
                 packageNode.setAnnotation("parentClass", parentClass);
                 
+                // Register in FieldRegistry for field inheritance tracking
+                // We'll register this after we know the class name
+                
                 // Handle optional version number using the existing version parser
                 // This properly handles v-strings, floating point versions, etc.
                 Node versionNode = parseOptionalPackageVersion(parser);

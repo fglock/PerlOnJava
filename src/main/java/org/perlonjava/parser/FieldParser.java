@@ -72,6 +72,10 @@ public class FieldParser {
         String fieldSymbol = "field:" + fieldName;
         parser.ctx.symbolTable.addVariable(fieldSymbol, "field", fieldPlaceholder);
         
+        // Also register in global FieldRegistry for inheritance tracking
+        String currentClass = parser.ctx.symbolTable.getCurrentPackage();
+        FieldRegistry.registerField(currentClass, fieldName);
+        
         // Parse attributes (optional)
         while (TokenUtils.peek(parser).text.equals(":")) {
             parseFieldAttribute(parser, fieldPlaceholder);

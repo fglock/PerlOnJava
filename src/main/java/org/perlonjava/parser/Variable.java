@@ -21,7 +21,8 @@ public class Variable {
     
     /**
      * Check if a field exists in the current class or any parent class.
-     * This method walks the inheritance hierarchy looking for field declarations.
+     * Uses both the local symbol table (for current class) and the global
+     * FieldRegistry (for parent classes that have been parsed).
      * 
      * @param parser The parser instance
      * @param fieldName The name of the field to check (without sigil)
@@ -31,31 +32,20 @@ public class Variable {
         // Get the current package/class name
         String currentClass = parser.ctx.symbolTable.getCurrentPackage();
         
-        // Check field in current class
+        // First check field in current class via symbol table
         String fieldSymbol = "field:" + fieldName;
         if (parser.ctx.symbolTable.getVariableIndex(fieldSymbol) != -1) {
             return true;
         }
-        
-        // For inherited fields, we need to check if we're in a class context
-        // and if the parser is currently inside a class block
-        // Since we're at parse time, we can't access runtime @ISA arrays
-        // Instead, we need to check if the field was registered during parent class parsing
         
         // Check if we're in a class (not just a regular package)
         if (!parser.ctx.symbolTable.currentPackageIsClass()) {
             return false;
         }
         
-        // At parse time, we can't easily access parent class fields because
-        // @ISA is populated at runtime. However, we can check if there's a
-        // parent class annotation stored during :isa() parsing
-        
-        // For now, return false for inherited fields
-        // A complete solution would require tracking parent class fields
-        // at parse time or deferring field resolution to runtime
-        
-        return false;
+        // Check the global FieldRegistry for inherited fields
+        // This works when parent classes were parsed before child classes
+        return FieldRegistry.hasFieldInHierarchy(currentClass, fieldName);
     }
     /**
      * Parses a variable from the given lexer token.
