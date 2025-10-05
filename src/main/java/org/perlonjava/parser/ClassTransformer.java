@@ -91,6 +91,16 @@ public class ClassTransformer {
                 } else {
                     otherStatements.add(element); // Regular subroutines
                 }
+            } else if (element instanceof BinaryOperatorNode binOp && "=".equals(binOp.operator)) {
+                // Check if this is a lexical method assignment (my $name__lexmethod_123 = sub {...})
+                if (binOp.right instanceof SubroutineNode subNode 
+                    && subNode.getBooleanAnnotation("isMethod")) {
+                    // This is a lexical method - transform it
+                    transformMethod(subNode, fields);
+                    otherStatements.add(element); // Keep the assignment with transformed method
+                } else {
+                    otherStatements.add(element);
+                }
             } else {
                 otherStatements.add(element);
             }
