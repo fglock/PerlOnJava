@@ -144,7 +144,7 @@ public class ClassTransformer {
         // Generate reader methods for fields with :reader attribute
         for (OperatorNode field : fields) {
             if (field.getAnnotation("attr:reader") != null) {
-                SubroutineNode reader = generateReaderMethod(field);
+                SubroutineNode reader = generateReaderMethod(field, className);
                 block.elements.add(reader);
                 // Register the reader using the same logic as named subroutines
                 SubroutineParser.handleNamedSub(parser, reader.name, reader.prototype,
@@ -479,7 +479,7 @@ public class ClassTransformer {
     /**
      * Generate a reader method for a field.
      */
-    private static SubroutineNode generateReaderMethod(OperatorNode field) {
+    private static SubroutineNode generateReaderMethod(OperatorNode field, String className) {
         String name = (String) field.getAnnotation("name");
         String sigil = (String) field.getAnnotation("sigil");
         String readerName = (String) field.getAnnotation("attr:reader");
@@ -490,6 +490,11 @@ public class ClassTransformer {
         // Create method body
         List<Node> bodyElements = new ArrayList<>();
         BlockNode body = new BlockNode(bodyElements, 0);
+        
+        // TODO: Add argument validation for reader methods
+        // Readers should only accept the object itself (no additional arguments)
+        // Temporarily disabled due to operator implementation issues
+        // Will revisit with simpler implementation
         
         // $_[0]->{fieldname}
         // Correct structure: BinaryOperatorNode("[", $_, ArrayLiteralNode([0]))
