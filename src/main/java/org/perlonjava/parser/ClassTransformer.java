@@ -261,12 +261,20 @@ public class ClassTransformer {
         body.elements.add(selfAssign);
         
         // Step 3: Add field initialization
+        // First initialize all fields
         for (OperatorNode field : fields) {
             Node fieldInit = generateFieldInitialization(field);
             if (fieldInit != null) {
                 body.elements.add(fieldInit);
             }
         }
+        
+        // Step 3.5: TODO - Parameter validation temporarily disabled
+        // The parameter validation implementation is hitting operator implementation issues
+        // (delete and if operators not fully implemented for our use case)
+        // We'll revisit this with a simpler approach later
+        
+        // For now, leaving parameter validation disabled to continue progress on other tests
         
         // Step 4: Run ADJUST blocks after field initialization
         // ADJUST blocks are anonymous subs that need to be called with $self
