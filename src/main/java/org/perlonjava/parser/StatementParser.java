@@ -484,12 +484,79 @@ public class StatementParser {
         Node version = parseOptionalPackageVersion(parser);
         parser.ctx.logDebug("package version: " + version);
 
+        // Parse class attributes (e.g., :isa(ParentClass))
+        if (isClass) {
+            parseClassAttributes(parser, packageNode);
+        }
+
         BlockNode block = parseOptionalPackageBlock(parser, nameNode, packageNode);
         if (block != null) return block;
 
         StatementResolver.parseStatementTerminator(parser);
         parser.ctx.symbolTable.setCurrentPackage(nameNode.name, isClass);
         return packageNode;
+    }
+
+    /**
+     * Parses class attributes like :isa(ParentClass)
+     *
+     * @param parser      The Parser instance
+     * @param packageNode The OperatorNode representing the class declaration
+     */
+    private static void parseClassAttributes(Parser parser, OperatorNode packageNode) {
+        LexerToken token = TokenUtils.peek(parser);
+        
+        // Check for :isa attribute
+        if (token.text.equals(":")) {
+            TokenUtils.consume(parser); // consume ':'
+            token = TokenUtils.peek(parser);
+            
+            if (token.text.equals("isa")) {
+                TokenUtils.consume(parser); // consume 'isa'
+                
+                // Expect opening parenthesis
+                TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
+                
+                // Parse parent class name
+                token = TokenUtils.peek(parser);
+                if (token.type != LexerTokenType.IDENTIFIER) {
+                    throw new PerlCompilerException(parser.tokenIndex, 
+                        "Expected class name after :isa(", parser.ctx.errorUtil);
+                }
+                
+                String parentClass = TokenUtils.consume(parser).text;
+                
+                // Handle qualified class names (e.g., Parent::Class)
+                while (TokenUtils.peek(parser).text.equals("::")) {
+                    TokenUtils.consume(parser); // consume '::'
+                    token = TokenUtils.peek(parser);
+                    if (token.type != LexerTokenType.IDENTIFIER) {
+                        throw new PerlCompilerException(parser.tokenIndex,
+                            "Expected identifier after '::'", parser.ctx.errorUtil);
+                    }
+                    parentClass += "::" + TokenUtils.consume(parser).text;
+                }
+                
+                // Store parent class in annotations
+                packageNode.setAnnotation("parentClass", parentClass);
+                
+                // Handle optional version number using the existing version parser
+                // This properly handles v-strings, floating point versions, etc.
+                Node versionNode = parseOptionalPackageVersion(parser);
+                if (versionNode != null) {
+                    // Store version node for potential future version checking
+                    packageNode.setAnnotation("parentVersion", versionNode);
+                    // TODO: Implement version checking when needed
+                }
+                
+                // Expect closing parenthesis
+                TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
+            } else {
+                // Unknown attribute - throw error for now
+                throw new PerlCompilerException(parser.tokenIndex,
+                    "Unknown class attribute: :" + token.text, parser.ctx.errorUtil);
+            }
+        }
     }
 
     /**
