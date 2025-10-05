@@ -134,7 +134,10 @@ public class StatementResolver {
                         } else if (peek(parser).text.equals("{")) {
                             // Full method definition with block
                             consume(parser, LexerTokenType.OPERATOR, "{");
+                            boolean wasInMethod = parser.isInMethod;
+                            parser.isInMethod = true; // Set method context
                             BlockNode block = ParseBlock.parseBlock(parser);
+                            parser.isInMethod = wasInMethod; // Restore previous context
                             consume(parser, LexerTokenType.OPERATOR, "}");
                             
                             // Create subroutine node
@@ -219,9 +222,12 @@ public class StatementResolver {
                             BlockNode block = null;
                             if (peek(parser).text.equals("{")) {
                                 consume(parser, LexerTokenType.OPERATOR, "{");
+                                boolean wasInMethod = parser.isInMethod;
+                                parser.isInMethod = true; // Set method context for lexical method
                                 block = ParseBlock.parseBlock(parser);
+                                parser.isInMethod = wasInMethod; // Restore previous context
                                 consume(parser, LexerTokenType.OPERATOR, "}");
-                            } else if (peek(parser).text.equals(";")) {
+                            } else if (peek(parser).text.equals(";")){
                                 // Forward declaration
                                 consume(parser, LexerTokenType.OPERATOR, ";");
                                 block = new BlockNode(new ArrayList<>(), parser.tokenIndex);

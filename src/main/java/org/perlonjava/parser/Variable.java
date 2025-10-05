@@ -33,6 +33,8 @@ public class Variable {
         String currentClass = parser.ctx.symbolTable.getCurrentPackage();
         
         // First check field in current class via symbol table
+        // Use getVariableIndex (not InCurrentScope) to search all parent scopes
+        // Fields are in the class scope, methods create inner scopes
         String fieldSymbol = "field:" + fieldName;
         if (parser.ctx.symbolTable.getVariableIndex(fieldSymbol) != -1) {
             return true;
@@ -105,13 +107,16 @@ public class Variable {
 
             // Check if we're in a method and this variable is a field
             // Only transform to $self->{field} if:
-            // 1. We're inside a method (TODO: need to track method context)
+            // 1. We're inside a method
             // 2. The field exists in the current class or parent classes
             // 3. The variable is not locally shadowed
             String localVar = sigil + varName;
             
             // Check if this is a field (in current or parent class) and not a locally declared variable
-            if (isFieldInClassHierarchy(parser, varName) 
+            // Note: We check if the variable is NOT defined locally (only in current scope)
+            // but we DO check for fields in all scopes (fields are in parent scope)
+            if (parser.isInMethod 
+                && isFieldInClassHierarchy(parser, varName) 
                 && parser.ctx.symbolTable.getVariableIndexInCurrentScope(localVar) == -1) {
                 // This is a field and not shadowed by a local variable
                 // Transform field access based on sigil type
