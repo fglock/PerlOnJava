@@ -114,6 +114,22 @@ public class StringDoubleQuoted extends StringSegmentParser {
      * @return An AST node representing the parsed string (StringNode, BinaryOperatorNode for join, etc.)
      */
     static Node parseDoubleQuotedString(EmitterContext ctx, StringParser.ParsedString rawStr, boolean parseEscapes, boolean interpolateVariable, boolean isRegexReplacement, List<OperatorNode> sharedHeredocNodes) {
+        return parseDoubleQuotedString(ctx, rawStr, parseEscapes, interpolateVariable, isRegexReplacement, sharedHeredocNodes, null);
+    }
+    
+    /**
+     * Parses a double-quoted string with optional shared heredoc state and original parser context.
+     *
+     * @param ctx                 The emitter context for logging and error handling
+     * @param rawStr              The parsed string data containing the string content and position info
+     * @param parseEscapes        Whether to process escape sequences or preserve them literally
+     * @param interpolateVariable Whether to interpolate variables
+     * @param isRegexReplacement  Whether this is in a regex replacement context
+     * @param sharedHeredocNodes  Optional list of heredoc nodes to share with parent parser
+     * @param originalParser      Optional original parser to preserve context flags (e.g., isInMethod)
+     * @return An AST node representing the parsed string
+     */
+    static Node parseDoubleQuotedString(EmitterContext ctx, StringParser.ParsedString rawStr, boolean parseEscapes, boolean interpolateVariable, boolean isRegexReplacement, List<OperatorNode> sharedHeredocNodes, Parser originalParser) {
         // Extract the first buffer (double-quoted strings don't have multiple parts like here-docs)
         var input = rawStr.buffers.getFirst();
         var tokenIndex = rawStr.next;
@@ -130,6 +146,13 @@ public class StringDoubleQuoted extends StringSegmentParser {
         var parser = sharedHeredocNodes != null ?
                 new Parser(ctx, tokens, sharedHeredocNodes) :
                 new Parser(ctx, tokens);
+        
+        // Preserve context flags from original parser if provided
+        if (originalParser != null) {
+            parser.isInMethod = originalParser.isInMethod;
+            parser.isInClassBlock = originalParser.isInClassBlock;
+            // Copy any other relevant context flags as needed
+        }
 
         // Create and run the double-quoted string parser with original token offset tracking
         var doubleQuotedParser = new StringDoubleQuoted(ctx, tokens, parser, tokenIndex, isRegex, parseEscapes, interpolateVariable, isRegexReplacement);

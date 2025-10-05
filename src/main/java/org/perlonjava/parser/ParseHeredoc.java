@@ -242,8 +242,8 @@ public class ParseHeredoc {
         // to avoid processing parent heredocs in the wrong context
         List<OperatorNode> heredocContext = new ArrayList<>();
 
-        // Parse the string with the new context
-        Node result = StringDoubleQuoted.parseDoubleQuotedString(parser.ctx, rawStr, true, true, false, heredocContext);
+        // Parse the string with the new context, preserving the original parser context
+        Node result = StringDoubleQuoted.parseDoubleQuotedString(parser.ctx, rawStr, true, true, false, heredocContext, parser);
 
         // After parsing, any heredocs declared in this context need to be added to the parent
         parser.getHeredocNodes().addAll(heredocContext);

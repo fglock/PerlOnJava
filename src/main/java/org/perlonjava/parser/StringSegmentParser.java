@@ -370,6 +370,38 @@ public abstract class StringSegmentParser {
             IdentifierParser.validateIdentifier(parser, identifier, startIndex);
 
             ctx.logDebug("str Identifier: " + identifier);
+            
+            // Check if this is a field that needs transformation to $self->{field}
+            // This mirrors the logic in Variable.parseVariable
+            if (parser.isInMethod && Variable.isFieldInClassHierarchy(parser, identifier)) {
+                String localVar = sigil + identifier;
+                // Only transform if not shadowed by a local variable
+                if (parser.ctx.symbolTable.getVariableIndexInCurrentScope(localVar) == -1) {
+                    // Transform field access to $self->{field}
+                    // Create $self
+                    OperatorNode selfVar = new OperatorNode("$", 
+                        new IdentifierNode("self", tokenIndex), tokenIndex);
+                    
+                    // Create hash subscript for field access
+                    List<Node> keyList = new ArrayList<>();
+                    keyList.add(new IdentifierNode(identifier, tokenIndex));
+                    HashLiteralNode hashSubscript = new HashLiteralNode(keyList, tokenIndex);
+                    
+                    // Create $self->{fieldname}
+                    Node fieldAccess = new BinaryOperatorNode("->", selfVar, hashSubscript, tokenIndex);
+                    
+                    // For array and hash fields, we need to dereference the reference
+                    if (sigil.equals("@") || sigil.equals("%")) {
+                        // @field becomes @{$self->{field}}
+                        // %field becomes %{$self->{field}}
+                        return new OperatorNode(sigil, fieldAccess, tokenIndex);
+                    } else {
+                        // Scalar fields: $field becomes $self->{field}
+                        return fieldAccess;
+                    }
+                }
+            }
+            
             return new OperatorNode(sigil, new IdentifierNode(identifier, tokenIndex), tokenIndex);
         }
 
