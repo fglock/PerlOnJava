@@ -510,21 +510,9 @@ public class ClassTransformer {
         HashLiteralNode hashSubscript = new HashLiteralNode(keyList, 0);
         BinaryOperatorNode fieldAccess = new BinaryOperatorNode("->", arg0, hashSubscript, 0);
         
-        // Reader methods need to be context-aware for array and hash fields
-        if (sigil.equals("@")) {
-            // Array field: return dereferenced in list context, count in scalar context
-            // @{$_[0]->{fieldname}}
-            OperatorNode deref = new OperatorNode("@", fieldAccess, 0);
-            body.elements.add(deref);
-        } else if (sigil.equals("%")) {
-            // Hash field: return dereferenced in list context, key count in scalar context
-            // %{$_[0]->{fieldname}}
-            OperatorNode deref = new OperatorNode("%", fieldAccess, 0);
-            body.elements.add(deref);
-        } else {
-            // Scalar field: return as-is
-            body.elements.add(fieldAccess);
-        }
+        // Reader methods should return the field value as-is (including references)
+        // For array and hash fields, we store arrayrefs/hashrefs, so return them directly
+        body.elements.add(fieldAccess);
         
         // Create the subroutine node
         SubroutineNode reader = new SubroutineNode(
