@@ -111,6 +111,9 @@ public class ClassTransformer {
         if (packageDecl != null) {
             String parentClass = (String) packageDecl.getAnnotation("parentClass");
             if (parentClass != null) {
+                // Register parent-child relationship in FieldRegistry
+                FieldRegistry.registerParentClass(className, parentClass);
+                
                 // Generate: @ClassName::ISA = ('ParentClass');
                 Node isaAssignment = generateIsaAssignment(className, parentClass);
                 block.elements.add(isaAssignment);
