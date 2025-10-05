@@ -100,9 +100,21 @@ public class ClassTransformer {
         block.elements.clear();
         
         // Add the package declaration back (it's always first)
+        OperatorNode packageDecl = null;
         if (!otherStatements.isEmpty() && otherStatements.get(0) instanceof OperatorNode opNode 
             && ("class".equals(opNode.operator) || "package".equals(opNode.operator))) {
+            packageDecl = opNode;
             block.elements.add(otherStatements.remove(0));
+        }
+        
+        // Set up inheritance if :isa() attribute was specified
+        if (packageDecl != null) {
+            String parentClass = (String) packageDecl.getAnnotation("parentClass");
+            if (parentClass != null) {
+                // Generate: @ClassName::ISA = ('ParentClass');
+                Node isaAssignment = generateIsaAssignment(className, parentClass);
+                block.elements.add(isaAssignment);
+            }
         }
         
         // Generate constructor if not present
@@ -124,6 +136,15 @@ public class ClassTransformer {
                 // Register the reader using the same logic as named subroutines
                 SubroutineParser.handleNamedSub(parser, reader.name, reader.prototype,
                                                reader.attributes, (BlockNode) reader.block);
+            }
+            
+            // Generate writer methods for fields with :writer attribute
+            if (field.getAnnotation("attr:writer") != null) {
+                SubroutineNode writer = generateWriterMethod(field);
+                block.elements.add(writer);
+                // Register the writer using the same logic as named subroutines
+                SubroutineParser.handleNamedSub(parser, writer.name, writer.prototype,
+                                               writer.attributes, (BlockNode) writer.block);
             }
         }
         
@@ -470,6 +491,86 @@ public class ClassTransformer {
     // We now use SubroutineParser.handleNamedSub directly which is much simpler
     // and ensures generated methods go through the exact same path as regular named subroutines
     
+    
+    /**
+     * Generate a writer (setter) method for a field.
+     * The setter returns $self to allow method chaining.
+     */
+    private static SubroutineNode generateWriterMethod(OperatorNode field) {
+        String name = (String) field.getAnnotation("name");
+        String writerName = (String) field.getAnnotation("attr:writer");
+        if (writerName == null || writerName.isEmpty()) {
+            writerName = "set_" + name; // Default to set_fieldname
+        }
+        
+        // Create method body: $_[0]->{fieldname} = $_[1]; return $_[0]
+        List<Node> bodyElements = new ArrayList<>();
+        BlockNode body = new BlockNode(bodyElements, 0);
+        
+        // $_[0]->{fieldname} = $_[1]
+        // First create $_[0]
+        OperatorNode underscore = new OperatorNode("$", new IdentifierNode("_", 0), 0);
+        List<Node> zeroList = new ArrayList<>();
+        zeroList.add(new NumberNode("0", 0));
+        ArrayLiteralNode indexZero = new ArrayLiteralNode(zeroList, 0);
+        BinaryOperatorNode arg0 = new BinaryOperatorNode("[", underscore, indexZero, 0);
+        
+        // Create hash subscript for field
+        List<Node> keyList = new ArrayList<>();
+        keyList.add(new IdentifierNode(name, 0));
+        HashLiteralNode hashSubscript = new HashLiteralNode(keyList, 0);
+        BinaryOperatorNode fieldAccess = new BinaryOperatorNode("->", arg0, hashSubscript, 0);
+        
+        // Create $_[1] for the value
+        List<Node> oneList = new ArrayList<>();
+        oneList.add(new NumberNode("1", 0));
+        ArrayLiteralNode indexOne = new ArrayLiteralNode(oneList, 0);
+        BinaryOperatorNode arg1 = new BinaryOperatorNode("[", 
+            new OperatorNode("$", new IdentifierNode("_", 0), 0), indexOne, 0);
+        
+        // Create assignment: $_[0]->{fieldname} = $_[1]
+        BinaryOperatorNode assignment = new BinaryOperatorNode("=", fieldAccess, arg1, 0);
+        body.elements.add(assignment);
+        
+        // Add return $_[0] for method chaining
+        // Create a new $_[0] reference for the return statement
+        OperatorNode returnUnderscore = new OperatorNode("$", new IdentifierNode("_", 0), 0);
+        List<Node> returnZeroList = new ArrayList<>();
+        returnZeroList.add(new NumberNode("0", 0));
+        ArrayLiteralNode returnIndexZero = new ArrayLiteralNode(returnZeroList, 0);
+        BinaryOperatorNode returnArg0 = new BinaryOperatorNode("[", returnUnderscore, returnIndexZero, 0);
+        body.elements.add(returnArg0);
+        
+        // Create the subroutine node
+        SubroutineNode writer = new SubroutineNode(
+            writerName, // name
+            null,       // prototype
+            null,       // attributes
+            body,       // body
+            false,      // isAnonymous
+            0           // tokenIndex
+        );
+        
+        return writer;
+    }
+    
+    /**
+     * Generate @ISA array assignment for inheritance.
+     * Creates: @ClassName::ISA = ('ParentClass');
+     */
+    private static Node generateIsaAssignment(String className, String parentClass) {
+        // Create @ClassName::ISA
+        OperatorNode isaArray = new OperatorNode("@",
+            new IdentifierNode(className + "::ISA", 0), 0);
+        
+        // Create list with parent class
+        List<Node> parentList = new ArrayList<>();
+        parentList.add(new StringNode(parentClass, 0));
+        ListNode parentListNode = new ListNode(parentList, 0);
+        
+        // Create assignment: @ISA = ('ParentClass')
+        return new BinaryOperatorNode("=", isaArray, parentListNode, 0);
+    }
     
     /**
      * Helper method to extract field name from a field OperatorNode.
