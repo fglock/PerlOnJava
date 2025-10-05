@@ -4,6 +4,7 @@ import org.perlonjava.astnode.*;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.PerlCompilerException;
+import org.perlonjava.symbols.SymbolTable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -146,6 +147,53 @@ public class ParseInfix {
                         } else {
                             throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);
                         }
+                    case "&":
+                        // Handle lexical method calls: $obj->&priv()
+                        TokenUtils.consume(parser); // consume '&'
+                        
+                        // Parse the method name
+                        LexerToken methodToken = peek(parser);
+                        if (methodToken.type != LexerTokenType.IDENTIFIER) {
+                            throw new PerlCompilerException(parser.tokenIndex, "Expecting method name after ->&", parser.ctx.errorUtil);
+                        }
+                        String methodName = methodToken.text;
+                        TokenUtils.consume(parser); // consume method name
+                        
+                        // Look up the lexical method in the symbol table
+                        String lexicalKey = "&" + methodName;
+                        SymbolTable.SymbolEntry entry = parser.ctx.symbolTable.getSymbolEntry(lexicalKey);
+                        
+                        if (entry != null && entry.ast() instanceof OperatorNode varNode) {
+                            // This is a lexical method - get the hidden variable AST
+                            // The AST contains the hidden variable (e.g., $priv__lexmethod_123)
+                            // Create a method call using the hidden variable
+                            right = varNode; // The hidden variable node
+                            
+                            // Check for method arguments
+                            if (peek(parser).text.equals("(")) {
+                                // Method call with arguments: ->&priv(args)
+                                ListNode args = consumeArgsWithPrototype(parser, null);
+                                right = new BinaryOperatorNode("(", right, args, parser.tokenIndex);
+                            }
+                            
+                            // Return method call via the hidden variable
+                            return new BinaryOperatorNode(token.text, left, right, parser.tokenIndex);
+                        }
+                        
+                        // Not a lexical method - treat as a regular code reference call
+                        // This creates a call like $obj->(&NAME) which will look up &NAME at runtime
+                        Node methodRef = new OperatorNode("&", new IdentifierNode(methodName, parser.tokenIndex), parser.tokenIndex);
+                        
+                        // Check for method arguments
+                        if (peek(parser).text.equals("(")) {
+                            ListNode args = consumeArgsWithPrototype(parser, null);
+                            right = new BinaryOperatorNode("(", methodRef, args, parser.tokenIndex);
+                        } else {
+                            // No arguments - just the method reference
+                            right = methodRef;
+                        }
+                        
+                        return new BinaryOperatorNode(token.text, left, right, parser.tokenIndex);
                     default:
                         parser.parsingForLoopVariable = true;
                         if (nextText.equals("$")) {
