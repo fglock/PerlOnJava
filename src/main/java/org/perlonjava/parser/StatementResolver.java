@@ -5,6 +5,7 @@ import org.perlonjava.codegen.ByteCodeSourceMapper;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.perlonjava.parser.OperatorParser.dieWarnNode;
@@ -105,8 +106,33 @@ public class StatementResolver {
                             // Note: SignatureParser consumes the closing )
                         }
                         
-                        // Parse block
-                        if (peek(parser).text.equals("{")) {
+                        // Check for forward declaration (method name;) or full definition (method name {...})
+                        if (peek(parser).text.equals(";")) {
+                            // Forward declaration - just consume the semicolon
+                            consume(parser, LexerTokenType.OPERATOR, ";");
+                            
+                            // Create a method stub with empty body for forward declaration
+                            // The actual implementation will be provided later
+                            BlockNode emptyBlock = new BlockNode(new ArrayList<>(), parser.tokenIndex);
+                            SubroutineNode method = new SubroutineNode(
+                                methodName, 
+                                prototype,
+                                null,  // attributes
+                                emptyBlock,
+                                false, // useTryCatch
+                                parser.tokenIndex
+                            );
+                            method.setAnnotation("isMethod", true);
+                            method.setAnnotation("isForwardDeclaration", true);
+                            
+                            // Store signature if present
+                            if (signatureAST != null) {
+                                method.setAnnotation("signatureAST", signatureAST);
+                            }
+                            
+                            yield method;
+                        } else if (peek(parser).text.equals("{")) {
+                            // Full method definition with block
                             consume(parser, LexerTokenType.OPERATOR, "{");
                             BlockNode block = ParseBlock.parseBlock(parser);
                             consume(parser, LexerTokenType.OPERATOR, "}");
@@ -135,9 +161,105 @@ public class StatementResolver {
 
                 case "our", "my", "state" -> {
                     String declaration = consume(parser).text;
-                    if (consume(parser).text.equals("sub") && peek(parser).type == LexerTokenType.IDENTIFIER) {
-                        // my sub name
-                        yield SubroutineParser.parseSubroutineDefinition(parser, true, declaration);
+                    LexerToken nextToken = peek(parser);
+                    
+                    if (nextToken.text.equals("sub")) {
+                        consume(parser); // consume "sub"
+                        LexerToken nameToken = peek(parser);
+                        
+                        if (nameToken.type == LexerTokenType.IDENTIFIER) {
+                            // my sub name {...} -> my $name__hidden = sub {...}
+                            String subName = consume(parser).text;
+                            
+                            // Generate unique hidden variable name
+                            String hiddenVarName = subName + "__lexsub_" + parser.tokenIndex;
+                            
+                            // Parse the rest as an anonymous sub
+                            Node anonSub = SubroutineParser.parseSubroutineDefinition(parser, false, null);
+                            
+                            // Create AST for: my $hiddenVarName = sub {...}
+                            // Create the declaration: my $hiddenVarName
+                            OperatorNode varDecl = new OperatorNode(declaration,
+                                new OperatorNode("$", new IdentifierNode(hiddenVarName, parser.tokenIndex), parser.tokenIndex),
+                                parser.tokenIndex);
+                            
+                            // Create the list for declaration
+                            ListNode declList = new ListNode(parser.tokenIndex);
+                            declList.elements.add(varDecl);
+                            
+                            // Create assignment: my $hiddenVarName = sub {...}
+                            BinaryOperatorNode assignment = new BinaryOperatorNode("=", declList, anonSub, parser.tokenIndex);
+                            
+                            // Store the mapping so we can resolve calls to this lexical sub
+                            parser.ctx.symbolTable.addVariable("&" + subName, declaration, varDecl);
+                            
+                            yield assignment;
+                        } else {
+                            // anonymous sub
+                            yield SubroutineParser.parseSubroutineDefinition(parser, false, declaration);
+                        }
+                    } else if (nextToken.text.equals("method") && parser.ctx.symbolTable.isFeatureCategoryEnabled("class")) {
+                        consume(parser); // consume "method"
+                        LexerToken nameToken = peek(parser);
+                        
+                        if (nameToken.type == LexerTokenType.IDENTIFIER) {
+                            // my method name {...} -> similar transformation
+                            String methodName = consume(parser).text;
+                            
+                            // Generate unique hidden variable name
+                            String hiddenVarName = methodName + "__lexmethod_" + parser.tokenIndex;
+                            
+                            // Parse signature if present
+                            ListNode signatureAST = null;
+                            if (peek(parser).text.equals("(")) {
+                                signatureAST = SignatureParser.parseSignature(parser);
+                            }
+                            
+                            // Parse the method body
+                            BlockNode block = null;
+                            if (peek(parser).text.equals("{")) {
+                                consume(parser, LexerTokenType.OPERATOR, "{");
+                                block = ParseBlock.parseBlock(parser);
+                                consume(parser, LexerTokenType.OPERATOR, "}");
+                            } else if (peek(parser).text.equals(";")) {
+                                // Forward declaration
+                                consume(parser, LexerTokenType.OPERATOR, ";");
+                                block = new BlockNode(new ArrayList<>(), parser.tokenIndex);
+                            } else {
+                                throw new RuntimeException("Expected '{' or ';' after method declaration");
+                            }
+                            
+                            // Create anonymous method
+                            SubroutineNode anonMethod = new SubroutineNode(
+                                null, // anonymous
+                                null, // prototype
+                                null, // attributes
+                                block,
+                                false, // useTryCatch
+                                parser.tokenIndex
+                            );
+                            anonMethod.setAnnotation("isMethod", true);
+                            if (signatureAST != null) {
+                                anonMethod.setAnnotation("signatureAST", signatureAST);
+                            }
+                            
+                            // Create AST for: my $hiddenVarName = sub {...}
+                            OperatorNode varDecl = new OperatorNode(declaration,
+                                new OperatorNode("$", new IdentifierNode(hiddenVarName, parser.tokenIndex), parser.tokenIndex),
+                                parser.tokenIndex);
+                            
+                            ListNode declList = new ListNode(parser.tokenIndex);
+                            declList.elements.add(varDecl);
+                            
+                            BinaryOperatorNode assignment = new BinaryOperatorNode("=", declList, anonMethod, parser.tokenIndex);
+                            
+                            // Store mapping for method calls
+                            parser.ctx.symbolTable.addVariable("&" + methodName, declaration, varDecl);
+                            
+                            yield assignment;
+                        } else {
+                            throw new RuntimeException("Method name expected after 'my method'");
+                        }
                     }
                     // Otherwise backtrack
                     parser.tokenIndex = currentIndex;
