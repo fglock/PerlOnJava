@@ -3,6 +3,7 @@ package org.perlonjava.operators;
 import org.perlonjava.parser.NumberParser;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.RuntimeScalarCache;
 import org.perlonjava.runtime.RuntimeScalarType;
 
 /**
@@ -21,6 +22,16 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the bitwise AND operation.
      */
     public static RuntimeScalar bitwiseAnd(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
+        // Check for uninitialized values and generate warnings
+        if (runtimeScalar.type == RuntimeScalarType.UNDEF) {
+            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in bitwise and (&)"),
+                    RuntimeScalarCache.scalarEmptyString);
+        }
+        if (arg2.type == RuntimeScalarType.UNDEF) {
+            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in bitwise and (&)"),
+                    RuntimeScalarCache.scalarEmptyString);
+        }
+        
         if (runtimeScalar.isString() && arg2.isString()) {
             return bitwiseAndDot(runtimeScalar, arg2);
         }
@@ -266,6 +277,16 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the left shift operation.
      */
     public static RuntimeScalar shiftLeft(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
+        // Check for uninitialized values and generate warnings
+        if (runtimeScalar.type == RuntimeScalarType.UNDEF) {
+            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in left bitshift (<<)"),
+                    RuntimeScalarCache.scalarEmptyString);
+        }
+        if (arg2.type == RuntimeScalarType.UNDEF) {
+            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in left bitshift (<<)"),
+                    RuntimeScalarCache.scalarEmptyString);
+        }
+        
         // Convert string type to number if necessary
         if (runtimeScalar.isString()) {
             runtimeScalar = NumberParser.parseNumber(runtimeScalar);
@@ -329,6 +350,16 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the right shift operation.
      */
     public static RuntimeScalar shiftRight(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
+        // Check for uninitialized values and generate warnings
+        if (runtimeScalar.type == RuntimeScalarType.UNDEF) {
+            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in right bitshift (>>)"),
+                    RuntimeScalarCache.scalarEmptyString);
+        }
+        if (arg2.type == RuntimeScalarType.UNDEF) {
+            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in right bitshift (>>)"),
+                    RuntimeScalarCache.scalarEmptyString);
+        }
+        
         // Convert string type to number if necessary
         if (runtimeScalar.isString()) {
             runtimeScalar = NumberParser.parseNumber(runtimeScalar);
