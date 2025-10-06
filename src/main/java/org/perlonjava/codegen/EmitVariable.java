@@ -365,6 +365,13 @@ public class EmitVariable {
                 EmitOperator.handleScalarContext(emitterVisitor, node);
                 break;
             default:
+                // Check if this is a chop/chomp that can't be an lvalue
+                if (node.left instanceof OperatorNode operatorNode) {
+                    String op = operatorNode.operator;
+                    if (op.equals("chop") || op.equals("chomp")) {
+                        throw new PerlCompilerException(node.tokenIndex, "Can't modify " + op + " in scalar assignment", ctx.errorUtil);
+                    }
+                }
                 throw new PerlCompilerException(node.tokenIndex, "Unsupported assignment context: " + lvalueContext, ctx.errorUtil);
         }
         EmitOperator.handleVoidContext(emitterVisitor);
