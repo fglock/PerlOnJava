@@ -1,9 +1,9 @@
 # Test Fix Session - October 6, 2025
 
-## Session Summary: 85+ Tests Fixed Using High-Yield Strategy
+## Session Summary: 110+ Tests Fixed Using High-Yield Strategy
 
 **Total Impact:**
-- Direct test fixes: 85+ tests (and counting)
+- Direct test fixes: 110+ tests (and counting)
 - Systematic improvements affecting ~500+ test failures across regex suite  
 - Multiple test files achieving 100% pass rate
 
@@ -128,6 +128,18 @@ if (node.left instanceof OperatorNode operatorNode) {
 
 **Files:** `/src/main/java/org/perlonjava/operators/Vec.java`
 
+### 11. Pack/Unpack Checksum Calculation ✅ (25 tests)
+**Problem:** 
+- Checksum was processing ALL data regardless of count/* flag
+- 65-bit checksums not handling overflow correctly
+
+**Solution:** 
+- Modified checksum to respect count and star flag
+- Fixed 65-bit overflow to return 0 when value > MAX_LONG
+
+**Files:** `/src/main/java/org/perlonjava/operators/Unpack.java`
+**Impact:** t/op/pack.t from 737 to 712 failures (25 tests fixed!)
+
 ## Key Success Patterns
 
 1. **Pattern-Based Errors**: Single validation fix resolves dozens of failures
@@ -178,8 +190,8 @@ if (node.left instanceof OperatorNode operatorNode) {
 
 ## Time Investment & ROI
 
-- **Session Duration**: ~3 hours
-- **Tests Fixed**: 85+ directly, ~500+ affected
+- **Session Duration**: ~4 hours
+- **Tests Fixed**: 110+ directly, ~500+ affected
 - **ROI**: Exceptional - single fixes yielding 64 test improvements
 - **Best Fix**: Transliteration validation (1 fix = 64 tests)
 
