@@ -58,6 +58,21 @@ public class PerlLanguageProvider {
      */
     public static RuntimeList executePerlCode(CompilerOptions compilerOptions,
                                               boolean isTopLevelScript) throws Exception {
+        // Default behavior: use SCALAR context for non-top-level scripts
+        return executePerlCode(compilerOptions, isTopLevelScript, -1);
+    }
+
+    /**
+     * Executes the given Perl code with specified context and returns the result.
+     *
+     * @param compilerOptions  Compiler flags, file name and source code
+     * @param isTopLevelScript Whether this is the top-level script (affects BEGIN/END/etc handling)
+     * @param callerContext    The calling context (VOID, SCALAR, LIST) or -1 for default
+     * @return The result of the Perl code execution.
+     */
+    public static RuntimeList executePerlCode(CompilerOptions compilerOptions,
+                                              boolean isTopLevelScript,
+                                              int callerContext) throws Exception {
 
         ScopedSymbolTable globalSymbolTable = new ScopedSymbolTable();
         // Enter a new scope in the symbol table and add special Perl variables
@@ -70,8 +85,9 @@ public class PerlLanguageProvider {
             globalSymbolTable.enableStrictOption(Strict.HINT_UTF8);
         }
 
-        // For files loaded via require/do, we want scalar context
-        int contextType = isTopLevelScript ? RuntimeContextType.VOID : RuntimeContextType.SCALAR;
+        // Use caller's context if specified, otherwise default based on script type
+        int contextType = callerContext >= 0 ? callerContext :
+                (isTopLevelScript ? RuntimeContextType.VOID : RuntimeContextType.SCALAR);
 
         // Create the compiler context
         EmitterContext ctx = new EmitterContext(
@@ -152,7 +168,7 @@ public class PerlLanguageProvider {
                 ast,
                 false   // no try-catch
         );
-        return executeGeneratedClass(generatedClass, ctx, isTopLevelScript);
+        return executeGeneratedClass(generatedClass, ctx, isTopLevelScript, callerContext);
     }
 
     /**
@@ -203,7 +219,8 @@ public class PerlLanguageProvider {
                 false
         );
 
-        return executeGeneratedClass(generatedClass, ctx, false);
+        // executePerlAST is always called from BEGIN blocks which use VOID context
+        return executeGeneratedClass(generatedClass, ctx, false, RuntimeContextType.VOID);
     }
 
     /**
@@ -212,9 +229,10 @@ public class PerlLanguageProvider {
      * @param generatedClass The generated Java class.
      * @param ctx            The emitter context.
      * @param isMainProgram  Indicates if this is the main program.
+     * @param callerContext  The calling context (VOID, SCALAR, LIST) or -1 for default
      * @return The result of the Perl code execution.
      */
-    private static RuntimeList executeGeneratedClass(Class<?> generatedClass, EmitterContext ctx, boolean isMainProgram) throws Exception {
+    private static RuntimeList executeGeneratedClass(Class<?> generatedClass, EmitterContext ctx, boolean isMainProgram, int callerContext) throws Exception {
         runUnitcheckBlocks(ctx.unitcheckBlocks);
         if (isMainProgram) {
             runCheckBlocks();
@@ -235,9 +253,9 @@ public class PerlLanguageProvider {
                 runInitBlocks();
             }
 
-            // For require/do (non-main programs), always use SCALAR context
-            // This ensures wantarray returns '' inside the required file
-            int executionContext = isMainProgram ? RuntimeContextType.VOID : RuntimeContextType.SCALAR;
+            // Use the caller's context if specified, otherwise use default behavior
+            int executionContext = callerContext >= 0 ? callerContext :
+                    (isMainProgram ? RuntimeContextType.VOID : RuntimeContextType.SCALAR);
             result = (RuntimeList) invoker.invoke(instance, new RuntimeArray(), executionContext);
 
             try {

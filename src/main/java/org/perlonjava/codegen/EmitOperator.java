@@ -552,6 +552,15 @@ public class EmitOperator {
         emitOperator(node, emitterVisitor);
     }
 
+    static void handleDoFileOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
+        // Accept the operand (filename) in scalar context
+        node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        // Push the context type
+        emitterVisitor.ctx.mv.visitLdcInsn(emitterVisitor.ctx.contextType);
+        // Call doFile with context
+        emitOperator(node, emitterVisitor);
+    }
+
     static void handleStatOperator(EmitterVisitor emitterVisitor, OperatorNode node, String operator) {
         if (node.operand instanceof IdentifierNode identNode &&
                 identNode.name.equals("_")) {
