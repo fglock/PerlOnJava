@@ -396,6 +396,10 @@ public class RegexPreprocessor {
             } else if (c3 == '>') {
                 // Atomic group (?>...) - non-backtracking group
                 offset = handleRegularParentheses(s, offset, length, sb, regexFlags);
+            } else if (Character.isDigit(c3)) {
+                // Recursive subpattern reference (?1), (?2), etc.
+                // These refer to the subpattern with that number and are recursive
+                regexError(s, offset + 2, "Sequence (?" + ((char)c3) + "...) not recognized");
             } else {
                 // Unknown sequence - show the actual character
                 String seq = "(?";
@@ -915,24 +919,25 @@ public class RegexPreprocessor {
             regexError(s, pos, "Switch (?(condition)... not terminated");
         }
 
-        // Convert conditional pattern to alternatives
-        // (?(1)yes|no) becomes (?:yes|no) - not semantically correct but will parse
-        // TODO: Implement proper conditional regex support
+        // Conditional patterns are not supported by Java regex and cannot be emulated
+        // (?(1)yes|no) means: if group 1 matched, use 'yes' branch, else use 'no' branch
+        // This is fundamentally different from alternation and cannot be converted
         
-        sb.append("(?:");
+        // For now, throw an error. In the future, we might implement a custom regex engine
+        // or find a way to emulate conditionals
+        regexError(s, condStart - 1, "Conditional patterns (?(...)...) not implemented");
         
-        // Process the branches - they're already preprocessed strings
-        if (pipePos > 0) {
-            // We have yes|no branches
-            sb.append(s.substring(branchStart, pipePos));
-            sb.append("|");
-            sb.append(s.substring(pipePos + 1, pos));
-        } else {
-            // Only one branch (yes branch only)
-            sb.append(s.substring(branchStart, pos));
-        }
+        // The code below would incorrectly convert to alternation, which is semantically wrong
+        // sb.append("(?:");
+        // if (pipePos > 0) {
+        //     sb.append(s.substring(branchStart, pipePos));
+        //     sb.append("|");
+        //     sb.append(s.substring(pipePos + 1, pos));
+        // } else {
+        //     sb.append(s.substring(branchStart, pos));
+        // }
+        // sb.append(")");
         
-        sb.append(")");
         return pos + 1; // Skip past the closing ) of the conditional
     }
 
