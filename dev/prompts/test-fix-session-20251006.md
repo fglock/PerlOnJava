@@ -1,9 +1,9 @@
 # Test Fix Session - October 6, 2025
 
-## Session Summary: 202+ Tests Fixed Using High-Yield Strategy
+## Session Summary: 761+ Tests Fixed Using High-Yield Strategy
 
 **Total Impact:**
-- Direct test fixes: 202+ tests (113 pack/unpack alone!)
+- Direct test fixes: 761+ tests (113 pack/unpack, 559 sprintf!)
 - Systematic improvements affecting ~500+ test failures across regex suite  
 - Multiple test files achieving 100% pass rate
 
@@ -129,18 +129,6 @@ if (node.left instanceof OperatorNode operatorNode) {
 **Files:** `/src/main/java/org/perlonjava/operators/Vec.java`
 
 ### 11. Pack/Unpack Checksum Calculation ✅ (113 tests total!)
-
-### 12. Missing Process Operators ✅ (6 tests)
-**Problem:** Missing getppid, getpgrp, setpgrp, getpriority operators.
-
-**Solution:** Added operator implementations with proper JNA integration for getppid and stubs for others.
-
-**Files:** 
-- `/src/main/java/org/perlonjava/operators/Operator.java`
-- `/src/main/java/org/perlonjava/operators/OperatorHandler.java`
-**Impact:** Fixed 6 tests in t/op/lex_assign.t (from 10 to 4 failures)
-
-### 11. Pack/Unpack Checksum Calculation ✅ (113 tests total!)
 **Problem:** 
 - Checksum was processing ALL data regardless of count/* flag
 - 65-bit checksums not handling overflow correctly
@@ -161,6 +149,24 @@ if (node.left instanceof OperatorNode operatorNode) {
 - Third fix: 630 to 624 failures (6 tests for floating point)
 - Total: 113 tests fixed in pack.t!
 
+### 12. Missing Process Operators ✅ (6 tests)
+**Problem:** Missing getppid, getpgrp, setpgrp, getpriority operators.
+
+**Solution:** Added operator implementations with proper JNA integration for getppid and stubs for others.
+
+**Files:** 
+- `/src/main/java/org/perlonjava/operators/Operator.java`
+- `/src/main/java/org/perlonjava/operators/OperatorHandler.java`
+**Impact:** Fixed 6 tests in t/op/lex_assign.t (from 10 to 4 failures)
+
+### 13. Regex Nested Quantifier False Positive ✅ (559 sprintf tests!)
+**Problem:** Escaped characters like `\+` were incorrectly triggering "Nested quantifiers" errors.
+
+**Solution:** Modified nested quantifier check to ignore escaped characters by checking if previous character was backslash.
+
+**Files:** `/src/main/java/org/perlonjava/regex/RegexPreprocessor.java`
+**Impact:** Fixed ALL 559 tests in t/op/sprintf.t - achieved 100% pass rate!
+
 ## Key Success Patterns
 
 1. **Pattern-Based Errors**: Single validation fix resolves dozens of failures
@@ -172,10 +178,12 @@ if (node.left instanceof OperatorNode operatorNode) {
 
 | Test File | Before | After | Notes |
 |-----------|--------|-------|-------|
+| t/op/sprintf.t | 559 failures | 0 failures | **100% pass rate** 🎉 |
 | t/op/tr.t | 77 failures | 13 failures | 64 tests fixed with one validation |
 | t/op/chop.t | 4 failures | 0 failures | **100% pass rate** |
 | t/op/range.t | 36 failures | 29 failures | 7 tests fixed |
 | t/op/hashassign.t | 28 failures | 25 failures | 3 tests fixed |
+| t/op/lex_assign.t | 10 failures | 4 failures | 6 tests fixed (process operators) |
 | t/re/regexp*.t | ~487 each | Improved | Forward refs and group positions |
 
 ## Remaining High-Impact Opportunities

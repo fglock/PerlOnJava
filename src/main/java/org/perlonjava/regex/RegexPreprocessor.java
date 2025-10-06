@@ -123,7 +123,9 @@ public class RegexPreprocessor {
                     // Check for nested quantifiers (but not possessive or non-greedy)
                     if (!isPossessive && !isNonGreedy && sb.length() > 0) {
                         char lastChar = sb.charAt(sb.length() - 1);
-                        if (lastChar == '*' || lastChar == '+' || lastChar == '?') {
+                        // Also check if the previous character was a backslash (escaped)
+                        boolean isEscaped = sb.length() >= 2 && sb.charAt(sb.length() - 2) == '\\';
+                        if (!isEscaped && (lastChar == '*' || lastChar == '+' || lastChar == '?')) {
                             regexError(s, offset + 1, "Nested quantifiers");
                         }
                     }
