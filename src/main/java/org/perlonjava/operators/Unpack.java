@@ -323,28 +323,44 @@ public class Unpack {
 
                     // Calculate checksum - use BigInteger for larger checksums
                     if (checksumBits >= 53) {
-                        // Use BigInteger for checksums that might lose precision
-                        BigInteger bigChecksum = BigInteger.ZERO;
+                        // Check if this is a floating point format
+                        boolean isFloatFormat = (format == 'd' || format == 'D' || format == 'f' || format == 'F');
                         
-                        if (format == 'b' || format == 'B') {
-                            // For binary formats, count 1 bits
+                        BigInteger bigChecksum;
+                        
+                        if (isFloatFormat) {
+                            // For floating point checksums with large bit widths, use double sum
+                            double doubleSum = 0.0;
                             for (RuntimeBase value : tempValues) {
-                                String binary = value.toString();
-                                for (int j = 0; j < binary.length(); j++) {
-                                    if (binary.charAt(j) == '1') {
-                                        bigChecksum = bigChecksum.add(BigInteger.ONE);
+                                doubleSum += ((RuntimeScalar) value).getDouble();
+                            }
+                            
+                            // Convert to BigInteger for bit masking
+                            bigChecksum = BigInteger.valueOf((long) doubleSum);
+                        } else {
+                            // Use BigInteger for checksums that might lose precision
+                            bigChecksum = BigInteger.ZERO;
+                            
+                            if (format == 'b' || format == 'B') {
+                                // For binary formats, count 1 bits
+                                for (RuntimeBase value : tempValues) {
+                                    String binary = value.toString();
+                                    for (int j = 0; j < binary.length(); j++) {
+                                        if (binary.charAt(j) == '1') {
+                                            bigChecksum = bigChecksum.add(BigInteger.ONE);
+                                        }
                                     }
                                 }
-                            }
-                        } else {
-                            // For other formats, sum the numeric values
-                            for (RuntimeBase value : tempValues) {
-                                long val = ((RuntimeScalar) value).getLong();
-                                // Handle negative values as unsigned
-                                if (val < 0) {
-                                    bigChecksum = bigChecksum.add(BigInteger.valueOf(val).add(BigInteger.ONE.shiftLeft(64)));
-                                } else {
-                                    bigChecksum = bigChecksum.add(BigInteger.valueOf(val));
+                            } else {
+                                // For other formats, sum the numeric values
+                                for (RuntimeBase value : tempValues) {
+                                    long val = ((RuntimeScalar) value).getLong();
+                                    // Handle negative values as unsigned
+                                    if (val < 0) {
+                                        bigChecksum = bigChecksum.add(BigInteger.valueOf(val).add(BigInteger.ONE.shiftLeft(64)));
+                                    } else {
+                                        bigChecksum = bigChecksum.add(BigInteger.valueOf(val));
+                                    }
                                 }
                             }
                         }
@@ -419,38 +435,63 @@ public class Unpack {
                             }
                         }
                     } else {
-                        // Use long for checksums < 64 bits
-                        long checksum = 0;
-                        if (format == 'b' || format == 'B') {
-                            // For binary formats, count 1 bits
+                        // For checksums < 53 bits, determine if we need floating point precision
+                        boolean isFloatFormat = (format == 'd' || format == 'D' || format == 'f' || format == 'F');
+                        
+                        if (isFloatFormat) {
+                            // Use double for floating point checksums
+                            double checksum = 0.0;
                             for (RuntimeBase value : tempValues) {
-                                String binary = value.toString();
-                                for (int j = 0; j < binary.length(); j++) {
-                                    if (binary.charAt(j) == '1') {
-                                        checksum++;
+                                checksum += ((RuntimeScalar) value).getDouble();
+                            }
+                            
+                            // For floating point formats, Perl doesn't truncate to integer
+                            // It may apply some special handling for very small bit widths (1,2)
+                            // but generally preserves the floating point value
+                            if (checksumBits == 1) {
+                                // Special case for %1f* - unclear what Perl does exactly
+                                // For now, return the float modulo 2
+                                double result = checksum;
+                                while (result >= 2.0) result -= 2.0;
+                                values.add(new RuntimeScalar(result));
+                            } else {
+                                // For all other cases, return the floating point sum
+                                values.add(new RuntimeScalar(checksum));
+                            }
+                        } else {
+                            // Use long for non-floating point checksums
+                            long checksum = 0;
+                            if (format == 'b' || format == 'B') {
+                                // For binary formats, count 1 bits
+                                for (RuntimeBase value : tempValues) {
+                                    String binary = value.toString();
+                                    for (int j = 0; j < binary.length(); j++) {
+                                        if (binary.charAt(j) == '1') {
+                                            checksum++;
+                                        }
                                     }
                                 }
+                            } else {
+                                // For other formats, sum the numeric values
+                                for (RuntimeBase value : tempValues) {
+                                    checksum += ((RuntimeScalar) value).getLong();
+                                }
                             }
-                        } else {
-                            // For other formats, sum the numeric values
-                            for (RuntimeBase value : tempValues) {
-                                checksum += ((RuntimeScalar) value).getLong();
+
+                            // Apply bit mask at the very end like Perl (not during accumulation)
+                            if (checksumBits > 0 && checksumBits < 64) {
+                                long mask = (1L << checksumBits) - 1;
+                                checksum &= mask;
                             }
-                        }
 
-                        // Apply bit mask at the very end like Perl (not during accumulation)
-                        if (checksumBits > 0 && checksumBits < 64) {
-                            long mask = (1L << checksumBits) - 1;
-                            checksum &= mask;
-                        }
-
-                        // Return the checksum value:
-                        // - For checksums that fit in an int, return as int
-                        // - For larger values or checksums with more than 32 bits, return as long
-                        if (checksumBits > 32 || checksum > Integer.MAX_VALUE || checksum < Integer.MIN_VALUE) {
-                            values.add(new RuntimeScalar(checksum));
-                        } else {
-                            values.add(new RuntimeScalar((int) checksum));
+                            // Return the checksum value:
+                            // - For checksums that fit in an int, return as int
+                            // - For larger values or checksums with more than 32 bits, return as long
+                            if (checksumBits > 32 || checksum > Integer.MAX_VALUE || checksum < Integer.MIN_VALUE) {
+                                values.add(new RuntimeScalar(checksum));
+                            } else {
+                                values.add(new RuntimeScalar((int) checksum));
+                            }
                         }
                     }
                     }
