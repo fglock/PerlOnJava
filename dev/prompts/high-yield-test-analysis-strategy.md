@@ -166,10 +166,32 @@ if [ $(find . -name ".perlonjava_env_ready" -mmin +240 | wc -l) -gt 0 ]; then
 fi
 ```
 
+### 💡 OPTIMIZATION TIP: Cache Analysis Results
+```bash
+# Save the heavy analysis output to avoid re-running every time
+ANALYSIS_FILE="logs/analysis_$(date +%Y%m%d).json"
+
+# Check if today's analysis exists
+if [ -f "$ANALYSIS_FILE" ]; then
+    echo "✅ Using cached analysis from: $ANALYSIS_FILE"
+    cp "$ANALYSIS_FILE" out.json
+else
+    echo "📊 Running fresh analysis (this may take a while)..."
+    perl dev/tools/perl_test_runner.pl t 2>&1 | tee logs/test_$(date +%Y%m%d_%H%M%S).log
+    cp out.json "$ANALYSIS_FILE"  # Save for later use
+    echo "💾 Analysis saved to: $ANALYSIS_FILE"
+fi
+
+# Now use out.json for all subsequent queries
+# This avoids re-running the heavy test runner multiple times
+```
+
 ### 1. Check Blocked Tests First (Highest ROI)
 ```bash
-# Find incomplete test runs
-perl dev/tools/perl_test_runner.pl t 2>&1 | tee logs/test_$(date +%Y%m%d_%H%M%S)
+# Use cached analysis if available (see Optimization Tip above)
+if [ ! -f out.json ]; then
+    perl dev/tools/perl_test_runner.pl t 2>&1 | tee logs/test_$(date +%Y%m%d_%H%M%S).log
+fi
 grep -A 15 "incomplete test files" logs/test_*
 ```
 
@@ -181,7 +203,7 @@ grep -A 15 "incomplete test files" logs/test_*
 
 ### 2. Analyze Pass Rates
 ```bash
-# Find tests with 70-95% pass rate (focused bugs, not missing features)
+# Uses cached out.json from analysis (see Optimization Tip above)
 jq -r '.results | to_entries[] | select(.value.ok_count > 50 and .value.not_ok_count > 15 and .value.not_ok_count < 100) | "\(.value.not_ok_count) failures / \(.value.ok_count) passing (\(.value.ok_count * 100 / .value.total_tests | floor)%) - \(.key)"' out.json | sort -rn | head -20
 ```
 
