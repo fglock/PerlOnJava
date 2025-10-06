@@ -44,7 +44,6 @@ sub new {
             eval {
                 local @INC = @INC;
                 pop @INC if $INC[-1] eq '.';
-                print "TRY $pm_file";
                 require $pm_file
 	    };
             if ($@) {
