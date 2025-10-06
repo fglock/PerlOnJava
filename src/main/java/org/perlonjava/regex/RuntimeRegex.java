@@ -661,7 +661,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         if (group < 0 || group > globalMatcher.groupCount()) {
             return scalarUndef;
         }
-        return getScalarInt(globalMatcher.start(group));
+        int start = globalMatcher.start(group);
+        // If the group didn't participate in the match, start() returns -1
+        // Perl returns undef in this case
+        if (start == -1) {
+            return scalarUndef;
+        }
+        return getScalarInt(start);
     }
 
     public static RuntimeScalar matcherEnd(int group) {
@@ -671,7 +677,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         if (group < 0 || group > globalMatcher.groupCount()) {
             return scalarUndef;
         }
-        return getScalarInt(globalMatcher.end(group));
+        int end = globalMatcher.end(group);
+        // If the group didn't participate in the match, end() returns -1
+        // Perl returns undef in this case
+        if (end == -1) {
+            return scalarUndef;
+        }
+        return getScalarInt(end);
     }
 
     public static int matcherSize() {
