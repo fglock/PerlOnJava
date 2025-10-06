@@ -1063,9 +1063,10 @@ public class RegexPreprocessor {
             return codeEnd + 1; // Just skip past '}' if no ')' found
         }
         
-        // If we couldn't handle it, throw an error
-        regexError(s, offset + 2, "(?{...}) code blocks in regex not implemented (only constant expressions supported)");
-        return offset; // Never reached due to regexError throwing exception
+        // If we couldn't handle it, throw an unimplemented exception that can be caught by RuntimeRegex
+        // RuntimeRegex will handle JPERL_UNIMPLEMENTED=warn to make it non-fatal
+        throw new PerlJavaUnimplementedException("(?{...}) code blocks in regex not implemented (only constant expressions supported) in regex; marked by <-- HERE in m/" +
+                s.substring(0, offset + 2) + " <-- HERE " + s.substring(offset + 2) + "/");
     }
     
     /**
