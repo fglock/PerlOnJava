@@ -297,22 +297,28 @@ public class Unpack {
                         checksumHandler = new NativeLongFormatHandler(format == 'l');
                     }
                     
-                    // For checksums, we need to consume ALL remaining data in the buffer
-                    // The count and star flag are ignored - we process everything
-                    int remainingBytes = state.remainingBytes();
+                    // For checksums, we respect the count and star flag
+                    // Without *, we only process 'count' values (default 1)
+                    // With *, we process all remaining values
                     
                     // Check if this format has native size modifier
                     boolean hasNativeSize = (format == 'l' || format == 'L') && hasShriek;
                     
                     int formatSize = getFormatSize(format, hasNativeSize);
                     
-                    if (formatSize > 0) {
-                        int remainingCount = remainingBytes / formatSize;
-                        // Process all remaining values of this format using the correct handler
-                        checksumHandler.unpack(state, tempValues, remainingCount, false);
+                    if (isStarCount) {
+                        // With *, process ALL remaining data
+                        int remainingBytes = state.remainingBytes();
+                        if (formatSize > 0) {
+                            int remainingCount = remainingBytes / formatSize;
+                            checksumHandler.unpack(state, tempValues, remainingCount, false);
+                        } else {
+                            // For variable-size formats, process all we can
+                            checksumHandler.unpack(state, tempValues, Integer.MAX_VALUE, true);
+                        }
                     } else {
-                        // For variable-size formats, process what we can
-                        checksumHandler.unpack(state, tempValues, count, isStarCount);
+                        // Without *, only process 'count' values
+                        checksumHandler.unpack(state, tempValues, count, false);
                     }
 
                     // Calculate checksum - use BigInteger for 64+ bit checksums to handle unsigned values
@@ -343,17 +349,32 @@ public class Unpack {
                             }
                         }
                         
-                        // Apply bit mask for 64-bit (not for 65+ as they overflow anyway)
+                        // Apply bit mask based on checksum bits
                         if (checksumBits == 64) {
                             // 64-bit mask: 2^64 - 1 = 0xFFFFFFFFFFFFFFFF
                             BigInteger mask = BigInteger.ONE.shiftLeft(64).subtract(BigInteger.ONE);
                             bigChecksum = bigChecksum.and(mask);
+                            // Convert BigInteger to long
+                            values.add(new RuntimeScalar(bigChecksum.longValue()));
+                        } else if (checksumBits > 64) {
+                            // For checksumBits > 64, Perl's behavior is special:
+                            // If the value would overflow a signed 64-bit integer, it returns 0
+                            // This happens when the unsigned sum is >= 2^63
+                            BigInteger max64Signed = BigInteger.valueOf(Long.MAX_VALUE); // 2^63 - 1
+                            
+                            // Check if the value fits in a signed 64-bit range
+                            // If not, Perl returns 0 for overflow
+                            if (bigChecksum.compareTo(max64Signed) > 0) {
+                                // Value is too large for signed 64-bit
+                                values.add(new RuntimeScalar(0L));
+                            } else {
+                                // Value fits, return it
+                                values.add(new RuntimeScalar(bigChecksum.longValue()));
+                            }
+                        } else {
+                            // checksumBits < 64, shouldn't happen in this branch but handle it
+                            values.add(new RuntimeScalar(bigChecksum.longValue()));
                         }
-                        // For checksumBits > 64, Perl treats it as no mask (full value)
-                        
-                        // Convert BigInteger to long - this will wrap around for unsigned values > Long.MAX_VALUE
-                        // which matches Perl's behavior on 64-bit systems
-                        values.add(new RuntimeScalar(bigChecksum.longValue()));
                     } else {
                         // Use long for checksums < 64 bits
                         long checksum = 0;
