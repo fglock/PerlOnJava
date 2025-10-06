@@ -314,8 +314,24 @@ The following areas are currently under active development to enhance the functi
 - **v5.42.2**: Next minor version
 
   - Add Perl 5.38+ Class Features
-    - Fully implemented ADJUST blocks for post-construction initialization
-    - `$self` and `__CLASS__` available in ADJUST context
+    - Class keyword with block syntax fully working
+    - Method declarations with automatic $self injection
+    - Field declarations supporting all sigils ($, @, %)
+    - Constructor parameter fields with :param attribute
+    - Reader method generation with :reader attribute  
+    - Automatic constructor generation with named parameters
+    - Default values for fields fully functional
+    - ADJUST blocks with field transformation working
+    - Field transformation to $self->{field} in methods
+    - Lexical method calls using $self->&priv syntax
+    - Class inheritance with :isa attribute working
+    - Version checking in :isa(Parent version) implemented
+    - Parent class field inheritance fully functional
+    - Object stringification shows OBJECT not HASH
+    - ClassRegistry tracks Perl 5.38+ class instances
+    - Context-aware reader methods for arrays/hashes
+    - Field transformation in string interpolation works
+    - __CLASS__ keyword with compile-time evaluation
   - Add System V IPC operators: `msgctl`, `msgget`, `msgrcv`, `msgsnd`, `semctl`, `semget`, `semop`, `shmctl`, `shmget`, `shmread`, `shmwrite`.
   - Add network enumeration operators: `endhostent`, `endnetent`, `endprotoent`, `endservent`, `gethostent`, `getnetbyaddr`, `getnetbyname`, `getnetent`, `getprotoent`, `getservent`, `sethostent`, `setnetent`, `setprotoent`, `setservent`.
   - Add socket operators: `socket`, `bind`, `listen`, `accept`, `connect`, `send`, `recv`, `shutdown`, `setsockopt`, `getsockopt`, `getsockname`, `getpeername`, `socketpair`.

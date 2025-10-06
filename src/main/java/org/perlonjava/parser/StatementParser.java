@@ -493,20 +493,20 @@ public class StatementParser {
             String versionString = null;
             if (version instanceof NumberNode) {
                 versionString = ((NumberNode) version).value;
-                System.err.println("DEBUG: Extracted version from NumberNode: " + versionString);
+                // System.err.println("DEBUG: Extracted version from NumberNode: " + versionString);
             } else if (version instanceof StringNode) {
                 versionString = ((StringNode) version).value;
-                System.err.println("DEBUG: Extracted version from StringNode: " + versionString);
+                // System.err.println("DEBUG: Extracted version from StringNode: " + versionString);
             }
             // Store the version in the symbol table for this package
             if (versionString != null) {
                 parser.ctx.symbolTable.setPackageVersion(packageName, versionString);
-                System.err.println("DEBUG: Stored version " + versionString + " for package " + packageName);
+                // System.err.println("DEBUG: Stored version " + versionString + " for package " + packageName);
             } else {
-                System.err.println("DEBUG: No version string extracted for package " + packageName);
+                // System.err.println("DEBUG: No version string extracted for package " + packageName);
             }
         } else {
-            System.err.println("DEBUG: No version node for package " + packageName);
+            // System.err.println("DEBUG: No version node for package " + packageName);
         }
 
         // Parse class attributes (e.g., :isa(ParentClass))
@@ -586,38 +586,38 @@ public class StatementParser {
                 // This properly handles v-strings, floating point versions, etc.
                 Node versionNode = parseOptionalPackageVersion(parser);
                 if (versionNode != null) {
-                    System.err.println("DEBUG: :isa() has version requirement");
+                    // System.err.println("DEBUG: :isa() has version requirement");
                     // Store version node for version checking
                     packageNode.setAnnotation("parentVersion", versionNode);
                     
                     // Use the same approach as parseUseDeclaration for version checking
                     // Extract version value using ExtractValueVisitor
                     RuntimeList versionValues = ExtractValueVisitor.getValues(versionNode);
-                    System.err.println("DEBUG: ExtractValueVisitor returned " + versionValues.size() + " values");
+                    // System.err.println("DEBUG: ExtractValueVisitor returned " + versionValues.size() + " values");
                     if (!versionValues.isEmpty()) {
                         RuntimeScalar requiredVersion = versionValues.getFirst();
-                        System.err.println("DEBUG: Required version for " + parentClass + ": " + requiredVersion);
+                        // System.err.println("DEBUG: Required version for " + parentClass + ": " + requiredVersion);
                         
                         // Get the actual version of the parent class from the symbol table
                         String parentVersionStr = parser.ctx.symbolTable.getPackageVersion(parentClass);
-                        System.err.println("DEBUG: Parent " + parentClass + " version from symbol table: " + parentVersionStr);
+                        // System.err.println("DEBUG: Parent " + parentClass + " version from symbol table: " + parentVersionStr);
                         if (parentVersionStr != null) {
                             // Use VersionHelper.compareVersion for consistent version checking
                             // This handles v-strings, underscores, and all version formats properly
                             RuntimeScalar parentVersion = new RuntimeScalar(parentVersionStr);
                             
-                            System.err.println("DEBUG: Comparing versions - has: " + parentVersion + ", wants: " + requiredVersion);
+                            // System.err.println("DEBUG: Comparing versions - has: " + parentVersion + ", wants: " + requiredVersion);
                             // This will throw the appropriate exception if version is insufficient
                             VersionHelper.compareVersion(parentVersion, requiredVersion, parentClass);
-                            System.err.println("DEBUG: Version check passed!");
+                            // System.err.println("DEBUG: Version check passed!");
                         } else {
-                            System.err.println("DEBUG: No version found for parent class " + parentClass);
+                            // System.err.println("DEBUG: No version found for parent class " + parentClass);
                         }
                     } else {
-                        System.err.println("DEBUG: ExtractValueVisitor returned empty list");
+                        // System.err.println("DEBUG: ExtractValueVisitor returned empty list");
                     }
                 } else {
-                    System.err.println("DEBUG: :isa() has no version requirement for " + parentClass);
+                    // System.err.println("DEBUG: :isa() has no version requirement for " + parentClass);
                 }
                 
                 // Expect closing parenthesis
