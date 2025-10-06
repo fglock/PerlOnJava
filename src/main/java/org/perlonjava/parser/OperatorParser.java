@@ -270,7 +270,11 @@ public class OperatorParser {
         // Add variables to the scope
         if (operand instanceof ListNode listNode) { // my ($a, $b)  our ($a, $b)
             // process each item of the list; then returns the list
-            for (Node element : listNode.elements) {
+            List<Node> transformedElements = new ArrayList<>();
+            boolean hasTransformation = false;
+            
+            for (int i = 0; i < listNode.elements.size(); i++) {
+                Node element = listNode.elements.get(i);
                 if (element instanceof OperatorNode operandNode) {
                     // Check if this element is a reference operator (backslash)
                     // This handles cases like my(\$x) where the backslash is inside the parentheses
@@ -288,13 +292,26 @@ public class OperatorParser {
                         // Also mark the original nodes
                         varNode.setAnnotation("isDeclaredReference", true);
                         operandNode.setAnnotation("isDeclaredReference", true);
+                        
+                        // Transform the AST: replace \@arr with $arr in the list
+                        transformedElements.add(scalarVarNode);
+                        hasTransformation = true;
                     } else {
                         if (isDeclaredReference) {
                             operandNode.setAnnotation("isDeclaredReference", true);
                         }
                         addVariableToScope(parser.ctx, operator, operandNode);
+                        transformedElements.add(element);
                     }
+                } else {
+                    transformedElements.add(element);
                 }
+            }
+            
+            // If we transformed any elements, replace the list elements
+            if (hasTransformation) {
+                listNode.elements.clear();
+                listNode.elements.addAll(transformedElements);
             }
         } else if (operand instanceof OperatorNode operandNode) {
 
