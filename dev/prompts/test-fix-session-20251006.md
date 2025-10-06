@@ -1,9 +1,9 @@
 # Test Fix Session - October 6, 2025
 
-## Session Summary: 761+ Tests Fixed Using High-Yield Strategy
+## Session Summary: 764+ Tests Fixed Using High-Yield Strategy
 
 **Total Impact:**
-- Direct test fixes: 761+ tests (113 pack/unpack, 559 sprintf!)
+- Direct test fixes: 764+ tests (113 pack/unpack, 559 sprintf, 3 join!)
 - Systematic improvements affecting ~500+ test failures across regex suite  
 - Multiple test files achieving 100% pass rate
 
@@ -166,6 +166,14 @@ if (node.left instanceof OperatorNode operatorNode) {
 
 **Files:** `/src/main/java/org/perlonjava/regex/RegexPreprocessor.java`
 **Impact:** Fixed ALL 559 tests in t/op/sprintf.t - achieved 100% pass rate!
+
+### 14. Join Warnings for Undef Values ✅ (3 tests)
+**Problem:** join() wasn't generating warnings for undef separator or undef values in the list.
+
+**Solution:** Added warning checks in join() for both separator and list values when they are undef.
+
+**Files:** `/src/main/java/org/perlonjava/operators/StringOperators.java`
+**Impact:** Fixed 3 tests in t/op/join.t (from 10 to 7 failures)
 
 ## Key Success Patterns
 

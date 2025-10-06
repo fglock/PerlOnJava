@@ -292,6 +292,12 @@ public class StringOperators {
 
         // TODO - convert octet string back to unicode if needed
 
+        // Check if separator is undef and generate warning
+        if (runtimeScalar.type == RuntimeScalarType.UNDEF) {
+            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in join or string"),
+                    RuntimeScalarCache.scalarEmptyString);
+        }
+
         boolean isByteString = runtimeScalar.type == BYTE_STRING;
 
         String delimiter = runtimeScalar.toString();
@@ -307,6 +313,13 @@ public class StringOperators {
                 sb.append(delimiter);
             }
             RuntimeScalar scalar = iterator.next();
+            
+            // Check if value is undef and generate warning
+            if (scalar.type == RuntimeScalarType.UNDEF) {
+                WarnDie.warn(new RuntimeScalar("Use of uninitialized value in join or string"),
+                        RuntimeScalarCache.scalarEmptyString);
+            }
+            
             isByteString = isByteString && scalar.type == BYTE_STRING;
             sb.append(scalar.toString());
         }
