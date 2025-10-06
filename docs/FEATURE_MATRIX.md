@@ -155,15 +155,23 @@ my @copy = @{$z};         # ERROR
 - ✅  **Version check**: Method `VERSION ( [ REQUIRE ] )` is implemented.
 - ✅  **Inheritance**: `SUPER::method` is implemented.
 - ✅  **Autoload**: `AUTOLOAD` mechanism is implemented; `$AUTOLOAD` variable is implemented.
-- ✅  **`class`**: `class` token is supported.
+- ✅  **`class`**: `class` keyword fully supported with blocks.
 - ✅  **Indirect object syntax** indirect object syntax is implemented.
-- ✅  **`__CLASS__`**: `__CLASS__` token is supported.
-- ❌  **`:isa`**: `:isa` class attribute is not yet supported.
-- ❌  **`method`**: `method` block is not yet supported.
-- ❌  **`field`**: `field` token is not yet supported.
-- ❌  **`:param`**: `:param` field attribute is not yet supported.
-- ❌  **`:reader`**: `:reader` field attribute is not yet supported.
-- ✅  **`ADJUST`**: `ADJUST` block is fully supported with closure variable capture.
+- 🟡  **`__CLASS__`**: Compile-time evaluation only, not runtime.
+- ✅  **`:isa`**: Class inheritance with version checking works.
+- ✅  **`method`**: Method declarations with automatic `$self`.
+- ✅  **`field`**: Field declarations with all sigils supported.
+- ✅  **`:param`**: Constructor parameter fields fully working.
+- ✅  **`:reader`**: Reader methods with context awareness.
+- ✅  **`ADJUST`**: `ADJUST` blocks with field transformation work.
+- ✅  **Constructor generation**: Automatic `new()` method creation.
+- ✅  **Field transformation**: Fields become `$self->{field}` in methods.
+- ✅  **Lexical method calls**: `$self->&priv` syntax works.
+- ✅  **Object stringification**: Shows OBJECT not HASH properly.
+- ✅  **Field defaults**: Default values for fields work.
+- ✅  **Field inheritance**: Parent class fields are inherited.
+- 🟡  **Argument validation**: Limited by operator implementation issues.
+- ❌  **`DESTROY`**: Destructor blocks not yet implemented.
 
 ## Operators
 - ✅  **Simple arithmetic**: Operators like `+`, `-`, `*`, and `%` are supported.
