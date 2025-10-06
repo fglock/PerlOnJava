@@ -133,6 +133,16 @@ public class MathOperators {
             if (result != null) return result;
         }
 
+        // Check for uninitialized values and generate warnings
+        if (arg1.type == RuntimeScalarType.UNDEF) {
+            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in multiplication (*)"),
+                    RuntimeScalarCache.scalarEmptyString);
+        }
+        if (arg2.type == RuntimeScalarType.UNDEF) {
+            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in multiplication (*)"),
+                    RuntimeScalarCache.scalarEmptyString);
+        }
+
         // Convert string type to number if necessary
         arg1 = arg1.getNumber();
         arg2 = arg2.getNumber();
@@ -158,6 +168,16 @@ public class MathOperators {
         if (blessId != 0) {
             RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, 0, "(/", "/");
             if (result != null) return result;
+        }
+
+        // Check for uninitialized values and generate warnings
+        if (arg1.type == RuntimeScalarType.UNDEF) {
+            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in division (/)"),
+                    RuntimeScalarCache.scalarEmptyString);
+        }
+        if (arg2.type == RuntimeScalarType.UNDEF) {
+            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in division (/)"),
+                    RuntimeScalarCache.scalarEmptyString);
         }
 
         // Convert string type to number if necessary
@@ -338,6 +358,16 @@ public class MathOperators {
         if (blessId != 0) {
             RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, new RuntimeScalar(arg2), blessId, 0, "(**", "**");
             if (result != null) return result;
+        }
+
+        // Check for uninitialized values and generate warnings
+        if (arg1.type == RuntimeScalarType.UNDEF) {
+            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in exponentiation (**)"),
+                    RuntimeScalarCache.scalarEmptyString);
+        }
+        if (arg2.type == RuntimeScalarType.UNDEF) {
+            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in exponentiation (**)"),
+                    RuntimeScalarCache.scalarEmptyString);
         }
 
         return new RuntimeScalar(Math.pow(arg1.getDouble(), arg2.getDouble()));

@@ -450,6 +450,16 @@ public class Operator {
     }
 
     public static RuntimeBase repeat(RuntimeBase value, RuntimeScalar timesScalar, int ctx) {
+        // Check for uninitialized values and generate warnings
+        if (value instanceof RuntimeScalar && ((RuntimeScalar) value).type == RuntimeScalarType.UNDEF) {
+            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in string repetition (x)"),
+                    RuntimeScalarCache.scalarEmptyString);
+        }
+        if (timesScalar.type == RuntimeScalarType.UNDEF) {
+            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in string repetition (x)"),
+                    RuntimeScalarCache.scalarEmptyString);
+        }
+        
         // Check for non-finite values first
         if (timesScalar.type == RuntimeScalarType.DOUBLE) {
             double d = timesScalar.getDouble();
