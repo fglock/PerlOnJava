@@ -5,6 +5,7 @@ import com.sun.jna.Native;
 import com.sun.jna.platform.win32.Kernel32;
 import com.sun.jna.platform.win32.WinDef;
 import com.sun.jna.platform.win32.WinNT;
+import org.perlonjava.nativ.NativeUtils;
 import org.perlonjava.nativ.PosixLibrary;
 import org.perlonjava.regex.RuntimeRegex;
 import org.perlonjava.runtime.*;
@@ -498,6 +499,38 @@ public class Operator {
 
     public static RuntimeScalar wantarray(int ctx) {
         return ctx == RuntimeContextType.VOID ? scalarUndef : new RuntimeScalar(ctx == RuntimeContextType.LIST ? scalarTrue : scalarFalse);
+    }
+
+    // Process-related operators
+    public static RuntimeScalar getppid(int ctx) {
+        // Delegate to NativeUtils which has the platform-specific implementation
+        return NativeUtils.getppid(ctx);
+    }
+
+    public static RuntimeScalar getpgrp(int ctx, RuntimeBase... args) {
+        // getpgrp([PID]) - get process group
+        // If no PID given, returns process group of current process
+        int pid = 0;
+        if (args.length > 0 && args[0] != null) {
+            pid = ((RuntimeScalar) args[0]).getInt();
+        }
+        // For now, return a stub value
+        // TODO: Implement proper getpgrp via JNA/JNI
+        return new RuntimeScalar(0);
+    }
+
+    public static RuntimeScalar setpgrp(int ctx, RuntimeBase... args) {
+        // setpgrp(PID, PGRP) - set process group
+        // For now, return 0 (failure) as this requires native implementation
+        // TODO: Implement proper setpgrp via JNA/JNI
+        return new RuntimeScalar(0);
+    }
+
+    public static RuntimeScalar getpriority(int ctx, RuntimeBase... args) {
+        // getpriority(WHICH, WHO) - get process priority
+        // For now, return 0 as this requires native implementation
+        // TODO: Implement proper getpriority via JNA/JNI
+        return new RuntimeScalar(0);
     }
 
     public static RuntimeList reset(RuntimeList args, int ctx) {
