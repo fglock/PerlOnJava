@@ -1,5 +1,6 @@
 package org.perlonjava.runtime;
 
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 
@@ -21,8 +22,32 @@ public class PerlRange extends RuntimeBase implements Iterable<RuntimeScalar> {
      * @param end   The ending value of the range.
      */
     public PerlRange(RuntimeScalar start, RuntimeScalar end) {
-        this.start = start;
-        this.end = end;
+        // Handle undef values: treat as 0 for numeric context or "" for string context
+        // We'll determine context based on the other operand or default to numeric
+        if (start.type == RuntimeScalarType.UNDEF) {
+            if (end.type != RuntimeScalarType.UNDEF && !ScalarUtils.looksLikeNumber(end)) {
+                // If end is a string, treat undef as ""
+                this.start = new RuntimeScalar("");
+            } else {
+                // Default to numeric context: treat undef as 0
+                this.start = new RuntimeScalar(0);
+            }
+        } else {
+            this.start = start;
+        }
+        
+        if (end.type == RuntimeScalarType.UNDEF) {
+            if (this.start.type == RuntimeScalarType.STRING || 
+                (this.start.type != RuntimeScalarType.INTEGER && !ScalarUtils.looksLikeNumber(this.start))) {
+                // If start is a string, treat undef as ""
+                this.end = new RuntimeScalar("");
+            } else {
+                // Default to numeric context: treat undef as 0
+                this.end = new RuntimeScalar(0);
+            }
+        } else {
+            this.end = end;
+        }
     }
 
     /**
@@ -65,6 +90,10 @@ public class PerlRange extends RuntimeBase implements Iterable<RuntimeScalar> {
             return scalarEmptyString.iterator();
         } else if (!startString.matches("^[a-zA-Z]*[0-9]*\\z")) {
             return start.iterator();
+        } else if (endString.isEmpty() && !startString.isEmpty()) {
+            // If end is empty string and start is not, return empty
+            // Example: "B" .. "" returns empty
+            return new ArrayList<RuntimeScalar>().iterator();
         } else if (startString.length() > endString.length()) {
             // If start is longer than end, only return start
             // Example: "abc" .. "z" returns only "abc"
