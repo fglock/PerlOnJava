@@ -1,9 +1,9 @@
 # Test Fix Session - October 6, 2025
 
-## Session Summary: 765+ Tests Fixed Using High-Yield Strategy
+## Session Summary: 767+ Tests Fixed Using High-Yield Strategy
 
 **Total Impact:**
-- Direct test fixes: 765+ tests (113 pack/unpack, 559 sprintf, 3 join, 1 int!)
+- Direct test fixes: 767+ tests (113 pack/unpack, 559 sprintf, 3 join, 1 int, 2 do!)
 - Systematic improvements affecting ~500+ test failures across regex suite  
 - Multiple test files achieving 100% pass rate
 
@@ -192,6 +192,24 @@ if (node.left instanceof OperatorNode operatorNode) {
 
 **Impact:** Fixed t/op/int.t - achieved 100% pass rate!
 
+### 16. Do FILE Context Propagation ✅ (2 tests)
+**Problem:** The `do FILE` operator wasn't propagating the calling context (scalar/list/void) to the executed file, causing `wantarray` to always return undef.
+
+**Solution:**
+- Modified PerlLanguageProvider.executePerlCode() to accept optional context parameter
+- Updated ModuleOperators.doFile() to pass context through to the executed code
+- Added handleDoFileOperator() to emit context along with the filename
+- Changed OperatorHandler signature for doFile to accept context parameter
+
+**Files:**
+- `/src/main/java/org/perlonjava/scriptengine/PerlLanguageProvider.java`
+- `/src/main/java/org/perlonjava/operators/ModuleOperators.java`
+- `/src/main/java/org/perlonjava/operators/OperatorHandler.java`  
+- `/src/main/java/org/perlonjava/codegen/EmitOperator.java`
+- `/src/main/java/org/perlonjava/codegen/EmitOperatorNode.java`
+
+**Impact:** Fixed 2 tests in t/op/do.t (from 3 to 1 failure)
+
 ## Key Success Patterns
 
 1. **Pattern-Based Errors**: Single validation fix resolves dozens of failures
@@ -216,6 +234,7 @@ if (node.left instanceof OperatorNode operatorNode) {
 | **t/op/delete.t** | - | 0 failures | **100% pass rate** |
 | **t/op/eval.t** | - | 0 failures | **100% pass rate** |
 | **t/op/int.t** | 1 failure | 0 failures | **100% pass rate** (integer pragma) |
+| **t/op/do.t** | 3 failures | 1 failure | 2 tests fixed (context propagation) |
 | t/re/regexp*.t | ~487 each | Improved | Forward refs and group positions |
 
 ## Remaining High-Impact Opportunities

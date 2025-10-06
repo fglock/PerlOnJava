@@ -147,7 +147,19 @@ public class StringOperators {
         // Bound the position to be within the valid range of the string
         if (pos < 0) {
             pos = 0;
-        } else if (pos >= str.length()) {
+        }
+        
+        // Special case for empty substring - it can be found at any valid position
+        if (sub.isEmpty()) {
+            // Empty string can be found at any position up to and including the length
+            if (pos > str.length()) {
+                return getScalarInt(str.length());
+            }
+            return getScalarInt(pos);
+        }
+        
+        // For non-empty substring, position beyond string length returns -1
+        if (pos >= str.length()) {
             return getScalarInt(-1);
         }
 
@@ -173,11 +185,27 @@ public class StringOperators {
         int pos = position.type == RuntimeScalarType.UNDEF
                 ? str.length() : position.getInt(); // Default to search from the end of the string
 
+        // Special case for empty substring - it can be found at any valid position
+        if (sub.isEmpty()) {
+            // For empty string, negative position returns 0
+            if (pos < 0) {
+                return getScalarInt(0);
+            }
+            // Bound position to string length
+            if (pos > str.length()) {
+                return getScalarInt(str.length());
+            }
+            return getScalarInt(pos);
+        }
+        
+        // For non-empty substring, negative position returns -1
+        if (pos < 0) {
+            return getScalarInt(-1);
+        }
+        
         // Bound the position to be within the valid range of the string
         if (pos >= str.length()) {
             pos = str.length() - 1;
-        } else if (pos < 0) {
-            return getScalarInt(-1);
         }
 
         // Find the last index of the substring before or at the specified position
