@@ -1,9 +1,9 @@
 # Test Fix Session - October 6, 2025
 
-## Session Summary: 80+ Tests Fixed Using High-Yield Strategy
+## Session Summary: 85+ Tests Fixed Using High-Yield Strategy
 
 **Total Impact:**
-- Direct test fixes: 80+ tests
+- Direct test fixes: 85+ tests (and counting)
 - Systematic improvements affecting ~500+ test failures across regex suite  
 - Multiple test files achieving 100% pass rate
 
@@ -114,6 +114,20 @@ if (node.left instanceof OperatorNode operatorNode) {
 
 **Status:** Added proper error messages instead of silently failing.
 
+### 9. Length of Undefined Values ✅ (5+ tests)
+**Problem:** `length(undef)` returning 0 instead of undef.
+
+**Solution:** Modified `StringOperators.length()` to check for undefined values.
+
+**Files:** `/src/main/java/org/perlonjava/operators/StringOperators.java`
+
+### 10. Vec Operation on Undefined ✅ (1 test)
+**Problem:** Reading vec from undef was autovivifying the value.
+
+**Solution:** Modified `Vec.vec()` to handle undefined values without autovivifying.
+
+**Files:** `/src/main/java/org/perlonjava/operators/Vec.java`
+
 ## Key Success Patterns
 
 1. **Pattern-Based Errors**: Single validation fix resolves dozens of failures
@@ -164,8 +178,8 @@ if (node.left instanceof OperatorNode operatorNode) {
 
 ## Time Investment & ROI
 
-- **Session Duration**: ~2 hours
-- **Tests Fixed**: 80+ directly, ~500+ affected
+- **Session Duration**: ~3 hours
+- **Tests Fixed**: 85+ directly, ~500+ affected
 - **ROI**: Exceptional - single fixes yielding 64 test improvements
 - **Best Fix**: Transliteration validation (1 fix = 64 tests)
 
