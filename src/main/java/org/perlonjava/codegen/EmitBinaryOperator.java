@@ -7,6 +7,7 @@ import org.perlonjava.astnode.NumberNode;
 import org.perlonjava.astnode.StringNode;
 import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.operators.OperatorHandler;
+import org.perlonjava.perlmodule.Strict;
 import org.perlonjava.runtime.RuntimeContextType;
 import org.perlonjava.runtime.ScalarUtils;
 
@@ -45,6 +46,35 @@ public class EmitBinaryOperator {
         // Special case for `isa` - left side can be bareword
         if (node.operator.equals("isa") && right instanceof IdentifierNode identifierNode) {
             right = new StringNode(identifierNode.name, node.tokenIndex);
+        }
+        
+        // Special case for modulus and division operators under "use integer"
+        if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_INTEGER)) {
+            if (node.operator.equals("%")) {
+                // Use integer modulus when "use integer" is in effect
+                node.left.accept(scalarVisitor); // left parameter
+                right.accept(scalarVisitor); // right parameter
+                emitterVisitor.ctx.mv.visitMethodInsn(
+                        Opcodes.INVOKESTATIC,
+                        "org/perlonjava/operators/MathOperators",
+                        "integerModulus",
+                        "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                        false);
+                EmitOperator.handleVoidContext(emitterVisitor);
+                return;
+            } else if (node.operator.equals("/")) {
+                // Use integer division when "use integer" is in effect
+                node.left.accept(scalarVisitor); // left parameter
+                right.accept(scalarVisitor); // right parameter
+                emitterVisitor.ctx.mv.visitMethodInsn(
+                        Opcodes.INVOKESTATIC,
+                        "org/perlonjava/operators/MathOperators",
+                        "integerDivide",
+                        "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                        false);
+                EmitOperator.handleVoidContext(emitterVisitor);
+                return;
+            }
         }
 
         node.left.accept(scalarVisitor); // left parameter
