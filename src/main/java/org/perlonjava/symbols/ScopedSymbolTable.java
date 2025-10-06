@@ -45,6 +45,8 @@ public class ScopedSymbolTable {
     private final Stack<String> subroutineStack = new Stack<>();
     // Cache for the getAllVisibleVariables method
     private Map<Integer, SymbolTable.SymbolEntry> visibleVariablesCache;
+    // Global package version storage (not stack-based, so versions persist)
+    private final Map<String, String> packageVersions = new HashMap<>();
 
     /**
      * Constructs a ScopedSymbolTable.
@@ -58,7 +60,7 @@ public class ScopedSymbolTable {
         // Initialize the strict options stack with 0 for the global scope
         strictOptionsStack.push(0);
         // Initialize the package name
-        packageStack.push(new PackageInfo("main", false));
+        packageStack.push(new PackageInfo("main", false, null));
         // Initialize the subroutine stack with empty string (no subroutine)
         subroutineStack.push("");
         // Initialize an empty symbol table
@@ -301,8 +303,47 @@ public class ScopedSymbolTable {
      * @param packageName The name of the package to set as the current scope.
      */
     public void setCurrentPackage(String packageName, boolean isClass) {
+        // Preserve existing version if the package already exists
+        String existingVersion = null;
+        if (!packageStack.isEmpty()) {
+            PackageInfo current = packageStack.peek();
+            if (current.packageName().equals(packageName)) {
+                existingVersion = current.version();
+            }
+        }
         packageStack.pop();
-        packageStack.push(new PackageInfo(packageName, isClass));
+        packageStack.push(new PackageInfo(packageName, isClass, existingVersion));
+    }
+
+    /**
+     * Sets the version for a package.
+     *
+     * @param packageName The name of the package.
+     * @param version The version string.
+     */
+    public void setPackageVersion(String packageName, String version) {
+        // Store in global map so version persists across scopes
+        packageVersions.put(packageName, version);
+        
+        // Also update the current package on the stack if it matches
+        if (!packageStack.isEmpty()) {
+            PackageInfo current = packageStack.peek();
+            if (current.packageName().equals(packageName)) {
+                packageStack.pop();
+                packageStack.push(new PackageInfo(packageName, current.isClass(), version));
+            }
+        }
+    }
+    
+    /**
+     * Gets the version for a package.
+     *
+     * @param packageName The name of the package.
+     * @return The version string, or null if not set.
+     */
+    public String getPackageVersion(String packageName) {
+        // First check the global map
+        return packageVersions.get(packageName);
     }
 
     /**
@@ -516,6 +557,6 @@ public class ScopedSymbolTable {
         this.strictOptionsStack.push(source.strictOptionsStack.peek());
     }
 
-    public record PackageInfo(String packageName, boolean isClass) {
+    public record PackageInfo(String packageName, boolean isClass, String version) {
     }
 }
