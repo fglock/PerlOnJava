@@ -1,9 +1,9 @@
 # Test Fix Session - October 6, 2025
 
-## Session Summary: 767+ Tests Fixed Using High-Yield Strategy
+## Session Summary: 773+ Tests Fixed Using High-Yield Strategy
 
 **Total Impact:**
-- Direct test fixes: 767+ tests (113 pack/unpack, 559 sprintf, 3 join, 1 int, 2 do!)
+- Direct test fixes: 773+ tests (113 pack/unpack, 559 sprintf, 3 join, 1 int, 2 do, 6 index!)
 - Systematic improvements affecting ~500+ test failures across regex suite  
 - Multiple test files achieving 100% pass rate
 
@@ -210,6 +210,20 @@ if (node.left instanceof OperatorNode operatorNode) {
 
 **Impact:** Fixed 2 tests in t/op/do.t (from 3 to 1 failure)
 
+### 17. Index/Rindex Empty String Handling ✅ (6 tests)
+**Problem:** index() and rindex() didn't properly handle searches for empty substrings, which should match at any valid position.
+
+**Solution:**
+- Added special case handling for empty substring searches
+- Empty substring can be found at any position up to and including string length
+- For index: returns the position (bounded by string length)
+- For rindex: returns position (bounded by string length), or 0 for negative positions
+
+**Files:**
+- `/src/main/java/org/perlonjava/operators/StringOperators.java`
+
+**Impact:** Fixed 6 tests in t/op/index.t (from 7 to 1 failure)
+
 ## Key Success Patterns
 
 1. **Pattern-Based Errors**: Single validation fix resolves dozens of failures
@@ -235,6 +249,7 @@ if (node.left instanceof OperatorNode operatorNode) {
 | **t/op/eval.t** | - | 0 failures | **100% pass rate** |
 | **t/op/int.t** | 1 failure | 0 failures | **100% pass rate** (integer pragma) |
 | **t/op/do.t** | 3 failures | 1 failure | 2 tests fixed (context propagation) |
+| **t/op/index.t** | 7 failures | 1 failure | 6 tests fixed (empty string handling) |
 | t/re/regexp*.t | ~487 each | Improved | Forward refs and group positions |
 
 ## Remaining High-Impact Opportunities
