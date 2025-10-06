@@ -258,6 +258,12 @@ public record OperatorHandler(String className, String methodName, int methodTyp
         put("undef", "undef", "org/perlonjava/operators/Operator", "()Lorg/perlonjava/runtime/RuntimeScalar;");
         put("wantarray", "wantarray", "org/perlonjava/operators/Operator", "(I)Lorg/perlonjava/runtime/RuntimeScalar;");
 
+        // Process-related operators
+        put("getppid", "getppid", "org/perlonjava/operators/Operator", "(I)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("getpgrp", "getpgrp", "org/perlonjava/operators/Operator", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("setpgrp", "setpgrp", "org/perlonjava/operators/Operator", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("getpriority", "getpriority", "org/perlonjava/operators/Operator", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
+
         put("prototype", "prototype", "org/perlonjava/runtime/RuntimeCode", "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;");
 
         // Tie
