@@ -30,7 +30,9 @@ t/
 # Ignore temporary analysis and debug files
 *_failures.txt
 debug_*.pl
+test_*.pl
 pack_test_*.log
 out.json
 logs/
+.perlonjava_env_ready
 
