@@ -23,11 +23,17 @@ public class RegexPreprocessorHelper {
             // This is a backreference like \1, \2, etc.
             int refNum = nextChar - '0';
 
-            // Check if we have captured this many groups
-            if (refNum > RegexPreprocessor.captureGroupCount) {
+            // Check if we have ANY capture groups at all
+            // If there are no groups, this is always an error
+            // But if there are groups, allow forward references
+            if (RegexPreprocessor.captureGroupCount == 0) {
                 sb.setLength(sb.length() - 1); // Remove the backslash
                 RegexPreprocessor.regexError(s, offset + 1, "Reference to nonexistent group");
             }
+            // Forward references are allowed when there are capture groups
+            // Perl allows forward references like (\3|b)\2(a) where \3 refers to group 3
+            // which hasn't been captured yet. This is valid and the reference just won't match
+            // until group 3 is actually captured.
 
             sb.append(nextChar);
             return offset;
@@ -69,10 +75,12 @@ public class RegexPreprocessorHelper {
                                 RegexPreprocessor.regexError(s, offset - 2, "Reference to nonexistent or unclosed group");
                             }
                         } else {
-                            // Positive numeric reference - validate it exists
-                            if (groupNum > RegexPreprocessor.captureGroupCount) {
+                            // Positive numeric reference
+                            // If there are no groups at all, this is an error
+                            if (RegexPreprocessor.captureGroupCount == 0) {
                                 RegexPreprocessor.regexError(s, offset - 2, "Reference to nonexistent group");
                             }
+                            // Otherwise allow forward references
                             sb.setLength(sb.length() - 1); // Remove the backslash
                             sb.append("\\").append(groupNum);
                         }
@@ -95,9 +103,11 @@ public class RegexPreprocessorHelper {
 
                 if (groupNum == 0) {
                     RegexPreprocessor.regexError(s, offset, "Reference to invalid group 0");
-                } else if (groupNum > RegexPreprocessor.captureGroupCount) {
+                } else if (RegexPreprocessor.captureGroupCount == 0) {
+                    // No groups at all - this is an error
                     RegexPreprocessor.regexError(s, offset, "Reference to nonexistent group");
                 }
+                // Otherwise allow forward references - they're valid in Perl
 
                 sb.setLength(sb.length() - 1); // Remove the backslash
                 sb.append("\\").append(groupNum);
