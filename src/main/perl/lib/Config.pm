@@ -116,6 +116,14 @@ $os_name =~ s/\s+/_/g;
 
     ivsize => 4,
     lseeksize => 8,
+    
+    # nv_preserves_uv_bits: Number of bits in an unsigned integer that can be
+    # preserved in a floating-point number (NV) without loss of precision.
+    # For 32-bit systems with 32-bit integers (IV), this is typically 32.
+    # This value is critical for pack/unpack checksum tests - when checksums
+    # exceed this bit count, they may lose precision in floating-point math.
+    # Tests use this to skip checksums that would overflow on this architecture.
+    nv_preserves_uv_bits => 32,
 
     # Features available in PerlOnJava
     d_readlink => 'define',
