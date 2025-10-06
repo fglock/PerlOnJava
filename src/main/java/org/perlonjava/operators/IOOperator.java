@@ -201,7 +201,10 @@ public class IOOperator {
 //        open FILEHANDLE,EXPR
 //        open FILEHANDLE
 
-        RuntimeScalar fileHandle = args[0].scalar();
+        // Get the filehandle - this should be an lvalue RuntimeScalar
+        // For array/hash elements like $fh0[0], this is the actual lvalue that can be modified
+        // We assert it's a RuntimeScalar rather than calling .scalar() which would create a copy
+        RuntimeScalar fileHandle = (RuntimeScalar) args[0];
         if (args.length < 2) {
             throw new PerlJavaUnimplementedException("1 argument open is not implemented");
         }
@@ -300,11 +303,17 @@ public class IOOperator {
         if (fh == null) {
             return scalarFalse;
         }
+        
+        // Check if the filehandle already contains a GLOB
         if ((fileHandle.type == RuntimeScalarType.GLOB || fileHandle.type == RuntimeScalarType.GLOBREFERENCE) && fileHandle.value instanceof RuntimeGlob glob) {
             glob.setIO(fh);
         } else {
-            fileHandle.type = RuntimeScalarType.GLOBREFERENCE;
-            fileHandle.value = new RuntimeGlob(null).setIO(fh);
+            // Create a new anonymous GLOB and assign it to the lvalue
+            RuntimeScalar newGlob = new RuntimeScalar();
+            newGlob.type = RuntimeScalarType.GLOBREFERENCE;
+            newGlob.value = new RuntimeGlob(null).setIO(fh);
+            // Use set() to modify the lvalue in place
+            fileHandle.set(newGlob);
         }
         return scalarTrue; // success
     }
