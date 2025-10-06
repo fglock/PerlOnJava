@@ -22,11 +22,11 @@ import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
 
 public class ModuleOperators {
-    public static RuntimeScalar doFile(RuntimeScalar runtimeScalar) {
-        return doFile(runtimeScalar, true, false); // do FILE always sets %INC and keeps it
+    public static RuntimeBase doFile(RuntimeScalar runtimeScalar, int ctx) {
+        return doFile(runtimeScalar, true, false, ctx); // do FILE always sets %INC and keeps it
     }
 
-    private static RuntimeScalar doFile(RuntimeScalar runtimeScalar, boolean setINC, boolean isRequire) {
+    private static RuntimeBase doFile(RuntimeScalar runtimeScalar, boolean setINC, boolean isRequire, int ctx) {
         // Clear error variables at start
         GlobalVariable.setGlobalVariable("main::@", "");
         GlobalVariable.setGlobalVariable("main::!", "");
@@ -211,7 +211,7 @@ public class ModuleOperators {
         try {
             featureManager = new FeatureFlags();
 
-            result = PerlLanguageProvider.executePerlCode(parsedArgs, false);
+            result = PerlLanguageProvider.executePerlCode(parsedArgs, false, ctx);
 
             boolean moduleTrue = featureManager.isFeatureEnabled("module_true");
             if (moduleTrue) {
@@ -229,14 +229,28 @@ public class ModuleOperators {
             featureManager = outerFeature;
         }
 
-        RuntimeScalar finalResult = result == null ? scalarUndef : result.scalar();
-
+        // Return result based on context
+        if (result == null) {
+            if (ctx == RuntimeContextType.LIST) {
+                return new RuntimeList();
+            } else {
+                return scalarUndef;
+            }
+        }
+        
+        RuntimeScalar scalarResult = result.scalar();
+        
         // For require, remove from %INC if result is false (but not if undef or error)
-        if (isRequire && setINC && finalResult.defined().getBoolean() && !finalResult.getBoolean()) {
+        if (isRequire && setINC && scalarResult.defined().getBoolean() && !scalarResult.getBoolean()) {
             getGlobalHash("main::INC").elements.remove(fileName);
         }
-
-        return finalResult;
+        
+        // Return appropriate result based on context
+        if (ctx == RuntimeContextType.LIST) {
+            return result;
+        } else {
+            return scalarResult;
+        }
     }
 
     public static RuntimeScalar require(RuntimeScalar runtimeScalar) {
@@ -269,7 +283,9 @@ public class ModuleOperators {
         }
 
         // Call doFile with require-specific behavior - set %INC optimistically
-        RuntimeScalar result = doFile(runtimeScalar, true, true);
+        // require always runs in scalar context
+        RuntimeBase baseResult = doFile(runtimeScalar, true, true, RuntimeContextType.SCALAR);
+        RuntimeScalar result = baseResult.scalar();
 
         // Check if `do` returned undef (file not found or I/O error)
         if (!result.defined().getBoolean()) {

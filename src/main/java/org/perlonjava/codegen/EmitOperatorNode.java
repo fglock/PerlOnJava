@@ -61,7 +61,7 @@ public class EmitOperatorNode {
             case "--postfix" -> EmitOperator.handleUnaryDefaultCase(node, "postAutoDecrement", emitterVisitor);
 
             // Standard unary functions
-            case "abs", "chdir", "chr", "closedir", "cos", "doFile", "exit", "exp", "fc",
+            case "abs", "chdir", "chr", "closedir", "cos", "exit", "exp", "fc",
                  "hex", "lc", "lcfirst", "length", "log",
                  "oct", "ord", "pos", "quotemeta", "rand", "ref",
                  "rewinddir", "rmdir", "sin", "sleep", "sqrt",
@@ -76,6 +76,7 @@ public class EmitOperatorNode {
                     EmitOperator.handleTimeRelatedOperator(emitterVisitor, node);
             case "prototype" -> EmitOperator.handlePrototypeOperator(emitterVisitor, node);
             case "require" -> EmitOperator.handleRequireOperator(emitterVisitor, node);
+            case "doFile" -> EmitOperator.handleDoFileOperator(emitterVisitor, node);
             case "stat", "lstat" -> EmitOperator.handleStatOperator(emitterVisitor, node, node.operator);
             case "+" -> EmitOperator.handleUnaryPlusOperator(emitterVisitor, node);
             case "<>" -> EmitOperator.handleDiamondBuiltin(emitterVisitor, node);
