@@ -113,13 +113,34 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     public RuntimeArray setFromList(RuntimeList value) {
         return switch (type) {
             case PLAIN_HASH -> {
+                // Store the original list size for scalar context
+                int originalSize = 0;
+                for (RuntimeBase elem : value.elements) {
+                    if (elem instanceof RuntimeArray) {
+                        originalSize += ((RuntimeArray) elem).elements.size();
+                    } else if (elem instanceof RuntimeScalar) {
+                        originalSize++;
+                    } else {
+                        // Count elements by iterating
+                        Iterator<RuntimeScalar> it = elem.iterator();
+                        while (it.hasNext()) {
+                            it.next();
+                            originalSize++;
+                        }
+                    }
+                }
+                
                 // Create a new hash from the provided list and replace our elements
                 RuntimeHash hash = createHash(value);
                 this.elements = hash.elements;
-                // Return the hash as a RuntimeArray so it gets flattened properly in list context
-                // When RuntimeList.add() is called with this RuntimeArray, it will iterate over
-                // the hash and add the deduplicated key-value pairs
-                yield new RuntimeArray(this);
+                
+                // Create a RuntimeArray that wraps this hash
+                // In list context: returns the deduplicated key-value pairs
+                // In scalar context: should return the original list size
+                RuntimeArray result = new RuntimeArray(this);
+                // Store the original size as an annotation for scalar context
+                result.scalarContextSize = originalSize;
+                yield result;
             }
             case AUTOVIVIFY_HASH -> {
                 AutovivificationHash.vivify(this);

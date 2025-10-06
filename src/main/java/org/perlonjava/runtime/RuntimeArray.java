@@ -28,6 +28,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     public List<RuntimeScalar> elements;
     // Iterator for traversing the hash elements
     private Integer eachIteratorIndex;
+    // For hash assignment in scalar context: %h = (1,2,3,4) should return 4, not 2
+    public Integer scalarContextSize;
 
 
     // Constructor
@@ -555,7 +557,13 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      */
     public RuntimeScalar scalar() {
         return switch (type) {
-            case PLAIN_ARRAY -> getScalarInt(elements.size());
+            case PLAIN_ARRAY -> {
+                // If this array was created from hash assignment, use the original list size
+                if (scalarContextSize != null) {
+                    yield getScalarInt(scalarContextSize);
+                }
+                yield getScalarInt(elements.size());
+            }
             case AUTOVIVIFY_ARRAY ->
                     throw new PerlCompilerException("Can't use an undefined value as an ARRAY reference");
             case TIED_ARRAY -> TieArray.tiedFetchSize(this);
