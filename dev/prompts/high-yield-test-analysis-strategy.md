@@ -1,9 +1,170 @@
 # High-Yield Test Analysis Strategy
 
+## 🛑 STOP! DO NOT PROCEED WITHOUT PROPER SETUP
+
+### ⭐ RECOMMENDED: Use the Analysis Gateway
+```bash
+# This single command handles EVERYTHING safely:
+./dev/tools/start_analysis.sh
+
+# It will:
+# ✅ Check and run environment setup if needed
+# ✅ Provide menu-driven analysis options
+# ✅ Ensure all safety checks are followed
+# ✅ Prevent common mistakes
+```
+
+### Alternative: Manual Setup (Advanced Users Only)
+```bash
+# If you prefer manual control, you MUST run this first:
+./dev/tools/safe_analysis_setup.sh
+
+# Without this, the analysis WILL fail or produce invalid results
+```
+
+**⚠️ WARNING: Skipping setup WILL cause:**
+- Contaminated git commits with test files
+- Hanging Java processes consuming resources  
+- Invalid test results from dirty environment
+- Potential data loss from uncommitted changes
+
 ## Core Principle
 **Target blocked tests and systematic errors for exponential impact.** One fix can unlock hundreds of tests.
 
+## ⚠️ Critical Safety Rules
+1. **NEVER commit test files** (`test_*.pl`, `debug_*.pl`)
+2. **ALWAYS test before committing** (run `./gradlew test`)
+3. **ALWAYS clean environment before starting** (kill processes, clean build)
+4. **NEVER use `git add .` or `git add -A`** (add specific files only)
+5. **ALWAYS run pre-commit check** before committing
+
+## 🚀 Quick Start: The Safe Way
+
+### Method 1: Guided Analysis (BEST FOR BEGINNERS)
+```bash
+# Just run this one command - it handles everything:
+./dev/tools/start_analysis.sh
+```
+This interactive gateway ensures you never skip safety steps and provides all analysis tools through a menu.
+
+### Method 2: Individual Scripts (For Automation)
+```bash
+# One-time: Install git safety hooks
+./dev/tools/install_git_hooks.sh
+
+# Before each session: Safe environment setup  
+./dev/tools/safe_analysis_setup.sh
+
+# Before every commit: Full safety check
+./dev/tools/pre_commit_check.sh
+```
+
+### Method 3: Manual Process (Expert Only)
+Follow the detailed steps below, but you MUST complete the "Essential Prerequisites" section first.
+
+## Essential Prerequisites: Clean Environment Setup
+
+### 1. Kill Old Java Processes (Critical!)
+```bash
+# Kill any hanging Java processes from previous test runs
+pkill -f "java.*org.perlonjava" || true
+ps aux | grep -E "java.*org.perlonjava|jperl" | grep -v grep | awk '{print $2}' | xargs -r kill -9 2>/dev/null || true
+
+# Verify no lingering processes
+ps aux | grep -E "java.*org.perlonjava|jperl" | grep -v grep
+```
+
+### 2. Clean Build Environment
+```bash
+# Clean all previous build artifacts
+./gradlew clean
+
+# Remove any temporary test files (NEVER commit these!)
+rm -f test_*.pl debug_*.pl 2>/dev/null || true
+rm -rf logs/*.log 2>/dev/null || true
+
+# Verify git status is clean before starting
+git status --short | grep -E "^\?\?" && echo "WARNING: Untracked files found - clean before starting!"
+```
+
+### 3. Build Fresh Binaries
+```bash
+# Full clean build with all components
+./gradlew clean shadowJar
+
+# Verify build success
+echo 'print "Build OK\n"' | ./jperl || (echo "Build failed!" && exit 1)
+```
+
+### 4. Run Baseline Tests
+```bash
+# Create logs directory if needed
+mkdir -p logs
+
+# Run quick sanity check
+./gradlew test || echo "Note: Some tests may fail - this is baseline"
+
+# Generate initial test report
+perl dev/tools/perl_test_runner.pl t 2>&1 | tee logs/baseline_$(date +%Y%m%d_%H%M%S).log
+```
+
+### 5. Verify Clean State
+```bash
+# Ensure no resource leaks or hanging processes
+lsof | grep -E "jperl|org.perlonjava" | wc -l  # Should be 0 or very low
+df -h .  # Check disk space
+free -h  # Check memory
+```
+
+### Common Environment Issues & Solutions
+
+**Problem: Java processes won't die**
+```bash
+# Force kill with stronger signal
+sudo kill -9 $(ps aux | grep -E "java.*org.perlonjava" | grep -v grep | awk '{print $2}')
+# If still stuck, may need system restart
+```
+
+**Problem: Build fails with "out of memory"**
+```bash
+# Increase heap size
+export GRADLE_OPTS="-Xmx4g -XX:MaxMetaspaceSize=1g"
+./gradlew clean shadowJar
+```
+
+**Problem: Port already in use (for network tests)**
+```bash
+# Find and kill process using port
+lsof -i :8080 | grep LISTEN | awk '{print $2}' | xargs kill -9
+```
+
+**Problem: Disk space issues**
+```bash
+# Clean Gradle cache
+rm -rf ~/.gradle/caches/
+# Clean test artifacts
+find . -name "*.class" -delete
+find . -name "test_*.pl" -delete
+find . -name "debug_*.pl" -delete
+```
+
 ## Quick Start: Finding Targets
+
+### 0. VERIFY SETUP (Required Before Analysis)
+```bash
+# Check that environment setup was completed
+if [ ! -f .perlonjava_env_ready ]; then
+    echo "❌ ERROR: Environment not set up!"
+    echo "Run: ./dev/tools/safe_analysis_setup.sh"
+    exit 1
+fi
+
+# Verify setup is recent (within 4 hours)
+if [ $(find . -name ".perlonjava_env_ready" -mmin +240 | wc -l) -gt 0 ]; then
+    echo "⚠️  Setup is stale (>4 hours old)"
+    echo "Run: ./dev/tools/safe_analysis_setup.sh"
+fi
+```
 
 ### 1. Check Blocked Tests First (Highest ROI)
 ```bash
@@ -97,6 +258,9 @@ Small validation fixes can unlock many tests:
 
 ### Build Properly
 ```bash
+# Quick compilation during development
+make
+
 # ALWAYS use shadowJar for parser/AST changes
 ./gradlew clean shadowJar
 
@@ -259,7 +423,200 @@ Tests that will be fixed.
 - 50+ tests/hour: Excellent, prioritize these
 - 100+ tests/hour: Exceptional, drop everything else
 
+## Process Monitoring During Analysis
+
+### Watch for Issues
+```bash
+# Monitor memory usage (run in separate terminal)
+watch -n 5 'ps aux | grep -E "java.*org.perlonjava|jperl" | grep -v grep'
+
+# Check for hanging tests
+timeout 30 ./jperl test_file.pl || echo "Test hung - investigate"
+
+# Kill hanging process if needed
+pkill -f "test_file.pl"
+```
+
+### Quick Reset Script
+Save as `reset_env.sh`:
+```bash
+#!/bin/bash
+echo "Killing old processes..."
+pkill -f "java.*org.perlonjava" || true
+ps aux | grep -E "java.*org.perlonjava|jperl" | grep -v grep | awk '{print $2}' | xargs -r kill -9 2>/dev/null || true
+
+echo "Cleaning build..."
+./gradlew clean
+rm -f test_*.pl debug_*.pl 2>/dev/null || true
+
+echo "Rebuilding..."
+./gradlew clean shadowJar
+
+echo "Verification..."
+echo 'print "Environment ready!\n"' | ./jperl || exit 1
+```
+
+## Git Safety & Pre-Commit Protocol
+
+### CRITICAL: Files to NEVER Commit
+```bash
+# Add to .gitignore if not already there:
+test_*.pl
+debug_*.pl
+*.log
+logs/
+tmp/
+*.class
+.DS_Store
+*.swp
+*~
+.perlonjava_env_ready
+```
+
+### Before ANY Commit - Mandatory Steps
+```bash
+#!/bin/bash
+# Save as pre_commit_check.sh
+
+echo "=== PRE-COMMIT SAFETY CHECK ==="
+
+# 1. Check for test files
+TEST_FILES=$(git status --porcelain | grep -E "test_.*\.pl|debug_.*\.pl")
+if [ ! -z "$TEST_FILES" ]; then
+    echo "❌ ABORT: Test files detected in git staging:"
+    echo "$TEST_FILES"
+    echo "Run: git reset HEAD test_*.pl debug_*.pl"
+    exit 1
+fi
+
+# 2. Clean test artifacts
+rm -f test_*.pl debug_*.pl 2>/dev/null
+rm -rf logs/*.log 2>/dev/null
+
+# 3. Full rebuild
+echo "Building..."
+./gradlew clean shadowJar || exit 1
+
+# 4. Run core tests
+echo "Testing build..."
+./gradlew test || exit 1
+
+# 5. Run specific test if provided
+if [ ! -z "$1" ]; then
+    echo "Running specific test: $1"
+    ./jperl "$1" || exit 1
+fi
+
+# 6. Check for regressions
+echo "Checking key functionality..."
+echo 'print "Hello World\n"' | ./jperl || exit 1
+echo '$x = 42; print "$x\n"' | ./jperl | grep -q "42" || exit 1
+
+# 7. Final git status check
+echo "=== Git Status ==="
+git status
+
+echo "✅ Pre-commit checks passed!"
+echo "Safe to commit with: git commit -m 'your message'"
+```
+
+### Safe Commit Workflow
+```bash
+# 1. Always check what you're committing
+git status
+git diff --staged
+
+# 2. Run pre-commit check
+./pre_commit_check.sh
+
+# 3. Commit ONLY intended changes
+git add src/main/java/specific/File.java  # Add specific files, not everything!
+git commit -m "Fix: specific issue description"
+
+# 4. NEVER use these dangerous commands:
+# git add .                    # DON'T - adds everything
+# git add -A                   # DON'T - adds all changes
+# git commit -a                # DON'T - commits all modified files
+```
+
+### Automated Git Hook (RECOMMENDED)
+```bash
+# Install as .git/hooks/pre-commit (make executable)
+#!/bin/bash
+# Prevents committing test files
+
+# Check for test files in staging
+if git diff --cached --name-only | grep -E "test_.*\.pl|debug_.*\.pl"; then
+    echo "❌ ERROR: Attempting to commit test/debug files!"
+    echo "Remove with: git reset HEAD test_*.pl debug_*.pl"
+    exit 1
+fi
+
+# Warn about logs
+if git diff --cached --name-only | grep -E "\.log$"; then
+    echo "⚠️  WARNING: Log files detected in commit"
+    echo "Consider removing with: git reset HEAD *.log"
+fi
+
+exit 0
+```
+
+### Emergency Cleanup
+```bash
+# If you accidentally staged test files:
+git reset HEAD test_*.pl debug_*.pl
+git clean -f test_*.pl debug_*.pl
+
+# If you accidentally committed test files:
+git reset --soft HEAD~1  # Undo last commit, keep changes
+# Then remove test files and recommit properly
+
+# Nuclear option - remove ALL untracked files (CAREFUL!)
+git clean -fd  # Removes all untracked files and directories
+```
+
+## 📋 TL;DR - The Foolproof Workflow
+
+### For New Users (Safest Path)
+```bash
+# 1. Start here EVERY time:
+./dev/tools/start_analysis.sh
+
+# 2. When ready to commit:
+./dev/tools/pre_commit_check.sh
+git add src/main/java/specific/File.java  # Add SPECIFIC files only
+git commit -m "Fix: specific issue"
+```
+
+### For Experienced Users
+```bash
+# 1. Setup (required each session):
+./dev/tools/safe_analysis_setup.sh
+
+# 2. Analysis:
+# ... do your work ...
+
+# 3. Before commit:
+rm -f test_*.pl debug_*.pl
+./dev/tools/pre_commit_check.sh
+git add [specific files only]
+git commit -m "Fix: description"
+```
+
+### The Golden Rules
+1. **ALWAYS** use `start_analysis.sh` or run setup first
+2. **NEVER** skip the environment setup
+3. **NEVER** use `git add .` or `git add -A`
+4. **ALWAYS** clean test files before committing
+5. **ALWAYS** run pre-commit check
+
 ## Final Checklist
+
+Before starting ANY analysis session:
+- [ ] Run environment setup (Section: Essential Prerequisites)
+- [ ] Kill all old Java processes
+- [ ] Clean and rebuild with `./gradlew clean shadowJar`
+- [ ] Verify clean state with test run
 
 Before starting a fix:
 - [ ] Check if it's a blocked test (highest priority)
@@ -271,5 +628,10 @@ After implementing:
 - [ ] Test with minimal case
 - [ ] Test with full test suite
 - [ ] Run `./gradlew test`
-- [ ] Commit with clear message
+- [ ] Check for memory leaks or hanging processes
+- [ ] Clean up ALL test files: `rm -f test_*.pl debug_*.pl`
+- [ ] Verify git status clean: `git status --short`
+- [ ] Run pre-commit check: `./pre_commit_check.sh`
+- [ ] Commit ONLY specific files with clear message
 - [ ] Update docs if new pattern discovered
+- [ ] Verify commit doesn't include test files: `git show --name-only`
