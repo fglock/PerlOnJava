@@ -272,6 +272,17 @@ public class RuntimeTransliterate {
                 int endConsumed = parseCharAt(input, nextPos + 1, endChar);
 
                 if (endConsumed > 0 && !endChar.isEmpty()) {
+                    // Check for ambiguous range like "a-z-9"
+                    // This happens when the char after the range could itself be part of a range
+                    int afterRangePos = nextPos + 1 + endConsumed;
+                    if (afterRangePos < input.length() && input.charAt(afterRangePos) == '-') {
+                        // Check if there's something after this dash
+                        if (afterRangePos + 1 < input.length()) {
+                            // We have "X-Y-Z" pattern - this is ambiguous
+                            throw new PerlCompilerException("Ambiguous range in transliteration operator");
+                        }
+                    }
+                    
                     // We have a valid range
                     int start = currentChar.get(0);
                     int end = endChar.get(0);
