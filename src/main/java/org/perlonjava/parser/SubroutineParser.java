@@ -393,14 +393,13 @@ public class SubroutineParser {
                         }
                 );
                 // Add the corresponding global variable to the parameter list
-                paramList.add(
-                        switch (sigil) {
-                            case "$" -> GlobalVariable.getGlobalVariable(variableName);
-                            case "%" -> GlobalVariable.getGlobalHash(variableName);
-                            case "@" -> GlobalVariable.getGlobalArray(variableName);
-                            default -> throw new IllegalStateException("Unexpected value: " + sigil);
-                        }
-                );
+                Object capturedVar = switch (sigil) {
+                    case "$" -> GlobalVariable.getGlobalVariable(variableName);
+                    case "%" -> GlobalVariable.getGlobalHash(variableName);
+                    case "@" -> GlobalVariable.getGlobalArray(variableName);
+                    default -> throw new IllegalStateException("Unexpected value: " + sigil);
+                };
+                paramList.add(capturedVar);
                 // System.out.println("Capture " + entry.decl() + " " + entry.name() + " as " + variableName);
             }
         }
