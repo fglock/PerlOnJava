@@ -6,6 +6,7 @@ import org.perlonjava.parser.NumberParser;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeBase;
 import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.RuntimeScalarCache;
 import org.perlonjava.runtime.RuntimeScalarType;
 
 import java.util.Iterator;
@@ -26,6 +27,10 @@ public class StringOperators {
      * @return a {@link RuntimeScalar} containing the length of the input as an integer
      */
     public static RuntimeScalar length(RuntimeScalar runtimeScalar) {
+        // If the scalar is undefined, return undef
+        if (!runtimeScalar.getDefinedBoolean()) {
+            return RuntimeScalarCache.scalarUndef;
+        }
         // Convert the RuntimeScalar to a string and return its length in codepoints
         String str = runtimeScalar.toString();
         return getScalarInt(str.codePointCount(0, str.length()));
