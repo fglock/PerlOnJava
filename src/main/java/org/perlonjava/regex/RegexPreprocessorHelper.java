@@ -286,22 +286,52 @@ public class RegexPreprocessorHelper {
             }
         } else {
             int c2 = s.codePointAt(offset);
-            if (c2 >= '1' && c2 <= '3') {
-                // Check if this might be an octal sequence \123
-                // We need at least 2 more characters after the current position
-                if (offset + 2 < length) {
-                    int c3 = s.codePointAt(offset + 1);
-                    int c4 = s.codePointAt(offset + 2);
-                    if ((c3 >= '0' && c3 <= '7') && (c4 >= '0' && c4 <= '7')) {
-                        // Handle \000 octal sequences
-                        sb.append('0');
+            if (c2 >= '0' && c2 <= '7') {
+                // Potential octal sequence - parse it
+                int octalValue = c2 - '0';
+                int octalLength = 1;
+                
+                // Read up to 2 more octal digits
+                for (int i = 1; i <= 2 && offset + i < length; i++) {
+                    int nextDigit = s.codePointAt(offset + i);
+                    if (nextDigit >= '0' && nextDigit <= '7') {
+                        octalValue = octalValue * 8 + (nextDigit - '0');
+                        octalLength++;
+                    } else {
+                        break;
                     }
                 }
-            } else if (c2 == '0') {
-                // Rewrite \0 to \00
-                sb.append('0');
+                
+                // Check if value is > 255 (requires hex conversion)
+                if (octalValue > 255) {
+                    // Convert to hex for Java regex
+                    sb.setLength(sb.length() - 1); // Remove the backslash
+                    sb.append(String.format("\\x{%X}", octalValue));
+                    offset += octalLength - 1; // -1 because caller will increment
+                } else if (octalValue <= 255 && octalLength == 3) {
+                    // Standard 3-digit octal, prepend 0 for Java
+                    sb.append('0');
+                    sb.append(Character.toChars(c2));
+                } else if (c2 == '0' && octalLength == 1) {
+                    // Single \0 becomes \00
+                    sb.append('0');
+                    sb.append('0');
+                } else if (c2 >= '1' && c2 <= '3' && octalLength == 3) {
+                    // 3-digit octal starting with 1-3, prepend 0
+                    sb.append('0');
+                    sb.append(Character.toChars(c2));
+                } else {
+                    // Short octal or single digit, pass through
+                    sb.append(Character.toChars(c2));
+                }
+            } else if (c2 == '8' || c2 == '9') {
+                // \8 and \9 are not valid octals - treat as literal digits
+                sb.setLength(sb.length() - 1); // Remove the backslash
+                sb.append(Character.toChars(c2));
+            } else {
+                // Other escape sequences, pass through
+                sb.append(Character.toChars(c2));
             }
-            sb.append(Character.toChars(c2));
         }
         return offset;
     }
@@ -479,26 +509,63 @@ public class RegexPreprocessorHelper {
                         lastChar = -1;
                     } else {
                         int c2 = s.codePointAt(offset);
-                        if (c2 >= '1' && c2 <= '3') {
-                            if (offset < length + 1) {
-                                int off = offset;
-                                int c3 = s.codePointAt(off++);
-                                int c4 = s.codePointAt(off++);
-                                if ((c3 >= '0' && c3 <= '7') && (c4 >= '0' && c4 <= '7')) {
-                                    // Handle \000 octal sequences
-                                    sb.append('0');
+                        if (c2 >= '0' && c2 <= '7') {
+                            // Potential octal sequence - parse it
+                            int octalValue = c2 - '0';
+                            int octalLength = 1;
+                            
+                            // Read up to 2 more octal digits
+                            for (int i = 1; i <= 2 && offset + i < length; i++) {
+                                int nextDigit = s.codePointAt(offset + i);
+                                if (nextDigit >= '0' && nextDigit <= '7') {
+                                    octalValue = octalValue * 8 + (nextDigit - '0');
+                                    octalLength++;
+                                } else {
+                                    break;
                                 }
                             }
-                        } else if (c2 == '0') {
-                            // Rewrite \0 to \00
-                            sb.append('0');
-                        }
-                        sb.append(Character.toChars(c2));
-                        // Remember the actual character for range validation
-                        if (c2 != 'p' && c2 != 'P') {  // Skip property escapes
+                            
+                            // Check if value is > 255 (requires hex conversion)
+                            if (octalValue > 255) {
+                                // Convert to hex for Java regex
+                                sb.append(String.format("x{%X}", octalValue));
+                                offset += octalLength - 1; // -1 because outer loop will increment
+                                lastChar = octalValue;
+                            } else if (octalValue <= 255 && octalLength == 3) {
+                                // Standard 3-digit octal, prepend 0 for Java
+                                sb.append('0');
+                                sb.append(Character.toChars(c2));
+                                lastChar = octalValue;
+                            } else if (c2 == '0' && octalLength == 1) {
+                                // Single \0 becomes \00
+                                sb.append('0');
+                                sb.append('0');
+                                lastChar = 0;
+                            } else if (c2 >= '1' && c2 <= '3' && octalLength == 3) {
+                                // 3-digit octal starting with 1-3, prepend 0
+                                sb.append('0');
+                                sb.append(Character.toChars(c2));
+                                lastChar = octalValue;
+                            } else {
+                                // Short octal or single digit, pass through
+                                sb.append(Character.toChars(c2));
+                                lastChar = c2;
+                            }
+                        } else if (c2 == '8' || c2 == '9') {
+                            // \8 and \9 are not valid octals - treat as literal digits
+                            // Remove the backslash that was already appended
+                            sb.setLength(sb.length() - 1);
+                            sb.append(Character.toChars(c2));
                             lastChar = c2;
                         } else {
-                            lastChar = -1;
+                            // Other escape sequences
+                            sb.append(Character.toChars(c2));
+                            // Remember the actual character for range validation
+                            if (c2 != 'p' && c2 != 'P') {  // Skip property escapes
+                                lastChar = c2;
+                            } else {
+                                lastChar = -1;
+                            }
                         }
                     }
                     first = false;
