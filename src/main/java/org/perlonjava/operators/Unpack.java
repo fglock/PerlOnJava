@@ -237,6 +237,11 @@ public class Unpack {
             boolean hasBigEndian = parsedCount.hasBigEndian();
             i = parsedCount.endPosition();
             
+            // Check if '/' has a repeat count (which is invalid)
+            if (format == '/' && (count > 1 || isStarCount)) {
+                throw new PerlCompilerException("'/' does not take a repeat count");
+            }
+            
             if (isStarCount) {
                 count = UnpackHelper.getRemainingCount(state, format, startsWithU);
             }

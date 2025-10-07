@@ -66,6 +66,12 @@ public class PackHelper {
      */
     public static int checkForSlashConstruct(String template, int position) {
         int lookAhead = position + 1;
+        char format = template.charAt(position);
+        
+        // Only numeric formats or string formats (a, A, Z) can be used before a slash
+        if (!isNumericFormat(format) && format != 'a' && format != 'A' && format != 'Z') {
+            return -1;
+        }
 
         // Skip modifiers (<, >, !)
         while (lookAhead < template.length() &&
@@ -75,39 +81,44 @@ public class PackHelper {
             lookAhead++;
         }
 
-        // Skip whitespace
-        while (lookAhead < template.length() && Character.isWhitespace(template.charAt(lookAhead))) {
-            lookAhead++;
-        }
-
-        // Skip count or *
-        if (lookAhead < template.length()) {
-            if (template.charAt(lookAhead) == '*') {
-                lookAhead++;
-            } else if (template.charAt(lookAhead) == '[') {
-                // Handle [n] style counts
-                lookAhead++; // skip '['
-                while (lookAhead < template.length() && Character.isDigit(template.charAt(lookAhead))) {
-                    lookAhead++;
-                }
-                if (lookAhead < template.length() && template.charAt(lookAhead) == ']') {
-                    lookAhead++;
-                }
-            } else if (Character.isDigit(template.charAt(lookAhead))) {
-                while (lookAhead < template.length() && Character.isDigit(template.charAt(lookAhead))) {
-                    lookAhead++;
+        // For string formats (a, A, Z), check for count
+        if (format == 'a' || format == 'A' || format == 'Z') {
+            // Check for * or numeric count
+            if (lookAhead < template.length()) {
+                if (template.charAt(lookAhead) == '*') {
+                    // Only Z* can be part of a slash construct (it provides string length)
+                    // a* and A* mean "all remaining" and cannot be used as a count source
+                    if (format != 'Z') {
+                        return -1;  // a* and A* cannot be part of slash constructs
+                    }
+                    lookAhead++;  // Skip the '*'
+                } else if (Character.isDigit(template.charAt(lookAhead))) {
+                    // Skip numeric count
+                    while (lookAhead < template.length() && Character.isDigit(template.charAt(lookAhead))) {
+                        lookAhead++;
+                    }
                 }
             }
         }
-
-        // Skip more whitespace after count
+        
+        // Skip whitespace after format/count
         while (lookAhead < template.length() && Character.isWhitespace(template.charAt(lookAhead))) {
             lookAhead++;
         }
 
         // Check if followed by '/'
         if (lookAhead < template.length() && template.charAt(lookAhead) == '/') {
-            // DEBUG: Found slash at position " + lookAhead + " after format at position " + position
+            // Make sure there's something after the '/'
+            int afterSlash = lookAhead + 1;
+            while (afterSlash < template.length() && Character.isWhitespace(template.charAt(afterSlash))) {
+                afterSlash++;
+            }
+            
+            if (afterSlash >= template.length()) {
+                return -1; // No format after '/'
+            }
+            
+            // Valid slash construct - the format after '/' will be validated by main Pack loop
             return lookAhead;
         }
 
