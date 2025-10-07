@@ -671,6 +671,39 @@ public class EmitOperator {
     }
 
     /**
+     * Handles the 'ord' operator, which can be affected by 'use bytes'.
+     *
+     * @param node           The operator node
+     * @param emitterVisitor The visitor walking the AST
+     */
+    static void handleOrdOperator(OperatorNode node, EmitterVisitor emitterVisitor) {
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        // Emit the operand in scalar context
+        node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        
+        // Check if 'use bytes' is in effect
+        if (emitterVisitor.ctx.symbolTable != null && 
+            emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_BYTES)) {
+            emitterVisitor.ctx.logDebug("handleOrdOperator: Using ordBytes (bytes pragma enabled)");
+            // Use ordBytes when bytes pragma is in effect
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/operators/ScalarOperators",
+                    "ordBytes",
+                    "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                    false);
+        } else {
+            emitterVisitor.ctx.logDebug("handleOrdOperator: Using normal ord (bytes pragma not enabled)");
+            // Use normal ord
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/operators/ScalarOperators",
+                    "ord",
+                    "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                    false);
+        }
+        handleVoidContext(emitterVisitor);
+    }
+
+    /**
      * Handles array-specific unary builtin operators.
      *
      * @param emitterVisitor The visitor walking the AST
