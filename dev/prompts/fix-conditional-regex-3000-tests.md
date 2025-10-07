@@ -1,7 +1,12 @@
-# Fix Conditional Regex Pattern (?(condition)yes|no) - Unlock ~3000 Tests
+# Fix Conditional Regex Pattern (?(condition)yes|no) - Remaining ~500 Tests
+
+## Current Status (2025-10-07)
+- **re/regexp.t**: 1676 passing / 501 failing (total 2177 tests)
+- Same failure patterns in 5 other regexp test files
+- **Total estimated impact**: ~3000 test failures across all 6 files
 
 ## Problem Statement
-The PerlOnJava regex preprocessor incorrectly handles conditional regex patterns `(?(condition)yes|no)`, causing 499 identical test failures across 6 regexp test files (re/regexp.t, re/regexp_noamp.t, re/regexp_notrie.t, re/regexp_qr.t, re/regexp_qr_embed.t, re/regexp_trielist.t), totaling approximately 3000 test failures.
+The PerlOnJava regex preprocessor incorrectly handles conditional regex patterns `(?(condition)yes|no)`, causing approximately 500 identical test failures across 6 regexp test files (re/regexp.t, re/regexp_noamp.t, re/regexp_notrie.t, re/regexp_qr.t, re/regexp_qr_embed.t, re/regexp_trielist.t).
 
 ## Root Cause Analysis
 
@@ -72,14 +77,15 @@ To fully support conditional regex, we would need:
 
 ## Testing
 
-### Before Fix
-- re/regexp.t: 499 failures (1678/2177 passing)
-- Same 499 failures in 5 other regexp test files
+### Current State
+- re/regexp.t: 501 failures (1676/2177 passing)
+- Same ~500 failures in 5 other regexp test files
 - Total: ~3000 test failures
 
 ### Expected After Fix
-- All 6 regexp test files should have 499 fewer failures
+- All 6 regexp test files should have ~500 fewer failures
 - Total improvement: ~3000 tests
+- re/regexp.t would go from 1676/2177 (77%) to ~2176/2177 (99.9%)
 
 ## File Modifications
 - `/Users/fglock/projects/PerlOnJava/src/main/java/org/perlonjava/regex/RegexPreprocessor.java`
@@ -104,11 +110,12 @@ done
 ## Priority
 **HIGH** - This single fix will resolve ~3000 test failures, representing one of the highest-impact fixes possible in the project.
 
-## Current Status
+## Current Status (Updated 2025-10-07)
 - Root cause identified
 - Solution approach determined
-- Implementation in progress
-- Debug output added for verification
+- **STATUS**: Not yet implemented
+- **PRIORITY**: HIGH - Single fix could resolve ~3000 test failures
+- **BLOCKER**: Requires regex engine modifications for full support
 
 ## Notes
 - The conditional regex pattern `(?(condition)yes|no)` is a Perl 5.10+ feature
