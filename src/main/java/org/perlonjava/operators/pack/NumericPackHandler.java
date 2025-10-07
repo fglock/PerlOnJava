@@ -168,16 +168,16 @@ public class NumericPackHandler implements PackFormatHandler {
                     break;
                 case 'w':
                     // BER compressed integer - validate input represents a valid unsigned integer
-                    String stringValue = value.toString();
-                    
-                    // First check if it looks like a number at all
-                    if (!ScalarUtils.looksLikeNumber(value)) {
-                        throw new PerlCompilerException("Can only compress unsigned integers");
-                    }
-                    
-                    // Use PerlOnJava's numeric conversion to get the proper numeric value
+                    // Note: We call getNumber() first to handle blessed objects like Math::BigInt
+                    // which have numeric overloading but don't pass looksLikeNumber() check
                     RuntimeScalar numericValue = value.getNumber();
                     double doubleValue = numericValue.getDouble();
+                    String stringValue = value.toString();
+                    
+                    // Check for NaN or Infinity (invalid for BER compression)
+                    if (Double.isNaN(doubleValue) || Double.isInfinite(doubleValue)) {
+                        throw new PerlCompilerException("Can only compress unsigned integers");
+                    }
                     
                     // Check for negative values after conversion
                     if (doubleValue < 0) {
