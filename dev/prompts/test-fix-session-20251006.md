@@ -1,9 +1,9 @@
 # Test Fix Session - October 6, 2025
 
-## Session Summary: 773+ Tests Fixed Using High-Yield Strategy
+## Session Summary: 778+ Tests Fixed Using High-Yield Strategy
 
 **Total Impact:**
-- Direct test fixes: 773+ tests (113 pack/unpack, 559 sprintf, 3 join, 1 int, 2 do, 6 index!)
+- Direct test fixes: 778+ tests (113 pack/unpack, 559 sprintf, 3 join, 1 int, 2 do, 6 index, 1 repeat, 1 tied, 5 length!)
 - Systematic improvements affecting ~500+ test failures across regex suite  
 - Multiple test files achieving 100% pass rate
 
@@ -223,6 +223,47 @@ if (node.left instanceof OperatorNode operatorNode) {
 - `/src/main/java/org/perlonjava/operators/StringOperators.java`
 
 **Impact:** Fixed 6 tests in t/op/index.t (from 7 to 1 failure)
+
+### 18. X Operator Scalar Context Fix ✅ (1 test)
+**Problem:** The x (repeat) operator wasn't evaluating its left operand in scalar context when the operator itself was in scalar context, causing `(do { @b }) x 1` to return concatenated elements instead of count.
+
+**Solution:**
+- Modified EmitOperator.handleRepeat() to propagate scalar context to left operand
+- Updated Operator.repeat() to convert non-scalar values to scalar before repetition
+
+**Files:**
+- `/src/main/java/org/perlonjava/codegen/EmitOperator.java`
+- `/src/main/java/org/perlonjava/operators/Operator.java`
+
+**Impact:** Fixed test 34 in t/op/do.t
+
+### 19. Tied Hash/Array Assignment Order ✅ (1 test)
+**Problem:** When assigning to tied hashes/arrays, the RHS was not fully materialized before clearing the LHS, causing CLEAR to happen before FETCH operations.
+
+**Solution:**
+- Modified RuntimeHash.setFromList() and RuntimeArray.setFromList() for tied collections
+- Now fully materializes the right-hand side before clearing the left-hand side
+
+**Files:**
+- `/src/main/java/org/perlonjava/runtime/RuntimeHash.java`
+- `/src/main/java/org/perlonjava/runtime/RuntimeArray.java`
+
+**Impact:** Fixed "magic keys" test in t/op/hash.t
+
+### 20. Bytes Pragma Implementation ✅ (5 tests)
+**Problem:** The `use bytes` pragma wasn't affecting the length operator, which should return byte count instead of character count.
+
+**Solution:**
+- Created BytesPragma module with compile-time routing
+- Modified EmitOperator.handleLengthOperator() to check HINT_BYTES flag
+- Added lengthBytes() method for UTF-8 byte counting
+
+**Files:**
+- `/src/main/java/org/perlonjava/perlmodule/BytesPragma.java`
+- `/src/main/java/org/perlonjava/codegen/EmitOperator.java`
+- `/src/main/java/org/perlonjava/operators/StringOperators.java`
+
+**Impact:** Fixed 5 length tests in t/op/length.t (tests 9, 12, 15, 18, 21)
 
 ## Key Success Patterns
 
