@@ -444,6 +444,8 @@ public class RegexPreprocessor {
             if (c3 == '#') {
                 // Remove inline comments (?# ... )
                 offset = handleSkipComment(offset, s, length);
+                // Comment is completely removed - don't append anything, just return
+                return offset; // offset points to ')', caller will increment past it
             } else if (c3 == '@') {
                 // Handle (?@...) which is not implemented
                 regexError(s, offset + 3, "Sequence (?@...) not implemented");
