@@ -35,4 +35,6 @@ pack_test_*.log
 out.json
 logs/
 .perlonjava_env_ready
+*.diff
+*.patch
 
