@@ -33,10 +33,36 @@
 
 ## ⚠️ Critical Safety Rules
 1. **NEVER commit test files** (`test_*.pl`, `debug_*.pl`)
-2. **ALWAYS test before committing** (run `./gradlew test`)
+2. **ALWAYS test FULL SUITE before committing** (run `make test`, not just the test you're fixing!)
 3. **ALWAYS clean environment before starting** (kill processes, clean build)
 4. **NEVER use `git add .` or `git add -A`** (add specific files only)
 5. **ALWAYS run pre-commit check** before committing
+
+### 🚨 LESSON LEARNED: Test the FULL Suite, Not Just Your Changes!
+**Real incident (2025-10-07)**: A major fix (PackBuffer for W format) passed pack.t with +151 tests but broke unit tests (pack_utf8.t). The issue was subtle: byte mode (C0U) needed UTF-8 bytes, not character codes. This wasn't caught because only pack.t was tested, not the full suite.
+
+**What happened:**
+- ✅ Tested: `./jperl t/op/pack.t` - 14,292 passing
+- ❌ NOT tested: `make test` - would have caught pack_utf8.t failure
+- Result: Had to amend commit and fix regression
+
+**The Rule:**
+```bash
+# ❌ WRONG - Testing only what you changed
+./jperl t/op/pack.t  # passes
+git commit -m "fix"  # DANGEROUS!
+
+# ✅ CORRECT - Test everything
+./jperl t/op/pack.t  # passes
+make test            # catches regressions!
+git commit -m "fix"  # SAFE
+```
+
+**Why this matters:**
+- Unit tests catch edge cases that integration tests miss
+- Different test contexts (byte mode vs character mode) reveal hidden bugs
+- One small architectural change can break distant functionality
+- "It works for my test case" ≠ "It works correctly"
 
 ## 🚀 Quick Start: The Safe Way
 
@@ -374,7 +400,8 @@ print ($result eq $expected ? "PASS" : "FAIL: got '$result', expected '$expected
 2. Verify with `--parse` if parser issue
 3. Test fix with minimal case
 4. Test with full test file
-5. Run `./gradlew test` for regressions
+5. **ALWAYS run `make test` for regressions** (not optional!)
+6. Review unit test failures carefully - they often reveal edge cases
 
 ## Critical Insights
 
@@ -519,11 +546,15 @@ rm -rf logs/*.log 2>/dev/null
 echo "Building..."
 ./gradlew clean shadowJar || exit 1
 
-# 4. Run core tests
-echo "Testing build..."
-./gradlew test || exit 1
+# 4. Run FULL test suite (MANDATORY - catches regressions!)
+echo "Running full test suite..."
+./gradlew test || {
+    echo "❌ ABORT: Test suite failed!"
+    echo "Fix failures before committing."
+    exit 1
+}
 
-# 5. Run specific test if provided
+# 5. Run specific test if provided (in addition to full suite)
 if [ ! -z "$1" ]; then
     echo "Running specific test: $1"
     ./jperl "$1" || exit 1
@@ -648,8 +679,9 @@ Before starting a fix:
 
 After implementing:
 - [ ] Test with minimal case
-- [ ] Test with full test suite
-- [ ] Run `./gradlew test`
+- [ ] Test with full test file (e.g., `./jperl t/op/pack.t`)
+- [ ] **CRITICAL: Run `make test` to catch ALL regressions** (don't skip this!)
+- [ ] Review any unit test failures - they reveal edge cases
 - [ ] Check for memory leaks or hanging processes
 - [ ] Clean up ALL test files: `rm -f test_*.pl debug_*.pl`
 - [ ] Verify git status clean: `git status --short`
@@ -657,3 +689,5 @@ After implementing:
 - [ ] Commit ONLY specific files with clear message
 - [ ] Update docs if new pattern discovered
 - [ ] Verify commit doesn't include test files: `git show --name-only`
+
+**Remember**: Testing only your target file is NOT enough! Unit tests (`make test`) catch subtle bugs that integration tests miss.
