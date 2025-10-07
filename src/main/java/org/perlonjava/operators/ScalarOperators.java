@@ -76,6 +76,35 @@ public class ScalarOperators {
         return getScalarInt(i);
     }
 
+    /**
+     * Returns the numeric value of the first byte when 'use bytes' pragma is in effect.
+     * This treats the string as a sequence of bytes rather than characters.
+     *
+     * @param runtimeScalar the RuntimeScalar whose first byte value is to be returned
+     * @return a RuntimeScalar containing the byte value (0-255)
+     */
+    public static RuntimeScalar ordBytes(RuntimeScalar runtimeScalar) {
+        String str = runtimeScalar.toString();
+        int i;
+        if (str.isEmpty()) {
+            i = 0;
+        } else {
+            // Get the first byte of the UTF-8 representation
+            try {
+                byte[] bytes = str.getBytes("UTF-8");
+                if (bytes.length > 0) {
+                    i = bytes[0] & 0xFF;  // Convert to unsigned
+                } else {
+                    i = 0;
+                }
+            } catch (Exception e) {
+                // If UTF-8 encoding fails, fall back to first character
+                i = str.charAt(0);
+            }
+        }
+        return getScalarInt(i);
+    }
+
     public static RuntimeScalar hex(RuntimeScalar runtimeScalar) {
         String expr = runtimeScalar.toString();
         long result = 0;
