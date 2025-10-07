@@ -291,6 +291,11 @@ public class Pack {
             i = parsedCount.endPosition;
             int count = parsedCount.count;
             boolean hasStar = parsedCount.hasStar;
+            
+            // Check if '/' has a repeat count (which is invalid)
+            if (format == '/' && (count > 1 || hasStar)) {
+                throw new PerlCompilerException("'/' does not take a repeat count");
+            }
 
             if (hasStar && count == 1) {
                 count = values.size() - valueIndex; // Use all remaining values
