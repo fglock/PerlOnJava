@@ -78,11 +78,59 @@ expected "305419896 591751041 893802344 354826056"
 1. ✅ Fixed `calculatePackedSize()` to use byte length (line 302 in PackParser.java)
 2. ❌ Result: No test improvement (still 14141/14724)
 
+**Detailed Investigation (Session 2025-10-07)**:
+
+Perl's internal representation when W+N mixed:
+```perl
+# pack "W N", 8188, 0x23456781
+Bytes: \xE1\xBF\xBC#Eg\xC2\x81  (8 bytes)
+Chars: \x{1ffc}#Eg\x{81}        (5 characters)
+UTF8 flag: SET
+```
+
+Key findings:
+1. W writes UTF-8 bytes (`e1bfbc` for U+1FFC)
+2. N writes binary bytes (`23456781`)
+3. Binary byte `0x81` gets UTF-8 encoded to `c281` when UTF-8 flag is set
+4. This is Perl's `utf8::upgrade()` behavior
+
+The challenge:
+- packW writes UTF-8 bytes directly
+- When mixed with binary formats, need to UTF-8-upgrade ALL bytes
+- Original UTF-8 decoding fails on invalid UTF-8 sequences
+- ISO-8859-1 approach treats UTF-8 bytes as separate characters
+
+**Attempted fixes**:
+1. ISO-8859-1 decoding: Regressed 40 tests (14141 → 14101)
+2. Conditional packW behavior: Not tested yet
+
+**Correct solution** (needs implementation):
+- packW should write character values that work with final STRING conversion
+- Pack.java needs to handle UTF-8 upgrade like Perl's utf8::upgrade()
+- This is complex - deferring to focus on other failures first
+
+**Deep Dive Session 2 Findings**:
+
+Confirmed lines 1586-1595 (176 failures) are ALSO W format related. Total W format failures: **338 (58% of remaining)**.
+
+**Root architectural issue**:
+- packW writes UTF-8 bytes (e1 bf bc for U+1FFC)
+- When mixed with binary formats, need to UTF-8-upgrade ALL bytes
+- ByteArrayOutputStream stores bytes, not character codes
+- Interpreting UTF-8 bytes as Latin-1 creates wrong characters (3 chars instead of 1)
+
+**Solution requires**:
+1. Store character codes OR use parallel data structure
+2. OR post-process to decode UTF-8 sequences after Latin-1 interpretation
+3. OR change packW to write character codes (but limited to 0-255)
+
+**Decision: DEFER W format** - requires architectural redesign of pack ByteArrayOutputStream approach.
+
 **Next Actions**:
-1. Study Perl's UTF-8 flag behavior in detail
-2. Review how RuntimeScalar handles STRING vs BYTE_STRING conversions
-3. May need to implement proper UTF-8 upgrade/downgrade in jperl
-4. Consider if W format should NOT trigger UTF-8 decoding when mixed with binary formats
+1. Commit PackParser byte length fix (already implemented)
+2. **Focus on ~239 non-W failures** - likely simpler wins
+3. Analyze test 24 (BigInt), test 3401 (quad), tests 4132+ (various)
+4. Return to W format with architectural redesign proposal
 
 ## Other Issues to Investigate Later
 
