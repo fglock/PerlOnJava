@@ -18,6 +18,12 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
     }
 
     public static RuntimeScalar makeLocal(String fullName) {
+        if (fullName.endsWith("::1")) {
+            System.out.println("GlobalRuntimeScalar.makeLocal");
+            var regexVar = GlobalVariable.getGlobalVariable(fullName);
+            DynamicVariableManager.pushLocalVariable(regexVar);
+            return regexVar;
+        }
         var localMarker = new GlobalRuntimeScalar(fullName);
         DynamicVariableManager.pushLocalVariable(localMarker);
         return GlobalVariable.getGlobalVariable(fullName);
