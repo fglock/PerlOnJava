@@ -96,7 +96,12 @@ public class WarnDie {
                 // String message
                 String out = messageStr;
                 if (!out.endsWith("\n")) {
-                    out += where.toString();
+                    String whereStr = where.toString();
+                    out += whereStr;
+                    // Only add newline if where was empty (no location info)
+                    if (whereStr.isEmpty() && !out.endsWith("\n")) {
+                        out += "\n";
+                    }
                 }
                 finalMessage = new RuntimeScalar(out);
             }
