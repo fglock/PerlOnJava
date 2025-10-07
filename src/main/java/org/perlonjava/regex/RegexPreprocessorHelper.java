@@ -262,6 +262,28 @@ public class RegexPreprocessorHelper {
             } else {
                 RegexPreprocessor.regexError(s, offset, "Missing right brace on \\\\p{}");
             }
+        } else if (nextChar == 'o' && offset + 1 < length && s.charAt(offset + 1) == '{') {
+            // Handle \o{...} octal escape construct
+            // Perl allows \o{123} for octal numbers
+            // Java doesn't support this syntax, so convert to \x{hex}
+            offset += 2; // Skip past \o{
+            int endBrace = s.indexOf('}', offset);
+            if (endBrace != -1) {
+                String octalStr = s.substring(offset, endBrace).trim();
+                // Remove underscores (Perl allows them in number literals)
+                octalStr = octalStr.replace("_", "");
+                try {
+                    // Parse as octal and convert to hex
+                    int value = Integer.parseInt(octalStr, 8);
+                    sb.setLength(sb.length() - 1); // Remove the backslash
+                    sb.append(String.format("\\x{%X}", value));
+                    offset = endBrace;
+                } catch (NumberFormatException e) {
+                    RegexPreprocessor.regexError(s, offset, "Invalid octal number in \\o{...}");
+                }
+            } else {
+                RegexPreprocessor.regexError(s, offset, "Missing right brace on \\o{}");
+            }
         } else {
             int c2 = s.codePointAt(offset);
             if (c2 >= '1' && c2 <= '3') {
@@ -431,6 +453,26 @@ public class RegexPreprocessorHelper {
                             RegexPreprocessor.regexError(s, offset - 1, "\\N (non-newline) not supported inside character class");
                         }
                         lastChar = -1;  // Can't use \N in ranges
+                    } else if (offset + 1 < length && s.charAt(offset) == 'o' && s.charAt(offset + 1) == '{') {
+                        // Handle \o{...} octal escape construct in character class
+                        offset += 2; // Skip past \o{
+                        int endBrace = s.indexOf('}', offset);
+                        if (endBrace != -1) {
+                            String octalStr = s.substring(offset, endBrace).trim();
+                            // Remove underscores (Perl allows them in number literals)
+                            octalStr = octalStr.replace("_", "");
+                            try {
+                                // Parse as octal and convert to hex
+                                int value = Integer.parseInt(octalStr, 8);
+                                sb.append(String.format("x{%X}", value));
+                                offset = endBrace;
+                                lastChar = value;
+                            } catch (NumberFormatException e) {
+                                RegexPreprocessor.regexError(s, offset, "Invalid octal number in \\o{...}");
+                            }
+                        } else {
+                            RegexPreprocessor.regexError(s, offset, "Missing right brace on \\o{}");
+                        }
                     } else if (s.codePointAt(offset) == 'b') {
                         rejected.append("\\b"); // Java doesn't support \b inside [...]
                         offset++;
