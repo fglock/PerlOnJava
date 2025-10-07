@@ -476,11 +476,15 @@ public class Operator {
 
         int times = timesScalar.getInt();
         if (ctx == SCALAR || value instanceof RuntimeScalar) {
-            StringBuilder sb = new StringBuilder();
-            for (RuntimeScalar runtimeScalar : value) {
-                sb.append(runtimeScalar.toString());
+            // In scalar context, convert value to scalar first
+            RuntimeScalar scalarValue;
+            if (value instanceof RuntimeScalar) {
+                scalarValue = (RuntimeScalar) value;
+            } else {
+                // Convert to scalar (gets count for arrays, etc.)
+                scalarValue = value.scalar();
             }
-            return new RuntimeScalar(sb.toString().repeat(Math.max(0, times)));
+            return new RuntimeScalar(scalarValue.toString().repeat(Math.max(0, times)));
         } else {
             RuntimeList result = new RuntimeList();
             List<RuntimeBase> outElements = result.elements;
