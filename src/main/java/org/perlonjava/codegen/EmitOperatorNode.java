@@ -60,9 +60,12 @@ public class EmitOperatorNode {
             case "++postfix" -> EmitOperator.handleUnaryDefaultCase(node, "postAutoIncrement", emitterVisitor);
             case "--postfix" -> EmitOperator.handleUnaryDefaultCase(node, "postAutoDecrement", emitterVisitor);
 
+            // Special case for length under "use bytes"
+            case "length" -> EmitOperator.handleLengthOperator(node, emitterVisitor);
+
             // Standard unary functions
             case "abs", "chdir", "chr", "closedir", "cos", "exit", "exp", "fc",
-                 "hex", "lc", "lcfirst", "length", "log",
+                 "hex", "lc", "lcfirst", "log",
                  "oct", "ord", "pos", "quotemeta", "rand", "ref",
                  "rewinddir", "rmdir", "sin", "sleep", "sqrt",
                  "srand", "study", "telldir", "uc", "ucfirst" ->

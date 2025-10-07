@@ -163,6 +163,7 @@ public class GlobalContext {
         ScalarUtil.initialize();
         Strict.initialize();
         IntegerPragma.initialize();
+        BytesPragma.initialize();
         Utf8.initialize();
         Feature.initialize();
         Warnings.initialize();
