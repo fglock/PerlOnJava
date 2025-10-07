@@ -489,10 +489,17 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 yield this.setFromList(list); // Recursive call after vivification
             }
             case TIED_ARRAY -> {
-                // For tied arrays, use proper tied array methods
+                // First, fully materialize the right-hand side list
+                // This is important when the right-hand side contains tied variables
+                RuntimeArray materializedList = new RuntimeArray();
+                for (RuntimeScalar element : list) {
+                    materializedList.push(new RuntimeScalar(element));
+                }
+                
+                // Now clear and repopulate from the materialized list
                 TieArray.tiedClear(this);
                 int index = 0;
-                for (RuntimeScalar element : list) {
+                for (RuntimeScalar element : materializedList) {
                     TieArray.tiedStore(this, getScalarInt(index), element);
                     index++;
                 }
