@@ -1488,12 +1488,12 @@ public class RegexPreprocessor {
                     result.append(between);
                     result.append(yesBranch);
                     
-                    // Second alternative: between+no (if no branch exists)
-                    if (!noBranch.isEmpty() || pipePos > 0) {
-                        result.append("|");
-                        result.append(between);
-                        result.append(noBranch);
-                    }
+                    // Second alternative: between+no
+                    // Always add second alternative (even if noBranch is empty)
+                    // Empty noBranch means "match nothing" when group doesn't match
+                    result.append("|");
+                    result.append(between);
+                    result.append(noBranch);
                     
                     result.append(")");
                     
