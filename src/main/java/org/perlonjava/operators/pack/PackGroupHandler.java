@@ -4,7 +4,6 @@ import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeList;
 import org.perlonjava.runtime.RuntimeScalar;
 
-import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
@@ -59,7 +58,7 @@ public class PackGroupHandler {
      * @throws PerlCompilerException if parentheses are unmatched or endianness conflicts
      */
     public static GroupResult handleGroup(String template, int openPos, List<RuntimeScalar> values,
-                                   ByteArrayOutputStream output, int valueIndex, PackFunction packFunction) {
+                                   PackBuffer output, int valueIndex, PackFunction packFunction) {
         // Find matching closing parenthesis
         int closePos = PackHelper.findMatchingParen(template, openPos);
         if (closePos == -1) {
@@ -210,7 +209,7 @@ public class PackGroupHandler {
      */
     public static int handleSlashConstruct(String template, int position, int slashPos, char format,
                                             List<RuntimeScalar> values, int valueIndex,
-                                            ByteArrayOutputStream output, ParsedModifiers modifiers,
+                                            PackBuffer output, ParsedModifiers modifiers,
                                             PackFunction packFunction) {
         // DEBUG: handling " + format + "/ construct at position " + position
 

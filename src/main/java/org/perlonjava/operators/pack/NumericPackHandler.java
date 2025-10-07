@@ -4,7 +4,7 @@ import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.runtime.ScalarUtils;
 
-import java.io.ByteArrayOutputStream;
+
 import java.math.BigInteger;
 import java.util.List;
 
@@ -60,7 +60,7 @@ public class NumericPackHandler implements PackFormatHandler {
 
     @Override
     public int pack(List<RuntimeScalar> values, int valueIndex, int count, boolean hasStar, 
-                    ParsedModifiers modifiers, ByteArrayOutputStream output) {
+                    ParsedModifiers modifiers, PackBuffer output) {
         for (int j = 0; j < count; j++) {
             RuntimeScalar value;
             if (valueIndex >= values.size()) {

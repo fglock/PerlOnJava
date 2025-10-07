@@ -2,7 +2,7 @@ package org.perlonjava.operators.pack;
 
 import org.perlonjava.runtime.PerlCompilerException;
 
-import java.io.ByteArrayOutputStream;
+
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 
@@ -11,10 +11,10 @@ public class PackWriter {
      * Writes a uuencoded string to the output stream.
      * Uuencoding converts binary data to printable ASCII characters.
      *
-     * @param output The ByteArrayOutputStream to write to.
+     * @param output The PackBuffer to write to.
      * @param str    The string to uuencode.
      */
-    public static void writeUuencodedString(ByteArrayOutputStream output, String str) {
+    public static void writeUuencodedString(PackBuffer output, String str) {
         byte[] bytes = str.getBytes(StandardCharsets.UTF_8);
         int length = bytes.length;
 
@@ -58,12 +58,12 @@ public class PackWriter {
     /**
      * Writes a hex string to the output stream based on the specified format and count.
      *
-     * @param output The ByteArrayOutputStream to write to.
+     * @param output The PackBuffer to write to.
      * @param str    The hex string to write.
      * @param count  The number of hex digits to write.
      * @param format The format character indicating the hex string type ('h' for low nybble first, 'H' for high nybble first).
      */
-    public static void writeHexString(ByteArrayOutputStream output, String str, int count, char format) {
+    public static void writeHexString(PackBuffer output, String str, int count, char format) {
         int hexDigitsToProcess = Math.min(str.length(), count);
 
         // Process pairs of hex digits from the input string
@@ -125,7 +125,7 @@ public class PackWriter {
     /**
      * Write a BER compressed integer
      */
-    public static void writeBER(ByteArrayOutputStream output, long value) {
+    public static void writeBER(PackBuffer output, long value) {
         if (value < 0) {
             throw new PerlCompilerException("Cannot compress negative numbers");
         }
@@ -160,7 +160,7 @@ public class PackWriter {
     /**
      * Write a BER compressed integer using BigInteger for very large values
      */
-    public static void writeBER(ByteArrayOutputStream output, BigInteger value) {
+    public static void writeBER(PackBuffer output, BigInteger value) {
         if (value.signum() < 0) {
             throw new PerlCompilerException("Cannot compress negative numbers");
         }
@@ -195,10 +195,10 @@ public class PackWriter {
     /**
      * Writes a short integer to the output stream in little-endian order.
      *
-     * @param output The ByteArrayOutputStream to write to.
+     * @param output The PackBuffer to write to.
      * @param value  The integer value to write.
      */
-    public static void writeShort(ByteArrayOutputStream output, int value) {
+    public static void writeShort(PackBuffer output, int value) {
         output.write(value & 0xFF);
         output.write((value >> 8) & 0xFF);
     }
@@ -206,10 +206,10 @@ public class PackWriter {
     /**
      * Writes a short integer to the output stream in big-endian order.
      *
-     * @param output The ByteArrayOutputStream to write to.
+     * @param output The PackBuffer to write to.
      * @param value  The integer value to write.
      */
-    public static void writeShortBigEndian(ByteArrayOutputStream output, int value) {
+    public static void writeShortBigEndian(PackBuffer output, int value) {
         output.write((value >> 8) & 0xFF);
         output.write(value & 0xFF);
     }
@@ -217,10 +217,10 @@ public class PackWriter {
     /**
      * Writes a short integer to the output stream in little-endian order.
      *
-     * @param output The ByteArrayOutputStream to write to.
+     * @param output The PackBuffer to write to.
      * @param value  The integer value to write.
      */
-    public static void writeShortLittleEndian(ByteArrayOutputStream output, int value) {
+    public static void writeShortLittleEndian(PackBuffer output, int value) {
         output.write(value & 0xFF);
         output.write((value >> 8) & 0xFF);
     }
@@ -228,10 +228,10 @@ public class PackWriter {
     /**
      * Writes a 32-bit integer to the output stream in little-endian order.
      *
-     * @param output The ByteArrayOutputStream to write to.
+     * @param output The PackBuffer to write to.
      * @param value  The integer value to write.
      */
-    private static void writeInt(ByteArrayOutputStream output, int value) {
+    private static void writeInt(PackBuffer output, int value) {
         output.write(value & 0xFF);
         output.write((value >> 8) & 0xFF);
         output.write((value >> 16) & 0xFF);
@@ -241,10 +241,10 @@ public class PackWriter {
     /**
      * Writes a 32-bit integer to the output stream in big-endian order.
      *
-     * @param output The ByteArrayOutputStream to write to.
+     * @param output The PackBuffer to write to.
      * @param value  The long value to write.
      */
-    public static void writeIntBigEndian(ByteArrayOutputStream output, long value) {
+    public static void writeIntBigEndian(PackBuffer output, long value) {
         output.write((int) ((value >> 24) & 0xFF));
         output.write((int) ((value >> 16) & 0xFF));
         output.write((int) ((value >> 8) & 0xFF));
@@ -254,10 +254,10 @@ public class PackWriter {
     /**
      * Writes a 32-bit integer to the output stream in little-endian order.
      *
-     * @param output The ByteArrayOutputStream to write to.
+     * @param output The PackBuffer to write to.
      * @param value  The long value to write.
      */
-    public static void writeIntLittleEndian(ByteArrayOutputStream output, long value) {
+    public static void writeIntLittleEndian(PackBuffer output, long value) {
         output.write((int) (value & 0xFF));
         output.write((int) ((value >> 8) & 0xFF));
         output.write((int) ((value >> 16) & 0xFF));
@@ -267,10 +267,10 @@ public class PackWriter {
     /**
      * Writes a long integer to the output stream in little-endian order (4 bytes).
      *
-     * @param output The ByteArrayOutputStream to write to.
+     * @param output The PackBuffer to write to.
      * @param value  The long value to write.
      */
-    public static void writeLong(ByteArrayOutputStream output, long value) {
+    public static void writeLong(PackBuffer output, long value) {
         output.write((int) (value & 0xFF));
         output.write((int) ((value >> 8) & 0xFF));
         output.write((int) ((value >> 16) & 0xFF));
@@ -280,10 +280,10 @@ public class PackWriter {
     /**
      * Writes a 64-bit long integer to the output stream in little-endian order (8 bytes).
      *
-     * @param output The ByteArrayOutputStream to write to.
+     * @param output The PackBuffer to write to.
      * @param value  The long value to write.
      */
-    public static void writeLongLittleEndian(ByteArrayOutputStream output, long value) {
+    public static void writeLongLittleEndian(PackBuffer output, long value) {
         output.write((int) (value & 0xFF));
         output.write((int) ((value >> 8) & 0xFF));
         output.write((int) ((value >> 16) & 0xFF));
@@ -297,10 +297,10 @@ public class PackWriter {
     /**
      * Writes a 64-bit long integer to the output stream in big-endian order (8 bytes).
      *
-     * @param output The ByteArrayOutputStream to write to.
+     * @param output The PackBuffer to write to.
      * @param value  The long value to write.
      */
-    public static void writeLongBigEndian(ByteArrayOutputStream output, long value) {
+    public static void writeLongBigEndian(PackBuffer output, long value) {
         output.write((int) ((value >> 56) & 0xFF));
         output.write((int) ((value >> 48) & 0xFF));
         output.write((int) ((value >> 40) & 0xFF));
@@ -314,10 +314,10 @@ public class PackWriter {
     /**
      * Writes a float to the output stream in little-endian order.
      *
-     * @param output The ByteArrayOutputStream to write to.
+     * @param output The PackBuffer to write to.
      * @param value  The float value to write.
      */
-    public static void writeFloat(ByteArrayOutputStream output, float value) {
+    public static void writeFloat(PackBuffer output, float value) {
         int intBits = Float.floatToIntBits(value);
         writeInt(output, intBits);
     }
@@ -325,10 +325,10 @@ public class PackWriter {
     /**
      * Writes a double to the output stream in little-endian order.
      *
-     * @param output The ByteArrayOutputStream to write to.
+     * @param output The PackBuffer to write to.
      * @param value  The double value to write.
      */
-    public static void writeDouble(ByteArrayOutputStream output, double value) {
+    public static void writeDouble(PackBuffer output, double value) {
         long longBits = Double.doubleToLongBits(value);
         output.write((int) (longBits & 0xFF));
         output.write((int) ((longBits >> 8) & 0xFF));
@@ -343,10 +343,10 @@ public class PackWriter {
     /**
      * Writes a float to the output stream in big-endian order.
      *
-     * @param output The ByteArrayOutputStream to write to.
+     * @param output The PackBuffer to write to.
      * @param value  The float value to write.
      */
-    public static void writeFloatBigEndian(ByteArrayOutputStream output, float value) {
+    public static void writeFloatBigEndian(PackBuffer output, float value) {
         int intBits = Float.floatToIntBits(value);
         writeIntBigEndian(output, (long) intBits);
     }
@@ -354,10 +354,10 @@ public class PackWriter {
     /**
      * Writes a float to the output stream in little-endian order.
      *
-     * @param output The ByteArrayOutputStream to write to.
+     * @param output The PackBuffer to write to.
      * @param value  The float value to write.
      */
-    public static void writeFloatLittleEndian(ByteArrayOutputStream output, float value) {
+    public static void writeFloatLittleEndian(PackBuffer output, float value) {
         int intBits = Float.floatToIntBits(value);
         writeIntLittleEndian(output, (long) intBits);
     }
@@ -365,10 +365,10 @@ public class PackWriter {
     /**
      * Writes a double to the output stream in big-endian order.
      *
-     * @param output The ByteArrayOutputStream to write to.
+     * @param output The PackBuffer to write to.
      * @param value  The double value to write.
      */
-    public static void writeDoubleBigEndian(ByteArrayOutputStream output, double value) {
+    public static void writeDoubleBigEndian(PackBuffer output, double value) {
         long longBits = Double.doubleToLongBits(value);
         output.write((int) ((longBits >> 56) & 0xFF));
         output.write((int) ((longBits >> 48) & 0xFF));
@@ -383,10 +383,10 @@ public class PackWriter {
     /**
      * Writes a double to the output stream in little-endian order.
      *
-     * @param output The ByteArrayOutputStream to write to.
+     * @param output The PackBuffer to write to.
      * @param value  The double value to write.
      */
-    public static void writeDoubleLittleEndian(ByteArrayOutputStream output, double value) {
+    public static void writeDoubleLittleEndian(PackBuffer output, double value) {
         long longBits = Double.doubleToLongBits(value);
         output.write((int) (longBits & 0xFF));
         output.write((int) ((longBits >> 8) & 0xFF));
@@ -401,13 +401,13 @@ public class PackWriter {
     /**
      * Writes a string to the output stream based on the specified format and count.
      *
-     * @param output   The ByteArrayOutputStream to write to.
+     * @param output   The PackBuffer to write to.
      * @param str      The string to write.
      * @param count    The number of characters to write.
      * @param format   The format character indicating the string type.
      * @param byteMode Whether we're in character mode (C0) or byte mode (U0)
      */
-    public static void writeString(ByteArrayOutputStream output, String str, int count, char format, boolean byteMode) {
+    public static void writeString(PackBuffer output, String str, int count, char format, boolean byteMode) {
         byte[] bytes;
 
         if (byteMode && format == 'a') {
@@ -453,12 +453,12 @@ public class PackWriter {
     /**
      * Writes a bit string to the output stream based on the specified format and count.
      *
-     * @param output The ByteArrayOutputStream to write to.
+     * @param output The PackBuffer to write to.
      * @param str    The bit string to write.
      * @param count  The number of bits to write.
      * @param format The format character indicating the bit string type.
      */
-    public static void writeBitString(ByteArrayOutputStream output, String str, int count, char format) {
+    public static void writeBitString(PackBuffer output, String str, int count, char format) {
         int bitIndex = 0;
         int byteValue = 0;
         int bitsToProcess = Math.min(str.length(), count);
