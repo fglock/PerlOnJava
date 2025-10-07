@@ -277,8 +277,9 @@ public class Pack {
                 int slashPos = PackHelper.checkForSlashConstruct(template, i);
                 if (slashPos != -1) {
                     // DEBUG: Detected slash construct for format '" + format + "' at position " + i
-                    i = PackGroupHandler.handleSlashConstruct(template, i, slashPos, format, values, valueIndex, output, modifiers, Pack::pack);
-                    valueIndex++;
+                    PackGroupHandler.GroupResult result = PackGroupHandler.handleSlashConstruct(template, i, slashPos, format, values, valueIndex, output, modifiers, Pack::pack);
+                    i = result.position();
+                    valueIndex = result.valueIndex();
                     continue;
                 }
             }
