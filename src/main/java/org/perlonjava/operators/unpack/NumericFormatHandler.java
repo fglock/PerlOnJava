@@ -131,11 +131,18 @@ public abstract class NumericFormatHandler implements FormatHandler {
                 if (signed) {
                     output.add(new RuntimeScalar(value));
                 } else {
-                    // For unsigned, handle conversion properly
+                    // For unsigned Q format, we need to preserve precision
+                    // For 32-bit Perl emulation, values > 2^53 lose precision as doubles
                     if (value < 0) {
-                        // Convert to unsigned representation
+                        // Negative values represent large unsigned values
+                        // Store as string to preserve full unsigned value
                         output.add(new RuntimeScalar(Long.toUnsignedString(value)));
+                    } else if (value > 9007199254740992L) { // 2^53
+                        // Positive values > 2^53 lose precision as doubles
+                        // Store as string to preserve exact value
+                        output.add(new RuntimeScalar(Long.toString(value)));
                     } else {
+                        // Value can be stored exactly
                         output.add(new RuntimeScalar(value));
                     }
                 }

@@ -17,6 +17,46 @@ public class NumericPackHandler implements PackFormatHandler {
     public NumericPackHandler(char format) {
         this.format = format;
     }
+    
+    /**
+     * Get the 64-bit value for unsigned formats Q and J.
+     * Handles large unsigned values that might be stored as strings or doubles.
+     */
+    private static long getUnsigned64BitValue(RuntimeScalar value) {
+        // For string values, try to parse as exact integer
+        if (value.type == org.perlonjava.runtime.RuntimeScalarType.STRING ||
+            value.type == org.perlonjava.runtime.RuntimeScalarType.BYTE_STRING) {
+            String str = value.toString();
+            try {
+                // Remove scientific notation marker if present
+                if (!str.contains("e") && !str.contains("E") && !str.contains(".")) {
+                    // Plain integer string - parse as BigInteger for exact value
+                    BigInteger bigVal = new BigInteger(str);
+                    return bigVal.longValue();
+                }
+            } catch (NumberFormatException e) {
+                // Fall through to double handling
+            }
+        }
+        
+        // For doubles, handle values > Long.MAX_VALUE specially
+        if (value.type == org.perlonjava.runtime.RuntimeScalarType.DOUBLE) {
+            double d = value.getDouble();
+            // For Q format, we need to handle unsigned values up to 2^64-1
+            // These are stored as doubles in 32-bit Perl emulation
+            if (d >= 18446744073709551615.0) { // Close to 2^64-1
+                return -1L; // 0xFFFFFFFFFFFFFFFF
+            } else if (d >= 9223372036854775808.0) { // >= 2^63
+                // Map to negative range
+                return (long)(d - 18446744073709551616.0); // Subtract 2^64
+            } else {
+                return (long) d;
+            }
+        }
+        
+        // For other types, use getLong()
+        return value.getLong();
+    }
 
     @Override
     public int pack(List<RuntimeScalar> values, int valueIndex, int count, boolean hasStar, 
@@ -196,33 +236,37 @@ public class NumericPackHandler implements PackFormatHandler {
                 case 'j':
                     // Perl internal signed integer (8 bytes) - use endianness if specified
                     if (modifiers.bigEndian) {
-                        PackWriter.writeLongBigEndian(output, (long) value.getDouble());
+                        PackWriter.writeLongBigEndian(output, value.getLong());
                     } else {
-                        PackWriter.writeLongLittleEndian(output, (long) value.getDouble());
+                        PackWriter.writeLongLittleEndian(output, value.getLong());
                     }
                     break;
                 case 'J':
                     // Perl internal unsigned integer (8 bytes) - use endianness if specified
+                    // Handle large unsigned values that might be stored as strings
+                    long jval = getUnsigned64BitValue(value);
                     if (modifiers.bigEndian) {
-                        PackWriter.writeLongBigEndian(output, (long) value.getDouble());
+                        PackWriter.writeLongBigEndian(output, jval);
                     } else {
-                        PackWriter.writeLongLittleEndian(output, (long) value.getDouble());
+                        PackWriter.writeLongLittleEndian(output, jval);
                     }
                     break;
                 case 'q':
                     // Signed 64-bit quad - use endianness if specified
                     if (modifiers.bigEndian) {
-                        PackWriter.writeLongBigEndian(output, (long) value.getDouble());
+                        PackWriter.writeLongBigEndian(output, value.getLong());
                     } else {
-                        PackWriter.writeLongLittleEndian(output, (long) value.getDouble());
+                        PackWriter.writeLongLittleEndian(output, value.getLong());
                     }
                     break;
                 case 'Q':
                     // Unsigned 64-bit quad - use endianness if specified
+                    // Handle large unsigned values that might be stored as strings
+                    long qval = getUnsigned64BitValue(value);
                     if (modifiers.bigEndian) {
-                        PackWriter.writeLongBigEndian(output, (long) value.getDouble());
+                        PackWriter.writeLongBigEndian(output, qval);
                     } else {
-                        PackWriter.writeLongLittleEndian(output, (long) value.getDouble());
+                        PackWriter.writeLongLittleEndian(output, qval);
                     }
                     break;
                 case 'f':
