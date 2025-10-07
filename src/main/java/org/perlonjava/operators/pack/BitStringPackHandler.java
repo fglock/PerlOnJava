@@ -2,7 +2,7 @@ package org.perlonjava.operators.pack;
 
 import org.perlonjava.runtime.RuntimeScalar;
 
-import java.io.ByteArrayOutputStream;
+
 import java.util.List;
 
 /**
@@ -17,7 +17,7 @@ public class BitStringPackHandler implements PackFormatHandler {
 
     @Override
     public int pack(List<RuntimeScalar> values, int valueIndex, int count, boolean hasStar, 
-                    ParsedModifiers modifiers, ByteArrayOutputStream output) {
+                    ParsedModifiers modifiers, PackBuffer output) {
         RuntimeScalar value;
         if (valueIndex >= values.size()) {
             // If no more arguments, use empty string as per Perl behavior

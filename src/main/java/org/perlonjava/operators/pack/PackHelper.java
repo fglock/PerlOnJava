@@ -5,7 +5,7 @@ import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.runtime.RuntimeList;
 import org.perlonjava.runtime.RuntimeScalarType;
 
-import java.io.ByteArrayOutputStream;
+
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -150,7 +150,7 @@ public class PackHelper {
      * @param output the output stream to write packed data
      * @return updated value index after consuming the string value
      */
-    public static int handleStringFormat(int valueIndex, List<RuntimeScalar> values, boolean hasStar, char format, int count, boolean byteMode, ByteArrayOutputStream output) {
+    public static int handleStringFormat(int valueIndex, List<RuntimeScalar> values, boolean hasStar, char format, int count, boolean byteMode, PackBuffer output) {
         // String formats consume only one value
         RuntimeScalar value;
         if (valueIndex >= values.size()) {
@@ -252,7 +252,7 @@ public class PackHelper {
      * @param output the output stream to write packed data
      * @return whether we have used Unicode in normal mode
      */
-    public static boolean packW(RuntimeScalar value, boolean byteMode, boolean hasUnicodeInNormalMode, ByteArrayOutputStream output) {
+    public static boolean packW(RuntimeScalar value, boolean byteMode, boolean hasUnicodeInNormalMode, PackBuffer output) {
         // Check for Inf/NaN first, before any other processing
         handleInfinity(value, 'W');
         
@@ -271,26 +271,18 @@ public class PackHelper {
             hasUnicodeInNormalMode = true;
         }
 
-        // W format always writes UTF-8 encoded bytes
-        // The difference between modes is handled at the final string conversion
+        // W format writes character codes (not UTF-8 bytes)
+        // PackBuffer will handle the encoding when creating the final string
         // Unlike U format, W doesn't validate the Unicode range
-        try {
-            if (Character.isValidCodePoint(codePoint)) {
-                String unicodeChar = new String(Character.toChars(codePoint));
-                byte[] utf8Bytes = unicodeChar.getBytes(StandardCharsets.UTF_8);
-                output.write(utf8Bytes);
-            } else {
-                // Beyond Unicode range - wrap to valid range without throwing exception
-                int wrappedValue = codePoint & 0x1FFFFF; // 21 bits
-                if (wrappedValue > 0x10FFFF) {
-                    wrappedValue = wrappedValue % 0x110000; // Modulo to fit in Unicode range
-                }
-                String unicodeChar = new String(Character.toChars(wrappedValue));
-                byte[] utf8Bytes = unicodeChar.getBytes(StandardCharsets.UTF_8);
-                output.write(utf8Bytes);
+        if (Character.isValidCodePoint(codePoint)) {
+            output.writeCharacter(codePoint);
+        } else {
+            // Beyond Unicode range - wrap to valid range without throwing exception
+            int wrappedValue = codePoint & 0x1FFFFF; // 21 bits
+            if (wrappedValue > 0x10FFFF) {
+                wrappedValue = wrappedValue % 0x110000; // Modulo to fit in Unicode range
             }
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+            output.writeCharacter(wrappedValue);
         }
         return hasUnicodeInNormalMode;
     }
@@ -319,7 +311,7 @@ public class PackHelper {
      * @throws PerlCompilerException if the code point is invalid
      * @throws RuntimeException if I/O error occurs during writing
      */
-    public static boolean packU(RuntimeScalar value, boolean byteMode, boolean hasUnicodeInNormalMode, ByteArrayOutputStream output) {
+    public static boolean packU(RuntimeScalar value, boolean byteMode, boolean hasUnicodeInNormalMode, PackBuffer output) {
         // Pack a Unicode character number as UTF-8
         // Check for Inf/NaN first, before any other processing
         handleInfinity(value, 'U');
@@ -339,16 +331,10 @@ public class PackHelper {
             hasUnicodeInNormalMode = true;
         }
 
-        // U format always writes UTF-8 encoded bytes
-        // The difference between modes is handled at the final string conversion
+        // U format writes character codes (like W but validates Unicode range)
+        // PackBuffer will handle the encoding when creating the final string
         if (Character.isValidCodePoint(codePoint1)) {
-            String unicodeChar1 = new String(Character.toChars(codePoint1));
-            byte[] utf8Bytes1 = unicodeChar1.getBytes(StandardCharsets.UTF_8);
-            try {
-                output.write(utf8Bytes1);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
+            output.writeCharacter(codePoint1);
         } else {
             throw new PerlCompilerException("pack: invalid Unicode code point: " + codePoint1);
         }
@@ -368,7 +354,7 @@ public class PackHelper {
      */
     public static boolean handleUnicode(List<RuntimeScalar> values, int valueIndex, int count,
                                          boolean byteMode, boolean hasUnicodeInNormalMode,
-                                         ByteArrayOutputStream output) {
+                                         PackBuffer output) {
         for (int j = 0; j < count; j++) {
             RuntimeScalar value;
             if (valueIndex + j >= values.size()) {
@@ -396,7 +382,7 @@ public class PackHelper {
      */
     public static boolean handleWideCharacter(List<RuntimeScalar> values, int valueIndex, int count,
                                                boolean byteMode, boolean hasUnicodeInNormalMode,
-                                               ByteArrayOutputStream output) {
+                                               PackBuffer output) {
         for (int j = 0; j < count; j++) {
             RuntimeScalar value;
             if (valueIndex + j >= values.size()) {
@@ -418,7 +404,7 @@ public class PackHelper {
      * @param length The length to pack
      * @param modifiers The modifiers for the format
      */
-    public static void packLength(ByteArrayOutputStream output, char format, int length, ParsedModifiers modifiers) {
+    public static void packLength(PackBuffer output, char format, int length, ParsedModifiers modifiers) {
         // DEBUG: packing length " + length + " with format '" + format + "'"
 
         switch (format) {

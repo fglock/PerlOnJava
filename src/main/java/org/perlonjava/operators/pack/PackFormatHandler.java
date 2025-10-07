@@ -2,7 +2,6 @@ package org.perlonjava.operators.pack;
 
 import org.perlonjava.runtime.RuntimeScalar;
 
-import java.io.ByteArrayOutputStream;
 import java.util.List;
 
 /**
@@ -17,9 +16,9 @@ public interface PackFormatHandler {
      * @param count      The number of items to pack
      * @param hasStar    Whether the count is '*' (pack all remaining)
      * @param modifiers  The parsed modifiers for this format
-     * @param output     The output stream to write packed data to
+     * @param output     The output buffer to write packed data to
      * @return The new index in the values list after packing
      */
     int pack(List<RuntimeScalar> values, int valueIndex, int count, boolean hasStar, 
-             ParsedModifiers modifiers, ByteArrayOutputStream output);
+             ParsedModifiers modifiers, PackBuffer output);
 }

@@ -2,7 +2,7 @@ package org.perlonjava.operators.pack;
 
 import org.perlonjava.runtime.RuntimeScalar;
 
-import java.io.ByteArrayOutputStream;
+
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,7 +31,7 @@ public class PointerPackHandler implements PackFormatHandler {
 
     @Override
     public int pack(List<RuntimeScalar> values, int valueIndex, int count, boolean hasStar, 
-                    ParsedModifiers modifiers, ByteArrayOutputStream output) {
+                    ParsedModifiers modifiers, PackBuffer output) {
         // For P format, count specifies the guaranteed length of the pointed-to string,
         // not a repeat count. We always pack exactly one pointer.
         RuntimeScalar value;

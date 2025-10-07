@@ -3,7 +3,7 @@ package org.perlonjava.operators.pack;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeScalar;
 
-import java.io.ByteArrayOutputStream;
+
 import java.util.List;
 
 /**
@@ -18,7 +18,7 @@ public class ControlPackHandler implements PackFormatHandler {
 
     @Override
     public int pack(List<RuntimeScalar> values, int valueIndex, int count, boolean hasStar, 
-                    ParsedModifiers modifiers, ByteArrayOutputStream output) {
+                    ParsedModifiers modifiers, PackBuffer output) {
         switch (format) {
             case 'x':
                 // When nativeSize is true (x!N), align to N-byte boundary
@@ -80,7 +80,7 @@ public class ControlPackHandler implements PackFormatHandler {
      * @param alignment The alignment boundary (e.g., 8 for 8-byte alignment)
      * @param output The output stream
      */
-    private static void handleAlignment(int alignment, ByteArrayOutputStream output) {
+    private static void handleAlignment(int alignment, PackBuffer output) {
         int currentPosition = output.size();
         // Calculate padding needed: (alignment - (position % alignment)) % alignment
         int padding = (alignment - (currentPosition % alignment)) % alignment;
@@ -95,7 +95,7 @@ public class ControlPackHandler implements PackFormatHandler {
      * @param count The number of null bytes to write
      * @param output The output stream
      */
-    private static void handleNullPadding(int count, ByteArrayOutputStream output) {
+    private static void handleNullPadding(int count, PackBuffer output) {
         for (int j = 0; j < count; j++) {
             output.write(0);
         }
@@ -107,7 +107,7 @@ public class ControlPackHandler implements PackFormatHandler {
      * @param targetPosition The target position
      * @param output The output stream
      */
-    private static void handleAbsolutePosition(int targetPosition, ByteArrayOutputStream output) {
+    private static void handleAbsolutePosition(int targetPosition, PackBuffer output) {
         int currentPosition = output.size();
 
         if (targetPosition > currentPosition) {
@@ -130,7 +130,7 @@ public class ControlPackHandler implements PackFormatHandler {
      * @param count The number of bytes to back up
      * @param output The output stream
      */
-    private static void handleBackup(int count, ByteArrayOutputStream output) {
+    private static void handleBackup(int count, PackBuffer output) {
         // DEBUG: handleBackup called with count=" + count + ", current size=" + output.size()
         int currentSize = output.size();
 
@@ -158,7 +158,7 @@ public class ControlPackHandler implements PackFormatHandler {
      * @param alignment The alignment boundary (e.g., 4 for 4-byte alignment)
      * @param output The output stream
      */
-    private static void handleBackupToAlignment(int alignment, ByteArrayOutputStream output) {
+    private static void handleBackupToAlignment(int alignment, PackBuffer output) {
         int currentSize = output.size();
         // Calculate the position of the previous alignment boundary
         // For position P and alignment A: aligned_pos = (P / A) * A

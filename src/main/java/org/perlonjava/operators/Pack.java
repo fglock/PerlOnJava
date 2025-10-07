@@ -201,7 +201,7 @@ public class Pack {
         RuntimeArray flattened = new RuntimeArray(remainingArgs.toArray(new RuntimeBase[0]));
         List<RuntimeScalar> values = flattened.elements;
 
-        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        PackBuffer output = new PackBuffer();
         int valueIndex = 0;
 
         // Track current mode - default is normal/character mode
@@ -358,16 +358,14 @@ public class Pack {
             }
         }
 
-        // Convert the byte array to a string
-        byte[] bytes = output.toByteArray();
-
-        // Return UTF-8 decoded string only if we never used byte mode AND used U in character mode
+        // Convert buffer to string based on whether UTF-8 flag should be set
         if (!byteModeUsed && hasUnicodeInNormalMode) {
-            // Pure character mode with U format - decode UTF-8
-            return new RuntimeScalar(new String(bytes, StandardCharsets.UTF_8));
+            // UTF-8 flag set: interpret all values as Latin-1 characters
+            // This matches Perl's utf8::upgrade behavior where each byte becomes a character
+            return new RuntimeScalar(output.toUpgradedString());
         } else {
-            // Mixed mode or byte mode - return as byte string
-            return new RuntimeScalar(bytes);
+            // No UTF-8 flag: return as byte string
+            return new RuntimeScalar(output.toByteArray());
         }
     }
 }
