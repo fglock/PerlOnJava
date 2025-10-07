@@ -56,10 +56,144 @@ public class RegexPreprocessor {
 
         s = convertPythonStyleGroups(s);
         s = transformSimpleConditionals(s);
+        s = removeUnderscoresFromEscapes(s);
+        s = normalizeQuantifiers(s);
         StringBuilder sb = new StringBuilder();
         handleRegex(s, 0, sb, regexFlags, false);
         String result = sb.toString();
         return result;
+    }
+    
+    /**
+     * Remove underscores from \x{...} and \o{...} escape sequences.
+     * Perl allows underscores in numeric literals for readability, but Java doesn't.
+     * Example: \x{_1_0000} becomes \x{10000}
+     */
+    private static String removeUnderscoresFromEscapes(String pattern) {
+        StringBuilder result = new StringBuilder();
+        int i = 0;
+        int len = pattern.length();
+        
+        while (i < len) {
+            if (i + 2 < len && pattern.charAt(i) == '\\' && 
+                (pattern.charAt(i + 1) == 'x' || pattern.charAt(i + 1) == 'o') &&
+                pattern.charAt(i + 2) == '{') {
+                // Found \x{ or \o{
+                result.append(pattern.charAt(i));   // \
+                result.append(pattern.charAt(i + 1)); // x or o
+                result.append('{');
+                i += 3;
+                
+                // Copy content until }, removing underscores
+                while (i < len && pattern.charAt(i) != '}') {
+                    char ch = pattern.charAt(i);
+                    if (ch != '_') {
+                        result.append(ch);
+                    }
+                    i++;
+                }
+                
+                if (i < len) {
+                    result.append('}'); // Closing brace
+                    i++;
+                }
+            } else {
+                result.append(pattern.charAt(i));
+                i++;
+            }
+        }
+        
+        return result.toString();
+    }
+    
+    /**
+     * Normalize quantifiers to Java regex format.
+     * Perl allows {,n} to mean {0,n} (omitting minimum).
+     * Perl allows spaces inside quantifiers like {2, 5} or { , 2 }.
+     * Java requires explicit {0,n} and no spaces (unless in /x mode).
+     * Example: {,2} becomes {0,2}, { , 2 } becomes {0,2}
+     */
+    private static String normalizeQuantifiers(String pattern) {
+        StringBuilder result = new StringBuilder();
+        int i = 0;
+        int len = pattern.length();
+        boolean inCharClass = false;
+        boolean escaped = false;
+        
+        while (i < len) {
+            char ch = pattern.charAt(i);
+            
+            if (escaped) {
+                result.append(ch);
+                escaped = false;
+                i++;
+                continue;
+            }
+            
+            if (ch == '\\') {
+                result.append(ch);
+                escaped = true;
+                i++;
+                continue;
+            }
+            
+            if (ch == '[') {
+                inCharClass = true;
+                result.append(ch);
+                i++;
+                continue;
+            }
+            
+            if (ch == ']' && inCharClass) {
+                inCharClass = false;
+                result.append(ch);
+                i++;
+                continue;
+            }
+            
+            if (ch == '{' && !inCharClass) {
+                // Potential quantifier
+                int start = i;
+                i++;
+                StringBuilder quantifier = new StringBuilder();
+                
+                // Read the quantifier content
+                while (i < len && pattern.charAt(i) != '}') {
+                    quantifier.append(pattern.charAt(i));
+                    i++;
+                }
+                
+                if (i < len && pattern.charAt(i) == '}') {
+                    // We have a complete quantifier
+                    String content = quantifier.toString().trim();
+                    
+                    // Check if it's a {,n} pattern or has spaces
+                    if (content.matches("\\s*,\\s*\\d+\\s*")) {
+                        // {,n} pattern - add 0 at the start
+                        content = content.replaceAll("\\s*,\\s*(\\d+)\\s*", "0,$1");
+                        result.append('{').append(content).append('}');
+                        i++;
+                    } else if (content.contains(",") && content.matches(".*\\s+.*")) {
+                        // Has comma and spaces - remove spaces
+                        content = content.replaceAll("\\s+", "");
+                        result.append('{').append(content).append('}');
+                        i++;
+                    } else {
+                        // Normal quantifier, keep as-is
+                        result.append('{').append(quantifier).append('}');
+                        i++;
+                    }
+                } else {
+                    // Unclosed {, not a quantifier - keep as-is
+                    result.append('{').append(quantifier);
+                }
+            } else {
+                result.append(ch);
+                i++;
+            }
+        }
+        
+        return result.toString();
     }
 
     /**
