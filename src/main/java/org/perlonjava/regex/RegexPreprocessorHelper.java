@@ -18,8 +18,33 @@ public class RegexPreprocessorHelper {
 
         char nextChar = s.charAt(offset);
 
-        // Check for numeric backreferences
+        // Check for numeric backreferences vs octal escapes
+        // In Perl: \400, \600, \777 are octals (> 255), not backreferences
+        // But \1-\9 followed by non-octal digits are backreferences
+        boolean isOctalNotBackref = false;
         if (nextChar >= '1' && nextChar <= '9') {
+            // Check if this might be a 3-digit octal > 255
+            if (nextChar >= '1' && nextChar <= '7' && offset + 2 < length) {
+                int d1 = nextChar - '0';
+                char c2 = s.charAt(offset + 1);
+                char c3 = offset + 2 < length ? s.charAt(offset + 2) : '\0';
+                
+                if (c2 >= '0' && c2 <= '7' && c3 >= '0' && c3 <= '7') {
+                    int octalValue = d1 * 64 + (c2 - '0') * 8 + (c3 - '0');
+                    if (octalValue > 255) {
+                        // This is an octal escape, not a backreference
+                        // Fall through to octal handling below at line ~320
+                        // Leave the backslash in sb for the octal handler to manage
+                        // offset stays pointing to the first octal digit ('4' in \400)
+                        isOctalNotBackref = true;
+                    }
+                    // else: It's a 3-digit octal <= 255, treat as backreference
+                    // (Perl's behavior: \1-\377 are backreferences if groups exist)
+                }
+            }
+        }
+        
+        if (!isOctalNotBackref && nextChar >= '1' && nextChar <= '9') {
             // This is a backreference like \1, \2, etc.
             int refNum = nextChar - '0';
 
