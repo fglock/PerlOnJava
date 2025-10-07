@@ -204,10 +204,10 @@ public class PackGroupHandler {
      * @param output The output stream
      * @param modifiers The modifiers for the format
      * @param packFunction Function to call for recursive packing
-     * @return The new position in the template string
+     * @return GroupResult containing template position and updated value index
      * @throws PerlCompilerException if slash construct is malformed
      */
-    public static int handleSlashConstruct(String template, int position, int slashPos, char format,
+    public static GroupResult handleSlashConstruct(String template, int position, int slashPos, char format,
                                             List<RuntimeScalar> values, int valueIndex,
                                             PackBuffer output, ParsedModifiers modifiers,
                                             PackFunction packFunction) {
@@ -228,7 +228,10 @@ public class PackGroupHandler {
 
         // Parse string count
         ParsedCount stringCountInfo = PackParser.parseRepeatCount(template, stringPos);
-        int stringCount = stringCountInfo.hasStar ? -1 : stringCountInfo.count;
+        // In Perl, N/S without explicit count means "pack all remaining values" (like N/S*)
+        // If no count was specified, endPosition stays at stringPos
+        boolean noCountSpecified = (stringCountInfo.endPosition == stringPos);
+        int stringCount = stringCountInfo.hasStar || noCountSpecified ? -1 : stringCountInfo.count;
         int endPos = stringCountInfo.endPosition;
 
         // Get the string value - handle missing arguments gracefully
@@ -320,7 +323,7 @@ public class PackGroupHandler {
             }
 
             // Return the position after consuming the correct number of values
-            return endPos;
+            return new GroupResult(endPos, valueIndex);
         }
 
         // Pack the length using the numeric format
@@ -332,6 +335,7 @@ public class PackGroupHandler {
             output.write(0); // null terminator
         }
 
-        return endPos;
+        // For string formats, we consumed exactly 1 value
+        return new GroupResult(endPos, valueIndex + 1);
     }
 }
