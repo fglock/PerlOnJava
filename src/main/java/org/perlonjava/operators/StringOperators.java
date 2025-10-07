@@ -338,6 +338,40 @@ public class StringOperators {
         return new RuntimeScalar(String.valueOf((char) 0xFFFD));
     }
 
+    /**
+     * Returns a character from a code point when 'use bytes' pragma is in effect.
+     * This treats the value as a byte value (0-255) and wraps negative values.
+     *
+     * @param runtimeScalar the {@link RuntimeScalar} containing the code point
+     * @return a {@link RuntimeScalar} containing the corresponding character
+     */
+    public static RuntimeScalar chrBytes(RuntimeScalar runtimeScalar) {
+        // Convert string type to number if necessary
+        if (runtimeScalar.isString()) {
+            runtimeScalar = NumberParser.parseNumber(runtimeScalar);
+        }
+
+        int codePoint = runtimeScalar.getInt();
+
+        // Handle special double values
+        if (runtimeScalar.type == RuntimeScalarType.DOUBLE) {
+            double doubleValue = runtimeScalar.getDouble();
+            if (Double.isInfinite(doubleValue) || Double.isNaN(doubleValue)) {
+                String value = Double.isNaN(doubleValue) ? "NaN" :
+                        (doubleValue > 0 ? "Inf" : "-Inf");
+                throw new PerlCompilerException("Cannot chr " + value);
+            }
+        }
+
+        // In bytes mode, wrap the value modulo 256
+        codePoint = codePoint & 0xFF;
+
+        // Create character from byte value
+        RuntimeScalar res = new RuntimeScalar(String.valueOf((char) codePoint));
+        res.type = BYTE_STRING;
+        return res;
+    }
+
     public static RuntimeScalar join(RuntimeScalar runtimeScalar, RuntimeBase list) {
 
         // TODO - convert octet string back to unicode if needed
