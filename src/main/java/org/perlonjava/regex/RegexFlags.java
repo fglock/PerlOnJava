@@ -44,7 +44,7 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
 
     public static void validateModifiers(String modifiers) {
         // Valid modifiers based on what's actually handled in fromModifiers
-        String validModifiers = "gcr?noimsxpadeu"; // Add 'xx' handling separately
+        String validModifiers = "gcr?noimsxpadeul"; // Add 'xx' handling separately, 'l' for locale
 
         for (int i = 0; i < modifiers.length(); i++) {
             char modifier = modifiers.charAt(i);
