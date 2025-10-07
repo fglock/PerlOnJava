@@ -297,7 +297,9 @@ public class PackParser {
             
             // Pack the data and measure the result
             org.perlonjava.runtime.RuntimeScalar result = org.perlonjava.operators.Pack.pack(args);
-            return result.toString().length();
+            // Use byte length, not character length (important for UTF-8 data from W/U formats)
+            // Get as ISO_8859_1 bytes to measure actual byte length
+            return result.toString().getBytes(java.nio.charset.StandardCharsets.ISO_8859_1).length;
             
         } catch (Exception e) {
             // If packing fails, fall back to a simple estimation
