@@ -353,6 +353,19 @@ public class RegexPreprocessorHelper {
                 // \8 and \9 are not valid octals - treat as literal digits
                 sb.setLength(sb.length() - 1); // Remove the backslash
                 sb.append(Character.toChars(c2));
+            } else if (c2 == 'x' && offset + 1 < length && s.charAt(offset + 1) == '{') {
+                // \x{...} hex escape - consume entire sequence so main loop doesn't see the braces
+                sb.append('x');
+                sb.append('{');
+                offset += 2; // Skip past x{
+                while (offset < length && s.charAt(offset) != '}') {
+                    sb.append(s.charAt(offset));
+                    offset++;
+                }
+                if (offset < length) {
+                    sb.append('}'); // Append closing brace
+                }
+                // offset now points to '}', caller will increment
             } else {
                 // Other escape sequences, pass through
                 sb.append(Character.toChars(c2));
