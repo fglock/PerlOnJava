@@ -42,12 +42,13 @@ PerlOnJava implements most core Perl features with some key differences:
 - Warnings and strict pragma
 - Some core modules and pragmas
 - File operations and I/O
+- Overload
+- `format` operator
 
 ❌ Not Supported:
 - XS modules and C integration
 - Threading
-- Some Perl features (formats)
-- Some system-level operations (fork)
+- `fork` operator
 
 ## Compiler Usability
 - ✅  **Wrapper scripts**: (jperl/jperl.bat) for easier command-line usage.
@@ -157,7 +158,6 @@ my @copy = @{$z};         # ERROR
 - ✅  **Autoload**: `AUTOLOAD` mechanism is implemented; `$AUTOLOAD` variable is implemented.
 - ✅  **`class`**: `class` keyword fully supported with blocks.
 - ✅  **Indirect object syntax** indirect object syntax is implemented.
-- 🟡  **`__CLASS__`**: Compile-time evaluation only, not runtime.
 - ✅  **`:isa`**: Class inheritance with version checking works.
 - ✅  **`method`**: Method declarations with automatic `$self`.
 - ✅  **`field`**: Field declarations with all sigils supported.
@@ -170,6 +170,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **Object stringification**: Shows OBJECT not HASH properly.
 - ✅  **Field defaults**: Default values for fields work.
 - ✅  **Field inheritance**: Parent class fields are inherited.
+- 🟡  **`__CLASS__`**: Compile-time evaluation only, not runtime.
 - 🟡  **Argument validation**: Limited by operator implementation issues.
 - ❌  **`DESTROY`**: Destructor blocks not yet implemented.
 
@@ -241,14 +242,14 @@ my @copy = @{$z};         # ERROR
 - ✅  **exists**: `exists &sub` is implemented.
 - ✅  **defined**: `defined &sub` is implemented.
 - ✅  **CORE namespace**: `CORE` is implemented.
-- ❌  **CORE operator references**: Taking a reference to a `CORE` operator is not implemented: `BEGIN { *shove = \&CORE::push; } shove @array, 1,2,3;`
 - ✅  **CORE::GLOBAL namespace**: `CORE::GLOBAL` and core function overrides are implemented.
 - ✅  **alternate subroutine call syntax**: `&$sub`, `&$sub(args)` syntax is implemented.
 - ✅  **Subroutine prototypes**: Prototypes `$`, `@`, `%`, `&`, `;`, `_`, `+`, `*`, `\@`, `\%`, `\$`, `\[@%]`, empty string and undef are supported.
 - ✅  **Subroutine signatures**: Formal parameters are implemented.
-- 🚧  **Subroutine attributes**: `prototype` is implemented. Other subroutine attributes are not yet supported.
 - ✅  **`lvalue` subroutines**: Subroutines with attribute `:lvalue` are supported.
 - ✅  **`Forcing main package`**: Identifiers starting with `::` are in `main` package.
+- 🚧  **Subroutine attributes**: `prototype` is implemented. Other subroutine attributes are not yet supported.
+- ❌  **CORE operator references**: Taking a reference to a `CORE` operator is not implemented: `BEGIN { *shove = \&CORE::push; } shove @array, 1,2,3;`
 - ❌  **Lexical subroutines**: Subroutines declared `my`, `state`, or `our` are not yet supported.
 
 ## Regular Expressions
