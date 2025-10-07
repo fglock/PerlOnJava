@@ -55,6 +55,7 @@ public class RegexPreprocessor {
         captureGroupCount = 0;
 
         s = convertPythonStyleGroups(s);
+        s = transformSimpleConditionals(s);
         StringBuilder sb = new StringBuilder();
         handleRegex(s, 0, sb, regexFlags, false);
         String result = sb.toString();
@@ -1065,24 +1066,18 @@ public class RegexPreprocessor {
             regexError(s, pos, "Switch (?(condition)... not terminated");
         }
 
-        // Conditional patterns are not supported by Java regex and cannot be emulated
+        // Conditional patterns are not supported by Java regex
         // (?(1)yes|no) means: if group 1 matched, use 'yes' branch, else use 'no' branch
         // This is fundamentally different from alternation and cannot be converted
         
-        // For now, throw an error. In the future, we might implement a custom regex engine
-        // or find a way to emulate conditionals
-        regexError(s, condStart - 1, "Conditional patterns (?(...)...) not implemented");
+        // Simple cases are transformed in transformSimpleConditionals()
+        // If we reach here, it's a complex case that couldn't be transformed
         
-        // The code below would incorrectly convert to alternation, which is semantically wrong
-        // sb.append("(?:");
-        // if (pipePos > 0) {
-        //     sb.append(s.substring(branchStart, pipePos));
-        //     sb.append("|");
-        //     sb.append(s.substring(pipePos + 1, pos));
-        // } else {
-        //     sb.append(s.substring(branchStart, pos));
-        // }
-        // sb.append(")");
+        // Use regexUnimplemented so it can be caught with JPERL_UNIMPLEMENTED=warn
+        // Append a placeholder that won't match anything
+        sb.append("(?!)"); // Negative lookahead that always fails
+        
+        regexUnimplemented(s, condStart - 1, "Conditional patterns (?(...)...) not implemented");
         
         return pos + 1; // Skip past the closing ) of the conditional
     }
@@ -1149,6 +1144,236 @@ public class RegexPreprocessor {
             m.appendReplacement(result, "\\\\k<" + m.group(1) + ">");
         }
         m.appendTail(result);
+        return result.toString();
+    }
+
+    /**
+     * Transform simple conditional patterns (?(N)yes|no) that can be converted to alternations.
+     * 
+     * Phase 1 implementation handles the common pattern: (group)?(?(N)yes|no)
+     * Transforms to: (?:(group)yes|no)
+     * 
+     * This works because:
+     * - If group matches: first alternative (group)yes is tried
+     * - If group doesn't match: second alternative no is tried
+     * 
+     * @param pattern The regex pattern
+     * @return Transformed pattern with simple conditionals converted to alternations
+     */
+    private static String transformSimpleConditionals(String pattern) {
+        // For now, we'll handle the simplest case: (?)?(?(1)yes|no) or (?)?(?(1)yes)
+        // More complex transformations can be added later
+        
+        // Pattern to match: (capture)? followed by (?(N)yes|no) or (?(N)yes)
+        // We need to be careful about nested parentheses and escapes
+        
+        StringBuilder result = new StringBuilder();
+        int pos = 0;
+        int len = pattern.length();
+        
+        while (pos < len) {
+            // Look for (?(digit)
+            int condStart = pattern.indexOf("(?(", pos);
+            if (condStart == -1) {
+                // No more conditionals
+                result.append(pattern.substring(pos));
+                break;
+            }
+            
+            // Check if next char after (?( is a digit
+            if (condStart + 3 >= len || !Character.isDigit(pattern.charAt(condStart + 3))) {
+                // Not a simple numeric conditional, skip it
+                result.append(pattern.substring(pos, condStart + 3));
+                pos = condStart + 3;
+                continue;
+            }
+            
+            // Extract the group number
+            int digitEnd = condStart + 3;
+            while (digitEnd < len && Character.isDigit(pattern.charAt(digitEnd))) {
+                digitEnd++;
+            }
+            
+            if (digitEnd >= len || pattern.charAt(digitEnd) != ')') {
+                // Invalid format, skip
+                result.append(pattern.substring(pos, digitEnd));
+                pos = digitEnd;
+                continue;
+            }
+            
+            int groupNum = Integer.parseInt(pattern.substring(condStart + 3, digitEnd));
+            
+            // Now find the yes|no branches
+            // We need to find the matching ) for the conditional
+            int branchStart = digitEnd + 1; // After the ) of (?(N)
+            int parenDepth = 0;
+            int pipePos = -1;
+            int condEnd = branchStart;
+            boolean inCharClass = false;
+            boolean escaped = false;
+            
+            while (condEnd < len) {
+                char ch = pattern.charAt(condEnd);
+                
+                if (escaped) {
+                    escaped = false;
+                    condEnd++;
+                    continue;
+                }
+                
+                if (ch == '\\') {
+                    escaped = true;
+                    condEnd++;
+                    continue;
+                }
+                
+                if (inCharClass) {
+                    if (ch == ']') {
+                        inCharClass = false;
+                    }
+                    condEnd++;
+                    continue;
+                }
+                
+                if (ch == '[') {
+                    inCharClass = true;
+                    condEnd++;
+                    continue;
+                }
+                
+                if (ch == '(') {
+                    parenDepth++;
+                } else if (ch == ')') {
+                    if (parenDepth == 0) {
+                        // Found the end of conditional
+                        break;
+                    }
+                    parenDepth--;
+                } else if (ch == '|' && parenDepth == 0 && pipePos == -1) {
+                    pipePos = condEnd;
+                }
+                
+                condEnd++;
+            }
+            
+            if (condEnd >= len) {
+                // Unterminated conditional, let normal error handling catch it
+                result.append(pattern.substring(pos));
+                break;
+            }
+            
+            // Extract yes and no branches
+            String yesBranch = pipePos > 0 ? pattern.substring(branchStart, pipePos) : pattern.substring(branchStart, condEnd);
+            String noBranch = pipePos > 0 ? pattern.substring(pipePos + 1, condEnd) : "";
+            
+            // Now try to find the referenced group BEFORE this conditional
+            // For simplicity in Phase 1, we only handle if the group appears immediately before
+            // or with simple pattern between (like literals)
+            
+            // Look backwards for group N
+            // Count groups from the start to condStart
+            int groupCount = 0;
+            int groupNStart = -1;
+            int groupNEnd = -1;
+            int searchPos = 0;
+            int depth = 0;
+            boolean isOptional = false;
+            
+            while (searchPos < condStart) {
+                char ch = pattern.charAt(searchPos);
+                
+                if (ch == '\\') {
+                    searchPos += 2; // Skip escaped char
+                    continue;
+                }
+                
+                if (ch == '(') {
+                    // Check if it's a capturing group
+                    if (searchPos + 1 < condStart && pattern.charAt(searchPos + 1) != '?') {
+                        // It's a capturing group
+                        groupCount++;
+                        if (groupCount == groupNum) {
+                            groupNStart = searchPos;
+                            // Find the end of this group
+                            depth = 1;
+                            int endPos = searchPos + 1;
+                            while (endPos < condStart && depth > 0) {
+                                char c = pattern.charAt(endPos);
+                                if (c == '\\') {
+                                    endPos += 2;
+                                    continue;
+                                }
+                                if (c == '(') depth++;
+                                if (c == ')') depth--;
+                                endPos++;
+                            }
+                            groupNEnd = endPos;
+                            
+                            // Check if followed by ? or * or {0,
+                            if (groupNEnd < condStart) {
+                                char next = pattern.charAt(groupNEnd);
+                                if (next == '?' || next == '*') {
+                                    isOptional = true;
+                                } else if (next == '{') {
+                                    // Check for {0,n}
+                                    int closePos = pattern.indexOf('}', groupNEnd);
+                                    if (closePos > 0 && closePos < condStart) {
+                                        String quant = pattern.substring(groupNEnd + 1, closePos);
+                                        if (quant.startsWith("0,")) {
+                                            isOptional = true;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                searchPos++;
+            }
+            
+            // Only transform if we found the group and it's optional and appears directly before the conditional
+            if (groupNStart >= 0 && isOptional) {
+                // Check if there's only simple content between group and conditional
+                String between = pattern.substring(groupNEnd + 1, condStart); // +1 to skip the ? or * after group
+                
+                // For Phase 1, only transform if:
+                // 1. The group is immediately before conditional OR
+                // 2. There's only simple literal text between
+                boolean canTransform = between.isEmpty() || between.matches("[a-zA-Z0-9\\s\\^\\$]+");
+                
+                if (canTransform) {
+                    // Perform transformation!
+                    // Append everything before the group
+                    result.append(pattern.substring(pos, groupNStart));
+                    
+                    // Build the alternation: (?:(group)between+yes|between+no)
+                    result.append("(?:");
+                    
+                    // First alternative: group+between+yes
+                    result.append(pattern.substring(groupNStart, groupNEnd)); // The group itself (without the ? or *)
+                    result.append(between);
+                    result.append(yesBranch);
+                    
+                    // Second alternative: between+no (if no branch exists)
+                    if (!noBranch.isEmpty() || pipePos > 0) {
+                        result.append("|");
+                        result.append(between);
+                        result.append(noBranch);
+                    }
+                    
+                    result.append(")");
+                    
+                    // Continue after the conditional
+                    pos = condEnd + 1;
+                    continue;
+                }
+            }
+            
+            // Could not transform, keep original
+            result.append(pattern.substring(pos, condEnd + 1));
+            pos = condEnd + 1;
+        }
+        
         return result.toString();
     }
 
