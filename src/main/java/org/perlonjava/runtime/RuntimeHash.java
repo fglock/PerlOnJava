@@ -147,9 +147,19 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 yield this.setFromList(value);
             }
             case TIED_HASH -> {
-                TieHash.tiedClear(this);
+                // First, fully materialize the right-hand side list
+                // This is important for cases like %t1 = (@t2{'a','b'})
+                // where @t2 is also tied and we need to fetch values before clearing
+                RuntimeArray materializedList = new RuntimeArray();
                 Iterator<RuntimeScalar> iterator = value.iterator();
+                while (iterator.hasNext()) {
+                    materializedList.push(new RuntimeScalar(iterator.next()));
+                }
+                
+                // Now clear and repopulate from the materialized list
+                TieHash.tiedClear(this);
                 RuntimeArray result = new RuntimeArray();
+                iterator = materializedList.iterator();
                 while (iterator.hasNext()) {
                     RuntimeScalar key = iterator.next();
                     RuntimeScalar val = iterator.hasNext() ? new RuntimeScalar(iterator.next()) : new RuntimeScalar();
