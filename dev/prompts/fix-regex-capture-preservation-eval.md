@@ -1,7 +1,19 @@
 # Fix Regex Capture Variable Preservation in Eval Blocks
 
-## Problem Statement
-Regex capture variables ($1, $2, etc.) are being lost when entering eval blocks because eval blocks are compiled as separate subroutines with try-catch, and the regex state isn't properly preserved. This affects test files like t/re/pat.t.
+## ✅ STATUS: COMPLETED
+
+**Implementation Date**: Prior to 2025-10-07  
+**Files Created/Modified**:
+- `src/main/java/org/perlonjava/runtime/RegexState.java` - Created
+- `src/main/java/org/perlonjava/regex/RuntimeRegex.java` - Added saveState/restoreState methods
+- Eval block code generation - Modified to save/restore regex state
+
+**Result**: Regex capture variables now properly preserved across eval blocks.
+
+---
+
+## Original Problem Statement
+Regex capture variables ($1, $2, etc.) were being lost when entering eval blocks because eval blocks are compiled as separate subroutines with try-catch, and the regex state wasn't properly preserved. This affected test files like t/re/pat.t.
 
 ## Current Architecture Analysis
 
@@ -145,7 +157,17 @@ die unless $1 eq "A";
 2. Modify: `src/main/java/org/perlonjava/regex/RuntimeRegex.java` (add save/restore)
 3. Modify: Code generation for eval blocks (find where useTryCatch is used)
 
-## Time Estimate
-- 1-2 hours for implementation
-- 30 minutes for testing
-- Low risk, high confidence solution
+## Implementation Notes
+
+### What Was Implemented
+Option 1 (Automatic State Preservation) was chosen and successfully implemented:
+- `RegexState.java` class created to hold all regex state
+- `RuntimeRegex.saveState()` and `restoreState()` methods added
+- Eval blocks automatically save/restore regex state on entry/exit
+- No visitor needed - simple and reliable approach
+
+### Verification
+The implementation successfully passes test cases and preserves regex captures across eval blocks, including nested eval scenarios.
+
+## Archive Note
+This document is kept for historical reference. The issue has been resolved and the feature is working as expected in the current codebase.
