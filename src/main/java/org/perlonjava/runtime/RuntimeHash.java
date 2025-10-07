@@ -32,7 +32,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      */
     public RuntimeHash() {
         type = PLAIN_HASH;
-        elements = new HashMap<>();
+        elements = new StableHashMap<>();
     }
 
     /**
@@ -673,7 +673,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     public void dynamicSaveState() {
         // Create a new RuntimeHash to save the current state
         RuntimeHash currentState = new RuntimeHash();
-        currentState.elements = new HashMap<>(this.elements);
+        currentState.elements = new StableHashMap<>(this.elements);
         currentState.blessId = this.blessId;
         dynamicStateStack.push(currentState);
         // Clear the hash
