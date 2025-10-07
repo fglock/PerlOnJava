@@ -445,8 +445,30 @@ public class Unpack {
                     } else {
                         // For checksums < 53 bits, determine if we need floating point precision
                         boolean isFloatFormat = (format == 'd' || format == 'D' || format == 'f' || format == 'F');
+                        // Q and J formats need BigInteger to preserve precision even for small checksums
+                        boolean needsBigInteger = (format == 'Q' || format == 'J');
                         
-                        if (isFloatFormat) {
+                        if (needsBigInteger) {
+                            // Use BigInteger for Q/J to preserve exact precision
+                            BigInteger bigChecksum = BigInteger.ZERO;
+                            for (RuntimeBase value : tempValues) {
+                                RuntimeScalar scalar = (RuntimeScalar) value;
+                                BigInteger valToAdd = scalar.getBigint();
+                                // For Q/J formats, treat negative values as unsigned
+                                if (valToAdd.signum() < 0) {
+                                    valToAdd = valToAdd.add(BigInteger.ONE.shiftLeft(64));
+                                }
+                                bigChecksum = bigChecksum.add(valToAdd);
+                            }
+                            
+                            // Apply bit mask
+                            if (checksumBits > 0 && checksumBits < 64) {
+                                BigInteger mask = BigInteger.ONE.shiftLeft(checksumBits).subtract(BigInteger.ONE);
+                                bigChecksum = bigChecksum.and(mask);
+                            }
+                            
+                            values.add(new RuntimeScalar(bigChecksum.longValue()));
+                        } else if (isFloatFormat) {
                             // Use double for floating point checksums
                             double checksum = 0.0;
                             for (RuntimeBase value : tempValues) {
