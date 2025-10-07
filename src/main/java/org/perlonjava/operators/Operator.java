@@ -418,8 +418,13 @@ public class Operator {
             } else if (arg instanceof RuntimeArray) {
                 // Flatten RuntimeArray into individual elements
                 RuntimeArray array = (RuntimeArray) arg;
-                for (RuntimeScalar scalar : array.elements) {
-                    flattenedArgs.add(scalar);
+                for (RuntimeBase element : array.elements) {
+                    // Handle null elements (deleted array elements)
+                    if (element != null) {
+                        flattenedArgs.add(element);
+                    } else {
+                        flattenedArgs.add(new RuntimeScalar());
+                    }
                 }
             } else {
                 flattenedArgs.add(arg);
@@ -438,6 +443,9 @@ public class Operator {
         for (int i = 0; i < size; i++) {
             if (TieArray.tiedExists(tiedArray, getScalarInt(i)).getBoolean()) {
                 reversedElements.set(targetIndex, TieArray.tiedFetch(tiedArray, getScalarInt(i)));
+            } else {
+                // For deleted tied array elements, set an undef RuntimeScalar
+                reversedElements.set(targetIndex, new RuntimeScalar());
             }
             targetIndex--;
         }
@@ -445,7 +453,16 @@ public class Operator {
     }
 
     private static RuntimeList reversePlainArray(RuntimeArray array) {
-        List<RuntimeBase> newElements = new ArrayList<>(array.elements);
+        List<RuntimeBase> newElements = new ArrayList<>();
+        // Handle null elements (deleted array elements)
+        for (RuntimeBase element : array.elements) {
+            if (element != null) {
+                newElements.add(element);
+            } else {
+                // Preserve undef for deleted elements
+                newElements.add(new RuntimeScalar());
+            }
+        }
         Collections.reverse(newElements);
         return new RuntimeList(newElements.toArray(new RuntimeBase[0]));
     }
