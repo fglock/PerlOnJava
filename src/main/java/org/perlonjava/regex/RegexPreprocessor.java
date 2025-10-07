@@ -398,6 +398,9 @@ public class RegexPreprocessor {
             } else if (c3 == '>') {
                 // Atomic group (?>...) - non-backtracking group
                 offset = handleRegularParentheses(s, offset, length, sb, regexFlags);
+            } else if (c3 == '|') {
+                // Handle (?|...) branch reset groups
+                offset = handleBranchReset(s, offset, length, sb, regexFlags);
             } else if (Character.isDigit(c3)) {
                 // Recursive subpattern reference (?1), (?2), etc.
                 // These refer to the subpattern with that number and are recursive
@@ -460,6 +463,147 @@ public class RegexPreprocessor {
         sb.append("(?<").append(name).append(">");
         captureGroupCount++; // Increment counter for capturing groups
         return handleRegex(s, end + 1, sb, regexFlags, true); // Process content inside the group
+    }
+
+    /**
+     * Handles branch reset groups (?|alt1|alt2|alt3)
+     * 
+     * Branch reset groups reset capture group numbering for each alternative.
+     * In Perl, (?|(a)|(b)) means both alternatives capture to $1.
+     * 
+     * Phase 1 Implementation: Converts to non-capturing group with alternatives.
+     * This allows compilation and works for same-structure alternatives.
+     * Full runtime remapping would be needed for perfect Perl emulation.
+     * 
+     * @param s          The regex string
+     * @param offset     Current position (at '(' of '(?|')
+     * @param length     Length of regex string
+     * @param sb         StringBuilder for output
+     * @param regexFlags Regex flags
+     * @return New offset after processing the branch reset group
+     */
+    private static int handleBranchReset(String s, int offset, int length, StringBuilder sb, RegexFlags regexFlags) {
+        // Save the starting group count
+        int startGroupCount = captureGroupCount;
+        
+        // Skip past '(?|'
+        offset += 3;
+        
+        // First pass: collect raw alternative strings
+        java.util.List<String> rawAlternatives = new java.util.ArrayList<>();
+        StringBuilder altSb = new StringBuilder();
+        int parenDepth = 1; // We're inside the (?| already
+        boolean inEscape = false;
+        boolean inCharClass = false;
+        
+        while (offset < length && parenDepth > 0) {
+            char c = s.charAt(offset);
+            
+            if (inEscape) {
+                altSb.append(c);
+                inEscape = false;
+                offset++;
+                continue;
+            }
+            
+            if (c == '\\') {
+                altSb.append(c);
+                inEscape = true;
+                offset++;
+                continue;
+            }
+            
+            if (inCharClass) {
+                altSb.append(c);
+                if (c == ']') {
+                    inCharClass = false;
+                }
+                offset++;
+                continue;
+            }
+            
+            if (c == '[') {
+                altSb.append(c);
+                inCharClass = true;
+                offset++;
+                continue;
+            }
+            
+            if (c == '(') {
+                parenDepth++;
+                altSb.append(c);
+                offset++;
+                continue;
+            }
+            
+            if (c == ')') {
+                parenDepth--;
+                if (parenDepth == 0) {
+                    // End of branch reset group - save last alternative
+                    rawAlternatives.add(altSb.toString());
+                    break;
+                }
+                altSb.append(c);
+                offset++;
+                continue;
+            }
+            
+            if (c == '|' && parenDepth == 1) {
+                // End of this alternative, start of next
+                rawAlternatives.add(altSb.toString());
+                altSb = new StringBuilder();
+                offset++;
+                continue;
+            }
+            
+            // Regular character
+            altSb.append(c);
+            offset++;
+        }
+        
+        if (parenDepth != 0) {
+            regexError(s, offset, "Unmatched ( in branch reset group");
+        }
+        
+        // Second pass: process each alternative and track capture counts
+        java.util.List<String> processedAlternatives = new java.util.ArrayList<>();
+        java.util.List<Integer> captureCounts = new java.util.ArrayList<>();
+        
+        for (String rawAlt : rawAlternatives) {
+            // Reset capture count for this alternative
+            captureGroupCount = startGroupCount;
+            
+            // Process this alternative through handleRegex
+            StringBuilder processedAlt = new StringBuilder();
+            handleRegex(rawAlt, 0, processedAlt, regexFlags, false);
+            
+            processedAlternatives.add(processedAlt.toString());
+            captureCounts.add(captureGroupCount - startGroupCount);
+        }
+        
+        // Find the maximum capture count across all alternatives
+        int maxCaptures = 0;
+        for (int count : captureCounts) {
+            if (count > maxCaptures) {
+                maxCaptures = count;
+            }
+        }
+        
+        // Set the final capture group count to start + max captures
+        captureGroupCount = startGroupCount + maxCaptures;
+        
+        // Build the output: (?:alt1|alt2|alt3)
+        // This is a non-capturing wrapper with all alternatives
+        // Note: We don't append the closing ')' here - the caller (handleParentheses) will do that
+        sb.append("(?:");
+        for (int i = 0; i < processedAlternatives.size(); i++) {
+            if (i > 0) {
+                sb.append('|');
+            }
+            sb.append(processedAlternatives.get(i));
+        }
+        
+        return offset;
     }
 
     private static int handleCharacterClass(String s, boolean flag_xx, StringBuilder sb, int c, int offset) {
