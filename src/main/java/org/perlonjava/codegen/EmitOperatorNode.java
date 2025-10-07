@@ -62,9 +62,12 @@ public class EmitOperatorNode {
 
             // Special case for length under "use bytes"
             case "length" -> EmitOperator.handleLengthOperator(node, emitterVisitor);
+            
+            // Special case for chr under "use bytes"
+            case "chr" -> EmitOperator.handleChrOperator(node, emitterVisitor);
 
             // Standard unary functions
-            case "abs", "chdir", "chr", "closedir", "cos", "exit", "exp", "fc",
+            case "abs", "chdir", "closedir", "cos", "exit", "exp", "fc",
                  "hex", "lc", "lcfirst", "log",
                  "oct", "ord", "pos", "quotemeta", "rand", "ref",
                  "rewinddir", "rmdir", "sin", "sleep", "sqrt",

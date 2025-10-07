@@ -638,6 +638,39 @@ public class EmitOperator {
     }
 
     /**
+     * Handles the 'chr' operator, which can be affected by 'use bytes'.
+     *
+     * @param node           The operator node
+     * @param emitterVisitor The visitor walking the AST
+     */
+    static void handleChrOperator(OperatorNode node, EmitterVisitor emitterVisitor) {
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        // Emit the operand in scalar context
+        node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        
+        // Check if 'use bytes' is in effect
+        if (emitterVisitor.ctx.symbolTable != null && 
+            emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_BYTES)) {
+            emitterVisitor.ctx.logDebug("handleChrOperator: Using chrBytes (bytes pragma enabled)");
+            // Use chrBytes when bytes pragma is in effect
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/operators/StringOperators",
+                    "chrBytes",
+                    "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                    false);
+        } else {
+            emitterVisitor.ctx.logDebug("handleChrOperator: Using normal chr (bytes pragma not enabled)");
+            // Use normal chr
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/operators/StringOperators",
+                    "chr",
+                    "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                    false);
+        }
+        handleVoidContext(emitterVisitor);
+    }
+
+    /**
      * Handles array-specific unary builtin operators.
      *
      * @param emitterVisitor The visitor walking the AST
