@@ -77,11 +77,20 @@ public class HashUtil extends PerlModuleBase {
     /**
      * Calculate bucket statistics for a RuntimeHash
      * 
-     * Since RuntimeHash uses HashMap internally, we need to estimate
-     * bucket usage based on HashMap's behavior.
+     * Since RuntimeHash uses StableHashMap internally, we can get
+     * the bucket ratio directly from it.
      */
     private static String calculateBucketRatio(RuntimeHash hash) {
         Map<String, RuntimeScalar> elements = hash.elements;
+        
+        // Check if it's a StableHashMap (which it should be for PLAIN_HASH)
+        if (elements instanceof org.perlonjava.runtime.StableHashMap) {
+            org.perlonjava.runtime.StableHashMap<String, RuntimeScalar> stableMap = 
+                (org.perlonjava.runtime.StableHashMap<String, RuntimeScalar>) elements;
+            return stableMap.getBucketRatio();
+        }
+        
+        // Fallback for other map types (shouldn't happen normally)
         int keyCount = elements.size();
         
         if (keyCount == 0) {
