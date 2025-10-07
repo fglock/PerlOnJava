@@ -7,6 +7,7 @@ import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.astvisitor.ReturnTypeVisitor;
 import org.perlonjava.operators.OperatorHandler;
 import org.perlonjava.operators.ScalarGlobOperator;
+import org.perlonjava.perlmodule.Strict;
 import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
@@ -601,6 +602,39 @@ public class EmitOperator {
                     false);
             handleVoidContext(emitterVisitor);
         }
+    }
+
+    /**
+     * Handles the 'length' operator, which can be affected by 'use bytes'.
+     *
+     * @param node           The operator node
+     * @param emitterVisitor The visitor walking the AST
+     */
+    static void handleLengthOperator(OperatorNode node, EmitterVisitor emitterVisitor) {
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        // Emit the operand in scalar context
+        node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        
+        // Check if 'use bytes' is in effect
+        if (emitterVisitor.ctx.symbolTable != null && 
+            emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_BYTES)) {
+            emitterVisitor.ctx.logDebug("handleLengthOperator: Using lengthBytes (bytes pragma enabled)");
+            // Use lengthBytes when bytes pragma is in effect
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/operators/StringOperators",
+                    "lengthBytes",
+                    "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                    false);
+        } else {
+            emitterVisitor.ctx.logDebug("handleLengthOperator: Using normal length (bytes pragma not enabled)");
+            // Use normal length
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/operators/StringOperators",
+                    "length",
+                    "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                    false);
+        }
+        handleVoidContext(emitterVisitor);
     }
 
     /**

@@ -37,6 +37,28 @@ public class StringOperators {
     }
 
     /**
+     * Returns the byte length of the string representation of the given {@link RuntimeScalar}.
+     * This is used when 'use bytes' pragma is in effect.
+     *
+     * @param runtimeScalar the {@link RuntimeScalar} whose byte length is to be calculated
+     * @return a {@link RuntimeScalar} containing the byte length of the input
+     */
+    public static RuntimeScalar lengthBytes(RuntimeScalar runtimeScalar) {
+        // If the scalar is undefined, return undef
+        if (!runtimeScalar.getDefinedBoolean()) {
+            return RuntimeScalarCache.scalarUndef;
+        }
+        // Convert the RuntimeScalar to a string and return its byte length
+        String str = runtimeScalar.toString();
+        try {
+            return getScalarInt(str.getBytes("UTF-8").length);
+        } catch (Exception e) {
+            // If UTF-8 encoding fails, fall back to character count
+            return getScalarInt(str.codePointCount(0, str.length()));
+        }
+    }
+
+    /**
      * Escapes all non-alphanumeric characters in the string representation of the given {@link RuntimeScalar}.
      *
      * @param runtimeScalar the {@link RuntimeScalar} to be quoted
