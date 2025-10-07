@@ -402,6 +402,15 @@ public class EmitLiteral {
         // Remove underscores which Perl allows as digit separators
         String value = node.value.replace("_", "");
         boolean isInteger = isInteger(value);
+        
+        // For 32-bit Perl emulation, check if this is a large integer
+        // that needs to be stored as a string to preserve precision
+        boolean isLargeInteger = false;
+        if (!isInteger && value.matches("^-?\\d+$")) {
+            // This looks like an integer but failed Integer.parseInt
+            // It must be too large for 32-bit int
+            isLargeInteger = true;
+        }
 
         if (ctx.isBoxed) {
             // Boxed context: create a RuntimeScalar object
@@ -413,6 +422,16 @@ public class EmitLiteral {
                         "org/perlonjava/runtime/RuntimeScalarCache",
                         "getScalarInt",
                         "(I)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+            } else if (isLargeInteger) {
+                // Store large integers as strings to preserve precision
+                // This emulates 32-bit Perl behavior
+                ctx.logDebug("visit(NumberNode) emit large integer as string");
+                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeScalar");
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitLdcInsn(value);
+                mv.visitMethodInsn(
+                        Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeScalar",
+                        "<init>", "(Ljava/lang/String;)V", false);
             } else {
                 // Create new RuntimeScalar for floating-point values
                 mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeScalar");
@@ -426,6 +445,10 @@ public class EmitLiteral {
             // Unboxed context: push primitive values
             if (isInteger) {
                 mv.visitLdcInsn(Integer.parseInt(value));
+            } else if (isLargeInteger) {
+                // For large integers in unboxed context, we have to convert to double
+                // but this will lose precision - same as 32-bit Perl
+                mv.visitLdcInsn(Double.parseDouble(value));
             } else {
                 mv.visitLdcInsn(Double.parseDouble(value));
             }

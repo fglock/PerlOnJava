@@ -292,11 +292,8 @@ public class PackParser {
             args.add(new org.perlonjava.runtime.RuntimeScalar(template));
             
             // Add dummy values for each format character that needs data
-            // We need to provide enough values to satisfy the template
-            int estimatedValues = countValuesNeeded(template);
-            for (int i = 0; i < estimatedValues; i++) {
-                args.add(new org.perlonjava.runtime.RuntimeScalar(0));
-            }
+            // Parse template to provide appropriate dummy values
+            addDummyValuesForTemplate(template, args);
             
             // Pack the data and measure the result
             org.perlonjava.runtime.RuntimeScalar result = org.perlonjava.operators.Pack.pack(args);
@@ -306,6 +303,111 @@ public class PackParser {
             // If packing fails, fall back to a simple estimation
             // This shouldn't happen for valid templates, but provides a safety net
             return 1;
+        }
+    }
+    
+    /**
+     * Adds dummy values to args list for packing the given template.
+     * Different format types need different dummy values to pack correctly.
+     * 
+     * @param template the pack template string
+     * @param args the RuntimeList to add dummy values to
+     */
+    private static void addDummyValuesForTemplate(String template, org.perlonjava.runtime.RuntimeList args) {
+        int i = 0;
+        while (i < template.length()) {
+            char format = template.charAt(i);
+            
+            // Skip whitespace and comments
+            if (Character.isWhitespace(format)) {
+                i++;
+                continue;
+            }
+            if (format == '#') {
+                // Skip to end of line or end of template
+                while (i < template.length() && template.charAt(i) != '\n') {
+                    i++;
+                }
+                i++;
+                continue;
+            }
+            
+            // Skip parentheses (groups)
+            if (format == '(' || format == ')') {
+                i++;
+                continue;
+            }
+            
+            // Skip modifiers
+            if (format == '<' || format == '>' || format == '!') {
+                i++;
+                continue;
+            }
+            
+            // Parse repeat count
+            int count = 1;
+            i++; // Move past format character
+            
+            // Skip modifiers after format
+            while (i < template.length() && (template.charAt(i) == '<' || 
+                   template.charAt(i) == '>' || template.charAt(i) == '!')) {
+                i++;
+            }
+            
+            // Parse count
+            if (i < template.length()) {
+                if (template.charAt(i) == '*') {
+                    count = 5; // Use a reasonable default for *
+                    i++;
+                } else if (Character.isDigit(template.charAt(i))) {
+                    int j = i;
+                    while (j < template.length() && Character.isDigit(template.charAt(j))) {
+                        j++;
+                    }
+                    count = Integer.parseInt(template.substring(i, j));
+                    i = j;
+                } else if (template.charAt(i) == '[') {
+                    // Skip bracketed expression
+                    int bracketDepth = 1;
+                    i++;
+                    while (i < template.length() && bracketDepth > 0) {
+                        if (template.charAt(i) == '[') bracketDepth++;
+                        else if (template.charAt(i) == ']') bracketDepth--;
+                        if (bracketDepth > 0) i++;
+                    }
+                    i++; // Move past closing bracket
+                    count = 1; // Use default count for bracketed expressions
+                }
+            }
+            
+            // Add appropriate dummy values based on format type
+            for (int j = 0; j < count; j++) {
+                switch (format) {
+                    case 'a', 'A', 'Z' -> {
+                        // String formats - provide a string
+                        args.add(new org.perlonjava.runtime.RuntimeScalar("test"));
+                    }
+                    case 'p', 'P' -> {
+                        // Pointer formats - provide a string
+                        args.add(new org.perlonjava.runtime.RuntimeScalar("pointer"));
+                    }
+                    case 'x', 'X', '@' -> {
+                        // These don't consume values
+                    }
+                    case 'b', 'B', 'h', 'H' -> {
+                        // Bit and hex strings - provide a string
+                        args.add(new org.perlonjava.runtime.RuntimeScalar("00"));
+                    }
+                    case 'u' -> {
+                        // Uuencode - provide a string
+                        args.add(new org.perlonjava.runtime.RuntimeScalar("test"));
+                    }
+                    default -> {
+                        // Numeric formats - provide a number
+                        args.add(new org.perlonjava.runtime.RuntimeScalar(0));
+                    }
+                }
+            }
         }
     }
     
