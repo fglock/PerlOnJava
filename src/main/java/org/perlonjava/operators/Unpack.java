@@ -429,33 +429,41 @@ public class Unpack {
                             }
                         } else if (checksumBits > 64) {
                             // For checksumBits > 64, Perl returns 0 for any overflow
-                            // This happens when the unsigned sum is >= 2^63
-                            BigInteger max64Signed = BigInteger.valueOf(Long.MAX_VALUE); // 2^63 - 1
+                            // A negative checksum (like -1) when treated as unsigned would be 2^64-1
+                            // which overflows a 64-bit value, so return 0
                             
-                            // Check if the value fits in a signed 64-bit range
-                            // If not, Perl returns 0 for overflow
-                            if (bigChecksum.compareTo(max64Signed) > 0) {
-                                // Value is too large for signed 64-bit
+                            // Check if the value is negative (which means overflow when unsigned)
+                            // or if it's too large for 64 bits
+                            if (bigChecksum.signum() < 0) {
+                                // Negative values overflow when interpreted as unsigned
                                 values.add(new RuntimeScalar(0L));
                             } else {
-                                // Value fits, return it
-                                values.add(new RuntimeScalar(bigChecksum.longValue()));
+                                BigInteger max64 = BigInteger.ONE.shiftLeft(64); // 2^64
+                                if (bigChecksum.compareTo(max64) >= 0) {
+                                    // Value is >= 2^64, overflow
+                                    values.add(new RuntimeScalar(0L));
+                                } else {
+                                    // Value fits in unsigned 64-bit range
+                                    values.add(new RuntimeScalar(bigChecksum.longValue()));
+                                }
                             }
                         }
                     } else {
                         // For checksums < 53 bits, determine if we need floating point precision
                         boolean isFloatFormat = (format == 'd' || format == 'D' || format == 'f' || format == 'F');
-                        // Q and J formats need BigInteger to preserve precision even for small checksums
-                        boolean needsBigInteger = (format == 'Q' || format == 'J');
+                        // Q, J and native long (l!/L!) formats need BigInteger to preserve precision even for small checksums
+                        boolean isNativeLong = (format == 'l' || format == 'L') && hasShriek;
+                        boolean needsBigInteger = (format == 'Q' || format == 'J' || format == 'q' || isNativeLong);
                         
                         if (needsBigInteger) {
-                            // Use BigInteger for Q/J to preserve exact precision
+                            // Use BigInteger for Q/J/q/l!/L! to preserve exact precision
                             BigInteger bigChecksum = BigInteger.ZERO;
                             for (RuntimeBase value : tempValues) {
                                 RuntimeScalar scalar = (RuntimeScalar) value;
                                 BigInteger valToAdd = scalar.getBigint();
-                                // For Q/J formats, treat negative values as unsigned
-                                if (valToAdd.signum() < 0) {
+                                // For unsigned formats (Q/J/L!), treat negative values as unsigned
+                                boolean isUnsigned = (format == 'Q' || format == 'J' || format == 'L');
+                                if (isUnsigned && valToAdd.signum() < 0) {
                                     valToAdd = valToAdd.add(BigInteger.ONE.shiftLeft(64));
                                 }
                                 bigChecksum = bigChecksum.add(valToAdd);

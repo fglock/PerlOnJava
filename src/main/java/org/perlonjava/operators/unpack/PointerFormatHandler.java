@@ -21,7 +21,7 @@ public class PointerFormatHandler implements FormatHandler {
 
     @Override
     public int getFormatSize() {
-        return 4; // 32-bit pointer (hashCode)
+        return 8; // 64-bit pointer (to match pack)
     }
 
     @Override
@@ -29,29 +29,32 @@ public class PointerFormatHandler implements FormatHandler {
         ByteBuffer buffer = state.getBuffer();
 
         for (int i = 0; i < count; i++) {
-            if (buffer.remaining() < 4) {
+            if (buffer.remaining() < 8) {
                 break;
             }
 
-            // Read 4 bytes and convert to canonical hash code
-            // The endianness affects byte storage, but we need the same logical hash code
-            byte[] bytes = new byte[4];
+            // Read 8 bytes and convert to pointer value
+            // Only the lower 32 bits matter for the hashCode
+            byte[] bytes = new byte[8];
             buffer.get(bytes);
             
-            int ptr;
+            long ptrLong;
             if (bigEndian) {
                 // Big-endian: most significant byte first
-                ptr = 0;
-                for (int j = 0; j < 4; j++) {
-                    ptr = (ptr << 8) | (bytes[j] & 0xFF);
+                ptrLong = 0;
+                for (int j = 0; j < 8; j++) {
+                    ptrLong = (ptrLong << 8) | (bytes[j] & 0xFF);
                 }
             } else {
                 // Little-endian: least significant byte first
-                ptr = 0;
-                for (int j = 0; j < 4; j++) {
-                    ptr |= ((bytes[j] & 0xFF) << (j * 8));
+                ptrLong = 0;
+                for (int j = 0; j < 8; j++) {
+                    ptrLong |= ((long)(bytes[j] & 0xFF) << (j * 8));
                 }
             }
+            
+            // Extract the int hashCode from the long pointer value
+            int ptr = (int) ptrLong;
 
             // DEBUG: unpack 'p' hashCode=" + ptr + " (bigEndian=" + bigEndian + ")
     
