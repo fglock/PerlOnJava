@@ -387,7 +387,10 @@ public class EmitOperator {
     // Handles the 'repeat' operator, which repeats a string or list a specified number of times.
     static void handleRepeat(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         // Determine the context for the left operand.
-        if (node.left instanceof ListNode) {
+        // When x operator is in scalar context, left operand must be in scalar context too
+        if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+            node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        } else if (node.left instanceof ListNode) {
             node.left.accept(emitterVisitor.with(RuntimeContextType.LIST));
         } else {
             node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
