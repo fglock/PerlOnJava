@@ -271,17 +271,17 @@ public class PackHelper {
             hasUnicodeInNormalMode = true;
         }
 
-        // W format behavior depends on mode (like U but without validation):
-        // - Character mode: write character code (PackBuffer will handle UTF-8 upgrade)
-        // - Byte mode: write UTF-8 bytes directly (for binary compatibility)
+        // W format behavior: write code point value directly as bytes
+        // Unlike U format which UTF-8 encodes, W writes the raw byte/character value
+        // This is consistent in both character and byte modes
         if (Character.isValidCodePoint(codePoint)) {
-            if (byteMode) {
-                // Byte mode: write UTF-8 bytes
-                String unicodeChar = new String(Character.toChars(codePoint));
-                byte[] utf8Bytes = unicodeChar.getBytes(StandardCharsets.UTF_8);
-                output.write(utf8Bytes);
+            // For values 0-255, write as single byte
+            // For higher values, write as multi-byte character
+            if (codePoint <= 0xFF) {
+                // Single byte value - write directly
+                output.write(codePoint);
             } else {
-                // Character mode: write character code
+                // Multi-byte character - write character code
                 output.writeCharacter(codePoint);
             }
         } else {
@@ -290,10 +290,8 @@ public class PackHelper {
             if (wrappedValue > 0x10FFFF) {
                 wrappedValue = wrappedValue % 0x110000; // Modulo to fit in Unicode range
             }
-            if (byteMode) {
-                String unicodeChar = new String(Character.toChars(wrappedValue));
-                byte[] utf8Bytes = unicodeChar.getBytes(StandardCharsets.UTF_8);
-                output.write(utf8Bytes);
+            if (wrappedValue <= 0xFF) {
+                output.write(wrappedValue);
             } else {
                 output.writeCharacter(wrappedValue);
             }
