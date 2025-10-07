@@ -271,18 +271,32 @@ public class PackHelper {
             hasUnicodeInNormalMode = true;
         }
 
-        // W format writes character codes (not UTF-8 bytes)
-        // PackBuffer will handle the encoding when creating the final string
-        // Unlike U format, W doesn't validate the Unicode range
+        // W format behavior depends on mode (like U but without validation):
+        // - Character mode: write character code (PackBuffer will handle UTF-8 upgrade)
+        // - Byte mode: write UTF-8 bytes directly (for binary compatibility)
         if (Character.isValidCodePoint(codePoint)) {
-            output.writeCharacter(codePoint);
+            if (byteMode) {
+                // Byte mode: write UTF-8 bytes
+                String unicodeChar = new String(Character.toChars(codePoint));
+                byte[] utf8Bytes = unicodeChar.getBytes(StandardCharsets.UTF_8);
+                output.write(utf8Bytes);
+            } else {
+                // Character mode: write character code
+                output.writeCharacter(codePoint);
+            }
         } else {
             // Beyond Unicode range - wrap to valid range without throwing exception
             int wrappedValue = codePoint & 0x1FFFFF; // 21 bits
             if (wrappedValue > 0x10FFFF) {
                 wrappedValue = wrappedValue % 0x110000; // Modulo to fit in Unicode range
             }
-            output.writeCharacter(wrappedValue);
+            if (byteMode) {
+                String unicodeChar = new String(Character.toChars(wrappedValue));
+                byte[] utf8Bytes = unicodeChar.getBytes(StandardCharsets.UTF_8);
+                output.write(utf8Bytes);
+            } else {
+                output.writeCharacter(wrappedValue);
+            }
         }
         return hasUnicodeInNormalMode;
     }
@@ -331,10 +345,19 @@ public class PackHelper {
             hasUnicodeInNormalMode = true;
         }
 
-        // U format writes character codes (like W but validates Unicode range)
-        // PackBuffer will handle the encoding when creating the final string
+        // U format behavior depends on mode:
+        // - Character mode: write character code (PackBuffer will handle UTF-8 upgrade)
+        // - Byte mode: write UTF-8 bytes directly (for binary compatibility)
         if (Character.isValidCodePoint(codePoint1)) {
-            output.writeCharacter(codePoint1);
+            if (byteMode) {
+                // Byte mode: write UTF-8 bytes
+                String unicodeChar = new String(Character.toChars(codePoint1));
+                byte[] utf8Bytes = unicodeChar.getBytes(StandardCharsets.UTF_8);
+                output.write(utf8Bytes);
+            } else {
+                // Character mode: write character code
+                output.writeCharacter(codePoint1);
+            }
         } else {
             throw new PerlCompilerException("pack: invalid Unicode code point: " + codePoint1);
         }
