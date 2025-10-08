@@ -25,10 +25,16 @@ public class UnpackHelper {
 
         // Handle string formats as count formats for slash constructs
         if (numericFormat == 'A' || numericFormat == 'a' || numericFormat == 'Z') {
+            // For string formats used as count, we need to parse the count from the template
+            // position points to the format character (e.g., 'a' in "a3/A")
+            // We need to extract the count (e.g., 3 from "a3")
+            ParsedCount countInfo = parseRepeatCount(template, position + 1);
+            int formatCount = countInfo.count;
+            
             // For string formats used as count, read as string and convert to integer
             FormatHandler stringHandler = Unpack.getHandler(numericFormat, startsWithU);
             int initialSize = values.size();
-            stringHandler.unpack(state, values, 1, false);  // Attempt to unpack just one for the count
+            stringHandler.unpack(state, values, formatCount, countInfo.hasStar);  // Unpack with the parsed count
 
             // Determine the slash count. If there wasn't enough data to read the count,
             // Perl returns no values and does not throw; treat count as 0.
@@ -99,7 +105,6 @@ public class UnpackHelper {
                 }
 
                 // Unpack the format with the count
-                // DEBUG: Unpacking format '" + stringFormat + "' " + slashCount + " times
                 // Only unpack if slashCount > 0 (if count was 0 due to insufficient data, don't unpack)
                 if (slashCount > 0 || hasStarAfterSlash) {
                     formatHandler.unpack(state, values, slashCount, hasStarAfterSlash);
@@ -183,7 +188,6 @@ public class UnpackHelper {
                 }
 
                 // Unpack the format with the count
-                // DEBUG: Unpacking format '" + stringFormat + "' " + slashCount + " times
                 // Only unpack if slashCount > 0 (if count was 0 due to insufficient data, don't unpack)
                 if (slashCount > 0 || hasStarAfterSlash) {
                     formatHandler.unpack(state, values, slashCount, hasStarAfterSlash);
