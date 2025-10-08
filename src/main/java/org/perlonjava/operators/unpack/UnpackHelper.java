@@ -131,7 +131,6 @@ public class UnpackHelper {
                 }
                 values.removeLast(); // Remove the count value
             }
-
             // DEBUG: Got slash count: " + slashCount
 
             // Find the slash position
@@ -192,7 +191,6 @@ public class UnpackHelper {
                 if (slashCount > 0 || hasStarAfterSlash) {
                     formatHandler.unpack(state, values, slashCount, hasStarAfterSlash);
                 }
-
                 return i;
             }
         }
