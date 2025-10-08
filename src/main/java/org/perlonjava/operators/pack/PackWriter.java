@@ -424,15 +424,12 @@ public class PackWriter {
             if (count == 0) {
                 // Z0 format: write nothing
                 return;
-            } else if (bytes.length > count) {
-                // String is longer than count: truncate to (count-1) bytes + null
+            } else if (bytes.length >= count) {
+                // String is >= count: truncate to (count-1) bytes + null
                 output.write(bytes, 0, count - 1);
                 output.write(0);
-            } else if (bytes.length == count) {
-                // String fits exactly: write all bytes, no null needed
-                output.write(bytes, 0, count);
             } else {
-                // String is shorter: write string + null padding to count bytes
+                // String is shorter: write string + null + padding to count bytes
                 output.write(bytes, 0, bytes.length);
                 for (int i = bytes.length; i < count; i++) {
                     output.write(0);
