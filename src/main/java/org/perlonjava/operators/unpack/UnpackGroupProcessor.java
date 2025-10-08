@@ -6,32 +6,40 @@ import org.perlonjava.operators.pack.GroupEndiannessHelper;
 import org.perlonjava.operators.pack.PackHelper;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeBase;
+import org.perlonjava.runtime.RuntimeList;
 import org.perlonjava.runtime.RuntimeScalar;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Stack;
-
 /**
  * Unified processor for handling group constructs in unpack templates.
  * This class combines both group syntax parsing and group content processing
  * to provide a complete solution for Perl's parenthesized group functionality.
  * 
- * <p>In Perl's unpack function, parentheses are used to create groups that can be repeated.
- * For example, the template "(a4 n)*" would unpack pairs of a 4-character string followed
- * by a network-order short integer, repeating until all data is consumed.</p>
+ * <p>This class manages the parsing and processing of parenthesized groups in unpack templates,
+ * including nested groups, repeat counts, and special modifiers.</p>
  * 
- * <p>This class provides functionality to:</p>
+ * <p>Key responsibilities:</p>
  * <ul>
- *   <li>Parse group syntax from templates (e.g., "(content)3", "(content)*")</li>
- *   <li>Process grouped template patterns with repeat counts</li>
- *   <li>Handle nested groups within groups</li>
- *   <li>Manage mode switching (character vs byte mode) within groups</li>
- *   <li>Process slash constructs (e.g., "n/a*" - unpack a count then that many strings)</li>
+ *   <li>Parse group syntax and extract group content</li>
+ *   <li>Handle group repeat counts (numeric, *, and template-based)</li>
+ *   <li>Process nested groups recursively</li>
+ *   <li>Manage mode changes (C0/U0) within groups</li>
+ *   <li>Handle slash constructs (N/X format) within groups</li>
  *   <li>Handle special positioning and counting operations</li>
  * </ul>
  */
 public class UnpackGroupProcessor {
+
+    /**
+     * Interface for unpack operations to avoid circular dependencies.
+     * This allows UnpackGroupProcessor to call back to the main unpack method.
+     */
+    @FunctionalInterface
+    public interface UnpackFunction {
+        RuntimeList unpack(String template, RuntimeScalar data);
+    }
 
     /**
      * Parse and process a parenthesized group from the template.
