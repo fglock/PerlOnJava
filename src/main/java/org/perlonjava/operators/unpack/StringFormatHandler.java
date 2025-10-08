@@ -34,13 +34,20 @@ public class StringFormatHandler implements FormatHandler {
                 }
             }
 
-            // Pad if needed and not star count
-            while (sb.length() < count && !isStarCount) {
-                sb.append(format == 'A' ? ' ' : '\0');
-            }
-
             String str = sb.toString();
             str = processString(str);
+            
+            // Pad if needed and not star count
+            // Note: 'A' and 'Z' formats strip content, so don't pad them back!
+            // Only 'a' format needs padding to maintain exact count
+            if (!isStarCount && format == 'a' && str.length() < count) {
+                StringBuilder padded = new StringBuilder(str);
+                while (padded.length() < count) {
+                    padded.append('\0');
+                }
+                str = padded.toString();
+            }
+            
             output.add(new RuntimeScalar(str));
         } else {
             // In byte mode, read from buffer
@@ -126,11 +133,12 @@ public class StringFormatHandler implements FormatHandler {
         result = processStringByteMode(result);
 
         // Pad if necessary and not star count
-        if (!isStarCount && result.length() < count) {
+        // Note: 'A' and 'Z' formats strip content, so don't pad them back!
+        // Only 'a' format needs padding to maintain exact count
+        if (!isStarCount && format == 'a' && result.length() < count) {
             StringBuilder sb = new StringBuilder(result);
-            char padChar = format == 'A' ? ' ' : '\0';
             while (sb.length() < count) {
-                sb.append(padChar);
+                sb.append('\0');
             }
             result = sb.toString();
         }
