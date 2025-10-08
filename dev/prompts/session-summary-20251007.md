@@ -238,7 +238,8 @@ pack('C0 W', 253)  # fd (correct - single byte)
 | op/pack.t (W format fix) | 14,155 passing, 569 failing | 14,298 passing, 426 failing | **+143 tests** |
 | op/pack.t (A* stripping) | 14,298 passing, 426 failing | 14,300 passing, 424 failing | **+2 tests** |
 | op/pack.t (W format inversion) | 14,300 passing, 424 failing | 14,323 passing, 401 failing | **+23 tests** |
-| **Total** | **15,672 passing** | **16,063 passing** | **+391 tests** |
+| op/pack.t (x!/X! alignment) | 14,323 passing, 401 failing | 14,344 passing, 380 failing | **+21 tests** |
+| **Total** | **15,672 passing** | **16,084 passing** | **+412 tests** |
 
 ## Fix Breakdown by Impact
 
@@ -246,9 +247,10 @@ pack('C0 W', 253)  # fd (correct - single byte)
 2. **Pack W format** - +143 tests (UTF-8 encoding bug)
 3. **Regex \x{...}** - +50 tests (nested quantifier false positive)
 4. **Unpack W format inversion** - +23 tests (critical inverted logic in character/byte mode check)
-5. **Pack Math::BigInt** - Quality fix (enables blessed object support)
-6. **Regex (?#...)** - Included in +50 (comment removal)
-7. **Unpack A/Z padding** - +2 tests (don't pad after stripping)
+5. **Unpack x!/X! alignment** - +21 tests (implemented alignment to boundary modifiers)
+6. **Pack Math::BigInt** - Quality fix (enables blessed object support)
+7. **Regex (?#...)** - Included in +50 (comment removal)
+8. **Unpack A/Z padding** - +2 tests (don't pad after stripping)
 
 ## Overall Project Status
 
