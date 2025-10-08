@@ -278,6 +278,25 @@ public class Unpack {
                     } else if (format == 'V') {
                         handler = new NumericFormatHandler.VAXLongHandler(true); // signed
                     }
+                } else if ((format == 'x' || format == 'X') && hasShriek) {
+                    // Special handling for x!/X! - alignment to boundary
+                    // x!N means align forward to next multiple of N
+                    // X!N means align backward to previous multiple of N
+                    int currentPos = state.getPosition();
+                    int alignment = count;
+                    int newPos;
+                    
+                    if (format == 'x') {
+                        // Forward alignment: round up to next multiple of alignment
+                        newPos = ((currentPos + alignment - 1) / alignment) * alignment;
+                    } else {
+                        // Backward alignment: round down to previous multiple of alignment
+                        newPos = (currentPos / alignment) * alignment;
+                    }
+                    
+                    state.setPosition(newPos);
+                    i++; // Move past this format
+                    continue; // Skip normal handler processing
                 }
                 // For 'p' format, create endianness-aware handler based on parsed modifiers
                 if (format == 'p' && (hasLittleEndian || hasBigEndian)) {
