@@ -13,21 +13,24 @@ import java.util.List;
 public class DotFormatHandler implements FormatHandler {
     @Override
     public void unpack(UnpackState state, List<RuntimeBase> values, int count, boolean isStarCount) {
-        // Get the current position
+        // Get the current position (absolute and relative to current group)
         int currentPos = state.getPosition();
+        int relativePos = state.getRelativePosition();
 
         // Parse optional positioning argument
         if (count == 0) {
-            // .0 means relative to current position (which is 0)
+            // .0 returns 0 (relative to current position)
             values.add(new RuntimeScalar(0));
         } else if (isStarCount) {
             // .* means relative to start of string
             values.add(new RuntimeScalar(currentPos));
         } else {
-            // .N means relative to start of Nth innermost group
-            // For now, just return the current position
-            // TODO: Implement proper group tracking
-            values.add(new RuntimeScalar(currentPos));
+            // .N (without *) inside a group should be relative to current group baseline
+            if (state.hasGroupBase()) {
+                values.add(new RuntimeScalar(relativePos));
+            } else {
+                values.add(new RuntimeScalar(currentPos));
+            }
         }
     }
 

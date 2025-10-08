@@ -103,12 +103,21 @@ public class UnpackHelper {
             // Original numeric format processing
             // First, unpack the numeric format to get the count
             FormatHandler handler = Unpack.getHandler(numericFormat, startsWithU);
-            handler.unpack(state, values, 1, false);  // Always unpack just one for the count
+            int initialSize = values.size();
+            handler.unpack(state, values, 1, false);  // Attempt to unpack just one for the count
 
-            // Get the count value
-            RuntimeBase lastValue = values.getLast();
-            int slashCount = ((RuntimeScalar) lastValue).getInt();
-            values.removeLast(); // Remove the count value
+            // Determine the slash count. If there wasn't enough data to read the count,
+            // Perl returns no values and does not throw; treat count as 0.
+            int slashCount = 0;
+            if (values.size() > initialSize) {
+                RuntimeBase lastValue = values.getLast();
+                try {
+                    slashCount = ((RuntimeScalar) lastValue).getInt();
+                } catch (Exception ignored) {
+                    slashCount = 0;
+                }
+                values.removeLast(); // Remove the count value
+            }
 
             // DEBUG: Got slash count: " + slashCount
 
