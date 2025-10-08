@@ -27,18 +27,23 @@ public class UnpackHelper {
         if (numericFormat == 'A' || numericFormat == 'a' || numericFormat == 'Z') {
             // For string formats used as count, read as string and convert to integer
             FormatHandler stringHandler = Unpack.getHandler(numericFormat, startsWithU);
-            stringHandler.unpack(state, values, 1, false);  // Always unpack just one for the count
+            int initialSize = values.size();
+            stringHandler.unpack(state, values, 1, false);  // Attempt to unpack just one for the count
 
-            // Get the count value from the string
-            RuntimeBase lastValue = values.getLast();
-            String countStr = lastValue.toString().trim();
-            int slashCount;
-            try {
-                slashCount = Integer.parseInt(countStr);
-            } catch (NumberFormatException e) {
-                slashCount = 0; // If not a valid number, use 0
+            // Determine the slash count. If there wasn't enough data to read the count,
+            // Perl returns no values and does not throw; treat count as 0.
+            int slashCount = 0;
+            if (values.size() > initialSize) {
+                // Get the count value from the string
+                RuntimeBase lastValue = values.getLast();
+                String countStr = lastValue.toString().trim();
+                try {
+                    slashCount = Integer.parseInt(countStr);
+                } catch (NumberFormatException e) {
+                    slashCount = 0; // If not a valid number, use 0
+                }
+                values.removeLast(); // Remove the count value
             }
-            values.removeLast(); // Remove the count value
 
             // Continue with the rest of the processing...
             // Find the slash position
@@ -95,7 +100,10 @@ public class UnpackHelper {
 
                 // Unpack the format with the count
                 // DEBUG: Unpacking format '" + stringFormat + "' " + slashCount + " times
-                formatHandler.unpack(state, values, slashCount, hasStarAfterSlash);
+                // Only unpack if slashCount > 0 (if count was 0 due to insufficient data, don't unpack)
+                if (slashCount > 0 || hasStarAfterSlash) {
+                    formatHandler.unpack(state, values, slashCount, hasStarAfterSlash);
+                }
 
                 return i;
             }
@@ -176,7 +184,10 @@ public class UnpackHelper {
 
                 // Unpack the format with the count
                 // DEBUG: Unpacking format '" + stringFormat + "' " + slashCount + " times
-                formatHandler.unpack(state, values, slashCount, hasStarAfterSlash);
+                // Only unpack if slashCount > 0 (if count was 0 due to insufficient data, don't unpack)
+                if (slashCount > 0 || hasStarAfterSlash) {
+                    formatHandler.unpack(state, values, slashCount, hasStarAfterSlash);
+                }
 
                 return i;
             }
