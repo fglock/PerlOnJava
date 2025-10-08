@@ -290,6 +290,9 @@ public class UnpackGroupProcessor {
             // DEBUG: Group iteration " + rep + " starting at position " + positionBefore
             int valuesBeforeGroup = values.size();
 
+            // Establish group-relative baseline for this repetition
+            state.pushGroupBase();
+
             // Process the group content
             for (int j = 0; j < groupTemplate.length(); j++) {
                 char format = groupTemplate.charAt(j);
