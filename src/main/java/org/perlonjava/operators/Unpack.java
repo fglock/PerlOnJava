@@ -220,21 +220,21 @@ public class Unpack {
                     continue;
                 }
 
-                // Original code for string formats
-                if (stringFormat != 'a' && stringFormat != 'A' && stringFormat != 'Z') {
-                    throw new PerlCompilerException("'/' must be followed by a string type");
+                // Any valid format can follow '/'
+                FormatHandler formatHandler = getHandler(stringFormat, startsWithU);
+                if (formatHandler == null) {
+                    throw new PerlCompilerException("'/' must be followed by a valid format or group");
                 }
 
-                // Parse optional count/star after string format
+                // Parse optional count/star after the format
                 boolean hasStarAfterSlash = false;
                 if (i + 1 < template.length() && template.charAt(i + 1) == '*') {
                     hasStarAfterSlash = true;
                     i++; // Move to the '*'
                 }
 
-                // Unpack the string with the count from the previous numeric value
-                FormatHandler stringHandler = handlers.get(stringFormat);
-                stringHandler.unpack(state, values, slashCount, hasStarAfterSlash);
+                // Unpack with the count from the previous value
+                formatHandler.unpack(state, values, slashCount, hasStarAfterSlash);
 
                 // IMPORTANT: Skip past all characters we've processed
                 // The continue statement will skip the normal i++ at the end of the loop
