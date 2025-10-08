@@ -4,99 +4,49 @@
 
 **YOU WILL BREAK THE BUILD if you skip this!**
 
-Even if your target test (e.g., `./jperl t/op/pack.t`) passes perfectly, you **MUST** run `make test` before committing. Unit tests catch regressions that integration tests miss.
-
-**Recent incident (2025-10-08)**: Fixed character/byte mode inversion bug. pack.t improved +19 tests, but broke unit tests (unpack.t, pack_c0_u0.t) because the mode logic change had subtle side effects.
+Even if your target test passes perfectly, you **MUST** run `make test` before committing. Unit tests catch regressions that integration tests miss.
 
 **The Rule (NO EXCEPTIONS):**
 ```bash
-# ❌ WRONG - Never do this
+# ❌ WRONG
 ./jperl t/op/yourtest.t  # passes
 git commit               # BREAKS BUILD!
 
-# ✅ CORRECT - Always do this
+# ✅ CORRECT
 ./jperl t/op/yourtest.t  # passes
-make test                # MUST pass before commit!
+make test                # MUST pass!
 git commit               # Safe
 ```
 
-## 🛑 STOP! DO NOT PROCEED WITHOUT PROPER SETUP
-
-### ⭐ RECOMMENDED: Use the Analysis Gateway
-```bash
-# This single command handles EVERYTHING safely:
-./dev/tools/start_analysis.sh
-
-# It will:
-# ✅ Check and run environment setup if needed
-# ✅ Provide menu-driven analysis options
-# ✅ Ensure all safety checks are followed
-# ✅ Prevent common mistakes
-```
-
-### Alternative: Manual Setup (Advanced Users Only)
-```bash
-# If you prefer manual control, you MUST run this first:
-./dev/tools/safe_analysis_setup.sh
-
-# Without this, the analysis WILL fail or produce invalid results
-```
-
-**⚠️ WARNING: Skipping setup WILL cause:**
-- Contaminated git commits with test files
-- Hanging Java processes consuming resources  
-- Invalid test results from dirty environment
-- Potential data loss from uncommitted changes
+**Recent incidents:**
+- 2025-10-08: Character/byte mode fix broke unit tests (unpack.t, pack_c0_u0.t)
+- 2025-10-07: PackBuffer fix broke pack_utf8.t
 
 ## Core Principle
-**Target blocked tests and systematic errors for exponential impact.** One fix can unlock hundreds of tests.
 
-## ⚠️ Critical Safety Rules
-1. **NEVER commit test files** (`test_*.pl`, `debug_*.pl`)
-2. **ALWAYS test FULL SUITE before committing** (run `make test`, not just the test you're fixing!)
-3. **ALWAYS clean environment before starting** (kill processes, clean build)
-4. **NEVER use `git add .` or `git add -A`** (add specific files only)
-5. **ALWAYS run pre-commit check** before committing
+**Target systematic errors for exponential impact.** One fix can unlock hundreds of tests.
 
-### 🚨 LESSON LEARNED: Test the FULL Suite, Not Just Your Changes!
-**Real incident (2025-10-07)**: A major fix (PackBuffer for W format) passed pack.t with +151 tests but broke unit tests (pack_utf8.t). The issue was subtle: byte mode (C0U) needed UTF-8 bytes, not character codes. This wasn't caught because only pack.t was tested, not the full suite.
+## Critical Workflow
 
-**What happened:**
-- ✅ Tested: `./jperl t/op/pack.t` - 14,292 passing
-- ❌ NOT tested: `make test` - would have caught pack_utf8.t failure
-- Result: Had to amend commit and fix regression
-
-**The Rule:**
 ```bash
-# ❌ WRONG - Testing only what you changed
-./jperl t/op/pack.t  # passes
-git commit -m "fix"  # DANGEROUS!
+# 1. Build and test target
+make
+./jperl t/op/yourtest.t
 
-# ✅ CORRECT - Test everything
-./jperl t/op/pack.t  # passes
-make test            # catches regressions!
-git commit -m "fix"  # SAFE
+# 2. ALWAYS test full suite before commit
+make test
+
+# 3. Commit specific files only
+git add src/main/java/specific/File.java
+git commit -m "Fix: description (+N tests)"
 ```
 
-**Why this matters:**
-- Unit tests catch edge cases that integration tests miss
-- Different test contexts (byte mode vs character mode) reveal hidden bugs
-- One small architectural change can break distant functionality
-- "It works for my test case" ≠ "It works correctly"
+## Safety Rules
 
-## 🚀 Quick Start: The Safe Way
-
-### Method 1: Guided Analysis (BEST FOR BEGINNERS)
-```bash
-# Just run this one command - it handles everything:
-./dev/tools/start_analysis.sh
-```
-This interactive gateway ensures you never skip safety steps and provides all analysis tools through a menu.
-
-### Method 2: Individual Scripts (For Automation)
-```bash
-# One-time: Install git safety hooks
-./dev/tools/install_git_hooks.sh
+1. **NEVER use `git add .` or `git add -A`** - add specific files only
+2. **NEVER commit test files** (`test_*.pl`, `debug_*.pl`)  
+3. **ALWAYS run `make test`** before committing
+4. **ALWAYS use `make`** for quick builds during development
 
 # Before each session: Safe environment setup  
 ./dev/tools/safe_analysis_setup.sh
