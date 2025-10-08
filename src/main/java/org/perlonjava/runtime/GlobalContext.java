@@ -31,6 +31,9 @@ public class GlobalContext {
      */
     public static void initializeGlobals(CompilerOptions compilerOptions) {
 
+        // Clear package versions from previous runs
+        org.perlonjava.symbols.ScopedSymbolTable.clearPackageVersions();
+
         // Initialize regex state and special variables
         RuntimeRegex.initialize();
 

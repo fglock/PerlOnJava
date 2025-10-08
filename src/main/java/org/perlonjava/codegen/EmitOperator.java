@@ -477,6 +477,16 @@ public class EmitOperator {
     static void handlePackageOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         // Extract the package name from the operand.
         String name = ((IdentifierNode) node.operand).name;
+        
+        // Check if there's a version associated with this package and set it at compile time
+        String version = emitterVisitor.ctx.symbolTable.getPackageVersion(name);
+        if (version != null) {
+            // Set $PackageName::VERSION at compile time using GlobalVariable
+            String versionVarName = name + "::VERSION";
+            org.perlonjava.runtime.GlobalVariable.getGlobalVariable(versionVarName)
+                .set(new org.perlonjava.runtime.RuntimeScalar(version));
+        }
+        
         // Set the current package in the symbol table.
         emitterVisitor.ctx.symbolTable.setCurrentPackage(name, node.getBooleanAnnotation("isClass"));
         // Set debug information for the file name.

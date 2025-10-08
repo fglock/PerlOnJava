@@ -493,20 +493,13 @@ public class StatementParser {
             String versionString = null;
             if (version instanceof NumberNode) {
                 versionString = ((NumberNode) version).value;
-                // System.err.println("DEBUG: Extracted version from NumberNode: " + versionString);
             } else if (version instanceof StringNode) {
                 versionString = ((StringNode) version).value;
-                // System.err.println("DEBUG: Extracted version from StringNode: " + versionString);
             }
             // Store the version in the symbol table for this package
             if (versionString != null) {
                 parser.ctx.symbolTable.setPackageVersion(packageName, versionString);
-                // System.err.println("DEBUG: Stored version " + versionString + " for package " + packageName);
-            } else {
-                // System.err.println("DEBUG: No version string extracted for package " + packageName);
             }
-        } else {
-            // System.err.println("DEBUG: No version node for package " + packageName);
         }
 
         // Parse class attributes (e.g., :isa(ParentClass))
