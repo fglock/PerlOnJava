@@ -1,5 +1,25 @@
 # High-Yield Test Analysis Strategy
 
+## 🚨 CRITICAL: NEVER COMMIT WITHOUT `make test`
+
+**YOU WILL BREAK THE BUILD if you skip this!**
+
+Even if your target test (e.g., `./jperl t/op/pack.t`) passes perfectly, you **MUST** run `make test` before committing. Unit tests catch regressions that integration tests miss.
+
+**Recent incident (2025-10-08)**: Fixed character/byte mode inversion bug. pack.t improved +19 tests, but broke unit tests (unpack.t, pack_c0_u0.t) because the mode logic change had subtle side effects.
+
+**The Rule (NO EXCEPTIONS):**
+```bash
+# ❌ WRONG - Never do this
+./jperl t/op/yourtest.t  # passes
+git commit               # BREAKS BUILD!
+
+# ✅ CORRECT - Always do this
+./jperl t/op/yourtest.t  # passes
+make test                # MUST pass before commit!
+git commit               # Safe
+```
+
 ## 🛑 STOP! DO NOT PROCEED WITHOUT PROPER SETUP
 
 ### ⭐ RECOMMENDED: Use the Analysis Gateway

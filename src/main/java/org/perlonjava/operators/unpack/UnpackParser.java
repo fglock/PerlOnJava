@@ -77,6 +77,7 @@ public class UnpackParser {
         boolean hasShriek = false;
         boolean hasLittleEndian = false;
         boolean hasBigEndian = false;
+        char formatChar = template.charAt(position);
         while (i + 1 < template.length()) {
             char modifier = template.charAt(i + 1);
             if (modifier == '<' || modifier == '>' || modifier == '!') {
@@ -94,7 +95,6 @@ public class UnpackParser {
         }
         
         // Validate modifiers using centralized validator
-        char formatChar = template.charAt(position);
         List<Character> modifiers = new ArrayList<>();
         int tempI = position;
         while (tempI + 1 < template.length()) {
