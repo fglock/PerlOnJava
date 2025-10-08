@@ -35,16 +35,24 @@ public class UnpackGroupProcessor {
     /**
      * Interface for unpack operations to avoid circular dependencies.
      * This allows UnpackGroupProcessor to call back to the main unpack method.
+     * 
+     * The function receives:
+     * - template: The unpack template for the group
+     * - state: The current UnpackState (position will be advanced)
+     * - startsWithU: Whether the original template starts with U
+     * - modeStack: Stack for tracking mode changes
+     * 
+     * Returns: List of unpacked values
      */
     @FunctionalInterface
     public interface UnpackFunction {
-        RuntimeList unpack(String template, RuntimeScalar data);
+        RuntimeList unpack(String template, UnpackState state, boolean startsWithU, Stack<Boolean> modeStack);
     }
 
     /**
      * Parse and process a parenthesized group from the template.
      * This method handles the complete group syntax including parsing modifiers,
-     * repeat counts, and delegating to content processing.
+     * repeat counts, and delegating to recursive unpack calls.
      * 
      * @param template The full template string
      * @param position Current position at the opening '('
@@ -52,11 +60,12 @@ public class UnpackGroupProcessor {
      * @param values List to append unpacked values to
      * @param startsWithU Whether template starts with U
      * @param modeStack Stack for tracking mode changes
+     * @param unpackFunction Function to call for recursive unpacking
      * @return New position after processing the group
      */
     public static int parseGroupSyntax(String template, int position, UnpackState state, 
                                        List<RuntimeBase> values, boolean startsWithU, 
-                                       Stack<Boolean> modeStack) {
+                                       Stack<Boolean> modeStack, UnpackFunction unpackFunction) {
         // Find matching closing parenthesis
         int closePos = UnpackHelper.findMatchingParen(template, position);
         if (closePos == -1) {
@@ -147,11 +156,43 @@ public class UnpackGroupProcessor {
             }
         }
 
+        // Apply group-level endianness to the content if specified
+        String effectiveContent = groupContent;
+        if (groupEndian != ' ') {
+            effectiveContent = GroupEndiannessHelper.applyGroupEndianness(groupContent, groupEndian);
+        }
+
         // Push current mode onto stack
         modeStack.push(state.isCharacterMode());
 
-        // Process the group content
-        processGroupContent(groupContent, state, values, groupRepeatCount, startsWithU, modeStack);
+        // Process the group by calling unpack recursively for each repeat
+        for (int rep = 0; rep < groupRepeatCount; rep++) {
+            // Check if we have more data
+            if (rep > 0 && state.remainingBytes() == 0 && !state.isCharacterMode()) {
+                break;
+            }
+            if (rep > 0 && state.remainingCodePoints() == 0 && state.isCharacterMode()) {
+                break;
+            }
+
+            // Save position before unpacking to detect infinite loops
+            int positionBefore = state.getPosition();
+            
+            // Call unpack recursively with the group template
+            RuntimeList groupResult = unpackFunction.unpack(effectiveContent, state, startsWithU, modeStack);
+            
+            // Add all unpacked values to the output
+            values.addAll(groupResult.elements);
+            
+            // For * groups, stop if no progress was made (prevents infinite loops)
+            if (groupRepeatCount == Integer.MAX_VALUE) {
+                int positionAfter = state.getPosition();
+                if (positionAfter == positionBefore) {
+                    // No data consumed - stop to prevent infinite loop
+                    break;
+                }
+            }
+        }
 
         // Restore mode from stack
         if (!modeStack.isEmpty()) {

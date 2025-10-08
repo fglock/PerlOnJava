@@ -59,7 +59,7 @@ public class Unpack {
     }
 
     /**
-     * unpack(template, data)
+     * unpack(template, data) - Public entry point
      *
      * @param ctx  call context
      * @param args argument list
@@ -83,11 +83,33 @@ public class Unpack {
             state.switchToByteMode();
         }
 
-        RuntimeList out = new RuntimeList();
-        List<RuntimeBase> values = out.elements;
-
         // Stack to track mode for parentheses scoping
         Stack<Boolean> modeStack = new Stack<>();
+
+        // Call internal unpack method
+        RuntimeList result = unpackInternal(template, state, startsWithU, modeStack);
+        
+        // Handle scalar context
+        if (ctx == RuntimeContextType.SCALAR && !result.isEmpty()) {
+            return result.elements.getFirst().getList();
+        }
+        return result;
+    }
+
+    /**
+     * Internal unpack method that can be called recursively.
+     * Used by both the public entry point and group processing.
+     *
+     * @param template The unpack template
+     * @param state The unpack state (position will be advanced)
+     * @param startsWithU Whether the original template starts with U
+     * @param modeStack Stack for tracking mode changes
+     * @return list of unpacked values
+     */
+    private static RuntimeList unpackInternal(String template, UnpackState state, 
+                                              boolean startsWithU, Stack<Boolean> modeStack) {
+        RuntimeList out = new RuntimeList();
+        List<RuntimeBase> values = out.elements;
 
         // Parse template
         int i = 0;
@@ -124,7 +146,10 @@ public class Unpack {
 
             // Handle parentheses for grouping
             if (format == '(') {
-                i = UnpackGroupProcessor.parseGroupSyntax(template, i, state, values, startsWithU, modeStack);
+                i = UnpackGroupProcessor.parseGroupSyntax(template, i, state, values, startsWithU, modeStack,
+                    // Pass lambda for recursive unpack calls
+                    (tmpl, st, starts, stack) -> unpackInternal(tmpl, st, starts, stack)
+                );
                 i++;
                 continue;
             }
@@ -581,9 +606,7 @@ public class Unpack {
 
             i++;
         }
-        if (ctx == RuntimeContextType.SCALAR && !out.isEmpty()) {
-            return out.elements.getFirst().getList();
-        }
+        // Internal method always returns list (context handled by public method)
         return out;
     }
 
