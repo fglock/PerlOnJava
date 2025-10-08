@@ -18,7 +18,7 @@ public class WFormatHandler implements FormatHandler {
     @Override
     public void unpack(UnpackState state, List<RuntimeBase> output, int count, boolean isStarCount) {
         for (int i = 0; i < count; i++) {
-            if (!state.isCharacterMode()) {
+            if (state.isCharacterMode()) {
                 // In character mode, read Unicode code points directly
                 if (state.hasMoreCodePoints()) {
                     output.add(new RuntimeScalar(state.nextCodePoint()));
