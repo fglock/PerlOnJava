@@ -327,7 +327,7 @@ public class Pack {
                         if (nextPos >= template.length()) {
                             throw new PerlCompilerException("Code missing after '/'");
                         } else {
-                            throw new PerlCompilerException("'/' must follow a numeric type in pack");
+                            throw new PerlCompilerException("Invalid type '/' in pack");
                         }
                     case 'U':
                         // Unicode format needs special handling for state management
