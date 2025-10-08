@@ -2,6 +2,7 @@ package org.perlonjava.operators.unpack;
 
 import org.perlonjava.operators.Unpack;
 import org.perlonjava.operators.UnpackState;
+import org.perlonjava.operators.pack.GroupEndiannessHelper;
 import org.perlonjava.operators.pack.PackHelper;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeBase;
@@ -79,6 +80,11 @@ public class UnpackGroupProcessor {
         // Check for conflicting endianness within the group
         if (groupEndian != ' ' && UnpackHelper.hasConflictingEndianness(groupContent, groupEndian)) {
             throw new PerlCompilerException("Can't use '" + groupEndian + "' in a group with different byte-order in unpack");
+        }
+        
+        // Apply group-level endianness to the content if specified
+        if (groupEndian != ' ') {
+            groupContent = GroupEndiannessHelper.applyGroupEndianness(groupContent, groupEndian);
         }
 
         // Check for repeat count after closing paren
