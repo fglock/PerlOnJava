@@ -171,12 +171,8 @@ public class PackHelper {
             }
         }
         // In byte mode, we need to handle the string differently
-        if (byteMode && format == 'a') {
-            // In byte mode with 'a', preserve the string as-is
-            PackWriter.writeString(output, str, count, format, byteMode);
-        } else {
-            PackWriter.writeString(output, str, count, format, false);
-        }
+        // Pass byteMode to writeString for all formats (a, A, Z)
+        PackWriter.writeString(output, str, count, format, byteMode);
         return valueIndex;
     }
 
@@ -271,29 +267,35 @@ public class PackHelper {
             hasUnicodeInNormalMode = true;
         }
 
-        // W format behavior: write code point value directly as bytes
-        // Unlike U format which UTF-8 encodes, W writes the raw byte/character value
-        // This is consistent in both character and byte modes
-        if (Character.isValidCodePoint(codePoint)) {
-            // For values 0-255, write as single byte
-            // For higher values, write as multi-byte character
-            if (codePoint <= 0xFF) {
-                // Single byte value - write directly
-                output.write(codePoint);
-            } else {
-                // Multi-byte character - write character code
-                output.writeCharacter(codePoint);
-            }
+        // W format behavior depends on mode:
+        // - In byte mode (C0): write raw byte value (0-255)
+        // - In character mode: write as Unicode character
+        if (byteMode) {
+            // In byte mode, write as raw byte (modulo 256)
+            output.write(codePoint & 0xFF);
         } else {
-            // Beyond Unicode range - wrap to valid range without throwing exception
-            int wrappedValue = codePoint & 0x1FFFFF; // 21 bits
-            if (wrappedValue > 0x10FFFF) {
-                wrappedValue = wrappedValue % 0x110000; // Modulo to fit in Unicode range
-            }
-            if (wrappedValue <= 0xFF) {
-                output.write(wrappedValue);
+            // In character mode, write as Unicode character
+            if (Character.isValidCodePoint(codePoint)) {
+                // For values 0-255, write as single byte
+                // For higher values, write as multi-byte character
+                if (codePoint <= 0xFF) {
+                    // Single byte value - write directly
+                    output.write(codePoint);
+                } else {
+                    // Multi-byte character - write character code
+                    output.writeCharacter(codePoint);
+                }
             } else {
-                output.writeCharacter(wrappedValue);
+                // Beyond Unicode range - wrap to valid range without throwing exception
+                int wrappedValue = codePoint & 0x1FFFFF; // 21 bits
+                if (wrappedValue > 0x10FFFF) {
+                    wrappedValue = wrappedValue % 0x110000; // Modulo to fit in Unicode range
+                }
+                if (wrappedValue <= 0xFF) {
+                    output.write(wrappedValue);
+                } else {
+                    output.writeCharacter(wrappedValue);
+                }
             }
         }
         return hasUnicodeInNormalMode;
