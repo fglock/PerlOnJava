@@ -276,15 +276,25 @@ Small validation fixes can unlock many tests:
 
 ### Build Properly
 ```bash
-# Quick compilation during development
+# Quick compilation during development (incremental - may miss changes!)
 make
 
-# ALWAYS use shadowJar for parser/AST changes
-./gradlew clean shadowJar
+# CRITICAL: For regex/parser changes, ALWAYS use clean shadowJar
+# Incremental builds (make) often don't pick up regex preprocessing changes!
+./gradlew clean shadowJar installDist
+
+# Alternative: Use make dev for forced recompilation
+make dev
 
 # Test immediately after changes
 ./gradlew test
 ```
+
+**⚠️ IMPORTANT BUILD RULE:**
+- **Regex changes** (RegexPreprocessor, RuntimeRegex, etc.) → MUST use `./gradlew clean shadowJar installDist`
+- **Parser/AST changes** → MUST use `./gradlew clean shadowJar`
+- **Simple operator changes** → `make` is usually sufficient
+- **When in doubt** → Use `./gradlew clean shadowJar installDist` to be safe
 
 ### Debug AST Issues
 ```bash
