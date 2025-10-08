@@ -204,9 +204,10 @@ public class Pack {
         PackBuffer output = new PackBuffer();
         int valueIndex = 0;
 
-        // Track current mode - default is normal/character mode
-        boolean byteMode = false;  // false = character mode (default), true = byte mode (after C0)
-        boolean byteModeUsed = false;  // Track if byte mode was ever used
+        // Pre-scan template for C0 to determine initial mode
+        // If C0 appears anywhere, start in byte mode from the beginning
+        boolean byteMode = template.contains("C0");  // Start in byte mode if C0 is present
+        boolean byteModeUsed = byteMode;  // Track if byte mode was ever used
 
         // Track if 'U' was used in normal mode (not byte mode)
         boolean hasUnicodeInNormalMode = false;
