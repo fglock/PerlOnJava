@@ -410,11 +410,12 @@ public class PackWriter {
     public static void writeString(PackBuffer output, String str, int count, char format, boolean byteMode) {
         byte[] bytes;
 
-        if (byteMode && format == 'a') {
-            // In byte mode with 'a', use the string as-is (already UTF-8 encoded if needed)
+        if (byteMode) {
+            // In byte mode (C0), use ISO_8859_1 to preserve raw byte values
+            // This prevents UTF-8 encoding of high bytes (128-255)
             bytes = str.getBytes(StandardCharsets.ISO_8859_1);
         } else {
-            // Normal UTF-8 encoding
+            // In character mode, use UTF-8 encoding
             bytes = str.getBytes(StandardCharsets.UTF_8);
         }
 
