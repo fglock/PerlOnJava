@@ -1,15 +1,24 @@
-.PHONY: all clean test build run wrapper
+.PHONY: all clean test build run wrapper dev
 
 all: build
 
 wrapper:
 	gradle wrapper
 
+# Standard build - incremental compilation (fast)
 build: wrapper
 ifeq ($(OS),Windows_NT)
 	gradlew.bat build
 else
 	./gradlew build
+endif
+
+# Development build - forces recompilation (use during active development)
+dev: wrapper
+ifeq ($(OS),Windows_NT)
+	gradlew.bat clean compileJava installDist
+else
+	./gradlew clean compileJava installDist
 endif
 
 test: wrapper
