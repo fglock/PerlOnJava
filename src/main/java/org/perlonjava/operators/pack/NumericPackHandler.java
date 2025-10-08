@@ -253,10 +253,12 @@ public class NumericPackHandler implements PackFormatHandler {
                     break;
                 case 'q':
                     // Signed 64-bit quad - use endianness if specified
+                    // Use getBigint() to preserve precision for large values
+                    long qSignedVal = value.getBigint().longValue();
                     if (modifiers.bigEndian) {
-                        PackWriter.writeLongBigEndian(output, value.getLong());
+                        PackWriter.writeLongBigEndian(output, qSignedVal);
                     } else {
-                        PackWriter.writeLongLittleEndian(output, value.getLong());
+                        PackWriter.writeLongLittleEndian(output, qSignedVal);
                     }
                     break;
                 case 'Q':
