@@ -34,6 +34,64 @@ public class PackGroupHandler {
     public interface PackFunction {
         RuntimeScalar pack(RuntimeList args);
     }
+    
+    /**
+     * Apply group-level endianness to all applicable formats in the group content.
+     * This adds the endianness modifier after each format character that supports it,
+     * and recursively applies to nested groups.
+     * 
+     * @param groupContent The original group content
+     * @param endian The endianness modifier ('&lt;' or '&gt;')
+     * @return Modified group content with endianness applied
+     */
+    private static String applyGroupEndianness(String groupContent, char endian) {
+        StringBuilder result = new StringBuilder();
+        
+        for (int i = 0; i < groupContent.length(); i++) {
+            char c = groupContent.charAt(i);
+            
+            // Handle nested groups
+            if (c == '(') {
+                int closePos = PackHelper.findMatchingParen(groupContent, i);
+                if (closePos != -1) {
+                    // Extract nested group content
+                    String nestedContent = groupContent.substring(i + 1, closePos);
+                    // Recursively apply endianness to nested group
+                    String modifiedNested = applyGroupEndianness(nestedContent, endian);
+                    result.append('(').append(modifiedNested).append(')');
+                    i = closePos; // Skip to closing paren
+                    continue;
+                }
+            }
+            
+            result.append(c);
+            
+            // Check if this is a format that supports endianness
+            if ("sSiIlLqQjJfFdDpP".indexOf(c) >= 0) {
+                // Check if next character is '!' modifier - if so, copy it first
+                int nextPos = i + 1;
+                if (nextPos < groupContent.length() && groupContent.charAt(nextPos) == '!') {
+                    result.append('!');
+                    i = nextPos; // Move past the '!'
+                    nextPos++;
+                }
+                
+                // Now check if there's already an endianness modifier
+                if (nextPos < groupContent.length()) {
+                    char next = groupContent.charAt(nextPos);
+                    if (next != '<' && next != '>') {
+                        // Add the group's endianness modifier
+                        result.append(endian);
+                    }
+                } else {
+                    // At end of string, add endianness
+                    result.append(endian);
+                }
+            }
+        }
+        
+        return result.toString();
+    }
 
     /**
      * Result of processing a group, containing both the template position and updated value index.
@@ -118,7 +176,16 @@ public class PackGroupHandler {
             } else {
                 // Normal group processing
                 RuntimeList groupArgs = new RuntimeList();
-                groupArgs.add(new RuntimeScalar(groupContent));
+                
+                // Apply group-level endianness to the content if specified
+                String effectiveContent = groupContent;
+                if (groupInfo.endian != ' ') {
+                    // Apply endianness modifier to each format in the group
+                    // This ensures the group's endianness applies to all formats inside
+                    effectiveContent = applyGroupEndianness(groupContent, groupInfo.endian);
+                }
+                
+                groupArgs.add(new RuntimeScalar(effectiveContent));
 
                 // Collect values for this group iteration
                 int groupValueCount = PackHelper.countValuesNeeded(groupContent);
