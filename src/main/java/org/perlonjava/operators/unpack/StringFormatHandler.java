@@ -50,11 +50,58 @@ public class StringFormatHandler implements FormatHandler {
         }
     }
 
+    /**
+     * Process string in character mode (UTF-8 mode).
+     * For 'A' format, removes all trailing Unicode whitespace.
+     */
     private String processString(String str) {
         switch (format) {
             case 'A':
-                // Trim trailing spaces
-                return str.replaceAll("\\s+$", "");
+                // In character mode, trim all Unicode whitespace including null
+                // Perl considers \xa0, \x{1680}, and other Unicode spaces as whitespace
+                // Note: Java's Character.isWhitespace() doesn't include \0, so we check it explicitly
+                int endPos = str.length();
+                while (endPos > 0) {
+                    char ch = str.charAt(endPos - 1);
+                    if (Character.isWhitespace(ch) || ch == '\0') {
+                        endPos--;
+                    } else {
+                        break;
+                    }
+                }
+                return str.substring(0, endPos);
+            case 'Z':
+                // Trim at first null
+                int nullIndex = str.indexOf('\0');
+                if (nullIndex >= 0) {
+                    return str.substring(0, nullIndex);
+                }
+                return str;
+            default: // 'a'
+                return str;
+        }
+    }
+
+    /**
+     * Process string in byte mode.
+     * For 'A' format, removes only ASCII trailing whitespace (not \xa0).
+     */
+    private String processStringByteMode(String str) {
+        switch (format) {
+            case 'A':
+                // In byte mode, only trim ASCII whitespace: space, tab, newline, etc.
+                // Do NOT trim \xa0 (non-breaking space) - it's not ASCII whitespace
+                int endPos = str.length();
+                while (endPos > 0) {
+                    char ch = str.charAt(endPos - 1);
+                    // ASCII whitespace: space, tab, newline, carriage return, form feed
+                    if (ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' || ch == '\f' || ch == '\0') {
+                        endPos--;
+                    } else {
+                        break;
+                    }
+                }
+                return str.substring(0, endPos);
             case 'Z':
                 // Trim at first null
                 int nullIndex = str.indexOf('\0');
@@ -72,10 +119,11 @@ public class StringFormatHandler implements FormatHandler {
         byte[] bytes = new byte[actualCount];
         buffer.get(bytes, 0, actualCount);
 
-        String result = new String(bytes, StandardCharsets.UTF_8);
+        // Use ISO-8859-1 for byte mode to preserve binary data
+        String result = new String(bytes, StandardCharsets.ISO_8859_1);
 
-        // Apply format-specific processing
-        result = processString(result);
+        // Apply format-specific processing (byte mode - ASCII whitespace only)
+        result = processStringByteMode(result);
 
         // Pad if necessary and not star count
         if (!isStarCount && result.length() < count) {
