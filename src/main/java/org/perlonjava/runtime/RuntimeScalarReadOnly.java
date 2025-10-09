@@ -10,9 +10,12 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
 
     // Immutable fields representing the scalar value
     final boolean b;
-    final int i;
     final String s;
-    final double d;
+    
+    // Lazy computation fields for string-to-number conversions
+    // These are null until first access to avoid premature warning generation
+    private Integer i;
+    private Double d;
 
     /**
      * Constructs a RuntimeScalarReadOnly representing an undefined value.
@@ -22,7 +25,7 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
         this.b = false;
         this.i = 0;
         this.s = "";
-        this.d = 0;
+        this.d = 0.0;
         this.value = null;
         this.type = UNDEF;
     }
@@ -37,7 +40,7 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
         this.b = (i != 0);
         this.i = i;
         this.s = Integer.toString(i);
-        this.d = i;
+        this.d = (double) i;
         this.value = i;
         this.type = RuntimeScalarType.INTEGER;
     }
@@ -52,7 +55,7 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
         this.b = b;
         this.i = b ? 1 : 0;
         this.s = b ? "1" : "";
-        this.d = b ? 1 : 0;
+        this.d = b ? 1.0 : 0.0;
         this.value = b;
         this.type = RuntimeScalarType.BOOLEAN;
     }
@@ -64,11 +67,12 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
      */
     public RuntimeScalarReadOnly(String s) {
         super();
-        RuntimeScalar temp = new RuntimeScalar(s);
-        this.b = temp.getBoolean();
-        this.i = temp.getInt();
+        // Don't pre-compute numeric values for strings as this would trigger
+        // "Argument isn't numeric" warnings at construction time instead of at use time.
+        this.b = !s.isEmpty();  // String boolean: true if non-empty
+        this.i = null;  // Computed lazily on first getInt() call
         this.s = s;
-        this.d = temp.getDouble();
+        this.d = null;  // Computed lazily on first getDouble() call
         this.value = s;
         this.type = RuntimeScalarType.STRING;
     }
@@ -85,21 +89,31 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
 
     /**
      * Retrieves the integer representation of the scalar.
+     * For STRING type, computes lazily to ensure warnings are generated at use time.
      *
      * @return the integer value
      */
     @Override
     public int getInt() {
+        // For strings, compute lazily to generate warnings at use time, not construction time
+        if (i == null) {
+            i = super.getInt();
+        }
         return i;
     }
 
     /**
      * Retrieves the double representation of the scalar.
+     * For STRING type, computes lazily to ensure warnings are generated at use time.
      *
      * @return the double value
      */
     @Override
     public double getDouble() {
+        // For strings, compute lazily to generate warnings at use time, not construction time
+        if (d == null) {
+            d = super.getDouble();
+        }
         return d;
     }
 
