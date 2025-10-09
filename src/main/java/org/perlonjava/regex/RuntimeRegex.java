@@ -483,9 +483,36 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         // Extract the regex pattern from the quotedRegex object
         RuntimeRegex regex = resolveRegex(quotedRegex);
+        
+        // Save the original replacement and flags before potentially changing regex
+        RuntimeScalar replacement = regex.replacement;
+        RegexFlags originalFlags = regex.regexFlags;
+
+        // Handle empty pattern - reuse last successful pattern
+        if (regex.patternString == null || regex.patternString.isEmpty()) {
+            if (lastSuccessfulPattern != null) {
+                // Use the pattern from last successful match
+                // But keep the current replacement and flags (especially /g and /i)
+                Pattern pattern = lastSuccessfulPattern.pattern;
+                // Re-apply current flags if they differ
+                if (originalFlags != null && !originalFlags.equals(lastSuccessfulPattern.regexFlags)) {
+                    // Need to recompile with current flags
+                    int newFlags = originalFlags.toPatternFlags();
+                    pattern = Pattern.compile(lastSuccessfulPattern.patternString, newFlags);
+                }
+                // Create a temporary regex with the right pattern and current flags
+                RuntimeRegex tempRegex = new RuntimeRegex();
+                tempRegex.pattern = pattern;
+                tempRegex.patternString = lastSuccessfulPattern.patternString;
+                tempRegex.regexFlags = originalFlags;
+                tempRegex.replacement = replacement;
+                regex = tempRegex;
+            } else {
+                throw new PerlCompilerException("No previous regular expression");
+            }
+        }
 
         Pattern pattern = regex.pattern;
-        RuntimeScalar replacement = regex.replacement;
         Matcher matcher = pattern.matcher(inputStr);
 
         // The result string after substitutions
@@ -544,6 +571,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         if (found > 0) {
             String finalResult = resultBuffer.toString();
+
+            // Store as last successful pattern for empty pattern reuse
+            lastSuccessfulPattern = regex;
 
             if (regex.regexFlags.isNonDestructive()) {
                 // /r modifier: return the modified string
