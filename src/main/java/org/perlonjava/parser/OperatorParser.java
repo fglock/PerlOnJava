@@ -424,9 +424,12 @@ public class OperatorParser {
         String operator = token.text;
         Node operand;
         // Handle operators with a single operand
-        operand = ParsePrimary.parsePrimary(parser);
-        // scalar() can have more operands if they are inside parenthesis
-        if (!operator.equals("scalar")) {
+        // For scalar, parse with precedence that includes postfix operators ([], {}, ->)
+        // Named unary operators have precedence between 20 and 21 in Perl
+        if (operator.equals("scalar")) {
+            operand = parser.parseExpression(parser.getPrecedence("=~")); // precedence 20
+        } else {
+            operand = ParsePrimary.parsePrimary(parser);
             operand = ensureOneOperand(parser, token, operand);
         }
         return new OperatorNode(operator, operand, currentIndex);
