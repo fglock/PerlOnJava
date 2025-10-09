@@ -277,7 +277,15 @@ public class ScopedSymbolTable {
     // XXX TODO cache this
     public String[] getVariableNames() {
         Map<Integer, SymbolTable.SymbolEntry> visibleVariables = this.getAllVisibleVariables();
-        String[] vars = new String[visibleVariables.size()];
+        // Create array sized for actual variables, indexed by their slot numbers
+        // We need to find the maximum slot index to properly size the array
+        int maxIndex = -1;
+        for (Integer index : visibleVariables.keySet()) {
+            if (index > maxIndex) {
+                maxIndex = index;
+            }
+        }
+        String[] vars = new String[maxIndex + 1];
         for (Integer index : visibleVariables.keySet()) {
             vars[index] = visibleVariables.get(index).name();
         }
@@ -422,6 +430,26 @@ public class ScopedSymbolTable {
     public int allocateLocalVariable() {
         // Allocate a new index in the current scope by incrementing the index counter
         return symbolTableStack.peek().index++;
+    }
+
+    /**
+     * Gets the current local variable index counter.
+     *
+     * @return The current index value.
+     */
+    public int getCurrentLocalVariableIndex() {
+        return symbolTableStack.peek().index;
+    }
+
+    /**
+     * Resets the local variable index counter for the current scope.
+     * This is used when creating closures to ensure new local variables
+     * don't overlap with uninitialized closure variable slots.
+     *
+     * @param newIndex The new starting index for local variable allocation.
+     */
+    public void resetLocalVariableIndex(int newIndex) {
+        symbolTableStack.peek().index = newIndex;
     }
 
     /**
