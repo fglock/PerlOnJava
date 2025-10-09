@@ -250,7 +250,8 @@ sub run_single_test {
         ? "warn" : "";
     local $ENV{JPERL_OPTS} = $test_file =~ m{
           re/pat.t
-        | op/repeat.t }x
+        | op/repeat.t
+        | op/list.t }x
         ? "-Xss256m" : "";
 
     # Skip memory-intensive tests (e.g., Long Monsters in re/pat.t with 300KB strings)
