@@ -49,6 +49,13 @@ public class EmitSubroutine {
 
         String[] newEnv = newSymbolTable.getVariableNames();
         ctx.logDebug("AnonSub " + newSymbolTable);
+        
+        // Reset the index counter to start after the closure variables
+        // This prevents allocateLocalVariable() from creating slots that overlap with uninitialized slots
+        // We need to use the MAXIMUM of newEnv.length and the current index to avoid conflicts
+        int currentVarIndex = newSymbolTable.getCurrentLocalVariableIndex();
+        int resetTo = Math.max(newEnv.length, currentVarIndex);
+        newSymbolTable.resetLocalVariableIndex(resetTo);
 
         // Create the new method context
         EmitterContext subCtx =

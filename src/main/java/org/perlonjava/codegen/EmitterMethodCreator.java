@@ -170,10 +170,23 @@ public class EmitterMethodCreator implements Opcodes {
             // Skip some indices because they are reserved for special arguments (this, "@_" and call
             // context)
             for (int i = skipVariables; i < env.length; i++) {
+                // Skip null entries (gaps in sparse array)
+                if (env[i] == null) {
+                    continue;
+                }
                 String descriptor = getVariableDescriptor(env[i]);
                 mv.visitVarInsn(Opcodes.ALOAD, 0); // Load 'this'
                 ctx.logDebug("Init closure variable: " + descriptor);
                 mv.visitFieldInsn(Opcodes.GETFIELD, ctx.javaClassInfo.javaClassName, env[i], descriptor);
+                mv.visitVarInsn(Opcodes.ASTORE, i);
+            }
+            
+            // Pre-initialize additional slots that might be allocated by localSetup or other mechanisms
+            // This prevents VerifyErrors when slots are accessed before explicit initialization
+            // We initialize slots from env.length up to env.length + 10 with null
+            int maxPreInitSlots = Math.min(env.length + 10, 64); // Cap at 64 to avoid excessive initialization
+            for (int i = env.length; i < maxPreInitSlots; i++) {
+                mv.visitInsn(Opcodes.ACONST_NULL);
                 mv.visitVarInsn(Opcodes.ASTORE, i);
             }
 
