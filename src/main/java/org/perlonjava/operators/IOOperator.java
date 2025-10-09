@@ -220,8 +220,9 @@ public class IOOperator {
             // 3-argument open
             RuntimeScalar secondArg = args[2].scalar();
 
-            // Check for filehandle duplication modes (<&, >&, <&=, >&=)
-            if (mode.equals("<&") || mode.equals(">&") || mode.equals("<&=") || mode.equals(">&=")) {
+            // Check for filehandle duplication modes (<&, >&, +<&, <&=, >&=, +<&=)
+            if (mode.equals("<&") || mode.equals(">&") || mode.equals("+<&") ||
+                mode.equals("<&=") || mode.equals(">&=") || mode.equals("+<&=")) {
                 // Handle filehandle duplication
                 String argStr = secondArg.toString();
                 boolean isParsimonious = mode.endsWith("="); // &= modes reuse file descriptor

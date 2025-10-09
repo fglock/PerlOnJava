@@ -408,10 +408,8 @@ public class RuntimeIO implements RuntimeScalarReference {
             // Truncate for write mode
             targetScalar.set("");
         } else if (mode.equals(">>")) {
-            // Seek to end for append mode
-            String content = targetScalar.toString();
-            int length = content.getBytes(StandardCharsets.ISO_8859_1).length;
-            scalarIO.seek(length);
+            // Enable append mode - writes always go to the end
+            scalarIO.setAppendMode(true);
         }
         // For "<" (read) mode, no special handling needed
 
@@ -705,6 +703,13 @@ public class RuntimeIO implements RuntimeScalarReference {
      * @throws PerlCompilerException if the mode is not supported
      */
     private Set<StandardOpenOption> convertMode(String mode) {
+        // Handle duplication modes - these are handled separately in open()
+        if (mode.equals("<&") || mode.equals(">&") || mode.equals("+<&") || 
+            mode.equals("<&=") || mode.equals(">&=") || mode.equals("+<&=")) {
+            // Return read-write mode for dup operations
+            return new HashSet<>(MODE_OPTIONS.get("+<"));
+        }
+        
         Set<StandardOpenOption> options = MODE_OPTIONS.get(mode);
         if (options == null) {
             throw new PerlCompilerException("Unsupported file mode: " + mode);

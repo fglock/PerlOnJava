@@ -14,6 +14,7 @@ public class ScalarBackedIO implements IOHandle {
     private boolean isEOF = false;
     private boolean isClosed = false;
     private CharsetDecoderHelper decoderHelper;
+    private boolean appendMode = false;
 
     public ScalarBackedIO(RuntimeScalar backingScalar) {
         this.backingScalar = backingScalar;
@@ -59,6 +60,10 @@ public class ScalarBackedIO implements IOHandle {
 
         String currentContent = backingScalar.toString();
         byte[] currentBytes = currentContent.getBytes(StandardCharsets.ISO_8859_1);
+
+        if (appendMode) {
+            position = currentBytes.length;
+        }
         byte[] newBytes = string.getBytes(StandardCharsets.ISO_8859_1);
 
         // Create new content array
@@ -224,6 +229,10 @@ public class ScalarBackedIO implements IOHandle {
         String content = backingScalar.toString();
         byte[] currentBytes = content.getBytes(StandardCharsets.ISO_8859_1);
 
+        if (appendMode) {
+            position = currentBytes.length;
+        }
+
         // Convert data to bytes
         byte[] dataBytes = new byte[data.length()];
         for (int i = 0; i < data.length(); i++) {
@@ -249,5 +258,19 @@ public class ScalarBackedIO implements IOHandle {
 
         position += dataBytes.length;
         return new RuntimeScalar(dataBytes.length);
+    }
+
+    /**
+     * Sets append mode for this scalar-backed handle.
+     * When append mode is enabled, all writes go to the end of the scalar.
+     *
+     * @param appendMode true to enable append mode
+     */
+    public void setAppendMode(boolean appendMode) {
+        this.appendMode = appendMode;
+        if (appendMode) {
+            String currentContent = backingScalar.toString();
+            position = currentContent.getBytes(StandardCharsets.ISO_8859_1).length;
+        }
     }
 }
