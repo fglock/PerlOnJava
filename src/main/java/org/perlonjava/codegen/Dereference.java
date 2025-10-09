@@ -88,7 +88,14 @@ public class Dereference {
                 emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray",
                         arrayOperation + "Slice", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
 
-                EmitOperator.handleVoidContext(emitterVisitor);
+                // Handle context conversion
+                if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+                    // Convert RuntimeList to RuntimeScalar (count of elements)
+                    emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList",
+                            "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                    emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
+                }
                 return;
             }
         }
