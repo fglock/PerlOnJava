@@ -328,6 +328,12 @@ public class IOOperator {
         RuntimeScalar handle = args.length == 1 ? ((RuntimeScalar) args[0]) : select(new RuntimeList(), RuntimeContextType.SCALAR);
         RuntimeIO fh = handle.getRuntimeIO();
 
+        // Handle case where the filehandle is invalid/corrupted
+        if (fh == null) {
+            // Return false (undef in boolean context) for invalid filehandle
+            return new RuntimeScalar();
+        }
+
         if (fh instanceof TieHandle tieHandle) {
             return TieHandle.tiedClose(tieHandle);
         }
