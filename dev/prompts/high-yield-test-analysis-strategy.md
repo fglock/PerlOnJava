@@ -1,5 +1,12 @@
 # High-Yield Test Analysis Strategy
 
+## 📏 DOCUMENTATION RULE: Keep It Concise
+
+**All analysis documents and status reports MUST be:**
+- **Maximum 2kB or 400 words**
+- Focus on: Problem → Root Cause → Solution
+- Avoid: Verbose explanations, redundant context, excessive code blocks
+
 ## 🚨 CRITICAL: NEVER COMMIT WITHOUT `make test`
 
 **YOU WILL BREAK THE BUILD if you skip this!**
@@ -410,11 +417,17 @@ Create a prompt document in `dev/prompts/` when:
 - High value but complex implementation
 
 ### Prompt Document Template
+
+**CRITICAL: Keep analysis documents concise!**
+- **Maximum length**: 2kB or 400 words
+- **Focus**: Problem, root cause, solution only
+- **Avoid**: Verbose explanations, redundant context, long code blocks
+
 ```markdown
 # Fix [Issue Name]
 
 ## Objective
-Clear problem statement and impact.
+Clear problem statement and impact. (1-2 sentences)
 
 ## Current Status
 - Test file: path/to/test.t
@@ -422,16 +435,16 @@ Clear problem statement and impact.
 - Pass rate: Y%
 
 ## Root Cause Analysis
-Technical investigation and evidence.
+Technical investigation and evidence. (2-3 sentences max)
 
 ## Proposed Solution
-Step-by-step implementation plan.
+Step-by-step implementation plan. (Bullet points, concise)
 
 ## Test Cases
-Minimal reproductions.
+Minimal reproductions. (Code only, no explanations)
 
 ## Expected Impact
-Tests that will be fixed.
+Tests that will be fixed. (1 sentence)
 ```
 
 ## Success Metrics
