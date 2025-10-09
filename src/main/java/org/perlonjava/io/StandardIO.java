@@ -160,6 +160,14 @@ public class StandardIO implements IOHandle {
 
     @Override
     public RuntimeScalar close() {
+        // Don't actually close STDIN, STDOUT, or STDERR - they should remain open
+        // Just return success to indicate the operation completed
+        // This prevents deadlocks when closing STDERR while debug output is being written
+        if (fileno == STDIN_FILENO || fileno == STDOUT_FILENO || fileno == STDERR_FILENO) {
+            flush();  // Flush any pending output
+            return RuntimeScalarCache.scalarTrue;
+        }
+        
         flush();
         shutdownRequested = true;
         if (printThread != null) {
