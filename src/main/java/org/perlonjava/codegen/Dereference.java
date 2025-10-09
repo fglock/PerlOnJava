@@ -88,9 +88,9 @@ public class Dereference {
                 emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray",
                         arrayOperation + "Slice", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
 
-                // Handle context conversion
+                // Handle context conversion for array slices
                 if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
-                    // Convert RuntimeList to RuntimeScalar (count of elements)
+                    // Convert RuntimeList to RuntimeScalar (Perl scalar slice semantics = last element or undef)
                     emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList",
                             "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
                 } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
@@ -208,7 +208,14 @@ public class Dereference {
                 emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeHash",
                         hashOperation + "Slice", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
 
-                EmitOperator.handleVoidContext(emitterVisitor);
+                // Handle context conversion for hash slices
+                if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+                    // Convert RuntimeList to RuntimeScalar (Perl scalar slice semantics)
+                    emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList",
+                            "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                    emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
+                }
                 return;
             }
             if (sigil.equals("%") && hashOperation.equals("get")) {
@@ -244,7 +251,13 @@ public class Dereference {
                 emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeHash",
                         "getKeyValueSlice", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
 
-                EmitOperator.handleVoidContext(emitterVisitor);
+                // Handle context conversion for key/value slice
+                if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+                    emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList",
+                            "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                    emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
+                }
                 return;
             }
         }
@@ -363,6 +376,15 @@ public class Dereference {
             
             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", 
                     "arrayDerefGetSlice", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
+
+            // Context conversion: list slice in scalar/void contexts
+            if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+                // Convert RuntimeList to RuntimeScalar (Perl scalar slice semantics)
+                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList",
+                        "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+            } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
+            }
         }
 
         EmitOperator.handleVoidContext(emitterVisitor);
