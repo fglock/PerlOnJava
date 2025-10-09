@@ -128,7 +128,7 @@ public class EmitLogicalOperator {
         mv.visitJumpInsn(compareOpcode, endLabel);
 
         mv.visitInsn(Opcodes.POP); // Remove left operand
-        node.right.accept(emitterVisitor); // Right operand in caller's context (list or scalar)
+        node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR)); // Right operand in scalar context
         // Stack is [right]
 
         mv.visitLabel(endLabel);
