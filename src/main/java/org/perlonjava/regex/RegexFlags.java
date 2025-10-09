@@ -121,6 +121,7 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
     public String toFlagString() {
         StringBuilder flagString = new StringBuilder();
 
+        if (isGlobalMatch) flagString.append('g');
         if (preservesMatch) flagString.append('p');
         if (isCaseInsensitive) flagString.append('i');
         if (isMultiLine) flagString.append('m');
@@ -128,7 +129,6 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
         if (isNonCapturing) flagString.append('n');
         if (isExtended) flagString.append('x');
         if (isNonDestructive) flagString.append('r');
-        if (isNonDestructive) flagString.append('g');
 
         return flagString.toString();
     }

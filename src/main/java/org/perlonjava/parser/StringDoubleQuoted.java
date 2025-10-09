@@ -454,13 +454,7 @@ public class StringDoubleQuoted extends StringSegmentParser {
             case "b" -> appendToCurrentSegment("\b");
             case "a" -> appendToCurrentSegment(String.valueOf((char) 7));  // ASCII bell
             case "e" -> appendToCurrentSegment(String.valueOf((char) 27)); // ASCII escape
-            case "$" -> {
-                if (isRegexReplacement) {
-                    appendToCurrentSegment("\\$");
-                } else {
-                    appendToCurrentSegment("$");
-                }
-            }
+            case "$" -> appendToCurrentSegment("$");
 
             // Control character: \cX
             case "c" -> handleControlCharacter();
