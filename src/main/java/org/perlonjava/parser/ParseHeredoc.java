@@ -116,6 +116,7 @@ public class ParseHeredoc {
             String indentWhitespace = "";
             StringBuilder currentLine = new StringBuilder();
             boolean foundTerminator = false; // Track if we found the terminator
+            boolean lastTokenWasNewline = false; // Track if last token was a newline
 
             parser.ctx.logDebug("  Looking for heredoc content starting at token index: " + currentIndex);
 
@@ -126,6 +127,7 @@ public class ParseHeredoc {
                 parser.ctx.logDebug("  Token[" + currentIndex + "]: type=" + token.type + ", text='" + token.text.replace("\n", "\\n") + "'");
 
                 if (token.type == LexerTokenType.NEWLINE || (!identifier.isEmpty() && token.type == LexerTokenType.EOF)) {
+                    lastTokenWasNewline = (token.type == LexerTokenType.NEWLINE);
                     // End of the current line
                     String line = currentLine.toString();
                     parser.ctx.logDebug("  Completed line: '" + line + "'");
@@ -161,17 +163,28 @@ public class ParseHeredoc {
 
             // Check if we found the terminator
             if (!foundTerminator) {
+                // Special case: blank identifier at EOF
+                // If identifier is empty and we're at EOF AND the last token was a newline,
+                // treat EOF as an implicit blank line terminator
+                if (identifier.isEmpty() && lastTokenWasNewline && 
+                    (currentIndex >= tokens.size() ||
+                        (currentIndex < tokens.size() && tokens.get(currentIndex).type == LexerTokenType.EOF))) {
+                    // The last line we collected should be the content
+                    // An implicit blank line at EOF terminates the heredoc
+                    parser.ctx.logDebug("Blank heredoc terminated by EOF after newline");
+                    foundTerminator = true;
+                }
                 // If we're at EOF and still haven't found the terminator, this is an error
-                if (currentIndex >= tokens.size() ||
+                else if (currentIndex >= tokens.size() ||
                         (currentIndex < tokens.size() && tokens.get(currentIndex).type == LexerTokenType.EOF)) {
                     // This is a real error - the terminator is missing
                     heredocError(parser, heredocNode);
+                } else {
+                    // Otherwise, if we're in a nested context, defer for parent to handle
+                    parser.ctx.logDebug("Heredoc " + identifier + " terminator not found in current context - deferring");
+                    deferredHeredocs.add(heredocNode);
+                    continue;
                 }
-
-                // Otherwise, if we're in a nested context, defer for parent to handle
-                parser.ctx.logDebug("Heredoc " + identifier + " terminator not found in current context - deferring");
-                deferredHeredocs.add(heredocNode);
-                continue;
             }
 
             // Handle indentation
