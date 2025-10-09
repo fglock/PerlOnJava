@@ -330,24 +330,34 @@ public class Dereference {
 
         ArrayLiteralNode right = (ArrayLiteralNode) node.right;
         if (right.elements.size() == 1) {
-            // Optimization: Extract the single element if the list has only one item
+            // Single index: use get/delete/exists methods
             Node elem = right.elements.getFirst();
             elem.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+            
+            String methodName = switch (arrayOperation) {
+                case "get" -> "arrayDerefGet";
+                case "delete" -> "arrayDerefDelete";
+                case "exists" -> "arrayDerefExists";
+                default ->
+                        throw new PerlCompilerException(node.tokenIndex, "Not implemented: array operation: " + arrayOperation, emitterVisitor.ctx.errorUtil);
+            };
+
+            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", 
+                    methodName, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
         } else {
-            // emit the [0] as a RuntimeList
+            // Multiple indices: use slice method (only for get operation)
+            if (!arrayOperation.equals("get")) {
+                throw new PerlCompilerException(node.tokenIndex, "Array slice not supported for " + arrayOperation, emitterVisitor.ctx.errorUtil);
+            }
+            
+            // Emit the indices as a RuntimeList
             ListNode nodeRight = right.asListNode();
-            nodeRight.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+            nodeRight.accept(emitterVisitor.with(RuntimeContextType.LIST));
+            
+            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", 
+                    "arrayDerefGetSlice", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
         }
 
-        String methodName = switch (arrayOperation) {
-            case "get" -> "arrayDerefGet";
-            case "delete" -> "arrayDerefDelete";
-            case "exists" -> "arrayDerefExists";
-            default ->
-                    throw new PerlCompilerException(node.tokenIndex, "Not implemented: array operation: " + arrayOperation, emitterVisitor.ctx.errorUtil);
-        };
-
-        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", methodName, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
         EmitOperator.handleVoidContext(emitterVisitor);
     }
 

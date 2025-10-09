@@ -690,6 +690,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return this.arrayDeref().get(index);
     }
 
+    // Method to implement `$v->[10, 20]` (slice)
+    public RuntimeList arrayDerefGetSlice(RuntimeList indices) {
+        return this.arrayDeref().getSlice(indices);
+    }
+
     // Method to implement `delete $v->[10]`
     public RuntimeScalar arrayDerefDelete(RuntimeScalar index) {
         return this.arrayDeref().delete(index);
