@@ -97,7 +97,17 @@ public class EmitLogicalOperator {
      */
     static void emitLogicalOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node, int compareOpcode, String getBoolean) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
-        Label endLabel = new Label(); // Label for the end of the operation
+        int callerContext = emitterVisitor.ctx.contextType;
+        
+        // In SCALAR or VOID context, use simple implementation (no context conversion needed)
+        if (callerContext == RuntimeContextType.SCALAR || callerContext == RuntimeContextType.VOID) {
+            emitLogicalOperatorSimple(emitterVisitor, node, compareOpcode, getBoolean);
+            return;
+        }
+        
+        // LIST context: Need special handling to convert scalar LHS to list
+        Label convertLabel = new Label();
+        Label endLabel = new Label();
 
         // check if the right operand contains a variable declaration,
         // if so, move the declaration outside of the logical operator
@@ -114,23 +124,61 @@ public class EmitLogicalOperator {
             }
         }
 
-        node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR)); // target - left parameter
-        // The left parameter is in the stack
+        // Evaluate LHS in scalar context (for boolean test)
+        node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        // Stack: [RuntimeScalar]
 
         mv.visitInsn(Opcodes.DUP);
-        // Stack is [left, left]
+        // Stack: [RuntimeScalar, RuntimeScalar]
 
-        // Convert the result to a boolean
+        // Test boolean value
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", getBoolean, "()Z", false);
-        // Stack is [left, boolean]
+        // Stack: [RuntimeScalar, boolean]
 
-        // If the left operand boolean value is true, return left operand
+        // If true, jump to convert label
+        mv.visitJumpInsn(compareOpcode, convertLabel);
+
+        // LHS is false: evaluate RHS in LIST context
+        mv.visitInsn(Opcodes.POP); // Remove LHS
+        node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
+        // Stack: [RuntimeList]
+        mv.visitJumpInsn(Opcodes.GOTO, endLabel);
+
+        // LHS is true: convert scalar to list
+        mv.visitLabel(convertLabel);
+        // Stack: [RuntimeScalar]
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
+                         "getList", "()Lorg/perlonjava/runtime/RuntimeList;", false);
+        // Stack: [RuntimeList]
+
+        mv.visitLabel(endLabel);
+        // Stack: [RuntimeList] from both branches
+        EmitOperator.handleVoidContext(emitterVisitor);
+    }
+
+    /**
+     * Simple implementation for SCALAR/VOID context (no context conversion needed)
+     */
+    private static void emitLogicalOperatorSimple(EmitterVisitor emitterVisitor, BinaryOperatorNode node, int compareOpcode, String getBoolean) {
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        Label endLabel = new Label();
+
+        // check if the right operand contains a variable declaration
+        OperatorNode declaration = FindDeclarationVisitor.findOperator(node.right, "my");
+        if (declaration != null) {
+            if (declaration.operand instanceof OperatorNode operatorNode) {
+                declaration.accept(emitterVisitor.with(RuntimeContextType.VOID));
+                declaration.operator = operatorNode.operator;
+                declaration.operand = operatorNode.operand;
+            }
+        }
+
+        node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", getBoolean, "()Z", false);
         mv.visitJumpInsn(compareOpcode, endLabel);
-
-        mv.visitInsn(Opcodes.POP); // Remove left operand
-        node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR)); // Right operand in scalar context
-        // Stack is [right]
-
+        mv.visitInsn(Opcodes.POP);
+        node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         mv.visitLabel(endLabel);
         EmitOperator.handleVoidContext(emitterVisitor);
     }
