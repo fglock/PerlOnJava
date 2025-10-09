@@ -378,6 +378,21 @@ public class StatementResolver {
                     TokenUtils.consume(parser);
                     Node modifierExpression = parser.parseExpression(0);
                     parseStatementTerminator(parser);
+                    
+                    // Special case: "EXPR for $_" when $_ is the list
+                    // This is a loop that executes once with $_ aliased to itself
+                    // Instead of creating a for loop with complex aliasing,
+                    // transform it to a simple loop block: { EXPR }
+                    // This avoids the aliasing issue while preserving loop semantics
+                    if (modifierExpression instanceof OperatorNode opNode 
+                        && opNode.operator.equals("$")
+                        && opNode.operand instanceof IdentifierNode idNode
+                        && (idNode.name.equals("_") || idNode.name.equals("main::_"))) {
+                        // Transform "EXPR for $_" to a simple block that executes once
+                        // This preserves loop control (last, next, redo) but avoids aliasing
+                        yield new BlockNode(List.of(expression), parser.tokenIndex);
+                    }
+                    
                     yield new BlockNode(
                             List.of(
                                     new OperatorNode("local", scalarUnderscore(parser), parser.tokenIndex),
