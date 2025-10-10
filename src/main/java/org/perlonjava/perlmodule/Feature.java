@@ -85,15 +85,9 @@ public class Feature extends PerlModuleBase {
         for (int i = 1; i < args.size(); i++) {
             String featureName = args.get(i).toString();
             
-            // Handle feature bundles like ":5.10", ":all", etc.
-            if (featureName.startsWith(":")) {
-                String bundle = featureName.substring(1);
-                featureManager.enableFeatureBundle(bundle);
-            } else {
-                // Individual feature like "declared_refs", "say", etc.
-                // Use symbolTable for proper lexical scoping
-                symbolTable.enableFeatureCategory(featureName);
-            }
+            // enableFeatureBundle handles both bundles (":5.10") and individual features ("say")
+            // It calls enableFeature() which updates both featureManager and symbolTable
+            featureManager.enableFeatureBundle(featureName);
         }
         return new RuntimeScalar().getList();
     }
@@ -116,14 +110,9 @@ public class Feature extends PerlModuleBase {
         for (int i = 1; i < args.size(); i++) {
             String featureName = args.get(i).toString();
             
-            // Handle feature bundles like ":5.10", ":all", etc.
-            if (featureName.startsWith(":")) {
-                String bundle = featureName.substring(1);
-                featureManager.disableFeatureBundle(bundle);
-            } else {
-                // Individual feature
-                symbolTable.disableFeatureCategory(featureName);
-            }
+            // disableFeatureBundle handles both bundles (":5.10") and individual features ("say")
+            // It calls disableFeature() which updates both featureManager and symbolTable
+            featureManager.disableFeatureBundle(featureName);
         }
         return new RuntimeScalar().getList();
     }
