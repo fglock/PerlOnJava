@@ -525,6 +525,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **parent** pragma
 - ✅  **base** pragma
 - ✅  **constant** pragma
+- ✅  **experimental** pragma
 - ✅  **if** pragma
 - ✅  **lib** pragma
 - ✅  **mro** (Method Resolution Order) pragma
@@ -536,7 +537,6 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
   - ✅ Features implemented: `fc`, `say`, `current_sub`, `isa`, `state`, `try`, `bitwise`, `postderef`, `evalbytes`, `module_true`, `signatures`, `class`, `keyword_all`, `keyword_any`.
   - ❌ Features missing: `postderef_qq`, `unicode_eval`, `unicode_strings`, `defer`, `refaliasing`.
 - 🚧  **warnings** pragma
-- ❌  **experimental** pragma
 - ❌  **attributes** pragma
 - ❌  **bignum, bigint, and bigrat** pragmas
 - ❌  **encoding** pragma
