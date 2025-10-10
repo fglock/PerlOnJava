@@ -493,6 +493,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **I/O symbols**: `STDOUT`, `STDERR`, `STDIN`, `ARGV`, `ARGVOUT` are implemented.
 - ✅  **Stash manipulation**: Alternative ways to create constants like: `$constant::{_CAN_PCS} = \$const`.
 - ✅  **`reset("A-Z")`** resetting global variables is implemented.
+- ✅  **Single-quote as package separator**: Legacy `$a'b` style package separator is supported.
 - ❌  **Thread-safe `@_`, `$_`, and regex variables**: Thread safety for global special variables is missing.
 - ❌  **Compiler flags**:  The special variables `$^H`, `%^H`, `${^WARNING_BITS}` are not implemented.
 - ✅  **`caller` operator**: `caller` returns `($package, $filename, $line)`.
