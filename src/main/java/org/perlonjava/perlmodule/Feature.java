@@ -1,7 +1,9 @@
 package org.perlonjava.perlmodule;
 
 import org.perlonjava.runtime.*;
+import org.perlonjava.symbols.ScopedSymbolTable;
 
+import static org.perlonjava.parser.SpecialBlockParser.getCurrentScope;
 import static org.perlonjava.runtime.FeatureFlags.featureExists;
 import static org.perlonjava.runtime.FeatureFlags.getFeatureList;
 
@@ -51,12 +53,25 @@ public class Feature extends PerlModuleBase {
      * @return A RuntimeList.
      */
     public static RuntimeList useFeature(RuntimeArray args, int ctx) {
+        ScopedSymbolTable symbolTable = getCurrentScope();
+        
+        if (args.size() == 1) {
+            // No arguments - do nothing
+            return new RuntimeScalar().getList();
+        }
+        
         for (int i = 1; i < args.size(); i++) {
-            String bundle = args.get(i).toString();
-            if (!FeatureFlags.featureExists(bundle) && !FeatureFlags.bundleExists(bundle)) {
-                throw new PerlCompilerException("Unknown feature category '" + bundle + "'");
+            String featureName = args.get(i).toString();
+            
+            // Handle feature bundles like ":5.10", ":all", etc.
+            if (featureName.startsWith(":")) {
+                String bundle = featureName.substring(1);
+                featureManager.enableFeatureBundle(bundle);
+            } else {
+                // Individual feature like "declared_refs", "say", etc.
+                // Use symbolTable for proper lexical scoping
+                symbolTable.enableFeatureCategory(featureName);
             }
-            featureManager.enableFeatureBundle(bundle);
         }
         return new RuntimeScalar().getList();
     }
@@ -69,12 +84,24 @@ public class Feature extends PerlModuleBase {
      * @return A RuntimeList.
      */
     public static RuntimeList noFeature(RuntimeArray args, int ctx) {
+        ScopedSymbolTable symbolTable = getCurrentScope();
+        
+        if (args.size() == 1) {
+            // No arguments - do nothing
+            return new RuntimeScalar().getList();
+        }
+        
         for (int i = 1; i < args.size(); i++) {
-            String bundle = args.get(i).toString();
-            if (!FeatureFlags.bundleExists(bundle) && !featureExists(bundle)) {
-                throw new PerlCompilerException("Unknown feature category '" + bundle + "'");
+            String featureName = args.get(i).toString();
+            
+            // Handle feature bundles like ":5.10", ":all", etc.
+            if (featureName.startsWith(":")) {
+                String bundle = featureName.substring(1);
+                featureManager.disableFeatureBundle(bundle);
+            } else {
+                // Individual feature
+                symbolTable.disableFeatureCategory(featureName);
             }
-            featureManager.disableFeatureBundle(bundle);
         }
         return new RuntimeScalar().getList();
     }
