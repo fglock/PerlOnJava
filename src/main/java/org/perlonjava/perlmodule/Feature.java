@@ -36,6 +36,11 @@ public class Feature extends PerlModuleBase {
         }
 
         featureManager = new FeatureFlags();
+        
+        // TODO: Populate %feature::feature hash for experimental.pm compatibility
+        // The hash needs to be accessible from Perl code for experimental.pm to work
+        // Currently the Java-side population doesn't persist to the Perl-side view
+        // Workaround: feature.pm has the hash defined in Perl
     }
 
     /**
