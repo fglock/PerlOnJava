@@ -99,8 +99,8 @@ public class EmitLogicalOperator {
         MethodVisitor mv = emitterVisitor.ctx.mv;
         int callerContext = emitterVisitor.ctx.contextType;
         
-        // In SCALAR or VOID context, use simple implementation (no context conversion needed)
-        if (callerContext == RuntimeContextType.SCALAR || callerContext == RuntimeContextType.VOID) {
+        // In SCALAR, VOID, or RUNTIME context, use simple implementation (no context conversion needed)
+        if (callerContext == RuntimeContextType.SCALAR || callerContext == RuntimeContextType.VOID || callerContext == RuntimeContextType.RUNTIME) {
             emitLogicalOperatorSimple(emitterVisitor, node, compareOpcode, getBoolean);
             return;
         }
@@ -173,12 +173,17 @@ public class EmitLogicalOperator {
             }
         }
 
-        node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        // For RUNTIME context, preserve it; otherwise use SCALAR for boolean evaluation
+        int operandContext = emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME 
+            ? RuntimeContextType.RUNTIME 
+            : RuntimeContextType.SCALAR;
+        
+        node.left.accept(emitterVisitor.with(operandContext));
         mv.visitInsn(Opcodes.DUP);
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", getBoolean, "()Z", false);
         mv.visitJumpInsn(compareOpcode, endLabel);
         mv.visitInsn(Opcodes.POP);
-        node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        node.right.accept(emitterVisitor.with(operandContext));
         mv.visitLabel(endLabel);
         EmitOperator.handleVoidContext(emitterVisitor);
     }
