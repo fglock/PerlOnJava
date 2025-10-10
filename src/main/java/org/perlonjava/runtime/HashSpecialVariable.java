@@ -158,6 +158,11 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
     }
 
     @Override
+    public boolean containsKey(Object key) {
+        return super.containsKey(key);
+    }
+
+    @Override
     public RuntimeScalar put(String key, RuntimeScalar value) {
         if (this.mode == Id.STASH) {
             String fullKey = namespace + key;
@@ -169,6 +174,57 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
             }
 
             return oldValue;
+        }
+        return scalarUndef;
+    }
+
+    @Override
+    public RuntimeScalar remove(Object key) {
+        if (this.mode == Id.STASH) {
+            String fullKey = namespace + key;
+            
+            // Check if the glob exists
+            boolean exists = containsNamespace(GlobalVariable.globalVariables, fullKey) ||
+                    containsNamespace(GlobalVariable.globalArrays, fullKey) ||
+                    containsNamespace(GlobalVariable.globalHashes, fullKey) ||
+                    containsNamespace(GlobalVariable.globalCodeRefs, fullKey) ||
+                    containsNamespace(GlobalVariable.globalIORefs, fullKey) ||
+                    containsNamespace(GlobalVariable.globalFormatRefs, fullKey);
+            
+            if (!exists) {
+                return scalarUndef;
+            }
+            
+            // Get references to all the slots before deleting
+            RuntimeScalar code = GlobalVariable.globalCodeRefs.remove(fullKey);
+            RuntimeScalar scalar = GlobalVariable.globalVariables.remove(fullKey);
+            RuntimeArray array = GlobalVariable.globalArrays.remove(fullKey);
+            RuntimeHash hash = GlobalVariable.globalHashes.remove(fullKey);
+            RuntimeGlob io = GlobalVariable.globalIORefs.remove(fullKey);
+            RuntimeScalar format = GlobalVariable.globalFormatRefs.remove(fullKey);
+            
+            // Count how many slots exist
+            int slotCount = 0;
+            if (code != null && code.getDefinedBoolean()) slotCount++;
+            if (scalar != null && scalar.getDefinedBoolean()) slotCount++;
+            if (array != null && !array.elements.isEmpty()) slotCount++;
+            if (hash != null && !hash.elements.isEmpty()) slotCount++;
+            if (io != null) slotCount++;
+            if (format != null && format.getDefinedBoolean()) slotCount++;
+            
+            // If only CODE slot exists, return it directly (Perl behavior)
+            if (slotCount == 1 && code != null && code.getDefinedBoolean()) {
+                return code;
+            }
+            
+            // Otherwise, create a detached glob with all slots
+            // For now, just return the CODE slot if it exists, otherwise return the glob
+            if (code != null && code.getDefinedBoolean()) {
+                return code;
+            }
+            
+            // Return a glob reference - create a new RuntimeGlob that will be detached
+            return new RuntimeGlob(fullKey);
         }
         return scalarUndef;
     }

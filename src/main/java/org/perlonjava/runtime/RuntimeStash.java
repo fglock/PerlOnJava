@@ -114,11 +114,49 @@ public class RuntimeStash extends RuntimeHash {
      * @param key The RuntimeScalar representing the key to delete.
      * @return The value associated with the deleted key, or an empty RuntimeScalar if the key did not exist.
      */
+    @Override
+    public RuntimeScalar delete(String key) {
+        return deleteGlob(key);
+    }
+    
+    @Override
     public RuntimeScalar delete(RuntimeScalar key) {
-        String k = key.toString();
-        if (elements.containsKey(k)) {
-            return new RuntimeScalar(elements.remove(k));
+        return deleteGlob(key.toString());
+    }
+    
+    private RuntimeScalar deleteGlob(String k) {
+        // For stash, we need to delete from GlobalVariable maps and return the glob
+        String fullKey = namespace + k;
+        
+        // Check if the glob exists
+        boolean exists = GlobalVariable.globalCodeRefs.containsKey(fullKey) ||
+                GlobalVariable.globalVariables.containsKey(fullKey) ||
+                GlobalVariable.globalArrays.containsKey(fullKey) ||
+                GlobalVariable.globalHashes.containsKey(fullKey) ||
+                GlobalVariable.globalIORefs.containsKey(fullKey) ||
+                GlobalVariable.globalFormatRefs.containsKey(fullKey);
+        
+        if (!exists) {
+            return new RuntimeScalar();
         }
+        
+        // Get the CODE slot before deleting (most common case)
+        RuntimeScalar code = GlobalVariable.globalCodeRefs.remove(fullKey);
+        
+        // Delete all other slots
+        GlobalVariable.globalVariables.remove(fullKey);
+        GlobalVariable.globalArrays.remove(fullKey);
+        GlobalVariable.globalHashes.remove(fullKey);
+        GlobalVariable.globalIORefs.remove(fullKey);
+        GlobalVariable.globalFormatRefs.remove(fullKey);
+        
+        // If only CODE slot existed, return it directly (Perl behavior)
+        if (code != null && code.getDefinedBoolean()) {
+            return code;
+        }
+        
+        // Otherwise return a glob (for now, just return undef as a placeholder)
+        // TODO: Implement proper detached glob support
         return new RuntimeScalar();
     }
 
