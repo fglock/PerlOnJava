@@ -62,6 +62,32 @@ public class IdentifierParser {
     }
 
     /**
+     * Helper method to check if a single quote can be treated as a package separator.
+     * It should only be a separator when preceded by an identifier/number and followed by an identifier.
+     *
+     * @param parser The parser object
+     * @param variableName The identifier built so far
+     * @return true if the single quote should be treated as a package separator
+     */
+    private static boolean isSingleQuotePackageSeparator(Parser parser, StringBuilder variableName) {
+        // Single quote is only a package separator if:
+        // 1. We have something before it (not at the start)
+        // 2. The next token is an identifier or number that can continue the name
+        if (variableName.length() == 0) {
+            return false;
+        }
+
+        LexerToken nextToken = parser.tokens.get(parser.tokenIndex + 1);
+
+        // Check if next token can be part of an identifier
+        if (nextToken.type == LexerTokenType.IDENTIFIER || nextToken.type == LexerTokenType.NUMBER) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Parses the inner part of a complex identifier, handling cases where the identifier
      * may be enclosed in braces.
      *
@@ -85,12 +111,24 @@ public class IdentifierParser {
             return null;
         }
 
-        // Special case for `$|`, because the tokenizer can generate $ |=
+        // Special case for special variables like `$|`, `$'`, etc.
         char firstChar = token.text.charAt(0);
-        if (token.type == LexerTokenType.OPERATOR && "!|/*+-<>&~.=%".indexOf(firstChar) >= 0) {
-            // Consume the '|' from the next token (which might be "|=" or just "|")
-            variableName.append(TokenUtils.consumeChar(parser));
-            return variableName.toString(); // Returns "|" for the special variable $|
+        if (token.type == LexerTokenType.OPERATOR && "!|/*+-<>&~.=%'".indexOf(firstChar) >= 0) {
+            // Check if this is a leading single quote followed by an identifier ($'foo means $main::foo)
+            if (firstChar == '\'' && (nextToken.type == LexerTokenType.IDENTIFIER || nextToken.type == LexerTokenType.NUMBER)) {
+                // This is $'foo which means $main::foo
+                // We convert it to ::foo internally (leading :: means main::)
+                variableName.append("::");
+                parser.tokenIndex++;
+                token = parser.tokens.get(parser.tokenIndex);
+                nextToken = parser.tokens.get(parser.tokenIndex + 1);
+                // Continue to parse the rest of the identifier - fall through to main loop
+            } else {
+                // Either it's a special variable like $' (postmatch), $| (autoflush), etc.
+                // Consume the character from the token (which might be "|=" or just "|")
+                variableName.append(TokenUtils.consumeChar(parser));
+                return variableName.toString(); // Returns "'" for $', "|" for $|, etc.
+            }
         }
 
         // FIXED: Explicitly reject WHITESPACE tokens as invalid identifier starts
@@ -174,6 +212,29 @@ public class IdentifierParser {
                     parser.tokenIndex++;
                     return variableName.toString();
                 }
+
+                // Handle single quote as package separator (legacy Perl syntax)
+                if (token.text.equals("'") && isSingleQuotePackageSeparator(parser, variableName)) {
+                    // Convert ' to :: for internal representation
+                    variableName.append("::");
+                    parser.tokenIndex++;
+
+                    // Skip whitespace after '
+                    parser.tokenIndex = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
+
+                    // Update token references
+                    token = parser.tokens.get(parser.tokenIndex);
+                    nextToken = parser.tokens.get(parser.tokenIndex + 1);
+
+                    // After ', only identifiers or another separator are allowed
+                    if (token.type != LexerTokenType.IDENTIFIER && !token.text.equals("::") && !token.text.equals("'")) {
+                        // Nothing valid follows ', so return what we have
+                        return variableName.toString();
+                    }
+                    // Continue the loop to process the next token
+                    continue;
+                }
+
                 if (token.text.equals("::")) {
                     // Handle :: specially
                     variableName.append(token.text);
@@ -186,8 +247,8 @@ public class IdentifierParser {
                     token = parser.tokens.get(parser.tokenIndex);
                     nextToken = parser.tokens.get(parser.tokenIndex + 1);
 
-                    // After ::, only identifiers or another :: are allowed
-                    if (token.type != LexerTokenType.IDENTIFIER && !token.text.equals("::")) {
+                    // After ::, only identifiers or another :: are allowed (or ' as package separator)
+                    if (token.type != LexerTokenType.IDENTIFIER && !token.text.equals("::") && !token.text.equals("'")) {
                         // Nothing valid follows ::, so return what we have
                         return variableName.toString();
                     }
@@ -195,33 +256,44 @@ public class IdentifierParser {
                     continue;
                 }
                 if (!(token.type == LexerTokenType.NUMBER)) {
-                    // Not :: and not a number, so this is the end
+                    // Not ::, not ', and not a number, so this is the end
                     variableName.append(token.text);
-                    
+
                     // Check identifier length limit (Perl's limit is around 251 characters)
                     if (variableName.length() > 251) {
                         parser.throwCleanError("Identifier too long");
                     }
-                    
+
                     parser.tokenIndex++;
                     return variableName.toString();
                 }
             } else if (token.type == LexerTokenType.IDENTIFIER) {
                 // Handle identifiers
                 variableName.append(token.text);
-                
+
                 // Check identifier length limit (Perl's limit is around 251 characters)
                 if (variableName.length() > 251) {
                     parser.throwCleanError("Identifier too long");
                 }
 
-                // Check if :: follows this identifier
-                if (!nextToken.text.equals("::")) {
+                // Check if the next token is a valid separator
+                boolean hasDoubleColon = nextToken.text.equals("::");
+                boolean hasSingleQuote = false;
+
+                if (nextToken.text.equals("'")) {
+                    // Look ahead to see what follows the '
+                    LexerToken afterQuote = parser.tokens.get(parser.tokenIndex + 2);
+                    if (afterQuote.type == LexerTokenType.IDENTIFIER || afterQuote.type == LexerTokenType.NUMBER) {
+                        hasSingleQuote = true;
+                    }
+                }
+
+                if (!hasDoubleColon && !hasSingleQuote) {
                     parser.tokenIndex++;
                     return variableName.toString();
                 }
 
-                // :: follows, so continue parsing
+                // :: or ' follows, so continue parsing
                 parser.tokenIndex++;
                 token = parser.tokens.get(parser.tokenIndex);
                 nextToken = parser.tokens.get(parser.tokenIndex + 1);
@@ -238,13 +310,13 @@ public class IdentifierParser {
             // For NUMBER tokens that aren't first token
             if (token.type == LexerTokenType.NUMBER) {
                 variableName.append(token.text);
-                
+
                 // Check identifier length limit (Perl's limit is around 251 characters)
                 if (variableName.length() > 251) {
                     parser.throwCleanError("Identifier too long");
                 }
-                
-                if (!nextToken.text.equals("::")) {
+
+                if (!nextToken.text.equals("::") && !nextToken.text.equals("'")) {
                     parser.tokenIndex++;
                     return variableName.toString();
                 }
@@ -281,8 +353,24 @@ public class IdentifierParser {
             // Check for various token types that can form part of a subroutine identifier
             if (token.type == LexerTokenType.WHITESPACE || token.type == LexerTokenType.EOF ||
                     token.type == LexerTokenType.NEWLINE ||
-                    (token.type == LexerTokenType.OPERATOR && !token.text.equals("::"))) {
+                    (token.type == LexerTokenType.OPERATOR && !token.text.equals("::") && !token.text.equals("'"))) {
                 return variableName.toString();
+            }
+
+            // Handle single quote as package separator in subroutine names
+            if (token.text.equals("'") && variableName.length() > 0) {
+                // Check if next token can continue the identifier
+                if (nextToken.type == LexerTokenType.IDENTIFIER || nextToken.type == LexerTokenType.NUMBER) {
+                    // Convert ' to :: for internal representation
+                    variableName.append("::");
+                    parser.tokenIndex++;
+                    token = parser.tokens.get(parser.tokenIndex);
+                    nextToken = parser.tokens.get(parser.tokenIndex + 1);
+                    continue;
+                } else {
+                    // Single quote not followed by valid identifier part
+                    return variableName.toString();
+                }
             }
 
             // Append the current token
@@ -303,12 +391,24 @@ public class IdentifierParser {
 
             // If current token is IDENTIFIER or NUMBER
             if (token.type == LexerTokenType.IDENTIFIER || token.type == LexerTokenType.NUMBER) {
-                // If next token is ::, continue parsing
+                // If next token is :: or ', continue parsing
                 if (nextToken.text.equals("::")) {
                     parser.tokenIndex++;
                     token = parser.tokens.get(parser.tokenIndex);
                     nextToken = parser.tokens.get(parser.tokenIndex + 1);
                     continue;
+                }
+
+                if (nextToken.text.equals("'")) {
+                    // Look ahead to see what follows the '
+                    LexerToken afterQuote = parser.tokens.get(parser.tokenIndex + 2);
+                    if (afterQuote.type == LexerTokenType.IDENTIFIER || afterQuote.type == LexerTokenType.NUMBER) {
+                        // ' is a package separator, continue parsing
+                        parser.tokenIndex++;
+                        token = parser.tokens.get(parser.tokenIndex);
+                        nextToken = parser.tokens.get(parser.tokenIndex + 1);
+                        continue;
+                    }
                 }
 
                 // If current token is NUMBER and next token is IDENTIFIER (like "5" followed by "p_4p1s")
