@@ -31,14 +31,14 @@ public class EmitRegex {
             // Regex operator: $v =~ /regex/; (but NOT qr//)
             // Bind the variable to the regex operation
             listNode.elements.add(node.left);
-            right.accept(emitterVisitor);
+            right.accept(emitterVisitor);  // Use caller's context for regex operations
             return;
         }
 
         // Handle non-regex operator case (e.g., $v =~ $qr OR $v =~ qr//)
         node.right.accept(scalarVisitor);
         node.left.accept(scalarVisitor);
-        emitMatchRegex(emitterVisitor);
+        emitMatchRegex(emitterVisitor);  // Use caller's context for regex matching
     }
 
     /**
