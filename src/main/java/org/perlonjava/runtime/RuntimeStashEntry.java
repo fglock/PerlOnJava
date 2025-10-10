@@ -50,13 +50,17 @@ public class RuntimeStashEntry extends RuntimeGlob {
      * @throws IllegalStateException if the typeglob assignment is not implemented for the given type.
      */
     public RuntimeScalar set(RuntimeScalar value) {
-        // System.out.println("Stash Entry set " + globName + " to " + value.type);
 
         type = RuntimeScalarType.GLOB;
         if (value.type == REFERENCE) {
             if (value.value instanceof RuntimeScalar) {
+                RuntimeScalar targetScalar = value.scalarDeref();
+                // Make the target scalar slot point to the same RuntimeScalar object (aliasing)
+                GlobalVariable.globalVariables.put(this.globName, targetScalar);
+                
+                // Also create a constant subroutine for bareword access
                 RuntimeCode code = new RuntimeCode("", null);
-                code.constantValue = value.scalarDeref().getList();
+                code.constantValue = targetScalar.getList();
                 GlobalVariable.getGlobalCodeRef(this.globName).set(
                         new RuntimeScalar(code));
             }
@@ -64,8 +68,13 @@ public class RuntimeStashEntry extends RuntimeGlob {
         }
         if (value.type == ARRAYREFERENCE) {
             if (value.value instanceof RuntimeArray) {
+                RuntimeArray targetArray = value.arrayDeref();
+                // Make the target array slot point to the same RuntimeArray object (aliasing)
+                GlobalVariable.globalArrays.put(this.globName, targetArray);
+                
+                // Also create a constant subroutine for bareword access
                 RuntimeCode code = new RuntimeCode("", null);
-                code.constantValue = value.arrayDeref().getList();
+                code.constantValue = targetArray.getList();
                 GlobalVariable.getGlobalCodeRef(this.globName).set(
                         new RuntimeScalar(code));
             }
@@ -89,6 +98,18 @@ public class RuntimeStashEntry extends RuntimeGlob {
                 if (value.value instanceof RuntimeIO) {
                     // *STDOUT = $new_handle
                     GlobalVariable.getGlobalIO(this.globName).set(value);
+                } else if (value.value instanceof RuntimeGlob) {
+                    // *dest = *source - copy all slots from source glob to dest glob
+                    RuntimeGlob sourceGlob = (RuntimeGlob) value.value;
+                    String sourceGlobName = sourceGlob.globName;
+                    
+                    // Copy all slots from source to destination
+                    this.set(GlobalVariable.getGlobalCodeRef(sourceGlobName));
+                    this.set(GlobalVariable.getGlobalIO(sourceGlobName));
+                    this.set(GlobalVariable.getGlobalArray(sourceGlobName).createReference());
+                    this.set(GlobalVariable.getGlobalHash(sourceGlobName).createReference());
+                    this.set(GlobalVariable.getGlobalVariable(sourceGlobName).createReference());
+                    this.set(GlobalVariable.getGlobalFormatRef(sourceGlobName));
                 }
                 return value;
             // Handle the case where a typeglob is assigned a reference to an array
