@@ -427,12 +427,15 @@ public class EmitOperator {
         if (node.operand instanceof OperatorNode operatorNode && operatorNode.operator.equals("%")) {
             // `scalar %a` needs an explicit call because tied hashes have a SCALAR method
             node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-            emitOperator(node, emitterVisitor);
+            emitOperator(node, emitterVisitor); // This already calls handleVoidContext
             return;
         }
 
         // Accept the operand in SCALAR context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        
+        // Handle VOID context - pop the result if not needed
+        handleVoidContext(emitterVisitor);
     }
 
     static void handleVoidContext(EmitterVisitor emitterVisitor) {
