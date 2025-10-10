@@ -17,9 +17,10 @@ public class Feature extends PerlModuleBase {
     /**
      * Constructor for FeatureFlags.
      * Initializes the module with the name "feature".
+     * Pass false to not override Perl's package variables.
      */
     public Feature() {
-        super("feature");
+        super("feature", false);
     }
 
     /**
@@ -39,10 +40,31 @@ public class Feature extends PerlModuleBase {
 
         featureManager = new FeatureFlags();
         
-        // TODO: Populate %feature::feature hash for experimental.pm compatibility
-        // The hash needs to be accessible from Perl code for experimental.pm to work
-        // Currently the Java-side population doesn't persist to the Perl-side view
-        // Workaround: feature.pm has the hash defined in Perl
+        // Populate %feature::feature hash for experimental.pm compatibility
+        // This makes the hash accessible from Perl code
+        populateFeatureHash();
+    }
+    
+    /**
+     * Populates the %feature::feature hash so Perl code can access it.
+     * This is needed for experimental.pm to work.
+     */
+    private static void populateFeatureHash() {
+        try {
+            // Create a new hash with all features
+            RuntimeHash featureHash = new RuntimeHash();
+            java.util.List<String> features = getFeatureList();
+            for (String featureName : features) {
+                featureHash.put(featureName, new RuntimeScalar("feature_" + featureName));
+            }
+            
+            // Set the global variable to point to this hash
+            RuntimeScalar hashRef = featureHash.createReference();
+            GlobalVariable.getGlobalVariable("%feature::feature").set(hashRef.value);
+        } catch (Exception e) {
+            System.err.println("Warning: Could not populate %feature::feature hash: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 
     /**

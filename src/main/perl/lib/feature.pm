@@ -1,6 +1,9 @@
 package feature;
 our $VERSION = '1.99';
 
+# Load the Java implementation first
+BEGIN { XSLoader::load('Feature'); }
+
 # Feature names mapped to internal feature flags
 # This hash is used by experimental.pm to check if a feature exists
 our %feature = (
