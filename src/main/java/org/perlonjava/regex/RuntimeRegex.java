@@ -521,19 +521,21 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         // Determine if the replacement is a code that needs to be evaluated
         boolean replacementIsCode = (replacement.type == RuntimeScalarType.CODE);
-        globalMatcher = null;
-        // Reset stored match information
-        lastMatchedString = null;
-        lastMatchStart = -1;
-        lastMatchEnd = -1;
+        
+        // Don't reset globalMatcher here - only reset it if we actually find a match
+        // This preserves capture variables from previous matches when substitution doesn't match
 
         // Perform the substitution
         while (matcher.find()) {
             found++;
 
-            // Initialize $1, $2, @+, @-
+            // Initialize $1, $2, @+, @- only when we have a match
             globalMatcher = matcher;
             globalMatchString = inputStr;
+            // Store match information
+            lastMatchedString = matcher.group(0);
+            lastMatchStart = matcher.start();
+            lastMatchEnd = matcher.end();
 
             String replacementStr;
             if (replacementIsCode) {
