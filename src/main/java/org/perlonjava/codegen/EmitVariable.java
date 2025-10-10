@@ -452,25 +452,47 @@ public class EmitVariable {
                 
                 // Check if this element is a backslash operator (declared reference)
                 // This handles cases like my(\$x) where the backslash is inside the parentheses
-                if (element instanceof OperatorNode operatorNode && 
-                    operatorNode.operator.equals("\\") && 
-                    operatorNode.operand instanceof OperatorNode varNode) {
-                    // This is a declared reference: my(\$x), my(\@arr), my(\%hash)
-                    // Declared references always create scalar variables
-                    OperatorNode scalarVarNode = varNode;
-                    if (varNode.operator.equals("@") || varNode.operator.equals("%")) {
-                        // Create a scalar version of the variable for emission
-                        scalarVarNode = new OperatorNode("$", varNode.operand, varNode.tokenIndex);
+                if (element instanceof OperatorNode operatorNode && operatorNode.operator.equals("\\")) {
+                    // Handle my(\$x), my(\@arr), my(\%hash)
+                    if (operatorNode.operand instanceof OperatorNode varNode) {
+                        // This is a declared reference: my(\$x), my(\@arr), my(\%hash)
+                        // Declared references always create scalar variables
+                        OperatorNode scalarVarNode = varNode;
+                        if (varNode.operator.equals("@") || varNode.operator.equals("%")) {
+                            // Create a scalar version of the variable for emission
+                            scalarVarNode = new OperatorNode("$", varNode.operand, varNode.tokenIndex);
+                            // Transfer the isDeclaredReference annotation
+                            scalarVarNode.setAnnotation("isDeclaredReference", true);
+                        }
+                        // Create a my node for the scalar variable with the isDeclaredReference flag
+                        OperatorNode myNode = new OperatorNode(operator, scalarVarNode, listNode.tokenIndex);
                         // Transfer the isDeclaredReference annotation
-                        scalarVarNode.setAnnotation("isDeclaredReference", true);
+                        if (scalarVarNode.annotations != null && Boolean.TRUE.equals(scalarVarNode.annotations.get("isDeclaredReference"))) {
+                            myNode.setAnnotation("isDeclaredReference", true);
+                        }
+                        myNode.accept(emitterVisitor.with(RuntimeContextType.VOID));
+                    } else if (operatorNode.operand instanceof ListNode nestedList) {
+                        // Handle my(\($d, $e)) - nested list with backslash
+                        // Process each element in the nested list as a declared reference
+                        for (Node nestedElement : nestedList.elements) {
+                            if (nestedElement instanceof OperatorNode nestedVarNode && "$@%".contains(nestedVarNode.operator)) {
+                                // Create scalar version if needed
+                                OperatorNode scalarVarNode = nestedVarNode;
+                                if (nestedVarNode.operator.equals("@") || nestedVarNode.operator.equals("%")) {
+                                    scalarVarNode = new OperatorNode("$", nestedVarNode.operand, nestedVarNode.tokenIndex);
+                                    scalarVarNode.setAnnotation("isDeclaredReference", true);
+                                }
+                                // Create a my node for each variable
+                                OperatorNode myNode = new OperatorNode(operator, scalarVarNode, listNode.tokenIndex);
+                                myNode.setAnnotation("isDeclaredReference", true);
+                                myNode.accept(emitterVisitor.with(RuntimeContextType.VOID));
+                            }
+                        }
+                    } else {
+                        // Unknown structure, fall through to default handling
+                        OperatorNode myNode = new OperatorNode(operator, element, listNode.tokenIndex);
+                        myNode.accept(emitterVisitor.with(RuntimeContextType.VOID));
                     }
-                    // Create a my node for the scalar variable with the isDeclaredReference flag
-                    OperatorNode myNode = new OperatorNode(operator, scalarVarNode, listNode.tokenIndex);
-                    // Transfer the isDeclaredReference annotation
-                    if (scalarVarNode.annotations != null && Boolean.TRUE.equals(scalarVarNode.annotations.get("isDeclaredReference"))) {
-                        myNode.setAnnotation("isDeclaredReference", true);
-                    }
-                    myNode.accept(emitterVisitor.with(RuntimeContextType.VOID));
                 } else {
                     OperatorNode myNode = new OperatorNode(operator, element, listNode.tokenIndex);
                     myNode.accept(emitterVisitor.with(RuntimeContextType.VOID));

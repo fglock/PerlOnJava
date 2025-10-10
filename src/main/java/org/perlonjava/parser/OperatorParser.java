@@ -5,9 +5,11 @@ import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.codegen.EmitterMethodCreator;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
+import org.perlonjava.operators.WarnDie;
 import org.perlonjava.runtime.GlobalVariable;
 import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.PerlCompilerException;
+import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.perlmodule.Strict;
 
 import java.util.ArrayList;
@@ -260,6 +262,30 @@ public class OperatorParser {
         boolean isDeclaredReference = false;
         if (peek(parser).type == LexerTokenType.OPERATOR && peek(parser).text.equals("\\")) {
             isDeclaredReference = true;
+            
+            // Check if declared_refs feature is enabled
+            if (!parser.ctx.symbolTable.isFeatureCategoryEnabled("declared_refs")) {
+                throw new PerlCompilerException(
+                    currentIndex,
+                    "The experimental declared_refs feature is not enabled",
+                    parser.ctx.errorUtil
+                );
+            }
+            
+            // Emit experimental warning if warnings are enabled
+            if (parser.ctx.symbolTable.isWarningCategoryEnabled("experimental::declared_refs")) {
+                // Use WarnDie.warn to respect $SIG{__WARN__} handler
+                try {
+                    WarnDie.warn(
+                        new RuntimeScalar("Declaring references is experimental"),
+                        new RuntimeScalar(parser.ctx.errorUtil.errorMessage(currentIndex, ""))
+                    );
+                } catch (Exception e) {
+                    // If warning system isn't initialized yet, fall back to System.err
+                    System.err.println(parser.ctx.errorUtil.errorMessage(currentIndex, "Declaring references is experimental"));
+                }
+            }
+            
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "\\");
         }
 
@@ -280,6 +306,30 @@ public class OperatorParser {
                     // This handles cases like my(\$x) where the backslash is inside the parentheses
                     if (operandNode.operator.equals("\\") && operandNode.operand instanceof OperatorNode varNode) {
                         // This is a declared reference inside parentheses: my(\$x), my(\@arr), my(\%hash)
+                        
+                        // Check if declared_refs feature is enabled
+                        if (!parser.ctx.symbolTable.isFeatureCategoryEnabled("declared_refs")) {
+                            throw new PerlCompilerException(
+                                operandNode.tokenIndex,
+                                "The experimental declared_refs feature is not enabled",
+                                parser.ctx.errorUtil
+                            );
+                        }
+                        
+                        // Emit experimental warning if warnings are enabled
+                        if (parser.ctx.symbolTable.isWarningCategoryEnabled("experimental::declared_refs")) {
+                            // Use WarnDie.warn to respect $SIG{__WARN__} handler
+                            try {
+                                WarnDie.warn(
+                                    new RuntimeScalar("Declaring references is experimental"),
+                                    new RuntimeScalar(parser.ctx.errorUtil.errorMessage(operandNode.tokenIndex, ""))
+                                );
+                            } catch (Exception e) {
+                                // If warning system isn't initialized yet, fall back to System.err
+                                System.err.println(parser.ctx.errorUtil.errorMessage(operandNode.tokenIndex, "Declaring references is experimental"));
+                            }
+                        }
+                        
                         // Declared references always create scalar variables
                         // Convert the variable to a scalar if it's an array or hash
                         OperatorNode scalarVarNode = varNode;
