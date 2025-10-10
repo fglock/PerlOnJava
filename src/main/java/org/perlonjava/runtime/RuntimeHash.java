@@ -495,7 +495,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
         RuntimeArray list = new RuntimeArray();
         for (RuntimeScalar value : elements.values()) {
-            RuntimeArray.push(list, value); // push an alias to the value
+            list.elements.add(value); // push an alias to the value (direct reference, not a copy)
         }
         hashIterator = null; // values resets the iterator
         return list;

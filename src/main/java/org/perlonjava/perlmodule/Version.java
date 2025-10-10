@@ -315,6 +315,9 @@ public class Version extends PerlModuleBase {
 
         RuntimeScalar v1 = args.get(0);
         RuntimeScalar v2 = args.get(1);
+        
+        // Check if arguments were swapped (third argument from overload)
+        boolean swapped = args.size() > 2 && args.get(2).getBoolean();
 
         // Handle non-version objects
         if (!v1.isBlessed() || !NameNormalizer.getBlessStr(v1.blessId).equals("version")) {
@@ -350,6 +353,11 @@ public class Version extends PerlModuleBase {
                 cmp = v1Part - v2Part;
                 break;
             }
+        }
+
+        // If arguments were swapped, negate the result
+        if (swapped) {
+            cmp = -cmp;
         }
 
         return new RuntimeScalar(cmp).getList();
