@@ -364,6 +364,7 @@ The following areas are currently under active development to enhance the functi
   - File::Temp
   - File::Path
   - File::Copy
+  - IO::File
   - IO::Handle
     - `ungetc`
     - Auto-bless filehandle into IO::Handle subclass

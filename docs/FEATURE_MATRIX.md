@@ -590,6 +590,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **Getopt::Long** module.
 - ✅  **HTTP::Date** module.
 - ✅  **Internals**: `Internals::SvREADONLY` is implemented as a no-op.
+- ✅  **IO::File** module..
 - ✅  **List::Util**: module.
 - ✅  **MIME::Base64** module
 - ✅  **MIME::QuotedPrint** module
