@@ -546,6 +546,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ❌  **locale** pragma
 - ❌  **ops** pragma
 - 🚧  **re** pragma for regular expression options: Implemented `is_regexp`.
+- 🚧  **vmsish** pragma.
 - ✅  **subs** pragma.
 - 🚧  **builtin** pragma:
   - ✅ Implemented: `true` `false` `is_bool` `inf` `nan` `weaken` `unweaken` `is_weak` `blessed` `refaddr` `reftype` `created_as_string` `created_as_number` `stringify` `ceil` `floor` `indexed` `trim` `is_tainted`.
