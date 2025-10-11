@@ -582,6 +582,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **Exporter**: `@EXPORT_OK`, `@EXPORT`, `%EXPORT_TAGS` are implemented.
   - ❌ Missing: export `*glob`.
 - ✅  **Fcntl** module
+- ✅  **FileHandle** module
 - ✅  **File::Basename** use the same version as Perl.
 - ✅  **File::Find** use the same version as Perl.
 - ✅  **File::Spec::Functions** module.
