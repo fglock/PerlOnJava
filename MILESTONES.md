@@ -368,6 +368,7 @@ The following areas are currently under active development to enhance the functi
   - IO::Handle
     - `ungetc`
     - Auto-bless filehandle into IO::Handle subclass
+  - IO::Seekable
   - Filter::Simple
   - Math::BigInt
   - Text::ParseWords
