@@ -360,6 +360,7 @@ The following areas are currently under active development to enhance the functi
     - `get_layers`
   - Term::ReadLine
   - Term::ReadKey
+  - FileHandle
   - File::Temp
   - File::Path
   - File::Copy
