@@ -22,10 +22,10 @@ out/
 src/test/_Deparsed_XSubs.pm
 
 # Ignore Perl test suite files
-t/
+perl5/
 # But don't ignore these two specific files
-!t/README.md
-!t/test.pl
+!perl5/t/README.md
+!perl5/t/test.pl
 
 # Ignore temporary analysis and debug files
 *_failures.txt
