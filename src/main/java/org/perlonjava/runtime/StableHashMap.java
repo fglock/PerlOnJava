@@ -7,14 +7,14 @@ import java.util.Map;
  * StableHashMap is a HashMap that maintains its capacity after growth.
  * Once the map has grown to accommodate elements, it doesn't shrink back
  * even when elements are removed. This mimics Perl's hash behavior.
- * 
+ * <p>
  * This optimization avoids repeated resizing when elements are frequently
  * added and removed.
  */
 public class StableHashMap<K, V> extends HashMap<K, V> {
     private int maxCapacityReached = 16;  // Track the maximum capacity we've grown to
     private int maxSizeReached = 0;       // Track the maximum number of elements we've had
-    
+
     /**
      * Default constructor with initial capacity of 8 (Perl's default)
      */
@@ -22,7 +22,7 @@ public class StableHashMap<K, V> extends HashMap<K, V> {
         super(8, 0.75f);  // Initial capacity 8, load factor 0.75 (HashMap default)
         maxCapacityReached = 8;
     }
-    
+
     /**
      * Constructor with specified initial capacity
      */
@@ -30,7 +30,7 @@ public class StableHashMap<K, V> extends HashMap<K, V> {
         super(initialCapacity, 0.75f);
         maxCapacityReached = initialCapacity;
     }
-    
+
     /**
      * Copy constructor
      */
@@ -39,7 +39,7 @@ public class StableHashMap<K, V> extends HashMap<K, V> {
         maxSizeReached = m.size();
         maxCapacityReached = calculateCapacityForSize(maxSizeReached);
     }
-    
+
     @Override
     public V put(K key, V value) {
         V result = super.put(key, value);
@@ -54,7 +54,7 @@ public class StableHashMap<K, V> extends HashMap<K, V> {
         }
         return result;
     }
-    
+
     @Override
     public void putAll(Map<? extends K, ? extends V> m) {
         super.putAll(m);
@@ -68,7 +68,7 @@ public class StableHashMap<K, V> extends HashMap<K, V> {
             }
         }
     }
-    
+
     /**
      * Calculate the capacity needed for a given number of elements
      * Following HashMap's growth pattern (powers of 2)
@@ -85,7 +85,7 @@ public class StableHashMap<K, V> extends HashMap<K, V> {
         }
         return capacity;
     }
-    
+
     /**
      * Estimate current capacity based on current size
      * This maintains the illusion of stable capacity
@@ -95,7 +95,7 @@ public class StableHashMap<K, V> extends HashMap<K, V> {
         // For now, use the calculation method
         return calculateCapacityForSize(size());
     }
-    
+
     /**
      * Get the stable capacity (maximum capacity ever reached)
      * Used for bucket_ratio calculations
@@ -105,7 +105,7 @@ public class StableHashMap<K, V> extends HashMap<K, V> {
         // This ensures bucket_ratio shows stable capacity even after deletions
         return maxCapacityReached;
     }
-    
+
     /**
      * Get the estimated number of used buckets
      * Used for bucket_ratio calculations
@@ -115,28 +115,28 @@ public class StableHashMap<K, V> extends HashMap<K, V> {
         if (keyCount == 0) {
             return 0;
         }
-        
+
         int capacity = getStableCapacity();
-        
+
         // For small numbers of keys, assume good distribution
         if (keyCount <= 8) {
             return keyCount;  // Each key likely in its own bucket
         }
-        
+
         // For larger hashes, estimate based on hash distribution
         // Using the formula for expected number of non-empty buckets
         double loadFactor = (double) keyCount / capacity;
         double usedRatio = 1.0 - Math.exp(-loadFactor * keyCount);
         int used = (int) Math.ceil(capacity * usedRatio);
-        
+
         // Ensure we don't exceed logical limits
         used = Math.min(used, keyCount);    // Can't have more used buckets than keys
         used = Math.min(used, capacity);     // Can't exceed total capacity
         used = Math.max(used, 1);           // At least 1 if we have keys
-        
+
         return used;
     }
-    
+
     /**
      * Get bucket ratio as a string "used/total"
      * This is what Perl's bucket_ratio returns

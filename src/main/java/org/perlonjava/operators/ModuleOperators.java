@@ -37,14 +37,14 @@ public class ModuleOperators {
         String actualFileName = null;
 
         // Check if the argument is a CODE reference (for @INC filter support)
-        if (runtimeScalar.type == RuntimeScalarType.CODE || 
-            (runtimeScalar.type == RuntimeScalarType.REFERENCE && 
-             runtimeScalar.scalarDeref() != null && 
-             runtimeScalar.scalarDeref().type == RuntimeScalarType.CODE)) {
+        if (runtimeScalar.type == RuntimeScalarType.CODE ||
+                (runtimeScalar.type == RuntimeScalarType.REFERENCE &&
+                        runtimeScalar.scalarDeref() != null &&
+                        runtimeScalar.scalarDeref().type == RuntimeScalarType.CODE)) {
             // `do` CODE reference - execute the subroutine as an @INC filter
             // The subroutine should populate $_ with file content
             // Return value of 0 means EOF
-            
+
             RuntimeCode codeRef = null;
             if (runtimeScalar.type == RuntimeScalarType.CODE) {
                 codeRef = (RuntimeCode) runtimeScalar.value;
@@ -59,7 +59,7 @@ public class ModuleOperators {
                     }
                 }
             }
-            
+
             if (codeRef == null) {
                 // Not a valid CODE reference
                 code = null;
@@ -67,16 +67,16 @@ public class ModuleOperators {
                 // Save current $_ 
                 RuntimeScalar savedDefaultVar = GlobalVariable.getGlobalVariable("main::_");
                 GlobalVariable.getGlobalVariable("main::_").set("");
-                
+
                 try {
                     // Call the CODE reference with no arguments
                     RuntimeArray args = new RuntimeArray();
                     RuntimeBase result = codeRef.apply(args, RuntimeContextType.SCALAR);
-                    
+
                     // Get the content from $_
                     RuntimeScalar defaultVar = GlobalVariable.getGlobalVariable("main::_");
                     code = defaultVar.toString();
-                    
+
                     // Return value of 0 means EOF (no MORE content after this call)
                     // But the content in $_ is still valid and should be used!
                     // Only set code to null if $_ is actually empty
@@ -237,14 +237,14 @@ public class ModuleOperators {
                 return scalarUndef;
             }
         }
-        
+
         RuntimeScalar scalarResult = result.scalar();
-        
+
         // For require, remove from %INC if result is false (but not if undef or error)
         if (isRequire && setINC && scalarResult.defined().getBoolean() && !scalarResult.getBoolean()) {
             getGlobalHash("main::INC").elements.remove(fileName);
         }
-        
+
         // Return appropriate result based on context
         if (ctx == RuntimeContextType.LIST) {
             return result;

@@ -18,7 +18,7 @@ public class EmitBlock {
      */
     public static void emitBlock(EmitterVisitor emitterVisitor, BlockNode node) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
-        
+
         // Try to refactor large blocks using the helper class
         if (LargeBlockRefactorer.processBlock(emitterVisitor, node)) {
             // Block was refactored and emitted by the helper

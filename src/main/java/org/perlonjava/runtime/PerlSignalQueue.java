@@ -10,27 +10,17 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  */
 public class PerlSignalQueue {
     private static final Queue<SignalEvent> signalQueue = new ConcurrentLinkedQueue<>();
-    
-    static class SignalEvent {
-        String signal;
-        RuntimeScalar handler;
-        
-        SignalEvent(String signal, RuntimeScalar handler) {
-            this.signal = signal;
-            this.handler = handler;
-        }
-    }
-    
+
     /**
      * Enqueue a signal for processing in the main thread.
-     * 
-     * @param signal The signal name (e.g., "ALRM")
+     *
+     * @param signal  The signal name (e.g., "ALRM")
      * @param handler The signal handler to execute
      */
     public static void enqueue(String signal, RuntimeScalar handler) {
         signalQueue.offer(new SignalEvent(signal, handler));
     }
-    
+
     /**
      * Process all pending signals in the current thread.
      * This method should be called at safe execution points.
@@ -53,20 +43,30 @@ public class PerlSignalQueue {
             }
         }
     }
-    
+
     /**
      * Check if there are any pending signals.
-     * 
+     *
      * @return true if signals are pending
      */
     public static boolean hasPendingSignals() {
         return !signalQueue.isEmpty();
     }
-    
+
     /**
      * Clear all pending signals (used for cleanup).
      */
     public static void clearSignals() {
         signalQueue.clear();
+    }
+
+    static class SignalEvent {
+        String signal;
+        RuntimeScalar handler;
+
+        SignalEvent(String signal, RuntimeScalar handler) {
+            this.signal = signal;
+            this.handler = handler;
+        }
     }
 }

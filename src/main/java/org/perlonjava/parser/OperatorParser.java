@@ -6,11 +6,11 @@ import org.perlonjava.codegen.EmitterMethodCreator;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.operators.WarnDie;
+import org.perlonjava.perlmodule.Strict;
 import org.perlonjava.runtime.GlobalVariable;
 import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeScalar;
-import org.perlonjava.perlmodule.Strict;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -262,30 +262,30 @@ public class OperatorParser {
         boolean isDeclaredReference = false;
         if (peek(parser).type == LexerTokenType.OPERATOR && peek(parser).text.equals("\\")) {
             isDeclaredReference = true;
-            
+
             // Check if declared_refs feature is enabled
             if (!parser.ctx.symbolTable.isFeatureCategoryEnabled("declared_refs")) {
                 throw new PerlCompilerException(
-                    currentIndex,
-                    "The experimental declared_refs feature is not enabled",
-                    parser.ctx.errorUtil
+                        currentIndex,
+                        "The experimental declared_refs feature is not enabled",
+                        parser.ctx.errorUtil
                 );
             }
-            
+
             // Emit experimental warning if warnings are enabled
             if (parser.ctx.symbolTable.isWarningCategoryEnabled("experimental::declared_refs")) {
                 // Use WarnDie.warn to respect $SIG{__WARN__} handler
                 try {
                     WarnDie.warn(
-                        new RuntimeScalar("Declaring references is experimental"),
-                        new RuntimeScalar(parser.ctx.errorUtil.errorMessage(currentIndex, ""))
+                            new RuntimeScalar("Declaring references is experimental"),
+                            new RuntimeScalar(parser.ctx.errorUtil.errorMessage(currentIndex, ""))
                     );
                 } catch (Exception e) {
                     // If warning system isn't initialized yet, fall back to System.err
                     System.err.println(parser.ctx.errorUtil.errorMessage(currentIndex, "Declaring references is experimental"));
                 }
             }
-            
+
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "\\");
         }
 
@@ -298,7 +298,7 @@ public class OperatorParser {
             // process each item of the list; then returns the list
             List<Node> transformedElements = new ArrayList<>();
             boolean hasTransformation = false;
-            
+
             for (int i = 0; i < listNode.elements.size(); i++) {
                 Node element = listNode.elements.get(i);
                 if (element instanceof OperatorNode operandNode) {
@@ -306,30 +306,30 @@ public class OperatorParser {
                     // This handles cases like my(\$x) where the backslash is inside the parentheses
                     if (operandNode.operator.equals("\\") && operandNode.operand instanceof OperatorNode varNode) {
                         // This is a declared reference inside parentheses: my(\$x), my(\@arr), my(\%hash)
-                        
+
                         // Check if declared_refs feature is enabled
                         if (!parser.ctx.symbolTable.isFeatureCategoryEnabled("declared_refs")) {
                             throw new PerlCompilerException(
-                                operandNode.tokenIndex,
-                                "The experimental declared_refs feature is not enabled",
-                                parser.ctx.errorUtil
+                                    operandNode.tokenIndex,
+                                    "The experimental declared_refs feature is not enabled",
+                                    parser.ctx.errorUtil
                             );
                         }
-                        
+
                         // Emit experimental warning if warnings are enabled
                         if (parser.ctx.symbolTable.isWarningCategoryEnabled("experimental::declared_refs")) {
                             // Use WarnDie.warn to respect $SIG{__WARN__} handler
                             try {
                                 WarnDie.warn(
-                                    new RuntimeScalar("Declaring references is experimental"),
-                                    new RuntimeScalar(parser.ctx.errorUtil.errorMessage(operandNode.tokenIndex, ""))
+                                        new RuntimeScalar("Declaring references is experimental"),
+                                        new RuntimeScalar(parser.ctx.errorUtil.errorMessage(operandNode.tokenIndex, ""))
                                 );
                             } catch (Exception e) {
                                 // If warning system isn't initialized yet, fall back to System.err
                                 System.err.println(parser.ctx.errorUtil.errorMessage(operandNode.tokenIndex, "Declaring references is experimental"));
                             }
                         }
-                        
+
                         // Declared references always create scalar variables
                         // Convert the variable to a scalar if it's an array or hash
                         OperatorNode scalarVarNode = varNode;
@@ -342,7 +342,7 @@ public class OperatorParser {
                         // Also mark the original nodes
                         varNode.setAnnotation("isDeclaredReference", true);
                         operandNode.setAnnotation("isDeclaredReference", true);
-                        
+
                         // Transform the AST: replace \@arr with $arr in the list
                         transformedElements.add(scalarVarNode);
                         hasTransformation = true;
@@ -357,7 +357,7 @@ public class OperatorParser {
                     transformedElements.add(element);
                 }
             }
-            
+
             // If we transformed any elements, replace the list elements
             if (hasTransformation) {
                 listNode.elements.clear();
@@ -501,12 +501,12 @@ public class OperatorParser {
         parser.parsingTakeReference = true;    // don't call `&subr` while parsing "Take reference"
         operand = ListParser.parseZeroOrOneList(parser, 1);
         parser.parsingTakeReference = false;
-        
+
         // Handle &{string} patterns for delete/exists operators (no transformation, direct handling)
         if (operand instanceof ListNode listNode) {
             transformCodeRefPatterns(parser, listNode, token.text);
         }
-        
+
         return new OperatorNode(token.text, operand, currentIndex);
     }
 
@@ -548,36 +548,36 @@ public class OperatorParser {
     private static void transformCodeRefPatterns(Parser parser, ListNode operand, String operator) {
         for (int i = 0; i < operand.elements.size(); i++) {
             Node element = operand.elements.get(i);
-            
+
             // Check for \&{string} patterns - these should error for exists/delete
-            if (element instanceof OperatorNode backslashOp && 
-                backslashOp.operator.equals("\\") &&
-                backslashOp.operand instanceof OperatorNode ampOp &&
-                ampOp.operator.equals("&") &&
-                ampOp.operand instanceof BlockNode blockNode &&
-                blockNode.elements.size() == 1 &&
-                blockNode.elements.get(0) instanceof StringNode) {
-                
+            if (element instanceof OperatorNode backslashOp &&
+                    backslashOp.operator.equals("\\") &&
+                    backslashOp.operand instanceof OperatorNode ampOp &&
+                    ampOp.operator.equals("&") &&
+                    ampOp.operand instanceof BlockNode blockNode &&
+                    blockNode.elements.size() == 1 &&
+                    blockNode.elements.get(0) instanceof StringNode) {
+
                 if (operator.equals("exists") || operator.equals("delete")) {
-                    throw new PerlCompilerException(operator + " argument is not a HASH or ARRAY element" + 
-                        (operator.equals("exists") ? " or a subroutine" : ""));
+                    throw new PerlCompilerException(operator + " argument is not a HASH or ARRAY element" +
+                            (operator.equals("exists") ? " or a subroutine" : ""));
                 }
                 // For defined, \&{string} is allowed as-is
             }
-            
+
             // Look for &{string} pattern: OperatorNode with "&" operator and BlockNode operand
-            if (element instanceof OperatorNode operatorNode && 
-                operatorNode.operator.equals("&") &&
-                operatorNode.operand instanceof BlockNode blockNode &&
-                blockNode.elements.size() == 1 &&
-                blockNode.elements.get(0) instanceof StringNode stringNode) {
-                
+            if (element instanceof OperatorNode operatorNode &&
+                    operatorNode.operator.equals("&") &&
+                    operatorNode.operand instanceof BlockNode blockNode &&
+                    blockNode.elements.size() == 1 &&
+                    blockNode.elements.get(0) instanceof StringNode stringNode) {
+
                 // Check strict refs at parse time - but only for defined operator
                 // Standard Perl allows &{string} with strict refs for exists/delete
                 if (operator.equals("defined") && parser.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_REFS)) {
                     throw new PerlCompilerException("Can't use string (\"" + stringNode.value + "\") as a subroutine ref while \"strict refs\" in use");
                 }
-                
+
                 // Don't transform &{string} patterns - handle them directly in emitter
                 // This preserves the semantic difference between &{string} and \&{string}
                 // For all operators (defined/exists/delete), keep &{string} as-is and handle in emitter
@@ -599,10 +599,10 @@ public class OperatorParser {
                     ParserNodeUtils.scalarUnderscore(parser)
             );
         }
-        
+
         // Transform &{string} patterns to \&{string} patterns for defined operator
         transformCodeRefPatterns(parser, operand, "defined");
-        
+
         return new OperatorNode(token.text, operand, currentIndex);
     }
 

@@ -479,7 +479,7 @@ public class StatementParser {
         IdentifierNode nameNode = new IdentifierNode(packageName, parser.tokenIndex);
         OperatorNode packageNode = new OperatorNode(token.text, nameNode, parser.tokenIndex);
         packageNode.setAnnotation("isClass", isClass);
-        
+
         // Register this as a Perl 5.38+ class for proper stringification
         if (isClass) {
             org.perlonjava.runtime.ClassRegistry.registerClass(packageName);
@@ -512,20 +512,20 @@ public class StatementParser {
 
         StatementResolver.parseStatementTerminator(parser);
         parser.ctx.symbolTable.setCurrentPackage(nameNode.name, isClass);
-        
+
         // For unit class syntax (class Name;), we need to generate a minimal class
         // with just a constructor, even though there's no block
         if (isClass) {
             // Create an empty block for the class
             BlockNode emptyBlock = new BlockNode(new ArrayList<>(), parser.tokenIndex);
             emptyBlock.elements.add(packageNode);
-            
+
             // Transform it to generate constructor
             emptyBlock = ClassTransformer.transformClassBlock(emptyBlock, nameNode.name, parser);
-            
+
             return emptyBlock;
         }
-        
+
         return packageNode;
     }
 
@@ -537,44 +537,44 @@ public class StatementParser {
      */
     private static void parseClassAttributes(Parser parser, OperatorNode packageNode) {
         LexerToken token = TokenUtils.peek(parser);
-        
+
         // Check for :isa attribute
         if (token.text.equals(":")) {
             TokenUtils.consume(parser); // consume ':'
             token = TokenUtils.peek(parser);
-            
+
             if (token.text.equals("isa")) {
                 TokenUtils.consume(parser); // consume 'isa'
-                
+
                 // Expect opening parenthesis
                 TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
-                
+
                 // Parse parent class name
                 token = TokenUtils.peek(parser);
                 if (token.type != LexerTokenType.IDENTIFIER) {
-                    throw new PerlCompilerException(parser.tokenIndex, 
-                        "Expected class name after :isa(", parser.ctx.errorUtil);
+                    throw new PerlCompilerException(parser.tokenIndex,
+                            "Expected class name after :isa(", parser.ctx.errorUtil);
                 }
-                
+
                 String parentClass = TokenUtils.consume(parser).text;
-                
+
                 // Handle qualified class names (e.g., Parent::Class)
                 while (TokenUtils.peek(parser).text.equals("::")) {
                     TokenUtils.consume(parser); // consume '::'
                     token = TokenUtils.peek(parser);
                     if (token.type != LexerTokenType.IDENTIFIER) {
                         throw new PerlCompilerException(parser.tokenIndex,
-                            "Expected identifier after '::'", parser.ctx.errorUtil);
+                                "Expected identifier after '::'", parser.ctx.errorUtil);
                     }
                     parentClass += "::" + TokenUtils.consume(parser).text;
                 }
-                
+
                 // Store parent class in annotations
                 packageNode.setAnnotation("parentClass", parentClass);
-                
+
                 // Register in FieldRegistry for field inheritance tracking
                 // We'll register this after we know the class name
-                
+
                 // Handle optional version number using the existing version parser
                 // This properly handles v-strings, floating point versions, etc.
                 Node versionNode = parseOptionalPackageVersion(parser);
@@ -582,7 +582,7 @@ public class StatementParser {
                     // System.err.println("DEBUG: :isa() has version requirement");
                     // Store version node for version checking
                     packageNode.setAnnotation("parentVersion", versionNode);
-                    
+
                     // Use the same approach as parseUseDeclaration for version checking
                     // Extract version value using ExtractValueVisitor
                     RuntimeList versionValues = ExtractValueVisitor.getValues(versionNode);
@@ -590,7 +590,7 @@ public class StatementParser {
                     if (!versionValues.isEmpty()) {
                         RuntimeScalar requiredVersion = versionValues.getFirst();
                         // System.err.println("DEBUG: Required version for " + parentClass + ": " + requiredVersion);
-                        
+
                         // Get the actual version of the parent class from the symbol table
                         String parentVersionStr = parser.ctx.symbolTable.getPackageVersion(parentClass);
                         // System.err.println("DEBUG: Parent " + parentClass + " version from symbol table: " + parentVersionStr);
@@ -598,7 +598,7 @@ public class StatementParser {
                             // Use VersionHelper.compareVersion for consistent version checking
                             // This handles v-strings, underscores, and all version formats properly
                             RuntimeScalar parentVersion = new RuntimeScalar(parentVersionStr);
-                            
+
                             // System.err.println("DEBUG: Comparing versions - has: " + parentVersion + ", wants: " + requiredVersion);
                             // This will throw the appropriate exception if version is insufficient
                             VersionHelper.compareVersion(parentVersion, requiredVersion, parentClass);
@@ -612,13 +612,13 @@ public class StatementParser {
                 } else {
                     // System.err.println("DEBUG: :isa() has no version requirement for " + parentClass);
                 }
-                
+
                 // Expect closing parenthesis
                 TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
             } else {
                 // Unknown attribute - throw error for now
                 throw new PerlCompilerException(parser.tokenIndex,
-                    "Unknown class attribute: :" + token.text, parser.ctx.errorUtil);
+                        "Unknown class attribute: :" + token.text, parser.ctx.errorUtil);
             }
         }
     }
@@ -639,13 +639,13 @@ public class StatementParser {
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
             int scopeIndex = parser.ctx.symbolTable.enterScope();
             parser.ctx.symbolTable.setCurrentPackage(nameNode.name, packageNode.getBooleanAnnotation("isClass"));
-            
+
             // Set flag if we're entering a class block
             boolean wasInClassBlock = parser.isInClassBlock;
             if (packageNode.getBooleanAnnotation("isClass")) {
                 parser.isInClassBlock = true;
             }
-            
+
             BlockNode block;
             try {
                 block = ParseBlock.parseBlock(parser);
@@ -656,7 +656,7 @@ public class StatementParser {
 
             // Insert packageNode as first statement in block
             block.elements.addFirst(packageNode);
-            
+
             // Transform class blocks
             // Pass parser for bytecode generation of generated methods
             if (packageNode.getBooleanAnnotation("isClass")) {

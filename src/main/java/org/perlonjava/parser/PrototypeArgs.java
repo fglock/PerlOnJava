@@ -457,8 +457,8 @@ public class PrototypeArgs {
                     if (firstElement instanceof OperatorNode innerOp && innerOp.operator.equals("&")) {
                         // Unwrap: use the inner &code node instead of \&code
                         codeRef = innerOp;
-                    } else if (firstElement instanceof OperatorNode innerOp && 
-                               (innerOp.operator.equals("@") || innerOp.operator.equals("%") || innerOp.operator.equals("$"))) {
+                    } else if (firstElement instanceof OperatorNode innerOp &&
+                            (innerOp.operator.equals("@") || innerOp.operator.equals("%") || innerOp.operator.equals("$"))) {
                         // Reject non-code references
                         String subName = parser.ctx.symbolTable.getCurrentSubroutine();
                         if (subName != null && !subName.isEmpty()) {
@@ -469,7 +469,7 @@ public class PrototypeArgs {
                     }
                 }
             }
-            
+
             // Code references are evaluated in SCALAR context
             codeRef.setAnnotation("context", "SCALAR");
             args.elements.add(codeRef);

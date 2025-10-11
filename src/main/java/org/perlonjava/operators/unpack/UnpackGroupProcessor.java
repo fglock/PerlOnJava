@@ -12,14 +12,15 @@ import org.perlonjava.runtime.RuntimeScalar;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Stack;
+
 /**
  * Unified processor for handling group constructs in unpack templates.
  * This class combines both group syntax parsing and group content processing
  * to provide a complete solution for Perl's parenthesized group functionality.
- * 
+ *
  * <p>This class manages the parsing and processing of parenthesized groups in unpack templates,
  * including nested groups, repeat counts, and special modifiers.</p>
- * 
+ *
  * <p>Key responsibilities:</p>
  * <ul>
  *   <li>Parse group syntax and extract group content</li>
@@ -33,38 +34,21 @@ import java.util.Stack;
 public class UnpackGroupProcessor {
 
     /**
-     * Interface for unpack operations to avoid circular dependencies.
-     * This allows UnpackGroupProcessor to call back to the main unpack method.
-     * 
-     * The function receives:
-     * - template: The unpack template for the group
-     * - state: The current UnpackState (position will be advanced)
-     * - startsWithU: Whether the original template starts with U
-     * - modeStack: Stack for tracking mode changes
-     * 
-     * Returns: List of unpacked values
-     */
-    @FunctionalInterface
-    public interface UnpackFunction {
-        RuntimeList unpack(String template, UnpackState state, boolean startsWithU, Stack<Boolean> modeStack);
-    }
-
-    /**
      * Parse and process a parenthesized group from the template.
      * This method handles the complete group syntax including parsing modifiers,
      * repeat counts, and delegating to recursive unpack calls.
-     * 
-     * @param template The full template string
-     * @param position Current position at the opening '('
-     * @param state The unpack state
-     * @param values List to append unpacked values to
-     * @param startsWithU Whether template starts with U
-     * @param modeStack Stack for tracking mode changes
+     *
+     * @param template       The full template string
+     * @param position       Current position at the opening '('
+     * @param state          The unpack state
+     * @param values         List to append unpacked values to
+     * @param startsWithU    Whether template starts with U
+     * @param modeStack      Stack for tracking mode changes
      * @param unpackFunction Function to call for recursive unpacking
      * @return New position after processing the group
      */
-    public static int parseGroupSyntax(String template, int position, UnpackState state, 
-                                       List<RuntimeBase> values, boolean startsWithU, 
+    public static int parseGroupSyntax(String template, int position, UnpackState state,
+                                       List<RuntimeBase> values, boolean startsWithU,
                                        Stack<Boolean> modeStack, UnpackFunction unpackFunction) {
         // Find matching closing parenthesis
         int closePos = UnpackHelper.findMatchingParen(template, position);
@@ -98,7 +82,7 @@ public class UnpackGroupProcessor {
         if (groupEndian != ' ' && UnpackHelper.hasConflictingEndianness(groupContent, groupEndian)) {
             throw new PerlCompilerException("Can't use '" + groupEndian + "' in a group with different byte-order in unpack");
         }
-        
+
         // Apply group-level endianness to the content if specified
         if (groupEndian != ' ') {
             groupContent = GroupEndiannessHelper.applyGroupEndianness(groupContent, groupEndian);
@@ -177,13 +161,13 @@ public class UnpackGroupProcessor {
 
             // Save position before unpacking to detect infinite loops
             int positionBefore = state.getPosition();
-            
+
             // Call unpack recursively with the group template
             RuntimeList groupResult = unpackFunction.unpack(effectiveContent, state, startsWithU, modeStack);
-            
+
             // Add all unpacked values to the output
             values.addAll(groupResult.elements);
-            
+
             // For * groups, stop if no progress was made (prevents infinite loops)
             if (groupRepeatCount == Integer.MAX_VALUE) {
                 int positionAfter = state.getPosition();
@@ -209,14 +193,14 @@ public class UnpackGroupProcessor {
 
     /**
      * Process a slash construct with a group (e.g., "n/(a4)*")
-     * 
-     * @param template The template string
-     * @param position Current position at the opening '('
-     * @param slashCount The count from the numeric format before '/'
-     * @param state The unpack state
-     * @param values List to append values to
+     *
+     * @param template    The template string
+     * @param position    Current position at the opening '('
+     * @param slashCount  The count from the numeric format before '/'
+     * @param state       The unpack state
+     * @param values      List to append values to
      * @param startsWithU Whether template starts with U
-     * @param modeStack Stack for mode tracking
+     * @param modeStack   Stack for mode tracking
      * @return New position after processing
      */
     public static int processSlashGroup(String template, int position, int slashCount,
@@ -241,10 +225,10 @@ public class UnpackGroupProcessor {
 
     /**
      * Process the content of a group template with the specified repeat count.
-     * 
+     *
      * <p>This method handles the core logic for processing Perl unpack groups, which are
      * template sections enclosed in parentheses that can be repeated. The method supports:</p>
-     * 
+     *
      * <ul>
      *   <li><strong>Repeat counts:</strong> Groups can be repeated a specific number of times
      *       or indefinitely with '*'</li>
@@ -257,13 +241,13 @@ public class UnpackGroupProcessor {
      *   <li><strong>Position tracking:</strong> Monitors data consumption to handle '*' repeat
      *       counts and prevent infinite loops</li>
      * </ul>
-     * 
+     *
      * @param groupTemplate The template string for the group content (without outer parentheses)
-     * @param state The current unpack state containing data buffer and position information
-     * @param values The list to append unpacked values to
-     * @param repeatCount The number of times to repeat the group (Integer.MAX_VALUE for '*')
-     * @param startsWithU Whether the overall template starts with 'U' (affects default mode)
-     * @param modeStack Stack for tracking nested mode changes
+     * @param state         The current unpack state containing data buffer and position information
+     * @param values        The list to append unpacked values to
+     * @param repeatCount   The number of times to repeat the group (Integer.MAX_VALUE for '*')
+     * @param startsWithU   Whether the overall template starts with 'U' (affects default mode)
+     * @param modeStack     Stack for tracking nested mode changes
      */
     public static void processGroupContent(String groupTemplate, UnpackState state, List<RuntimeBase> values,
                                            int repeatCount, boolean startsWithU, Stack<Boolean> modeStack) {
@@ -584,5 +568,22 @@ public class UnpackGroupProcessor {
         } else {
             state.switchToByteMode();
         }
+    }
+
+    /**
+     * Interface for unpack operations to avoid circular dependencies.
+     * This allows UnpackGroupProcessor to call back to the main unpack method.
+     * <p>
+     * The function receives:
+     * - template: The unpack template for the group
+     * - state: The current UnpackState (position will be advanced)
+     * - startsWithU: Whether the original template starts with U
+     * - modeStack: Stack for tracking mode changes
+     * <p>
+     * Returns: List of unpacked values
+     */
+    @FunctionalInterface
+    public interface UnpackFunction {
+        RuntimeList unpack(String template, UnpackState state, boolean startsWithU, Stack<Boolean> modeStack);
     }
 }

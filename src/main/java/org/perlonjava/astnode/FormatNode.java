@@ -8,7 +8,7 @@ import java.util.List;
  * The FormatNode class represents a node in the abstract syntax tree (AST) that holds
  * a Perl format declaration. This includes the format name and the template lines
  * that define the output format structure.
- * 
+ * <p>
  * Perl format syntax:
  * format NAME =
  * template lines...
@@ -19,7 +19,7 @@ public class FormatNode extends AbstractNode {
      * The name of the format. If omitted in the source, defaults to "STDOUT".
      */
     public final String formatName;
-    
+
     /**
      * The list of template lines that make up the format definition.
      * This includes picture lines, argument lines, and comment lines.
@@ -29,9 +29,9 @@ public class FormatNode extends AbstractNode {
     /**
      * Constructor for FormatNode.
      *
-     * @param formatName The name of the format
+     * @param formatName    The name of the format
      * @param templateLines The list of template lines defining the format
-     * @param tokenIndex The token index in the source code
+     * @param tokenIndex    The token index in the source code
      */
     public FormatNode(String formatName, List<FormatLine> templateLines, int tokenIndex) {
         this.formatName = formatName;

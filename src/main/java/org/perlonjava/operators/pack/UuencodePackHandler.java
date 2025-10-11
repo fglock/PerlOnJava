@@ -2,7 +2,6 @@ package org.perlonjava.operators.pack;
 
 import org.perlonjava.runtime.RuntimeScalar;
 
-
 import java.util.List;
 
 /**
@@ -11,7 +10,7 @@ import java.util.List;
 public class UuencodePackHandler implements PackFormatHandler {
 
     @Override
-    public int pack(List<RuntimeScalar> values, int valueIndex, int count, boolean hasStar, 
+    public int pack(List<RuntimeScalar> values, int valueIndex, int count, boolean hasStar,
                     ParsedModifiers modifiers, PackBuffer output) {
         RuntimeScalar value;
         if (valueIndex >= values.size()) {

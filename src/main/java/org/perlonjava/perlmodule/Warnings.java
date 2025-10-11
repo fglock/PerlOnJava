@@ -46,7 +46,7 @@ public class Warnings extends PerlModuleBase {
             warningManager.initializeEnabledWarnings();
             return new RuntimeScalar().getList();
         }
-        
+
         for (int i = 1; i < args.size(); i++) {
             String category = args.get(i).toString();
             if (category.startsWith("-")) {

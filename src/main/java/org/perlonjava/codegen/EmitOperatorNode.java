@@ -62,10 +62,10 @@ public class EmitOperatorNode {
 
             // Special case for length under "use bytes"
             case "length" -> EmitOperator.handleLengthOperator(node, emitterVisitor);
-            
+
             // Special case for chr under "use bytes"
             case "chr" -> EmitOperator.handleChrOperator(node, emitterVisitor);
-            
+
             // Special case for ord under "use bytes"
             case "ord" -> EmitOperator.handleOrdOperator(node, emitterVisitor);
 

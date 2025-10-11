@@ -4,7 +4,6 @@ import org.perlonjava.runtime.*;
 import org.perlonjava.symbols.ScopedSymbolTable;
 
 import static org.perlonjava.parser.SpecialBlockParser.getCurrentScope;
-import static org.perlonjava.runtime.FeatureFlags.featureExists;
 import static org.perlonjava.runtime.FeatureFlags.getFeatureList;
 
 /**
@@ -39,12 +38,12 @@ public class Feature extends PerlModuleBase {
         }
 
         featureManager = new FeatureFlags();
-        
+
         // Populate %feature::feature hash for experimental.pm compatibility
         // This makes the hash accessible from Perl code
         populateFeatureHash();
     }
-    
+
     /**
      * Populates the %feature::feature hash so Perl code can access it.
      * This is needed for experimental.pm to work.
@@ -57,7 +56,7 @@ public class Feature extends PerlModuleBase {
             for (String featureName : features) {
                 featureHash.put(featureName, new RuntimeScalar("feature_" + featureName));
             }
-            
+
             // Set the global variable to point to this hash
             RuntimeScalar hashRef = featureHash.createReference();
             GlobalVariable.getGlobalVariable("%feature::feature").set(hashRef.value);
@@ -76,15 +75,15 @@ public class Feature extends PerlModuleBase {
      */
     public static RuntimeList useFeature(RuntimeArray args, int ctx) {
         ScopedSymbolTable symbolTable = getCurrentScope();
-        
+
         if (args.size() == 1) {
             // No arguments - do nothing
             return new RuntimeScalar().getList();
         }
-        
+
         for (int i = 1; i < args.size(); i++) {
             String featureName = args.get(i).toString();
-            
+
             // enableFeatureBundle handles both bundles (":5.10") and individual features ("say")
             // It calls enableFeature() which updates both featureManager and symbolTable
             featureManager.enableFeatureBundle(featureName);
@@ -101,15 +100,15 @@ public class Feature extends PerlModuleBase {
      */
     public static RuntimeList noFeature(RuntimeArray args, int ctx) {
         ScopedSymbolTable symbolTable = getCurrentScope();
-        
+
         if (args.size() == 1) {
             // No arguments - do nothing
             return new RuntimeScalar().getList();
         }
-        
+
         for (int i = 1; i < args.size(); i++) {
             String featureName = args.get(i).toString();
-            
+
             // disableFeatureBundle handles both bundles (":5.10") and individual features ("say")
             // It calls disableFeature() which updates both featureManager and symbolTable
             featureManager.disableFeatureBundle(featureName);

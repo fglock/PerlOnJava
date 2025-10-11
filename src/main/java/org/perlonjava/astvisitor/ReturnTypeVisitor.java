@@ -11,16 +11,6 @@ import org.perlonjava.runtime.RuntimeDescriptorConstants;
  */
 public class ReturnTypeVisitor implements Visitor {
 
-    @Override
-    public void visit(FormatLine node) {
-        // Default implementation - no action needed for format lines
-    }
-
-    @Override
-    public void visit(FormatNode node) {
-        // Default implementation - no action needed for format nodes
-    }
-
     private String returnType = null;
 
     /**
@@ -33,6 +23,16 @@ public class ReturnTypeVisitor implements Visitor {
         ReturnTypeVisitor visitor = new ReturnTypeVisitor();
         node.accept(visitor);
         return visitor.returnType;
+    }
+
+    @Override
+    public void visit(FormatLine node) {
+        // Default implementation - no action needed for format lines
+    }
+
+    @Override
+    public void visit(FormatNode node) {
+        // Default implementation - no action needed for format nodes
     }
 
     @Override

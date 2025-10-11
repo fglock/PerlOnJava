@@ -169,9 +169,9 @@ public class FileHandle {
      * @return true if the name is a standard filehandle
      */
     private static boolean isStandardFilehandle(String normalizedName) {
-        return "main::STDOUT".equals(normalizedName) || 
-               "main::STDERR".equals(normalizedName) || 
-               "main::STDIN".equals(normalizedName);
+        return "main::STDOUT".equals(normalizedName) ||
+                "main::STDERR".equals(normalizedName) ||
+                "main::STDIN".equals(normalizedName);
     }
 
     public static String normalizeBarewordHandle(Parser parser, String name) {

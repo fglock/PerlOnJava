@@ -20,16 +20,16 @@ import static org.perlonjava.parser.TokenUtils.peek;
  * It handles binary operators, ternary operators, and special cases like method calls and subscripts.
  */
 public class ParseInfix {
-    
+
     // Non-chainable comparison operators (cannot be chained with any operator)
     private static final List<String> NON_CHAINABLE_COMPARISON_OPS = Arrays.asList("<=>", "cmp", "~~");
-    
+
     // Non-chainable relational operators (cannot be chained with any operator)
-    private static final List<String> NON_CHAINABLE_RELATIONAL_OPS = Arrays.asList("isa");
-    
+    private static final List<String> NON_CHAINABLE_RELATIONAL_OPS = List.of("isa");
+
     // Chainable equality operators (can chain with each other)
     private static final List<String> CHAINABLE_EQUALITY_OPS = Arrays.asList("==", "!=", "eq", "ne");
-    
+
     // Chainable relational operators (can chain with each other)
     private static final List<String> CHAINABLE_RELATIONAL_OPS = Arrays.asList("<", ">", "<=", ">=", "lt", "gt", "le", "ge");
 
@@ -80,7 +80,7 @@ public class ParseInfix {
                     operatorNode.operator = "quoteRegex";
                 }
             }
-            
+
             // Validate operator chaining rules (Perl 5.32+)
             validateOperatorChaining(parser, operator, left, right);
 
@@ -166,7 +166,7 @@ public class ParseInfix {
                     case "&":
                         // Handle lexical method calls: $obj->&priv()
                         TokenUtils.consume(parser); // consume '&'
-                        
+
                         // Parse the method name
                         LexerToken methodToken = peek(parser);
                         if (methodToken.type != LexerTokenType.IDENTIFIER) {
@@ -174,32 +174,32 @@ public class ParseInfix {
                         }
                         String methodName = methodToken.text;
                         TokenUtils.consume(parser); // consume method name
-                        
+
                         // Look up the lexical method in the symbol table
                         String lexicalKey = "&" + methodName;
                         SymbolTable.SymbolEntry entry = parser.ctx.symbolTable.getSymbolEntry(lexicalKey);
-                        
+
                         if (entry != null && entry.ast() instanceof OperatorNode varNode) {
                             // This is a lexical method - get the hidden variable AST
                             // The AST contains the hidden variable (e.g., $priv__lexmethod_123)
                             // Create a method call using the hidden variable
                             right = varNode; // The hidden variable node
-                            
+
                             // Check for method arguments
                             if (peek(parser).text.equals("(")) {
                                 // Method call with arguments: ->&priv(args)
                                 ListNode args = consumeArgsWithPrototype(parser, null);
                                 right = new BinaryOperatorNode("(", right, args, parser.tokenIndex);
                             }
-                            
+
                             // Return method call via the hidden variable
                             return new BinaryOperatorNode(token.text, left, right, parser.tokenIndex);
                         }
-                        
+
                         // Not a lexical method - treat as a regular code reference call
                         // This creates a call like $obj->(&NAME) which will look up &NAME at runtime
                         Node methodRef = new OperatorNode("&", new IdentifierNode(methodName, parser.tokenIndex), parser.tokenIndex);
-                        
+
                         // Check for method arguments
                         if (peek(parser).text.equals("(")) {
                             ListNode args = consumeArgsWithPrototype(parser, null);
@@ -208,7 +208,7 @@ public class ParseInfix {
                             // No arguments - just the method reference
                             right = methodRef;
                         }
-                        
+
                         return new BinaryOperatorNode(token.text, left, right, parser.tokenIndex);
                     default:
                         parser.parsingForLoopVariable = true;
@@ -244,7 +244,7 @@ public class ParseInfix {
                 // Handle hash subscripts
                 right = new HashLiteralNode(parseHashSubscript(parser), parser.tokenIndex);
                 // Check if left is $$var and transform to $var->{...}
-                if (left instanceof OperatorNode leftOp && leftOp.operator.equals("$") 
+                if (left instanceof OperatorNode leftOp && leftOp.operator.equals("$")
                         && leftOp.operand instanceof OperatorNode innerOp && innerOp.operator.equals("$")) {
                     // Transform $$var{...} to $var->{...}
                     return new BinaryOperatorNode("->", innerOp, right, parser.tokenIndex);
@@ -254,7 +254,7 @@ public class ParseInfix {
                 // Handle array subscripts
                 right = new ArrayLiteralNode(parseArraySubscript(parser), parser.tokenIndex);
                 // Check if left is $$var and transform to $var->[...]
-                if (left instanceof OperatorNode leftOp && leftOp.operator.equals("$") 
+                if (left instanceof OperatorNode leftOp && leftOp.operator.equals("$")
                         && leftOp.operand instanceof OperatorNode innerOp && innerOp.operator.equals("$")) {
                     // Transform $$var[...] to $var->[...]
                     return new BinaryOperatorNode("->", innerOp, right, parser.tokenIndex);
@@ -322,21 +322,21 @@ public class ParseInfix {
 
         return ListParser.parseList(parser, "}", 1);
     }
-    
+
     /**
      * Validates operator chaining rules for comparison and relational operators.
      * Perl 5.32+ introduced chained comparison operators with specific rules:
      * - Non-chainable operators (<==>, cmp, ~~, isa) cannot be chained with any operator at the same precedence
      * - Chainable equality operators (==, !=, eq, ne) can only chain with each other
      * - Chainable relational operators (<, >, <=, >=, lt, gt, le, ge) can only chain with each other
-     * 
+     * <p>
      * Note: Operators only chain when they have the same precedence level.
      * For example: "5 < 6 eq '1'" is valid because < (precedence 14) and eq (precedence 13) don't chain.
-     * 
-     * @param parser The parser instance
+     *
+     * @param parser   The parser instance
      * @param operator The current operator being parsed
-     * @param left The left operand
-     * @param right The right operand
+     * @param left     The left operand
+     * @param right    The right operand
      * @throws PerlCompilerException if operator chaining rules are violated
      */
     private static void validateOperatorChaining(Parser parser, String operator, Node left, Node right) {
@@ -345,28 +345,28 @@ public class ParseInfix {
         boolean isNonChainableRelational = NON_CHAINABLE_RELATIONAL_OPS.contains(operator);
         boolean isChainableEquality = CHAINABLE_EQUALITY_OPS.contains(operator);
         boolean isChainableRelational = CHAINABLE_RELATIONAL_OPS.contains(operator);
-        
-        if (!isNonChainableComparison && !isNonChainableRelational && 
-            !isChainableEquality && !isChainableRelational) {
+
+        if (!isNonChainableComparison && !isNonChainableRelational &&
+                !isChainableEquality && !isChainableRelational) {
             return; // Not a comparison/relational operator
         }
-        
+
         // Get precedence of current operator
         Integer currentPrecedence = ParserTables.precedenceMap.get(operator);
         if (currentPrecedence == null) {
             return;
         }
-        
+
         // Check if left operand is a comparison/relational operator
         if (left instanceof BinaryOperatorNode leftBinOp) {
             String leftOp = leftBinOp.operator;
             Integer leftPrecedence = ParserTables.precedenceMap.get(leftOp);
-            
+
             boolean leftIsNonChainableComparison = NON_CHAINABLE_COMPARISON_OPS.contains(leftOp);
             boolean leftIsNonChainableRelational = NON_CHAINABLE_RELATIONAL_OPS.contains(leftOp);
             boolean leftIsChainableEquality = CHAINABLE_EQUALITY_OPS.contains(leftOp);
             boolean leftIsChainableRelational = CHAINABLE_RELATIONAL_OPS.contains(leftOp);
-            
+
             // Special rule for 'isa': cannot chain with any relational operator regardless of precedence
             if (isNonChainableRelational && leftIsChainableRelational) {
                 throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);
@@ -374,19 +374,19 @@ public class ParseInfix {
             if (leftIsNonChainableRelational && isChainableRelational) {
                 throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);
             }
-            
+
             // Only validate same-precedence chaining for other operators
             if (leftPrecedence != null && leftPrecedence.equals(currentPrecedence)) {
                 // Rule 1: Non-chainable operators cannot be chained with anything at same precedence
                 if (leftIsNonChainableComparison || leftIsNonChainableRelational) {
                     throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);
                 }
-                
+
                 // Rule 2: Current operator is non-chainable - cannot chain with anything at same precedence
                 if (isNonChainableComparison || isNonChainableRelational) {
                     throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);
                 }
-                
+
                 // Rule 3: Cannot mix chainable equality with chainable relational (even at same precedence)
                 // Note: This shouldn't happen since they have different precedence, but check anyway
                 if (isChainableEquality && leftIsChainableRelational) {
@@ -397,16 +397,16 @@ public class ParseInfix {
                 }
             }
         }
-        
+
         // Check if right operand is a comparison/relational operator (for higher precedence operators)
         if (right instanceof BinaryOperatorNode rightBinOp) {
             String rightOp = rightBinOp.operator;
-            
+
             boolean rightIsNonChainableComparison = NON_CHAINABLE_COMPARISON_OPS.contains(rightOp);
             boolean rightIsNonChainableRelational = NON_CHAINABLE_RELATIONAL_OPS.contains(rightOp);
             boolean rightIsChainableEquality = CHAINABLE_EQUALITY_OPS.contains(rightOp);
             boolean rightIsChainableRelational = CHAINABLE_RELATIONAL_OPS.contains(rightOp);
-            
+
             // Special rule for 'isa': cannot chain with any relational operator regardless of precedence
             if (isNonChainableRelational && rightIsChainableRelational) {
                 throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);

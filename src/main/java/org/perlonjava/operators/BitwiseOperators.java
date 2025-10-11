@@ -31,7 +31,7 @@ public class BitwiseOperators {
             WarnDie.warn(new RuntimeScalar("Use of uninitialized value in bitwise and (&)"),
                     RuntimeScalarCache.scalarEmptyString);
         }
-        
+
         if (runtimeScalar.isString() && arg2.isString()) {
             return bitwiseAndDot(runtimeScalar, arg2);
         }
@@ -91,11 +91,11 @@ public class BitwiseOperators {
 
     /**
      * Performs a bitwise XOR operation on two RuntimeScalar objects.
-     * 
+     * <p>
      * Perl's XOR behavior:
      * - If both operands are pure numeric types (INTEGER/DOUBLE), use numeric XOR
      * - Otherwise (strings, blessed objects, etc.), use string XOR
-     * 
+     * <p>
      * Note: isString() returns true for STRING types, but blessed objects need
      * special handling - they should use string XOR after stringification.
      *
@@ -106,8 +106,8 @@ public class BitwiseOperators {
     public static RuntimeScalar bitwiseXor(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
         // Use numeric XOR only if BOTH operands are pure numeric types (not strings)
         // For everything else (strings, blessed objects, etc.), use string XOR
-        if (!runtimeScalar.isString() && !arg2.isString() && 
-            !runtimeScalar.isBlessed() && !arg2.isBlessed()) {
+        if (!runtimeScalar.isString() && !arg2.isString() &&
+                !runtimeScalar.isBlessed() && !arg2.isBlessed()) {
             // Both are pure numbers (INTEGER or DOUBLE), use numeric XOR
             return bitwiseXorBinary(runtimeScalar, arg2);
         }
@@ -286,7 +286,7 @@ public class BitwiseOperators {
             WarnDie.warn(new RuntimeScalar("Use of uninitialized value in left bitshift (<<)"),
                     RuntimeScalarCache.scalarEmptyString);
         }
-        
+
         // Convert string type to number if necessary
         if (runtimeScalar.isString()) {
             runtimeScalar = NumberParser.parseNumber(runtimeScalar);
@@ -359,7 +359,7 @@ public class BitwiseOperators {
             WarnDie.warn(new RuntimeScalar("Use of uninitialized value in right bitshift (>>)"),
                     RuntimeScalarCache.scalarEmptyString);
         }
-        
+
         // Convert string type to number if necessary
         if (runtimeScalar.isString()) {
             runtimeScalar = NumberParser.parseNumber(runtimeScalar);

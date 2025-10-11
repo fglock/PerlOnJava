@@ -315,7 +315,7 @@ public class Version extends PerlModuleBase {
 
         RuntimeScalar v1 = args.get(0);
         RuntimeScalar v2 = args.get(1);
-        
+
         // Check if arguments were swapped (third argument from overload)
         boolean swapped = args.size() > 2 && args.get(2).getBoolean();
 

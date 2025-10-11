@@ -131,17 +131,17 @@ public class SystemOperator {
             // CORRECT PERL BEHAVIOR: Handle streams according to Perl documentation
             // - system(): Both stdout and stderr go to terminal
             // - backticks: Only stdout is captured, stderr goes to terminal
-            
+
             // Always inherit stderr (goes to terminal in both cases)
             processBuilder.redirectError(ProcessBuilder.Redirect.INHERIT);
-            
+
             // Handle stdout based on operation type
             if (!captureOutput) {
                 // For system(): stdout also goes to terminal
                 processBuilder.redirectOutput(ProcessBuilder.Redirect.INHERIT);
             }
             // For backticks: stdout will be captured (default behavior)
-            
+
             // Always redirect stdin from /dev/null to prevent subprocess blocking
             // This prevents the subprocess from waiting for input that will never come
             try {
@@ -155,7 +155,7 @@ public class SystemOperator {
 
             final Process finalProcess = process;
             final StringBuilder finalOutput = output;
-            
+
             if (captureOutput) {
                 // For backticks: capture stdout only, stderr already goes to terminal
                 Thread stdoutThread = new Thread(() -> {

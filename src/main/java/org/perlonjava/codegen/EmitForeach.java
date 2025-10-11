@@ -11,13 +11,13 @@ import org.perlonjava.runtime.RuntimeContextType;
 public class EmitForeach {
     public static void emitFor1(EmitterVisitor emitterVisitor, For1Node node) {
         emitterVisitor.ctx.logDebug("FOR1 start");
-        
+
         // Check if the loop variable is a complex lvalue expression like $$f
         // If so, emit as while loop with explicit assignment
-        if (node.variable instanceof OperatorNode opNode && 
-            opNode.operand instanceof OperatorNode nestedOpNode &&
-            opNode.operator.equals("$") && nestedOpNode.operator.equals("$")) {
-            
+        if (node.variable instanceof OperatorNode opNode &&
+                opNode.operand instanceof OperatorNode nestedOpNode &&
+                opNode.operator.equals("$") && nestedOpNode.operator.equals("$")) {
+
             emitterVisitor.ctx.logDebug("FOR1 emitting complex lvalue $$var as while loop");
             emitFor1AsWhileLoop(emitterVisitor, node);
             return;
@@ -201,7 +201,7 @@ public class EmitForeach {
         node.variable.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         // Stack: iteratorValue, dereferenced_var
         mv.visitInsn(Opcodes.SWAP);
-        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", 
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
                 "set", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
         mv.visitInsn(Opcodes.POP);
 

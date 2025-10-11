@@ -104,21 +104,21 @@ public class FileTestOperator {
                     getGlobalVariable("main::!").set(0); // Clear error
                     return scalarFalse;
                 }
-                
+
                 // Check if it's a directory handle
                 if (fh.directoryIO != null) {
                     // Directory handles are not regular files
                     getGlobalVariable("main::!").set(0); // Clear error
                     return scalarFalse;
                 }
-                
+
                 // Check if it's an in-memory scalar handle
                 if (fh.ioHandle instanceof ScalarBackedIO) {
                     // In-memory scalar handles are not regular files
                     getGlobalVariable("main::!").set(0); // Clear error
                     return scalarFalse;
                 }
-                
+
                 // For most other filehandles (file I/O), assume it's a regular file
                 getGlobalVariable("main::!").set(0); // Clear error
                 return scalarTrue;

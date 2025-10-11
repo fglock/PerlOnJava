@@ -402,15 +402,12 @@ public class EmitLiteral {
         // Remove underscores which Perl allows as digit separators
         String value = node.value.replace("_", "");
         boolean isInteger = isInteger(value);
-        
+
         // For 32-bit Perl emulation, check if this is a large integer
         // that needs to be stored as a string to preserve precision
-        boolean isLargeInteger = false;
-        if (!isInteger && value.matches("^-?\\d+$")) {
-            // This looks like an integer but failed Integer.parseInt
-            // It must be too large for 32-bit int
-            isLargeInteger = true;
-        }
+        boolean isLargeInteger = !isInteger && value.matches("^-?\\d+$");
+        // This looks like an integer but failed Integer.parseInt
+        // It must be too large for 32-bit int
 
         if (ctx.isBoxed) {
             // Boxed context: create a RuntimeScalar object

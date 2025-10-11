@@ -1,10 +1,11 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.runtime.*;
-import java.math.BigInteger;
-import java.math.BigDecimal;
+import org.perlonjava.runtime.RuntimeArray;
+import org.perlonjava.runtime.RuntimeList;
+import org.perlonjava.runtime.RuntimeScalar;
 
-import static org.perlonjava.runtime.RuntimeScalarCache.*;
+import java.math.BigDecimal;
+import java.math.BigInteger;
 
 /**
  * Math::BigInt module implementation for PerlonJava.
@@ -156,7 +157,7 @@ public class MathBigInt extends PerlModuleBase {
     public static RuntimeList _pow(RuntimeArray args, int ctx) {
         BigInteger x = (BigInteger) args.get(1).value;
         BigInteger y = (BigInteger) args.get(2).value;
-        
+
         // BigInteger.pow() only accepts int, so we need to check range
         if (y.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0) {
             throw new ArithmeticException("Exponent too large");
@@ -164,7 +165,7 @@ public class MathBigInt extends PerlModuleBase {
         if (y.signum() < 0) {
             throw new ArithmeticException("Negative exponent not supported for integers");
         }
-        
+
         BigInteger result = x.pow(y.intValue());
         return new RuntimeScalar(result).getList();
     }
@@ -188,7 +189,7 @@ public class MathBigInt extends PerlModuleBase {
     }
 
     // High-level operations that handle conversion and return BigInteger
-    
+
     /**
      * High-level addition: _badd(x, y) - converts y if needed, returns x + y
      */
@@ -238,14 +239,14 @@ public class MathBigInt extends PerlModuleBase {
     public static RuntimeList _bpow(RuntimeArray args, int ctx) {
         BigInteger x = (BigInteger) args.get(1).value;
         BigInteger y = convertToBigInteger(args.get(2));
-        
+
         if (y.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0) {
             throw new ArithmeticException("Exponent too large");
         }
         if (y.signum() < 0) {
             throw new ArithmeticException("Negative exponent not supported for integers");
         }
-        
+
         BigInteger result = x.pow(y.intValue());
         return new RuntimeScalar(result).getList();
     }

@@ -41,35 +41,35 @@ public class SpecialBlockParser {
     static Node parseSpecialBlock(Parser parser) {
         // Consume the block name token
         String blockName = TokenUtils.consume(parser).text;
-        
+
         // ADJUST blocks are only allowed inside class blocks
         if ("ADJUST".equals(blockName) && !parser.isInClassBlock) {
-            throw new PerlCompilerException(parser.tokenIndex, 
-                "ADJUST blocks are only allowed inside class blocks", parser.ctx.errorUtil);
+            throw new PerlCompilerException(parser.tokenIndex,
+                    "ADJUST blocks are only allowed inside class blocks", parser.ctx.errorUtil);
         }
 
         // Consume the opening brace '{'
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
-        
+
         // ADJUST blocks have implicit $self, so set isInMethod flag
         boolean wasInMethod = parser.isInMethod;
         if ("ADJUST".equals(blockName) && parser.isInClassBlock) {
             parser.isInMethod = true;
         }
-        
+
         // Parse the block content
         BlockNode block = ParseBlock.parseBlock(parser);
-        
+
         // Restore the isInMethod flag
         parser.isInMethod = wasInMethod;
-        
+
         // Consume the closing brace '}'
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
         // ADJUST blocks in class context are not executed at parse time
         // They are compiled as anonymous subs and stored for the constructor
         if ("ADJUST".equals(blockName) && parser.isInClassBlock) {
-            
+
             // Create an anonymous sub that captures lexical variables
             SubroutineNode adjustSub = new SubroutineNode(
                     null,  // anonymous
@@ -78,10 +78,10 @@ public class SpecialBlockParser {
                     block,
                     false,
                     parser.tokenIndex);
-            
+
             // Store in parser's ADJUST blocks list
             parser.classAdjustBlocks.add(adjustSub);
-            
+
             // Return the anonymous sub node (won't be executed now)
             return adjustSub;
         }

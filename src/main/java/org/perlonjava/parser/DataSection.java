@@ -33,7 +33,7 @@ public class DataSection {
         if (placeholderCreated.contains(parser)) {
             return; // Already created placeholder for this parser
         }
-        
+
         placeholderCreated.add(parser);
         String handleName = parser.ctx.symbolTable.getCurrentPackage() + "::DATA";
 
@@ -58,7 +58,7 @@ public class DataSection {
 
         // Get the existing RuntimeIO (which should be the placeholder we created earlier)
         RuntimeIO existingIO = GlobalVariable.getGlobalIO(handleName).getRuntimeIO();
-        
+
         if (existingIO != null) {
             // Update the existing IO handle with new content instead of replacing it
             // This ensures that any aliased handles (like *ARGV = *DATA) continue to work

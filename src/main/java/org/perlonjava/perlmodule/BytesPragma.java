@@ -2,7 +2,6 @@ package org.perlonjava.perlmodule;
 
 import org.perlonjava.runtime.RuntimeArray;
 import org.perlonjava.runtime.RuntimeList;
-import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.symbols.ScopedSymbolTable;
 
 import static org.perlonjava.parser.SpecialBlockParser.getCurrentScope;

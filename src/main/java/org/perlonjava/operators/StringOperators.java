@@ -3,12 +3,9 @@ package org.perlonjava.operators;
 import com.ibm.icu.text.CaseMap;
 import com.ibm.icu.text.Normalizer2;
 import org.perlonjava.parser.NumberParser;
-import org.perlonjava.runtime.PerlCompilerException;
-import org.perlonjava.runtime.RuntimeBase;
-import org.perlonjava.runtime.RuntimeScalar;
-import org.perlonjava.runtime.RuntimeScalarCache;
-import org.perlonjava.runtime.RuntimeScalarType;
+import org.perlonjava.runtime.*;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
@@ -51,7 +48,7 @@ public class StringOperators {
         // Convert the RuntimeScalar to a string and return its byte length
         String str = runtimeScalar.toString();
         try {
-            return getScalarInt(str.getBytes("UTF-8").length);
+            return getScalarInt(str.getBytes(StandardCharsets.UTF_8).length);
         } catch (Exception e) {
             // If UTF-8 encoding fails, fall back to character count
             return getScalarInt(str.codePointCount(0, str.length()));
@@ -170,7 +167,7 @@ public class StringOperators {
         if (pos < 0) {
             pos = 0;
         }
-        
+
         // Special case for empty substring - it can be found at any valid position
         if (sub.isEmpty()) {
             // Empty string can be found at any position up to and including the length
@@ -179,7 +176,7 @@ public class StringOperators {
             }
             return getScalarInt(pos);
         }
-        
+
         // For non-empty substring, position beyond string length returns -1
         if (pos >= str.length()) {
             return getScalarInt(-1);
@@ -219,12 +216,12 @@ public class StringOperators {
             }
             return getScalarInt(pos);
         }
-        
+
         // For non-empty substring, negative position returns -1
         if (pos < 0) {
             return getScalarInt(-1);
         }
-        
+
         // Bound the position to be within the valid range of the string
         if (pos >= str.length()) {
             pos = str.length() - 1;
@@ -397,15 +394,15 @@ public class StringOperators {
                 sb.append(delimiter);
             }
             RuntimeScalar scalar = iterator.next();
-            
+
             // Check if value is undef and generate warning
             if (scalar.type == RuntimeScalarType.UNDEF) {
                 WarnDie.warn(new RuntimeScalar("Use of uninitialized value in join or string"),
                         RuntimeScalarCache.scalarEmptyString);
             }
-            
+
             isByteString = isByteString && scalar.type == BYTE_STRING;
-            sb.append(scalar.toString());
+            sb.append(scalar);
         }
         RuntimeScalar res = new RuntimeScalar(sb.toString());
         if (isByteString) {

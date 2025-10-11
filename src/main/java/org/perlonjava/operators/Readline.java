@@ -307,7 +307,7 @@ public class Readline {
             if (offsetValue != 0) {
                 // Handle offset (both positive and negative) when reading 0 bytes
                 StringBuilder scalarValue = new StringBuilder(scalar.toString());
-                
+
                 // Convert negative offset to positive
                 if (offsetValue < 0) {
                     offsetValue = scalarValue.length() + offsetValue;
@@ -315,12 +315,12 @@ public class Readline {
                         offsetValue = 0;
                     }
                 }
-                
+
                 // Ensure buffer is large enough for offset
                 while (scalarValue.length() < offsetValue) {
                     scalarValue.append('\0');
                 }
-                
+
                 // Truncate to offset
                 scalarValue.setLength(offsetValue);
                 scalar.set(scalarValue.toString());

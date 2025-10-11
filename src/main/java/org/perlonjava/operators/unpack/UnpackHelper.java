@@ -8,7 +8,6 @@ import org.perlonjava.runtime.RuntimeBase;
 import org.perlonjava.runtime.RuntimeScalar;
 
 import java.util.List;
-import java.util.Stack;
 
 public class UnpackHelper {
 
@@ -30,7 +29,7 @@ public class UnpackHelper {
             // We need to extract the count (e.g., 3 from "a3")
             ParsedCount countInfo = parseRepeatCount(template, position + 1);
             int formatCount = countInfo.count;
-            
+
             // For string formats used as count, read as string and convert to integer
             FormatHandler stringHandler = Unpack.getHandler(numericFormat, startsWithU);
             int initialSize = values.size();
@@ -239,9 +238,6 @@ public class UnpackHelper {
         return new ParsedCount(count, hasStar, i);
     }
 
-    public record ParsedCount(int count, boolean hasStar, int endPosition) {
-    }
-
     /**
      * Calculate the remaining count for star notation based on format and state
      */
@@ -322,5 +318,8 @@ public class UnpackHelper {
             }
         }
         return false;
+    }
+
+    public record ParsedCount(int count, boolean hasStar, int endPosition) {
     }
 }

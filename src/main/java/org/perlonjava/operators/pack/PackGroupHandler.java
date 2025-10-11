@@ -9,17 +9,17 @@ import java.util.List;
 
 /**
  * PackGroupHandler handles complex pack template constructs including groups and slash constructs.
- * 
+ *
  * <p>This class is responsible for processing:</p>
  * <ul>
  *   <li>Parenthesized groups with repeat counts and modifiers</li>
  *   <li>Slash constructs (N/X format) for length-prefixed data</li>
  *   <li>Value index tracking for complex template structures</li>
  * </ul>
- * 
+ *
  * <p>Groups allow applying repeat counts and modifiers to multiple format characters,
  * while slash constructs enable packing data with length prefixes calculated dynamically.</p>
- * 
+ *
  * @see org.perlonjava.operators.Pack
  * @see PackParser
  * @see PackHelper
@@ -27,39 +27,23 @@ import java.util.List;
 public class PackGroupHandler {
 
     /**
-     * Interface for pack operations to avoid circular dependencies.
-     * This allows PackGroupHandler to call back to the main pack method.
-     */
-    @FunctionalInterface
-    public interface PackFunction {
-        RuntimeScalar pack(RuntimeList args);
-    }
-    
-
-    /**
-     * Result of processing a group, containing both the template position and updated value index.
-     */
-    public record GroupResult(int position, int valueIndex) {
-    }
-
-    /**
      * Handles a group in the template string, starting from the given position.
-     * 
+     *
      * <p>Groups are enclosed in parentheses and can have modifiers and repeat counts.
      * This method processes the group content according to the specified repeat count
      * and handles special cases like backup operations within groups.</p>
-     * 
-     * @param template The template string
-     * @param openPos The starting position of the group (points to '(')
-     * @param values The list of values to pack
-     * @param output The output stream
-     * @param valueIndex The current index in the values list
+     *
+     * @param template     The template string
+     * @param openPos      The starting position of the group (points to '(')
+     * @param values       The list of values to pack
+     * @param output       The output stream
+     * @param valueIndex   The current index in the values list
      * @param packFunction Function to call for recursive packing
      * @return GroupResult containing the position after the group and updated value index
      * @throws PerlCompilerException if parentheses are unmatched or endianness conflicts
      */
     public static GroupResult handleGroup(String template, int openPos, List<RuntimeScalar> values,
-                                   PackBuffer output, int valueIndex, PackFunction packFunction) {
+                                          PackBuffer output, int valueIndex, PackFunction packFunction) {
         // Find matching closing parenthesis
         int closePos = PackHelper.findMatchingParen(template, openPos);
         if (closePos == -1) {
@@ -119,7 +103,7 @@ public class PackGroupHandler {
             } else {
                 // Normal group processing
                 RuntimeList groupArgs = new RuntimeList();
-                
+
                 // Apply group-level endianness to the content if specified
                 String effectiveContent = groupContent;
                 if (groupInfo.endian != ' ') {
@@ -127,7 +111,7 @@ public class PackGroupHandler {
                     // This ensures the group's endianness applies to all formats inside
                     effectiveContent = GroupEndiannessHelper.applyGroupEndianness(groupContent, groupInfo.endian);
                 }
-                
+
                 groupArgs.add(new RuntimeScalar(effectiveContent));
 
                 // Collect values for this group iteration
@@ -157,14 +141,14 @@ public class PackGroupHandler {
 
     /**
      * Returns the index in the values list after processing a group.
-     * 
+     *
      * <p>This method calculates how many values were consumed by a group
      * based on the group content and repeat count. It's used to update
      * the value index correctly after group processing.</p>
-     * 
-     * @param template The template string
-     * @param groupEndPos The ending position of the group (points to ')')
-     * @param values The list of values to pack
+     *
+     * @param template          The template string
+     * @param groupEndPos       The ending position of the group (points to ')')
+     * @param values            The list of values to pack
      * @param currentValueIndex The current index in the values list
      * @return The index after the group
      */
@@ -197,30 +181,30 @@ public class PackGroupHandler {
 
     /**
      * Handles a slash construct in pack templates.
-     * 
+     *
      * <p>Slash constructs (N/X format) allow using the result of one format
      * as the count for another format. For example, "n/a*" packs a short
      * containing the length, followed by that many characters.</p>
-     * 
+     *
      * <p>This method handles both string formats (a, A, Z, U) and numeric
      * formats after the slash, with proper length calculation and data packing.</p>
-     * 
-     * @param template The template string
-     * @param position The starting position of the slash construct
-     * @param slashPos The position of the slash character
-     * @param format The format character before the slash
-     * @param values The list of values to pack
-     * @param valueIndex The current index in the values list
-     * @param output The output stream
-     * @param modifiers The modifiers for the format
+     *
+     * @param template     The template string
+     * @param position     The starting position of the slash construct
+     * @param slashPos     The position of the slash character
+     * @param format       The format character before the slash
+     * @param values       The list of values to pack
+     * @param valueIndex   The current index in the values list
+     * @param output       The output stream
+     * @param modifiers    The modifiers for the format
      * @param packFunction Function to call for recursive packing
      * @return GroupResult containing template position and updated value index
      * @throws PerlCompilerException if slash construct is malformed
      */
     public static GroupResult handleSlashConstruct(String template, int position, int slashPos, char format,
-                                            List<RuntimeScalar> values, int valueIndex,
-                                            PackBuffer output, ParsedModifiers modifiers,
-                                            PackFunction packFunction) {
+                                                   List<RuntimeScalar> values, int valueIndex,
+                                                   PackBuffer output, ParsedModifiers modifiers,
+                                                   PackFunction packFunction) {
         // DEBUG: handling " + format + "/ construct at position " + position
 
         // Skip whitespace after '/'
@@ -347,5 +331,20 @@ public class PackGroupHandler {
 
         // For string formats, we consumed exactly 1 value
         return new GroupResult(endPos, valueIndex + 1);
+    }
+
+    /**
+     * Interface for pack operations to avoid circular dependencies.
+     * This allows PackGroupHandler to call back to the main pack method.
+     */
+    @FunctionalInterface
+    public interface PackFunction {
+        RuntimeScalar pack(RuntimeList args);
+    }
+
+    /**
+     * Result of processing a group, containing both the template position and updated value index.
+     */
+    public record GroupResult(int position, int valueIndex) {
     }
 }

@@ -4,7 +4,6 @@ import org.perlonjava.regex.RuntimeRegex;
 
 import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
-import static org.perlonjava.runtime.RuntimeScalarType.UNDEF;
 
 /**
  * Represents a Perl special scalar variable, such as $`, $&, $', or $1.
@@ -198,25 +197,6 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
     }
 
     /**
-     * Enum to represent the id of the special variable.
-     *
-     * <p>This enum defines the different types of special variables that can be
-     * represented by this class, each corresponding to a specific role in regex
-     * operations or file handling.</p>
-     */
-    public enum Id {
-        CAPTURE,   // Represents a captured substring.
-        PREMATCH,  // Represents the part of the string before the matched substring.
-        MATCH,     // Represents the matched substring.
-        POSTMATCH, // Represents the part of the string after the matched substring.
-        LAST_FH,    // Represents the last filehandle used in an input operation.
-        INPUT_LINE_NUMBER, // Represents the current line number in an input operation.
-        LAST_PAREN_MATCH, // The highest capture variable ($1, $2, ...) which has a defined value.
-        LAST_SUCCESSFUL_PATTERN, // ${^LAST_SUCCESSFUL_PATTERN}
-        LAST_REGEXP_CODE_RESULT, // $^R - Result of last (?{...}) code block in regex
-    }
-
-    /**
      * Saves the current state of the RuntimeScalar instance.
      *
      * <p>This method creates a snapshot of the current type and value of the scalar,
@@ -256,5 +236,24 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
 //            this.value = previousState.value;
 //            this.blessId = previousState.blessId;
 //        }
+    }
+
+    /**
+     * Enum to represent the id of the special variable.
+     *
+     * <p>This enum defines the different types of special variables that can be
+     * represented by this class, each corresponding to a specific role in regex
+     * operations or file handling.</p>
+     */
+    public enum Id {
+        CAPTURE,   // Represents a captured substring.
+        PREMATCH,  // Represents the part of the string before the matched substring.
+        MATCH,     // Represents the matched substring.
+        POSTMATCH, // Represents the part of the string after the matched substring.
+        LAST_FH,    // Represents the last filehandle used in an input operation.
+        INPUT_LINE_NUMBER, // Represents the current line number in an input operation.
+        LAST_PAREN_MATCH, // The highest capture variable ($1, $2, ...) which has a defined value.
+        LAST_SUCCESSFUL_PATTERN, // ${^LAST_SUCCESSFUL_PATTERN}
+        LAST_REGEXP_CODE_RESULT, // $^R - Result of last (?{...}) code block in regex
     }
 }

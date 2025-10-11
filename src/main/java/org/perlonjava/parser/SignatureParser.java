@@ -258,7 +258,7 @@ public class SignatureParser {
                                 parser.tokenIndex)
                 ), parser.tokenIndex),
                 dieWarnNode(parser, "die", new ListNode(List.of(
-                                new StringNode("Bad number of arguments", parser.tokenIndex)), parser.tokenIndex)),
+                        new StringNode("Bad number of arguments", parser.tokenIndex)), parser.tokenIndex)),
                 parser.tokenIndex);
     }
 

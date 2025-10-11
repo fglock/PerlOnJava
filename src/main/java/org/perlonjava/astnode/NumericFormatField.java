@@ -1,7 +1,6 @@
 package org.perlonjava.astnode;
 
 import java.text.DecimalFormat;
-import java.text.NumberFormat;
 
 /**
  * Represents a numeric format field in Perl format templates.
@@ -15,12 +14,12 @@ public class NumericFormatField extends FormatField {
      * Number of decimal places (0 for integer fields)
      */
     public final int decimalPlaces;
-    
+
     /**
      * Number of integer digits
      */
     public final int integerDigits;
-    
+
     /**
      * Whether this field has decimal places
      */
@@ -29,14 +28,14 @@ public class NumericFormatField extends FormatField {
     /**
      * Constructor for NumericFormatField.
      *
-     * @param width The total width of the field
-     * @param startPosition The starting position in the line
+     * @param width          The total width of the field
+     * @param startPosition  The starting position in the line
      * @param isSpecialField Whether this is a special field (^) or regular field (@)
-     * @param integerDigits Number of integer digits
-     * @param decimalPlaces Number of decimal places (0 for integer fields)
+     * @param integerDigits  Number of integer digits
+     * @param decimalPlaces  Number of decimal places (0 for integer fields)
      */
-    public NumericFormatField(int width, int startPosition, boolean isSpecialField, 
-                             int integerDigits, int decimalPlaces) {
+    public NumericFormatField(int width, int startPosition, boolean isSpecialField,
+                              int integerDigits, int decimalPlaces) {
         super(width, startPosition, isSpecialField);
         this.integerDigits = integerDigits;
         this.decimalPlaces = decimalPlaces;
@@ -54,7 +53,7 @@ public class NumericFormatField extends FormatField {
         if (value == null) {
             return " ".repeat(width);
         }
-        
+
         // Convert value to number
         double numValue;
         try {
@@ -71,15 +70,15 @@ public class NumericFormatField extends FormatField {
             // If not a valid number, return spaces
             return " ".repeat(width);
         }
-        
+
         // Create format pattern
         StringBuilder pattern = new StringBuilder();
-        
+
         // Add integer part padding
         for (int i = 0; i < integerDigits; i++) {
             pattern.append("#");
         }
-        
+
         // Add decimal part if needed
         if (hasDecimal && decimalPlaces > 0) {
             pattern.append(".");
@@ -87,11 +86,11 @@ public class NumericFormatField extends FormatField {
                 pattern.append("0");
             }
         }
-        
+
         // Format the number
         DecimalFormat formatter = new DecimalFormat(pattern.toString());
         String formatted = formatter.format(numValue);
-        
+
         // Right-justify within the field width
         if (formatted.length() > width) {
             // Truncate if too long (show asterisks to indicate overflow)

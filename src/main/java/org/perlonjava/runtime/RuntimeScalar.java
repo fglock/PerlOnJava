@@ -1,6 +1,5 @@
 package org.perlonjava.runtime;
 
-import org.perlonjava.operators.MathOperators;
 import org.perlonjava.operators.StringOperators;
 import org.perlonjava.parser.NumberParser;
 import org.perlonjava.regex.RuntimeRegex;
@@ -291,7 +290,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * Get the BigInteger value of this scalar for exact arithmetic operations.
      * This method preserves full precision for large integer strings.
      * Used primarily for pack/unpack checksum calculations.
-     * 
+     *
      * @return the value as a BigInteger with full precision
      */
     public BigInteger getBigint() {
@@ -312,12 +311,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         } else {
             // String types - parse exactly without precision loss
             String str = this.toString().trim();
-            
+
             // Handle empty strings
             if (str.isEmpty()) {
                 return BigInteger.ZERO;
             }
-            
+
             try {
                 // Check if it's a plain integer (most important case for checksums)
                 // This is critical for preserving exact values like "9223372036854775807"
@@ -325,23 +324,23 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     // Parse directly as BigInteger to preserve all digits
                     return new BigInteger(str);
                 }
-                
+
                 // Handle scientific notation or decimal numbers
                 // These require double conversion which may lose precision
                 double d = Double.parseDouble(str);
-                
+
                 // Check for special values
                 if (Double.isNaN(d) || Double.isInfinite(d)) {
                     return BigInteger.ZERO;
                 }
-                
+
                 // For very large values, try to preserve more precision
                 if (Math.abs(d) > 9007199254740992.0) { // > 2^53
                     // Format without scientific notation to get more digits
                     String formatted = String.format("%.0f", d);
                     return new BigInteger(formatted);
                 }
-                
+
                 // Convert to long then BigInteger
                 return BigInteger.valueOf((long) d);
             } catch (NumberFormatException e) {
@@ -350,11 +349,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
         }
     }
-    
+
     /**
      * Get the unsigned long value of this scalar.
      * Used for unsigned integer formats like Q and J.
-     * 
+     *
      * @return the unsigned long value as a BigInteger
      */
     public BigInteger getUnsignedLong() {
@@ -384,28 +383,28 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         } else {
             // String types - parse carefully to preserve precision
             String str = this.toString().trim();
-            
+
             // Handle empty strings
             if (str.isEmpty()) {
                 return BigInteger.ZERO;
             }
-            
+
             try {
                 // First, try to parse as an exact integer (no decimal point or scientific notation)
                 // This preserves full precision for large integer strings
                 if (str.matches("^-?\\d+$")) {
                     return new BigInteger(str);
                 }
-                
+
                 // Handle scientific notation or decimal numbers
                 // These require double conversion which may lose precision
                 double d = Double.parseDouble(str);
-                
+
                 // Check for special values
                 if (Double.isNaN(d) || Double.isInfinite(d)) {
                     return BigInteger.ZERO;
                 }
-                
+
                 // For large values > 2^53, precision is already lost in the double
                 // Just convert directly to avoid further issues
                 if (d < 0 && d < Long.MIN_VALUE) {
@@ -551,11 +550,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.initializeWithLong(value);
         return this;
     }
-    
+
     /**
      * Set this scalar to a BigInteger value.
      * This method preserves full precision for large integers by storing them as strings.
-     * 
+     *
      * @param value the BigInteger value to set
      * @return this RuntimeScalar instance
      */
@@ -563,10 +562,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (this.type == TIED_SCALAR) {
             return this.tiedStore(new RuntimeScalar(value.toString()));
         }
-        
+
         // Check if the value fits in an int
-        if (value.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) <= 0 
-            && value.compareTo(BigInteger.valueOf(Integer.MIN_VALUE)) >= 0) {
+        if (value.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) <= 0
+                && value.compareTo(BigInteger.valueOf(Integer.MIN_VALUE)) >= 0) {
             // Fits in int
             this.type = RuntimeScalarType.INTEGER;
             this.value = value.intValue();
@@ -576,8 +575,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             // Can be exactly represented as double
             this.type = RuntimeScalarType.DOUBLE;
             this.value = value.doubleValue();
-        }
-        else {
+        } else {
             // Too large for exact numeric representation
             // Store as string to preserve precision (like 32-bit Perl does)
             this.type = RuntimeScalarType.STRING;

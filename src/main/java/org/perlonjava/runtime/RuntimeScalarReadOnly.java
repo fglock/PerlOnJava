@@ -11,7 +11,7 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
     // Immutable fields representing the scalar value
     final boolean b;
     final String s;
-    
+
     // Lazy computation fields for string-to-number conversions
     // These are null until first access to avoid premature warning generation
     private Integer i;

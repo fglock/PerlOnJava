@@ -433,7 +433,7 @@ public class EmitOperator {
 
         // Accept the operand in SCALAR context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        
+
         // Handle VOID context - pop the result if not needed
         handleVoidContext(emitterVisitor);
     }
@@ -480,16 +480,16 @@ public class EmitOperator {
     static void handlePackageOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         // Extract the package name from the operand.
         String name = ((IdentifierNode) node.operand).name;
-        
+
         // Check if there's a version associated with this package and set it at compile time
         String version = emitterVisitor.ctx.symbolTable.getPackageVersion(name);
         if (version != null) {
             // Set $PackageName::VERSION at compile time using GlobalVariable
             String versionVarName = name + "::VERSION";
             org.perlonjava.runtime.GlobalVariable.getGlobalVariable(versionVarName)
-                .set(new org.perlonjava.runtime.RuntimeScalar(version));
+                    .set(new org.perlonjava.runtime.RuntimeScalar(version));
         }
-        
+
         // Set the current package in the symbol table.
         emitterVisitor.ctx.symbolTable.setCurrentPackage(name, node.getBooleanAnnotation("isClass"));
         // Set debug information for the file name.
@@ -627,10 +627,10 @@ public class EmitOperator {
         MethodVisitor mv = emitterVisitor.ctx.mv;
         // Emit the operand in scalar context
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        
+
         // Check if 'use bytes' is in effect
-        if (emitterVisitor.ctx.symbolTable != null && 
-            emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_BYTES)) {
+        if (emitterVisitor.ctx.symbolTable != null &&
+                emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_BYTES)) {
             emitterVisitor.ctx.logDebug("handleLengthOperator: Using lengthBytes (bytes pragma enabled)");
             // Use lengthBytes when bytes pragma is in effect
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
@@ -660,10 +660,10 @@ public class EmitOperator {
         MethodVisitor mv = emitterVisitor.ctx.mv;
         // Emit the operand in scalar context
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        
+
         // Check if 'use bytes' is in effect
-        if (emitterVisitor.ctx.symbolTable != null && 
-            emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_BYTES)) {
+        if (emitterVisitor.ctx.symbolTable != null &&
+                emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_BYTES)) {
             emitterVisitor.ctx.logDebug("handleChrOperator: Using chrBytes (bytes pragma enabled)");
             // Use chrBytes when bytes pragma is in effect
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
@@ -693,10 +693,10 @@ public class EmitOperator {
         MethodVisitor mv = emitterVisitor.ctx.mv;
         // Emit the operand in scalar context
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        
+
         // Check if 'use bytes' is in effect
-        if (emitterVisitor.ctx.symbolTable != null && 
-            emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_BYTES)) {
+        if (emitterVisitor.ctx.symbolTable != null &&
+                emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_BYTES)) {
             emitterVisitor.ctx.logDebug("handleOrdOperator: Using ordBytes (bytes pragma enabled)");
             // Use ordBytes when bytes pragma is in effect
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,

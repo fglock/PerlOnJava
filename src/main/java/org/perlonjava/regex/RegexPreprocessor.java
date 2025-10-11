@@ -63,7 +63,7 @@ public class RegexPreprocessor {
         String result = sb.toString();
         return result;
     }
-    
+
     /**
      * Remove underscores from \x{...} and \o{...} escape sequences.
      * Perl allows underscores in numeric literals for readability, but Java doesn't.
@@ -73,17 +73,17 @@ public class RegexPreprocessor {
         StringBuilder result = new StringBuilder();
         int i = 0;
         int len = pattern.length();
-        
+
         while (i < len) {
-            if (i + 2 < len && pattern.charAt(i) == '\\' && 
-                (pattern.charAt(i + 1) == 'x' || pattern.charAt(i + 1) == 'o') &&
-                pattern.charAt(i + 2) == '{') {
+            if (i + 2 < len && pattern.charAt(i) == '\\' &&
+                    (pattern.charAt(i + 1) == 'x' || pattern.charAt(i + 1) == 'o') &&
+                    pattern.charAt(i + 2) == '{') {
                 // Found \x{ or \o{
                 result.append(pattern.charAt(i));   // \
                 result.append(pattern.charAt(i + 1)); // x or o
                 result.append('{');
                 i += 3;
-                
+
                 // Copy content until }, removing underscores
                 while (i < len && pattern.charAt(i) != '}') {
                     char ch = pattern.charAt(i);
@@ -92,7 +92,7 @@ public class RegexPreprocessor {
                     }
                     i++;
                 }
-                
+
                 if (i < len) {
                     result.append('}'); // Closing brace
                     i++;
@@ -102,10 +102,10 @@ public class RegexPreprocessor {
                 i++;
             }
         }
-        
+
         return result.toString();
     }
-    
+
     /**
      * Normalize quantifiers to Java regex format.
      * Perl allows {,n} to mean {0,n} (omitting minimum).
@@ -119,54 +119,54 @@ public class RegexPreprocessor {
         int len = pattern.length();
         boolean inCharClass = false;
         boolean escaped = false;
-        
+
         while (i < len) {
             char ch = pattern.charAt(i);
-            
+
             if (escaped) {
                 result.append(ch);
                 escaped = false;
                 i++;
                 continue;
             }
-            
+
             if (ch == '\\') {
                 result.append(ch);
                 escaped = true;
                 i++;
                 continue;
             }
-            
+
             if (ch == '[') {
                 inCharClass = true;
                 result.append(ch);
                 i++;
                 continue;
             }
-            
+
             if (ch == ']' && inCharClass) {
                 inCharClass = false;
                 result.append(ch);
                 i++;
                 continue;
             }
-            
+
             if (ch == '{' && !inCharClass) {
                 // Potential quantifier
                 int start = i;
                 i++;
                 StringBuilder quantifier = new StringBuilder();
-                
+
                 // Read the quantifier content
                 while (i < len && pattern.charAt(i) != '}') {
                     quantifier.append(pattern.charAt(i));
                     i++;
                 }
-                
+
                 if (i < len && pattern.charAt(i) == '}') {
                     // We have a complete quantifier
                     String content = quantifier.toString().trim();
-                    
+
                     // Check if it's a {,n} pattern or has spaces
                     if (content.matches("\\s*,\\s*\\d+\\s*")) {
                         // {,n} pattern - add 0 at the start
@@ -192,7 +192,7 @@ public class RegexPreprocessor {
                 i++;
             }
         }
-        
+
         return result.toString();
     }
 
@@ -407,7 +407,7 @@ public class RegexPreprocessor {
         if (c2 == '*') {
             // (*...) control verbs like (*ACCEPT), (*FAIL), (*COMMIT), etc.
             // These are Perl-specific and not supported by Java regex
-            
+
             // Find the end of the verb
             int verbEnd = offset + 2;
             while (verbEnd < length && s.codePointAt(verbEnd) != ')') {
@@ -416,16 +416,16 @@ public class RegexPreprocessor {
             if (verbEnd < length) {
                 verbEnd++; // Include the closing paren
             }
-            
+
             // Extract the verb name for error reporting
             String verb = s.substring(offset, Math.min(verbEnd, length));
-            
+
             // Replace with empty non-capturing group as placeholder
             sb.append("(?:)");
-            
+
             // Throw error that can be caught by JPERL_UNIMPLEMENTED=warn
             regexError(s, offset + 2, "Regex control verb " + verb + " not implemented");
-            
+
             return verbEnd; // Skip past the entire verb construct
         }
 
@@ -465,10 +465,10 @@ public class RegexPreprocessor {
                 // These insert a regex pattern at runtime based on code execution
                 // For now, replace with a placeholder that will be caught later
                 sb.append("(?:");  // Non-capturing group as placeholder
-                
+
                 // Skip the (??{ part
                 offset += 4;
-                
+
                 // Find the closing }
                 int braceCount = 1;
                 while (offset < length && braceCount > 0) {
@@ -480,7 +480,7 @@ public class RegexPreprocessor {
                     }
                     offset++;
                 }
-                
+
                 // Throw error that can be caught by JPERL_UNIMPLEMENTED=warn
                 regexError(s, offset - 1, "(??{...}) recursive regex patterns not implemented");
             } else if (c3 == '(') {
@@ -541,7 +541,7 @@ public class RegexPreprocessor {
             } else if (Character.isDigit(c3)) {
                 // Recursive subpattern reference (?1), (?2), etc.
                 // These refer to the subpattern with that number and are recursive
-                regexError(s, offset + 2, "Sequence (?" + ((char)c3) + "...) not recognized");
+                regexError(s, offset + 2, "Sequence (?" + ((char) c3) + "...) not recognized");
             } else {
                 // Unknown sequence - show the actual character
                 String seq = "(?";
@@ -604,14 +604,14 @@ public class RegexPreprocessor {
 
     /**
      * Handles branch reset groups (?|alt1|alt2|alt3)
-     * 
+     * <p>
      * Branch reset groups reset capture group numbering for each alternative.
      * In Perl, (?|(a)|(b)) means both alternatives capture to $1.
-     * 
+     * <p>
      * Phase 1 Implementation: Converts to non-capturing group with alternatives.
      * This allows compilation and works for same-structure alternatives.
      * Full runtime remapping would be needed for perfect Perl emulation.
-     * 
+     *
      * @param s          The regex string
      * @param offset     Current position (at '(' of '(?|')
      * @param length     Length of regex string
@@ -622,34 +622,34 @@ public class RegexPreprocessor {
     private static int handleBranchReset(String s, int offset, int length, StringBuilder sb, RegexFlags regexFlags) {
         // Save the starting group count
         int startGroupCount = captureGroupCount;
-        
+
         // Skip past '(?|'
         offset += 3;
-        
+
         // First pass: collect raw alternative strings
         java.util.List<String> rawAlternatives = new java.util.ArrayList<>();
         StringBuilder altSb = new StringBuilder();
         int parenDepth = 1; // We're inside the (?| already
         boolean inEscape = false;
         boolean inCharClass = false;
-        
+
         while (offset < length && parenDepth > 0) {
             char c = s.charAt(offset);
-            
+
             if (inEscape) {
                 altSb.append(c);
                 inEscape = false;
                 offset++;
                 continue;
             }
-            
+
             if (c == '\\') {
                 altSb.append(c);
                 inEscape = true;
                 offset++;
                 continue;
             }
-            
+
             if (inCharClass) {
                 altSb.append(c);
                 if (c == ']') {
@@ -658,21 +658,21 @@ public class RegexPreprocessor {
                 offset++;
                 continue;
             }
-            
+
             if (c == '[') {
                 altSb.append(c);
                 inCharClass = true;
                 offset++;
                 continue;
             }
-            
+
             if (c == '(') {
                 parenDepth++;
                 altSb.append(c);
                 offset++;
                 continue;
             }
-            
+
             if (c == ')') {
                 parenDepth--;
                 if (parenDepth == 0) {
@@ -684,7 +684,7 @@ public class RegexPreprocessor {
                 offset++;
                 continue;
             }
-            
+
             if (c == '|' && parenDepth == 1) {
                 // End of this alternative, start of next
                 rawAlternatives.add(altSb.toString());
@@ -692,32 +692,32 @@ public class RegexPreprocessor {
                 offset++;
                 continue;
             }
-            
+
             // Regular character
             altSb.append(c);
             offset++;
         }
-        
+
         if (parenDepth != 0) {
             regexError(s, offset, "Unmatched ( in branch reset group");
         }
-        
+
         // Second pass: process each alternative and track capture counts
         java.util.List<String> processedAlternatives = new java.util.ArrayList<>();
         java.util.List<Integer> captureCounts = new java.util.ArrayList<>();
-        
+
         for (String rawAlt : rawAlternatives) {
             // Reset capture count for this alternative
             captureGroupCount = startGroupCount;
-            
+
             // Process this alternative through handleRegex
             StringBuilder processedAlt = new StringBuilder();
             handleRegex(rawAlt, 0, processedAlt, regexFlags, false);
-            
+
             processedAlternatives.add(processedAlt.toString());
             captureCounts.add(captureGroupCount - startGroupCount);
         }
-        
+
         // Find the maximum capture count across all alternatives
         int maxCaptures = 0;
         for (int count : captureCounts) {
@@ -725,10 +725,10 @@ public class RegexPreprocessor {
                 maxCaptures = count;
             }
         }
-        
+
         // Set the final capture group count to start + max captures
         captureGroupCount = startGroupCount + maxCaptures;
-        
+
         // Build the output: (?:alt1|alt2|alt3)
         // This is a non-capturing wrapper with all alternatives
         // Note: We don't append the closing ')' here - the caller (handleParentheses) will do that
@@ -739,7 +739,7 @@ public class RegexPreprocessor {
             }
             sb.append(processedAlternatives.get(i));
         }
-        
+
         return offset;
     }
 
@@ -1205,16 +1205,16 @@ public class RegexPreprocessor {
         // Conditional patterns are not supported by Java regex
         // (?(1)yes|no) means: if group 1 matched, use 'yes' branch, else use 'no' branch
         // This is fundamentally different from alternation and cannot be converted
-        
+
         // Simple cases are transformed in transformSimpleConditionals()
         // If we reach here, it's a complex case that couldn't be transformed
-        
+
         // Use regexUnimplemented so it can be caught with JPERL_UNIMPLEMENTED=warn
         // Append a placeholder that won't match anything
         sb.append("(?!)"); // Negative lookahead that always fails
-        
+
         regexUnimplemented(s, condStart - 1, "Conditional patterns (?(...)...) not implemented");
-        
+
         return pos + 1; // Skip past the closing ) of the conditional
     }
 
@@ -1285,28 +1285,28 @@ public class RegexPreprocessor {
 
     /**
      * Transform simple conditional patterns (?(N)yes|no) that can be converted to alternations.
-     * 
+     * <p>
      * Phase 1 implementation handles the common pattern: (group)?(?(N)yes|no)
      * Transforms to: (?:(group)yes|no)
-     * 
+     * <p>
      * This works because:
      * - If group matches: first alternative (group)yes is tried
      * - If group doesn't match: second alternative no is tried
-     * 
+     *
      * @param pattern The regex pattern
      * @return Transformed pattern with simple conditionals converted to alternations
      */
     private static String transformSimpleConditionals(String pattern) {
         // For now, we'll handle the simplest case: (?)?(?(1)yes|no) or (?)?(?(1)yes)
         // More complex transformations can be added later
-        
+
         // Pattern to match: (capture)? followed by (?(N)yes|no) or (?(N)yes)
         // We need to be careful about nested parentheses and escapes
-        
+
         StringBuilder result = new StringBuilder();
         int pos = 0;
         int len = pattern.length();
-        
+
         while (pos < len) {
             // Look for (?(digit)
             int condStart = pattern.indexOf("(?(", pos);
@@ -1315,30 +1315,30 @@ public class RegexPreprocessor {
                 result.append(pattern.substring(pos));
                 break;
             }
-            
+
             // Check if next char after (?( is a digit
             if (condStart + 3 >= len || !Character.isDigit(pattern.charAt(condStart + 3))) {
                 // Not a simple numeric conditional, skip it
-                result.append(pattern.substring(pos, condStart + 3));
+                result.append(pattern, pos, condStart + 3);
                 pos = condStart + 3;
                 continue;
             }
-            
+
             // Extract the group number
             int digitEnd = condStart + 3;
             while (digitEnd < len && Character.isDigit(pattern.charAt(digitEnd))) {
                 digitEnd++;
             }
-            
+
             if (digitEnd >= len || pattern.charAt(digitEnd) != ')') {
                 // Invalid format, skip
-                result.append(pattern.substring(pos, digitEnd));
+                result.append(pattern, pos, digitEnd);
                 pos = digitEnd;
                 continue;
             }
-            
+
             int groupNum = Integer.parseInt(pattern.substring(condStart + 3, digitEnd));
-            
+
             // Now find the yes|no branches
             // We need to find the matching ) for the conditional
             int branchStart = digitEnd + 1; // After the ) of (?(N)
@@ -1347,22 +1347,22 @@ public class RegexPreprocessor {
             int condEnd = branchStart;
             boolean inCharClass = false;
             boolean escaped = false;
-            
+
             while (condEnd < len) {
                 char ch = pattern.charAt(condEnd);
-                
+
                 if (escaped) {
                     escaped = false;
                     condEnd++;
                     continue;
                 }
-                
+
                 if (ch == '\\') {
                     escaped = true;
                     condEnd++;
                     continue;
                 }
-                
+
                 if (inCharClass) {
                     if (ch == ']') {
                         inCharClass = false;
@@ -1370,13 +1370,13 @@ public class RegexPreprocessor {
                     condEnd++;
                     continue;
                 }
-                
+
                 if (ch == '[') {
                     inCharClass = true;
                     condEnd++;
                     continue;
                 }
-                
+
                 if (ch == '(') {
                     parenDepth++;
                 } else if (ch == ')') {
@@ -1388,24 +1388,24 @@ public class RegexPreprocessor {
                 } else if (ch == '|' && parenDepth == 0 && pipePos == -1) {
                     pipePos = condEnd;
                 }
-                
+
                 condEnd++;
             }
-            
+
             if (condEnd >= len) {
                 // Unterminated conditional, let normal error handling catch it
                 result.append(pattern.substring(pos));
                 break;
             }
-            
+
             // Extract yes and no branches
             String yesBranch = pipePos > 0 ? pattern.substring(branchStart, pipePos) : pattern.substring(branchStart, condEnd);
             String noBranch = pipePos > 0 ? pattern.substring(pipePos + 1, condEnd) : "";
-            
+
             // Now try to find the referenced group BEFORE this conditional
             // For simplicity in Phase 1, we only handle if the group appears immediately before
             // or with simple pattern between (like literals)
-            
+
             // Look backwards for group N
             // Count groups from the start to condStart
             int groupCount = 0;
@@ -1414,15 +1414,15 @@ public class RegexPreprocessor {
             int searchPos = 0;
             int depth = 0;
             boolean isOptional = false;
-            
+
             while (searchPos < condStart) {
                 char ch = pattern.charAt(searchPos);
-                
+
                 if (ch == '\\') {
                     searchPos += 2; // Skip escaped char
                     continue;
                 }
-                
+
                 if (ch == '(') {
                     // Check if it's a capturing group
                     if (searchPos + 1 < condStart && pattern.charAt(searchPos + 1) != '?') {
@@ -1444,7 +1444,7 @@ public class RegexPreprocessor {
                                 endPos++;
                             }
                             groupNEnd = endPos;
-                            
+
                             // Check if followed by ? or * or {0,
                             if (groupNEnd < condStart) {
                                 char next = pattern.charAt(groupNEnd);
@@ -1466,50 +1466,50 @@ public class RegexPreprocessor {
                 }
                 searchPos++;
             }
-            
+
             // Only transform if we found the group and it's optional and appears directly before the conditional
             if (groupNStart >= 0 && isOptional) {
                 // Check if there's only simple content between group and conditional
                 String between = pattern.substring(groupNEnd + 1, condStart); // +1 to skip the ? or * after group
-                
+
                 // For Phase 1, only transform if:
                 // 1. The group is immediately before conditional OR
                 // 2. There's only simple literal text between
                 boolean canTransform = between.isEmpty() || between.matches("[a-zA-Z0-9\\s\\^\\$]+");
-                
+
                 if (canTransform) {
                     // Perform transformation!
                     // Append everything before the group
-                    result.append(pattern.substring(pos, groupNStart));
-                    
+                    result.append(pattern, pos, groupNStart);
+
                     // Build the alternation: (?:(group)between+yes|between+no)
                     result.append("(?:");
-                    
+
                     // First alternative: group+between+yes
-                    result.append(pattern.substring(groupNStart, groupNEnd)); // The group itself (without the ? or *)
+                    result.append(pattern, groupNStart, groupNEnd); // The group itself (without the ? or *)
                     result.append(between);
                     result.append(yesBranch);
-                    
+
                     // Second alternative: between+no
                     // Always add second alternative (even if noBranch is empty)
                     // Empty noBranch means "match nothing" when group doesn't match
                     result.append("|");
                     result.append(between);
                     result.append(noBranch);
-                    
+
                     result.append(")");
-                    
+
                     // Continue after the conditional
                     pos = condEnd + 1;
                     continue;
                 }
             }
-            
+
             // Could not transform, keep original
-            result.append(pattern.substring(pos, condEnd + 1));
+            result.append(pattern, pos, condEnd + 1);
             pos = condEnd + 1;
         }
-        
+
         return result.toString();
     }
 
@@ -1530,7 +1530,7 @@ public class RegexPreprocessor {
         int braceCount = 1;
         int codeStart = offset + 3; // Skip '(?{'
         int codeEnd = codeStart;
-        
+
         while (codeEnd < length && braceCount > 0) {
             char c = s.charAt(codeEnd);
             if (c == '{') {
@@ -1546,14 +1546,14 @@ public class RegexPreprocessor {
             }
             codeEnd++;
         }
-        
+
         if (braceCount != 0) {
             regexError(s, offset + 2, "Unmatched '{' in (?{...}) code block");
         }
-        
+
         // Extract the code block content
         String codeBlock = s.substring(codeStart, codeEnd).trim();
-        
+
         // Try to detect simple constant expressions
         // This handles the common cases in pack.t without full parser integration
         if (isSimpleConstant(codeBlock)) {
@@ -1562,11 +1562,11 @@ public class RegexPreprocessor {
             // Generate a unique name for this code block capture
             // Java regex requires capture group names to start with a letter
             String captureName = "codeblock" + captureGroupCount++;
-            
+
             // Append a named capture group that matches empty string
             // This allows us to store the constant value without affecting the match
             sb.append("(?<").append(captureName).append(">)");
-            
+
             // Skip past '}' and ')' - the closing brace and paren of (?{...})
             // codeEnd points to the '}', so we need to skip '}' and ')'
             if (codeEnd + 1 < length && s.charAt(codeEnd + 1) == ')') {
@@ -1574,15 +1574,15 @@ public class RegexPreprocessor {
             }
             return codeEnd + 1; // Just skip past '}' if no ')' found
         }
-        
+
         // If we couldn't handle it, throw an unimplemented exception that can be caught by RuntimeRegex
         // RuntimeRegex will handle JPERL_UNIMPLEMENTED=warn to make it non-fatal
         throw new PerlJavaUnimplementedException("(?{...}) code blocks in regex not implemented (only constant expressions supported) in regex; marked by <-- HERE in m/" +
                 s.substring(0, offset + 2) + " <-- HERE " + s.substring(offset + 2) + "/");
     }
-    
+
     /**
-{{ ... }}
+     * {{ ... }}
      * Handles the common patterns used in pack.t tests.
      *
      * @param codeBlock The code block content (without (?{ and }))
@@ -1595,28 +1595,24 @@ public class RegexPreprocessor {
         // - "string"
         // - numbers (integer or float)
         // - simple arithmetic (e.g., 1.36514538e37)
-        
+
         if (codeBlock.equals("undef")) {
             return true;
         }
-        
+
         // String literals
         if ((codeBlock.startsWith("'") && codeBlock.endsWith("'")) ||
-            (codeBlock.startsWith("\"") && codeBlock.endsWith("\""))) {
+                (codeBlock.startsWith("\"") && codeBlock.endsWith("\""))) {
             return true;
         }
-        
+
         // Numeric literals (including scientific notation)
         if (codeBlock.matches("[+-]?\\d+(\\.\\d+)?([eE][+-]?\\d+)?")) {
             return true;
         }
-        
+
         // Simple arithmetic expressions (for pack.t compatibility)
         // Just check if it looks like a number-only expression
-        if (codeBlock.matches("[\\d\\s+\\-*/().eE]+")) {
-            return true;
-        }
-        
-        return false;
+        return codeBlock.matches("[\\d\\s+\\-*/().eE]+");
     }
 }

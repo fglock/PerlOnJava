@@ -51,7 +51,7 @@ public class EmitRegex {
      */
     static void handleNotBindRegex(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         // Check if using !~ with tr///r or y///r (which doesn't make sense)
-        if (node.right instanceof OperatorNode operatorNode 
+        if (node.right instanceof OperatorNode operatorNode
                 && (operatorNode.operator.equals("tr") || operatorNode.operator.equals("transliterate"))
                 && operatorNode.operand instanceof ListNode listNode
                 && listNode.elements.size() >= 3) {
@@ -60,13 +60,13 @@ public class EmitRegex {
             if (modifiersNode instanceof StringNode stringNode) {
                 String modifiers = stringNode.value;
                 if (modifiers.contains("r")) {
-                    throw new PerlCompilerException(node.tokenIndex, 
-                        "Using !~ with tr///r doesn't make sense", 
-                        emitterVisitor.ctx.errorUtil);
+                    throw new PerlCompilerException(node.tokenIndex,
+                            "Using !~ with tr///r doesn't make sense",
+                            emitterVisitor.ctx.errorUtil);
                 }
             }
         }
-        
+
         emitterVisitor.visit(
                 new OperatorNode("not",
                         new BinaryOperatorNode(

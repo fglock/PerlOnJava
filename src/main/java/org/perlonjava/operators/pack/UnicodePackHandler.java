@@ -2,7 +2,6 @@ package org.perlonjava.operators.pack;
 
 import org.perlonjava.runtime.RuntimeScalar;
 
-
 import java.util.List;
 
 /**
@@ -13,7 +12,7 @@ import java.util.List;
 public class UnicodePackHandler implements PackFormatHandler {
 
     @Override
-    public int pack(List<RuntimeScalar> values, int valueIndex, int count, boolean hasStar, 
+    public int pack(List<RuntimeScalar> values, int valueIndex, int count, boolean hasStar,
                     ParsedModifiers modifiers, PackBuffer output) {
         // Note: This handler is not used directly due to state management requirements.
         // The Unicode format is handled specially in Pack.java to manage byteMode and 

@@ -203,12 +203,12 @@ public class EmitVariable {
             case "&":
                 // `&$a` or `&{sub ...}`
                 emitterVisitor.ctx.logDebug("GETVAR `&$a` or `&{sub ...}`");
-                
+
                 // Special handling for &{sub ...} - BlockNode containing SubroutineNode
-                if (node.operand instanceof BlockNode blockNode && 
-                    blockNode.elements.size() == 1 && 
-                    blockNode.elements.get(0) instanceof SubroutineNode) {
-                    
+                if (node.operand instanceof BlockNode blockNode &&
+                        blockNode.elements.size() == 1 &&
+                        blockNode.elements.get(0) instanceof SubroutineNode) {
+
                     emitterVisitor.ctx.logDebug("GETVAR `&{sub ...}` - emitting subroutine as RuntimeScalar");
                     // Emit the subroutine directly as a RuntimeScalar (code reference)
                     blockNode.elements.get(0).accept(emitterVisitor.with(RuntimeContextType.SCALAR));
@@ -216,7 +216,7 @@ public class EmitVariable {
                     // Regular case: `&$a`
                     node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
                 }
-                
+
                 mv.visitVarInsn(Opcodes.ALOAD, 1);  // push @_ to stack
                 emitterVisitor.pushCallContext();   // push call context to stack
                 mv.visitMethodInsn(
@@ -225,7 +225,7 @@ public class EmitVariable {
                         "apply",
                         "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeArray;I)Lorg/perlonjava/runtime/RuntimeList;",
                         false); // generate an .apply() call
-                
+
                 // Handle context conversion: RuntimeCode.apply() always returns RuntimeList
                 // but we need to convert based on the calling context
                 if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
@@ -236,7 +236,7 @@ public class EmitVariable {
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
                 }
                 // LIST context: RuntimeList is already correct, no conversion needed
-                
+
                 return;
         }
 
@@ -449,7 +449,7 @@ public class EmitVariable {
                 if (element instanceof OperatorNode && "undef".equals(((OperatorNode) element).operator)) {
                     continue; // skip "undef"
                 }
-                
+
                 // Check if this element is a backslash operator (declared reference)
                 // This handles cases like my(\$x) where the backslash is inside the parentheses
                 if (element instanceof OperatorNode operatorNode && operatorNode.operator.equals("\\")) {
@@ -523,8 +523,8 @@ public class EmitVariable {
                     // TODO optimization - SETVAR+MY can be combined
 
                     // Check if this is a declared reference (my \$x)
-                    boolean isDeclaredReference = node.annotations != null && 
-                        Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"));
+                    boolean isDeclaredReference = node.annotations != null &&
+                            Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"));
 
                     // Determine the class name based on the sigil
                     String className = EmitterMethodCreator.getVariableClassName(sigil);
@@ -627,7 +627,7 @@ public class EmitVariable {
                         // Store in a JVM local variable
                         emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, varIndex);
                     }
-                    
+
                     if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR && !sigil.equals("$")) {
                         // scalar context: transform the value in the stack to scalar
                         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);

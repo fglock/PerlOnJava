@@ -1,8 +1,6 @@
 package org.perlonjava.operators;
 
 import org.perlonjava.runtime.*;
-import org.perlonjava.runtime.DynamicVariableManager;
-import org.perlonjava.runtime.PerlSignalQueue;
 
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
@@ -11,10 +9,10 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 import static org.perlonjava.runtime.ErrorMessageUtil.stringifyException;
 import static org.perlonjava.runtime.GlobalVariable.getGlobalHash;
@@ -160,7 +158,7 @@ public class Time {
      * Sets an alarm to go off after the specified number of seconds.
      * Returns the number of seconds remaining from a previous alarm, if any.
      *
-     * @param ctx the runtime context
+     * @param ctx  the runtime context
      * @param args the arguments (seconds to wait)
      * @return a RuntimeScalar representing the seconds remaining from previous alarm
      */
@@ -174,7 +172,7 @@ public class Time {
         int remainingTime = 0;
         if (currentAlarmTask != null && !currentAlarmTask.isDone()) {
             long elapsedTime = (System.currentTimeMillis() - alarmStartTime) / 1000;
-            remainingTime = Math.max(0, alarmDuration - (int)elapsedTime);
+            remainingTime = Math.max(0, alarmDuration - (int) elapsedTime);
             currentAlarmTask.cancel(false);
         }
 
@@ -200,7 +198,7 @@ public class Time {
 
         return new RuntimeScalar(remainingTime);
     }
-    
+
     /**
      * Check and process any pending signals.
      * This method should be called at safe execution points in the interpreter.
@@ -208,13 +206,13 @@ public class Time {
     public static void checkPendingSignals() {
         // Process any queued signals
         PerlSignalQueue.processSignals();
-        
+
         // Clear interrupt flag if it was set by alarm
         if (Thread.interrupted()) {
             // The interrupt was handled via signal processing
         }
     }
-    
+
     /**
      * Shuts down the alarm scheduler to allow clean JVM exit.
      * This method is called by the shutdown hook and can also be called manually.
@@ -224,7 +222,7 @@ public class Time {
             currentAlarmTask.cancel(false);
             currentAlarmTask = null;
         }
-        
+
         if (!alarmScheduler.isShutdown()) {
             alarmScheduler.shutdown();
             try {

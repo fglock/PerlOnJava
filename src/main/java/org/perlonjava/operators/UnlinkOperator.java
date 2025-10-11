@@ -23,8 +23,8 @@ public class UnlinkOperator {
      * Deletes a list of files specified in the RuntimeBase arguments.
      * Follows Perl's unlink operator behavior.
      *
-     * @param ctx   The context (SCALAR or LIST)
-     * @param args  The files to be deleted
+     * @param ctx  The context (SCALAR or LIST)
+     * @param args The files to be deleted
      * @return A RuntimeScalar indicating the number of files successfully deleted.
      */
     public static RuntimeBase unlink(int ctx, RuntimeBase... args) {

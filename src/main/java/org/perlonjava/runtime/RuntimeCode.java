@@ -499,13 +499,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         String name = NameNormalizer.normalizeVariableName(runtimeScalar.toString(), packageName);
         // System.out.println("Creating code reference: " + name + " got: " + GlobalContext.getGlobalCodeRef(name));
         RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(name);
-        
+
         // Mark this as a symbolic reference created by \&{string} pattern
         // This ensures defined(\&{nonexistent}) returns true to match standard Perl behavior
         if (codeRef.type == RuntimeScalarType.CODE && codeRef.value instanceof RuntimeCode runtimeCode) {
             runtimeCode.isSymbolicReference = true;
         }
-        
+
         return codeRef;
     }
 

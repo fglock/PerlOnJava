@@ -253,7 +253,7 @@ public class StringParser {
         } else {
             // interpolate variables, but ignore the escapes, keep `\$` if present
             // Pass shared heredoc nodes to handle heredocs inside regex patterns
-            parsed = StringDoubleQuoted.parseDoubleQuotedString(ctx, rawStr, false, true, true, 
+            parsed = StringDoubleQuoted.parseDoubleQuotedString(ctx, rawStr, false, true, true,
                     parser != null ? parser.getHeredocNodes() : null);
         }
         return parsed;

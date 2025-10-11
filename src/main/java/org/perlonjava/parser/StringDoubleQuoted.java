@@ -116,7 +116,7 @@ public class StringDoubleQuoted extends StringSegmentParser {
     static Node parseDoubleQuotedString(EmitterContext ctx, StringParser.ParsedString rawStr, boolean parseEscapes, boolean interpolateVariable, boolean isRegexReplacement, List<OperatorNode> sharedHeredocNodes) {
         return parseDoubleQuotedString(ctx, rawStr, parseEscapes, interpolateVariable, isRegexReplacement, sharedHeredocNodes, null);
     }
-    
+
     /**
      * Parses a double-quoted string with optional shared heredoc state and original parser context.
      *
@@ -146,7 +146,7 @@ public class StringDoubleQuoted extends StringSegmentParser {
         var parser = sharedHeredocNodes != null ?
                 new Parser(ctx, tokens, sharedHeredocNodes) :
                 new Parser(ctx, tokens);
-        
+
         // Preserve context flags from original parser if provided
         if (originalParser != null) {
             parser.isInMethod = originalParser.isInMethod;
@@ -156,11 +156,11 @@ public class StringDoubleQuoted extends StringSegmentParser {
 
         // Create and run the double-quoted string parser with original token offset tracking
         var doubleQuotedParser = new StringDoubleQuoted(ctx, tokens, parser, tokenIndex, isRegex, parseEscapes, interpolateVariable, isRegexReplacement);
-        
+
         // Set up offset tracking and original string content for proper error reporting
         doubleQuotedParser.setOriginalTokenOffset(tokenIndex);
         doubleQuotedParser.setOriginalStringContent(input);
-        
+
         return doubleQuotedParser.parse();
     }
 

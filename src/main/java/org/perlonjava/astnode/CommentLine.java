@@ -14,8 +14,8 @@ public class CommentLine extends FormatLine {
     /**
      * Constructor for CommentLine.
      *
-     * @param content The raw text content of the line
-     * @param comment The comment text without the leading #
+     * @param content    The raw text content of the line
+     * @param comment    The comment text without the leading #
      * @param tokenIndex The token index in the source code
      */
     public CommentLine(String content, String comment, int tokenIndex) {

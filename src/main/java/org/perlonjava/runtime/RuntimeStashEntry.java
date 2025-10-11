@@ -57,7 +57,7 @@ public class RuntimeStashEntry extends RuntimeGlob {
                 RuntimeScalar targetScalar = value.scalarDeref();
                 // Make the target scalar slot point to the same RuntimeScalar object (aliasing)
                 GlobalVariable.globalVariables.put(this.globName, targetScalar);
-                
+
                 // Also create a constant subroutine for bareword access
                 RuntimeCode code = new RuntimeCode("", null);
                 code.constantValue = targetScalar.getList();
@@ -71,7 +71,7 @@ public class RuntimeStashEntry extends RuntimeGlob {
                 RuntimeArray targetArray = value.arrayDeref();
                 // Make the target array slot point to the same RuntimeArray object (aliasing)
                 GlobalVariable.globalArrays.put(this.globName, targetArray);
-                
+
                 // Also create a constant subroutine for bareword access
                 RuntimeCode code = new RuntimeCode("", null);
                 code.constantValue = targetArray.getList();
@@ -98,11 +98,10 @@ public class RuntimeStashEntry extends RuntimeGlob {
                 if (value.value instanceof RuntimeIO) {
                     // *STDOUT = $new_handle
                     GlobalVariable.getGlobalIO(this.globName).set(value);
-                } else if (value.value instanceof RuntimeGlob) {
+                } else if (value.value instanceof RuntimeGlob sourceGlob) {
                     // *dest = *source - copy all slots from source glob to dest glob
-                    RuntimeGlob sourceGlob = (RuntimeGlob) value.value;
                     String sourceGlobName = sourceGlob.globName;
-                    
+
                     // Copy all slots from source to destination
                     this.set(GlobalVariable.getGlobalCodeRef(sourceGlobName));
                     this.set(GlobalVariable.getGlobalIO(sourceGlobName));

@@ -47,7 +47,7 @@ public class EmitBinaryOperator {
         if (node.operator.equals("isa") && right instanceof IdentifierNode identifierNode) {
             right = new StringNode(identifierNode.name, node.tokenIndex);
         }
-        
+
         // Special case for modulus and division operators under "use integer"
         if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_INTEGER)) {
             if (node.operator.equals("%")) {

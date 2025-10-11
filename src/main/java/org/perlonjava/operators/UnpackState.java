@@ -14,14 +14,13 @@ public class UnpackState {
     private final String dataString;
     private final byte[] originalBytes;
     private final int[] codePoints;
+    // Stacks to track group-relative baselines (character and byte domains)
+    private final java.util.Deque<Integer> groupCharBase = new java.util.ArrayDeque<>();
+    private final java.util.Deque<Integer> groupByteBase = new java.util.ArrayDeque<>();
     private int codePointIndex = 0;
     private boolean characterMode;
     private ByteBuffer buffer;
     private ByteOrder currentByteOrder = ByteOrder.LITTLE_ENDIAN; // Default to little-endian
-
-    // Stacks to track group-relative baselines (character and byte domains)
-    private final java.util.Deque<Integer> groupCharBase = new java.util.ArrayDeque<>();
-    private final java.util.Deque<Integer> groupByteBase = new java.util.ArrayDeque<>();
 
     public UnpackState(String dataString, boolean startsWithU) {
         this.dataString = dataString;
@@ -55,19 +54,25 @@ public class UnpackState {
         }
     }
 
-    /** Push current position as the baseline for a new group scope. */
+    /**
+     * Push current position as the baseline for a new group scope.
+     */
     public void pushGroupBase() {
         groupCharBase.push(getCurrentCodePointIndex());
         groupByteBase.push(getBytePosition());
     }
 
-    /** Pop the current group baseline. Safe to call when stack is empty. */
+    /**
+     * Pop the current group baseline. Safe to call when stack is empty.
+     */
     public void popGroupBase() {
         if (!groupCharBase.isEmpty()) groupCharBase.pop();
         if (!groupByteBase.isEmpty()) groupByteBase.pop();
     }
 
-    /** Get the relative position from the current group baseline in the active mode. */
+    /**
+     * Get the relative position from the current group baseline in the active mode.
+     */
     public int getRelativePosition() {
         if (isCharacterMode()) {
             int base = groupCharBase.isEmpty() ? 0 : groupCharBase.peek();
@@ -78,13 +83,9 @@ public class UnpackState {
         }
     }
 
-    /** Get the relative byte position from the current group baseline. */
-    public int getRelativeBytePosition() {
-        int base = groupByteBase.isEmpty() ? 0 : groupByteBase.peek();
-        return getBytePosition() - base;
-    }
-
-    /** Set the position relative to the current group baseline. */
+    /**
+     * Set the position relative to the current group baseline.
+     */
     public void setRelativePosition(int offset) {
         if (isCharacterMode()) {
             int base = groupCharBase.isEmpty() ? 0 : groupCharBase.peek();
@@ -95,7 +96,17 @@ public class UnpackState {
         }
     }
 
-    /** Returns true if there is an active group baseline on the stack. */
+    /**
+     * Get the relative byte position from the current group baseline.
+     */
+    public int getRelativeBytePosition() {
+        int base = groupByteBase.isEmpty() ? 0 : groupByteBase.peek();
+        return getBytePosition() - base;
+    }
+
+    /**
+     * Returns true if there is an active group baseline on the stack.
+     */
     public boolean hasGroupBase() {
         return !groupCharBase.isEmpty() || !groupByteBase.isEmpty();
     }
@@ -192,7 +203,7 @@ public class UnpackState {
     /**
      * Sets the byte order for the ByteBuffer used in unpacking.
      * This must be called based on endianness modifiers in the pack template.
-     * 
+     *
      * @param bigEndian true for big-endian ('>'), false for little-endian ('<')
      */
     public void setByteOrder(boolean bigEndian) {
@@ -223,28 +234,6 @@ public class UnpackState {
             return originalBytes.length;
         }
         return buffer.remaining();
-    }
-
-    /**
-     * Sets the absolute position in the data.
-     *
-     * @param newPosition The new position (0-based)
-     */
-    public void setPosition(int newPosition) {
-        // DEBUG: setPosition called with " + newPosition + ", characterMode=" + characterMode
-        if (characterMode) {
-            // In character mode, position is in code points
-            codePointIndex = Math.min(newPosition, codePoints.length);
-            // DEBUG: Set codePointIndex to " + codePointIndex
-        } else {
-            // In byte mode, we need to recreate the buffer at the new position
-            if (originalBytes != null && originalBytes.length > 0) {
-                int bytePos = Math.min(newPosition, originalBytes.length);
-                buffer = ByteBuffer.wrap(originalBytes, bytePos, originalBytes.length - bytePos);
-                buffer.order(currentByteOrder);
-                // DEBUG: Reset buffer to position " + bytePos
-            }
-        }
     }
 
     /**
@@ -285,6 +274,28 @@ public class UnpackState {
                 return 0;
             }
             return buffer.position();
+        }
+    }
+
+    /**
+     * Sets the absolute position in the data.
+     *
+     * @param newPosition The new position (0-based)
+     */
+    public void setPosition(int newPosition) {
+        // DEBUG: setPosition called with " + newPosition + ", characterMode=" + characterMode
+        if (characterMode) {
+            // In character mode, position is in code points
+            codePointIndex = Math.min(newPosition, codePoints.length);
+            // DEBUG: Set codePointIndex to " + codePointIndex
+        } else {
+            // In byte mode, we need to recreate the buffer at the new position
+            if (originalBytes != null && originalBytes.length > 0) {
+                int bytePos = Math.min(newPosition, originalBytes.length);
+                buffer = ByteBuffer.wrap(originalBytes, bytePos, originalBytes.length - bytePos);
+                buffer.order(currentByteOrder);
+                // DEBUG: Reset buffer to position " + bytePos
+            }
         }
     }
 

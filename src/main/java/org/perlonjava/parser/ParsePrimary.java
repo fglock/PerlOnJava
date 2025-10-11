@@ -338,12 +338,12 @@ public class ParsePrimary {
                 }
                 // Regular unary minus
                 operand = parser.parseExpression(parser.getPrecedence(token.text) + 1);
-                
+
                 // Check for missing operand - this is a syntax error
                 if (operand == null) {
                     parser.throwError("Syntax error: unary minus operator requires an operand");
                 }
-                
+
                 if (operand instanceof IdentifierNode identifierNode) {
                     // Special case: -bareword becomes "-bareword" (string)
                     return new StringNode("-" + identifierNode.name, parser.tokenIndex);
@@ -372,7 +372,7 @@ public class ParsePrimary {
             // autoquote ` -X => ... `
             return new StringNode(operator, parser.tokenIndex);
         }
-        
+
 
         var hasParenthesis = false;
         if (nextToken.text.equals("(")) {
@@ -403,14 +403,14 @@ public class ParsePrimary {
         }
 
         // Check for ambiguous cases like -C- where we have a unary minus without operand
-        if (operand instanceof org.perlonjava.astnode.OperatorNode opNode && 
-            "unaryMinus".equals(opNode.operator) && opNode.operand == null) {
+        if (operand instanceof org.perlonjava.astnode.OperatorNode opNode &&
+                "unaryMinus".equals(opNode.operator) && opNode.operand == null) {
             // This is an ambiguous case like -C- 
             // Use the saved line number from before peek() side effects
-            String warningMsg = "Warning: Use of \"" + operator + "-\" without parentheses is ambiguous at " + 
-                              parser.ctx.errorUtil.getFileName() + " line " + startLineNumber + ".\n" +
-                              "syntax error at " + parser.ctx.errorUtil.getFileName() + " line " + startLineNumber + ", at EOF\n" +
-                              "Execution of " + parser.ctx.errorUtil.getFileName() + " aborted due to compilation errors.";
+            String warningMsg = "Warning: Use of \"" + operator + "-\" without parentheses is ambiguous at " +
+                    parser.ctx.errorUtil.getFileName() + " line " + startLineNumber + ".\n" +
+                    "syntax error at " + parser.ctx.errorUtil.getFileName() + " line " + startLineNumber + ", at EOF\n" +
+                    "Execution of " + parser.ctx.errorUtil.getFileName() + " aborted due to compilation errors.";
             throw new org.perlonjava.runtime.PerlParserException(warningMsg);
         }
 

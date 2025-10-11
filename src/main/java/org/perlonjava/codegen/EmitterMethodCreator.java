@@ -180,7 +180,7 @@ public class EmitterMethodCreator implements Opcodes {
                 mv.visitFieldInsn(Opcodes.GETFIELD, ctx.javaClassInfo.javaClassName, env[i], descriptor);
                 mv.visitVarInsn(Opcodes.ASTORE, i);
             }
-            
+
             // Pre-initialize additional slots that might be allocated by localSetup or other mechanisms
             // This prevents VerifyErrors when slots are accessed before explicit initialization
             // We initialize slots from env.length up to env.length + 10 with null

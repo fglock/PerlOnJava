@@ -3,7 +3,6 @@ package org.perlonjava.parser;
 import org.perlonjava.astnode.*;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
-import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.PerlJavaUnimplementedException;
 
 import static org.perlonjava.parser.ParserTables.CORE_PROTOTYPES;
@@ -71,13 +70,10 @@ public class CoreOperatorResolver {
             case "sort" -> ParseMapGrepSort.parseSort(parser, token);
             case "map", "grep", "all", "any" -> ParseMapGrepSort.parseMapGrep(parser, token);
             case "pack" -> OperatorParser.parsePack(parser, token, currentIndex);
-            case "chomp", "chop", "splice", "mkdir" ->
-                    OperatorParser.parseReverse(parser, token, currentIndex);
-            case "die", "warn" ->
-                    OperatorParser.parseDieWarn(parser, token, currentIndex);
+            case "chomp", "chop", "splice", "mkdir" -> OperatorParser.parseReverse(parser, token, currentIndex);
+            case "die", "warn" -> OperatorParser.parseDieWarn(parser, token, currentIndex);
             case "system", "exec" -> OperatorParser.parseSystem(parser, token, currentIndex);
-            case "readline", "eof", "tell" ->
-                    OperatorParser.parseReadline(parser, token, currentIndex);
+            case "readline", "eof", "tell" -> OperatorParser.parseReadline(parser, token, currentIndex);
             case "binmode" -> OperatorParser.parseBinmodeOperator(parser, token, currentIndex);
             case "seek" -> OperatorParser.parseSeek(parser, token, currentIndex);
             case "printf", "print", "say" -> OperatorParser.parsePrint(parser, token, currentIndex);
@@ -103,8 +99,8 @@ public class CoreOperatorResolver {
             case "dump", "dbmclose", "dbmopen" ->
                     throw new PerlJavaUnimplementedException(parser.tokenIndex, "Not implemented: operator: " + token.text, parser.ctx.errorUtil);
             case "format" ->
-                    // Format statements should be handled by StatementResolver, not as operators
-                    // Return null to allow StatementResolver to handle it
+                // Format statements should be handled by StatementResolver, not as operators
+                // Return null to allow StatementResolver to handle it
                     null;
             case "msgctl", "msgget", "msgrcv", "msgsnd", "semctl", "semget", "semop",
                  "shmctl", "shmget", "shmread", "shmwrite",

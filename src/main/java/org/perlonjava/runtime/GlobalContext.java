@@ -114,7 +114,7 @@ public class GlobalContext {
         // This allows comp/form_scope.t and other format tests to run
         RuntimeFormat stdoutFormat = GlobalVariable.getGlobalFormatRef("STDOUT");
         stdoutFormat.setTemplate("");  // Empty template - can be overridden by user code
-        
+
         // Initialize hashes
         GlobalVariable.getGlobalHash("main::SIG");
         GlobalVariable.getGlobalHash(encodeSpecialVar("H"));

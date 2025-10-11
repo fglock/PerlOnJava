@@ -1,13 +1,14 @@
 package org.perlonjava.operators.pack;
 
-import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.operators.FormatModifierValidator;
+import org.perlonjava.runtime.PerlCompilerException;
+
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * PackParser provides utility methods for parsing Perl pack template strings.
- * 
+ *
  * <p>This class handles the parsing of various components in pack templates including:
  * <ul>
  *   <li>Endianness modifiers (&lt; for little-endian, &gt; for big-endian)</li>
@@ -15,27 +16,27 @@ import java.util.List;
  *   <li>Repeat counts (numeric values, * for "use all remaining", or bracketed expressions)</li>
  *   <li>Group information for parenthesized template sections</li>
  * </ul>
- * 
+ *
  * <p>Pack templates in Perl follow the format: [type][modifiers][count]
  * where modifiers can include endianness and native size indicators,
  * and count can be a number, *, or a bracketed expression.
- * 
+ *
  * @see ParsedModifiers
- * @see ParsedCount  
+ * @see ParsedCount
  * @see GroupInfo
  */
 public class PackParser {
-    
+
     /**
      * Parses endianness and native size modifiers from a pack template.
-     * 
+     *
      * <p>Modifiers are parsed in sequence after the template character:
      * <ul>
      *   <li>&lt; - little-endian byte order</li>
      *   <li>&gt; - big-endian byte order</li>
      *   <li>! - use native platform sizes</li>
      * </ul>
-     * 
+     *
      * @param template the pack template string to parse
      * @param position the current position in the template (should point to the type character)
      * @return ParsedModifiers object containing the parsed modifier flags and end position
@@ -81,7 +82,7 @@ public class PackParser {
 
     /**
      * Parses repeat count specifications from a pack template.
-     * 
+     *
      * <p>Repeat counts can be specified in several formats:
      * <ul>
      *   <li>Numeric: a simple integer (e.g., "5")</li>
@@ -89,11 +90,11 @@ public class PackParser {
      *   <li>Bracketed: "[n]" for numeric count or "[template]" for template-based sizing</li>
      *   <li>Empty brackets: "[]" treated as count 0</li>
      * </ul>
-     * 
+     *
      * <p>For bracketed expressions containing templates (non-numeric content),
      * the method currently falls back to count 1 as template size calculation
      * is not yet fully implemented.
-     * 
+     *
      * @param template the pack template string to parse
      * @param position the current position in the template (should point to the type character)
      * @return ParsedCount object containing the parsed count, star flag, and end position
@@ -161,10 +162,10 @@ public class PackParser {
 
     /**
      * Skips a comment in the template string, starting from the given position.
-     * 
+     *
      * <p>Comments in pack templates start with '#' and continue until the end of the line.
      * This method advances the position past the entire comment.</p>
-     * 
+     *
      * @param template The template string
      * @param position The starting position of the comment (should point to '#')
      * @return The position after the comment
@@ -178,10 +179,10 @@ public class PackParser {
 
     /**
      * Parses group information including modifiers and repeat counts for parenthesized template sections.
-     * 
+     *
      * <p>Groups in pack templates are enclosed in parentheses and can have modifiers and repeat counts
      * applied to the entire group. This method parses the content after the closing parenthesis ')'.
-     * 
+     *
      * <p>Supported group modifiers and counts:
      * <ul>
      *   <li>Endianness: &lt; or &gt;</li>
@@ -190,7 +191,7 @@ public class PackParser {
      *   <li>Bracketed repeat count: [n]</li>
      *   <li>Star repeat: * (treated as Integer.MAX_VALUE)</li>
      * </ul>
-     * 
+     *
      * @param template the pack template string to parse
      * @param closePos the position of the closing parenthesis ')' in the template
      * @return GroupInfo object containing endianness, repeat count, and end position
@@ -246,7 +247,7 @@ public class PackParser {
 
     /**
      * Validates that the parsed modifiers are compatible with the format character.
-     * 
+     *
      * <p>Certain format characters do not support certain modifiers:
      * <ul>
      *   <li>h, H (hex): Do not support endianness (&lt;, &gt;) or native size (!) modifiers</li>
@@ -255,7 +256,7 @@ public class PackParser {
      *   <li>p, P (pointer): Do not support native size (!) or endianness modifiers</li>
      *   <li>n, N, v, V (network/VAX): Do not support endianness modifiers (have fixed byte order)</li>
      * </ul>
-     * 
+     *
      * @param formatChar the format character being validated
      * @param modifiers the parsed modifiers to validate
      * @param modifierOrder the order in which modifiers appeared in the template
@@ -265,11 +266,11 @@ public class PackParser {
     /**
      * Calculates the packed size in bytes for a given template.
      * This is used for x[template] constructs in unpack to determine how many bytes to skip.
-     * 
+     *
      * <p>This method works by actually packing dummy data with the template and measuring
      * the resulting byte length. This approach handles all format types correctly, including
      * variable-length formats like bit strings and hex strings.</p>
-     * 
+     *
      * @param template the pack template string
      * @return the number of bytes the template would produce when packed
      * @throws PerlCompilerException if the template contains invalid formats
@@ -283,43 +284,43 @@ public class PackParser {
                 }
             }
         }
-        
+
         // The best way to calculate the size is to actually pack dummy data and measure the result
         // This handles all the complex cases (bit strings, hex strings, groups, modifiers, etc.)
         try {
             // Create a RuntimeList with the template and enough dummy values
             org.perlonjava.runtime.RuntimeList args = new org.perlonjava.runtime.RuntimeList();
             args.add(new org.perlonjava.runtime.RuntimeScalar(template));
-            
+
             // Add dummy values for each format character that needs data
             // Parse template to provide appropriate dummy values
             addDummyValuesForTemplate(template, args);
-            
+
             // Pack the data and measure the result
             org.perlonjava.runtime.RuntimeScalar result = org.perlonjava.operators.Pack.pack(args);
             // Use byte length, not character length (important for UTF-8 data from W/U formats)
             // Get as ISO_8859_1 bytes to measure actual byte length
             return result.toString().getBytes(java.nio.charset.StandardCharsets.ISO_8859_1).length;
-            
+
         } catch (Exception e) {
             // If packing fails, fall back to a simple estimation
             // This shouldn't happen for valid templates, but provides a safety net
             return 1;
         }
     }
-    
+
     /**
      * Adds dummy values to args list for packing the given template.
      * Different format types need different dummy values to pack correctly.
-     * 
+     *
      * @param template the pack template string
-     * @param args the RuntimeList to add dummy values to
+     * @param args     the RuntimeList to add dummy values to
      */
     private static void addDummyValuesForTemplate(String template, org.perlonjava.runtime.RuntimeList args) {
         int i = 0;
         while (i < template.length()) {
             char format = template.charAt(i);
-            
+
             // Skip whitespace and comments
             if (Character.isWhitespace(format)) {
                 i++;
@@ -333,29 +334,29 @@ public class PackParser {
                 i++;
                 continue;
             }
-            
+
             // Skip parentheses (groups)
             if (format == '(' || format == ')') {
                 i++;
                 continue;
             }
-            
+
             // Skip modifiers
             if (format == '<' || format == '>' || format == '!') {
                 i++;
                 continue;
             }
-            
+
             // Parse repeat count
             int count = 1;
             i++; // Move past format character
-            
+
             // Skip modifiers after format
-            while (i < template.length() && (template.charAt(i) == '<' || 
-                   template.charAt(i) == '>' || template.charAt(i) == '!')) {
+            while (i < template.length() && (template.charAt(i) == '<' ||
+                    template.charAt(i) == '>' || template.charAt(i) == '!')) {
                 i++;
             }
-            
+
             // Parse count
             if (i < template.length()) {
                 if (template.charAt(i) == '*') {
@@ -381,7 +382,7 @@ public class PackParser {
                     count = 1; // Use default count for bracketed expressions
                 }
             }
-            
+
             // Add appropriate dummy values based on format type
             for (int j = 0; j < count; j++) {
                 switch (format) {
@@ -412,11 +413,11 @@ public class PackParser {
             }
         }
     }
-    
+
     /**
      * Counts how many values are needed to pack a template.
      * This is a helper method for calculatePackedSize.
-     * 
+     *
      * @param template the pack template string
      * @return estimated number of values needed
      */
@@ -431,15 +432,15 @@ public class PackParser {
         }
         return Math.max(count, 10); // Ensure we have at least 10 values
     }
-    
+
     /**
      * Calculates the total size in bytes of a template string.
      * For use with x[template] and X[template] formats.
-     * 
+     * <p>
      * This method uses the actual Pack.pack method to pack dummy data
      * and measure the resulting size, which handles all complex cases
      * including groups, modifiers, and nested templates correctly.
-     * 
+     *
      * @param template the template string
      * @return the total size in bytes
      */
@@ -450,14 +451,14 @@ public class PackParser {
             // Create a RuntimeList with the template and dummy values
             org.perlonjava.runtime.RuntimeList args = new org.perlonjava.runtime.RuntimeList();
             args.add(new org.perlonjava.runtime.RuntimeScalar(template));
-            
+
             // Count how many values the template needs and add dummy values
             int valueCount = countValuesNeeded(template);
             for (int j = 0; j < valueCount; j++) {
                 // Add dummy values - use 0 for numeric formats
                 args.add(new org.perlonjava.runtime.RuntimeScalar(0));
             }
-            
+
             // Pack with the template and measure the result
             org.perlonjava.runtime.RuntimeScalar result = org.perlonjava.operators.Pack.pack(args);
             return result.toString().length();
@@ -467,7 +468,7 @@ public class PackParser {
             return calculateTemplateSizeSimple(template);
         }
     }
-    
+
     /**
      * Simple fallback calculation for template size.
      * This is used when the pack method fails for some reason.
@@ -483,11 +484,11 @@ public class PackParser {
         }
         return Math.max(size, 1);  // Return at least 1
     }
-    
+
     /**
      * Returns the size in bytes for a given format character.
-     * 
-     * @param format the format character
+     *
+     * @param format     the format character
      * @param nativeSize whether the ! modifier is present
      * @return the size in bytes
      */

@@ -26,10 +26,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     public int type;
     // List to hold the elements of the array.
     public List<RuntimeScalar> elements;
-    // Iterator for traversing the hash elements
-    private Integer eachIteratorIndex;
     // For hash assignment in scalar context: %h = (1,2,3,4) should return 4, not 2
     public Integer scalarContextSize;
+    // Iterator for traversing the hash elements
+    private Integer eachIteratorIndex;
 
 
     // Constructor
@@ -170,7 +170,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * @return A scalar representing the new size of the array.
      */
     public static RuntimeScalar unshift(RuntimeArray runtimeArray, RuntimeBase value) {
-        
+
         return switch (runtimeArray.type) {
             case PLAIN_ARRAY -> {
                 RuntimeArray arr = new RuntimeArray();
@@ -462,7 +462,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                         break;
                     }
                 }
-                
+
                 if (needsCopy) {
                     // Make a defensive copy of the list before clearing
                     RuntimeList listCopy = new RuntimeList();
@@ -495,7 +495,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 for (RuntimeScalar element : list) {
                     materializedList.push(new RuntimeScalar(element));
                 }
-                
+
                 // Now clear and repopulate from the materialized list
                 TieArray.tiedClear(this);
                 int index = 0;

@@ -98,13 +98,13 @@ public class EmitLogicalOperator {
     static void emitLogicalOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node, int compareOpcode, String getBoolean) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
         int callerContext = emitterVisitor.ctx.contextType;
-        
+
         // In SCALAR, VOID, or RUNTIME context, use simple implementation (no context conversion needed)
         if (callerContext == RuntimeContextType.SCALAR || callerContext == RuntimeContextType.VOID || callerContext == RuntimeContextType.RUNTIME) {
             emitLogicalOperatorSimple(emitterVisitor, node, compareOpcode, getBoolean);
             return;
         }
-        
+
         // LIST context: Need special handling to convert scalar LHS to list
         Label convertLabel = new Label();
         Label endLabel = new Label();
@@ -148,7 +148,7 @@ public class EmitLogicalOperator {
         mv.visitLabel(convertLabel);
         // Stack: [RuntimeScalar]
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
-                         "getList", "()Lorg/perlonjava/runtime/RuntimeList;", false);
+                "getList", "()Lorg/perlonjava/runtime/RuntimeList;", false);
         // Stack: [RuntimeList]
 
         mv.visitLabel(endLabel);
@@ -174,10 +174,10 @@ public class EmitLogicalOperator {
         }
 
         // For RUNTIME context, preserve it; otherwise use SCALAR for boolean evaluation
-        int operandContext = emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME 
-            ? RuntimeContextType.RUNTIME 
-            : RuntimeContextType.SCALAR;
-        
+        int operandContext = emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME
+                ? RuntimeContextType.RUNTIME
+                : RuntimeContextType.SCALAR;
+
         node.left.accept(emitterVisitor.with(operandContext));
         mv.visitInsn(Opcodes.DUP);
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", getBoolean, "()Z", false);

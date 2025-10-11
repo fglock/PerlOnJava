@@ -3,21 +3,19 @@ package org.perlonjava.operators;
 import org.perlonjava.operators.pack.*;
 import org.perlonjava.runtime.*;
 
-import java.io.ByteArrayOutputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Stack;
 import java.util.Map;
+import java.util.Stack;
 
 /**
  * The Pack class provides functionality to pack a list of scalars into a binary string
  * based on a specified template, similar to Perl's pack function.
- * 
+ *
  * <p>This class implements Perl's pack() function, which takes a template string and a list
  * of values, and converts them into a packed binary string according to the format
  * specifications in the template.</p>
- * 
+ *
  * <p>Supported format characters include:</p>
  * <ul>
  *   <li><b>a, A, Z</b> - ASCII string formats (null-padded, space-padded, null-terminated)</li>
@@ -36,7 +34,7 @@ import java.util.Map;
  *   <li><b>x, X</b> - Null padding and backup</li>
  *   <li><b>@, .</b> - Absolute positioning</li>
  * </ul>
- * 
+ *
  * <p>The class also supports:</p>
  * <ul>
  *   <li>Repeat counts (e.g., "i4" for 4 integers)</li>
@@ -46,7 +44,7 @@ import java.util.Map;
  *   <li>Slash constructs for length-prefixed data (e.g., "n/a*")</li>
  *   <li>Mode switching (C0 for byte mode, U0 for character mode)</li>
  * </ul>
- * 
+ *
  * @see org.perlonjava.operators.Unpack
  * @see org.perlonjava.operators.pack.PackHelper
  * @see org.perlonjava.operators.pack.PackParser
@@ -70,7 +68,7 @@ public class Pack {
         handlers.put('X', new ControlPackHandler('X'));
         handlers.put('@', new ControlPackHandler('@'));
         handlers.put('.', new ControlPackHandler('.'));
-        
+
         // Numeric format handlers
         handlers.put('c', new NumericPackHandler('c'));
         handlers.put('C', new NumericPackHandler('C'));
@@ -99,7 +97,7 @@ public class Pack {
      * Retrieves a string value associated with a pointer hash code.
      * This method is used by the unpack operation to retrieve strings
      * that were stored during pack operations with 'p' or 'P' formats.
-     * 
+     *
      * @param hashCode The hash code of the string to retrieve
      * @return The string associated with the hash code, or null if not found
      */
@@ -110,11 +108,11 @@ public class Pack {
     /**
      * Packs a list of RuntimeScalar objects into a binary string according to the specified template.
      * This is the main entry point for the pack operation.
-     * 
+     *
      * <p>The first argument must be a template string that specifies how to pack the remaining
      * arguments. The template consists of format characters, optional repeat counts, and
      * various modifiers.</p>
-     * 
+     *
      * <p>Examples:</p>
      * <pre>
      * pack("C*", 65, 66, 67)        // Pack as unsigned chars: "ABC"
@@ -122,13 +120,13 @@ public class Pack {
      * pack("a10", "hello")          // Pack as 10-byte null-padded string
      * pack("(si)2", 1, 100, 2, 200) // Pack 2 short-int pairs
      * </pre>
-     * 
+     *
      * @param args A RuntimeList containing the template string followed by the values to pack
      * @return A RuntimeScalar representing the packed binary string
      * @throws PerlCompilerException if there are not enough arguments, invalid format characters,
      *                              mismatched brackets, or other template parsing errors
      */
-    
+
     /**
      * Validates bracket matching in a template using proper stack-based algorithm.
      * Returns null if brackets are properly matched, or error message if mismatched.
@@ -138,10 +136,10 @@ public class Pack {
      */
     private static String validateBracketMatching(String template) {
         Stack<Character> stack = new Stack<>();
-        
+
         for (int i = 0; i < template.length(); i++) {
             char ch = template.charAt(i);
-            
+
             // Push opening brackets onto stack
             if (ch == '[' || ch == '(') {
                 stack.push(ch);
@@ -151,16 +149,16 @@ public class Pack {
                 if (stack.isEmpty()) {
                     return "Mismatched brackets in template";
                 }
-                
+
                 char top = stack.pop();
-                
+
                 // Check if bracket types match
                 if ((ch == ']' && top != '[') || (ch == ')' && top != '(')) {
                     return "Mismatched brackets in template";
                 }
             }
         }
-        
+
         // Check for unmatched opening brackets
         if (!stack.isEmpty()) {
             // If stack contains only '[' characters, use specific message
@@ -171,17 +169,17 @@ public class Pack {
                     break;
                 }
             }
-            
+
             if (onlySquareBrackets) {
                 return "No group ending character ']' found in template";
             } else {
                 return "Mismatched brackets in template";
             }
         }
-        
+
         return null; // All brackets properly matched
     }
-    
+
     public static RuntimeScalar pack(RuntimeList args) {
         if (args.isEmpty()) {
             throw new PerlCompilerException("pack: not enough arguments");
@@ -293,7 +291,7 @@ public class Pack {
             i = parsedCount.endPosition;
             int count = parsedCount.count;
             boolean hasStar = parsedCount.hasStar;
-            
+
             // Check if '/' has a repeat count (which is invalid)
             if (format == '/' && (count > 1 || hasStar)) {
                 throw new PerlCompilerException("'/' does not take a repeat count");
