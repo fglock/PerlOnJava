@@ -129,11 +129,11 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                         }
                     }
                 }
-                
+
                 // Create a new hash from the provided list and replace our elements
                 RuntimeHash hash = createHash(value);
                 this.elements = hash.elements;
-                
+
                 // Create a RuntimeArray that wraps this hash
                 // In list context: returns the deduplicated key-value pairs
                 // In scalar context: should return the original list size
@@ -155,7 +155,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 while (iterator.hasNext()) {
                     materializedList.push(new RuntimeScalar(iterator.next()));
                 }
-                
+
                 // Now clear and repopulate from the materialized list
                 TieHash.tiedClear(this);
                 RuntimeArray result = new RuntimeArray();
@@ -585,7 +585,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 refType = "OBJECT";
             }
         }
-        
+
         String ref = refType + "(0x" + Integer.toHexString(this.hashCode()) + ")";
         return (blessId == 0
                 ? ref

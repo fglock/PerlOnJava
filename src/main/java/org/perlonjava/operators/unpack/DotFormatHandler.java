@@ -1,6 +1,5 @@
 package org.perlonjava.operators.unpack;
 
-import org.perlonjava.operators.unpack.FormatHandler;
 import org.perlonjava.operators.UnpackState;
 import org.perlonjava.runtime.RuntimeBase;
 import org.perlonjava.runtime.RuntimeScalar;

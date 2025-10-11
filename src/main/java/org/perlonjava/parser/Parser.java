@@ -39,9 +39,9 @@ public class Parser {
     // List to store heredoc nodes encountered during parsing.
     private List<OperatorNode> heredocNodes = new ArrayList<>();
     // List to store format nodes encountered during parsing.
-    private List<FormatNode> formatNodes = new ArrayList<>();
+    private final List<FormatNode> formatNodes = new ArrayList<>();
     // List to store completed format nodes after template parsing.
-    private List<FormatNode> completedFormatNodes = new ArrayList<>();
+    private final List<FormatNode> completedFormatNodes = new ArrayList<>();
 
     /**
      * Constructs a Parser with the given context and tokens.

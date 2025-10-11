@@ -1,11 +1,11 @@
 package org.perlonjava.runtime;
 
 import org.perlonjava.astnode.*;
+
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
-import static org.perlonjava.runtime.RuntimeScalarType.*;
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 
 /**
@@ -17,16 +17,16 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
 
     // The name of the format
     public String formatName;
-    
+
     // The format template string
     public String formatTemplate;
-    
+
     // Whether this format is defined
     private boolean isDefined;
-    
+
     // Compiled format lines for execution
     private List<FormatLine> compiledLines;
-    
+
     // Whether the format has been compiled
     private boolean isCompiled = false;
 
@@ -49,7 +49,7 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
      * Constructor for RuntimeFormat with template.
      * Initializes a new instance of the RuntimeFormat class with the specified format name and template.
      *
-     * @param formatName The name of the format.
+     * @param formatName     The name of the format.
      * @param formatTemplate The format template string.
      */
     public RuntimeFormat(String formatName, String formatTemplate) {
@@ -59,23 +59,6 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
         // Initialize the RuntimeScalar fields
         this.type = RuntimeScalarType.FORMAT;
         this.value = this;
-    }
-
-    /**
-     * Sets the format template.
-     *
-     * @param template The format template string.
-     * @return This RuntimeFormat instance.
-     */
-    public RuntimeFormat setTemplate(String template) {
-        this.formatTemplate = template;
-        this.isDefined = true;
-        // Only reset compilation status if we don't already have compiled lines
-        if (this.compiledLines == null || this.compiledLines.isEmpty()) {
-            this.isCompiled = false;
-            this.compiledLines = null;
-        }
-        return this;
     }
 
     /**
@@ -99,6 +82,23 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
      */
     public String getTemplate() {
         return this.formatTemplate;
+    }
+
+    /**
+     * Sets the format template.
+     *
+     * @param template The format template string.
+     * @return This RuntimeFormat instance.
+     */
+    public RuntimeFormat setTemplate(String template) {
+        this.formatTemplate = template;
+        this.isDefined = true;
+        // Only reset compilation status if we don't already have compiled lines
+        if (this.compiledLines == null || this.compiledLines.isEmpty()) {
+            this.isCompiled = false;
+            this.compiledLines = null;
+        }
+        return this;
     }
 
     /**
@@ -354,13 +354,13 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
      * Execute a picture line with its corresponding argument line.
      *
      * @param pictureLine The picture line containing format fields
-     * @param argLine The argument line containing expressions (may be null)
-     * @param args The list of all arguments
-     * @param startIndex The starting index in the argument list
+     * @param argLine     The argument line containing expressions (may be null)
+     * @param args        The list of all arguments
+     * @param startIndex  The starting index in the argument list
      * @return The formatted line
      */
-    private String executePictureLine(PictureLine pictureLine, ArgumentLine argLine, 
-                                     List<RuntimeScalar> args, int startIndex) {
+    private String executePictureLine(PictureLine pictureLine, ArgumentLine argLine,
+                                      List<RuntimeScalar> args, int startIndex) {
         StringBuilder result = new StringBuilder();
         String template = pictureLine.content;
         List<FormatField> fields = pictureLine.fields;
@@ -427,7 +427,7 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
             // Handle the case where expressions are stored as StringNode with serialized AST data
             // This is a workaround for the parsing issue in FormatParser.parseArgumentExpressions()
             String content = stringNode.value;
-            
+
             // Parse simple variable expressions from the serialized AST data
             if (content.contains("OperatorNode: $") && content.contains("IdentifierNode:")) {
                 // Extract variable name from serialized AST: "OperatorNode: $  pos:3\nIdentifierNode: 'name'"
@@ -442,7 +442,7 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                     }
                 }
             }
-            
+
             // If we can't parse it, return the raw content as a fallback
             return new RuntimeScalar(content);
         } else if (expression instanceof OperatorNode opNode) {
@@ -458,7 +458,7 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
         } else if (expression instanceof IdentifierNode idNode) {
             // Handle variable access like $name, $version
             String varName = idNode.name;
-            
+
             // Variables in Perl start with sigils ($, @, %)
             // For format expressions, we're typically dealing with scalars ($)
             if (varName.startsWith("$")) {
@@ -475,7 +475,7 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                 return getGlobalVariable(fullName).scalar();
             }
         }
-        
+
         // For unsupported expression types, return a placeholder
         return new RuntimeScalar("<unsupported_expr>");
     }
@@ -531,25 +531,25 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
         List<FormatField> fields = new ArrayList<>();
         // This is a simplified implementation
         // In practice, this would use the full FormatParser logic
-        
+
         for (int i = 0; i < line.length(); i++) {
             char c = line.charAt(i);
             if (c == '@' || c == '^') {
                 boolean isSpecial = (c == '^');
                 int start = i + 1;
                 int width = 0;
-                
+
                 // Count field characters
                 while (start + width < line.length()) {
                     char fieldChar = line.charAt(start + width);
-                    if (fieldChar == '<' || fieldChar == '>' || fieldChar == '|' || 
-                        fieldChar == '#' || fieldChar == '*') {
+                    if (fieldChar == '<' || fieldChar == '>' || fieldChar == '|' ||
+                            fieldChar == '#' || fieldChar == '*') {
                         width++;
                     } else {
                         break;
                     }
                 }
-                
+
                 if (width > 0) {
                     String fieldSpec = line.substring(start, start + width);
                     FormatField field = createFormatField(fieldSpec, i, isSpecial);
@@ -560,7 +560,7 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                 }
             }
         }
-        
+
         return fields;
     }
 
@@ -569,15 +569,15 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
      */
     private FormatField createFormatField(String fieldSpec, int startPos, boolean isSpecialField) {
         int width = fieldSpec.length();
-        
+
         // Multiline fields
         if (fieldSpec.equals("*")) {
-            MultilineFormatField.MultilineType type = isSpecialField ? 
-                MultilineFormatField.MultilineType.FILL_MODE : 
-                MultilineFormatField.MultilineType.CONSUME_ALL;
+            MultilineFormatField.MultilineType type = isSpecialField ?
+                    MultilineFormatField.MultilineType.FILL_MODE :
+                    MultilineFormatField.MultilineType.CONSUME_ALL;
             return new MultilineFormatField(width, startPos, isSpecialField, type);
         }
-        
+
         // Text fields with justification
         if (fieldSpec.matches("<+")) {
             return new TextFormatField(width, startPos, isSpecialField, TextFormatField.Justification.LEFT);
@@ -586,12 +586,12 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
         } else if (fieldSpec.matches("\\|+")) {
             return new TextFormatField(width, startPos, isSpecialField, TextFormatField.Justification.CENTER);
         }
-        
+
         // Numeric fields
         if (fieldSpec.matches("#+")) {
             return new NumericFormatField(width, startPos, isSpecialField, width, 0);
         }
-        
+
         // Default to left-justified text field
         return new TextFormatField(width, startPos, isSpecialField, TextFormatField.Justification.LEFT);
     }

@@ -23,7 +23,7 @@ public class EmitFormat {
     public static void emitFormat(EmitterVisitor emitterVisitor, FormatNode node) {
         EmitterContext ctx = emitterVisitor.ctx;
         MethodVisitor mv = ctx.mv;
-        
+
         ctx.logDebug("FORMAT start: " + node.formatName);
 
         // Always generate format bytecode, even in VOID context
@@ -33,30 +33,30 @@ public class EmitFormat {
         mv.visitTypeInsn(Opcodes.NEW, "java/util/ArrayList");
         mv.visitInsn(Opcodes.DUP);
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/util/ArrayList", "<init>", "()V", false);
-        
+
         // Add each template line to the list
         for (int i = 0; i < node.templateLines.size(); i++) {
             mv.visitInsn(Opcodes.DUP); // Duplicate ArrayList reference
-            
+
             // Create the appropriate FormatLine object based on type
             emitFormatLine(ctx, node.templateLines.get(i));
-            
+
             // Add to ArrayList
-            mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/List", "add", 
-                              "(Ljava/lang/Object;)Z", true);
+            mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/List", "add",
+                    "(Ljava/lang/Object;)Z", true);
             mv.visitInsn(Opcodes.POP); // Pop the boolean return value
         }
-        
+
         // Now get the global format reference and set both template and compiled lines
         // Format name is already normalized by FormatParser using NameNormalizer
         // GlobalVariable.getGlobalFormatRef(formatName)
         mv.visitLdcInsn(node.formatName);
-        mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/GlobalVariable", 
-                          "getGlobalFormatRef", "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeFormat;", false);
-        
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/GlobalVariable",
+                "getGlobalFormatRef", "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeFormat;", false);
+
         // Duplicate the format reference for the second method call
         mv.visitInsn(Opcodes.DUP);
-        
+
         // Set the template string first
         // Reconstruct template from format lines
         StringBuilder templateBuilder = new StringBuilder();
@@ -65,23 +65,23 @@ public class EmitFormat {
         }
         String template = templateBuilder.toString();
         mv.visitLdcInsn(template);
-        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeFormat", 
-                          "setTemplate", "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeFormat;", false);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeFormat",
+                "setTemplate", "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeFormat;", false);
         mv.visitInsn(Opcodes.POP); // Pop the result
-        
+
         // Now set the compiled lines
         // Swap so we have: [formatRef, compiledLines]
         mv.visitInsn(Opcodes.SWAP);
-        
+
         // Call setCompiledLines on the global format reference
-        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeFormat", 
-                          "setCompiledLines", "(Ljava/util/List;)Lorg/perlonjava/runtime/RuntimeFormat;", false);
-        
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeFormat",
+                "setCompiledLines", "(Ljava/util/List;)Lorg/perlonjava/runtime/RuntimeFormat;", false);
+
         // Pop the result if in void context
         if (ctx.contextType == RuntimeContextType.VOID) {
             mv.visitInsn(Opcodes.POP);
         }
-        
+
         ctx.logDebug("FORMAT end: " + node.formatName);
     }
 
@@ -95,7 +95,7 @@ public class EmitFormat {
      */
     private static void emitFormatLine(EmitterContext ctx, org.perlonjava.astnode.FormatLine line) {
         MethodVisitor mv = ctx.mv;
-        
+
         if (line instanceof org.perlonjava.astnode.CommentLine commentLine) {
             // Create CommentLine(content, comment, tokenIndex)
             mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/astnode/CommentLine");
@@ -103,35 +103,35 @@ public class EmitFormat {
             mv.visitLdcInsn(commentLine.content);
             mv.visitLdcInsn(commentLine.comment);
             mv.visitLdcInsn(commentLine.tokenIndex);
-            mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/astnode/CommentLine", 
-                              "<init>", "(Ljava/lang/String;Ljava/lang/String;I)V", false);
-                              
+            mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/astnode/CommentLine",
+                    "<init>", "(Ljava/lang/String;Ljava/lang/String;I)V", false);
+
         } else if (line instanceof org.perlonjava.astnode.PictureLine pictureLine) {
             // Create PictureLine(content, fields, literalText, tokenIndex)
             mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/astnode/PictureLine");
             mv.visitInsn(Opcodes.DUP);
             mv.visitLdcInsn(pictureLine.content);
-            
+
             // Create fields list
             emitFormatFieldsList(ctx, pictureLine.fields);
-            
+
             mv.visitLdcInsn(pictureLine.literalText);
             mv.visitLdcInsn(pictureLine.tokenIndex);
-            mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/astnode/PictureLine", 
-                              "<init>", "(Ljava/lang/String;Ljava/util/List;Ljava/lang/String;I)V", false);
-                              
+            mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/astnode/PictureLine",
+                    "<init>", "(Ljava/lang/String;Ljava/util/List;Ljava/lang/String;I)V", false);
+
         } else if (line instanceof org.perlonjava.astnode.ArgumentLine argumentLine) {
             // Create ArgumentLine(content, expressions, tokenIndex)
             mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/astnode/ArgumentLine");
             mv.visitInsn(Opcodes.DUP);
             mv.visitLdcInsn(argumentLine.content);
-            
+
             // Create expressions list
             emitNodeList(ctx, argumentLine.expressions);
-            
+
             mv.visitLdcInsn(argumentLine.tokenIndex);
-            mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/astnode/ArgumentLine", 
-                              "<init>", "(Ljava/lang/String;Ljava/util/List;I)V", false);
+            mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/astnode/ArgumentLine",
+                    "<init>", "(Ljava/lang/String;Ljava/util/List;I)V", false);
         }
     }
 
@@ -143,18 +143,18 @@ public class EmitFormat {
      */
     private static void emitFormatFieldsList(EmitterContext ctx, java.util.List<org.perlonjava.astnode.FormatField> fields) {
         MethodVisitor mv = ctx.mv;
-        
+
         // Create ArrayList
         mv.visitTypeInsn(Opcodes.NEW, "java/util/ArrayList");
         mv.visitInsn(Opcodes.DUP);
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/util/ArrayList", "<init>", "()V", false);
-        
+
         // Add each field to the list
         for (org.perlonjava.astnode.FormatField field : fields) {
             mv.visitInsn(Opcodes.DUP); // Duplicate ArrayList reference
             emitFormatField(ctx, field);
-            mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/List", "add", 
-                              "(Ljava/lang/Object;)Z", true);
+            mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/List", "add",
+                    "(Ljava/lang/Object;)Z", true);
             mv.visitInsn(Opcodes.POP); // Pop boolean return value
         }
     }
@@ -167,7 +167,7 @@ public class EmitFormat {
      */
     private static void emitFormatField(EmitterContext ctx, org.perlonjava.astnode.FormatField field) {
         MethodVisitor mv = ctx.mv;
-        
+
         if (field instanceof org.perlonjava.astnode.TextFormatField textField) {
             // Create TextFormatField(width, startPosition, isSpecialField, justification)
             mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/astnode/TextFormatField");
@@ -175,15 +175,15 @@ public class EmitFormat {
             mv.visitLdcInsn(textField.width);
             mv.visitLdcInsn(textField.startPosition);
             mv.visitLdcInsn(textField.isSpecialField);
-            
+
             // Get justification enum value
             String justificationName = textField.justification.name();
-            mv.visitFieldInsn(Opcodes.GETSTATIC, "org/perlonjava/astnode/TextFormatField$Justification", 
-                             justificationName, "Lorg/perlonjava/astnode/TextFormatField$Justification;");
-            
-            mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/astnode/TextFormatField", 
-                              "<init>", "(IIZLorg/perlonjava/astnode/TextFormatField$Justification;)V", false);
-                              
+            mv.visitFieldInsn(Opcodes.GETSTATIC, "org/perlonjava/astnode/TextFormatField$Justification",
+                    justificationName, "Lorg/perlonjava/astnode/TextFormatField$Justification;");
+
+            mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/astnode/TextFormatField",
+                    "<init>", "(IIZLorg/perlonjava/astnode/TextFormatField$Justification;)V", false);
+
         } else if (field instanceof org.perlonjava.astnode.NumericFormatField numericField) {
             // Create NumericFormatField(width, startPosition, isSpecialField, integerDigits, decimalPlaces)
             mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/astnode/NumericFormatField");
@@ -193,10 +193,10 @@ public class EmitFormat {
             mv.visitLdcInsn(numericField.isSpecialField);
             mv.visitLdcInsn(numericField.integerDigits);
             mv.visitLdcInsn(numericField.decimalPlaces);
-            
-            mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/astnode/NumericFormatField", 
-                              "<init>", "(IIZII)V", false);
-                              
+
+            mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/astnode/NumericFormatField",
+                    "<init>", "(IIZII)V", false);
+
         } else if (field instanceof org.perlonjava.astnode.MultilineFormatField multilineField) {
             // Create MultilineFormatField(width, startPosition, isSpecialField, multilineType)
             mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/astnode/MultilineFormatField");
@@ -204,14 +204,14 @@ public class EmitFormat {
             mv.visitLdcInsn(multilineField.width);
             mv.visitLdcInsn(multilineField.startPosition);
             mv.visitLdcInsn(multilineField.isSpecialField);
-            
+
             // Get multiline type enum value
             String typeName = multilineField.multilineType.name();
-            mv.visitFieldInsn(Opcodes.GETSTATIC, "org/perlonjava/astnode/MultilineFormatField$MultilineType", 
-                             typeName, "Lorg/perlonjava/astnode/MultilineFormatField$MultilineType;");
-            
-            mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/astnode/MultilineFormatField", 
-                              "<init>", "(IIZLorg/perlonjava/astnode/MultilineFormatField$MultilineType;)V", false);
+            mv.visitFieldInsn(Opcodes.GETSTATIC, "org/perlonjava/astnode/MultilineFormatField$MultilineType",
+                    typeName, "Lorg/perlonjava/astnode/MultilineFormatField$MultilineType;");
+
+            mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/astnode/MultilineFormatField",
+                    "<init>", "(IIZLorg/perlonjava/astnode/MultilineFormatField$MultilineType;)V", false);
         }
     }
 
@@ -223,16 +223,16 @@ public class EmitFormat {
      */
     private static void emitNodeList(EmitterContext ctx, java.util.List<org.perlonjava.astnode.Node> nodes) {
         MethodVisitor mv = ctx.mv;
-        
+
         // Create ArrayList
         mv.visitTypeInsn(Opcodes.NEW, "java/util/ArrayList");
         mv.visitInsn(Opcodes.DUP);
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/util/ArrayList", "<init>", "()V", false);
-        
+
         // Add each node to the list
         for (org.perlonjava.astnode.Node node : nodes) {
             mv.visitInsn(Opcodes.DUP); // Duplicate ArrayList reference
-            
+
             // For now, create simple StringNode objects
             // In a full implementation, we would emit the actual node bytecode
             if (node instanceof org.perlonjava.astnode.StringNode stringNode) {
@@ -240,20 +240,20 @@ public class EmitFormat {
                 mv.visitInsn(Opcodes.DUP);
                 mv.visitLdcInsn(stringNode.value);
                 mv.visitLdcInsn(stringNode.tokenIndex);
-                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/astnode/StringNode", 
-                                  "<init>", "(Ljava/lang/String;I)V", false);
+                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/astnode/StringNode",
+                        "<init>", "(Ljava/lang/String;I)V", false);
             } else {
                 // For other node types, create a placeholder StringNode
                 mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/astnode/StringNode");
                 mv.visitInsn(Opcodes.DUP);
                 mv.visitLdcInsn(node.toString());
                 mv.visitLdcInsn(0);
-                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/astnode/StringNode", 
-                                  "<init>", "(Ljava/lang/String;I)V", false);
+                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/astnode/StringNode",
+                        "<init>", "(Ljava/lang/String;I)V", false);
             }
-            
-            mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/List", "add", 
-                              "(Ljava/lang/Object;)Z", true);
+
+            mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/List", "add",
+                    "(Ljava/lang/Object;)Z", true);
             mv.visitInsn(Opcodes.POP); // Pop boolean return value
         }
     }

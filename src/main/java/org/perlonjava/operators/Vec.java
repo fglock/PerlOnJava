@@ -24,7 +24,7 @@ public class Vec {
      */
     public static RuntimeScalar vec(RuntimeList args) throws PerlCompilerException {
         RuntimeScalar strScalar = (RuntimeScalar) args.elements.get(0);
-        
+
         // Check if the scalar is undefined - vec should not autovivify on read
         if (!strScalar.getDefinedBoolean()) {
             // Return 0 for undefined values without autovivifying
@@ -32,7 +32,7 @@ public class Vec {
             int bits = ((RuntimeScalar) args.elements.get(2)).getInt();
             return new RuntimeVecLvalue(strScalar, offset, bits, 0);
         }
-        
+
         String str = strScalar.toString();
         int offset = ((RuntimeScalar) args.elements.get(1)).getInt();
         int bits = ((RuntimeScalar) args.elements.get(2)).getInt();

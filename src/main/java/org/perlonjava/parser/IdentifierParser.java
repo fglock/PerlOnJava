@@ -65,7 +65,7 @@ public class IdentifierParser {
      * Helper method to check if a single quote can be treated as a package separator.
      * It should only be a separator when preceded by an identifier/number and followed by an identifier.
      *
-     * @param parser The parser object
+     * @param parser       The parser object
      * @param variableName The identifier built so far
      * @return true if the single quote should be treated as a package separator
      */
@@ -80,11 +80,7 @@ public class IdentifierParser {
         LexerToken nextToken = parser.tokens.get(parser.tokenIndex + 1);
 
         // Check if next token can be part of an identifier
-        if (nextToken.type == LexerTokenType.IDENTIFIER || nextToken.type == LexerTokenType.NUMBER) {
-            return true;
-        }
-
-        return false;
+        return nextToken.type == LexerTokenType.IDENTIFIER || nextToken.type == LexerTokenType.NUMBER;
     }
 
     /**

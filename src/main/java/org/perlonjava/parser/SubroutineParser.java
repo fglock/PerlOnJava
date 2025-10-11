@@ -363,7 +363,7 @@ public class SubroutineParser {
                 if (entry.decl().equals("field")) {
                     continue;
                 }
-                
+
                 String sigil = entry.name().substring(0, 1);
                 String variableName = null;
                 if (entry.decl().equals("our")) {

@@ -15,6 +15,14 @@ import org.perlonjava.runtime.RuntimeContextType;
  */
 public class LValueVisitor implements Visitor {
 
+    private int context = RuntimeContextType.VOID;
+
+    public static int getContext(Node node) {
+        LValueVisitor lvVisitor = new LValueVisitor();
+        node.accept(lvVisitor);
+        return lvVisitor.context;
+    }
+
     @Override
     public void visit(FormatLine node) {
         // Default implementation - no action needed for format lines
@@ -23,13 +31,6 @@ public class LValueVisitor implements Visitor {
     @Override
     public void visit(FormatNode node) {
         // Default implementation - no action needed for format nodes
-    }
-    private int context = RuntimeContextType.VOID;
-
-    public static int getContext(Node node) {
-        LValueVisitor lvVisitor = new LValueVisitor();
-        node.accept(lvVisitor);
-        return lvVisitor.context;
     }
 
     @Override

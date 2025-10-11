@@ -327,7 +327,7 @@ public class ExtendedNativeUtils extends NativeUtils {
             RuntimeArray.push(result, packedAddress); // packed address
 
             hostInfoCache.put(cacheKey, result);
-            
+
             // In scalar context, return the packed IP address
             if (ctx == SCALAR) {
                 RuntimeArray scalarResult = new RuntimeArray();
@@ -611,11 +611,11 @@ public class ExtendedNativeUtils extends NativeUtils {
      */
     public static RuntimeScalar msgctl(int ctx, RuntimeBase... args) {
         if (args.length < 3) return new RuntimeScalar(-1);
-        
+
         int msqid = args[0].scalar().getInt();
         int cmd = args[1].scalar().getInt();
         RuntimeBase buf = args[2];
-        
+
         // Simulate basic msgctl operations
         switch (cmd) {
             case 0: // IPC_STAT
@@ -642,15 +642,15 @@ public class ExtendedNativeUtils extends NativeUtils {
      */
     public static RuntimeScalar msgget(int ctx, RuntimeBase... args) {
         if (args.length < 2) return new RuntimeScalar(-1);
-        
+
         int key = args[0].scalar().getInt();
         int msgflg = args[1].scalar().getInt();
-        
+
         // Create or get existing message queue
         int msqid = nextIpcId++;
         RuntimeArray msgQueue = new RuntimeArray();
         messageQueues.put(msqid, msgQueue);
-        
+
         return new RuntimeScalar(msqid);
     }
 
@@ -659,22 +659,22 @@ public class ExtendedNativeUtils extends NativeUtils {
      */
     public static RuntimeScalar msgrcv(int ctx, RuntimeBase... args) {
         if (args.length < 5) return new RuntimeScalar(-1);
-        
+
         int msqid = args[0].scalar().getInt();
         RuntimeBase msg = args[1];
         int msgsz = args[2].scalar().getInt();
         int msgtyp = args[3].scalar().getInt();
         int msgflg = args[4].scalar().getInt();
-        
+
         RuntimeArray msgQueue = messageQueues.get(msqid);
         if (msgQueue == null || msgQueue.size() == 0) {
             return new RuntimeScalar(-1); // No messages
         }
-        
+
         // Simulate receiving first message
         RuntimeBase message = msgQueue.get(0);
         msgQueue.elements.remove(0);
-        
+
         return new RuntimeScalar(message.toString().length());
     }
 
@@ -683,16 +683,16 @@ public class ExtendedNativeUtils extends NativeUtils {
      */
     public static RuntimeScalar msgsnd(int ctx, RuntimeBase... args) {
         if (args.length < 3) return new RuntimeScalar(-1);
-        
+
         int msqid = args[0].scalar().getInt();
         RuntimeBase msgp = args[1];
         int msgsz = args[2].scalar().getInt();
-        
+
         RuntimeArray msgQueue = messageQueues.get(msqid);
         if (msgQueue == null) {
             return new RuntimeScalar(-1); // Queue doesn't exist
         }
-        
+
         // Add message to queue
         RuntimeArray.push(msgQueue, msgp);
         return new RuntimeScalar(0); // Success
@@ -703,16 +703,16 @@ public class ExtendedNativeUtils extends NativeUtils {
      */
     public static RuntimeScalar semctl(int ctx, RuntimeBase... args) {
         if (args.length < 3) return new RuntimeScalar(-1);
-        
+
         int semid = args[0].scalar().getInt();
         int semnum = args[1].scalar().getInt();
         int cmd = args[2].scalar().getInt();
-        
+
         RuntimeArray semArray = semaphores.get(semid);
         if (semArray == null) {
             return new RuntimeScalar(-1); // Semaphore doesn't exist
         }
-        
+
         // Simulate basic semctl operations
         switch (cmd) {
             case 0: // GETVAL
@@ -740,11 +740,11 @@ public class ExtendedNativeUtils extends NativeUtils {
      */
     public static RuntimeScalar semget(int ctx, RuntimeBase... args) {
         if (args.length < 3) return new RuntimeScalar(-1);
-        
+
         int key = args[0].scalar().getInt();
         int nsems = args[1].scalar().getInt();
         int semflg = args[2].scalar().getInt();
-        
+
         // Create semaphore array
         int semid = nextIpcId++;
         RuntimeArray semArray = new RuntimeArray();
@@ -752,7 +752,7 @@ public class ExtendedNativeUtils extends NativeUtils {
             RuntimeArray.push(semArray, new RuntimeScalar(0));
         }
         semaphores.put(semid, semArray);
-        
+
         return new RuntimeScalar(semid);
     }
 
@@ -761,15 +761,15 @@ public class ExtendedNativeUtils extends NativeUtils {
      */
     public static RuntimeScalar semop(int ctx, RuntimeBase... args) {
         if (args.length < 2) return new RuntimeScalar(-1);
-        
+
         int semid = args[0].scalar().getInt();
         RuntimeBase sops = args[1];
-        
+
         RuntimeArray semArray = semaphores.get(semid);
         if (semArray == null) {
             return new RuntimeScalar(-1); // Semaphore doesn't exist
         }
-        
+
         // Simulate semaphore operation (simplified)
         return new RuntimeScalar(0); // Success
     }
@@ -779,13 +779,13 @@ public class ExtendedNativeUtils extends NativeUtils {
      */
     public static RuntimeScalar shmctl(int ctx, RuntimeBase... args) {
         if (args.length < 3) return new RuntimeScalar(-1);
-        
+
         int shmid = args[0].scalar().getInt();
         int cmd = args[1].scalar().getInt();
         RuntimeBase buf = args[2];
-        
+
         RuntimeArray shmSeg = sharedMemory.get(shmid);
-        
+
         switch (cmd) {
             case 0: // IPC_STAT
                 if (shmSeg != null) {
@@ -811,11 +811,11 @@ public class ExtendedNativeUtils extends NativeUtils {
      */
     public static RuntimeScalar shmget(int ctx, RuntimeBase... args) {
         if (args.length < 3) return new RuntimeScalar(-1);
-        
+
         int key = args[0].scalar().getInt();
         int size = args[1].scalar().getInt();
         int shmflg = args[2].scalar().getInt();
-        
+
         // Create shared memory segment
         int shmid = nextIpcId++;
         RuntimeArray shmSeg = new RuntimeArray();
@@ -824,7 +824,7 @@ public class ExtendedNativeUtils extends NativeUtils {
             RuntimeArray.push(shmSeg, new RuntimeScalar(0));
         }
         sharedMemory.put(shmid, shmSeg);
-        
+
         return new RuntimeScalar(shmid);
     }
 
@@ -833,28 +833,28 @@ public class ExtendedNativeUtils extends NativeUtils {
      */
     public static RuntimeScalar shmread(int ctx, RuntimeBase... args) {
         if (args.length < 4) return new RuntimeScalar(-1);
-        
+
         int shmid = args[0].scalar().getInt();
         RuntimeBase var = args[1];
         int pos = args[2].scalar().getInt();
         int size = args[3].scalar().getInt();
-        
+
         RuntimeArray shmSeg = sharedMemory.get(shmid);
         if (shmSeg == null || pos < 0 || pos >= shmSeg.size()) {
             return new RuntimeScalar(-1);
         }
-        
+
         // Read data from shared memory segment
         StringBuilder data = new StringBuilder();
         for (int i = pos; i < Math.min(pos + size, shmSeg.size()); i++) {
             data.append((char) shmSeg.get(i).scalar().getInt());
         }
-        
+
         // Set the variable to the read data
         if (var instanceof RuntimeScalar) {
             ((RuntimeScalar) var).set(data.toString());
         }
-        
+
         return new RuntimeScalar(data.length());
     }
 
@@ -863,30 +863,30 @@ public class ExtendedNativeUtils extends NativeUtils {
      */
     public static RuntimeScalar shmwrite(int ctx, RuntimeBase... args) {
         if (args.length < 4) return new RuntimeScalar(-1);
-        
+
         int shmid = args[0].scalar().getInt();
         String string = args[1].toString();
         int pos = args[2].scalar().getInt();
         int size = args[3].scalar().getInt();
-        
+
         RuntimeArray shmSeg = sharedMemory.get(shmid);
         if (shmSeg == null || pos < 0) {
             return new RuntimeScalar(-1);
         }
-        
+
         // Write data to shared memory segment
         byte[] bytes = string.getBytes();
         int writeSize = Math.min(size, bytes.length);
-        
+
         // Extend segment if necessary
         while (shmSeg.size() <= pos + writeSize) {
             RuntimeArray.push(shmSeg, new RuntimeScalar(0));
         }
-        
+
         for (int i = 0; i < writeSize; i++) {
             shmSeg.elements.set(pos + i, new RuntimeScalar(bytes[i] & 0xFF));
         }
-        
+
         return new RuntimeScalar(writeSize);
     }
 
@@ -948,17 +948,17 @@ public class ExtendedNativeUtils extends NativeUtils {
      */
     public static RuntimeArray getnetbyaddr(int ctx, RuntimeBase... args) {
         if (args.length < 2) return new RuntimeArray();
-        
+
         String addr = args[0].toString();
         int addrtype = args[1].scalar().getInt();
-        
+
         // Simplified network lookup
         RuntimeArray result = new RuntimeArray();
         RuntimeArray.push(result, new RuntimeScalar("loopback")); // name
         RuntimeArray.push(result, new RuntimeArray()); // aliases
         RuntimeArray.push(result, new RuntimeScalar(addrtype)); // addrtype
         RuntimeArray.push(result, new RuntimeScalar("127.0.0.1")); // net
-        
+
         return result;
     }
 
@@ -967,9 +967,9 @@ public class ExtendedNativeUtils extends NativeUtils {
      */
     public static RuntimeArray getnetbyname(int ctx, RuntimeBase... args) {
         if (args.length < 1) return new RuntimeArray();
-        
+
         String name = args[0].toString();
-        
+
         // Simplified network lookup
         RuntimeArray result = new RuntimeArray();
         if (name.equals("loopback") || name.equals("localhost")) {
@@ -978,7 +978,7 @@ public class ExtendedNativeUtils extends NativeUtils {
             RuntimeArray.push(result, new RuntimeScalar(2)); // addrtype (AF_INET)
             RuntimeArray.push(result, new RuntimeScalar("127.0.0.1")); // net
         }
-        
+
         return result;
     }
 
@@ -1078,7 +1078,7 @@ public class ExtendedNativeUtils extends NativeUtils {
         List<String> hosts = new ArrayList<>();
         hosts.add("localhost");
         hosts.add("127.0.0.1");
-        
+
         try {
             // Add local hostname
             String hostname = java.net.InetAddress.getLocalHost().getHostName();
@@ -1088,7 +1088,7 @@ public class ExtendedNativeUtils extends NativeUtils {
         } catch (Exception e) {
             // Ignore
         }
-        
+
         return hosts;
     }
 }

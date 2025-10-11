@@ -10,25 +10,14 @@ import org.perlonjava.astnode.*;
  */
 public class FindDeclarationVisitor implements Visitor {
 
-    @Override
-    public void visit(FormatLine node) {
-        // Default implementation - no action needed for format lines
-    }
-
-    @Override
-    public void visit(FormatNode node) {
-        // Default implementation - no action needed for format nodes
-    }
     /**
      * Tracks whether the target operator has been found
      */
     private boolean containsLocalOperator = false;
-
     /**
      * The name of the operator we are searching for (e.g., "local", "my")
      */
     private String operatorName = null;
-
     /**
      * Stores the found operator node when located
      */
@@ -46,6 +35,16 @@ public class FindDeclarationVisitor implements Visitor {
         visitor.operatorName = operatorName;
         blockNode.accept(visitor);
         return visitor.operatorNode;
+    }
+
+    @Override
+    public void visit(FormatLine node) {
+        // Default implementation - no action needed for format lines
+    }
+
+    @Override
+    public void visit(FormatNode node) {
+        // Default implementation - no action needed for format nodes
     }
 
     /**

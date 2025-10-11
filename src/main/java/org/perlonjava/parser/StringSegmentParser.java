@@ -5,16 +5,14 @@ import org.perlonjava.astnode.*;
 import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
-import org.perlonjava.regex.CaptureNameEncoder;
 import org.perlonjava.runtime.PerlCompilerException;
-import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.runtime.ScalarUtils;
 
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.perlonjava.parser.Variable.parseArrayHashAccess;
 import static org.perlonjava.parser.ParseBlock.parseBlock;
+import static org.perlonjava.parser.Variable.parseArrayHashAccess;
 
 /**
  * Base class for parsing strings with segments and variable interpolation.
@@ -39,57 +37,47 @@ import static org.perlonjava.parser.ParseBlock.parseBlock;
 public abstract class StringSegmentParser {
 
     /**
-     * The emitter context for logging and error handling
-     */
-    protected final EmitterContext ctx;
-
-    /**
-     * The list of tokens representing the string content
-     */
-    protected final List<LexerToken> tokens;
-
-    /**
-     * The parser instance for parsing embedded expressions
-     */
-    protected final Parser parser;
-
-    /**
-     * The token index in the original source for error reporting
-     */
-    protected final int tokenIndex;
-
-    /**
-     * Flag indicating if this is parsing a regex pattern (affects bracket handling)
-     */
-    protected final boolean isRegex;
-    protected final boolean isRegexReplacement;
-
-    /**
-     * Buffer for accumulating literal text segments
-     */
-    protected final StringBuilder currentSegment;
-
-    /**
-     * List of AST nodes representing string segments (literals and interpolated expressions)
-     */
-    protected final List<Node> segments;
-
-    protected final boolean interpolateVariable;
-    
-    protected final boolean parseEscapes;
-
-    /**
      * Static counter for generating globally unique capture group names for regex code blocks
      * Must be static to ensure names don't collide across different patterns that share
      * the same pendingCodeBlockConstants map
      */
     private static int codeBlockCaptureCounter = 0;
-
+    /**
+     * The emitter context for logging and error handling
+     */
+    protected final EmitterContext ctx;
+    /**
+     * The list of tokens representing the string content
+     */
+    protected final List<LexerToken> tokens;
+    /**
+     * The parser instance for parsing embedded expressions
+     */
+    protected final Parser parser;
+    /**
+     * The token index in the original source for error reporting
+     */
+    protected final int tokenIndex;
+    /**
+     * Flag indicating if this is parsing a regex pattern (affects bracket handling)
+     */
+    protected final boolean isRegex;
+    protected final boolean isRegexReplacement;
+    /**
+     * Buffer for accumulating literal text segments
+     */
+    protected final StringBuilder currentSegment;
+    /**
+     * List of AST nodes representing string segments (literals and interpolated expressions)
+     */
+    protected final List<Node> segments;
+    protected final boolean interpolateVariable;
+    protected final boolean parseEscapes;
     /**
      * Original token offset for mapping string positions back to source
      */
     private int originalTokenOffset = 0;
-    
+
     /**
      * Original string content for better error context
      */
@@ -370,7 +358,7 @@ public abstract class StringSegmentParser {
             IdentifierParser.validateIdentifier(parser, identifier, startIndex);
 
             ctx.logDebug("str Identifier: " + identifier);
-            
+
             // Check if this is a field that needs transformation to $self->{field}
             // This mirrors the logic in Variable.parseVariable
             if (parser.isInMethod && Variable.isFieldInClassHierarchy(parser, identifier)) {
@@ -379,17 +367,17 @@ public abstract class StringSegmentParser {
                 if (parser.ctx.symbolTable.getVariableIndexInCurrentScope(localVar) == -1) {
                     // Transform field access to $self->{field}
                     // Create $self
-                    OperatorNode selfVar = new OperatorNode("$", 
-                        new IdentifierNode("self", tokenIndex), tokenIndex);
-                    
+                    OperatorNode selfVar = new OperatorNode("$",
+                            new IdentifierNode("self", tokenIndex), tokenIndex);
+
                     // Create hash subscript for field access
                     List<Node> keyList = new ArrayList<>();
                     keyList.add(new IdentifierNode(identifier, tokenIndex));
                     HashLiteralNode hashSubscript = new HashLiteralNode(keyList, tokenIndex);
-                    
+
                     // Create $self->{fieldname}
                     Node fieldAccess = new BinaryOperatorNode("->", selfVar, hashSubscript, tokenIndex);
-                    
+
                     // For array and hash fields, we need to dereference the reference
                     if (sigil.equals("@") || sigil.equals("%")) {
                         // @field becomes @{$self->{field}}
@@ -401,7 +389,7 @@ public abstract class StringSegmentParser {
                     }
                 }
             }
-            
+
             return new OperatorNode(sigil, new IdentifierNode(identifier, tokenIndex), tokenIndex);
         }
 
@@ -619,7 +607,7 @@ public abstract class StringSegmentParser {
     private boolean isRegexCodeBlock() {
         // Current token is "(", check if next tokens are "?" and "{"
         int currentPos = parser.tokenIndex;
-        
+
         if (currentPos + 1 < parser.tokens.size() && currentPos + 2 < parser.tokens.size()) {
             LexerToken nextToken = parser.tokens.get(currentPos);
             LexerToken afterNextToken = parser.tokens.get(currentPos + 1);
@@ -627,7 +615,7 @@ public abstract class StringSegmentParser {
         }
         return false;
     }
-    
+
     /**
      * Checks if the current tokens form a (??{...}) recursive regex pattern.
      * This is similar to (?{...}) but uses the result as a regex pattern.
@@ -637,7 +625,7 @@ public abstract class StringSegmentParser {
     private boolean isRegexRecursiveBlock() {
         // Current token is "(", check if next tokens are "?", "?" and "{"
         int currentPos = parser.tokenIndex;
-        
+
         if (currentPos + 2 < parser.tokens.size() && currentPos + 3 < parser.tokens.size()) {
             LexerToken token1 = parser.tokens.get(currentPos);
             LexerToken token2 = parser.tokens.get(currentPos + 1);
@@ -649,65 +637,64 @@ public abstract class StringSegmentParser {
 
     /**
      * Parses a (?{...}) regex code block by calling the Block parser and applying constant folding.
-     * 
+     *
      * <p>This method implements compile-time constant folding for regex code blocks to support
      * the special variable $^R (last regex code block result). When a code block contains a
      * simple constant expression, it is evaluated at compile time and the constant value is
      * encoded in a named capture group for retrieval at runtime.</p>
-     * 
+     *
      * <p><strong>IMPORTANT LIMITATION:</strong> This approach only works for literal regex patterns
      * in the source code (e.g., {@code /(?{ 42 })/}). It does NOT work for runtime-interpolated
      * patterns (e.g., {@code $var = '(?{ 42 })'; /$var/}) because those patterns are constructed
      * at runtime and never pass through the parser. This limitation affects approximately 1% of
      * real-world use cases, with pack.t and most Perl code using literal patterns.</p>
-     * 
+     *
      * <p>Future enhancement: To support interpolated patterns, this processing would need to be
      * moved to RegexPreprocessor.preProcessRegex() which sees the final pattern string regardless
      * of how it was constructed.</p>
-     * 
+     *
      * <p>Only called when isRegex=true.</p>
      */
     private void parseRegexCodeBlock(boolean isRecursive) {
         // Flush any accumulated text before adding the code block capture group
         // This ensures segments are added in the correct order (critical fix!)
         flushCurrentSegment();
-        
+
         int savedTokenIndex = tokenIndex;
-        
+
         // Consume the "?" token(s)
         TokenUtils.consume(parser); // consume first "?"
         if (isRecursive) {
             TokenUtils.consume(parser); // consume second "?" for (??{...})
         }
-        
+
         // Consume the "{" token
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
-        
+
         // Parse the block content using the Block parser - this handles heredocs properly
         Node block = parseBlock(parser);
-        
+
         // Consume the closing "}"
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
-        
+
         // Consume the closing ")" that completes the (?{...}) construct  
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
-        
+
         // Try to apply constant folding to the block
         Node folded = org.perlonjava.astvisitor.ConstantFoldingVisitor.foldConstants(block);
-        
+
         // If it's a BlockNode with a single element, extract it
         // This handles both empty blocks (BlockNode with empty ListNode) and single-expression blocks
-        if (folded instanceof org.perlonjava.astnode.BlockNode) {
-            org.perlonjava.astnode.BlockNode blockNode = (org.perlonjava.astnode.BlockNode) folded;
+        if (folded instanceof BlockNode blockNode) {
             if (blockNode.elements.size() == 1) {
                 folded = blockNode.elements.get(0);
             }
         }
-        
+
         // Check if the result is a simple constant using the visitor pattern
-        org.perlonjava.runtime.RuntimeScalar constantValue = 
-            org.perlonjava.astvisitor.ConstantFoldingVisitor.getConstantValue(folded);
-        
+        org.perlonjava.runtime.RuntimeScalar constantValue =
+                org.perlonjava.astvisitor.ConstantFoldingVisitor.getConstantValue(folded);
+
         if (constantValue != null) {
             if (isRecursive) {
                 // For (??{...}), the constant becomes a pattern to match
@@ -718,17 +705,17 @@ public abstract class StringSegmentParser {
             } else {
                 // For (?{...}), encode the value in a capture group for $^R
                 String captureName;
-                
+
                 // Check if it's undef (needs special encoding)
                 if (constantValue == org.perlonjava.runtime.RuntimeScalarCache.scalarUndef) {
                     captureName = String.format("cb%03du", codeBlockCaptureCounter++);
                 } else {
                     // Use CaptureNameEncoder to encode the value in the capture name
                     captureName = org.perlonjava.regex.CaptureNameEncoder.encodeCodeBlockValue(
-                        codeBlockCaptureCounter++, constantValue
+                            codeBlockCaptureCounter++, constantValue
                     );
                 }
-                
+
                 if (captureName == null) {
                     // Encoding failed (e.g., name too long) - use fallback
                     segments.add(new StringNode("(?{UNIMPLEMENTED_CODE_BLOCK})", savedTokenIndex));
@@ -758,13 +745,13 @@ public abstract class StringSegmentParser {
             StringBuilder context = new StringBuilder();
             int start = Math.max(0, position - 2);
             int end = Math.min(tokens.size(), position + 3);
-            
+
             for (int i = start; i < end; i++) {
                 if (i < tokens.size()) {
                     context.append(tokens.get(i).text);
                 }
             }
-            
+
             // Quote and escape the context for error message display
             String contextStr = context.toString();
             if (contextStr.length() > 50) {
@@ -776,7 +763,7 @@ public abstract class StringSegmentParser {
             return "\"string interpolation\"";
         }
     }
-    
+
     /**
      * Sets the original token offset and string content for mapping string positions back to source.
      * This enables proper error reporting that shows the actual string content.
@@ -784,7 +771,7 @@ public abstract class StringSegmentParser {
     public void setOriginalTokenOffset(int offset) {
         this.originalTokenOffset = offset;
     }
-    
+
     /**
      * Sets the original string content for better error context.
      */
@@ -803,12 +790,12 @@ public abstract class StringSegmentParser {
         if (coreMessage.startsWith("Syntax error in braced variable: ")) {
             coreMessage = coreMessage.substring("Syntax error in braced variable: ".length());
         }
-        
+
         // Create error message matching Perl's exact format: "[ERROR] at [FILE] line [N]."
         String fileName = ctx.errorUtil.getFileName();
         int lineNumber = ctx.errorUtil.getLineNumber(originalTokenOffset);
         String perlStyleMessage = coreMessage + " at " + fileName + " line " + lineNumber + ".";
-        
+
         // Create a custom exception that produces clean output like Perl
         RuntimeException cleanError = new RuntimeException(perlStyleMessage) {
             @Override
@@ -816,23 +803,23 @@ public abstract class StringSegmentParser {
                 // Print only the clean message, no stack trace
                 System.err.println(getMessage());
             }
-            
+
             @Override
             public void printStackTrace(java.io.PrintStream s) {
                 // Print only the clean message, no stack trace
                 s.println(getMessage());
             }
-            
+
             @Override
             public void printStackTrace(java.io.PrintWriter s) {
                 // Print only the clean message, no stack trace
                 s.println(getMessage());
             }
         };
-        
+
         throw cleanError;
     }
-    
+
     /**
      * Gets error context from the original string content around the specified position.
      */
@@ -841,27 +828,27 @@ public abstract class StringSegmentParser {
             if (originalStringContent.isEmpty()) {
                 return "\"string interpolation\"";
             }
-            
+
             // Try to estimate character position from token index
             // Look for variable interpolation patterns like ${...} to get better positioning
             int estimatedCharPos = findBestErrorPosition(stringTokenIndex);
-            
+
             // Show a larger context window around the estimated position
             int contextWindow = 25; // Increased from 10 to show more context
             int start = Math.max(0, estimatedCharPos - contextWindow);
             int end = Math.min(originalStringContent.length(), estimatedCharPos + contextWindow);
-            
+
             String context = originalStringContent.substring(start, end);
-            
+
             // Escape special characters for display
             context = context.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\t", "\\t");
-            
+
             return "\"" + context + "\"";
         } catch (Exception e) {
             return "\"string interpolation\"";
         }
     }
-    
+
     /**
      * Finds the best error position by looking for variable interpolation patterns.
      */
@@ -872,7 +859,7 @@ public abstract class StringSegmentParser {
             // If we found a ${...} pattern, position the error around it
             return Math.max(0, dollarIndex - 5);
         }
-        
+
         // Fallback to simple token-based estimation
         return Math.min(stringTokenIndex * 4, originalStringContent.length() - 1);
     }

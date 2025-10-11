@@ -216,7 +216,7 @@ public class GlobalVariable {
             var = new RuntimeScalar();
             var.type = RuntimeScalarType.CODE;  // value is null
             RuntimeCode runtimeCode = new RuntimeCode(null, null);
-            
+
             // Parse the key to extract package and subroutine names
             // key format is typically "Package::SubroutineName"
             int lastColonIndex = key.lastIndexOf("::");
@@ -227,10 +227,10 @@ public class GlobalVariable {
                 runtimeCode.packageName = "main";
                 runtimeCode.subName = key;
             }
-            
+
             // Note: We don't set isSymbolicReference here by default
             // It will be set specifically for \&{string} patterns in createCodeReference
-            
+
             var.value = runtimeCode;
             globalCodeRefs.put(key, var);
         }
@@ -391,7 +391,7 @@ public class GlobalVariable {
      * Sets a global format reference to share the same format object.
      * Used for typeglob format assignments like *COPIED = *ORIGINAL.
      *
-     * @param key The key of the global format reference.
+     * @param key    The key of the global format reference.
      * @param format The RuntimeFormat object to set.
      */
     public static void setGlobalFormatRef(String key, RuntimeFormat format) {
@@ -417,8 +417,8 @@ public class GlobalVariable {
     }
 
     public static RuntimeScalar definedGlobalFormatAsScalar(String key) {
-        return globalFormatRefs.containsKey(key) ? 
-            (globalFormatRefs.get(key).isFormatDefined() ? scalarTrue : scalarFalse) : scalarFalse;
+        return globalFormatRefs.containsKey(key) ?
+                (globalFormatRefs.get(key).isFormatDefined() ? scalarTrue : scalarFalse) : scalarFalse;
     }
 
     public static RuntimeScalar definedGlobalFormatAsScalar(RuntimeScalar key) {

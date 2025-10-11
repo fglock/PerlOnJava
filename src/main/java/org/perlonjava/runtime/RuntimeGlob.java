@@ -93,8 +93,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             case FORMAT:
                 // Handle format assignments to typeglobs
                 // Share the same format reference instead of copying content
-                if (value.value instanceof RuntimeFormat) {
-                    RuntimeFormat sourceFormat = (RuntimeFormat) value.value;
+                if (value.value instanceof RuntimeFormat sourceFormat) {
                     GlobalVariable.setGlobalFormatRef(this.globName, sourceFormat);
                 }
                 return value;

@@ -3,7 +3,7 @@ package org.perlonjava.astvisitor;
 import org.perlonjava.astnode.*;
 
 /**
- * Visitor that detects control flow statements (next, last, redo, goto) 
+ * Visitor that detects control flow statements (next, last, redo, goto)
  * that could potentially jump outside of a refactored block.
  */
 public class ControlFlowDetectorVisitor implements Visitor {
@@ -11,6 +11,7 @@ public class ControlFlowDetectorVisitor implements Visitor {
 
     /**
      * Check if unsafe control flow was detected during traversal.
+     *
      * @return true if unsafe control flow statements were found
      */
     public boolean hasUnsafeControlFlow() {
@@ -27,8 +28,8 @@ public class ControlFlowDetectorVisitor implements Visitor {
     @Override
     public void visit(OperatorNode node) {
         // Check for control flow operators
-        if ("next".equals(node.operator) || "last".equals(node.operator) || 
-            "redo".equals(node.operator) || "goto".equals(node.operator)) {
+        if ("next".equals(node.operator) || "last".equals(node.operator) ||
+                "redo".equals(node.operator) || "goto".equals(node.operator)) {
             hasUnsafeControlFlow = true;
             return;
         }

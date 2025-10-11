@@ -1,6 +1,7 @@
 package org.perlonjava.runtime;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 
@@ -35,10 +36,10 @@ public class PerlRange extends RuntimeBase implements Iterable<RuntimeScalar> {
         } else {
             this.start = start;
         }
-        
+
         if (end.type == RuntimeScalarType.UNDEF) {
-            if (this.start.type == RuntimeScalarType.STRING || 
-                (this.start.type != RuntimeScalarType.INTEGER && !ScalarUtils.looksLikeNumber(this.start))) {
+            if (this.start.type == RuntimeScalarType.STRING ||
+                    (this.start.type != RuntimeScalarType.INTEGER && !ScalarUtils.looksLikeNumber(this.start))) {
                 // If start is a string, treat undef as ""
                 this.end = new RuntimeScalar("");
             } else {
@@ -93,7 +94,7 @@ public class PerlRange extends RuntimeBase implements Iterable<RuntimeScalar> {
         } else if (endString.isEmpty() && !startString.isEmpty()) {
             // If end is empty string and start is not, return empty
             // Example: "B" .. "" returns empty
-            return new ArrayList<RuntimeScalar>().iterator();
+            return Collections.emptyIterator();
         } else if (startString.length() > endString.length()) {
             // If start is longer than end, only return start
             // Example: "abc" .. "z" returns only "abc"
@@ -333,7 +334,7 @@ public class PerlRange extends RuntimeBase implements Iterable<RuntimeScalar> {
         PerlRangeStringIterator() {
             current = start.toString();
             endString = end.toString();
-            
+
             // For string ranges, we always have at least the start element
             // The range continues as long as:
             // 1. Current string is shorter than end string, OR
@@ -366,14 +367,14 @@ public class PerlRange extends RuntimeBase implements Iterable<RuntimeScalar> {
                 throw new NoSuchElementException();
             }
             RuntimeScalar res = new RuntimeScalar(current);
-            
+
             // Check if we've reached the end
             if (current.equals(endString)) {
                 hasNext = false;
             } else {
                 // Increment the current string to the next in the sequence
                 String next = ScalarUtils.incrementPlainString(current);
-                
+
                 // Perl's range behavior: continue until the next increment would make
                 // the string longer than the end string.
                 // Examples:

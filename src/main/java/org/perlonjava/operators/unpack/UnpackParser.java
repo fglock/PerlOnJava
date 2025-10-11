@@ -1,8 +1,9 @@
 package org.perlonjava.operators.unpack;
 
-import org.perlonjava.runtime.PerlCompilerException;
-import org.perlonjava.operators.pack.PackParser;
 import org.perlonjava.operators.FormatModifierValidator;
+import org.perlonjava.operators.pack.PackParser;
+import org.perlonjava.runtime.PerlCompilerException;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -15,7 +16,7 @@ public class UnpackParser {
     /**
      * Skip comment in template starting from current position
      * Comments start with '#' and continue to end of line or end of template
-     * 
+     *
      * @param template The template string
      * @param position Current position in template
      * @return New position after skipping comment
@@ -30,7 +31,7 @@ public class UnpackParser {
 
     /**
      * Parse modifiers for unpack format character and validate them
-     * 
+     *
      * @param template The template string
      * @param position Current position in template (should point to format character)
      * @return New position after parsing modifiers
@@ -39,7 +40,7 @@ public class UnpackParser {
         char formatChar = template.charAt(position);
         List<Character> modifiers = new ArrayList<>();
         int i = position;
-        
+
         // Parse modifiers that follow the format character
         while (i + 1 < template.length()) {
             char modifier = template.charAt(i + 1);
@@ -50,19 +51,19 @@ public class UnpackParser {
                 break;
             }
         }
-        
+
         // Validate modifiers using centralized validator
         if (!modifiers.isEmpty()) {
             FormatModifierValidator.validateFormatModifiers(formatChar, modifiers, "unpack");
         }
-        
+
         return i;
     }
 
     /**
      * Parse repeat count from template at given position
      * Handles numeric counts, star notation, and bracket notation
-     * 
+     *
      * @param template The template string
      * @param position Current position in template
      * @return ParsedCount object with count, hasStar flag, and end position
@@ -93,7 +94,7 @@ public class UnpackParser {
                 break;
             }
         }
-        
+
         // Validate modifiers using centralized validator
         List<Character> modifiers = new ArrayList<>();
         int tempI = position;
@@ -166,6 +167,7 @@ public class UnpackParser {
     /**
      * Record to hold parsed count information
      */
-    public record ParsedCount(int count, boolean isStarCount, int endPosition, boolean hasShriek, boolean hasLittleEndian, boolean hasBigEndian) {
+    public record ParsedCount(int count, boolean isStarCount, int endPosition, boolean hasShriek,
+                              boolean hasLittleEndian, boolean hasBigEndian) {
     }
 }

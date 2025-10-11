@@ -40,7 +40,7 @@ public class WBERFormatHandler implements FormatHandler {
                     // Fits in a long, but check if it would lose precision in scientific notation
                     long longValue = value.longValue();
                     String longAsString = String.valueOf(longValue);
-                    
+
                     // If the string representation would be in scientific notation, preserve as string
                     if (longAsString.contains("E") || longAsString.contains("e") || longValue >= 1e15) {
                         // Large number that would be formatted in scientific notation - preserve as string
@@ -85,7 +85,7 @@ public class WBERFormatHandler implements FormatHandler {
                     // Fits in a long, but check if it would lose precision in scientific notation
                     long longValue = value.longValue();
                     String longAsString = String.valueOf(longValue);
-                    
+
                     // If the string representation would be in scientific notation, preserve as string
                     if (longAsString.contains("E") || longAsString.contains("e") || longValue >= 1e15) {
                         // Large number that would be formatted in scientific notation - preserve as string

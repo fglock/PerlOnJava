@@ -17,16 +17,6 @@ import java.util.List;
  */
 public class ConstantFoldingVisitor implements Visitor {
 
-    @Override
-    public void visit(FormatLine node) {
-        // Default implementation - no action needed for format lines
-    }
-
-    @Override
-    public void visit(FormatNode node) {
-        // Default implementation - no action needed for format nodes
-    }
-
     private Node result;
     private boolean isConstant;
 
@@ -43,6 +33,51 @@ public class ConstantFoldingVisitor implements Visitor {
         ConstantFoldingVisitor visitor = new ConstantFoldingVisitor();
         node.accept(visitor);
         return visitor.result;
+    }
+
+    /**
+     * Gets the constant value from a node if it represents a constant.
+     * Supports NumberNode, StringNode, and undef OperatorNode.
+     *
+     * @param node The node to extract a constant value from
+     * @return A RuntimeScalar representation of the constant, or null if not a constant
+     */
+    public static RuntimeScalar getConstantValue(Node node) {
+        if (node instanceof NumberNode) {
+            return new RuntimeScalar(((NumberNode) node).value);
+        } else if (node instanceof StringNode strNode) {
+            RuntimeScalar scalar = new RuntimeScalar(strNode.value);
+            if (strNode.isVString) {
+                scalar.type = RuntimeScalarType.VSTRING;
+            }
+            return scalar;
+        } else if (node instanceof BlockNode blockNode) {
+            // Handle empty blocks - they return undef in Perl
+            if (blockNode.elements.isEmpty()) {
+                return RuntimeScalarCache.scalarUndef;
+            }
+        } else if (node instanceof ListNode listNode) {
+            // Handle empty list/statement - returns undef in scalar context
+            if (listNode.elements.isEmpty()) {
+                return RuntimeScalarCache.scalarUndef;
+            }
+        } else if (node instanceof OperatorNode opNode) {
+            // Handle undef
+            if ("undef".equals(opNode.operator) && opNode.operand == null) {
+                return RuntimeScalarCache.scalarUndef;
+            }
+        }
+        return null;
+    }
+
+    @Override
+    public void visit(FormatLine node) {
+        // Default implementation - no action needed for format lines
+    }
+
+    @Override
+    public void visit(FormatNode node) {
+        // Default implementation - no action needed for format nodes
     }
 
     @Override
@@ -218,6 +253,8 @@ public class ConstantFoldingVisitor implements Visitor {
         isConstant = false;
     }
 
+    // Helper methods
+
     @Override
     public void visit(HashLiteralNode node) {
         List<Node> foldedElements = new ArrayList<>();
@@ -239,45 +276,8 @@ public class ConstantFoldingVisitor implements Visitor {
         isConstant = false;
     }
 
-    // Helper methods
-
     private boolean isConstantNode(Node node) {
         return node instanceof NumberNode || node instanceof StringNode;
-    }
-
-    /**
-     * Gets the constant value from a node if it represents a constant.
-     * Supports NumberNode, StringNode, and undef OperatorNode.
-     *
-     * @param node The node to extract a constant value from
-     * @return A RuntimeScalar representation of the constant, or null if not a constant
-     */
-    public static RuntimeScalar getConstantValue(Node node) {
-        if (node instanceof NumberNode) {
-            return new RuntimeScalar(((NumberNode) node).value);
-        } else if (node instanceof StringNode strNode) {
-            RuntimeScalar scalar = new RuntimeScalar(strNode.value);
-            if (strNode.isVString) {
-                scalar.type = RuntimeScalarType.VSTRING;
-            }
-            return scalar;
-        } else if (node instanceof BlockNode blockNode) {
-            // Handle empty blocks - they return undef in Perl
-            if (blockNode.elements.isEmpty()) {
-                return RuntimeScalarCache.scalarUndef;
-            }
-        } else if (node instanceof ListNode listNode) {
-            // Handle empty list/statement - returns undef in scalar context
-            if (listNode.elements.isEmpty()) {
-                return RuntimeScalarCache.scalarUndef;
-            }
-        } else if (node instanceof OperatorNode opNode) {
-            // Handle undef
-            if ("undef".equals(opNode.operator) && opNode.operand == null) {
-                return RuntimeScalarCache.scalarUndef;
-            }
-        }
-        return null;
     }
 
     private Node foldFunctionCall(IdentifierNode function, Node args, int tokenIndex) {

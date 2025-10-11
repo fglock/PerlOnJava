@@ -166,9 +166,9 @@ public class ParseHeredoc {
                 // Special case: blank identifier at EOF
                 // If identifier is empty and we're at EOF AND the last token was a newline,
                 // treat EOF as an implicit blank line terminator
-                if (identifier.isEmpty() && lastTokenWasNewline && 
-                    (currentIndex >= tokens.size() ||
-                        (currentIndex < tokens.size() && tokens.get(currentIndex).type == LexerTokenType.EOF))) {
+                if (identifier.isEmpty() && lastTokenWasNewline &&
+                        (currentIndex >= tokens.size() ||
+                                (currentIndex < tokens.size() && tokens.get(currentIndex).type == LexerTokenType.EOF))) {
                     // The last line we collected should be the content
                     // An implicit blank line at EOF terminates the heredoc
                     parser.ctx.logDebug("Blank heredoc terminated by EOF after newline");

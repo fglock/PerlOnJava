@@ -5,22 +5,22 @@ package org.perlonjava.operators.pack;
  * This logic is shared between Pack and Unpack operations.
  */
 public class GroupEndiannessHelper {
-    
+
     /**
      * Apply group-level endianness to all applicable formats in the group content.
      * This adds the endianness modifier after each format character that supports it,
      * and recursively applies to nested groups.
-     * 
+     *
      * @param groupContent The original group content
-     * @param endian The endianness modifier ('&lt;' or '&gt;')
+     * @param endian       The endianness modifier ('&lt;' or '&gt;')
      * @return Modified group content with endianness applied
      */
     public static String applyGroupEndianness(String groupContent, char endian) {
         StringBuilder result = new StringBuilder();
-        
+
         for (int i = 0; i < groupContent.length(); i++) {
             char c = groupContent.charAt(i);
-            
+
             // Handle nested groups
             if (c == '(') {
                 int closePos = PackHelper.findMatchingParen(groupContent, i);
@@ -34,9 +34,9 @@ public class GroupEndiannessHelper {
                     continue;
                 }
             }
-            
+
             result.append(c);
-            
+
             // Check if this is a format that supports endianness
             if ("sSiIlLqQjJfFdDpP".indexOf(c) >= 0) {
                 // Check if next character is '!' modifier - if so, copy it first
@@ -46,7 +46,7 @@ public class GroupEndiannessHelper {
                     i = nextPos; // Move past the '!'
                     nextPos++;
                 }
-                
+
                 // Now check if there's already an endianness modifier
                 if (nextPos < groupContent.length()) {
                     char next = groupContent.charAt(nextPos);
@@ -60,7 +60,7 @@ public class GroupEndiannessHelper {
                 }
             }
         }
-        
+
         return result.toString();
     }
 }

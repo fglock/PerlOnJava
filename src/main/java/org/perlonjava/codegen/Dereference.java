@@ -353,7 +353,7 @@ public class Dereference {
             // Single index: use get/delete/exists methods
             Node elem = right.elements.getFirst();
             elem.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-            
+
             String methodName = switch (arrayOperation) {
                 case "get" -> "arrayDerefGet";
                 case "delete" -> "arrayDerefDelete";
@@ -362,19 +362,19 @@ public class Dereference {
                         throw new PerlCompilerException(node.tokenIndex, "Not implemented: array operation: " + arrayOperation, emitterVisitor.ctx.errorUtil);
             };
 
-            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", 
+            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
                     methodName, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
         } else {
             // Multiple indices: use slice method (only for get operation)
             if (!arrayOperation.equals("get")) {
                 throw new PerlCompilerException(node.tokenIndex, "Array slice not supported for " + arrayOperation, emitterVisitor.ctx.errorUtil);
             }
-            
+
             // Emit the indices as a RuntimeList
             ListNode nodeRight = right.asListNode();
             nodeRight.accept(emitterVisitor.with(RuntimeContextType.LIST));
-            
-            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", 
+
+            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
                     "arrayDerefGetSlice", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
 
             // Context conversion: list slice in scalar/void contexts

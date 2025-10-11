@@ -1,6 +1,7 @@
 package org.perlonjava.runtime;
 
 import org.perlonjava.regex.RuntimeRegex;
+
 import java.util.regex.Matcher;
 
 /**
@@ -18,7 +19,7 @@ public class RegexState {
     public final int lastSuccessfulMatchEnd;
     public final String lastSuccessfulMatchString;
     public final RuntimeRegex lastSuccessfulPattern;
-    
+
     public RegexState() {
         // Save all the static fields from RuntimeRegex
         this.globalMatcher = RuntimeRegex.globalMatcher;
@@ -32,7 +33,7 @@ public class RegexState {
         this.lastSuccessfulMatchString = RuntimeRegex.lastSuccessfulMatchString;
         this.lastSuccessfulPattern = RuntimeRegex.lastSuccessfulPattern;
     }
-    
+
     public void restore() {
         // Restore all the static fields to RuntimeRegex
         RuntimeRegex.globalMatcher = this.globalMatcher;

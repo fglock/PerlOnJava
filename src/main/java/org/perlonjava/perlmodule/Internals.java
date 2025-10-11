@@ -1,10 +1,6 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.runtime.RuntimeArray;
-import org.perlonjava.runtime.RuntimeBase;
-import org.perlonjava.runtime.RuntimeList;
-import org.perlonjava.runtime.RuntimeScalar;
-import org.perlonjava.runtime.StateVariable;
+import org.perlonjava.runtime.*;
 
 /**
  * The Strict class provides functionalities similar to the Perl strict module.
@@ -84,16 +80,14 @@ public class Internals extends PerlModuleBase {
         if (args.size() >= 2) {
             RuntimeBase variable = args.get(0);
             RuntimeBase flag = args.get(1);
-            
+
             // If flag is true (non-zero), make the variable readonly
             if (flag.getBoolean()) {
-                if (variable instanceof RuntimeArray) {
-                    RuntimeArray array = (RuntimeArray) variable;
+                if (variable instanceof RuntimeArray array) {
                     array.type = RuntimeArray.READONLY_ARRAY;
-                } else if (variable instanceof RuntimeScalar) {
+                } else if (variable instanceof RuntimeScalar scalar) {
                     // Try to dereference as an array reference
                     try {
-                        RuntimeScalar scalar = (RuntimeScalar) variable;
                         RuntimeArray array = scalar.arrayDeref();
                         array.type = RuntimeArray.READONLY_ARRAY;
                     } catch (Exception e) {

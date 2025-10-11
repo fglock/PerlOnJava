@@ -3,6 +3,8 @@ package org.perlonjava.operators;
 import org.perlonjava.parser.StringParser;
 import org.perlonjava.runtime.RuntimeScalar;
 
+import java.nio.charset.StandardCharsets;
+
 import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarZero;
 
@@ -91,7 +93,7 @@ public class ScalarOperators {
         } else {
             // Get the first byte of the UTF-8 representation
             try {
-                byte[] bytes = str.getBytes("UTF-8");
+                byte[] bytes = str.getBytes(StandardCharsets.UTF_8);
                 if (bytes.length > 0) {
                     i = bytes[0] & 0xFF;  // Convert to unsigned
                 } else {

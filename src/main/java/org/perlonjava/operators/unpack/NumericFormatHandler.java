@@ -190,7 +190,7 @@ public abstract class NumericFormatHandler implements FormatHandler {
                 int b1 = buffer.get() & 0xFF;
                 int b2 = buffer.get() & 0xFF;
                 int value = (b1 << 8) | b2;
-                
+
                 if (signed) {
                     // Convert to signed short (sign extend from 16 bits)
                     output.add(new RuntimeScalar((short) value));
@@ -243,7 +243,7 @@ public abstract class NumericFormatHandler implements FormatHandler {
                 for (int j = 0; j < 4; j++) {
                     value = (value << 8) | (buffer.get() & 0xFF);
                 }
-                
+
                 if (signed) {
                     // Convert to signed int (sign extend from 32 bits)
                     output.add(new RuntimeScalar((int) value));
@@ -295,7 +295,7 @@ public abstract class NumericFormatHandler implements FormatHandler {
                 int b1 = buffer.get() & 0xFF;
                 int b2 = buffer.get() & 0xFF;
                 int value = b1 | (b2 << 8);
-                
+
                 if (signed) {
                     // Convert to signed short (sign extend from 16 bits)
                     output.add(new RuntimeScalar((short) value));
@@ -348,7 +348,7 @@ public abstract class NumericFormatHandler implements FormatHandler {
                 for (int j = 0; j < 4; j++) {
                     value |= (long) (buffer.get() & 0xFF) << (j * 8);
                 }
-                
+
                 if (signed) {
                     // Convert to signed int (sign extend from 32 bits)
                     output.add(new RuntimeScalar((int) value));

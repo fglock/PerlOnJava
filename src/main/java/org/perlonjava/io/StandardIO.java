@@ -167,7 +167,7 @@ public class StandardIO implements IOHandle {
             flush();  // Flush any pending output
             return RuntimeScalarCache.scalarTrue;
         }
-        
+
         flush();
         shutdownRequested = true;
         if (printThread != null) {

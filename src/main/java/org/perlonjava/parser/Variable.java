@@ -8,7 +8,6 @@ import org.perlonjava.runtime.GlobalVariable;
 import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeScalar;
-import org.perlonjava.perlmodule.Strict;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -18,20 +17,20 @@ import static org.perlonjava.parser.ParserNodeUtils.atUnderscore;
 import static org.perlonjava.parser.TokenUtils.peek;
 
 public class Variable {
-    
+
     /**
      * Check if a field exists in the current class or any parent class.
      * Uses both the local symbol table (for current class) and the global
      * FieldRegistry (for parent classes that have been parsed).
-     * 
-     * @param parser The parser instance
+     *
+     * @param parser    The parser instance
      * @param fieldName The name of the field to check (without sigil)
      * @return true if the field exists in the class hierarchy
      */
     public static boolean isFieldInClassHierarchy(Parser parser, String fieldName) {
         // Get the current package/class name
         String currentClass = parser.ctx.symbolTable.getCurrentPackage();
-        
+
         // First check field in current class via symbol table
         // Use getVariableIndex (not InCurrentScope) to search all parent scopes
         // Fields are in the class scope, methods create inner scopes
@@ -39,16 +38,17 @@ public class Variable {
         if (parser.ctx.symbolTable.getVariableIndex(fieldSymbol) != -1) {
             return true;
         }
-        
+
         // Check if we're in a class (not just a regular package)
         if (!parser.ctx.symbolTable.currentPackageIsClass()) {
             return false;
         }
-        
+
         // Check the global FieldRegistry for inherited fields
         // This works when parent classes were parsed before child classes
         return FieldRegistry.hasFieldInHierarchy(currentClass, fieldName);
     }
+
     /**
      * Parses a variable from the given lexer token.
      *
@@ -60,7 +60,7 @@ public class Variable {
     public static Node parseVariable(Parser parser, String sigil) {
         Node operand;
         var nextToken = peek(parser);
-        
+
 
         // Special handling for $ followed by {
         if (nextToken.text.equals("$")) {
@@ -112,29 +112,29 @@ public class Variable {
             // 2. The field exists in the current class or parent classes
             // 3. The variable is not locally shadowed
             String localVar = sigil + varName;
-            
+
             // Check if this is a field (in current or parent class) and not a locally declared variable
             // Note: We check if the variable is NOT defined locally (only in current scope)
             // but we DO check for fields in all scopes (fields are in parent scope)
-            
-            if (parser.isInMethod 
-                && isFieldInClassHierarchy(parser, varName) 
-                && parser.ctx.symbolTable.getVariableIndexInCurrentScope(localVar) == -1) {
+
+            if (parser.isInMethod
+                    && isFieldInClassHierarchy(parser, varName)
+                    && parser.ctx.symbolTable.getVariableIndexInCurrentScope(localVar) == -1) {
                 // This is a field and not shadowed by a local variable
                 // Transform field access based on sigil type
-                
+
                 // Create $self
-                OperatorNode selfVar = new OperatorNode("$", 
-                    new IdentifierNode("self", parser.tokenIndex), parser.tokenIndex);
-                
+                OperatorNode selfVar = new OperatorNode("$",
+                        new IdentifierNode("self", parser.tokenIndex), parser.tokenIndex);
+
                 // Create hash subscript for field access
                 List<Node> keyList = new ArrayList<>();
                 keyList.add(new IdentifierNode(varName, parser.tokenIndex));
                 HashLiteralNode hashSubscript = new HashLiteralNode(keyList, parser.tokenIndex);
-                
+
                 // Create $self->{fieldname} 
                 Node fieldAccess = new BinaryOperatorNode("->", selfVar, hashSubscript, parser.tokenIndex);
-                
+
                 // For array and hash fields, we need to dereference the reference
                 if (sigil.equals("@") || sigil.equals("%")) {
                     // @field becomes @{$self->{field}}
@@ -145,7 +145,7 @@ public class Variable {
                     return fieldAccess;
                 }
             }
-            
+
             // Create a normal Variable node
             return new OperatorNode(sigil, new IdentifierNode(varName, parser.tokenIndex), parser.tokenIndex);
         } else if (peek(parser).text.equals("{")) {
@@ -279,7 +279,7 @@ public class Variable {
                             // Critical distinction:
                             // 1. Scalar variables: $foo[$A-Z] -> character class (should NOT interpolate)
                             // 2. Array variables: $X[-1] -> array element (should interpolate)
-                            
+
                             // Enhanced parsing logic that considers strict mode context
                             // Key insight: Strict mode affects how $foo[...] is parsed
                             //
@@ -290,9 +290,9 @@ public class Variable {
                             // In STRICT mode:
                             //   - $foo[$A-Z] may cause parsing issues (barewords not allowed)
                             //   - Need more careful disambiguation
-                            
+
                             boolean shouldTreatAsCharacterClass = false;
-                            
+
                             if (operand instanceof OperatorNode opNode && "$".equals(opNode.operator)) {
                                 // This is a scalar variable access like $foo or $X
                                 // Use enhanced logic to distinguish array subscripts from character classes
@@ -300,7 +300,7 @@ public class Variable {
                                     shouldTreatAsCharacterClass = true;
                                 }
                             }
-                            
+
                             if (shouldTreatAsCharacterClass) {
                                 // This is a character class pattern
                                 break outerLoop; // Stop parsing, let caller handle as character class
@@ -645,26 +645,26 @@ public class Variable {
                     // We need to check if this pattern matches heredoc syntax
                     if (nextToken.type == LexerTokenType.IDENTIFIER) {
                         // This looks like <<IDENTIFIER - treat as heredoc in ${<<END} context
-                        
+
                         // Skip the < token
                         parser.tokenIndex++;
-                        
+
                         // Get the identifier
                         String identifier = nextToken.text;
                         parser.tokenIndex++; // Skip identifier
-                        
+
                         // Create a heredoc node and add it to the queue for later processing
                         OperatorNode heredocNode = new OperatorNode("HEREDOC", null, parser.tokenIndex);
                         heredocNode.setAnnotation("identifier", identifier);
                         heredocNode.setAnnotation("delimiter", "\""); // Default to double-quoted
                         parser.getHeredocNodes().add(heredocNode);
-                        
+
                         // Consume the closing brace
                         if (!TokenUtils.peek(parser).text.equals("}")) {
                             throw new PerlCompilerException(parser.tokenIndex, "Missing closing brace in variable interpolation", parser.ctx.errorUtil);
                         }
                         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
-                        
+
                         // In ${<<END} context, this evaluates to empty string
                         return new OperatorNode(sigil, new StringNode("", parser.tokenIndex), parser.tokenIndex);
                     }
@@ -691,8 +691,8 @@ public class Variable {
             // Use the saved line number from before peek() side effects
             String fileName = parser.ctx.errorUtil.getFileName();
             String multiLineError = "Missing right curly or square bracket at " + fileName + " line " + startLineNumber + ", at end of line\n" +
-                                  "syntax error at " + fileName + " line " + startLineNumber + ", at EOF\n" +
-                                  "Execution of " + fileName + " aborted due to compilation errors.";
+                    "syntax error at " + fileName + " line " + startLineNumber + ", at EOF\n" +
+                    "Execution of " + fileName + " aborted due to compilation errors.";
             throw new org.perlonjava.runtime.PerlParserException(multiLineError);
         }
     }
@@ -730,8 +730,8 @@ public class Variable {
     /**
      * Determines if a '[' in regex context should be treated as an array subscript
      * rather than a character class by looking ahead for character class patterns.
-     * 
-     * @param parser the parser instance
+     *
+     * @param parser       the parser instance
      * @param bracketIndex the index of the '[' token
      * @return true if this should be treated as array subscript, false for character class
      */
@@ -741,14 +741,14 @@ public class Variable {
         // $foo[$A-Z] - character class (should NOT interpolate)
         // $foo[0] - array subscript with number (should interpolate)
         // $foo[a-z] - character class (should NOT interpolate)
-        
+
         int index = bracketIndex + 1; // Skip the '['
         if (index >= parser.tokens.size()) {
             return false; // Incomplete, treat as character class
         }
-        
+
         var firstToken = parser.tokens.get(index);
-        
+
         // Handle different token patterns:
         // Array access (should interpolate):
         //   [$A] -> tokens: $, A, ]
@@ -758,7 +758,7 @@ public class Variable {
         //   [$A-Z] -> tokens: $, A, -, Z, ]
         //   [0-9] -> tokens: 0, -, 9, ]
         //   [a-z] -> tokens: a, -, z, ]
-        
+
         if (firstToken.text.equals("$")) {
             // Variable case: $A, need to skip both $ and A tokens
             index++; // Skip the $ token
@@ -785,23 +785,23 @@ public class Variable {
             // If it doesn't start with $, number, or -, it's definitely a character class
             return false;
         }
-        
+
         if (index >= parser.tokens.size()) {
             return true; // Just [$A], [0], or [-1] - treat as array subscript
         }
-        
+
         var nextToken = parser.tokens.get(index);
-        
+
         // If followed by '-', it's a character class range
         if (nextToken.text.equals("-")) {
             return false; // Character class pattern like [$A-Z] or [0-9]
         }
-        
+
         // If followed by ']', it's a simple array subscript
         if (nextToken.text.equals("]")) {
             return true; // Array subscript like [$A], [0], or [-1]
         }
-        
+
         // For other cases, default to array subscript behavior
         return true;
     }

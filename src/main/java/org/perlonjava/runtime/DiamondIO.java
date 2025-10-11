@@ -7,7 +7,6 @@ import org.perlonjava.operators.Readline;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalArray;
@@ -32,7 +31,7 @@ public class DiamondIO {
 
     // Flag to indicate if the reading process has started
     static boolean readingStarted = false;
-    
+
     // Flag to track if @ARGV was initially empty (determines STDIN fallback behavior)
     static boolean argvWasInitiallyEmpty = false;
 
@@ -46,7 +45,7 @@ public class DiamondIO {
     public static void initialize(CompilerOptions compilerOptions) {
         // Reset all static variables to ensure clean state between compiler runs
         reset();
-        
+
         inPlaceExtension = compilerOptions.inPlaceExtension;
         inPlaceEdit = compilerOptions.inPlaceEdit;
     }
@@ -92,7 +91,7 @@ public class DiamondIO {
                 readingStarted = true;
                 // Check if @ARGV was initially empty to determine STDIN fallback behavior
                 argvWasInitiallyEmpty = getGlobalArray("main::ARGV").isEmpty();
-                
+
                 RuntimeIO argv = getGlobalIO("main::ARGV").getRuntimeIO();
                 // Only use ARGV filehandle directly if @ARGV is empty (handles aliased filehandles like *ARGV = *DATA)
                 if (argv != null && !(argv.ioHandle instanceof ClosedIOHandle) && getGlobalArray("main::ARGV").isEmpty()) {
@@ -157,7 +156,7 @@ public class DiamondIO {
         // Check if in-place editing is enabled (either via -i switch or $^I variable)
         boolean isInPlaceEnabled = inPlaceEdit;
         String extension = inPlaceExtension;
-        
+
         // Also check $^I variable for runtime in-place editing
         if (!isInPlaceEnabled) {
             try {
@@ -170,11 +169,11 @@ public class DiamondIO {
                 // If $^I is not accessible, continue without in-place editing
             }
         }
-        
+
         if (isInPlaceEnabled) {
             // Use RuntimeIO's existing path resolution methods for consistency
             Path originalPath = RuntimeIO.resolvePath(originalFileName);
-            
+
             if (extension == null || extension.isEmpty()) {
                 // Create a temporary file for the original file
                 try {
@@ -196,10 +195,10 @@ public class DiamondIO {
                 } else {
                     backupFileName = originalFileName + extension;
                 }
-                
+
                 // Use RuntimeIO's existing path resolution for consistency
                 Path backupPath = RuntimeIO.resolvePath(backupFileName);
-                
+
                 // Rename the original file to the backup file if needed
                 try {
                     // Check if original file exists and is readable
@@ -211,12 +210,12 @@ public class DiamondIO {
                         System.err.println("Error: Original file is not readable: " + originalFileName);
                         return false;
                     }
-                    
+
                     // Check if backup file already exists
                     if (Files.exists(backupPath)) {
                         System.err.println("Warning: Backup file already exists, will overwrite: " + backupFileName);
                     }
-                    
+
                     Files.move(originalPath, backupPath, StandardCopyOption.REPLACE_EXISTING);
                 } catch (IOException e) {
                     System.err.println("Error: Unable to create backup file " + backupFileName + ": " + e.getMessage());
@@ -230,7 +229,7 @@ public class DiamondIO {
             currentWriter = RuntimeIO.open(originalPath.toString(), ">");
             getGlobalIO("main::ARGVOUT").set(currentWriter);
             RuntimeIO.lastAccesseddHandle = currentWriter;
-            
+
             // CRITICAL: Update selectedHandle so print statements without explicit filehandle
             // write to the original file during in-place editing
             RuntimeIO.selectedHandle = currentWriter;

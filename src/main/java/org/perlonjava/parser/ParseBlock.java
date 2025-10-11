@@ -4,7 +4,6 @@ import org.perlonjava.astnode.BlockNode;
 import org.perlonjava.astnode.LabelNode;
 import org.perlonjava.astnode.ListNode;
 import org.perlonjava.astnode.Node;
-import org.perlonjava.astnode.SubroutineNode;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 
@@ -104,12 +103,12 @@ public class ParseBlock {
             // `m:` not a label, but a quote-like operator
             return null;
         }
-        
+
         // Don't treat 'sub' as a label - it's a keyword for subroutine definitions
         if (id.equals("sub")) {
             return null;
         }
-        
+
         TokenUtils.consume(parser);
         if (peek(parser).text.equals(":")) {
             statements.add(new LabelNode(id, currentIndexLabel));

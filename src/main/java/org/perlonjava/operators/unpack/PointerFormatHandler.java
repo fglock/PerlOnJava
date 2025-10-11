@@ -37,7 +37,7 @@ public class PointerFormatHandler implements FormatHandler {
             // Only the lower 32 bits matter for the hashCode
             byte[] bytes = new byte[8];
             buffer.get(bytes);
-            
+
             long ptrLong;
             if (bigEndian) {
                 // Big-endian: most significant byte first
@@ -49,15 +49,15 @@ public class PointerFormatHandler implements FormatHandler {
                 // Little-endian: least significant byte first
                 ptrLong = 0;
                 for (int j = 0; j < 8; j++) {
-                    ptrLong |= ((long)(bytes[j] & 0xFF) << (j * 8));
+                    ptrLong |= ((long) (bytes[j] & 0xFF) << (j * 8));
                 }
             }
-            
+
             // Extract the int hashCode from the long pointer value
             int ptr = (int) ptrLong;
 
             // DEBUG: unpack 'p' hashCode=" + ptr + " (bigEndian=" + bigEndian + ")
-    
+
             if (ptr == 0) {
                 result.add(new RuntimeScalar()); // undef
             } else {

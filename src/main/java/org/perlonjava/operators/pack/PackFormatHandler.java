@@ -19,6 +19,6 @@ public interface PackFormatHandler {
      * @param output     The output buffer to write packed data to
      * @return The new index in the values list after packing
      */
-    int pack(List<RuntimeScalar> values, int valueIndex, int count, boolean hasStar, 
+    int pack(List<RuntimeScalar> values, int valueIndex, int count, boolean hasStar,
              ParsedModifiers modifiers, PackBuffer output);
 }

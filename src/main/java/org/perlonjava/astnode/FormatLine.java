@@ -18,7 +18,7 @@ public abstract class FormatLine extends AbstractNode {
     /**
      * Constructor for FormatLine.
      *
-     * @param content The raw text content of the line
+     * @param content    The raw text content of the line
      * @param tokenIndex The token index in the source code
      */
     public FormatLine(String content, int tokenIndex) {

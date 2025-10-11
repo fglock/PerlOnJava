@@ -13,13 +13,6 @@ import org.perlonjava.io.*;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.net.DatagramSocket;
-import java.net.Socket;
-import java.nio.channels.ReadableByteChannel;
-import java.nio.channels.WritableByteChannel;
-import java.nio.charset.StandardCharsets;
-
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
@@ -28,6 +21,7 @@ import java.util.*;
 import static org.perlonjava.runtime.GlobalVariable.getGlobalIO;
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarFalse;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
 /**
  * Represents a Perl-style I/O handle with support for files, directories, and streams.
@@ -510,12 +504,12 @@ public class RuntimeIO implements RuntimeScalarReference {
      */
     public static Path resolvePath(String fileName) {
         Path path = Paths.get(fileName);
-        
+
         // If the path is already absolute, return it as-is
         if (path.isAbsolute()) {
             return path.toAbsolutePath();
         }
-        
+
         // For relative paths, resolve against current directory
         return Paths.get(System.getProperty("user.dir")).resolve(fileName).toAbsolutePath();
     }
@@ -655,6 +649,26 @@ public class RuntimeIO implements RuntimeScalarReference {
     }
 
     /**
+     * Duplicates a filehandle for <& and >& operations.
+     *
+     * @param sourceHandle the source filehandle to duplicate
+     * @param mode         the duplication mode ("<&" for read, ">&" for write)
+     * @return RuntimeIO handle that shares the same underlying resource, or null on error
+     */
+    public static RuntimeIO duplicateHandle(RuntimeIO sourceHandle, String mode) {
+        if (sourceHandle == null || sourceHandle.ioHandle == null) {
+            handleIOError("Cannot duplicate invalid filehandle");
+            return null;
+        }
+
+        // For now, return the original handle directly to avoid sharing issues
+        // This is a simplified implementation - in a full implementation,
+        // we would create a proper duplicate that shares the underlying file descriptor
+        // but has separate buffering and close semantics
+        return sourceHandle;
+    }
+
+    /**
      * Sets or changes the I/O layers for this handle.
      *
      * <p>If no layers are specified, checks the ${^OPEN} variable for defaults.
@@ -704,12 +718,12 @@ public class RuntimeIO implements RuntimeScalarReference {
      */
     private Set<StandardOpenOption> convertMode(String mode) {
         // Handle duplication modes - these are handled separately in open()
-        if (mode.equals("<&") || mode.equals(">&") || mode.equals("+<&") || 
-            mode.equals("<&=") || mode.equals(">&=") || mode.equals("+<&=")) {
+        if (mode.equals("<&") || mode.equals(">&") || mode.equals("+<&") ||
+                mode.equals("<&=") || mode.equals(">&=") || mode.equals("+<&=")) {
             // Return read-write mode for dup operations
             return new HashSet<>(MODE_OPTIONS.get("+<"));
         }
-        
+
         Set<StandardOpenOption> options = MODE_OPTIONS.get(mode);
         if (options == null) {
             throw new PerlCompilerException("Unsupported file mode: " + mode);
@@ -902,26 +916,6 @@ public class RuntimeIO implements RuntimeScalarReference {
      */
     public RuntimeScalar accept() {
         return ioHandle.accept();
-    }
-
-    /**
-     * Duplicates a filehandle for <& and >& operations.
-     * 
-     * @param sourceHandle the source filehandle to duplicate
-     * @param mode the duplication mode ("<&" for read, ">&" for write)
-     * @return RuntimeIO handle that shares the same underlying resource, or null on error
-     */
-    public static RuntimeIO duplicateHandle(RuntimeIO sourceHandle, String mode) {
-        if (sourceHandle == null || sourceHandle.ioHandle == null) {
-            handleIOError("Cannot duplicate invalid filehandle");
-            return null;
-        }
-
-        // For now, return the original handle directly to avoid sharing issues
-        // This is a simplified implementation - in a full implementation,
-        // we would create a proper duplicate that shares the underlying file descriptor
-        // but has separate buffering and close semantics
-        return sourceHandle;
     }
 
     /**

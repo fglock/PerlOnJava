@@ -28,7 +28,7 @@ public class RegexPreprocessorHelper {
                 int d1 = nextChar - '0';
                 char c2 = s.charAt(offset + 1);
                 char c3 = offset + 2 < length ? s.charAt(offset + 2) : '\0';
-                
+
                 if (c2 >= '0' && c2 <= '7' && c3 >= '0' && c3 <= '7') {
                     int octalValue = d1 * 64 + (c2 - '0') * 8 + (c3 - '0');
                     if (octalValue > 255) {
@@ -43,7 +43,7 @@ public class RegexPreprocessorHelper {
                 }
             }
         }
-        
+
         if (!isOctalNotBackref && nextChar >= '1' && nextChar <= '9') {
             // This is a backreference like \1, \2, etc.
             int refNum = nextChar - '0';
@@ -315,7 +315,7 @@ public class RegexPreprocessorHelper {
                 // Potential octal sequence - parse it
                 int octalValue = c2 - '0';
                 int octalLength = 1;
-                
+
                 // Read up to 2 more octal digits
                 for (int i = 1; i <= 2 && offset + i < length; i++) {
                     int nextDigit = s.codePointAt(offset + i);
@@ -326,7 +326,7 @@ public class RegexPreprocessorHelper {
                         break;
                     }
                 }
-                
+
                 // Check if value is > 255 (requires hex conversion)
                 if (octalValue > 255) {
                     // Convert to hex for Java regex
@@ -551,7 +551,7 @@ public class RegexPreprocessorHelper {
                             // Potential octal sequence - parse it
                             int octalValue = c2 - '0';
                             int octalLength = 1;
-                            
+
                             // Read up to 2 more octal digits
                             for (int i = 1; i <= 2 && offset + i < length; i++) {
                                 int nextDigit = s.codePointAt(offset + i);
@@ -562,7 +562,7 @@ public class RegexPreprocessorHelper {
                                     break;
                                 }
                             }
-                            
+
                             // Check if value is > 255 (requires hex conversion)
                             if (octalValue > 255) {
                                 // Convert to hex for Java regex

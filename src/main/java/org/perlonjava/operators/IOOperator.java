@@ -1,33 +1,15 @@
 package org.perlonjava.operators;
 
-import org.perlonjava.io.*;
-import org.perlonjava.io.ClosedIOHandle;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.Map;
-import org.perlonjava.io.IOHandle;
-import org.perlonjava.io.InternalPipeHandle;
-import org.perlonjava.io.LayeredIOHandle;
-import org.perlonjava.io.PipeInputChannel;
-import org.perlonjava.io.PipeOutputChannel;
-import org.perlonjava.io.ScalarBackedIO;
-import org.perlonjava.io.SocketIO;
-import org.perlonjava.parser.StringParser;
-import org.perlonjava.runtime.*;
-import org.perlonjava.runtime.NameNormalizer;
-import org.perlonjava.runtime.PerlCompilerException;
-import org.perlonjava.runtime.ScalarUtils;
-import org.perlonjava.runtime.PerlJavaUnimplementedException;
 import org.perlonjava.astnode.FormatLine;
 import org.perlonjava.astnode.PictureLine;
+import org.perlonjava.io.*;
+import org.perlonjava.parser.StringParser;
+import org.perlonjava.runtime.*;
 
 import java.io.File;
 import java.io.IOException;
 import java.net.*;
 import java.nio.channels.FileChannel;
-import java.nio.channels.Pipe;
-import java.nio.channels.ReadableByteChannel;
-import java.nio.channels.WritableByteChannel;
-import java.nio.channels.SocketChannel;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
@@ -35,24 +17,19 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.PosixFilePermission;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarFalse;
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
+import static org.perlonjava.runtime.RuntimeScalarCache.*;
 
 public class IOOperator {
     // Simple socket option storage: key is "socketHashCode:level:optname", value is the option value
     private static final Map<String, Integer> globalSocketOptions = new ConcurrentHashMap<>();
-    
+
     // File descriptor to RuntimeIO mapping for duplication support
     private static final Map<Integer, RuntimeIO> fileDescriptorMap = new ConcurrentHashMap<>();
-    
+
     public static RuntimeScalar select(RuntimeList runtimeList, int ctx) {
         if (runtimeList.isEmpty()) {
             // select (returns current filehandle)
@@ -176,7 +153,7 @@ public class IOOperator {
         } else {
             fileHandle = args[0].scalar();
         }
-        
+
         RuntimeIO fh = fileHandle.getRuntimeIO();
 
         if (fh instanceof TieHandle tieHandle) {
@@ -222,11 +199,11 @@ public class IOOperator {
 
             // Check for filehandle duplication modes (<&, >&, +<&, <&=, >&=, +<&=)
             if (mode.equals("<&") || mode.equals(">&") || mode.equals("+<&") ||
-                mode.equals("<&=") || mode.equals(">&=") || mode.equals("+<&=")) {
+                    mode.equals("<&=") || mode.equals(">&=") || mode.equals("+<&=")) {
                 // Handle filehandle duplication
                 String argStr = secondArg.toString();
                 boolean isParsimonious = mode.endsWith("="); // &= modes reuse file descriptor
-                
+
                 // Check if it's a numeric file descriptor
                 if (argStr.matches("^\\d+$")) {
                     int fd = Integer.parseInt(argStr);
@@ -304,7 +281,7 @@ public class IOOperator {
         if (fh == null) {
             return scalarFalse;
         }
-        
+
         // Check if the filehandle already contains a GLOB
         if ((fileHandle.type == RuntimeScalarType.GLOB || fileHandle.type == RuntimeScalarType.GLOBREFERENCE) && fileHandle.value instanceof RuntimeGlob glob) {
             glob.setIO(fh);
@@ -933,29 +910,28 @@ public class IOOperator {
      * Executes a Perl format against a filehandle.
      * write FILEHANDLE
      * write
-     * 
+     * <p>
      * This function looks up the format associated with the filehandle name,
      * executes it with the current values of format variables, and writes
      * the formatted output to the filehandle.
      *
-     * @param ctx The runtime context
+     * @param ctx  The runtime context
      * @param args Optional filehandle argument (defaults to currently selected handle)
      * @return A RuntimeScalar indicating success (1) or failure (0)
      */
     public static RuntimeScalar write(int ctx, RuntimeBase... args) {
         String formatName;
         RuntimeIO fh = RuntimeIO.stdout; // Default output handle
-        
+
         if (args.length == 0) {
             // No arguments: write() - use STDOUT format to STDOUT handle
             formatName = "STDOUT";
         } else {
             // One argument: write FORMAT_NAME - use named format to STDOUT handle
             RuntimeScalar arg = args[0].scalar();
-            
+
             // Check if argument is a glob reference (which contains the format name)
-            if (arg.type == RuntimeScalarType.GLOBREFERENCE && arg.value instanceof RuntimeGlob) {
-                RuntimeGlob glob = (RuntimeGlob) arg.value;
+            if (arg.type == RuntimeScalarType.GLOBREFERENCE && arg.value instanceof RuntimeGlob glob) {
                 formatName = glob.globName;
             } else {
                 // Check if argument is a filehandle or format name
@@ -980,66 +956,66 @@ public class IOOperator {
                 }
             }
         }
-        
+
         // Look up the format
         RuntimeFormat format = GlobalVariable.getGlobalFormatRef(formatName);
-        
+
         if (format == null || !format.isFormatDefined()) {
             // Format not found or not defined
             String errorMsg = "Undefined format \"" + formatName + "\" called";
             getGlobalVariable("main::!").set(errorMsg);
             throw new RuntimeException(errorMsg);
         }
-        
+
         try {
             // Execute the format with arguments from current scope
             // For now, we'll pass empty arguments and let the format execution handle variable lookup
             // In a full implementation, this would collect format variables from the current scope
             RuntimeList formatArgs = new RuntimeList();
-            
+
             // TODO: Collect format variables from current scope
             // This would involve scanning for variables referenced in the format's argument lines
             // and collecting their current values from the symbol table
             // For now, the format execution will need to handle variable lookup internally
-            
+
             String formattedOutput = format.execute(formatArgs);
-            
+
             // Write the formatted output to the filehandle
             RuntimeScalar writeResult = fh.write(formattedOutput);
-            
+
             return writeResult;
-            
+
         } catch (Exception e) {
             getGlobalVariable("main::!").set("Format execution failed: " + e.getMessage());
             return scalarFalse;
         }
     }
-    
+
     /**
      * Executes a Perl format with explicit arguments.
      * This is a helper method for testing and advanced format usage.
      *
      * @param formatName The name of the format to execute
-     * @param args The arguments to pass to the format
+     * @param args       The arguments to pass to the format
      * @param fileHandle The filehandle to write to
      * @return A RuntimeScalar indicating success (1) or failure (0)
      */
     public static RuntimeScalar writeFormat(String formatName, RuntimeList args, RuntimeScalar fileHandle) {
         RuntimeIO fh = fileHandle.getRuntimeIO();
-        
+
         if (fh == null) {
             getGlobalVariable("main::!").set("Bad file descriptor");
             return scalarFalse;
         }
-        
+
         // Look up the format
         RuntimeFormat format = GlobalVariable.getGlobalFormatRef(formatName);
-        
+
         if (format == null || !format.isFormatDefined()) {
             getGlobalVariable("main::!").set("Undefined format \"" + formatName + "\" called");
             return scalarFalse;
         }
-        
+
         try {
             String formattedOutput = format.execute(args);
             return fh.write(formattedOutput);
@@ -1052,8 +1028,8 @@ public class IOOperator {
     /**
      * Implements the formline operator.
      * Formats text according to a format template and appends to $^A.
-     * 
-     * @param ctx The runtime context
+     *
+     * @param ctx  The runtime context
      * @param args The arguments: format template followed by values
      * @return The current value of $^A after appending
      */
@@ -1061,10 +1037,10 @@ public class IOOperator {
         if (args.length < 1) {
             throw new PerlCompilerException("Not enough arguments for formline");
         }
-        
+
         // Get the format template
         String formatTemplate = args[0].scalar().toString();
-        
+
         // For simple cases (like constants in index.t), if there are no format fields,
         // just append the template string directly to $^A
         if (!formatTemplate.contains("@") && !formatTemplate.contains("^")) {
@@ -1074,33 +1050,33 @@ public class IOOperator {
             accumulator.set(currentValue + formatTemplate);
             return scalarTrue;
         }
-        
+
         // Create arguments list for format processing
         RuntimeList formatArgs = new RuntimeList();
         for (int i = 1; i < args.length; i++) {
             formatArgs.add(args[i]);
         }
-        
+
         // For complex format templates with @ or ^ fields, use RuntimeFormat
         // Note: This is a simplified implementation - full format support would require
         // parsing the format template properly
         try {
             // Create a temporary RuntimeFormat to process the template
             RuntimeFormat tempFormat = new RuntimeFormat("FORMLINE_TEMP", formatTemplate);
-            
+
             // Parse the format template as picture lines
             List<FormatLine> lines = new ArrayList<>();
             lines.add(new PictureLine(formatTemplate, new ArrayList<>(), formatTemplate, 0));
             tempFormat.setCompiledLines(lines);
-            
+
             // Execute the format and get the result
             String formattedOutput = tempFormat.execute(formatArgs);
-            
+
             // Append to $^A
             RuntimeScalar accumulator = getGlobalVariable(GlobalContext.encodeSpecialVar("A"));
             String currentValue = accumulator.toString();
             accumulator.set(currentValue + formattedOutput);
-            
+
             // Return success (1)
             return scalarTrue;
         } catch (Exception e) {
@@ -1114,17 +1090,17 @@ public class IOOperator {
      */
     private static String extractFilehandleName(String argStr) {
         if (argStr == null) return "unknown";
-        
+
         // Remove *main:: prefix if present
         if (argStr.startsWith("*main::")) {
             return argStr.substring(7);
         }
-        
+
         // Handle GLOB(0x...) format - extract just the reference part
         if (argStr.startsWith("GLOB(") && argStr.endsWith(")")) {
             return argStr; // Keep the GLOB reference as is for now
         }
-        
+
         return argStr;
     }
 
@@ -1187,7 +1163,7 @@ public class IOOperator {
     /**
      * Parses a Perl sockaddr_in packed binary address.
      * Format: 2-byte family + 2-byte port + 4-byte IP address + 8 bytes padding
-     * 
+     *
      * @param packedAddress The packed binary socket address
      * @return An array containing [host, port] or null if parsing fails
      */
@@ -1198,32 +1174,32 @@ public class IOOperator {
             if (packedAddress.contains(":") || packedAddress.matches(".*[0-9]+\\.[0-9]+.*")) {
                 return null; // This is a text address, not binary sockaddr_in
             }
-            
-            byte[] bytes = packedAddress.getBytes("ISO-8859-1"); // Get raw bytes
-            
+
+            byte[] bytes = packedAddress.getBytes(StandardCharsets.ISO_8859_1); // Get raw bytes
+
             if (bytes.length < 8) {
                 return null; // Too short for sockaddr_in
             }
-            
+
             // Check if first 2 bytes indicate AF_INET (family = 2)
             int family = ((bytes[0] & 0xFF) << 8) | (bytes[1] & 0xFF);
             if (family != 2) { // AF_INET = 2
                 return null; // Not a valid sockaddr_in structure
             }
-            
+
             // Extract port (bytes 2-3, network byte order)
             int port = ((bytes[2] & 0xFF) << 8) | (bytes[3] & 0xFF);
-            
+
             // Extract IP address (bytes 4-7)
             int ip1 = bytes[4] & 0xFF;
             int ip2 = bytes[5] & 0xFF;
             int ip3 = bytes[6] & 0xFF;
             int ip4 = bytes[7] & 0xFF;
-            
+
             String host = ip1 + "." + ip2 + "." + ip3 + "." + ip4;
-            
+
             return new String[]{host, String.valueOf(port)};
-            
+
         } catch (Exception e) {
             return null;
         }
@@ -1242,7 +1218,7 @@ public class IOOperator {
         try {
             RuntimeScalar socketHandle = args[0].scalar();
             RuntimeScalar address = args[1].scalar();
-            
+
             RuntimeIO socketIO = socketHandle.getRuntimeIO();
             if (socketIO == null) {
                 getGlobalVariable("main::!").set("Invalid socket handle for bind");
@@ -1252,7 +1228,7 @@ public class IOOperator {
             // Parse Perl-style packed socket address (sockaddr_in format)
             String addressStr = address.toString();
             String[] parts = parseSockaddrIn(addressStr);
-            
+
             // Fallback to "host:port" string format if binary parsing fails
             if (parts == null) {
                 parts = addressStr.split(":");
@@ -1261,7 +1237,7 @@ public class IOOperator {
                     return scalarFalse;
                 }
             }
-            
+
             String host = parts[0];
             int port;
             try {
@@ -1270,7 +1246,7 @@ public class IOOperator {
                 getGlobalVariable("main::!").set("Invalid port number for bind");
                 return scalarFalse;
             }
-            
+
             // Delegate to RuntimeIO's bind method
             return socketIO.bind(host, port);
 
@@ -1293,7 +1269,7 @@ public class IOOperator {
         try {
             RuntimeScalar socketHandle = args[0].scalar();
             RuntimeScalar address = args[1].scalar();
-            
+
             RuntimeIO socketIO = socketHandle.getRuntimeIO();
             if (socketIO == null) {
                 getGlobalVariable("main::!").set("Invalid socket handle for connect");
@@ -1303,7 +1279,7 @@ public class IOOperator {
             // Parse Perl-style packed socket address (sockaddr_in format)
             String addressStr = address.toString();
             String[] parts = parseSockaddrIn(addressStr);
-            
+
             // Fallback to "host:port" string format if binary parsing fails
             if (parts == null) {
                 parts = addressStr.split(":");
@@ -1312,7 +1288,7 @@ public class IOOperator {
                     return scalarFalse;
                 }
             }
-            
+
             String host = parts[0];
             int port;
             try {
@@ -1321,7 +1297,7 @@ public class IOOperator {
                 getGlobalVariable("main::!").set("Invalid port number for connect");
                 return scalarFalse;
             }
-            
+
             // Delegate to RuntimeIO's connect method
             return socketIO.connect(host, port);
 
@@ -1344,7 +1320,7 @@ public class IOOperator {
         try {
             RuntimeScalar socketHandle = args[0].scalar();
             int queueSize = args[1].scalar().getInt();
-            
+
             RuntimeIO socketIO = socketHandle.getRuntimeIO();
             if (socketIO == null) {
                 getGlobalVariable("main::!").set("Invalid socket handle for listen");
@@ -1373,7 +1349,7 @@ public class IOOperator {
         try {
             RuntimeScalar newSocketHandle = args[0].scalar();
             RuntimeScalar listenSocketHandle = args[1].scalar();
-            
+
             RuntimeIO listenSocketIO = listenSocketHandle.getRuntimeIO();
             if (listenSocketIO == null) {
                 getGlobalVariable("main::!").set("Invalid listening socket handle for accept");
@@ -1412,7 +1388,7 @@ public class IOOperator {
             // The arguments are references to RuntimeGlob objects that already exist
             RuntimeScalar readRef = args[0].scalar();
             RuntimeScalar writeRef = args[1].scalar();
-            
+
             // Get the actual RuntimeGlob objects from the references
             RuntimeGlob readGlob = (RuntimeGlob) readRef.value;
             RuntimeGlob writeGlob = (RuntimeGlob) writeRef.value;
@@ -1420,22 +1396,22 @@ public class IOOperator {
             // Create connected pipes using Java's PipedInputStream/PipedOutputStream
             java.io.PipedInputStream pipeIn = new java.io.PipedInputStream();
             java.io.PipedOutputStream pipeOut = new java.io.PipedOutputStream(pipeIn);
-            
+
             // Create IOHandle implementations for the pipe ends
             InternalPipeHandle readerHandle = InternalPipeHandle.createReader(pipeIn);
             InternalPipeHandle writerHandle = InternalPipeHandle.createWriter(pipeOut);
-            
+
             // Create RuntimeIO objects for the handles
             RuntimeIO readerIO = new RuntimeIO();
             readerIO.ioHandle = readerHandle;
-            
+
             RuntimeIO writerIO = new RuntimeIO();
             writerIO.ioHandle = writerHandle;
-            
+
             // Set the IO handles directly on the existing globs
             readGlob.setIO(readerIO);
             writeGlob.setIO(writerIO);
-            
+
             return scalarTrue;
 
         } catch (Exception e) {
@@ -1497,7 +1473,7 @@ public class IOOperator {
         try {
             RuntimeScalar socketHandle = args[0].scalar();
             RuntimeIO socketIO = socketHandle.getRuntimeIO();
-            
+
             if (socketIO == null) {
                 getGlobalVariable("main::!").set("Invalid socket handle for getsockname");
                 return scalarFalse;
@@ -1525,7 +1501,7 @@ public class IOOperator {
         try {
             RuntimeScalar socketHandle = args[0].scalar();
             RuntimeIO socketIO = socketHandle.getRuntimeIO();
-            
+
             if (socketIO == null) {
                 getGlobalVariable("main::!").set("Invalid socket handle for getpeername");
                 return scalarFalse;
@@ -1554,7 +1530,7 @@ public class IOOperator {
             RuntimeScalar socketHandle = args[0].scalar();
             String message = args[1].toString();
             int flags = args[2].scalar().getInt();
-            
+
             RuntimeIO socketIO = socketHandle.getRuntimeIO();
             if (socketIO == null) {
                 getGlobalVariable("main::!").set("Invalid socket handle for send");
@@ -1564,7 +1540,7 @@ public class IOOperator {
             // For now, ignore flags and TO address - implement basic send
             // Send message as string
             RuntimeScalar result = socketIO.write(message);
-            
+
             if (result != null && !result.equals(scalarFalse)) {
                 return new RuntimeScalar(message.length()); // Return number of bytes sent
             } else {
@@ -1593,7 +1569,7 @@ public class IOOperator {
             RuntimeScalar buffer = args[1].scalar();
             int length = args[2].scalar().getInt();
             int flags = args.length > 3 ? args[3].scalar().getInt() : 0;
-            
+
             RuntimeIO socketIO = socketHandle.getRuntimeIO();
             if (socketIO == null) {
                 getGlobalVariable("main::!").set("Invalid socket handle for recv");
@@ -1630,7 +1606,7 @@ public class IOOperator {
         try {
             RuntimeScalar socketHandle = args[0].scalar();
             int how = args[1].scalar().getInt();
-            
+
             RuntimeIO socketIO = socketHandle.getRuntimeIO();
             if (socketIO == null) {
                 getGlobalVariable("main::!").set("Invalid socket handle for shutdown");
@@ -1670,7 +1646,7 @@ public class IOOperator {
             int optname = args[2].scalar().getInt();
             RuntimeScalar optvalScalar = args[3].scalar();
             String optval = optvalScalar.toString();
-            
+
             RuntimeIO socketIO = socketHandle.getRuntimeIO();
             if (socketIO == null) {
                 getGlobalVariable("main::!").set("Invalid socket handle for setsockopt");
@@ -1678,12 +1654,11 @@ public class IOOperator {
             }
 
             // Handle socket option setting
-            if (socketIO.ioHandle instanceof org.perlonjava.io.SocketIO) {
-                org.perlonjava.io.SocketIO socketIOHandle = (org.perlonjava.io.SocketIO) socketIO.ioHandle;
-                
+            if (socketIO.ioHandle instanceof SocketIO socketIOHandle) {
+
                 // Extract the integer value from the optval - handle both integer and string representations
                 int optionValue = 0;
-                
+
                 // Use Perl's looksLikeNumber logic to determine how to handle the value
                 if (ScalarUtils.looksLikeNumber(optvalScalar)) {
                     // This is a number - get it directly as an integer
@@ -1698,14 +1673,14 @@ public class IOOperator {
                             break;
                         }
                     }
-                    
+
                     if (isPacked) {
                         // Unpack as little-endian integer (packed format)
-                        byte[] bytes = optval.getBytes("ISO-8859-1");
-                        optionValue = (bytes[0] & 0xFF) | 
-                                     ((bytes[1] & 0xFF) << 8) | 
-                                     ((bytes[2] & 0xFF) << 16) | 
-                                     ((bytes[3] & 0xFF) << 24);
+                        byte[] bytes = optval.getBytes(StandardCharsets.ISO_8859_1);
+                        optionValue = (bytes[0] & 0xFF) |
+                                ((bytes[1] & 0xFF) << 8) |
+                                ((bytes[2] & 0xFF) << 16) |
+                                ((bytes[3] & 0xFF) << 24);
                     } else {
                         // Try to parse as string number
                         try {
@@ -1724,10 +1699,10 @@ public class IOOperator {
                         optionValue = optval.length() > 0 ? 1 : 0;
                     }
                 }
-                
+
                 // Use Java's native socket option support via SocketIO
                 boolean success = socketIOHandle.setSocketOption(level, optname, optionValue);
-                
+
                 return success ? scalarTrue : scalarFalse;
             } else {
                 getGlobalVariable("main::!").set("Not a socket handle for setsockopt");
@@ -1754,7 +1729,7 @@ public class IOOperator {
             RuntimeScalar socketHandle = args[0].scalar();
             int level = args[1].scalar().getInt();
             int optname = args[2].scalar().getInt();
-            
+
             RuntimeIO socketIO = socketHandle.getRuntimeIO();
             if (socketIO == null) {
                 getGlobalVariable("main::!").set("Invalid socket handle for getsockopt");
@@ -1762,17 +1737,16 @@ public class IOOperator {
             }
 
             // Handle socket option retrieval
-            if (socketIO.ioHandle instanceof org.perlonjava.io.SocketIO) {
-                org.perlonjava.io.SocketIO socketIOHandle = (org.perlonjava.io.SocketIO) socketIO.ioHandle;
-                
+            if (socketIO.ioHandle instanceof SocketIO socketIOHandle) {
+
                 // Use Java's native socket option support via SocketIO
                 int optionValue = socketIOHandle.getSocketOption(level, optname);
-                
+
                 // For SO_ERROR (common case), always return 0 (no error)
                 if (level == 1 && optname == 4) { // SOL_SOCKET, SO_ERROR
                     optionValue = 0;
                 }
-                
+
                 // Pack the option value as a 4-byte integer and return it
                 return new RuntimeScalar(pack("i", optionValue));
             } else {
@@ -1812,7 +1786,7 @@ public class IOOperator {
         if (handle != null) {
             return handle;
         }
-        
+
         // Handle standard file descriptors
         switch (fd) {
             case 0: // STDIN
@@ -1834,12 +1808,12 @@ public class IOOperator {
         if (original == null || original.ioHandle == null) {
             return null;
         }
-        
+
         // Create a new RuntimeIO that shares the same IOHandle
         RuntimeIO duplicate = new RuntimeIO();
         duplicate.ioHandle = original.ioHandle;
         duplicate.currentLineNumber = original.currentLineNumber;
-        
+
         return duplicate;
     }
 
@@ -1867,7 +1841,7 @@ public class IOOperator {
         if (args.length < 5) {
             throw new PerlCompilerException("Not enough arguments for socketpair");
         }
-        
+
         try {
             // The first two arguments are references to RuntimeGlob objects that already exist
             RuntimeScalar sock1Ref = args[0].scalar();
@@ -1875,41 +1849,41 @@ public class IOOperator {
             RuntimeBase domain = args[2];
             RuntimeBase type = args[3];
             RuntimeBase protocol = args[4];
-            
+
             // Get the actual RuntimeGlob objects from the references
             RuntimeGlob glob1 = (RuntimeGlob) sock1Ref.value;
             RuntimeGlob glob2 = (RuntimeGlob) sock2Ref.value;
-            
+
             // For simplicity, we'll create a local socket pair using ServerSocket and Socket
             // This is similar to how socketpair works on Unix systems
-            
+
             // Create a server socket on localhost with a random port
             ServerSocket serverSocket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress());
             int port = serverSocket.getLocalPort();
-            
+
             // Create the first socket and connect it to the server
             Socket socket1 = new Socket();
             socket1.connect(new InetSocketAddress(InetAddress.getLoopbackAddress(), port));
-            
+
             // Accept the connection on the server side to get the second socket
             Socket socket2 = serverSocket.accept();
-            
+
             // Close the server socket as we no longer need it
             serverSocket.close();
-            
+
             // Create RuntimeIO objects for both sockets
             RuntimeIO io1 = new RuntimeIO();
             io1.ioHandle = new SocketIO(socket1);
-            
+
             RuntimeIO io2 = new RuntimeIO();
             io2.ioHandle = new SocketIO(socket2);
-            
+
             // Set the IO handles directly on the existing globs
             glob1.setIO(io1);
             glob2.setIO(io2);
-            
+
             return scalarTrue;
-            
+
         } catch (IOException e) {
             // Set $! to the error message
             getGlobalVariable("main::!").set(e.getMessage());

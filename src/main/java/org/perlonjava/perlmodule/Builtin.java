@@ -1,7 +1,6 @@
 package org.perlonjava.perlmodule;
 
 import org.perlonjava.runtime.RuntimeArray;
-import org.perlonjava.runtime.RuntimeBase;
 import org.perlonjava.runtime.RuntimeList;
 import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.runtime.RuntimeScalarType;
@@ -137,7 +136,7 @@ public class Builtin extends PerlModuleBase {
 
     public static RuntimeList reftype(RuntimeArray args, int ctx) {
         RuntimeScalar ref = args.get(0);
-        
+
         // Check if this is a blessed object (class instance)
         // For Perl 5.38+ class syntax, blessed objects should return "OBJECT"
         int blessId = RuntimeScalarType.blessedId(ref);
@@ -146,7 +145,7 @@ public class Builtin extends PerlModuleBase {
             // This is specifically for the new class syntax
             return new RuntimeList(new RuntimeScalar("OBJECT"));
         }
-        
+
         // Return reference type in capitals
         String type = switch (ref.type) {
             case REFERENCE -> {

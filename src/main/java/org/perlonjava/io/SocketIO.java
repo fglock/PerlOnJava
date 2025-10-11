@@ -5,14 +5,9 @@ import org.perlonjava.runtime.RuntimeScalar;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.net.ServerSocket;
-import java.net.Socket;
-import java.net.SocketOption;
-import java.net.StandardSocketOptions;
-import java.nio.channels.SocketChannel;
+import java.net.*;
 import java.nio.channels.ServerSocketChannel;
+import java.nio.channels.SocketChannel;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
@@ -36,9 +31,9 @@ public class SocketIO implements IOHandle {
     private OutputStream outputStream;
     private boolean isEOF;
     private CharsetDecoderHelper decoderHelper;
-    
+
     // Socket options storage: key is "level:optname", value is the option value
-    private Map<String, Integer> socketOptions;
+    private final Map<String, Integer> socketOptions;
 
     /**
      * Constructs a SocketIO instance for a client socket.
@@ -75,7 +70,7 @@ public class SocketIO implements IOHandle {
     /**
      * Constructs a SocketIO instance for a server socket with explicit channel.
      *
-     * @param serverSocket the server socket to be used for accepting connections
+     * @param serverSocket        the server socket to be used for accepting connections
      * @param serverSocketChannel the server socket channel for native socket option support
      */
     public SocketIO(ServerSocket serverSocket, ServerSocketChannel serverSocketChannel) {
@@ -297,17 +292,17 @@ public class SocketIO implements IOHandle {
     public RuntimeScalar getsockname() {
         try {
             InetSocketAddress localAddress = null;
-            
+
             if (socket != null && socket.getLocalSocketAddress() instanceof InetSocketAddress) {
                 localAddress = (InetSocketAddress) socket.getLocalSocketAddress();
             } else if (serverSocket != null && serverSocket.getLocalSocketAddress() instanceof InetSocketAddress) {
                 localAddress = (InetSocketAddress) serverSocket.getLocalSocketAddress();
             }
-            
+
             if (localAddress != null) {
                 return packSockaddrIn(localAddress);
             }
-            
+
             return scalarUndef;
         } catch (Exception e) {
             return scalarUndef;
@@ -320,11 +315,10 @@ public class SocketIO implements IOHandle {
      */
     public RuntimeScalar getpeername() {
         try {
-            if (socket != null && socket.getRemoteSocketAddress() instanceof InetSocketAddress) {
-                InetSocketAddress remoteAddress = (InetSocketAddress) socket.getRemoteSocketAddress();
+            if (socket != null && socket.getRemoteSocketAddress() instanceof InetSocketAddress remoteAddress) {
                 return packSockaddrIn(remoteAddress);
             }
-            
+
             return scalarUndef;
         } catch (Exception e) {
             return scalarUndef;
@@ -338,38 +332,38 @@ public class SocketIO implements IOHandle {
     private RuntimeScalar packSockaddrIn(InetSocketAddress address) {
         try {
             byte[] sockaddr = new byte[16];
-            
+
             // Family: AF_INET = 2 (network byte order)
             sockaddr[0] = 0;
             sockaddr[1] = 2;
-            
+
             // Port (network byte order - big endian)
             int port = address.getPort();
             sockaddr[2] = (byte) ((port >> 8) & 0xFF);
             sockaddr[3] = (byte) (port & 0xFF);
-            
+
             // IP address (4 bytes)
             byte[] ipBytes = address.getAddress().getAddress();
             System.arraycopy(ipBytes, 0, sockaddr, 4, 4);
-            
+
             // Padding (8 bytes of zeros)
             for (int i = 8; i < 16; i++) {
                 sockaddr[i] = 0;
             }
-            
-            return new RuntimeScalar(new String(sockaddr, "ISO-8859-1"));
+
+            return new RuntimeScalar(new String(sockaddr, StandardCharsets.ISO_8859_1));
         } catch (Exception e) {
             return scalarUndef;
         }
     }
-    
+
     /**
      * Sets a socket option value using Java's native socket option support.
      * This provides better IPv4/IPv6 compatibility and proper socket handling.
      *
-     * @param level the socket level (e.g., SOL_SOCKET)
+     * @param level   the socket level (e.g., SOL_SOCKET)
      * @param optname the option name (e.g., SO_REUSEADDR)
-     * @param value the option value
+     * @param value   the option value
      * @return true if the option was set successfully, false otherwise
      */
     public boolean setSocketOption(int level, int optname, int value) {
@@ -394,7 +388,7 @@ public class SocketIO implements IOHandle {
                     return true;
                 }
             }
-            
+
             // Fall back to manual storage for unsupported options
             String key = level + ":" + optname;
             socketOptions.put(key, value);
@@ -406,12 +400,12 @@ public class SocketIO implements IOHandle {
             return true;
         }
     }
-    
+
     /**
      * Gets a socket option value using Java's native socket option support.
      * This provides better IPv4/IPv6 compatibility and proper socket handling.
      *
-     * @param level the socket level (e.g., SOL_SOCKET)
+     * @param level   the socket level (e.g., SOL_SOCKET)
      * @param optname the option name (e.g., SO_REUSEADDR)
      * @return the option value, or 0 if not set
      */
@@ -440,7 +434,7 @@ public class SocketIO implements IOHandle {
         } catch (Exception e) {
             // Fall back to manual storage
         }
-        
+
         // Fall back to manual storage for unsupported options
         String key = level + ":" + optname;
         return socketOptions.getOrDefault(key, 0);
@@ -450,7 +444,7 @@ public class SocketIO implements IOHandle {
      * Maps Perl socket option constants to Java StandardSocketOptions.
      * This enables native Java socket option handling with IPv4/IPv6 support.
      *
-     * @param level the protocol level
+     * @param level   the protocol level
      * @param optname the option name
      * @return the corresponding Java SocketOption, or null if not supported
      */

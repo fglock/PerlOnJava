@@ -9,8 +9,6 @@ import org.perlonjava.nativ.NativeUtils;
 import org.perlonjava.nativ.PosixLibrary;
 import org.perlonjava.regex.RuntimeRegex;
 import org.perlonjava.runtime.*;
-import org.perlonjava.runtime.TieArray;
-import org.perlonjava.runtime.PerlRange;
 
 import java.io.IOException;
 import java.nio.file.*;
@@ -334,12 +332,12 @@ public class Operator {
     }
 
     public static RuntimeBase reverse(int ctx, RuntimeBase... args) {
-        
+
         if (ctx == SCALAR) {
             StringBuilder sb = new StringBuilder();
             if (args.length == 0) {
                 // In scalar context, reverse($_) if no arguments are provided.
-                sb.append(GlobalVariable.getGlobalVariable("main::_").toString());
+                sb.append(GlobalVariable.getGlobalVariable("main::_"));
             } else {
                 for (RuntimeBase arg : args) {
                     sb.append(arg.toString());
@@ -349,19 +347,18 @@ public class Operator {
         }
 
         // List context - avoid unnecessary copying to preserve element references
-        
+
         // Create a RuntimeList from args to validate autovivification (like sort does)
         RuntimeList argsList = new RuntimeList();
         for (RuntimeBase arg : args) {
             argsList.add(arg);
         }
-        
+
         // Check for autovivification arrays that should throw errors (like sort does)
         argsList.validateNoAutovivification();
-        
+
         // Handle single PerlRange argument (e.g., from 1..5)
-        if (args.length == 1 && args[0] instanceof PerlRange) {
-            PerlRange range = (PerlRange) args[0];
+        if (args.length == 1 && args[0] instanceof PerlRange range) {
             RuntimeList list = range.getList();
             List<RuntimeBase> listElements = new ArrayList<>();
             for (RuntimeScalar scalar : list) {
@@ -372,8 +369,7 @@ public class Operator {
         }
 
         // Handle single RuntimeList argument (e.g., from range operator)
-        if (args.length == 1 && args[0] instanceof RuntimeList) {
-            RuntimeList list = (RuntimeList) args[0];
+        if (args.length == 1 && args[0] instanceof RuntimeList list) {
             List<RuntimeBase> listElements = new ArrayList<>();
             for (RuntimeScalar scalar : list) {
                 listElements.add(scalar);
@@ -383,8 +379,7 @@ public class Operator {
         }
 
         // Handle single RuntimeHash argument (e.g., from %hash expansion)
-        if (args.length == 1 && args[0] instanceof RuntimeHash) {
-            RuntimeHash hash = (RuntimeHash) args[0];
+        if (args.length == 1 && args[0] instanceof RuntimeHash hash) {
             RuntimeList hashList = hash.getList(); // Get key-value pairs as RuntimeList
             List<RuntimeBase> listElements = new ArrayList<>();
             for (RuntimeScalar scalar : hashList) {
@@ -395,8 +390,7 @@ public class Operator {
         }
 
         // Handle single RuntimeArray argument
-        if (args.length == 1 && args[0] instanceof RuntimeArray) {
-            RuntimeArray array = (RuntimeArray) args[0];
+        if (args.length == 1 && args[0] instanceof RuntimeArray array) {
             if (array.type == RuntimeArray.TIED_ARRAY) {
                 return reverseTiedArray(array);
             } else {
@@ -409,15 +403,13 @@ public class Operator {
         // where ('A', 'B', 'C') becomes a RuntimeList and @array is a RuntimeArray
         List<RuntimeBase> flattenedArgs = new ArrayList<>();
         for (RuntimeBase arg : args) {
-            if (arg instanceof RuntimeList) {
+            if (arg instanceof RuntimeList list) {
                 // Flatten RuntimeList into individual elements
-                RuntimeList list = (RuntimeList) arg;
                 for (RuntimeScalar scalar : list) {
                     flattenedArgs.add(scalar);
                 }
-            } else if (arg instanceof RuntimeArray) {
+            } else if (arg instanceof RuntimeArray array) {
                 // Flatten RuntimeArray into individual elements
-                RuntimeArray array = (RuntimeArray) arg;
                 for (RuntimeBase element : array.elements) {
                     // Handle null elements (deleted array elements)
                     if (element != null) {
@@ -430,7 +422,7 @@ public class Operator {
                 flattenedArgs.add(arg);
             }
         }
-        
+
         // Now reverse the flattened list
         Collections.reverse(flattenedArgs);
         return new RuntimeList(flattenedArgs.toArray(new RuntimeBase[0]));
@@ -477,7 +469,7 @@ public class Operator {
             WarnDie.warn(new RuntimeScalar("Use of uninitialized value in string repetition (x)"),
                     RuntimeScalarCache.scalarEmptyString);
         }
-        
+
         // Check for non-finite values first
         if (timesScalar.type == RuntimeScalarType.DOUBLE) {
             double d = timesScalar.getDouble();

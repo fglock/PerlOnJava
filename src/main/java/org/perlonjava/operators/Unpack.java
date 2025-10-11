@@ -3,7 +3,6 @@ package org.perlonjava.operators;
 import org.perlonjava.operators.pack.PackHelper;
 import org.perlonjava.operators.unpack.*;
 import org.perlonjava.runtime.*;
-import org.perlonjava.operators.FormatModifierValidator;
 
 import java.math.BigInteger;
 import java.util.*;
@@ -88,7 +87,7 @@ public class Unpack {
 
         // Call internal unpack method
         RuntimeList result = unpackInternal(template, state, startsWithU, modeStack);
-        
+
         // Handle scalar context
         if (ctx == RuntimeContextType.SCALAR && !result.isEmpty()) {
             return result.elements.getFirst().getList();
@@ -100,13 +99,13 @@ public class Unpack {
      * Internal unpack method that can be called recursively.
      * Used by both the public entry point and group processing.
      *
-     * @param template The unpack template
-     * @param state The unpack state (position will be advanced)
+     * @param template    The unpack template
+     * @param state       The unpack state (position will be advanced)
      * @param startsWithU Whether the original template starts with U
-     * @param modeStack Stack for tracking mode changes
+     * @param modeStack   Stack for tracking mode changes
      * @return list of unpacked values
      */
-    private static RuntimeList unpackInternal(String template, UnpackState state, 
+    private static RuntimeList unpackInternal(String template, UnpackState state,
                                               boolean startsWithU, Stack<Boolean> modeStack) {
         RuntimeList out = new RuntimeList();
         List<RuntimeBase> values = out.elements;
@@ -147,8 +146,8 @@ public class Unpack {
             // Handle parentheses for grouping
             if (format == '(') {
                 i = UnpackGroupProcessor.parseGroupSyntax(template, i, state, values, startsWithU, modeStack,
-                    // Pass lambda for recursive unpack calls
-                    (tmpl, st, starts, stack) -> unpackInternal(tmpl, st, starts, stack)
+                        // Pass lambda for recursive unpack calls
+                        (tmpl, st, starts, stack) -> unpackInternal(tmpl, st, starts, stack)
                 );
                 i++;
                 continue;
@@ -188,12 +187,12 @@ public class Unpack {
             if (format == '<' || format == '>') {
                 // For unpack, we need to provide a generic format character since we don't have context
                 // The tests expect "allowed only after types \S+ in unpack" format
-                throw new PerlCompilerException("'" + format + "' allowed only after types " + 
-                    FormatModifierValidator.getValidFormatsForModifier(FormatModifierValidator.Modifier.LITTLE_ENDIAN) + " in unpack");
+                throw new PerlCompilerException("'" + format + "' allowed only after types " +
+                        FormatModifierValidator.getValidFormatsForModifier(FormatModifierValidator.Modifier.LITTLE_ENDIAN) + " in unpack");
             }
             if (format == '!') {
-                throw new PerlCompilerException("'!' allowed only after types " + 
-                    FormatModifierValidator.getValidFormatsForModifier(FormatModifierValidator.Modifier.NATIVE_SIZE) + " in unpack");
+                throw new PerlCompilerException("'!' allowed only after types " +
+                        FormatModifierValidator.getValidFormatsForModifier(FormatModifierValidator.Modifier.NATIVE_SIZE) + " in unpack");
             }
 
             // Handle '/' for counted strings
@@ -261,12 +260,12 @@ public class Unpack {
             boolean hasLittleEndian = parsedCount.hasLittleEndian();
             boolean hasBigEndian = parsedCount.hasBigEndian();
             i = parsedCount.endPosition();
-            
+
             // Check if '/' has a repeat count (which is invalid)
             if (format == '/' && (count > 1 || isStarCount)) {
                 throw new PerlCompilerException("'/' does not take a repeat count");
             }
-            
+
             if (isStarCount) {
                 count = UnpackHelper.getRemainingCount(state, format, startsWithU);
             }
@@ -280,7 +279,7 @@ public class Unpack {
                     state.getBuffer();
                     state.setByteOrder(hasBigEndian);
                 }
-                
+
                 if (format == '@') {
                     // DEBUG: Calling @ handler with count=" + count
                 } else if (format == '.') {
@@ -310,7 +309,7 @@ public class Unpack {
                     int currentPos = state.getPosition();
                     int alignment = count;
                     int newPos;
-                    
+
                     if (format == 'x') {
                         // Forward alignment: round up to next multiple of alignment
                         newPos = ((currentPos + alignment - 1) / alignment) * alignment;
@@ -318,7 +317,7 @@ public class Unpack {
                         // Backward alignment: round down to previous multiple of alignment
                         newPos = (currentPos / alignment) * alignment;
                     }
-                    
+
                     state.setPosition(newPos);
                     i++; // Move past this format
                     continue; // Skip normal handler processing
@@ -337,252 +336,252 @@ public class Unpack {
                     } else {
                         // Handle checksum calculation - process ALL remaining data
                         List<RuntimeBase> tempValues = new ArrayList<>();
-                    
-                    // For checksums, we need to ensure we use the correct handler
-                    // especially for native size formats like l! and L!
-                    FormatHandler checksumHandler = handler;
-                    if ((format == 'l' || format == 'L') && hasShriek) {
-                        // Force use of NativeLongFormatHandler for checksum calculation
-                        checksumHandler = new NativeLongFormatHandler(format == 'l');
-                    }
-                    
-                    // For checksums, we respect the count and star flag
-                    // Without *, we only process 'count' values (default 1)
-                    // With *, we process all remaining values
-                    
-                    // Check if this format has native size modifier
-                    boolean hasNativeSize = (format == 'l' || format == 'L') && hasShriek;
-                    
-                    int formatSize = getFormatSize(format, hasNativeSize);
-                    
-                    if (isStarCount) {
-                        // With *, process ALL remaining data
-                        int remainingBytes = state.remainingBytes();
-                        if (formatSize > 0) {
-                            int remainingCount = remainingBytes / formatSize;
-                            checksumHandler.unpack(state, tempValues, remainingCount, false);
-                        } else {
-                            // For variable-size formats, process all we can
-                            checksumHandler.unpack(state, tempValues, Integer.MAX_VALUE, true);
-                        }
-                    } else {
-                        // Without *, only process 'count' values
-                        checksumHandler.unpack(state, tempValues, count, false);
-                    }
 
-                    // Calculate checksum - use BigInteger for larger checksums
-                    if (checksumBits >= 53) {
-                        // Check if this is a floating point format
-                        boolean isFloatFormat = (format == 'd' || format == 'D' || format == 'f' || format == 'F');
-                        
-                        BigInteger bigChecksum;
-                        
-                        if (isFloatFormat) {
-                            // For floating point checksums with large bit widths, use double sum
-                            double doubleSum = 0.0;
-                            for (RuntimeBase value : tempValues) {
-                                doubleSum += ((RuntimeScalar) value).getDouble();
+                        // For checksums, we need to ensure we use the correct handler
+                        // especially for native size formats like l! and L!
+                        FormatHandler checksumHandler = handler;
+                        if ((format == 'l' || format == 'L') && hasShriek) {
+                            // Force use of NativeLongFormatHandler for checksum calculation
+                            checksumHandler = new NativeLongFormatHandler(format == 'l');
+                        }
+
+                        // For checksums, we respect the count and star flag
+                        // Without *, we only process 'count' values (default 1)
+                        // With *, we process all remaining values
+
+                        // Check if this format has native size modifier
+                        boolean hasNativeSize = (format == 'l' || format == 'L') && hasShriek;
+
+                        int formatSize = getFormatSize(format, hasNativeSize);
+
+                        if (isStarCount) {
+                            // With *, process ALL remaining data
+                            int remainingBytes = state.remainingBytes();
+                            if (formatSize > 0) {
+                                int remainingCount = remainingBytes / formatSize;
+                                checksumHandler.unpack(state, tempValues, remainingCount, false);
+                            } else {
+                                // For variable-size formats, process all we can
+                                checksumHandler.unpack(state, tempValues, Integer.MAX_VALUE, true);
                             }
-                            
-                            // Convert to BigInteger for bit masking
-                            bigChecksum = BigInteger.valueOf((long) doubleSum);
                         } else {
-                            // Use BigInteger for checksums that might lose precision
-                            bigChecksum = BigInteger.ZERO;
-                            
-                            if (format == 'b' || format == 'B') {
-                                // For binary formats, count 1 bits
+                            // Without *, only process 'count' values
+                            checksumHandler.unpack(state, tempValues, count, false);
+                        }
+
+                        // Calculate checksum - use BigInteger for larger checksums
+                        if (checksumBits >= 53) {
+                            // Check if this is a floating point format
+                            boolean isFloatFormat = (format == 'd' || format == 'D' || format == 'f' || format == 'F');
+
+                            BigInteger bigChecksum;
+
+                            if (isFloatFormat) {
+                                // For floating point checksums with large bit widths, use double sum
+                                double doubleSum = 0.0;
                                 for (RuntimeBase value : tempValues) {
-                                    String binary = value.toString();
-                                    for (int j = 0; j < binary.length(); j++) {
-                                        if (binary.charAt(j) == '1') {
-                                            bigChecksum = bigChecksum.add(BigInteger.ONE);
+                                    doubleSum += ((RuntimeScalar) value).getDouble();
+                                }
+
+                                // Convert to BigInteger for bit masking
+                                bigChecksum = BigInteger.valueOf((long) doubleSum);
+                            } else {
+                                // Use BigInteger for checksums that might lose precision
+                                bigChecksum = BigInteger.ZERO;
+
+                                if (format == 'b' || format == 'B') {
+                                    // For binary formats, count 1 bits
+                                    for (RuntimeBase value : tempValues) {
+                                        String binary = value.toString();
+                                        for (int j = 0; j < binary.length(); j++) {
+                                            if (binary.charAt(j) == '1') {
+                                                bigChecksum = bigChecksum.add(BigInteger.ONE);
+                                            }
                                         }
                                     }
-                                }
-                            } else {
-                                // For other formats, sum the numeric values
-                                for (RuntimeBase value : tempValues) {
-                                    RuntimeScalar scalar = (RuntimeScalar) value;
-                                    
-                                    // Check if this is an unsigned format (Q, J)
-                                    if (format == 'Q' || format == 'J') {
-                                        // For unsigned 64-bit formats, use getBigint for exact precision
-                                        // This preserves full precision for large integer strings
-                                        BigInteger valToAdd = scalar.getBigint();
-                                        // For Q/J formats, treat negative values as unsigned
-                                        if (valToAdd.signum() < 0) {
-                                            // Convert to unsigned representation
-                                            valToAdd = valToAdd.add(BigInteger.ONE.shiftLeft(64));
-                                        }
-                                        bigChecksum = bigChecksum.add(valToAdd);
-                                    } else {
-                                        // For other formats, use regular getLong
-                                        long val = scalar.getLong();
-                                        // Check if this is an unsigned format (uppercase means unsigned)
-                                        boolean isUnsigned = Character.isUpperCase(format);
-                                        if (isUnsigned && val < 0) {
-                                            // Handle as unsigned for 32-bit and smaller formats
-                                            if (format == 'I' || format == 'L') {
-                                                // 32-bit unsigned
-                                                bigChecksum = bigChecksum.add(BigInteger.valueOf(val & 0xFFFFFFFFL));
-                                            } else if (format == 'S') {
-                                                // 16-bit unsigned
-                                                bigChecksum = bigChecksum.add(BigInteger.valueOf(val & 0xFFFFL));
-                                            } else if (format == 'C') {
-                                                // 8-bit unsigned
-                                                bigChecksum = bigChecksum.add(BigInteger.valueOf(val & 0xFFL));
+                                } else {
+                                    // For other formats, sum the numeric values
+                                    for (RuntimeBase value : tempValues) {
+                                        RuntimeScalar scalar = (RuntimeScalar) value;
+
+                                        // Check if this is an unsigned format (Q, J)
+                                        if (format == 'Q' || format == 'J') {
+                                            // For unsigned 64-bit formats, use getBigint for exact precision
+                                            // This preserves full precision for large integer strings
+                                            BigInteger valToAdd = scalar.getBigint();
+                                            // For Q/J formats, treat negative values as unsigned
+                                            if (valToAdd.signum() < 0) {
+                                                // Convert to unsigned representation
+                                                valToAdd = valToAdd.add(BigInteger.ONE.shiftLeft(64));
+                                            }
+                                            bigChecksum = bigChecksum.add(valToAdd);
+                                        } else {
+                                            // For other formats, use regular getLong
+                                            long val = scalar.getLong();
+                                            // Check if this is an unsigned format (uppercase means unsigned)
+                                            boolean isUnsigned = Character.isUpperCase(format);
+                                            if (isUnsigned && val < 0) {
+                                                // Handle as unsigned for 32-bit and smaller formats
+                                                if (format == 'I' || format == 'L') {
+                                                    // 32-bit unsigned
+                                                    bigChecksum = bigChecksum.add(BigInteger.valueOf(val & 0xFFFFFFFFL));
+                                                } else if (format == 'S') {
+                                                    // 16-bit unsigned
+                                                    bigChecksum = bigChecksum.add(BigInteger.valueOf(val & 0xFFFFL));
+                                                } else if (format == 'C') {
+                                                    // 8-bit unsigned
+                                                    bigChecksum = bigChecksum.add(BigInteger.valueOf(val & 0xFFL));
+                                                } else {
+                                                    bigChecksum = bigChecksum.add(BigInteger.valueOf(val));
+                                                }
                                             } else {
                                                 bigChecksum = bigChecksum.add(BigInteger.valueOf(val));
                                             }
-                                        } else {
-                                            bigChecksum = bigChecksum.add(BigInteger.valueOf(val));
                                         }
                                     }
                                 }
                             }
-                        }
-                        
-                        // For 32-bit Perl emulation, we need to check if precision loss
-                        // would cause the test function to return 0
-                        // The test does: return 0 if $total == $total - 1; # Overflowed integers
-                        
-                        if (checksumBits < 64) {
-                            // Apply bit mask first
-                            BigInteger mask = BigInteger.ONE.shiftLeft(checksumBits).subtract(BigInteger.ONE);
-                            bigChecksum = bigChecksum.and(mask);
-                            
-                            // Now check if the masked value would lose precision as a double
-                            // This happens when the value is so large that subtracting 1 makes no difference
-                            double maskedAsDouble = bigChecksum.doubleValue();
-                            if (maskedAsDouble > 0 && maskedAsDouble == maskedAsDouble - 1.0) {
-                                // Precision completely lost - the test expects 0
-                                values.add(new RuntimeScalar(0));
-                            } else {
-                                // Return the masked value
-                                values.add(new RuntimeScalar(bigChecksum.longValue()));
-                            }
-                        } else if (checksumBits == 64) {
-                            // 64-bit mask: 2^64 - 1 = 0xFFFFFFFFFFFFFFFF
-                            BigInteger mask = BigInteger.ONE.shiftLeft(64).subtract(BigInteger.ONE);
-                            bigChecksum = bigChecksum.and(mask);
-                            
-                            // For 64-bit, check if it equals max (which means original was -1)
-                            if (bigChecksum.equals(mask)) {
-                                // Sum was -1, result is 2^64-1 which is max unsigned
-                                // Perl test expects 0 in this case
-                                values.add(new RuntimeScalar(0));
-                            } else {
-                                // Convert BigInteger to long
-                                values.add(new RuntimeScalar(bigChecksum.longValue()));
-                            }
-                        } else if (checksumBits > 64) {
-                            // For checksumBits > 64, Perl returns 0 for any overflow
-                            // A negative checksum (like -1) when treated as unsigned would be 2^64-1
-                            // which overflows a 64-bit value, so return 0
-                            
-                            // Check if the value is negative (which means overflow when unsigned)
-                            // or if it's too large for 64 bits
-                            if (bigChecksum.signum() < 0) {
-                                // Negative values overflow when interpreted as unsigned
-                                values.add(new RuntimeScalar(0L));
-                            } else {
-                                BigInteger max64 = BigInteger.ONE.shiftLeft(64); // 2^64
-                                if (bigChecksum.compareTo(max64) >= 0) {
-                                    // Value is >= 2^64, overflow
-                                    values.add(new RuntimeScalar(0L));
-                                } else {
-                                    // Value fits in unsigned 64-bit range
-                                    values.add(new RuntimeScalar(bigChecksum.longValue()));
-                                }
-                            }
-                        }
-                    } else {
-                        // For checksums < 53 bits, determine if we need floating point precision
-                        boolean isFloatFormat = (format == 'd' || format == 'D' || format == 'f' || format == 'F');
-                        // Q, J and native long (l!/L!) formats need BigInteger to preserve precision even for small checksums
-                        boolean isNativeLong = (format == 'l' || format == 'L') && hasShriek;
-                        boolean needsBigInteger = (format == 'Q' || format == 'J' || format == 'q' || isNativeLong);
-                        
-                        if (needsBigInteger) {
-                            // Use BigInteger for Q/J/q/l!/L! to preserve exact precision
-                            BigInteger bigChecksum = BigInteger.ZERO;
-                            for (RuntimeBase value : tempValues) {
-                                RuntimeScalar scalar = (RuntimeScalar) value;
-                                BigInteger valToAdd = scalar.getBigint();
-                                // For unsigned formats (Q/J/L!), treat negative values as unsigned
-                                boolean isUnsigned = (format == 'Q' || format == 'J' || format == 'L');
-                                if (isUnsigned && valToAdd.signum() < 0) {
-                                    valToAdd = valToAdd.add(BigInteger.ONE.shiftLeft(64));
-                                }
-                                bigChecksum = bigChecksum.add(valToAdd);
-                            }
-                            
-                            // Apply bit mask
-                            if (checksumBits > 0 && checksumBits < 64) {
+
+                            // For 32-bit Perl emulation, we need to check if precision loss
+                            // would cause the test function to return 0
+                            // The test does: return 0 if $total == $total - 1; # Overflowed integers
+
+                            if (checksumBits < 64) {
+                                // Apply bit mask first
                                 BigInteger mask = BigInteger.ONE.shiftLeft(checksumBits).subtract(BigInteger.ONE);
                                 bigChecksum = bigChecksum.and(mask);
-                            }
-                            
-                            values.add(new RuntimeScalar(bigChecksum.longValue()));
-                        } else if (isFloatFormat) {
-                            // Use double for floating point checksums
-                            double checksum = 0.0;
-                            for (RuntimeBase value : tempValues) {
-                                checksum += ((RuntimeScalar) value).getDouble();
-                            }
-                            
-                            // For floating point formats, apply modulo based on checksumBits
-                            // The default is 16 bits
-                            if (checksumBits <= 52) {  // Can be represented exactly as double
-                                // Apply modulo based on checksumBits
-                                double modulo = Math.pow(2, checksumBits);
-                                double result = checksum % modulo;
-                                // Handle negative results
-                                if (result < 0) {
-                                    result += modulo;
+
+                                // Now check if the masked value would lose precision as a double
+                                // This happens when the value is so large that subtracting 1 makes no difference
+                                double maskedAsDouble = bigChecksum.doubleValue();
+                                if (maskedAsDouble > 0 && maskedAsDouble == maskedAsDouble - 1.0) {
+                                    // Precision completely lost - the test expects 0
+                                    values.add(new RuntimeScalar(0));
+                                } else {
+                                    // Return the masked value
+                                    values.add(new RuntimeScalar(bigChecksum.longValue()));
                                 }
-                                values.add(new RuntimeScalar(result));
-                            } else {
-                                // For large bit widths, don't apply modulo
-                                values.add(new RuntimeScalar(checksum));
-                            }
-                        } else {
-                            // Use long for non-floating point checksums
-                            long checksum = 0;
-                            if (format == 'b' || format == 'B') {
-                                // For binary formats, count 1 bits
-                                for (RuntimeBase value : tempValues) {
-                                    String binary = value.toString();
-                                    for (int j = 0; j < binary.length(); j++) {
-                                        if (binary.charAt(j) == '1') {
-                                            checksum++;
-                                        }
+                            } else if (checksumBits == 64) {
+                                // 64-bit mask: 2^64 - 1 = 0xFFFFFFFFFFFFFFFF
+                                BigInteger mask = BigInteger.ONE.shiftLeft(64).subtract(BigInteger.ONE);
+                                bigChecksum = bigChecksum.and(mask);
+
+                                // For 64-bit, check if it equals max (which means original was -1)
+                                if (bigChecksum.equals(mask)) {
+                                    // Sum was -1, result is 2^64-1 which is max unsigned
+                                    // Perl test expects 0 in this case
+                                    values.add(new RuntimeScalar(0));
+                                } else {
+                                    // Convert BigInteger to long
+                                    values.add(new RuntimeScalar(bigChecksum.longValue()));
+                                }
+                            } else if (checksumBits > 64) {
+                                // For checksumBits > 64, Perl returns 0 for any overflow
+                                // A negative checksum (like -1) when treated as unsigned would be 2^64-1
+                                // which overflows a 64-bit value, so return 0
+
+                                // Check if the value is negative (which means overflow when unsigned)
+                                // or if it's too large for 64 bits
+                                if (bigChecksum.signum() < 0) {
+                                    // Negative values overflow when interpreted as unsigned
+                                    values.add(new RuntimeScalar(0L));
+                                } else {
+                                    BigInteger max64 = BigInteger.ONE.shiftLeft(64); // 2^64
+                                    if (bigChecksum.compareTo(max64) >= 0) {
+                                        // Value is >= 2^64, overflow
+                                        values.add(new RuntimeScalar(0L));
+                                    } else {
+                                        // Value fits in unsigned 64-bit range
+                                        values.add(new RuntimeScalar(bigChecksum.longValue()));
                                     }
                                 }
-                            } else {
-                                // For other formats, sum the numeric values
+                            }
+                        } else {
+                            // For checksums < 53 bits, determine if we need floating point precision
+                            boolean isFloatFormat = (format == 'd' || format == 'D' || format == 'f' || format == 'F');
+                            // Q, J and native long (l!/L!) formats need BigInteger to preserve precision even for small checksums
+                            boolean isNativeLong = (format == 'l' || format == 'L') && hasShriek;
+                            boolean needsBigInteger = (format == 'Q' || format == 'J' || format == 'q' || isNativeLong);
+
+                            if (needsBigInteger) {
+                                // Use BigInteger for Q/J/q/l!/L! to preserve exact precision
+                                BigInteger bigChecksum = BigInteger.ZERO;
                                 for (RuntimeBase value : tempValues) {
-                                    checksum += ((RuntimeScalar) value).getLong();
+                                    RuntimeScalar scalar = (RuntimeScalar) value;
+                                    BigInteger valToAdd = scalar.getBigint();
+                                    // For unsigned formats (Q/J/L!), treat negative values as unsigned
+                                    boolean isUnsigned = (format == 'Q' || format == 'J' || format == 'L');
+                                    if (isUnsigned && valToAdd.signum() < 0) {
+                                        valToAdd = valToAdd.add(BigInteger.ONE.shiftLeft(64));
+                                    }
+                                    bigChecksum = bigChecksum.add(valToAdd);
+                                }
+
+                                // Apply bit mask
+                                if (checksumBits > 0 && checksumBits < 64) {
+                                    BigInteger mask = BigInteger.ONE.shiftLeft(checksumBits).subtract(BigInteger.ONE);
+                                    bigChecksum = bigChecksum.and(mask);
+                                }
+
+                                values.add(new RuntimeScalar(bigChecksum.longValue()));
+                            } else if (isFloatFormat) {
+                                // Use double for floating point checksums
+                                double checksum = 0.0;
+                                for (RuntimeBase value : tempValues) {
+                                    checksum += ((RuntimeScalar) value).getDouble();
+                                }
+
+                                // For floating point formats, apply modulo based on checksumBits
+                                // The default is 16 bits
+                                if (checksumBits <= 52) {  // Can be represented exactly as double
+                                    // Apply modulo based on checksumBits
+                                    double modulo = Math.pow(2, checksumBits);
+                                    double result = checksum % modulo;
+                                    // Handle negative results
+                                    if (result < 0) {
+                                        result += modulo;
+                                    }
+                                    values.add(new RuntimeScalar(result));
+                                } else {
+                                    // For large bit widths, don't apply modulo
+                                    values.add(new RuntimeScalar(checksum));
+                                }
+                            } else {
+                                // Use long for non-floating point checksums
+                                long checksum = 0;
+                                if (format == 'b' || format == 'B') {
+                                    // For binary formats, count 1 bits
+                                    for (RuntimeBase value : tempValues) {
+                                        String binary = value.toString();
+                                        for (int j = 0; j < binary.length(); j++) {
+                                            if (binary.charAt(j) == '1') {
+                                                checksum++;
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    // For other formats, sum the numeric values
+                                    for (RuntimeBase value : tempValues) {
+                                        checksum += ((RuntimeScalar) value).getLong();
+                                    }
+                                }
+
+                                // Apply bit mask at the very end like Perl (not during accumulation)
+                                if (checksumBits > 0 && checksumBits < 64) {
+                                    long mask = (1L << checksumBits) - 1;
+                                    checksum &= mask;
+                                }
+
+                                // Return the checksum value:
+                                // - For checksums that fit in an int, return as int
+                                // - For larger values or checksums with more than 32 bits, return as long
+                                if (checksumBits > 32 || checksum > Integer.MAX_VALUE || checksum < Integer.MIN_VALUE) {
+                                    values.add(new RuntimeScalar(checksum));
+                                } else {
+                                    values.add(new RuntimeScalar((int) checksum));
                                 }
                             }
-
-                            // Apply bit mask at the very end like Perl (not during accumulation)
-                            if (checksumBits > 0 && checksumBits < 64) {
-                                long mask = (1L << checksumBits) - 1;
-                                checksum &= mask;
-                            }
-
-                            // Return the checksum value:
-                            // - For checksums that fit in an int, return as int
-                            // - For larger values or checksums with more than 32 bits, return as long
-                            if (checksumBits > 32 || checksum > Integer.MAX_VALUE || checksum < Integer.MIN_VALUE) {
-                                values.add(new RuntimeScalar(checksum));
-                            } else {
-                                values.add(new RuntimeScalar((int) checksum));
-                            }
                         }
-                    }
                     }
                 } else {
                     handler.unpack(state, values, count, isStarCount);
@@ -594,12 +593,12 @@ public class Unpack {
                 }
                 // Check for standalone modifiers that should only appear after valid format characters
                 if (format == '<' || format == '>') {
-                    throw new PerlCompilerException("'" + format + "' allowed only after types " + 
-                        FormatModifierValidator.getValidFormatsForModifier(FormatModifierValidator.Modifier.LITTLE_ENDIAN) + " in unpack");
+                    throw new PerlCompilerException("'" + format + "' allowed only after types " +
+                            FormatModifierValidator.getValidFormatsForModifier(FormatModifierValidator.Modifier.LITTLE_ENDIAN) + " in unpack");
                 }
                 if (format == '!') {
-                    throw new PerlCompilerException("'!' allowed only after types " + 
-                        FormatModifierValidator.getValidFormatsForModifier(FormatModifierValidator.Modifier.NATIVE_SIZE) + " in unpack");
+                    throw new PerlCompilerException("'!' allowed only after types " +
+                            FormatModifierValidator.getValidFormatsForModifier(FormatModifierValidator.Modifier.NATIVE_SIZE) + " in unpack");
                 }
                 throw new PerlCompilerException("unpack: unsupported format character: " + format);
             }
@@ -619,23 +618,50 @@ public class Unpack {
 
     /**
      * Get the byte size of a format character for checksum calculations
-     * @param format The format character
+     *
+     * @param format        The format character
      * @param hasNativeSize Whether the format has native size modifier (!)
      * @return The size in bytes, or 0 for variable-size formats
      */
     private static int getFormatSize(char format, boolean hasNativeSize) {
         switch (format) {
-            case 'c': case 'C': case 'x': case 'X': case 'a': case 'A': case 'Z':
+            case 'c':
+            case 'C':
+            case 'x':
+            case 'X':
+            case 'a':
+            case 'A':
+            case 'Z':
                 return 1;
-            case 's': case 'S': case 'n': case 'v':
+            case 's':
+            case 'S':
+            case 'n':
+            case 'v':
                 return 2;
-            case 'i': case 'I': case 'f': case 'N': case 'V':
+            case 'i':
+            case 'I':
+            case 'f':
+            case 'N':
+            case 'V':
                 return 4;
-            case 'l': case 'L':
+            case 'l':
+            case 'L':
                 return hasNativeSize ? 8 : 4; // Native long is 8 bytes, regular long is 4
-            case 'q': case 'Q': case 'd': case 'j': case 'J':
+            case 'q':
+            case 'Q':
+            case 'd':
+            case 'j':
+            case 'J':
                 return 8;
-            case 'w': case 'u': case 'U': case 'p': case 'P': case 'b': case 'B': case 'h': case 'H':
+            case 'w':
+            case 'u':
+            case 'U':
+            case 'p':
+            case 'P':
+            case 'b':
+            case 'B':
+            case 'h':
+            case 'H':
                 return 0; // Variable size
             default:
                 return 0; // Unknown or variable size

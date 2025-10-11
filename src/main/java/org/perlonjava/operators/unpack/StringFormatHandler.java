@@ -36,7 +36,7 @@ public class StringFormatHandler implements FormatHandler {
 
             String str = sb.toString();
             str = processString(str);
-            
+
             // Pad if needed and not star count
             // Note: 'A' and 'Z' formats strip content, so don't pad them back!
             // Only 'a' format needs padding to maintain exact count
@@ -47,7 +47,7 @@ public class StringFormatHandler implements FormatHandler {
                 }
                 str = padded.toString();
             }
-            
+
             output.add(new RuntimeScalar(str));
         } else {
             // In byte mode, read from buffer

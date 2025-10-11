@@ -4,8 +4,6 @@ import org.perlonjava.runtime.RuntimeArray;
 import org.perlonjava.runtime.RuntimeList;
 import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.runtime.RuntimeScalarType;
-import org.perlonjava.runtime.WarningFlags;
-import org.perlonjava.perlmodule.Warnings;
 
 /**
  * The Re class provides functionalities similar to the Perl re module.

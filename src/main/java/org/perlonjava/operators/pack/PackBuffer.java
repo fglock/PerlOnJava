@@ -10,7 +10,7 @@ import java.util.List;
  * PackBuffer is a specialized buffer for pack operations that can store both:
  * - Raw bytes (from binary formats like N, V, etc.)
  * - Unicode character codes (from W/U formats)
- * 
+ * <p>
  * This allows proper UTF-8 flag handling when W format is mixed with binary formats.
  * When converted to a string with UTF-8 flag set, all values are interpreted as
  * Latin-1 characters (0x00-0xFF and Unicode > 255), matching Perl's utf8::upgrade behavior.
@@ -18,7 +18,7 @@ import java.util.List;
 public class PackBuffer {
     private final List<Integer> values = new ArrayList<>();
     private final List<Boolean> isCharacter = new ArrayList<>();
-    
+
     /**
      * Write a raw byte value (from binary formats like N, V, s, etc.)
      */
@@ -26,7 +26,7 @@ public class PackBuffer {
         values.add(b & 0xFF);
         isCharacter.add(false);
     }
-    
+
     /**
      * Write multiple raw bytes
      */
@@ -35,14 +35,14 @@ public class PackBuffer {
             writeByte(b);
         }
     }
-    
+
     /**
      * Write a single byte (ByteArrayOutputStream compatibility)
      */
     public void write(int b) {
         writeByte(b);
     }
-    
+
     /**
      * Write bytes from array (ByteArrayOutputStream compatibility)
      */
@@ -51,14 +51,14 @@ public class PackBuffer {
             writeByte(bytes[offset + i]);
         }
     }
-    
+
     /**
      * Write all bytes from array (ByteArrayOutputStream compatibility)
      */
     public void write(byte[] bytes) {
         writeBytes(bytes);
     }
-    
+
     /**
      * Write a Unicode character code (from W/U formats)
      * For characters 0-255, stored as-is
@@ -68,7 +68,7 @@ public class PackBuffer {
         values.add(codePoint);
         isCharacter.add(true);
     }
-    
+
     /**
      * Convert to byte array (for BYTE_STRING - no UTF-8 flag)
      */
@@ -90,7 +90,7 @@ public class PackBuffer {
         }
         return out.toByteArray();
     }
-    
+
     /**
      * Convert to String (for STRING - UTF-8 flag set)
      * Interprets all values as Latin-1 characters, matching Perl's utf8::upgrade
@@ -108,14 +108,14 @@ public class PackBuffer {
         }
         return sb.toString();
     }
-    
+
     /**
      * Get the size in bytes (for x[template] calculations)
      */
     public int size() {
         return values.size();
     }
-    
+
     /**
      * Reset the buffer (clear all data)
      * ByteArrayOutputStream compatibility method

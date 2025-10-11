@@ -165,7 +165,7 @@ public class RuntimeTransliterate {
         // 2. It's an empty string AND we have a replacement operation (not just counting)
         boolean hasReplacement = !replacementChars.isEmpty() || deleteUnmatched;
         boolean needsSet = !input.equals(resultString) || (input.isEmpty() && hasReplacement);
-        
+
         if (needsSet) {
             originalString.set(resultString);
         }
@@ -282,7 +282,7 @@ public class RuntimeTransliterate {
                             throw new PerlCompilerException("Ambiguous range in transliteration operator");
                         }
                     }
-                    
+
                     // We have a valid range
                     int start = currentChar.get(0);
                     int end = endChar.get(0);

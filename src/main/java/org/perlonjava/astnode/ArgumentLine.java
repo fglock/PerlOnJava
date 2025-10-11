@@ -17,9 +17,9 @@ public class ArgumentLine extends FormatLine {
     /**
      * Constructor for ArgumentLine.
      *
-     * @param content The raw text content of the line
+     * @param content     The raw text content of the line
      * @param expressions List of expression nodes for field values
-     * @param tokenIndex The token index in the source code
+     * @param tokenIndex  The token index in the source code
      */
     public ArgumentLine(String content, List<Node> expressions, int tokenIndex) {
         super(content, tokenIndex);

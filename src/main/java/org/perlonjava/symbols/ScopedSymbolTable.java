@@ -17,6 +17,8 @@ public class ScopedSymbolTable {
     // Mapping of warning and feature names to bit positions
     private static final Map<String, Integer> warningBitPositions = new HashMap<>();
     private static final Map<String, Integer> featureBitPositions = new HashMap<>();
+    // Global package version storage (static so it persists across all symbol table instances)
+    private static final Map<String, String> packageVersions = new HashMap<>();
 
     static {
         // Initialize warning bit positions
@@ -45,8 +47,6 @@ public class ScopedSymbolTable {
     private final Stack<String> subroutineStack = new Stack<>();
     // Cache for the getAllVisibleVariables method
     private Map<Integer, SymbolTable.SymbolEntry> visibleVariablesCache;
-    // Global package version storage (static so it persists across all symbol table instances)
-    private static final Map<String, String> packageVersions = new HashMap<>();
 
     /**
      * Constructs a ScopedSymbolTable.
@@ -103,6 +103,13 @@ public class ScopedSymbolTable {
             }
         }
         return result.toString();
+    }
+
+    /**
+     * Clears all package versions. Called during global initialization.
+     */
+    public static void clearPackageVersions() {
+        packageVersions.clear();
     }
 
     /**
@@ -332,22 +339,15 @@ public class ScopedSymbolTable {
     }
 
     /**
-     * Clears all package versions. Called during global initialization.
-     */
-    public static void clearPackageVersions() {
-        packageVersions.clear();
-    }
-
-    /**
      * Sets the version for a package.
      *
      * @param packageName The name of the package.
-     * @param version The version string.
+     * @param version     The version string.
      */
     public void setPackageVersion(String packageName, String version) {
         // Store in global map so version persists across scopes
         packageVersions.put(packageName, version);
-        
+
         // Also update the current package on the stack if it matches
         if (!packageStack.isEmpty()) {
             PackageInfo current = packageStack.peek();
@@ -357,7 +357,7 @@ public class ScopedSymbolTable {
             }
         }
     }
-    
+
     /**
      * Gets the version for a package.
      *

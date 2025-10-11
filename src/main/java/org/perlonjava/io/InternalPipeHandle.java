@@ -3,27 +3,33 @@ package org.perlonjava.io;
 import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.runtime.RuntimeScalarCache;
 
-import java.io.*;
+import java.io.IOException;
+import java.io.PipedInputStream;
+import java.io.PipedOutputStream;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeIO.handleIOException;
-import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarFalse;
+import static org.perlonjava.runtime.RuntimeScalarCache.*;
 
 /**
  * Internal pipe handle for implementing the pipe() operator.
  * This creates a pair of connected pipes for inter-thread communication.
  */
 public class InternalPipeHandle implements IOHandle {
-    
+
     private final PipedInputStream inputStream;
     private final PipedOutputStream outputStream;
     private final boolean isReader;
     private boolean isClosed = false;
     private boolean isEOF = false;
+
+    private InternalPipeHandle(PipedInputStream inputStream, PipedOutputStream outputStream, boolean isReader) {
+        this.inputStream = inputStream;
+        this.outputStream = outputStream;
+        this.isReader = isReader;
+    }
 
     /**
      * Creates a reader end of an internal pipe.
@@ -39,18 +45,12 @@ public class InternalPipeHandle implements IOHandle {
         return new InternalPipeHandle(null, outputStream, false);
     }
 
-    private InternalPipeHandle(PipedInputStream inputStream, PipedOutputStream outputStream, boolean isReader) {
-        this.inputStream = inputStream;
-        this.outputStream = outputStream;
-        this.isReader = isReader;
-    }
-
     @Override
     public RuntimeScalar doRead(int maxBytes, Charset charset) {
         if (!isReader) {
             return handleIOException(new IOException("Cannot read from write end of pipe"), "read from pipe writer failed");
         }
-        
+
         if (isClosed || isEOF) {
             return new RuntimeScalar("");
         }
@@ -78,7 +78,7 @@ public class InternalPipeHandle implements IOHandle {
         if (isReader) {
             return handleIOException(new IOException("Cannot write to read end of pipe"), "write to pipe reader failed");
         }
-        
+
         if (isClosed) {
             return handleIOException(new IOException("Cannot write to closed pipe"), "write to closed pipe failed");
         }
@@ -133,7 +133,7 @@ public class InternalPipeHandle implements IOHandle {
         if (isReader) {
             return scalarTrue; // Flush is no-op for readers
         }
-        
+
         if (isClosed) {
             return scalarFalse;
         }
@@ -164,7 +164,7 @@ public class InternalPipeHandle implements IOHandle {
             getGlobalVariable("main::!").set("Cannot sysread from write end of pipe");
             return new RuntimeScalar(); // undef
         }
-        
+
         if (isClosed || isEOF) {
             return new RuntimeScalar("");
         }

@@ -10,17 +10,21 @@ import org.snakeyaml.engine.v2.api.LoadSettings;
 import org.snakeyaml.engine.v2.common.FlowStyle;
 import org.snakeyaml.engine.v2.schema.CoreSchema;
 
-import java.io.*;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.*;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
-import static org.perlonjava.runtime.RuntimeScalarCache.*;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
 
 /**
  * Storable module implementation using YAML with type tags for blessed objects.
- * 
+ * <p>
  * This elegant approach leverages YAML's !! type tag system for object serialization:
  * - Uses !!perl/hash:ClassName for blessed objects
  * - Leverages YAML's built-in circular reference handling (anchors & aliases)
@@ -49,9 +53,9 @@ public class Storable extends PerlModuleBase {
             storable.registerMethod("retrieve", null);
             storable.registerMethod("nstore", null);
             storable.registerMethod("dclone", null);
-            
+
             storable.defineExport("EXPORT", "store", "retrieve", "nstore", "freeze", "thaw", "nfreeze", "dclone");
-            
+
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Storable method: " + e.getMessage());
         }
@@ -64,7 +68,7 @@ public class Storable extends PerlModuleBase {
         if (args.isEmpty()) {
             return WarnDie.die(new RuntimeScalar("freeze: not enough arguments"), new RuntimeScalar("\n")).getList();
         }
-        
+
         try {
             RuntimeScalar data = args.get(0);
             String yaml = serializeToYAML(data);
@@ -82,7 +86,7 @@ public class Storable extends PerlModuleBase {
         if (args.isEmpty()) {
             return WarnDie.die(new RuntimeScalar("thaw: not enough arguments"), new RuntimeScalar("\n")).getList();
         }
-        
+
         try {
             RuntimeScalar frozen = args.get(0);
             String yaml = decompressString(frozen.toString());
@@ -107,14 +111,14 @@ public class Storable extends PerlModuleBase {
         if (args.size() < 2) {
             return WarnDie.die(new RuntimeScalar("store: not enough arguments"), new RuntimeScalar("\n")).getList();
         }
-        
+
         try {
             RuntimeScalar data = args.get(0);
             String filename = args.get(1).toString();
-            
+
             String yaml = serializeToYAML(data);
-            Files.write(new File(filename).toPath(), yaml.getBytes("UTF-8"));
-            
+            Files.write(new File(filename).toPath(), yaml.getBytes(StandardCharsets.UTF_8));
+
             return scalarTrue.getList();
         } catch (Exception e) {
             return WarnDie.die(new RuntimeScalar("store failed: " + e.getMessage()), new RuntimeScalar("\n")).getList();
@@ -128,11 +132,11 @@ public class Storable extends PerlModuleBase {
         if (args.isEmpty()) {
             return WarnDie.die(new RuntimeScalar("retrieve: not enough arguments"), new RuntimeScalar("\n")).getList();
         }
-        
+
         try {
             String filename = args.get(0).toString();
-            String yaml = new String(Files.readAllBytes(new File(filename).toPath()), "UTF-8");
-            
+            String yaml = new String(Files.readAllBytes(new File(filename).toPath()), StandardCharsets.UTF_8);
+
             RuntimeScalar data = deserializeFromYAML(yaml);
             return data.getList();
         } catch (Exception e) {
@@ -154,7 +158,7 @@ public class Storable extends PerlModuleBase {
         if (args.isEmpty()) {
             return WarnDie.die(new RuntimeScalar("dclone: not enough arguments"), new RuntimeScalar("\n")).getList();
         }
-        
+
         try {
             RuntimeScalar data = args.get(0);
             String yaml = serializeToYAML(data);
@@ -170,10 +174,10 @@ public class Storable extends PerlModuleBase {
      */
     private static String serializeToYAML(RuntimeScalar data) {
         DumpSettings settings = DumpSettings.builder()
-            .setDefaultFlowStyle(FlowStyle.BLOCK)
-            .setSchema(new CoreSchema())
-            .build();
-            
+                .setDefaultFlowStyle(FlowStyle.BLOCK)
+                .setSchema(new CoreSchema())
+                .build();
+
         Dump dump = new Dump(settings);
         IdentityHashMap<Object, Object> seen = new IdentityHashMap<>();
         Object yamlObject = convertToYAMLWithTags(data, seen);
@@ -185,9 +189,9 @@ public class Storable extends PerlModuleBase {
      */
     private static RuntimeScalar deserializeFromYAML(String yaml) {
         LoadSettings settings = LoadSettings.builder()
-            .setSchema(new CoreSchema())
-            .build();
-            
+                .setSchema(new CoreSchema())
+                .build();
+
         Load load = new Load(settings);
         Object yamlObject = load.loadFromString(yaml);
         IdentityHashMap<Object, RuntimeScalar> seen = new IdentityHashMap<>();
@@ -200,11 +204,11 @@ public class Storable extends PerlModuleBase {
     @SuppressWarnings("unchecked")
     private static Object convertToYAMLWithTags(RuntimeScalar scalar, IdentityHashMap<Object, Object> seen) {
         if (scalar == null) return null;
-        
+
         if (scalar.value != null && seen.containsKey(scalar.value)) {
             return seen.get(scalar.value);
         }
-        
+
         // Check if blessed object
         int blessId = RuntimeScalarType.blessedId(scalar);
         if (blessId != 0) {
@@ -213,7 +217,7 @@ public class Storable extends PerlModuleBase {
             taggedObject.put("!!perl/hash:" + className, convertScalarValue(scalar, seen));
             return taggedObject;
         }
-        
+
         return convertScalarValue(scalar, seen);
     }
 
@@ -230,7 +234,7 @@ public class Storable extends PerlModuleBase {
                 seen.put(scalar.value, map);
                 RuntimeHash hash = (RuntimeHash) scalar.value;
                 hash.elements.forEach((key, value) ->
-                    map.put(key, convertToYAMLWithTags(value, seen)));
+                        map.put(key, convertToYAMLWithTags(value, seen)));
                 yield map;
             }
             case RuntimeScalarType.ARRAYREFERENCE -> {
@@ -282,11 +286,11 @@ public class Storable extends PerlModuleBase {
     @SuppressWarnings("unchecked")
     private static RuntimeScalar convertFromYAMLWithTags(Object yaml, IdentityHashMap<Object, RuntimeScalar> seen) {
         if (yaml == null) return new RuntimeScalar();
-        
+
         if (seen.containsKey(yaml)) {
             return seen.get(yaml);
         }
-        
+
         return switch (yaml) {
             case Map<?, ?> map -> {
                 // Check for type tags
@@ -308,13 +312,13 @@ public class Storable extends PerlModuleBase {
                         yield new RuntimeScalar();
                     }
                 }
-                
+
                 // Regular hash
                 RuntimeHash hash = new RuntimeHash();
                 RuntimeScalar hashRef = hash.createReference();
                 seen.put(yaml, hashRef);
                 map.forEach((key, value) ->
-                    hash.put(key.toString(), convertFromYAMLWithTags(value, seen)));
+                        hash.put(key.toString(), convertFromYAMLWithTags(value, seen)));
                 yield hashRef;
             }
             case List<?> list -> {
@@ -322,7 +326,7 @@ public class Storable extends PerlModuleBase {
                 RuntimeScalar arrayRef = array.createReference();
                 seen.put(yaml, arrayRef);
                 list.forEach(item ->
-                    array.elements.add(convertFromYAMLWithTags(item, seen)));
+                        array.elements.add(convertFromYAMLWithTags(item, seen)));
                 yield arrayRef;
             }
             case String s -> new RuntimeScalar(s);
@@ -337,7 +341,7 @@ public class Storable extends PerlModuleBase {
     private static String compressString(String input) throws IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         try (GZIPOutputStream gzos = new GZIPOutputStream(baos)) {
-            gzos.write(input.getBytes("UTF-8"));
+            gzos.write(input.getBytes(StandardCharsets.UTF_8));
         }
         return Base64.getEncoder().encodeToString(baos.toByteArray());
     }
@@ -345,7 +349,7 @@ public class Storable extends PerlModuleBase {
     private static String decompressString(String compressed) throws IOException {
         byte[] bytes = Base64.getDecoder().decode(compressed);
         try (GZIPInputStream gzis = new GZIPInputStream(new ByteArrayInputStream(bytes))) {
-            return new String(gzis.readAllBytes(), "UTF-8");
+            return new String(gzis.readAllBytes(), StandardCharsets.UTF_8);
         }
     }
 }

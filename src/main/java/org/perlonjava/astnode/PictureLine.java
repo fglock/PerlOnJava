@@ -12,7 +12,7 @@ public class PictureLine extends FormatLine {
      * List of format fields found in this picture line
      */
     public final List<FormatField> fields;
-    
+
     /**
      * The literal text portions between fields
      */
@@ -21,10 +21,10 @@ public class PictureLine extends FormatLine {
     /**
      * Constructor for PictureLine.
      *
-     * @param content The raw text content of the line
-     * @param fields List of format fields in this line
+     * @param content     The raw text content of the line
+     * @param fields      List of format fields in this line
      * @param literalText The literal text with field placeholders
-     * @param tokenIndex The token index in the source code
+     * @param tokenIndex  The token index in the source code
      */
     public PictureLine(String content, List<FormatField> fields, String literalText, int tokenIndex) {
         super(content, tokenIndex);

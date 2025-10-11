@@ -45,8 +45,8 @@ public class EmitOperatorDeleteExists {
                             return;
                         }
                         if (operatorNode.operand instanceof BlockNode blockNode &&
-                            blockNode.elements.size() == 1 &&
-                            blockNode.elements.get(0) instanceof StringNode stringNode) {
+                                blockNode.elements.size() == 1 &&
+                                blockNode.elements.get(0) instanceof StringNode stringNode) {
                             // exists/defined &{"string"} - literal string
                             handleExistsSubroutineWithPackage(emitterVisitor, operator, stringNode);
                             return;
@@ -61,8 +61,8 @@ public class EmitOperatorDeleteExists {
                     // Handle original &{string} pattern for defined/exists/delete operators (no transformation)
                     if ((operator.equals("defined") || operator.equals("exists") || operator.equals("delete")) && operatorNode.operator.equals("&")) {
                         if (operatorNode.operand instanceof BlockNode blockNode &&
-                            blockNode.elements.size() == 1 &&
-                            blockNode.elements.get(0) instanceof StringNode stringNode) {
+                                blockNode.elements.size() == 1 &&
+                                blockNode.elements.get(0) instanceof StringNode stringNode) {
                             // Handle original &{string} pattern with proper package name resolution
                             // For defined/exists/delete(&{string}), this checks actual existence
                             handleExistsSubroutineWithPackage(emitterVisitor, operator, stringNode);
@@ -71,11 +71,11 @@ public class EmitOperatorDeleteExists {
                     }
                     // Handle transformed \&{string} pattern for defined operator only
                     if (operator.equals("defined") && operatorNode.operator.equals("\\")) {
-                        if (operatorNode.operand instanceof OperatorNode innerOperatorNode && 
-                            innerOperatorNode.operator.equals("&") &&
-                            innerOperatorNode.operand instanceof BlockNode blockNode &&
-                            blockNode.elements.size() == 1 &&
-                            blockNode.elements.get(0) instanceof StringNode stringNode) {
+                        if (operatorNode.operand instanceof OperatorNode innerOperatorNode &&
+                                innerOperatorNode.operator.equals("&") &&
+                                innerOperatorNode.operand instanceof BlockNode blockNode &&
+                                blockNode.elements.size() == 1 &&
+                                blockNode.elements.get(0) instanceof StringNode stringNode) {
                             // Handle transformed \&{string} pattern with proper package name resolution
                             handleExistsSubroutineWithPackage(emitterVisitor, operator, stringNode);
                             return;
@@ -145,7 +145,7 @@ public class EmitOperatorDeleteExists {
                 }
             }
         }
-        
+
         // If we reach here, it means we have an exists/defined/delete pattern that we don't specifically handle
         // (like exists(&{$variable}) where the content is evaluated at runtime)
         // For now, we'll throw an exception with a more helpful message
@@ -187,8 +187,8 @@ public class EmitOperatorDeleteExists {
                             return;
                         }
                         if (operatorNode.operand instanceof BlockNode blockNode &&
-                            blockNode.elements.size() == 1 &&
-                            blockNode.elements.get(0) instanceof StringNode stringNode) {
+                                blockNode.elements.size() == 1 &&
+                                blockNode.elements.get(0) instanceof StringNode stringNode) {
                             // defined &{"string"} - BlockNode containing StringNode
                             handleExistsSubroutineWithPackage(emitterVisitor, operator, stringNode);
                             return;
@@ -247,13 +247,13 @@ public class EmitOperatorDeleteExists {
         // Handle transformed \&{string} pattern with proper package name resolution
         // This directly calls the string-based method with package name, avoiding the RuntimeCode conversion
         MethodVisitor mv = emitterVisitor.ctx.mv;
-        
+
         // Create a RuntimeScalar from the string value
         stringNode.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        
+
         // Push the current package name onto the stack
         emitterVisitor.pushCurrentPackage();
-        
+
         // Call the package-aware method
         mv.visitMethodInsn(
                 Opcodes.INVOKESTATIC,
@@ -261,7 +261,7 @@ public class EmitOperatorDeleteExists {
                 operator + "GlobalCodeRefAsScalar",
                 "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
                 false);
-        
+
         EmitOperator.handleVoidContext(emitterVisitor);
     }
 
@@ -271,15 +271,15 @@ public class EmitOperatorDeleteExists {
      */
     private static void handleExistsSubroutineWithDynamicName(EmitterVisitor emitterVisitor, String operator, BlockNode blockNode) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
-        
+
         // Evaluate the expression inside the block to get the method name as a scalar
         if (blockNode.elements.size() == 1) {
             Node expression = blockNode.elements.get(0);
             expression.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-            
+
             // Push current package for context
             emitterVisitor.pushCurrentPackage();
-            
+
             // Call the runtime method to handle dynamic method name resolution
             mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/GlobalVariable", operator + "GlobalCodeRefAsScalar", "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
             EmitOperator.handleVoidContext(emitterVisitor);
@@ -296,10 +296,10 @@ public class EmitOperatorDeleteExists {
                     element.accept(emitterVisitor.with(RuntimeContextType.VOID));
                 }
             }
-            
+
             // Push current package for context
             emitterVisitor.pushCurrentPackage();
-            
+
             // Call the runtime method to handle dynamic method name resolution
             mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/GlobalVariable", operator + "GlobalCodeRefAsScalar", "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
             EmitOperator.handleVoidContext(emitterVisitor);

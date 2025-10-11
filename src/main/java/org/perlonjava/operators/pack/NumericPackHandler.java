@@ -2,8 +2,6 @@ package org.perlonjava.operators.pack;
 
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeScalar;
-import org.perlonjava.runtime.ScalarUtils;
-
 
 import java.math.BigInteger;
 import java.util.List;
@@ -17,7 +15,7 @@ public class NumericPackHandler implements PackFormatHandler {
     public NumericPackHandler(char format) {
         this.format = format;
     }
-    
+
     /**
      * Get the 64-bit value for unsigned formats Q and J.
      * Handles large unsigned values that might be stored as strings or doubles.
@@ -25,7 +23,7 @@ public class NumericPackHandler implements PackFormatHandler {
     private static long getUnsigned64BitValue(RuntimeScalar value) {
         // For string values, try to parse as exact integer
         if (value.type == org.perlonjava.runtime.RuntimeScalarType.STRING ||
-            value.type == org.perlonjava.runtime.RuntimeScalarType.BYTE_STRING) {
+                value.type == org.perlonjava.runtime.RuntimeScalarType.BYTE_STRING) {
             String str = value.toString();
             try {
                 // Remove scientific notation marker if present
@@ -38,7 +36,7 @@ public class NumericPackHandler implements PackFormatHandler {
                 // Fall through to double handling
             }
         }
-        
+
         // For doubles, handle values > Long.MAX_VALUE specially
         if (value.type == org.perlonjava.runtime.RuntimeScalarType.DOUBLE) {
             double d = value.getDouble();
@@ -48,18 +46,18 @@ public class NumericPackHandler implements PackFormatHandler {
                 return -1L; // 0xFFFFFFFFFFFFFFFF
             } else if (d >= 9223372036854775808.0) { // >= 2^63
                 // Map to negative range
-                return (long)(d - 18446744073709551616.0); // Subtract 2^64
+                return (long) (d - 18446744073709551616.0); // Subtract 2^64
             } else {
                 return (long) d;
             }
         }
-        
+
         // For other types, use getLong()
         return value.getLong();
     }
 
     @Override
-    public int pack(List<RuntimeScalar> values, int valueIndex, int count, boolean hasStar, 
+    public int pack(List<RuntimeScalar> values, int valueIndex, int count, boolean hasStar,
                     ParsedModifiers modifiers, PackBuffer output) {
         for (int j = 0; j < count; j++) {
             RuntimeScalar value;
@@ -173,24 +171,24 @@ public class NumericPackHandler implements PackFormatHandler {
                     RuntimeScalar numericValue = value.getNumber();
                     double doubleValue = numericValue.getDouble();
                     String stringValue = value.toString();
-                    
+
                     // Check for NaN or Infinity (invalid for BER compression)
                     if (Double.isNaN(doubleValue) || Double.isInfinite(doubleValue)) {
                         throw new PerlCompilerException("Can only compress unsigned integers");
                     }
-                    
+
                     // Check for negative values after conversion
                     if (doubleValue < 0) {
                         throw new PerlCompilerException("Cannot compress negative numbers");
                     }
-                    
+
                     // Special case: reject strings that look like malformed scientific notation
                     // The test case '11111111111e0' should be rejected because it represents
                     // a very large integer in a form that Perl considers invalid for BER
                     if (stringValue.matches("\\d{10,}e0")) {
                         throw new PerlCompilerException("Can only compress unsigned integers");
                     }
-                    
+
                     // Special handling for values near 2**54 that may have lost precision
                     // This fixes test 31 where 2**54+3 and 2**54-2 become equal due to precision loss
                     if (doubleValue >= 1.8014398509481984E16 && doubleValue <= 1.8014398509481988E16) {

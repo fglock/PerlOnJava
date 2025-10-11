@@ -2,22 +2,18 @@ package org.perlonjava.operators.pack;
 
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeScalar;
-import org.perlonjava.runtime.RuntimeList;
-import org.perlonjava.runtime.RuntimeScalarType;
 
-
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 /**
  * Helper utility class for Perl's pack operation.
- * 
+ *
  * <p>This class provides various utility methods to support the pack operation,
  * which converts a list of values into a binary string according to a template.
  * The pack operation is the counterpart to unpack and is used for creating
  * binary data structures, network protocols, and file formats.</p>
- * 
+ *
  * <p>Key functionality includes:</p>
  * <ul>
  *   <li>Format validation and type checking</li>
@@ -26,7 +22,7 @@ import java.util.List;
  *   <li>Unicode and UTF-8 encoding support</li>
  *   <li>Endianness conflict detection</li>
  * </ul>
- * 
+ *
  * @see org.perlonjava.operators.Pack
  * @see org.perlonjava.operators.Unpack
  */
@@ -34,32 +30,33 @@ public class PackHelper {
 
     /**
      * Check if the format is an integer format that should reject Inf/NaN values.
-     * 
+     *
      * <p>Integer formats in Perl's pack operation cannot handle infinite or
      * NaN (Not a Number) values and should throw exceptions when such values
      * are encountered.</p>
-     * 
+     *
      * @param format the pack format character to check
      * @return true if the format is an integer format, false otherwise
      */
     public static boolean isIntegerFormat(char format) {
         return switch (format) {
-            case 'c', 'C', 's', 'S', 'l', 'L', 'i', 'I', 'n', 'N', 'v', 'V', 'w', 'W', 'q', 'Q', 'j', 'J', 'U', 'Z' -> true;
+            case 'c', 'C', 's', 'S', 'l', 'L', 'i', 'I', 'n', 'N', 'v', 'V', 'w', 'W', 'q', 'Q', 'j', 'J', 'U', 'Z' ->
+                    true;
             default -> false;
         };
     }
 
     /**
      * Check if a format at the given position is part of a '/' construct.
-     * 
+     *
      * <p>In Perl's pack templates, the '/' construct allows using the result
      * of one format as the count for another format. For example, in "n/a*",
      * the 'n' format provides the count for the 'a' format that follows.</p>
-     * 
+     *
      * <p>This method analyzes the template to determine if a format character
      * is part of such a construct by looking ahead for modifiers, counts,
      * and the '/' separator.</p>
-     * 
+     *
      * @param template The complete pack template string
      * @param position The position of the format character to check
      * @return The position of '/' if found, or -1 if not part of '/' construct
@@ -67,7 +64,7 @@ public class PackHelper {
     public static int checkForSlashConstruct(String template, int position) {
         int lookAhead = position + 1;
         char format = template.charAt(position);
-        
+
         // Only numeric formats or string formats (a, A, Z) can be used before a slash
         if (!isNumericFormat(format) && format != 'a' && format != 'A' && format != 'Z') {
             return -1;
@@ -100,7 +97,7 @@ public class PackHelper {
                 }
             }
         }
-        
+
         // Skip whitespace after format/count
         while (lookAhead < template.length() && Character.isWhitespace(template.charAt(lookAhead))) {
             lookAhead++;
@@ -113,11 +110,11 @@ public class PackHelper {
             while (afterSlash < template.length() && Character.isWhitespace(template.charAt(afterSlash))) {
                 afterSlash++;
             }
-            
+
             if (afterSlash >= template.length()) {
                 return -1; // No format after '/'
             }
-            
+
             // Valid slash construct - the format after '/' will be validated by main Pack loop
             return lookAhead;
         }
@@ -127,12 +124,12 @@ public class PackHelper {
 
     /**
      * Handle string format processing for pack operations.
-     * 
+     *
      * <p>String formats (a, A, Z, b, B, h, H, u) in pack templates consume
      * exactly one value from the input list, regardless of the repeat count.
      * This method processes the string value and writes it to the output
      * according to the specified format and count.</p>
-     * 
+     *
      * <p>Special handling includes:</p>
      * <ul>
      *   <li>Using empty string when no more values are available</li>
@@ -140,14 +137,14 @@ public class PackHelper {
      *   <li>Proper null termination for 'Z' format</li>
      *   <li>Byte mode considerations for 'a' format</li>
      * </ul>
-     * 
+     *
      * @param valueIndex current index in the values list
-     * @param values list of input values to pack
-     * @param hasStar true if the format uses '*' as count
-     * @param format the string format character (a, A, Z, etc.)
-     * @param count the repeat count for the format
-     * @param byteMode true if operating in byte mode
-     * @param output the output stream to write packed data
+     * @param values     list of input values to pack
+     * @param hasStar    true if the format uses '*' as count
+     * @param format     the string format character (a, A, Z, etc.)
+     * @param count      the repeat count for the format
+     * @param byteMode   true if operating in byte mode
+     * @param output     the output stream to write packed data
      * @return updated value index after consuming the string value
      */
     public static int handleStringFormat(int valueIndex, List<RuntimeScalar> values, boolean hasStar, char format, int count, boolean byteMode, PackBuffer output) {
@@ -178,19 +175,19 @@ public class PackHelper {
 
     /**
      * Handle infinite and NaN values for integer formats.
-     * 
+     *
      * <p>Integer pack formats cannot handle infinite or NaN values.
      * This method checks for these special floating-point values and
      * throws appropriate exceptions with descriptive error messages.</p>
-     * 
+     *
      * <p>Recognized infinite/NaN representations:</p>
      * <ul>
      *   <li>"Inf", "+Inf", "Infinity" - positive infinity</li>
      *   <li>"-Inf", "-Infinity" - negative infinity</li>
      *   <li>"NaN" - Not a Number</li>
      * </ul>
-     * 
-     * @param value the scalar value to check
+     *
+     * @param value  the scalar value to check
      * @param format the pack format character (used for error messages)
      * @throws PerlCompilerException if the value is infinite or NaN
      */
@@ -219,12 +216,12 @@ public class PackHelper {
 
     /**
      * Pack a value using the 'w' format (BER compressed integer).
-     * 
+     *
      * <p>The 'w' format packs an unsigned integer using BER (Basic Encoding Rules)
      * compression. For Unicode characters, this method encodes them as UTF-8.
      * Values beyond the Unicode range are wrapped to fit within valid Unicode
      * code points.</p>
-     * 
+     *
      * <p>Processing logic:</p>
      * <ul>
      *   <li>If input is a character, use its code point</li>
@@ -232,7 +229,7 @@ public class PackHelper {
      *   <li>Valid Unicode code points are encoded as UTF-8</li>
      *   <li>Invalid code points are wrapped to valid range</li>
      * </ul>
-     * 
+     *
      * @param value the scalar value to pack
      * @param output the output stream to write packed data
      * @throws RuntimeException if I/O error occurs during writing
@@ -241,17 +238,17 @@ public class PackHelper {
      * Pack a wide character using the 'W' format.
      * W format is like U format but without Unicode range validation.
      * It accepts any integer value and stores it as UTF-8 bytes.
-     * 
-     * @param value the scalar value to pack
-     * @param byteMode whether we are in byte mode
+     *
+     * @param value                  the scalar value to pack
+     * @param byteMode               whether we are in byte mode
      * @param hasUnicodeInNormalMode whether we have already used Unicode in normal mode
-     * @param output the output stream to write packed data
+     * @param output                 the output stream to write packed data
      * @return whether we have used Unicode in normal mode
      */
     public static boolean packW(RuntimeScalar value, boolean byteMode, boolean hasUnicodeInNormalMode, PackBuffer output) {
         // Check for Inf/NaN first, before any other processing
         handleInfinity(value, 'W');
-        
+
         int codePoint;
         String strValue = value.toString();
         if (!strValue.isEmpty() && !Character.isDigit(strValue.charAt(0))) {
@@ -303,12 +300,12 @@ public class PackHelper {
 
     /**
      * Pack a Unicode character using the 'U' format.
-     * 
+     *
      * <p>The 'U' format packs Unicode code points as UTF-8 encoded bytes.
      * This method handles both character and numeric inputs, validates
      * Unicode code points, and tracks whether Unicode is used in normal
      * (non-byte) mode for proper string conversion.</p>
-     * 
+     *
      * <p>Processing steps:</p>
      * <ul>
      *   <li>Extract code point from character or numeric input</li>
@@ -316,20 +313,20 @@ public class PackHelper {
      *   <li>Encode as UTF-8 and write to output stream</li>
      *   <li>Track Unicode usage in normal mode</li>
      * </ul>
-     * 
-     * @param value the scalar value containing the Unicode code point
-     * @param byteMode true if operating in byte mode
+     *
+     * @param value                  the scalar value containing the Unicode code point
+     * @param byteMode               true if operating in byte mode
      * @param hasUnicodeInNormalMode current state of Unicode usage tracking
-     * @param output the output stream to write UTF-8 encoded bytes
+     * @param output                 the output stream to write UTF-8 encoded bytes
      * @return updated Unicode usage state for normal mode
      * @throws PerlCompilerException if the code point is invalid
-     * @throws RuntimeException if I/O error occurs during writing
+     * @throws RuntimeException      if I/O error occurs during writing
      */
     public static boolean packU(RuntimeScalar value, boolean byteMode, boolean hasUnicodeInNormalMode, PackBuffer output) {
         // Pack a Unicode character number as UTF-8
         // Check for Inf/NaN first, before any other processing
         handleInfinity(value, 'U');
-        
+
         int codePoint1;
         String strValue1 = value.toString();
         if (!strValue1.isEmpty() && !Character.isDigit(strValue1.charAt(0))) {
@@ -366,18 +363,18 @@ public class PackHelper {
 
     /**
      * Handles a Unicode format.
-     * 
-     * @param values The list of values to pack
-     * @param valueIndex The current index in the values list
-     * @param count The repeat count
-     * @param byteMode Whether we are in byte mode
+     *
+     * @param values                 The list of values to pack
+     * @param valueIndex             The current index in the values list
+     * @param count                  The repeat count
+     * @param byteMode               Whether we are in byte mode
      * @param hasUnicodeInNormalMode Whether we have already used Unicode in normal mode
-     * @param output The output stream
+     * @param output                 The output stream
      * @return Whether we have used Unicode in normal mode
      */
     public static boolean handleUnicode(List<RuntimeScalar> values, int valueIndex, int count,
-                                         boolean byteMode, boolean hasUnicodeInNormalMode,
-                                         PackBuffer output) {
+                                        boolean byteMode, boolean hasUnicodeInNormalMode,
+                                        PackBuffer output) {
         for (int j = 0; j < count; j++) {
             RuntimeScalar value;
             if (valueIndex + j >= values.size()) {
@@ -394,18 +391,18 @@ public class PackHelper {
     /**
      * Handles a wide character format (W).
      * W format is like U format but without Unicode range validation.
-     * 
-     * @param values The list of values to pack
-     * @param valueIndex The current index in the values list
-     * @param count The repeat count
-     * @param byteMode Whether we are in byte mode
+     *
+     * @param values                 The list of values to pack
+     * @param valueIndex             The current index in the values list
+     * @param count                  The repeat count
+     * @param byteMode               Whether we are in byte mode
      * @param hasUnicodeInNormalMode Whether we have already used Unicode in normal mode
-     * @param output The output stream
+     * @param output                 The output stream
      * @return Whether we have used Unicode in normal mode
      */
     public static boolean handleWideCharacter(List<RuntimeScalar> values, int valueIndex, int count,
-                                               boolean byteMode, boolean hasUnicodeInNormalMode,
-                                               PackBuffer output) {
+                                              boolean byteMode, boolean hasUnicodeInNormalMode,
+                                              PackBuffer output) {
         for (int j = 0; j < count; j++) {
             RuntimeScalar value;
             if (valueIndex + j >= values.size()) {
@@ -421,10 +418,10 @@ public class PackHelper {
 
     /**
      * Packs the length of a string according to the specified format.
-     * 
-     * @param output The output stream
-     * @param format The format character
-     * @param length The length to pack
+     *
+     * @param output    The output stream
+     * @param format    The format character
+     * @param length    The length to pack
      * @param modifiers The modifiers for the format
      */
     public static void packLength(PackBuffer output, char format, int length, ParsedModifiers modifiers) {
@@ -500,11 +497,11 @@ public class PackHelper {
 
     /**
      * Count the number of values needed to satisfy a pack template.
-     * 
+     *
      * <p>This method analyzes a pack template to determine how many input
      * values will be consumed during the pack operation. This is essential
      * for validating that sufficient arguments are provided.</p>
-     * 
+     *
      * <p>Counting rules:</p>
      * <ul>
      *   <li>String formats (a, A, Z, etc.) consume exactly 1 value</li>
@@ -514,7 +511,7 @@ public class PackHelper {
      *   <li>Formats with '*' count return Integer.MAX_VALUE</li>
      *   <li>Formats in N/ constructs don't consume values</li>
      * </ul>
-     * 
+     *
      * @param template the pack template string to analyze
      * @return number of values needed, or Integer.MAX_VALUE if unlimited
      */
@@ -663,21 +660,21 @@ public class PackHelper {
 
     /**
      * Check if a group has conflicting endianness modifiers.
-     * 
+     *
      * <p>In pack templates, groups can have endianness modifiers (&lt; for little-endian,
      * &gt; for big-endian) that apply to all formats within the group. This method
      * detects conflicts where individual formats within the group specify
      * different endianness than the group's setting.</p>
-     * 
+     *
      * <p>Conflict detection includes:</p>
      * <ul>
      *   <li>Direct format modifiers conflicting with group endianness</li>
      *   <li>Nested groups with conflicting endianness</li>
      *   <li>Recursive checking of nested group contents</li>
      * </ul>
-     * 
+     *
      * @param groupContent the content inside the group parentheses
-     * @param groupEndian the endianness modifier for the group ('&lt;' or '&gt;')
+     * @param groupEndian  the endianness modifier for the group ('&lt;' or '&gt;')
      * @return true if conflicting endianness is detected, false otherwise
      */
     public static boolean hasConflictingEndianness(String groupContent, char groupEndian) {
@@ -727,13 +724,13 @@ public class PackHelper {
 
     /**
      * Find the position of the closing parenthesis that matches an opening parenthesis.
-     * 
+     *
      * <p>This method performs balanced parenthesis matching to find the closing
      * parenthesis that corresponds to an opening parenthesis at the specified
      * position. It properly handles nested groups by tracking the nesting depth.</p>
-     * 
+     *
      * @param template the pack template string
-     * @param openPos the position of the opening parenthesis
+     * @param openPos  the position of the opening parenthesis
      * @return the position of the matching closing parenthesis, or -1 if not found
      */
     public static int findMatchingParen(String template, int openPos) {
@@ -750,11 +747,11 @@ public class PackHelper {
 
     /**
      * Check if a format character represents a numeric format.
-     * 
+     *
      * <p>Numeric formats in pack templates represent various integer and
      * floating-point types with different sizes and byte orders. This method
      * identifies which format characters are considered numeric.</p>
-     * 
+     *
      * <p>Numeric formats include:</p>
      * <ul>
      *   <li>c, C - signed/unsigned char</li>
@@ -768,7 +765,7 @@ public class PackHelper {
      *   <li>j, J - signed/unsigned intmax</li>
      *   <li>Z - null-terminated string (can be used as count)</li>
      * </ul>
-     * 
+     *
      * @param format the format character to check
      * @return true if the format is numeric, false otherwise
      */

@@ -2,9 +2,7 @@ package org.perlonjava.regex;
 
 import org.perlonjava.operators.WarnDie;
 import org.perlonjava.runtime.*;
-import org.perlonjava.runtime.GlobalContext; // Add this import
 
-import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -87,7 +85,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         RuntimeRegex regex = regexCache.get(cacheKey);
         if (regex == null) {
             regex = new RuntimeRegex();
-            
+
             if (patternString != null && patternString.contains("\\Q")) {
                 patternString = escapeQ(patternString);
             }
@@ -103,10 +101,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 String javaPattern = preProcessRegex(patternString, regex.regexFlags);
 
                 regex.patternString = patternString;
-                
+
                 // Compile the regex pattern
                 regex.pattern = Pattern.compile(javaPattern, regex.patternFlags);
-                
+
                 // Check if pattern has code block captures for $^R optimization
                 // Code blocks are encoded as named captures like (?<cb010...>)
                 Map<String, Integer> namedGroups = regex.pattern.namedGroups();
@@ -375,7 +373,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
             found = true;
             int captureCount = matcher.groupCount();
-            
+
             // Always initialize $1, $2, @+, @-, $`, $&, $' for every successful match
             globalMatcher = matcher;
             globalMatchString = inputStr;
@@ -385,7 +383,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             lastMatchEnd = matcher.end();
             // System.err.println("DEBUG: Set globalMatcher for match at position " + matcher.start() + "-" + matcher.end());
             // System.err.println("DEBUG: Stored match info - matched: '" + lastMatchedString + "', start: " + lastMatchStart + ", end: " + lastMatchEnd);
-            
+
             if (regex.regexFlags.isGlobalMatch() && captureCount < 1 && ctx == RuntimeContextType.LIST) {
                 // Global match and no captures, in list context return the matched string
                 String matchedStr = matcher.group(0);
@@ -423,7 +421,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         if (!found && regex.regexFlags.isGlobalMatch() && !regex.regexFlags.keepCurrentPosition()) {
             posScalar.set(scalarUndef);
         }
-        
+
         // Reset special variables on failed match (Perl behavior)
         if (!found) {
             lastSuccessfulPattern = null;
@@ -441,15 +439,15 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             lastSuccessfulMatchStart = lastMatchStart;
             lastSuccessfulMatchEnd = lastMatchEnd;
             lastSuccessfulMatchString = globalMatchString;
-            
+
             // Update $^R if this regex has code block captures (performance optimization)
             if (regex.hasCodeBlockCaptures) {
                 RuntimeScalar codeBlockResult = regex.getLastCodeBlockResult();
                 // Set $^R to the code block result (or undef if no code blocks matched)
                 GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("R"))
-                    .set(codeBlockResult != null ? codeBlockResult : RuntimeScalarCache.scalarUndef);
+                        .set(codeBlockResult != null ? codeBlockResult : RuntimeScalarCache.scalarUndef);
             }
-            
+
             // Reset pos() after global match in LIST context (matches Perl behavior)
             if (regex.regexFlags.isGlobalMatch() && ctx == RuntimeContextType.LIST) {
                 posScalar.set(scalarUndef);
@@ -483,7 +481,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         // Extract the regex pattern from the quotedRegex object
         RuntimeRegex regex = resolveRegex(quotedRegex);
-        
+
         // Save the original replacement and flags before potentially changing regex
         RuntimeScalar replacement = regex.replacement;
         RegexFlags originalFlags = regex.regexFlags;
@@ -521,7 +519,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         // Determine if the replacement is a code that needs to be evaluated
         boolean replacementIsCode = (replacement.type == RuntimeScalarType.CODE);
-        
+
         // Don't reset globalMatcher here - only reset it if we actually find a match
         // This preserves capture variables from previous matches when substitution doesn't match
 
@@ -617,19 +615,19 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // Reset all match state
         globalMatcher = null;
         globalMatchString = null;
-        
+
         // Reset current match information
         lastMatchedString = null;
         lastMatchStart = -1;
         lastMatchEnd = -1;
-        
+
         // Reset last successful match information
         lastSuccessfulPattern = null;
         lastSuccessfulMatchedString = null;
         lastSuccessfulMatchStart = -1;
         lastSuccessfulMatchEnd = -1;
         lastSuccessfulMatchString = null;
-        
+
         // Reset regex cache matched flags
         reset();
     }
@@ -949,18 +947,18 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         if (matcher == null) {
             return null;
         }
-        
+
         // Get named groups from the pattern (same as %CAPTURE does)
         Map<String, Integer> namedGroups = matcher.pattern().namedGroups();
         if (namedGroups == null) {
             return null;
         }
-        
+
         // Find the code block capture with the HIGHEST counter that matched
         // For multiple code blocks like a(?{1})b(?{2})c, we want cb011 (counter 11), not cb010 (counter 10)
         String lastMatchedCapture = null;
         int maxCounter = -1;
-        
+
         for (String groupName : namedGroups.keySet()) {
             if (CaptureNameEncoder.isCodeBlockCapture(groupName)) {
                 try {
@@ -979,12 +977,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 }
             }
         }
-        
+
         // Decode the value from the capture name using CaptureNameEncoder
         if (lastMatchedCapture != null) {
             return CaptureNameEncoder.decodeCodeBlockValue(lastMatchedCapture);
         }
-        
+
         return null;
     }
 }
