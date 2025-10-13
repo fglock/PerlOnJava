@@ -21,11 +21,18 @@ git commit               # BREAKS BUILD!
 
 # ✅ CORRECT
 ./jperl t/op/yourtest.t  # passes
-make test                # MUST pass!
+make test                # MUST pass! (or use: make 2>&1 | tail -5)
 git commit               # Safe
 ```
 
+**Why `make` not `make test`?**
+- `make` runs the full build including `./gradlew test`
+- If tests fail, `make` will fail and prevent you from committing
+- Check the output: `BUILD SUCCESSFUL` means all tests passed
+- If you see `BUILD FAILED`, check the error and fix before committing
+
 **Recent incidents:**
+- 2025-10-13: local() fix initially broke 30 unit tests due to incorrect VOID context handling
 - 2025-10-08: Character/byte mode fix broke unit tests (unpack.t, pack_c0_u0.t)
 - 2025-10-07: PackBuffer fix broke pack_utf8.t
 
