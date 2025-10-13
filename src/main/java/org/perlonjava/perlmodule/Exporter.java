@@ -25,6 +25,7 @@ public class Exporter extends PerlModuleBase {
         try {
             // Load Exporter methods into Perl namespace
             exporter.registerMethod("import", "importSymbols", null);
+            exporter.registerMethod("export", null);
             exporter.registerMethod("export_to_level", "exportToLevel", null);
             exporter.registerMethod("export_tags", "exportTags", null);
             exporter.registerMethod("export_ok_tags", "exportOkTags", null);
@@ -56,6 +57,81 @@ public class Exporter extends PerlModuleBase {
         args.elements.add(2, packageScalar);
 
         return exportToLevel(args, ctx);
+    }
+
+    public static RuntimeList export(RuntimeArray args, int ctx) {
+        // Exporter::export($pkg, $callpkg, @symbols)
+        // Export symbols from $pkg into $callpkg namespace
+        if (args.size() < 2) {
+            throw new PerlCompilerException("Not enough arguments for export");
+        }
+        
+        RuntimeScalar packageScalar = args.get(0);  // Source package
+        RuntimeScalar targetPackage = args.get(1);  // Target package (caller)
+        String caller = targetPackage.toString();
+        String packageName = packageScalar.toString();
+        
+        // Get symbols to export (everything after the first two args)
+        RuntimeArray symbolsToExport = new RuntimeArray();
+        for (int i = 2; i < args.size(); i++) {
+            symbolsToExport.elements.add(args.get(i));
+        }
+        
+        // If no symbols specified, export @EXPORT
+        if (symbolsToExport.isEmpty()) {
+            RuntimeArray export = GlobalVariable.getGlobalArray(packageName + "::EXPORT");
+            if (export != null && !export.elements.isEmpty()) {
+                symbolsToExport = export;
+            }
+        }
+        
+        // Import the symbols into the target package
+        for (RuntimeBase symbolObj : symbolsToExport.elements) {
+            String symbolString = symbolObj.toString();
+            
+            // Check if symbol is exported
+            RuntimeArray export = GlobalVariable.getGlobalArray(packageName + "::EXPORT");
+            RuntimeArray exportOk = GlobalVariable.getGlobalArray(packageName + "::EXPORT_OK");
+            
+            boolean isExported = export.elements.stream()
+                    .anyMatch(e -> e.toString().equals(symbolString));
+            boolean isExportOk = exportOk.elements.stream()
+                    .anyMatch(e -> e.toString().equals(symbolString));
+            
+            if (!isExported && !isExportOk && !symbolString.matches("^[$@%*]")) {
+                // try with/without "&"
+                String finalSymbolString;
+                if (symbolString.startsWith("&")) {
+                    finalSymbolString = symbolString.substring(1);
+                } else {
+                    finalSymbolString = "&" + symbolString;
+                }
+                isExported = export.elements.stream()
+                        .anyMatch(e -> e.toString().equals(finalSymbolString));
+                isExportOk = exportOk.elements.stream()
+                        .anyMatch(e -> e.toString().equals(finalSymbolString));
+            }
+            
+            if (isExported || isExportOk) {
+                if (symbolString.startsWith("&")) {
+                    importFunction(packageName, caller, symbolString.substring(1));
+                } else if (symbolString.startsWith("$")) {
+                    importScalar(packageName, caller, symbolString.substring(1));
+                } else if (symbolString.startsWith("@")) {
+                    importArray(packageName, caller, symbolString.substring(1));
+                } else if (symbolString.startsWith("%")) {
+                    importHash(packageName, caller, symbolString.substring(1));
+                } else if (symbolString.startsWith("*")) {
+                    importTypeglob(packageName, caller, symbolString.substring(1));
+                } else {
+                    importFunction(packageName, caller, symbolString);
+                }
+            } else {
+                throw new PerlCompilerException("\"" + symbolString + "\" is not exported by the " + packageName + " module\nCan't continue after import errors");
+            }
+        }
+        
+        return new RuntimeList();
     }
 
     public static RuntimeList exportToLevel(RuntimeArray args, int ctx) {

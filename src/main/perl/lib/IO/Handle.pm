@@ -26,6 +26,10 @@ our @EXPORT_OK = qw(
     format_line_break_characters
     format_formfeed
     input_line_number
+    print
+    printf
+    getline
+    getlines
     _IOFBF
     _IOLBF
     _IONBF

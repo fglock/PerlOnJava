@@ -69,6 +69,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public String subName;
     // Flag to indicate this is a symbolic reference created by \&{string} that should always be "defined"
     public boolean isSymbolicReference = false;
+    // Flag to indicate this is a built-in operator
+    public boolean isBuiltin = false;
     // State variables
     public Map<String, Boolean> stateVariableInitialized = new HashMap<>();
     public Map<String, RuntimeScalar> stateVariable = new HashMap<>();
@@ -280,12 +282,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             int blessId = ((RuntimeBase) runtimeScalar.value).blessId;
             if (blessId == 0) {
                 if (runtimeScalar.type == GLOBREFERENCE) {
-                    // Auto-bless file handler to IO::File or appropriate class
-                    // TODO - find the appropriate subclass
-                    perlClassName = "IO::Handle";
+                    // Auto-bless file handler to IO::File which inherits from both IO::Handle and IO::Seekable
+                    // This allows GLOBs to call methods like seek, tell, etc.
+                    perlClassName = "IO::File";
                     // Load the module if needed
                     // TODO - optimize by creating a flag in RuntimeIO
-                    ModuleOperators.require(new RuntimeScalar("IO/Handle.pm"));
+                    ModuleOperators.require(new RuntimeScalar("IO/File.pm"));
                 } else {
                     // Not auto-blessed
                     throw new PerlCompilerException("Can't call method \"" + methodName + "\" on unblessed reference");
@@ -555,6 +557,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public boolean defined() {
         // Symbolic references created by \&{string} are always considered "defined" to match standard Perl
         if (this.isSymbolicReference) {
+            return true;
+        }
+        // Built-in operators are always considered "defined"
+        if (this.isBuiltin) {
             return true;
         }
         return this.constantValue != null || this.compilerSupplier != null || this.methodHandle != null;
