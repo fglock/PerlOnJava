@@ -77,7 +77,16 @@ public class ParseBlock {
             }
 
             // Parse the actual statement, passing any label found
-            statements.add(StatementResolver.parseStatement(parser, label));
+            Node statement = StatementResolver.parseStatement(parser, label);
+            
+            // parseStatement should never return null, but if it does, it's a parser bug
+            // that should be fixed at the source. For now, add defensive check.
+            if (statement != null) {
+                statements.add(statement);
+            } else {
+                // This should never happen - log and skip
+                parser.ctx.logDebug("WARNING: parseStatement returned null at token: " + token.text);
+            }
 
             token = peek(parser);
         }
