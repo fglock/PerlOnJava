@@ -8,6 +8,7 @@ import org.perlonjava.astnode.*;
  */
 public class ControlFlowDetectorVisitor implements Visitor {
     private boolean hasUnsafeControlFlow = false;
+    private static final boolean DEBUG = false; // Set to true for debugging
 
     /**
      * Check if unsafe control flow was detected during traversal.
@@ -180,9 +181,11 @@ public class ControlFlowDetectorVisitor implements Visitor {
 
     @Override
     public void visit(SubroutineNode node) {
-        if (node.block != null) {
-            node.block.accept(this);
-        }
+        // DO NOT traverse into subroutines!
+        // Control flow statements (last/next/redo) inside a subroutine are scoped to that subroutine
+        // and won't be affected by refactoring the outer block.
+        // Traversing into subroutines causes false positives where we think a block has unsafe
+        // control flow when it actually doesn't (the control flow is inside a nested subroutine).
     }
 
     @Override
