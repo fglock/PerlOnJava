@@ -1,6 +1,5 @@
 package org.perlonjava.parser;
 
-import org.perlonjava.astnode.BlockNode;
 import org.perlonjava.astnode.FormatNode;
 import org.perlonjava.astnode.Node;
 import org.perlonjava.astnode.OperatorNode;
@@ -116,13 +115,6 @@ public class Parser {
             tokens.addFirst(new LexerToken(LexerTokenType.NEWLINE, "\n"));
         }
         Node ast = ParseBlock.parseBlock(this);
-        
-        // Mark main script body to prevent large block refactoring
-        // Main script can contain labeled blocks with last/next/redo that would break if refactored
-        if (ast instanceof BlockNode block) {
-            block.setAnnotation("blockIsMainScript", true);
-        }
-        
         if (!getHeredocNodes().isEmpty()) {
             ParseHeredoc.heredocError(this);
         }
