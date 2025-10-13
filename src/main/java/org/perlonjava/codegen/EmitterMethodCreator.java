@@ -301,6 +301,8 @@ public class EmitterMethodCreator implements Opcodes {
                     ctx.errorUtil);
         } catch (NegativeArraySizeException e) {
             // Special handling for ASM frame computation errors
+            // Print stack trace to help debug the issue
+            e.printStackTrace();
             String formattedError = String.format(
                     "ASM bytecode generation failed: %s\n" +
                             "This typically occurs when:\n" +
