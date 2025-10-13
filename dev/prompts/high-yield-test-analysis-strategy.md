@@ -30,21 +30,14 @@ git commit               # Safe
 - 2025-10-07: PackBuffer fix broke pack_utf8.t
 
 ## Core Principle
-
 **Target systematic errors for exponential impact.** One fix can unlock hundreds of tests.
 
 ## Critical Workflow
 
 ```bash
-# 1. Build and test target
-make
-./jperl t/op/yourtest.t
+## Test Execution Summary
 
-# 2. ALWAYS test full suite before commit
-make test
-
-# 3. Commit specific files only
-git add src/main/java/specific/File.java
+Run all tests and collect results:
 git commit -m "Fix: description (+N tests)"
 ```
 
@@ -740,3 +733,26 @@ After implementing:
 **Remember**: 
 1. Testing only your target file is NOT enough! Unit tests (`make test`) catch subtle bugs that integration tests miss.
 2. NEVER use `git add .` or `git add -A` - they will add temporary garbage files from test runs!
+
+## Understanding 0/0 Test Results
+
+Tests showing `0/0` (no tests run) fall into three categories:
+
+### 1. **Correctly Skipped Tests** ✓
+Tests that detect missing features and skip themselves gracefully:
+- **Missing extensions**: Fcntl, Encode, IPC modules, PerlIO layers
+- **Platform incompatibilities**: Detected at runtime via Config checks
+- **Output format**: `1..0 # Skip [reason]` with exit code 0
+- **Examples**: io/eintr.t, io/layers.t, io/msg.t, io/sem.t, io/semctl.t, io/shm.t
+
+### 2. **Compilation Failures** !
+Tests that fail during compilation before any tests can run:
+- **Bytecode errors**: Method too large, invalid bytecode generation
+- **Parser errors**: Syntax errors, unimplemented features
+- **Cannot self-skip**: Failure happens before skip_all() can execute
+- **Examples**: 
+  - io/pipe.t - Bytecode generation failure (requires fork)
+  - io/fs.t - Bareword filehandle issue (FIXED 2025-10-13)
+
+### 3. **TAP Format**
+The `0/0` output is correct TAP format: "0 tests run out of 0 planned" signals to the test harness that the entire test file was skipped. This is expected behavior, not an error.

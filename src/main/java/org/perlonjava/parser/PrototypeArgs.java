@@ -339,10 +339,47 @@ public class PrototypeArgs {
     private static void handleScalarArgument(Parser parser, ListNode args, boolean isOptional, boolean needComma) {
         Node arg = parseArgumentWithComma(parser, isOptional, needComma, "scalar argument");
         if (arg != null) {
+            // Check if this is the first argument and might be a bareword filehandle
+            // For operators like truncate, seek, tell, eof, binmode, etc.
+            if (args.elements.isEmpty() && arg instanceof IdentifierNode idNode) {
+                String operatorName = parser.ctx.symbolTable.getCurrentSubroutine();
+                if (isFilehandleOperator(operatorName)) {
+                    // Try to parse as bareword filehandle first
+                    Node filehandleNode = FileHandle.parseBarewordHandle(parser, idNode.name);
+                    if (filehandleNode != null) {
+                        // It's a known filehandle, use the typeglob reference
+                        filehandleNode.setAnnotation("context", "SCALAR");
+                        args.elements.add(filehandleNode);
+                        return;
+                    }
+                    // Not a known filehandle, but still allow bareword (will be treated as filename string)
+                    // Autovivify the filehandle in case it's used later
+                    GlobalVariable.getGlobalIO(FileHandle.normalizeBarewordHandle(parser, idNode.name));
+                }
+            }
             Node scalarArg = ParserNodeUtils.toScalarContext(arg);
             scalarArg.setAnnotation("context", "SCALAR");
             args.elements.add(scalarArg);
         }
+    }
+
+    /**
+     * Check if an operator accepts a filehandle as its first scalar argument.
+     * These operators allow bareword filehandles even under 'use strict'.
+     */
+    private static boolean isFilehandleOperator(String operatorName) {
+        if (operatorName == null) return false;
+        return operatorName.equals("truncate") ||
+               operatorName.equals("seek") ||
+               operatorName.equals("tell") ||
+               operatorName.equals("eof") ||
+               operatorName.equals("binmode") ||
+               operatorName.equals("fileno") ||
+               operatorName.equals("getc") ||
+               operatorName.equals("read") ||
+               operatorName.equals("sysread") ||
+               operatorName.equals("syswrite") ||
+               operatorName.equals("sysseek");
     }
 
     private static void handleUnderscoreArgument(Parser parser, ListNode args, boolean isOptional, boolean needComma) {
