@@ -80,15 +80,27 @@ public class EmitRegex {
 
     /**
      * Handles system command execution (backticks or qx operator).
-     * Example: `command` or qx/command/
+     * Example: `command` or qx/command/ or readpipe($expr)
      */
     static void handleSystemCommand(EmitterVisitor emitterVisitor, OperatorNode node) {
-        ListNode operand = (ListNode) node.operand;
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
-        operand.elements.getFirst().accept(scalarVisitor);
+        Node commandNode;
+        
+        // Handle two cases:
+        // 1. readpipe() with no args -> operand is OperatorNode for $_
+        // 2. readpipe($expr) or `cmd` -> operand is ListNode with command
+        if (node.operand instanceof ListNode) {
+            ListNode operand = (ListNode) node.operand;
+            commandNode = operand.elements.getFirst();
+        } else {
+            // readpipe() with no arguments uses $_
+            commandNode = node.operand;
+        }
+        
+        commandNode.accept(scalarVisitor);
         emitterVisitor.pushCallContext();
         // Create an OperatorNode for systemCommand
-        OperatorNode systemCmdNode = new OperatorNode("systemCommand", operand.elements.getFirst(), node.tokenIndex);
+        OperatorNode systemCmdNode = new OperatorNode("systemCommand", commandNode, node.tokenIndex);
         EmitOperator.emitOperator(systemCmdNode, emitterVisitor);
     }
 

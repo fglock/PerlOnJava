@@ -334,7 +334,11 @@ public class ParsePrimary {
                 // Unary minus or file test operator (-f, -d, etc.)
                 LexerToken nextToken = parser.tokens.get(parser.tokenIndex);
                 if (nextToken.type == LexerTokenType.IDENTIFIER && nextToken.text.length() == 1) {
-                    return parseFileTestOperator(parser, nextToken, operand);
+                    // Check if this is a valid file test operator
+                    String testOp = nextToken.text;
+                    if (isValidFileTestOperator(testOp)) {
+                        return parseFileTestOperator(parser, nextToken, operand);
+                    }
                 }
                 // Regular unary minus
                 operand = parser.parseExpression(parser.getPrecedence(token.text) + 1);
@@ -415,5 +419,14 @@ public class ParsePrimary {
         }
 
         return new OperatorNode(operator, operand, parser.tokenIndex);
+    }
+
+    /**
+     * Checks if a single character represents a valid file test operator.
+     * Valid operators: r w x o R W X O e z s f d l p S b c t u g k T B M A C
+     * Note: 'a' is NOT a valid file test operator (it's used for the -a command line switch)
+     */
+    private static boolean isValidFileTestOperator(String op) {
+        return op.length() == 1 && "rwxoRWXOezsfdlpSbctugkTBMAC".indexOf(op.charAt(0)) >= 0;
     }
 }

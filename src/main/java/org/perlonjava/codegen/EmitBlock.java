@@ -60,6 +60,14 @@ public class EmitBlock {
 
         for (int i = 0; i < list.size(); i++) {
             Node element = list.get(i);
+            
+            // Skip null elements - these occur when parseStatement returns null to signal
+            // "not a statement, continue parsing" (e.g., AUTOLOAD without {}, try without feature enabled)
+            // ParseBlock.parseBlock() adds these null results to the statements list
+            if (element == null) {
+                emitterVisitor.ctx.logDebug("Skipping null element in block at index " + i);
+                continue;
+            }
 
             ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, element.getIndex());
 
