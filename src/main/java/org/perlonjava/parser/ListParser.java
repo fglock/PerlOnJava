@@ -273,6 +273,11 @@ public class ListParser {
             } else if (token.text.equals(".") && token1.type == LexerTokenType.NUMBER) {
                 // Looks like a fractional number, not an infix `.`
                 parser.ctx.logDebug("parseZeroOrMoreList looks like Number");
+            } else if (token.text.equals("/")) {
+                // Looks like a regex pattern, not division
+                // In Perl, /pattern/ at the start of a list context is a regex match
+                // Note: // is the defined-or operator, not a regex, so we don't include it here
+                parser.ctx.logDebug("parseZeroOrMoreList looks like regex");
             } else {
                 // Subroutine call with zero arguments, followed by infix operator: `pos = 3`
                 parser.ctx.logDebug("parseZeroOrMoreList return zero at `" + parser.tokens.get(parser.tokenIndex) + "`");
