@@ -41,6 +41,10 @@ public class EmitOperatorLocal {
 
         if (node.operand instanceof ListNode listNode) {
             for (Node child : listNode.elements) {
+                // Skip undef in local lists - it's a no-op
+                if (child instanceof OperatorNode opNode && opNode.operator.equals("undef")) {
+                    continue;
+                }
                 handleLocal(emitterVisitor.with(RuntimeContextType.VOID), new OperatorNode("local", child, node.tokenIndex));
             }
             node.operand.accept(emitterVisitor.with(lvalueContext));
