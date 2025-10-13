@@ -52,8 +52,10 @@ git commit -m "Fix: description (+N tests)"
 
 1. **NEVER use `git add .` or `git add -A`** - add specific files only
 2. **NEVER commit test files** (`test_*.pl`, `debug_*.pl`)  
-3. **ALWAYS run `make test`** before committing
-4. **ALWAYS use `make`** for quick builds during development
+3. **NEVER commit temporary files** (`*.tmp`, `test_*.tmp`, etc.)
+4. **ALWAYS check `git status` before staging** - look for untracked garbage files
+5. **ALWAYS run `make test`** before committing
+6. **ALWAYS use `make`** for quick builds during development
 
 # Before each session: Safe environment setup  
 ./dev/tools/safe_analysis_setup.sh
@@ -505,6 +507,8 @@ echo 'print "Environment ready!\n"' | ./jperl || exit 1
 # Add to .gitignore if not already there:
 test_*.pl
 debug_*.pl
+*.tmp
+test_*.tmp
 *.log
 logs/
 tmp/
@@ -513,6 +517,10 @@ tmp/
 *.swp
 *~
 .perlonjava_env_ready
+
+# Common garbage patterns from test runs:
+test_io_pipe_*.tmp
+test_read_operator_*.tmp
 ```
 
 ### Before ANY Commit - Mandatory Steps
@@ -522,17 +530,31 @@ tmp/
 
 echo "=== PRE-COMMIT SAFETY CHECK ==="
 
-# 1. Check for test files
-TEST_FILES=$(git status --porcelain | grep -E "test_.*\.pl|debug_.*\.pl")
+# 1. Check for test files and temporary garbage
+TEST_FILES=$(git status --porcelain | grep -E "test_.*\.(pl|tmp)|debug_.*\.pl|\.tmp$")
 if [ ! -z "$TEST_FILES" ]; then
-    echo "❌ ABORT: Test files detected in git staging:"
+    echo "❌ ABORT: Test/temporary files detected in git staging:"
     echo "$TEST_FILES"
-    echo "Run: git reset HEAD test_*.pl debug_*.pl"
+    echo "Run: git reset HEAD test_*.pl debug_*.pl *.tmp"
     exit 1
 fi
 
-# 2. Clean test artifacts
-rm -f test_*.pl debug_*.pl 2>/dev/null
+# 2. Check for untracked garbage files
+GARBAGE=$(git status --short | grep "^??" | grep -E "test_.*\.(pl|tmp)|\.tmp$")
+if [ ! -z "$GARBAGE" ]; then
+    echo "⚠️  WARNING: Untracked garbage files found:"
+    echo "$GARBAGE"
+    echo "Clean with: rm -f test_*.pl debug_*.pl *.tmp test_*.tmp"
+    read -p "Clean now? (y/n) " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        rm -f test_*.pl debug_*.pl *.tmp test_*.tmp
+        echo "✓ Cleaned"
+    fi
+fi
+
+# 3. Clean test artifacts
+rm -f test_*.pl debug_*.pl *.tmp test_*.tmp 2>/dev/null
 rm -rf logs/*.log 2>/dev/null
 
 # 3. Full rebuild
@@ -568,20 +590,29 @@ echo "Safe to commit with: git commit -m 'your message'"
 
 ### Safe Commit Workflow
 ```bash
-# 1. Always check what you're committing
+# 1. Always check what you're committing (look for garbage!)
 git status
-git diff --staged
+git status --short | grep "^??"  # Check for untracked files
 
-# 2. Run pre-commit check
+# 2. Clean any temporary files
+rm -f test_*.pl debug_*.pl *.tmp test_*.tmp
+
+# 3. Verify only intended files remain
+git status --short
+
+# 4. Run pre-commit check
 ./pre_commit_check.sh
 
-# 3. Commit ONLY intended changes
+# 5. Commit ONLY intended changes
 git add src/main/java/specific/File.java  # Add specific files, not everything!
 git commit -m "Fix: specific issue description"
 
-# 4. NEVER use these dangerous commands:
-# git add .                    # DON'T - adds everything
-# git add -A                   # DON'T - adds all changes
+# 6. Verify commit doesn't include garbage
+git show --name-only | head -20
+
+# 7. NEVER use these dangerous commands:
+# git add .                    # DON'T - adds everything including garbage
+# git add -A                   # DON'T - adds all changes including temp files
 # git commit -a                # DON'T - commits all modified files
 ```
 
@@ -589,12 +620,12 @@ git commit -m "Fix: specific issue description"
 ```bash
 # Install as .git/hooks/pre-commit (make executable)
 #!/bin/bash
-# Prevents committing test files
+# Prevents committing test files and temporary garbage
 
-# Check for test files in staging
-if git diff --cached --name-only | grep -E "test_.*\.pl|debug_.*\.pl"; then
-    echo "❌ ERROR: Attempting to commit test/debug files!"
-    echo "Remove with: git reset HEAD test_*.pl debug_*.pl"
+# Check for test files and temp files in staging
+if git diff --cached --name-only | grep -E "test_.*\.(pl|tmp)|debug_.*\.pl|\.tmp$"; then
+    echo "❌ ERROR: Attempting to commit test/debug/temp files!"
+    echo "Remove with: git reset HEAD test_*.pl debug_*.pl *.tmp"
     exit 1
 fi
 
@@ -604,21 +635,36 @@ if git diff --cached --name-only | grep -E "\.log$"; then
     echo "Consider removing with: git reset HEAD *.log"
 fi
 
+# Check for common garbage patterns
+if git diff --cached --name-only | grep -E "test_io_pipe_.*\.tmp|test_read_operator_.*\.tmp"; then
+    echo "❌ ERROR: Test-generated temporary files detected!"
+    echo "These are garbage files from test runs."
+    echo "Remove with: git reset HEAD *.tmp && rm -f *.tmp"
+    exit 1
+fi
+
 exit 0
 ```
 
 ### Emergency Cleanup
 ```bash
-# If you accidentally staged test files:
-git reset HEAD test_*.pl debug_*.pl
-git clean -f test_*.pl debug_*.pl
+# If you accidentally staged test/temp files:
+git reset HEAD test_*.pl debug_*.pl *.tmp
+git clean -f test_*.pl debug_*.pl *.tmp
 
-# If you accidentally committed test files:
+# If you accidentally committed garbage files:
 git reset --soft HEAD~1  # Undo last commit, keep changes
-# Then remove test files and recommit properly
+rm -f test_*.pl debug_*.pl *.tmp test_*.tmp  # Clean garbage
+git status --short  # Verify only intended files remain
+# Then recommit properly with only intended files
 
-# Nuclear option - remove ALL untracked files (CAREFUL!)
+# If garbage made it into the commit:
+git reset --hard HEAD~1  # DESTRUCTIVE: Undo commit and discard changes
+# Then redo your work without the garbage
+
+# Nuclear option - remove ALL untracked files (VERY CAREFUL!)
 git clean -fd  # Removes all untracked files and directories
+git clean -fdn  # DRY RUN - see what would be deleted first
 ```
 
 ## 📋 TL;DR - The Foolproof Workflow
@@ -642,19 +688,24 @@ git commit -m "Fix: specific issue"
 # 2. Analysis:
 # ... do your work ...
 
-# 3. Before commit:
-rm -f test_*.pl debug_*.pl
-./dev/tools/pre_commit_check.sh
-git add [specific files only]
+# 3. Before commit - CRITICAL STEPS:
+rm -f test_*.pl debug_*.pl *.tmp test_*.tmp  # Clean ALL garbage
+git status --short | grep "^??"              # Check for untracked files
+./dev/tools/pre_commit_check.sh              # Run safety check
+git add [specific files only]                # NEVER use git add . or -A
+git status --short                            # Verify staging
 git commit -m "Fix: description"
+git show --name-only | head -20               # Verify no garbage in commit
 ```
 
 ### The Golden Rules
 1. **ALWAYS** use `start_analysis.sh` or run setup first
 2. **NEVER** skip the environment setup
-3. **NEVER** use `git add .` or `git add -A`
-4. **ALWAYS** clean test files before committing
-5. **ALWAYS** run pre-commit check
+3. **NEVER** use `git add .` or `git add -A` - they add garbage files
+4. **ALWAYS** check `git status` for untracked files before staging
+5. **ALWAYS** clean test/temp files before committing: `rm -f test_*.pl debug_*.pl *.tmp`
+6. **ALWAYS** run pre-commit check
+7. **ALWAYS** verify commit with `git show --name-only` after committing
 
 ## Final Checklist
 
@@ -676,11 +727,16 @@ After implementing:
 - [ ] **CRITICAL: Run `make test` to catch ALL regressions** (don't skip this!)
 - [ ] Review any unit test failures - they reveal edge cases
 - [ ] Check for memory leaks or hanging processes
-- [ ] Clean up ALL test files: `rm -f test_*.pl debug_*.pl`
+- [ ] Clean up ALL test/temp files: `rm -f test_*.pl debug_*.pl *.tmp test_*.tmp`
+- [ ] Check for untracked garbage: `git status --short | grep "^??"`
 - [ ] Verify git status clean: `git status --short`
 - [ ] Run pre-commit check: `./pre_commit_check.sh`
-- [ ] Commit ONLY specific files with clear message
+- [ ] Add ONLY specific files: `git add src/main/java/specific/File.java`
+- [ ] Verify staging: `git status --short`
+- [ ] Commit with clear message: `git commit -m "Fix: description"`
+- [ ] **CRITICAL: Verify no garbage in commit**: `git show --name-only | head -20`
 - [ ] Update docs if new pattern discovered
-- [ ] Verify commit doesn't include test files: `git show --name-only`
 
-**Remember**: Testing only your target file is NOT enough! Unit tests (`make test`) catch subtle bugs that integration tests miss.
+**Remember**: 
+1. Testing only your target file is NOT enough! Unit tests (`make test`) catch subtle bugs that integration tests miss.
+2. NEVER use `git add .` or `git add -A` - they will add temporary garbage files from test runs!
