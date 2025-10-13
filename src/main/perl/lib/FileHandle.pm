@@ -33,10 +33,23 @@ require IO::File;
     getlines
 );
 
+################################################
+# Define pipe before importing, so defined(&pipe) returns true
+# and it won't try to import from IO::Handle
+#
+
+sub pipe {
+    my $r = IO::Handle->new;
+    my $w = IO::Handle->new;
+    CORE::pipe($r, $w) or return undef;
+    ($r, $w);
+}
+
 #
 # Everything we're willing to export, we must first import.
+# Note: pipe is defined by FileHandle itself, so exclude it from import
 #
-IO::Handle->import( grep { !defined(&$_) } @EXPORT, @EXPORT_OK );
+IO::Handle->import( grep { !defined(&$_) && $_ ne 'pipe' } @EXPORT, @EXPORT_OK );
 
 #
 # Some people call "FileHandle::function", so all the functions

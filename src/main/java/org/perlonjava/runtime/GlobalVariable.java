@@ -1,6 +1,7 @@
 package org.perlonjava.runtime;
 
 import org.perlonjava.codegen.CustomClassLoader;
+import org.perlonjava.parser.ParserTables;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -275,10 +276,25 @@ public class GlobalVariable {
     public static RuntimeScalar definedGlobalCodeRefAsScalar(String key) {
         // For defined(&{string}) patterns, check actual subroutine existence to match standard Perl
         // Standard Perl: defined(&{existing}) = true, defined(&{nonexistent}) = false
+        
+        // Check if it's a built-in operator
+        // Built-ins are ONLY accessible via CORE:: prefix
+        int lastColonIndex = key.lastIndexOf("::");
+        
+        if (lastColonIndex > 0) {
+            String packageName = key.substring(0, lastColonIndex);
+            String operatorName = key.substring(lastColonIndex + 2);
+            // CORE:: prefix means it's definitely referring to a built-in
+            if (packageName.equals("CORE") && ParserTables.CORE_PROTOTYPES.containsKey(operatorName)) {
+                return scalarTrue;
+            }
+        }
+        
+        // Check if it's a user-defined subroutine
         RuntimeScalar var = globalCodeRefs.get(key);
         if (var != null && var.type == RuntimeScalarType.CODE && var.value instanceof RuntimeCode runtimeCode) {
             // Check if the subroutine has actual implementation (not just a placeholder)
-            return (runtimeCode.methodHandle != null || runtimeCode.compilerSupplier != null) ? scalarTrue : scalarFalse;
+            return (runtimeCode.methodHandle != null || runtimeCode.compilerSupplier != null || runtimeCode.isBuiltin) ? scalarTrue : scalarFalse;
         }
         return scalarFalse;
     }
@@ -290,6 +306,9 @@ public class GlobalVariable {
     public static RuntimeScalar definedGlobalCodeRefAsScalar(RuntimeScalar key, String packageName) {
         // Use proper package name resolution like createCodeReference
         String name = NameNormalizer.normalizeVariableName(key.toString(), packageName);
+        
+        // Built-ins are ONLY accessible via CORE:: prefix, not from main:: or other packages
+        // So just delegate to the main method which checks for CORE:: prefix
         return definedGlobalCodeRefAsScalar(name);
     }
 
