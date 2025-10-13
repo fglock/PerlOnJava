@@ -44,6 +44,12 @@ public class LargeBlockRefactorer {
         if (node.getBooleanAnnotation("blockIsSubroutine")) {
             return false;
         }
+        
+        // Skip main script body - it can contain labeled blocks with last/next/redo
+        // that would break if refactored into a subroutine
+        if (node.getBooleanAnnotation("blockIsMainScript")) {
+            return false;
+        }
 
         // Determine if we need to refactor
         boolean needsRefactoring = shouldRefactorBlock(node, emitterVisitor, refactorEnabled);
@@ -80,8 +86,11 @@ public class LargeBlockRefactorer {
             return false;
         }
 
-        // Check if we're in a context that allows refactoring
-        return refactorEnabled || !emitterVisitor.ctx.javaClassInfo.gotoLabelStack.isEmpty();
+        // Only refactor if explicitly enabled via JPERL_LARGECODE=refactor
+        // Automatic refactoring is disabled because:
+        // 1. It can break labeled blocks with last/next/redo (control flow detector has bugs)
+        // 2. The original logic "refactor if goto labels exist" was backwards
+        return refactorEnabled;
     }
 
     /**
