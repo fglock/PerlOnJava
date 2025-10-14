@@ -234,11 +234,21 @@ public class MathOperators {
             }
             return new RuntimeScalar(result);
         }
-        int divisor = arg2.getInt();
-        int result = arg1.getInt() % divisor;
-        // Adjust result for negative modulus
-        if (result != 0.0 && ((divisor > 0.0 && result < 0.0) || (divisor < 0.0 && result > 0.0))) {
+        
+        // Use long arithmetic to handle large integers (beyond int range)
+        long dividend = arg1.getLong();
+        long divisor = arg2.getLong();
+        long result = dividend % divisor;
+        
+        // Adjust result for Perl-style modulus behavior
+        // In Perl, the result has the same sign as the divisor
+        if (result != 0 && ((divisor > 0 && result < 0) || (divisor < 0 && result > 0))) {
             result += divisor;
+        }
+        
+        // Return as int if it fits, otherwise as long
+        if (result >= Integer.MIN_VALUE && result <= Integer.MAX_VALUE) {
+            return new RuntimeScalar((int) result);
         }
         return new RuntimeScalar(result);
     }
