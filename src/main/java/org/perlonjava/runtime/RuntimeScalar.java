@@ -951,8 +951,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
         // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         switch (type) {
-            case INTEGER -> // 0
-                    this.value = (int) this.value + 1;
+            case INTEGER -> { // 0
+                int intValue = (int) this.value;
+                // Check for overflow - upgrade to double if needed
+                if (intValue == Integer.MAX_VALUE) {
+                    this.type = RuntimeScalarType.DOUBLE;
+                    this.value = (double) intValue + 1;
+                } else {
+                    this.value = intValue + 1;
+                }
+            }
             case DOUBLE -> // 1
                     this.value = (double) this.value + 1;
             case STRING, BYTE_STRING -> // 2
@@ -998,7 +1006,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public RuntimeScalar postAutoIncrement() {
-        RuntimeScalar old = new RuntimeScalar(this);
+        // For undef, the old value should be 0, not undef
+        RuntimeScalar old = this.type == RuntimeScalarType.UNDEF ? 
+            new RuntimeScalar(0) : new RuntimeScalar(this);
 
         // Check if object is eligible for overloading
         int blessId = blessedId(this);
@@ -1027,8 +1037,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
         // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         switch (type) {
-            case INTEGER -> // 0
-                    this.value = (int) this.value + 1;
+            case INTEGER -> { // 0
+                int intValue = (int) this.value;
+                // Check for overflow - upgrade to double if needed
+                if (intValue == Integer.MAX_VALUE) {
+                    this.type = RuntimeScalarType.DOUBLE;
+                    this.value = (double) intValue + 1;
+                } else {
+                    this.value = intValue + 1;
+                }
+            }
             case DOUBLE -> // 1
                     this.value = (double) this.value + 1;
             case STRING, BYTE_STRING -> // 2
