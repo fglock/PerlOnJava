@@ -365,22 +365,54 @@ public class RuntimeList extends RuntimeBase {
         RuntimeArray arr = new RuntimeArray();
         original.addToArray(arr);
 
+        // Check if we have any hash assignments that need deduplication
+        boolean hasHashAssignment = false;
+        for (RuntimeBase elem : elements) {
+            if (elem instanceof RuntimeHash) {
+                hasHashAssignment = true;
+                break;
+            }
+        }
+
+        // If no hash assignments, return original (preserves existing behavior)
+        if (!hasHashAssignment) {
+            for (RuntimeBase elem : elements) {
+                if (elem instanceof RuntimeScalarReadOnly runtimeScalarReadOnly && !runtimeScalarReadOnly.getDefinedBoolean()) {
+                    RuntimeArray.shift(arr);
+                } else if (elem instanceof RuntimeScalar runtimeScalar) {
+                    runtimeScalar.set(RuntimeArray.shift(arr));
+                } else if (elem instanceof RuntimeArray runtimeArray) {
+                    runtimeArray.elements = arr.elements;
+                    arr.elements = new ArrayList<>();
+                }
+            }
+            return original;
+        }
+
+        // Build result with hash deduplication
+        RuntimeArray result = new RuntimeArray();
+        // Store original size for scalar context
+        result.scalarContextSize = original.elements.size();
+        
         for (RuntimeBase elem : elements) {
             if (elem instanceof RuntimeScalarReadOnly runtimeScalarReadOnly && !runtimeScalarReadOnly.getDefinedBoolean()) {
-                // assignment to `undef` is ignored
                 RuntimeArray.shift(arr);
             } else if (elem instanceof RuntimeScalar runtimeScalar) {
-                runtimeScalar.set(RuntimeArray.shift(arr));
+                RuntimeScalar assigned = RuntimeArray.shift(arr);
+                runtimeScalar.set(assigned);
+                result.elements.add(assigned);  // Use original reference, not copy
             } else if (elem instanceof RuntimeArray runtimeArray) {
                 runtimeArray.elements = arr.elements;
+                result.elements.addAll(arr.elements);  // Use original references
                 arr.elements = new ArrayList<>();
             } else if (elem instanceof RuntimeHash runtimeHash) {
                 RuntimeHash hash = RuntimeHash.createHash(arr);
                 runtimeHash.elements = hash.elements;
+                hash.addToArray(result);  // This creates new scalars internally
                 arr.elements = new ArrayList<>();
             }
         }
-        return original;
+        return result;
     }
 
     /**
