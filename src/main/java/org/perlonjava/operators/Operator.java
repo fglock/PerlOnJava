@@ -398,12 +398,18 @@ public class Operator {
             }
         }
 
-        // For multiple arguments or other cases, flatten any RuntimeList/RuntimeArray arguments first
-        // This handles cases like: reverse(1, ('A', 'B', 'C')) or reverse(1, @array)
-        // where ('A', 'B', 'C') becomes a RuntimeList and @array is a RuntimeArray
+        // For multiple arguments or other cases, flatten any RuntimeList/RuntimeArray/PerlRange arguments first
+        // This handles cases like: reverse(1, ('A', 'B', 'C')) or reverse(1, @array) or reverse(1..3, @array)
+        // where ('A', 'B', 'C') becomes a RuntimeList, @array is a RuntimeArray, and 1..3 is a PerlRange
         List<RuntimeBase> flattenedArgs = new ArrayList<>();
         for (RuntimeBase arg : args) {
-            if (arg instanceof RuntimeList list) {
+            if (arg instanceof PerlRange range) {
+                // Flatten PerlRange into individual elements
+                RuntimeList rangeList = range.getList();
+                for (RuntimeScalar scalar : rangeList) {
+                    flattenedArgs.add(scalar);
+                }
+            } else if (arg instanceof RuntimeList list) {
                 // Flatten RuntimeList into individual elements
                 for (RuntimeScalar scalar : list) {
                     flattenedArgs.add(scalar);
