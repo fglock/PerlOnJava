@@ -38,12 +38,35 @@ public class EmitLogicalOperator {
 
         // Emit bytecode to evaluate the flip-flop operator
         mv.visitLdcInsn(flipFlopId);
-        node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        
+        // Emit left operand - convert quoteRegex to matchRegex
+        emitFlipFlopOperand(emitterVisitor, node.left);
+        
+        // Emit right operand - convert quoteRegex to matchRegex
+        emitFlipFlopOperand(emitterVisitor, node.right);
+        
         mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/operators/ScalarFlipFlopOperator", "evaluate", "(ILorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
 
         // If the context is VOID, pop the result from the stack
         EmitOperator.handleVoidContext(emitterVisitor);
+    }
+
+    /**
+     * Emits bytecode for a flip-flop operand, with special handling for regex patterns.
+     * If the operand is a quoteRegex node, it's emitted as a match operation instead.
+     *
+     * @param emitterVisitor The visitor used for code emission.
+     * @param operandNode    The operand node to emit.
+     */
+    private static void emitFlipFlopOperand(EmitterVisitor emitterVisitor, org.perlonjava.astnode.Node operandNode) {
+        // Special handling: if operand is a quoteRegex node, emit a match operation
+        if (operandNode instanceof OperatorNode opNode && "quoteRegex".equals(opNode.operator)) {
+            // Emit a match operation against $_
+            EmitRegex.handleMatchRegex(emitterVisitor.with(RuntimeContextType.SCALAR), opNode);
+        } else {
+            // Normal evaluation
+            operandNode.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        }
     }
 
     /**
