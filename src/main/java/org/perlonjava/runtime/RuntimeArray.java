@@ -207,8 +207,12 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         }
 
         List<RuntimeScalar> targetElements = array.elements;
+        
+        // If pushing array onto itself, make a copy to avoid ConcurrentModificationException
+        List<RuntimeScalar> sourceElements = (this == array) ? 
+            new ArrayList<>(this.elements) : this.elements;
 
-        for (RuntimeScalar arrElem : this.elements) {
+        for (RuntimeScalar arrElem : sourceElements) {
             if (arrElem == null) {
                 targetElements.add(null);
             } else {
