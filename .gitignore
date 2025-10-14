@@ -27,10 +27,18 @@ perl5/
 !perl5/t/README.md
 !perl5/t/test.pl
 
+# Ignore the t/ directory (Perl test suite copied from perl5/t/)
+# These should be synced from perl5 repo, not committed here
+t/
+# But keep our own t/README.md documentation
+!t/README.md
+
 # Ignore temporary analysis and debug files
 *_failures.txt
 debug_*.pl
 test_*.pl
+*.tmp
+test_*.tmp
 pack_test_*.log
 out.json
 logs/
