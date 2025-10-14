@@ -3,6 +3,7 @@ package org.perlonjava.runtime;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
@@ -365,31 +366,7 @@ public class RuntimeList extends RuntimeBase {
         RuntimeArray arr = new RuntimeArray();
         original.addToArray(arr);
 
-        // Check if we have any hash assignments that need deduplication
-        boolean hasHashAssignment = false;
-        for (RuntimeBase elem : elements) {
-            if (elem instanceof RuntimeHash) {
-                hasHashAssignment = true;
-                break;
-            }
-        }
-
-        // If no hash assignments, return original (preserves existing behavior)
-        if (!hasHashAssignment) {
-            for (RuntimeBase elem : elements) {
-                if (elem instanceof RuntimeScalarReadOnly runtimeScalarReadOnly && !runtimeScalarReadOnly.getDefinedBoolean()) {
-                    RuntimeArray.shift(arr);
-                } else if (elem instanceof RuntimeScalar runtimeScalar) {
-                    runtimeScalar.set(RuntimeArray.shift(arr));
-                } else if (elem instanceof RuntimeArray runtimeArray) {
-                    runtimeArray.elements = arr.elements;
-                    arr.elements = new ArrayList<>();
-                }
-            }
-            return original;
-        }
-
-        // Build result with hash deduplication
+        // Build result with assigned values (including undef for unassigned scalars)
         RuntimeArray result = new RuntimeArray();
         // Store original size for scalar context
         result.scalarContextSize = original.elements.size();
@@ -400,7 +377,7 @@ public class RuntimeList extends RuntimeBase {
             } else if (elem instanceof RuntimeScalar runtimeScalar) {
                 RuntimeScalar assigned = RuntimeArray.shift(arr);
                 runtimeScalar.set(assigned);
-                result.elements.add(assigned);  // Use original reference, not copy
+                result.elements.add(runtimeScalar);  // Add reference to the variable itself
             } else if (elem instanceof RuntimeArray runtimeArray) {
                 runtimeArray.elements = arr.elements;
                 result.elements.addAll(arr.elements);  // Use original references
@@ -408,7 +385,11 @@ public class RuntimeList extends RuntimeBase {
             } else if (elem instanceof RuntimeHash runtimeHash) {
                 RuntimeHash hash = RuntimeHash.createHash(arr);
                 runtimeHash.elements = hash.elements;
-                hash.addToArray(result);  // This creates new scalars internally
+                // Add lvalue references to hash elements for list assignment
+                for (Map.Entry<String, RuntimeScalar> entry : hash.elements.entrySet()) {
+                    result.elements.add(new RuntimeScalar(entry.getKey()));
+                    result.elements.add(entry.getValue());  // Add reference to hash value
+                }
                 arr.elements = new ArrayList<>();
             }
         }
