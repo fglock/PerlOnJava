@@ -497,14 +497,20 @@ public class MathOperators {
                     return new RuntimeScalar("-");
                 }
             }
-            if (input.matches("^[-+]?[_A-Za-z].*")) {
+            // Check if string has non-numeric trailing characters (not purely numeric)
+            // Purely numeric: "10", "-10", "10.0", "-10.0", "1e5"
+            // Non-numeric: "-10foo", "+xyz", "abc"
+            // Don't match: whitespace-prefixed numbers like " -10"
+            if (!input.matches("^\\s*[-+]?\\d+(\\.\\d+)?([eE][-+]?\\d+)?\\s*$")) {
+                // String is not purely numeric
                 if (input.startsWith("-")) {
                     // Handle case where string starts with "-"
                     return new RuntimeScalar("+" + input.substring(1));
                 } else if (input.startsWith("+")) {
                     // Handle case where string starts with "+"
                     return new RuntimeScalar("-" + input.substring(1));
-                } else {
+                } else if (input.matches("^[_A-Za-z].*")) {
+                    // Only add "-" prefix for strings starting with letter/underscore
                     return new RuntimeScalar("-" + input);
                 }
             }
