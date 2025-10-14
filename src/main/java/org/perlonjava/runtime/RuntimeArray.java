@@ -629,6 +629,11 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             AutovivificationArray.vivify(this);
         }
 
+        // If the array is empty, slicing it returns an empty list, not undefs
+        if (this.elements.isEmpty()) {
+            return new RuntimeList();
+        }
+
         RuntimeList result = new RuntimeList();
         List<RuntimeBase> outElements = result.elements;
         for (RuntimeScalar runtimeScalar : value) {

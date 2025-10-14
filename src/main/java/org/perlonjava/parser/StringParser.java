@@ -263,8 +263,15 @@ public class StringParser {
     public static ListNode parseWordsString(ParsedString rawStr) {
         // Use a regular expression to split the string.
         // "\\s+" matches any whitespace including \r\n, \n, \t, space, etc.
-        String[] words = rawStr.buffers.getFirst().trim().split("\\s+");
+        String trimmed = rawStr.buffers.getFirst().trim();
         ListNode list = new ListNode(rawStr.index);
+        
+        // If the string is empty after trimming, return an empty list
+        if (trimmed.isEmpty()) {
+            return list;
+        }
+        
+        String[] words = trimmed.split("\\s+");
         for (String word : words) {
             list.elements.add(new StringNode(word, rawStr.index));
         }
