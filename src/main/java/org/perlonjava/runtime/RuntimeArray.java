@@ -675,14 +675,19 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             int currentIndex = eachIteratorIndex;
             RuntimeScalar indexScalar = getScalarInt(currentIndex);
 
-            // Get the value at current index
+            // Move to next position
+            eachIteratorIndex++;
+
+            // In scalar context, return only the index
+            if (ctx == RuntimeContextType.SCALAR) {
+                return new RuntimeList(indexScalar);
+            }
+
+            // In list context, return index and value
             RuntimeScalar element = elements.get(currentIndex);
             RuntimeScalar value = (element == null)
                     ? new RuntimeArrayProxyEntry(this, currentIndex)
                     : element;
-
-            // Move to next position
-            eachIteratorIndex++;
 
             return new RuntimeList(indexScalar, value);
         }
