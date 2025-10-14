@@ -643,7 +643,14 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * @return A RuntimeArray representing the keys.
      */
     public RuntimeArray keys() {
-        return new PerlRange(getScalarInt(0), getScalarInt(this.countElements())).getArrayOfAlias();
+        // Reset the each iterator when keys() is called
+        this.eachIteratorIndex = null;
+        
+        int count = this.countElements();
+        if (count == 0) {
+            return new RuntimeArray();
+        }
+        return new PerlRange(getScalarInt(0), getScalarInt(count - 1)).getArrayOfAlias();
     }
 
     /**
@@ -652,6 +659,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * @return This RuntimeArray.
      */
     public RuntimeArray values() {
+        // Reset the each iterator when values() is called
+        this.eachIteratorIndex = null;
         return this;
     }
 
