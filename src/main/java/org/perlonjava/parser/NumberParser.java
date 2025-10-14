@@ -31,7 +31,7 @@ public class NumberParser {
     private static final NumberFormat BINARY_FORMAT = new NumberFormat(
             2,
             str -> str.matches("[01_]*"),
-            str -> Long.parseLong(str, 2),
+            str -> Long.parseLong(str.replaceAll("_", ""), 2),
             NumberParser::parseBinaryToDouble,
             true,
             "binary"
@@ -39,7 +39,7 @@ public class NumberParser {
     private static final NumberFormat OCTAL_FORMAT = new NumberFormat(
             8,
             str -> str.matches("[0-7_]*"),
-            str -> Long.parseLong(str, 8),
+            str -> Long.parseLong(str.replaceAll("_", ""), 8),
             NumberParser::parseOctalToDouble,
             true, // octal floats use binary exponent
             "octal"
@@ -47,7 +47,7 @@ public class NumberParser {
     private static final NumberFormat HEX_FORMAT = new NumberFormat(
             16,
             str -> str.matches("[0-9a-fA-F_]*"),
-            str -> Long.parseLong(str, 16),
+            str -> Long.parseUnsignedLong(str.replaceAll("_", ""), 16),
             NumberParser::parseHexToDouble,
             false, // hex floats use their own exponent handling
             "hexadecimal"
