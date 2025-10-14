@@ -23,15 +23,13 @@ src/test/_Deparsed_XSubs.pm
 
 # Ignore Perl test suite files
 perl5/
-# But don't ignore these two specific files
-!perl5/t/README.md
-!perl5/t/test.pl
 
 # Ignore the t/ directory (Perl test suite copied from perl5/t/)
 # These should be synced from perl5 repo, not committed here
 t/
 # But keep our own t/README.md documentation
 !t/README.md
+!t/test.pl
 
 # Ignore temporary analysis and debug files
 *_failures.txt
