@@ -44,6 +44,40 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     public static RuntimeHash createHash(RuntimeBase value) {
         RuntimeHash result = new RuntimeHash();
         Map<String, RuntimeScalar> resultHash = result.elements;
+        
+        // Count elements to check for odd number
+        int elementCount = 0;
+        Iterator<RuntimeScalar> countIterator = value.iterator();
+        while (countIterator.hasNext()) {
+            countIterator.next();
+            elementCount++;
+        }
+        
+        // Warn if odd number of elements in anonymous hash
+        if (elementCount % 2 != 0) {
+            org.perlonjava.operators.WarnDie.warn(
+                new RuntimeScalar("Odd number of elements in anonymous hash"),
+                RuntimeScalarCache.scalarEmptyString);
+        }
+        
+        Iterator<RuntimeScalar> iterator = value.iterator();
+        while (iterator.hasNext()) {
+            String key = iterator.next().toString();
+            RuntimeScalar val = iterator.hasNext() ? new RuntimeScalar(iterator.next()) : new RuntimeScalar();
+            resultHash.put(key, val);
+        }
+        return result;
+    }
+
+    /**
+     * Creates a hash with the elements of a list without warnings (internal use).
+     *
+     * @param value The RuntimeBase containing the elements to populate the hash.
+     * @return A new RuntimeHash populated with the elements from the list.
+     */
+    private static RuntimeHash createHashNoWarn(RuntimeBase value) {
+        RuntimeHash result = new RuntimeHash();
+        Map<String, RuntimeScalar> resultHash = result.elements;
         Iterator<RuntimeScalar> iterator = value.iterator();
         while (iterator.hasNext()) {
             String key = iterator.next().toString();
@@ -115,10 +149,17 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             case PLAIN_HASH -> {
                 // Store the original list size for scalar context
                 int originalSize = 0;
+                boolean hasReference = false;
                 for (RuntimeBase elem : value.elements) {
                     if (elem instanceof RuntimeArray) {
                         originalSize += ((RuntimeArray) elem).elements.size();
-                    } else if (elem instanceof RuntimeScalar) {
+                    } else if (elem instanceof RuntimeScalar scalar) {
+                        // Check if this is a reference (not a simple scalar)
+                        if (scalar.type == RuntimeScalarType.ARRAYREFERENCE ||
+                            scalar.type == RuntimeScalarType.HASHREFERENCE ||
+                            scalar.type == RuntimeScalarType.REFERENCE) {
+                            hasReference = true;
+                        }
                         originalSize++;
                     } else {
                         // Count elements by iterating
@@ -130,8 +171,22 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                     }
                 }
 
+                // Warn about references or odd elements
+                if (hasReference) {
+                    // If we have a reference, always warn about it
+                    org.perlonjava.operators.WarnDie.warn(
+                        new RuntimeScalar("Reference found where even-sized list expected"),
+                        RuntimeScalarCache.scalarEmptyString);
+                } else if (originalSize % 2 != 0) {
+                    // Only warn about odd elements if no reference
+                    org.perlonjava.operators.WarnDie.warn(
+                        new RuntimeScalar("Odd number of elements in hash assignment"),
+                        RuntimeScalarCache.scalarEmptyString);
+                }
+
                 // Create a new hash from the provided list and replace our elements
-                RuntimeHash hash = createHash(value);
+                // Use createHashNoWarn to avoid double warnings
+                RuntimeHash hash = createHashNoWarn(value);
                 this.elements = hash.elements;
 
                 // Create a RuntimeArray that wraps this hash
