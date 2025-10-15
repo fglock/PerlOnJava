@@ -134,6 +134,14 @@ public class IOOperator {
     public static RuntimeScalar binmode(RuntimeScalar fileHandle, RuntimeList runtimeList) {
         RuntimeIO fh = fileHandle.getRuntimeIO();
 
+        // Handle undefined or invalid filehandle
+        if (fh == null) {
+            // Set $! to EBADF (Bad file descriptor) - errno 9
+            GlobalVariable.getGlobalVariable("main::!")
+                    .set(new RuntimeScalar(9));
+            return RuntimeScalarCache.scalarUndef;
+        }
+
         if (fh instanceof TieHandle tieHandle) {
             return TieHandle.tiedBinmode(tieHandle, runtimeList);
         }
