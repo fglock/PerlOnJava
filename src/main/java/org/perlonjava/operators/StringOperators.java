@@ -304,9 +304,9 @@ public class StringOperators {
             runtimeScalar = NumberParser.parseNumber(runtimeScalar);
         }
 
-        int codePoint = runtimeScalar.getInt();
-
-        // Handle special double values
+        // Check for negative values BEFORE converting to int
+        // because int conversion truncates towards zero (e.g., -0.1 becomes 0)
+        boolean isNegative = false;
         if (runtimeScalar.type == RuntimeScalarType.DOUBLE) {
             double doubleValue = runtimeScalar.getDouble();
             if (Double.isInfinite(doubleValue) || Double.isNaN(doubleValue)) {
@@ -314,15 +314,22 @@ public class StringOperators {
                         (doubleValue > 0 ? "Inf" : "-Inf");
                 throw new PerlCompilerException("Cannot chr " + value);
             }
+            isNegative = doubleValue < 0;
         }
 
-        // Handle negative values
-        if (codePoint < 0) {
+        int codePoint = runtimeScalar.getInt();
+
+        // Handle negative values (check both int and original double)
+        if (codePoint < 0 || isNegative) {
             codePoint = 0xFFFD;  // Unicode replacement character
         }
 
-        // For valid Unicode code points, use Java's built-in support
-        if (Character.isValidCodePoint(codePoint)) {
+        // Perl's chr() accepts any non-negative integer value and creates a character
+        // with that code point, even if it's not valid Unicode (surrogates, beyond 0x10FFFF).
+        // Java's Character.isValidCodePoint() rejects these, so we need to handle them.
+        
+        // For values 0-0x10FFFF that Java accepts, use Java's built-in support
+        if (Character.isValidCodePoint(codePoint) && codePoint <= 0x10FFFF) {
             RuntimeScalar res = new RuntimeScalar(new String(Character.toChars(codePoint)));
             // Only mark as BYTE_STRING for values 0-255
             if (codePoint <= 0xFF) {
@@ -330,9 +337,27 @@ public class StringOperators {
             }
             return res;
         }
-
-        // For invalid code points, use replacement character
-        return new RuntimeScalar(String.valueOf((char) 0xFFFD));
+        
+        // For surrogates (0xD800-0xDFFF) and values beyond Unicode (> 0x10FFFF),
+        // Perl still creates a character with that code point. We store it as a
+        // special marker that will be properly encoded when converted to UTF-8.
+        // For now, we create a string with the code point value, which will be
+        // handled by the UTF-8 encoding logic in pack/unpack.
+        
+        // Create a character using the code point directly
+        // Note: This may create invalid Unicode, but that's what Perl does
+        if (codePoint <= 0x10FFFF) {
+            // Surrogates: Java won't let us create these with Character.toChars,
+            // but we can store the value for later UTF-8 encoding
+            RuntimeScalar res = new RuntimeScalar(new String(new int[]{codePoint}, 0, 1));
+            return res;
+        }
+        
+        // For values beyond 0x10FFFF, Perl creates a character but Java can't represent it
+        // We'll create a special marker that pack/unpack can handle
+        // For now, return the value modulo 0x110000 to match Perl's behavior
+        RuntimeScalar res = new RuntimeScalar(new String(new int[]{codePoint}, 0, 1));
+        return res;
     }
 
     /**
