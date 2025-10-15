@@ -486,6 +486,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     this.elements.clear();
                     list.addToArray(this);
                 }
+                // Set scalarContextSize to the number of elements now in the array
+                // This is what array assignment should return in scalar context
+                this.scalarContextSize = this.elements.size();
                 yield this;
             }
             case AUTOVIVIFY_ARRAY -> {
