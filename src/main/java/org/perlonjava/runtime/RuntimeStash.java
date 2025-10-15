@@ -230,6 +230,8 @@ public class RuntimeStash extends RuntimeHash {
             RuntimeArray.push(list, new RuntimeScalar(key));
         }
         hashIterator = null; // keys resets the iterator
+        // Set scalarContextSize so that keys() in scalar context returns the count
+        list.scalarContextSize = list.elements.size();
         return list;
     }
 

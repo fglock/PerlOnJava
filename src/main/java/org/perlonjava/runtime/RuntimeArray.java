@@ -558,7 +558,19 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * @return A RuntimeList representing the array.
      */
     public RuntimeList getList() {
-        return new RuntimeList(this);
+        // If this array has scalarContextSize set (e.g., from keys()), don't copy elements
+        // Just wrap the array itself so the scalar context behavior is preserved
+        if (this.scalarContextSize != null) {
+            return new RuntimeList(this);
+        }
+        
+        // Otherwise, copy all elements to ensure independence from the original array
+        // This is important for returning local arrays from functions
+        RuntimeList result = new RuntimeList();
+        for (RuntimeScalar element : this.elements) {
+            result.elements.add(new RuntimeScalar(element));
+        }
+        return result;
     }
 
     /**
@@ -652,9 +664,14 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         
         int count = this.countElements();
         if (count == 0) {
-            return new RuntimeArray();
+            RuntimeArray empty = new RuntimeArray();
+            empty.scalarContextSize = 0;
+            return empty;
         }
-        return new PerlRange(getScalarInt(0), getScalarInt(count - 1)).getArrayOfAlias();
+        RuntimeArray result = new PerlRange(getScalarInt(0), getScalarInt(count - 1)).getArrayOfAlias();
+        // Set scalarContextSize so that keys() in scalar context returns the count
+        result.scalarContextSize = count;
+        return result;
     }
 
     /**

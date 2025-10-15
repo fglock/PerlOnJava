@@ -455,6 +455,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 isKey = !isKey;
             }
             hashIterator = null; // keys resets the iterator
+            // Set scalarContextSize so that keys() in scalar context returns the count
+            list.scalarContextSize = list.elements.size();
             return list;
         }
 
@@ -467,6 +469,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             RuntimeArray.push(list, new RuntimeScalar(key));
         }
         hashIterator = null; // keys resets the iterator
+        // Set scalarContextSize so that keys() in scalar context returns the count
+        list.scalarContextSize = list.elements.size();
         return list;
     }
 
