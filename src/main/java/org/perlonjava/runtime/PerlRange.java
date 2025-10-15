@@ -23,10 +23,38 @@ public class PerlRange extends RuntimeBase implements Iterable<RuntimeScalar> {
      * @param end   The ending value of the range.
      */
     public PerlRange(RuntimeScalar start, RuntimeScalar end) {
+        // Special variables like $1, $2 are implemented as ScalarSpecialVariable (RuntimeBaseProxy)
+        // which extends RuntimeScalar but has type=UNDEF until evaluated. We need to force
+        // evaluation by accessing the value, which will call getValueAsScalar() internally.
+        // We do this by checking if the scalar is a proxy and creating a proper copy.
+        RuntimeScalar evalStart = start;
+        RuntimeScalar evalEnd = end;
+        
+        // Force evaluation of special variables by creating new RuntimeScalar with the actual value
+        // But only if they're defined - undef special variables should stay undef
+        if (start instanceof RuntimeBaseProxy) {
+            if (start.getDefinedBoolean()) {
+                // Call toString() to force evaluation, then create a new RuntimeScalar
+                evalStart = new RuntimeScalar(start.toString());
+            } else {
+                // Keep as undef
+                evalStart = new RuntimeScalar();
+            }
+        }
+        if (end instanceof RuntimeBaseProxy) {
+            if (end.getDefinedBoolean()) {
+                // Call toString() to force evaluation, then create a new RuntimeScalar
+                evalEnd = new RuntimeScalar(end.toString());
+            } else {
+                // Keep as undef
+                evalEnd = new RuntimeScalar();
+            }
+        }
+        
         // Handle undef values: treat as 0 for numeric context or "" for string context
         // We'll determine context based on the other operand or default to numeric
-        if (start.type == RuntimeScalarType.UNDEF) {
-            if (end.type != RuntimeScalarType.UNDEF && !ScalarUtils.looksLikeNumber(end)) {
+        if (evalStart.type == RuntimeScalarType.UNDEF) {
+            if (evalEnd.type != RuntimeScalarType.UNDEF && !ScalarUtils.looksLikeNumber(evalEnd)) {
                 // If end is a string, treat undef as ""
                 this.start = new RuntimeScalar("");
             } else {
@@ -34,10 +62,10 @@ public class PerlRange extends RuntimeBase implements Iterable<RuntimeScalar> {
                 this.start = new RuntimeScalar(0);
             }
         } else {
-            this.start = start;
+            this.start = evalStart;
         }
 
-        if (end.type == RuntimeScalarType.UNDEF) {
+        if (evalEnd.type == RuntimeScalarType.UNDEF) {
             if (this.start.type == RuntimeScalarType.STRING ||
                     (this.start.type != RuntimeScalarType.INTEGER && !ScalarUtils.looksLikeNumber(this.start))) {
                 // If start is a string, treat undef as ""
@@ -47,7 +75,7 @@ public class PerlRange extends RuntimeBase implements Iterable<RuntimeScalar> {
                 this.end = new RuntimeScalar(0);
             }
         } else {
-            this.end = end;
+            this.end = evalEnd;
         }
     }
 
