@@ -467,6 +467,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     }
                 }
 
+                int originalSize = this.elements.size();
                 if (needsCopy) {
                     // Make a defensive copy of the list before clearing
                     RuntimeList listCopy = new RuntimeList();
@@ -486,7 +487,13 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     this.elements.clear();
                     list.addToArray(this);
                 }
-                yield this;
+                
+                // Create a new array with scalarContextSize set for assignment return value
+                // This is needed for eval context where assignment should return element count
+                RuntimeArray result = new RuntimeArray();
+                result.elements.addAll(this.elements);
+                result.scalarContextSize = this.elements.size();
+                yield result;
             }
             case AUTOVIVIFY_ARRAY -> {
                 AutovivificationArray.vivify(this);
