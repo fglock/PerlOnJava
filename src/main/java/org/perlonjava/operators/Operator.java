@@ -467,11 +467,12 @@ public class Operator {
 
     public static RuntimeBase repeat(RuntimeBase value, RuntimeScalar timesScalar, int ctx) {
         // Check for uninitialized values and generate warnings
-        if (value instanceof RuntimeScalar && ((RuntimeScalar) value).type == RuntimeScalarType.UNDEF) {
+        // Use getDefinedBoolean() to handle tied scalars correctly
+        if (value instanceof RuntimeScalar && !((RuntimeScalar) value).getDefinedBoolean()) {
             WarnDie.warn(new RuntimeScalar("Use of uninitialized value in string repetition (x)"),
                     RuntimeScalarCache.scalarEmptyString);
         }
-        if (timesScalar.type == RuntimeScalarType.UNDEF) {
+        if (!timesScalar.getDefinedBoolean()) {
             WarnDie.warn(new RuntimeScalar("Use of uninitialized value in string repetition (x)"),
                     RuntimeScalarCache.scalarEmptyString);
         }

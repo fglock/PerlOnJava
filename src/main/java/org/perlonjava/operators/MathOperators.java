@@ -134,11 +134,12 @@ public class MathOperators {
         }
 
         // Check for uninitialized values and generate warnings
-        if (arg1.type == RuntimeScalarType.UNDEF) {
+        // Use getDefinedBoolean() to handle tied scalars correctly
+        if (!arg1.getDefinedBoolean()) {
             WarnDie.warn(new RuntimeScalar("Use of uninitialized value in multiplication (*)"),
                     RuntimeScalarCache.scalarEmptyString);
         }
-        if (arg2.type == RuntimeScalarType.UNDEF) {
+        if (!arg2.getDefinedBoolean()) {
             WarnDie.warn(new RuntimeScalar("Use of uninitialized value in multiplication (*)"),
                     RuntimeScalarCache.scalarEmptyString);
         }
@@ -171,11 +172,12 @@ public class MathOperators {
         }
 
         // Check for uninitialized values and generate warnings
-        if (arg1.type == RuntimeScalarType.UNDEF) {
+        // Use getDefinedBoolean() to handle tied scalars correctly
+        if (!arg1.getDefinedBoolean()) {
             WarnDie.warn(new RuntimeScalar("Use of uninitialized value in division (/)"),
                     RuntimeScalarCache.scalarEmptyString);
         }
-        if (arg2.type == RuntimeScalarType.UNDEF) {
+        if (!arg2.getDefinedBoolean()) {
             WarnDie.warn(new RuntimeScalar("Use of uninitialized value in division (/)"),
                     RuntimeScalarCache.scalarEmptyString);
         }
@@ -418,11 +420,12 @@ public class MathOperators {
         }
 
         // Check for uninitialized values and generate warnings
-        if (arg1.type == RuntimeScalarType.UNDEF) {
+        // Use getDefinedBoolean() to handle tied scalars correctly
+        if (!arg1.getDefinedBoolean()) {
             WarnDie.warn(new RuntimeScalar("Use of uninitialized value in exponentiation (**)"),
                     RuntimeScalarCache.scalarEmptyString);
         }
-        if (arg2.type == RuntimeScalarType.UNDEF) {
+        if (!arg2.getDefinedBoolean()) {
             WarnDie.warn(new RuntimeScalar("Use of uninitialized value in exponentiation (**)"),
                     RuntimeScalarCache.scalarEmptyString);
         }

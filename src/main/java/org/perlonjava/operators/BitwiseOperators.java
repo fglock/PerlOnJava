@@ -23,11 +23,12 @@ public class BitwiseOperators {
      */
     public static RuntimeScalar bitwiseAnd(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
         // Check for uninitialized values and generate warnings
-        if (runtimeScalar.type == RuntimeScalarType.UNDEF) {
+        // Use getDefinedBoolean() to handle tied scalars correctly
+        if (!runtimeScalar.getDefinedBoolean()) {
             WarnDie.warn(new RuntimeScalar("Use of uninitialized value in bitwise and (&)"),
                     RuntimeScalarCache.scalarEmptyString);
         }
-        if (arg2.type == RuntimeScalarType.UNDEF) {
+        if (!arg2.getDefinedBoolean()) {
             WarnDie.warn(new RuntimeScalar("Use of uninitialized value in bitwise and (&)"),
                     RuntimeScalarCache.scalarEmptyString);
         }
@@ -278,11 +279,12 @@ public class BitwiseOperators {
      */
     public static RuntimeScalar shiftLeft(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
         // Check for uninitialized values and generate warnings
-        if (runtimeScalar.type == RuntimeScalarType.UNDEF) {
+        // Use getDefinedBoolean() to handle tied scalars correctly
+        if (!runtimeScalar.getDefinedBoolean()) {
             WarnDie.warn(new RuntimeScalar("Use of uninitialized value in left bitshift (<<)"),
                     RuntimeScalarCache.scalarEmptyString);
         }
-        if (arg2.type == RuntimeScalarType.UNDEF) {
+        if (!arg2.getDefinedBoolean()) {
             WarnDie.warn(new RuntimeScalar("Use of uninitialized value in left bitshift (<<)"),
                     RuntimeScalarCache.scalarEmptyString);
         }
@@ -351,11 +353,12 @@ public class BitwiseOperators {
      */
     public static RuntimeScalar shiftRight(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
         // Check for uninitialized values and generate warnings
-        if (runtimeScalar.type == RuntimeScalarType.UNDEF) {
+        // Use getDefinedBoolean() to handle tied scalars correctly
+        if (!runtimeScalar.getDefinedBoolean()) {
             WarnDie.warn(new RuntimeScalar("Use of uninitialized value in right bitshift (>>)"),
                     RuntimeScalarCache.scalarEmptyString);
         }
-        if (arg2.type == RuntimeScalarType.UNDEF) {
+        if (!arg2.getDefinedBoolean()) {
             WarnDie.warn(new RuntimeScalar("Use of uninitialized value in right bitshift (>>)"),
                     RuntimeScalarCache.scalarEmptyString);
         }
