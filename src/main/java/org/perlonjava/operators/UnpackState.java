@@ -25,27 +25,53 @@ public class UnpackState {
 
     public UnpackState(String dataString, boolean startsWithU) {
         this.dataString = dataString;
-        this.codePoints = dataString.codePoints().toArray();
         this.characterMode = !startsWithU;
+
+        // Check for special marker format for code points > 0x10FFFF
+        // Format: "\uFFFD<XXXXXXXX>" where XXXXXXXX is hex code point
+        java.util.List<Integer> codePointList = new java.util.ArrayList<>();
+        int i = 0;
+        while (i < dataString.length()) {
+            if (i < dataString.length() - 10 && 
+                dataString.charAt(i) == '\uFFFD' && 
+                dataString.charAt(i + 1) == '<' &&
+                dataString.charAt(i + 10) == '>') {
+                // Extract the hex code point
+                String hexStr = dataString.substring(i + 2, i + 10);
+                try {
+                    int cp = Integer.parseUnsignedInt(hexStr, 16);
+                    codePointList.add(cp);
+                    i += 11; // Skip the marker
+                    continue;
+                } catch (NumberFormatException e) {
+                    // Not a valid marker, treat as regular character
+                }
+            }
+            codePointList.add(dataString.codePointAt(i));
+            i += Character.charCount(dataString.codePointAt(i));
+        }
+        
+        this.codePoints = codePointList.stream().mapToInt(Integer::intValue).toArray();
 
         // Determine if this is binary data or a Unicode string
         boolean hasSurrogates = false;
         boolean hasHighUnicode = false;
+        boolean hasBeyondUnicode = false;
 
-        for (int i = 0; i < dataString.length(); i++) {
-            char ch = dataString.charAt(i);
-            if (Character.isHighSurrogate(ch) || Character.isLowSurrogate(ch)) {
+        for (int cp : this.codePoints) {
+            if (cp >= 0xD800 && cp <= 0xDFFF) {
                 hasSurrogates = true;
-                break;
             }
-            if (ch > 255) {
+            if (cp > 255 && cp <= 0x10FFFF) {
                 hasHighUnicode = true;
-                break;
+            }
+            if (cp > 0x10FFFF) {
+                hasBeyondUnicode = true;
             }
         }
 
         // If we have Unicode characters beyond Latin-1, use extended UTF-8 (Perl semantics)
-        this.isUTF8Data = hasHighUnicode || hasSurrogates;
+        this.isUTF8Data = hasHighUnicode || hasSurrogates || hasBeyondUnicode;
         if (isUTF8Data) {
             this.originalBytes = encodeUtf8Extended(this.codePoints);
         } else {
