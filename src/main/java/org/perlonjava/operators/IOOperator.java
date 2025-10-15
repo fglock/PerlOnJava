@@ -120,6 +120,18 @@ public class IOOperator {
 
     public static RuntimeScalar tell(RuntimeScalar fileHandle) {
         RuntimeIO fh = fileHandle.getRuntimeIO();
+        
+        // If no explicit filehandle was provided (tell with no args),
+        // fall back to the last accessed handle like Perl does.
+        if (fh == null) {
+            RuntimeIO last = RuntimeIO.lastAccesseddHandle;
+            if (last != null) {
+                return last.tell();
+            }
+            // Set $! to EBADF (9) and return undef
+            GlobalVariable.getGlobalVariable("main::!").set(9);
+            return RuntimeScalarCache.scalarUndef;
+        }
 
         if (fh instanceof TieHandle tieHandle) {
             return TieHandle.tiedTell(tieHandle);
@@ -128,12 +140,13 @@ public class IOOperator {
         if (fh.ioHandle != null) {
             return fh.ioHandle.tell();
         }
-        throw new PerlCompilerException("No input source available");
+        // Set $! to EBADF (9) and return undef if no underlying handle
+        GlobalVariable.getGlobalVariable("main::!").set(9);
+        return RuntimeScalarCache.scalarUndef;
     }
 
     public static RuntimeScalar binmode(RuntimeScalar fileHandle, RuntimeList runtimeList) {
         RuntimeIO fh = fileHandle.getRuntimeIO();
-
         // Handle undefined or invalid filehandle
         if (fh == null) {
             // Set $! to EBADF (Bad file descriptor) - errno 9
@@ -445,6 +458,14 @@ public class IOOperator {
     public static RuntimeScalar eof(RuntimeScalar fileHandle) {
         RuntimeIO fh = fileHandle.getRuntimeIO();
 
+        // Handle undefined or invalid filehandle
+        if (fh == null) {
+            // Set $! to EBADF (Bad file descriptor) - errno 9
+            GlobalVariable.getGlobalVariable("main::!")
+                    .set(new RuntimeScalar(9));
+            return RuntimeScalarCache.scalarUndef;
+        }
+
         if (fh instanceof TieHandle tieHandle) {
             return TieHandle.tiedEof(tieHandle, new RuntimeList());
         }
@@ -454,6 +475,14 @@ public class IOOperator {
 
     public static RuntimeScalar eof(RuntimeList runtimeList, RuntimeScalar fileHandle) {
         RuntimeIO fh = fileHandle.getRuntimeIO();
+
+        // Handle undefined or invalid filehandle
+        if (fh == null) {
+            // Set $! to EBADF (Bad file descriptor) - errno 9
+            GlobalVariable.getGlobalVariable("main::!")
+                    .set(new RuntimeScalar(9));
+            return RuntimeScalarCache.scalarUndef;
+        }
 
         if (fh instanceof TieHandle tieHandle) {
             return TieHandle.tiedEof(tieHandle, runtimeList);
