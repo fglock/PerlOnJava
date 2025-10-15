@@ -68,7 +68,7 @@ public class Internals extends PerlModuleBase {
 
         return new RuntimeList();
     }
-
+    
     /**
      * Sets or gets the read-only status of a variable.
      *
@@ -86,15 +86,24 @@ public class Internals extends PerlModuleBase {
                 if (variable instanceof RuntimeArray array) {
                     array.type = RuntimeArray.READONLY_ARRAY;
                 } else if (variable instanceof RuntimeScalar scalar) {
-                    // Try to dereference as an array reference
-                    try {
-                        RuntimeArray array = scalar.arrayDeref();
-                        array.type = RuntimeArray.READONLY_ARRAY;
-                    } catch (Exception e) {
-                        // Variable is not an array reference, ignore silently
+                    // Check if it's a scalar reference (from \$var)
+                    if (scalar.type == RuntimeScalarType.REFERENCE && scalar.value instanceof RuntimeScalar targetScalar) {
+                        // Replace the target scalar with a readonly version
+                        RuntimeScalarReadOnly readonlyScalar;
+                        if (targetScalar.type == RuntimeScalarType.INTEGER) {
+                            readonlyScalar = new RuntimeScalarReadOnly(targetScalar.getInt());
+                        } else if (targetScalar.type == RuntimeScalarType.BOOLEAN) {
+                            readonlyScalar = new RuntimeScalarReadOnly(targetScalar.getBoolean());
+                        } else if (targetScalar.type == RuntimeScalarType.STRING) {
+                            readonlyScalar = new RuntimeScalarReadOnly(targetScalar.toString());
+                        } else {
+                            readonlyScalar = new RuntimeScalarReadOnly(); // undef
+                        }
+                        // Copy readonly value into the actual target scalar (replace variable contents)
+                        targetScalar.type = readonlyScalar.type;
+                        targetScalar.value = readonlyScalar.value;
                     }
                 }
-                // TODO: Handle scalars and hashes when needed
             }
         }
         return new RuntimeList();

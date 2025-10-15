@@ -2,6 +2,7 @@ package org.perlonjava.operators;
 
 import org.perlonjava.runtime.PerlCompilerException;
 
+import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
@@ -43,10 +44,10 @@ public class UnpackState {
             }
         }
 
-        // If we have Unicode characters beyond Latin-1, use UTF-8
+        // If we have Unicode characters beyond Latin-1, use extended UTF-8 (Perl semantics)
         this.isUTF8Data = hasHighUnicode || hasSurrogates;
         if (isUTF8Data) {
-            this.originalBytes = dataString.getBytes(StandardCharsets.UTF_8);
+            this.originalBytes = encodeUtf8Extended(this.codePoints);
         } else {
             // For strings that only contain characters 0-255, preserve as ISO-8859-1
             // This handles both ASCII and binary packed data correctly
@@ -127,18 +128,7 @@ public class UnpackState {
                     int byteIndex = 0;
                     while (byteIndex < bytesConsumed && cpIndex < codePoints.length) {
                         int cp = codePoints[cpIndex];
-                        int utf8ByteLength;
-
-                        // Calculate actual UTF-8 byte length for this code point
-                        if (cp <= 0x7F) {
-                            utf8ByteLength = 1;
-                        } else if (cp <= 0x7FF) {
-                            utf8ByteLength = 2;
-                        } else if (cp <= 0xFFFF) {
-                            utf8ByteLength = 3;
-                        } else {
-                            utf8ByteLength = 4;
-                        }
+                        int utf8ByteLength = utf8Len(cp);
 
                         // Check if we have consumed exactly this character's bytes
                         if (byteIndex + utf8ByteLength <= bytesConsumed) {
@@ -172,18 +162,9 @@ public class UnpackState {
             // Calculate byte position based on consumed code points
             int bytePos = 0;
             if (isUTF8Data) {
-                // For UTF-8 data, calculate variable-length byte position
+                // For UTF-8 data, calculate variable-length byte position (extended UTF-8)
                 for (int i = 0; i < codePointIndex; i++) {
-                    int cp = codePoints[i];
-                    if (cp <= 0x7F) {
-                        bytePos += 1;
-                    } else if (cp <= 0x7FF) {
-                        bytePos += 2;
-                    } else if (cp <= 0xFFFF) {
-                        bytePos += 3;
-                    } else {
-                        bytePos += 4;
-                    }
+                    bytePos += utf8Len(codePoints[i]);
                 }
             } else {
                 // For ISO-8859-1 data, each code point is exactly one byte
@@ -312,18 +293,9 @@ public class UnpackState {
             // We're in character mode - need to calculate byte position
             int bytePos = 0;
             if (isUTF8Data) {
-                // For UTF-8 data, calculate variable-length byte position
+                // For UTF-8 data, calculate variable-length byte position (extended UTF-8)
                 for (int i = 0; i < codePointIndex; i++) {
-                    int cp = codePoints[i];
-                    if (cp <= 0x7F) {
-                        bytePos += 1;
-                    } else if (cp <= 0x7FF) {
-                        bytePos += 2;
-                    } else if (cp <= 0xFFFF) {
-                        bytePos += 3;
-                    } else {
-                        bytePos += 4;
-                    }
+                    bytePos += utf8Len(codePoints[i]);
                 }
             } else {
                 // For ISO-8859-1 data, each code point is exactly one byte
@@ -331,5 +303,44 @@ public class UnpackState {
             }
             return bytePos;
         }
+    }
+
+    /**
+     * Compute the extended UTF-8 length (Perl semantics) for a code point.
+     * Supports 1 to 6 byte sequences.
+     */
+    private static int utf8Len(int cp) {
+        if (cp <= 0x7F) return 1;
+        if (cp <= 0x7FF) return 2;
+        if (cp <= 0xFFFF) return 3;
+        if (cp <= 0x1FFFFF) return 4;
+        if (cp <= 0x3FFFFFF) return 5;
+        return 6;
+    }
+
+    /**
+     * Encode an array of code points into extended UTF-8 bytes (Perl semantics).
+     */
+    private static byte[] encodeUtf8Extended(int[] cps) {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        for (int cp : cps) {
+            int len = utf8Len(cp);
+            byte[] out = new byte[len];
+            int val = cp;
+            // Fill continuation bytes from the end
+            for (int i = len - 1; i >= 1; i--) {
+                out[i] = (byte) (0x80 | (val & 0x3F));
+                val >>= 6;
+            }
+            // First byte prefix: 0xxxxxxx, 110xxxxx, 1110xxxx, 11110xxx, 111110xx, 1111110x
+            if (len == 1) {
+                out[0] = (byte) (val & 0x7F);
+            } else {
+                int prefix = (0xFF << (8 - len)) & 0xFF; // 11000000, 11100000, 11110000, 11111000, 11111100
+                out[0] = (byte) (prefix | (val & ((1 << (8 - (len + 1))) - 1)));
+            }
+            baos.write(out, 0, out.length);
+        }
+        return baos.toByteArray();
     }
 }

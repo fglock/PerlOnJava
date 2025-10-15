@@ -66,13 +66,12 @@ public class PerlRange extends RuntimeBase implements Iterable<RuntimeScalar> {
         }
 
         if (evalEnd.type == RuntimeScalarType.UNDEF) {
-            if (this.start.type == RuntimeScalarType.STRING ||
-                    (this.start.type != RuntimeScalarType.INTEGER && !ScalarUtils.looksLikeNumber(this.start))) {
-                // If start is a string, treat undef as ""
-                this.end = new RuntimeScalar("");
-            } else {
-                // Default to numeric context: treat undef as 0
+            // Decide context based on the start operand. If start looks like a number
+            // (including quoted numeric like "-2"), then undef is 0. Otherwise undef is "".
+            if (ScalarUtils.looksLikeNumber(this.start)) {
                 this.end = new RuntimeScalar(0);
+            } else {
+                this.end = new RuntimeScalar("");
             }
         } else {
             this.end = evalEnd;
