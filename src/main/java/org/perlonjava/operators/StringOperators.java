@@ -401,11 +401,23 @@ public class StringOperators {
     }
 
     public static RuntimeScalar join(RuntimeScalar runtimeScalar, RuntimeBase list) {
+        return joinInternal(runtimeScalar, list, true);
+    }
 
+    /**
+     * Internal join implementation with optional warning control.
+     * Used for both explicit join() calls and string interpolation.
+     *
+     * @param runtimeScalar The separator
+     * @param list The list to join
+     * @param warnOnUndef Whether to warn about undef values
+     * @return The joined string
+     */
+    private static RuntimeScalar joinInternal(RuntimeScalar runtimeScalar, RuntimeBase list, boolean warnOnUndef) {
         // TODO - convert octet string back to unicode if needed
 
         // Check if separator is undef and generate warning
-        if (runtimeScalar.type == RuntimeScalarType.UNDEF) {
+        if (warnOnUndef && runtimeScalar.type == RuntimeScalarType.UNDEF) {
             WarnDie.warn(new RuntimeScalar("Use of uninitialized value in join or string"),
                     RuntimeScalarCache.scalarEmptyString);
         }
@@ -413,6 +425,10 @@ public class StringOperators {
         boolean isByteString = runtimeScalar.type == BYTE_STRING;
 
         String delimiter = runtimeScalar.toString();
+        
+        // String interpolation uses empty delimiter - don't warn about undef in that case
+        boolean isStringInterpolation = delimiter.isEmpty();
+        
         // Join the list into a string
         StringBuilder sb = new StringBuilder();
 
@@ -426,8 +442,8 @@ public class StringOperators {
             }
             RuntimeScalar scalar = iterator.next();
 
-            // Check if value is undef and generate warning
-            if (scalar.type == RuntimeScalarType.UNDEF) {
+            // Check if value is undef and generate warning (but not for string interpolation)
+            if (warnOnUndef && !isStringInterpolation && scalar.type == RuntimeScalarType.UNDEF) {
                 WarnDie.warn(new RuntimeScalar("Use of uninitialized value in join or string"),
                         RuntimeScalarCache.scalarEmptyString);
             }
@@ -440,5 +456,17 @@ public class StringOperators {
             res.type = BYTE_STRING;
         }
         return res;
+    }
+
+    /**
+     * Join for string interpolation - doesn't warn about undef values.
+     * This is used internally by the compiler for string interpolation.
+     *
+     * @param runtimeScalar The separator (usually empty string)
+     * @param list The list to join
+     * @return The joined string
+     */
+    public static RuntimeScalar joinForInterpolation(RuntimeScalar runtimeScalar, RuntimeBase list) {
+        return joinInternal(runtimeScalar, list, false);
     }
 }
