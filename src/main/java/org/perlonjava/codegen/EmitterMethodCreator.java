@@ -267,11 +267,12 @@ public class EmitterMethodCreator implements Opcodes {
                 mv.visitLabel(ctx.javaClassInfo.returnLabel); // "return" from other places arrive here
             }
 
-            // Teardown local variables and environment after the method execution
-            Local.localTeardown(localRecord, mv);
-
-            // Transform the value in the stack to RuntimeList
+            // Transform the value in the stack to RuntimeList BEFORE local teardown
+            // This ensures that array/hash elements are expanded before local variables are restored
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "getList", "()Lorg/perlonjava/runtime/RuntimeList;", false);
+
+            // Teardown local variables and environment after the return value is materialized
+            Local.localTeardown(localRecord, mv);
 
             mv.visitInsn(Opcodes.ARETURN); // Returns an Object
             mv.visitMaxs(0, 0); // Automatically computed
