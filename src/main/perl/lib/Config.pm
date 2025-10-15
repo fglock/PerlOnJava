@@ -124,6 +124,11 @@ $os_name =~ s/\s+/_/g;
     # exceed this bit count, they may lose precision in floating-point math.
     # Tests use this to skip checksums that would overflow on this architecture.
     nv_preserves_uv_bits => 32,
+    
+    # d_nv_preserves_uv: Whether NV (double) can preserve UV (unsigned int) values
+    # For 32-bit integers with 64-bit doubles (IEEE 754), this is true since
+    # doubles have 53 bits of precision, which is more than 32 bits.
+    d_nv_preserves_uv => 'define',
 
     # Features available in PerlOnJava
     d_readlink => 'define',
