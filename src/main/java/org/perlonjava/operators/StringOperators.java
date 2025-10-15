@@ -353,10 +353,16 @@ public class StringOperators {
             return res;
         }
         
-        // For values beyond 0x10FFFF, Perl creates a character but Java can't represent it
-        // We'll create a special marker that pack/unpack can handle
-        // For now, return the value modulo 0x110000 to match Perl's behavior
-        RuntimeScalar res = new RuntimeScalar(new String(new int[]{codePoint}, 0, 1));
+        // For values beyond 0x10FFFF, Java's String can't represent them.
+        // We need to store the code point value separately so UnpackState can encode it.
+        // As a workaround, we'll store a special marker string with the code point embedded.
+        // Format: "\uFFFD" + 4-byte big-endian int representation
+        // This is a hack, but it allows us to preserve the value for unpack.
+        RuntimeScalar res = new RuntimeScalar();
+        res.type = RuntimeScalarType.STRING;
+        // Store as a special format that UnpackState will recognize
+        // Use a marker followed by the code point value
+        res.value = "\uFFFD" + String.format("<%08X>", codePoint);
         return res;
     }
 
