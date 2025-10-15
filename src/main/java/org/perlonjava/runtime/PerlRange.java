@@ -96,8 +96,12 @@ public class PerlRange extends RuntimeBase implements Iterable<RuntimeScalar> {
             // Example: "B" .. "" returns empty
             return Collections.emptyIterator();
         } else if (startString.length() > endString.length()) {
-            // If start is longer than end, only return start
-            // Example: "abc" .. "z" returns only "abc"
+            // If start is longer than end:
+            // - If start > end lexicographically: return empty (e.g., "aaa" .. "--")
+            // - If start <= end lexicographically: return start only (e.g., "abc" .. "z")
+            if (startString.compareTo(endString) > 0) {
+                return Collections.emptyIterator();
+            }
             return start.iterator();
         }
         // For all other cases, use the string iterator which will handle:
@@ -411,10 +415,18 @@ public class PerlRange extends RuntimeBase implements Iterable<RuntimeScalar> {
                 if (Double.isNaN(startDouble) || Double.isInfinite(startDouble)) {
                     throw new PerlCompilerException("Range iterator outside integer range");
                 }
+                // Check if the double value exceeds integer range
+                if (startDouble > Integer.MAX_VALUE || startDouble < Integer.MIN_VALUE) {
+                    throw new PerlCompilerException("Range iterator outside integer range");
+                }
             }
             if (end.type == RuntimeScalarType.DOUBLE) {
                 double endDouble = end.getDouble();
                 if (Double.isNaN(endDouble) || Double.isInfinite(endDouble)) {
+                    throw new PerlCompilerException("Range iterator outside integer range");
+                }
+                // Check if the double value exceeds integer range
+                if (endDouble > Integer.MAX_VALUE || endDouble < Integer.MIN_VALUE) {
                     throw new PerlCompilerException("Range iterator outside integer range");
                 }
             }
