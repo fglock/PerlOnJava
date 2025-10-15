@@ -44,3 +44,8 @@ logs/
 *.diff
 *.patch
 
+# Ignore top-level .md files except the existing ones
+/*.md
+!LICENSE.md
+!MILESTONES.md
+!README.md
