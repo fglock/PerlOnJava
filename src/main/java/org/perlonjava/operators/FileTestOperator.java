@@ -129,8 +129,20 @@ public class FileTestOperator {
             return operator.equals("-l") ? scalarFalse : scalarUndef;
         }
 
+        // Handle undef - treat as non-existent file
+        if (fileHandle.type == RuntimeScalarType.UNDEF) {
+            getGlobalVariable("main::!").set(2); // ENOENT
+            return operator.equals("-l") ? scalarFalse : scalarUndef;
+        }
+
         // Handle string arguments
         String filename = fileHandle.toString();
+
+        // Handle empty string - treat as non-existent file
+        if (filename.isEmpty()) {
+            getGlobalVariable("main::!").set(2); // ENOENT
+            return operator.equals("-l") ? scalarFalse : scalarUndef;
+        }
 
         // Check if it looks like a filehandle name but isn't actually a filehandle
         if (looksLikeFilehandle(filename)) {
@@ -353,9 +365,10 @@ public class FileTestOperator {
                     yield getScalarBoolean(owner.equals(currentUser));
                 }
                 case "-t" -> {
-                    // Check if the standard input is a TTY
-                    getGlobalVariable("main::!").set(0); // Clear error
-                    yield getScalarBoolean(System.console() != null);
+                    // -t on a string filename is an error in Perl (expects a filehandle)
+                    // Set $! = EBADF and return undef
+                    getGlobalVariable("main::!").set(9); // EBADF
+                    yield scalarUndef;
                 }
                 default -> throw new UnsupportedOperationException("Unsupported file test operator: " + operator);
             };
@@ -367,13 +380,11 @@ public class FileTestOperator {
     }
 
     public static RuntimeScalar chainedFileTest(String[] operators, RuntimeScalar fileHandle) {
+        RuntimeScalar currentHandle = fileHandle;
         for (String operator : operators) {
-            RuntimeScalar result = fileTest(operator, fileHandle);
-            if (!result.getBoolean()) {
-                return scalarFalse;
-            }
+            currentHandle = fileTest(operator, currentHandle);
         }
-        return scalarTrue;
+        return currentHandle;
     }
 
     public static RuntimeScalar chainedFileTestLastHandle(String[] operators) {
