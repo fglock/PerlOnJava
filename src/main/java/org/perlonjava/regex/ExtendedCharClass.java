@@ -52,10 +52,19 @@ public class ExtendedCharClass {
         }
 
         // Now find the end
-        int end = findExtendedClassEnd(s, start);
+        int end;
+        try {
+            end = findExtendedClassEnd(s, start);
+        } catch (IllegalStateException e) {
+            // Convert validation errors to regex errors
+            // This handles "Unexpected ]" and other structural errors
+            RegexPreprocessor.regexError(s, offset, e.getMessage());
+            return -1; // Never reached
+        }
 
         if (end == -1) {
-            RegexPreprocessor.regexError(s, offset, "Unterminated (?[...]) in regex");
+            // Extended class never properly closed - this is a syntax error
+            RegexPreprocessor.regexError(s, offset, "Syntax error in (?[...])");
         }
 
         String content = s.substring(start, end);
@@ -157,8 +166,9 @@ public class ExtendedCharClass {
                             // System.err.println("DEBUG: Found end of extended class at position " + i);
                             return i;
                         }
-                        // Not properly terminated
-                        return -1;
+                        // Found ] at depth 0 but not followed by )
+                        // This is "Unexpected ]" not "Unterminated"
+                        throw new IllegalStateException("Unexpected ']' with no following ')' in (?[...");
                     }
                     break;
             }
