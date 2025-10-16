@@ -282,8 +282,11 @@ public class StatementResolver {
 
                     // Check if format name is provided
                     LexerToken nextToken = peek(parser);
-                    if (nextToken.type == LexerTokenType.IDENTIFIER) {
-                        formatName = consume(parser).text;
+                    if (nextToken.type == LexerTokenType.IDENTIFIER
+                            || nextToken.text.equals("'")
+                            || nextToken.text.equals("::")) {
+                        // Accept legacy package separator ' and leading :: like sub names
+                        formatName = IdentifierParser.parseSubroutineIdentifier(parser);
                     }
 
                     // Expect '=' after format name (or after "format" if no name)
