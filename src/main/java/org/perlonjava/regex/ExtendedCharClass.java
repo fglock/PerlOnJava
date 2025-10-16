@@ -73,7 +73,16 @@ public class ExtendedCharClass {
 
             if (inEscape) {
                 inEscape = false;
-                i++;
+                // Special case: \c consumes two characters (c and the control char)
+                if (c == 'c' && i + 1 < s.length()) {
+                    i += 2;  // Skip both 'c' and the next character
+                    // If the control char is \, we need to skip one more
+                    if (i < s.length() && s.charAt(i - 1) == '\\') {
+                        i++;  // Skip the character after the backslash
+                    }
+                } else {
+                    i++;
+                }
                 continue;
             }
 
@@ -451,7 +460,12 @@ public class ExtendedCharClass {
             }
         } else if (next == 'c') {
             // Control character: \cX consumes the backslash, 'c', and the next character
-            return start + 3;
+            // Check if we have a character after \c
+            if (start + 2 < content.length()) {
+                return start + 3;
+            }
+            // Incomplete \c at end of string
+            return start + 2;
         }
 
         // Default: single character escape
