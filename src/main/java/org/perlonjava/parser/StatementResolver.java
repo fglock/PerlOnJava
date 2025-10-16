@@ -70,7 +70,10 @@ public class StatementResolver {
 
                 case "sub" -> {
                     parser.tokenIndex++;
-                    if (peek(parser).type == LexerTokenType.IDENTIFIER) {
+                    LexerToken nextToken = peek(parser);
+                    if (nextToken.type == LexerTokenType.IDENTIFIER || 
+                        nextToken.text.equals("'") || 
+                        nextToken.text.equals("::")) {
                         yield SubroutineParser.parseSubroutineDefinition(parser, true, "our");
                     }
                     // Otherwise backtrack

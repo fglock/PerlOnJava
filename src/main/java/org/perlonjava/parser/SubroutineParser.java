@@ -224,8 +224,9 @@ public class SubroutineParser {
         // Initialize the subroutine name to null. This will store the name of the subroutine if 'wantName' is true.
         String subName = null;
 
-        // If the 'wantName' flag is true and the next token is an identifier, we parse the subroutine name.
-        if (wantName && peek(parser).type == LexerTokenType.IDENTIFIER) {
+        // If the 'wantName' flag is true and the next token is an identifier (or starts with ' or ::), we parse the subroutine name.
+        // Note: ' and :: can start a subroutine name (old-style package separator or explicit main:: prefix)
+        if (wantName && (peek(parser).type == LexerTokenType.IDENTIFIER || peek(parser).text.equals("'") || peek(parser).text.equals("::"))) {
             // 'parseSubroutineIdentifier' is called to handle cases where the subroutine name might be complex
             // (e.g., namespaced, fully qualified names). It may return null if no valid name is found.
             subName = IdentifierParser.parseSubroutineIdentifier(parser);
@@ -264,7 +265,7 @@ public class SubroutineParser {
             }
         }
 
-        if (wantName && !peek(parser).text.equals("{")) {
+        if (wantName && subName != null && !peek(parser).text.equals("{")) {
             // A named subroutine can be predeclared without a block of code.
             String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
             RuntimeCode codeRef = (RuntimeCode) GlobalVariable.getGlobalCodeRef(fullName).value;
