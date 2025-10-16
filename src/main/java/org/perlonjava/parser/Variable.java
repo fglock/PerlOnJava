@@ -80,6 +80,12 @@ public class Variable {
             return new StringNode("", parser.tokenIndex);
         }
 
+        // PRE-CHECK: If next token is '{', skip identifier parsing and go directly to parseBracedVariable
+        // This avoids backtracking and heredoc processing issues
+        if (nextToken.text.equals("{")) {
+            return parseBracedVariable(parser, sigil, false);
+        }
+
         // Store the current position before parsing the identifier
         int startIndex = parser.tokenIndex;
 
