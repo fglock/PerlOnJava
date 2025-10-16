@@ -411,11 +411,13 @@ public class ExtendedCharClass {
 
         // Handle special escape sequences
         if (next == 'p' || next == 'P') {
-            // Unicode property
+            // Unicode property: \p{Name} or \pL (single letter)
             if (start + 2 < content.length() && content.charAt(start + 2) == '{') {
                 int end = content.indexOf('}', start + 3);
                 return end != -1 ? end + 1 : start + 2;
             }
+            // Single-letter property like \pN, \pL
+            return start + 3;
         } else if (next == 'N') {
             // Named character
             if (start + 2 < content.length() && content.charAt(start + 2) == '{') {
