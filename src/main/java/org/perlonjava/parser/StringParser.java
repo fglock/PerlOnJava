@@ -245,8 +245,6 @@ public class StringParser {
     static Node parseRegexString(EmitterContext ctx, ParsedString rawStr, Parser parser) {
         Node parsed;
 
-//        System.out.println(rawStr);
-
         if (rawStr.startDelim == '\'') {
             // single quote delimiter, use the string as-is
             parsed = new StringNode(rawStr.buffers.getFirst(), rawStr.index);
