@@ -721,7 +721,14 @@ public class ExtendedCharClass {
             if (operator.equals("!")) {
                 // Complement: [^A]
                 operandEval = unwrapBrackets(operandEval);
-                return "[^" + operandEval + "]";
+                
+                // Check if already negated (starts with ^)
+                if (operandEval.startsWith("^")) {
+                    // Double negation: remove the ^
+                    return "[" + operandEval.substring(1) + "]";
+                } else {
+                    return "[^" + operandEval + "]";
+                }
             }
 
             throw new IllegalStateException("Unknown unary operator: " + operator);
