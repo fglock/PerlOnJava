@@ -149,6 +149,12 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
      */
     @Override
     public RuntimeScalar arrayDerefGet(RuntimeScalar index) {
+        // Don't vivify read-only scalars (like constants from constant subroutines)
+        // This matches Perl's behavior where FILE1->[0] returns undef without error
+        // If lvalue is null and this is read-only, just return undef
+        if (lvalue == null && this instanceof RuntimeScalarReadOnly) {
+            return RuntimeScalarCache.scalarUndef;
+        }
         vivify();
         RuntimeScalar ret = lvalue.arrayDerefGet(index);
         this.type = lvalue.type;
