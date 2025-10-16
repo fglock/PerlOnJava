@@ -770,6 +770,23 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     /**
+     * Returns just the extended character class content if this is an extended character class,
+     * otherwise returns the full stringified pattern. This is used when interpolating into
+     * another extended character class.
+     *
+     * @return The extended character class content or full pattern
+     */
+    public String toExtendedCharClassString() {
+        // Check if this is an extended character class pattern
+        if (patternString != null && patternString.startsWith("(?[") && patternString.endsWith("])")) {
+            // Return just the (?[...]) part without the outer (?^FLAGS:...)
+            return patternString;
+        }
+        // Not an extended character class, return full stringified form
+        return toString();
+    }
+
+    /**
      * Returns a string representation of the regex reference.
      *
      * @return A string representing the regex reference.

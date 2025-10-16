@@ -258,6 +258,38 @@ public class ExtendedCharClass {
                             // Unterminated comment, skip to end
                             i = content.length();
                         }
+                    } else if (i + 6 < content.length() && content.charAt(i + 1) == '?') {
+                        // Check for interpolated regex pattern: (?FLAGS:(?[ ... ]))
+                        // Find the : after the flags
+                        int colonPos = i + 2;
+                        while (colonPos < content.length() && content.charAt(colonPos) != ':' && content.charAt(colonPos) != ')') {
+                            colonPos++;
+                        }
+                        if (colonPos < content.length() && content.charAt(colonPos) == ':' &&
+                            colonPos + 3 < content.length() && content.charAt(colonPos + 1) == '(' &&
+                            content.charAt(colonPos + 2) == '?' && content.charAt(colonPos + 3) == '[') {
+                            // Found (?FLAGS:(?[ ... ]))
+                            int innerStart = colonPos + 1; // Position of inner '(?['
+                            int innerEnd = findMatchingParen(content, innerStart);
+                            if (innerEnd != -1) {
+                                // Extract just the content between (?[ and ])
+                                String innerContent = content.substring(innerStart + 3, innerEnd - 1);
+                                // Add as a character class token (will be processed recursively)
+                                tokens.add(new Token(TokenType.CHAR_CLASS, "(?[" + innerContent + "])", tokenStart));
+                                // Skip past the entire (?FLAGS:(?[ ... ])) construct
+                                i = innerEnd + 1; // After the closing ) of (?FLAGS:...)
+                                if (i < content.length() && content.charAt(i) == ')') {
+                                    i++; // Skip the outer )
+                                }
+                            } else {
+                                // Malformed, treat as regular paren
+                                tokens.add(new Token(TokenType.LPAREN, "(", tokenStart));
+                                i++;
+                            }
+                        } else {
+                            tokens.add(new Token(TokenType.LPAREN, "(", tokenStart));
+                            i++;
+                        }
                     } else {
                         tokens.add(new Token(TokenType.LPAREN, "(", tokenStart));
                         i++;
@@ -485,6 +517,13 @@ public class ExtendedCharClass {
      * Process a character class element from extended syntax
      */
     private static String processCharacterClass(String charClass) {
+        // Handle nested extended character class (?[...])
+        if (charClass.startsWith("(?[") && charClass.endsWith("])")) {
+            // Recursively process the nested extended character class
+            String nestedContent = charClass.substring(3, charClass.length() - 2);
+            return transformExtendedClass(nestedContent, charClass, 0);
+        }
+        
         // Handle POSIX classes
         if (charClass.startsWith("::") && charClass.endsWith("::")) {
             // Transform ::word:: to [:word:]
