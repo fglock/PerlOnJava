@@ -721,11 +721,23 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
 
         return switch (type) {
-            case UNDEF -> AutovivificationArray.createAutovivifiedArray(this);
+            case UNDEF -> {
+                // Don't autovivify read-only scalars (like constants)
+                // This matches Perl's behavior where 1->[0] returns undef without error
+                if (this instanceof RuntimeScalarReadOnly) {
+                    yield new RuntimeArray();
+                }
+                yield AutovivificationArray.createAutovivifiedArray(this);
+            }
             case ARRAYREFERENCE -> (RuntimeArray) value;
             case STRING, BYTE_STRING ->
                     throw new PerlCompilerException("Can't use string (\"" + this + "\") as an ARRAY ref while \"strict refs\" in use");
             case TIED_SCALAR -> tiedFetch().arrayDeref();
+            case INTEGER, DOUBLE -> {
+                // For numeric constants (like 1->[0]), return an empty array
+                // This matches Perl's behavior where 1->[0] returns undef without error
+                yield new RuntimeArray();
+            }
             default -> throw new PerlCompilerException("Not an ARRAY reference");
         };
     }

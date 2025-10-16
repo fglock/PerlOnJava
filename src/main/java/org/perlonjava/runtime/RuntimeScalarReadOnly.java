@@ -150,6 +150,8 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
         if (this.type == UNDEF) {
             throw new PerlCompilerException("Can't use an undefined value as an ARRAY reference");
         }
-        throw new PerlCompilerException("Can't use value as an ARRAY reference");
+        // For non-reference values (like constants), return an empty array
+        // This matches Perl's behavior where 1->[0] returns undef without error
+        return new RuntimeArray();
     }
 }
