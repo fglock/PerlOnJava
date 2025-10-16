@@ -35,6 +35,7 @@ t/
 *_failures.txt
 debug_*.pl
 test_*.pl
+*_copy.t
 *.tmp
 test_*.tmp
 pack_test_*.log
