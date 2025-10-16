@@ -296,25 +296,59 @@ public class ExtendedCharClass {
                             colonPos++;
                         }
                         
-                        // Check if this is followed by (?[
+                        // Check if this is followed by (?[ or another (?FLAGS:
                         if (colonPos < content.length() && content.charAt(colonPos) == ':' &&
-                            colonPos + 3 < content.length() && content.charAt(colonPos + 1) == '(' &&
-                            content.charAt(colonPos + 2) == '?' && content.charAt(colonPos + 3) == '[') {
-                            // Found (?FLAGS:(?[ ... ])) - this is an interpolated extended char class
-                            int innerStart = colonPos + 1; // Position of inner '(?['
-                            int innerEnd = findMatchingParen(content, innerStart);
-                            if (innerEnd != -1) {
-                                // Extract just the content between (?[ and ])
-                                String innerContent = content.substring(innerStart + 3, innerEnd - 1);
-                                // Add as a character class token (will be processed recursively)
-                                tokens.add(new Token(TokenType.CHAR_CLASS, "(?[" + innerContent + "])", tokenStart));
-                                // Skip past the entire (?FLAGS:(?[ ... ])) construct
-                                i = innerEnd + 1; // After the closing ) of (?FLAGS:...)
-                                if (i < content.length() && content.charAt(i) == ')') {
-                                    i++; // Skip the outer )
+                            colonPos + 1 < content.length() && content.charAt(colonPos + 1) == '(') {
+                            
+                            int searchPos = colonPos + 1;
+                            // Skip nested (?FLAGS: groups to find the actual (?[
+                            while (searchPos < content.length() && content.charAt(searchPos) == '(' &&
+                                   searchPos + 2 < content.length() && content.charAt(searchPos + 1) == '?') {
+                                // Find the : after these flags
+                                int nextColon = searchPos + 2;
+                                while (nextColon < content.length() && content.charAt(nextColon) != ':' && 
+                                       content.charAt(nextColon) != ')') {
+                                    nextColon++;
+                                }
+                                if (nextColon < content.length() && content.charAt(nextColon) == ':') {
+                                    if (nextColon + 3 < content.length() && content.charAt(nextColon + 1) == '(' &&
+                                        content.charAt(nextColon + 2) == '?' && content.charAt(nextColon + 3) == '[') {
+                                        // Found (?[!
+                                        searchPos = nextColon + 1;
+                                        break;
+                                    }
+                                    // Another (?FLAGS: group, continue searching
+                                    searchPos = nextColon + 1;
+                                } else {
+                                    break;
+                                }
+                            }
+                            
+                            // Check if we found (?[
+                            if (searchPos < content.length() && content.charAt(searchPos) == '(' &&
+                                searchPos + 2 < content.length() && content.charAt(searchPos + 1) == '?' &&
+                                content.charAt(searchPos + 2) == '[') {
+                                // Found (?FLAGS:...(?[ ... ])) - this is an interpolated extended char class
+                                int innerStart = searchPos; // Position of inner '(?['
+                                int innerEnd = findMatchingParen(content, innerStart);
+                                if (innerEnd != -1) {
+                                    // Extract just the content between (?[ and ])
+                                    String innerContent = content.substring(innerStart + 3, innerEnd - 1);
+                                    // Add as a character class token (will be processed recursively)
+                                    tokens.add(new Token(TokenType.CHAR_CLASS, "(?[" + innerContent + "])", tokenStart));
+                                    // Skip past the entire (?FLAGS:...(?[ ... ])) construct
+                                    // We need to skip all the closing ) for the nested flag groups
+                                    i = innerEnd + 1; // After the closing ) of (?[...)
+                                    // Skip closing ) for each nested flag group
+                                    while (i < content.length() && content.charAt(i) == ')') {
+                                        i++;
+                                    }
+                                } else {
+                                    // Malformed, treat as regular paren
+                                    tokens.add(new Token(TokenType.LPAREN, "(", tokenStart));
+                                    i++;
                                 }
                             } else {
-                                // Malformed, treat as regular paren
                                 tokens.add(new Token(TokenType.LPAREN, "(", tokenStart));
                                 i++;
                             }
