@@ -106,10 +106,6 @@ public class ExtendedCharClass {
                 // This is critical for patterns like \c[ where [ is the control char
                 if (c == 'c' && i + 1 < s.length()) {
                     i += 2;  // Skip both 'c' and the next character
-                    // If the control char is \, we need to skip one more
-                    if (i < s.length() && s.charAt(i - 1) == '\\') {
-                        i++;  // Skip the character after the backslash
-                    }
                 } else {
                     i++;
                 }
