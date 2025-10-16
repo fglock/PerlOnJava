@@ -14,12 +14,12 @@ buildscript {
 plugins {
     id 'java'
     // Plugin for checking dependency updates
-    id 'com.github.ben-manes.versions' version '0.52.0'
+    id 'com.github.ben-manes.versions' version '0.53.0'
     // Plugin for automatically updating dependencies
     id 'se.patrikerdes.use-latest-versions' version '0.2.19'
     id 'application'
     // Plugin for creating OS packages (deb)
-    id 'com.netflix.nebula.ospackage' version '12.1.0'
+    id 'com.netflix.nebula.ospackage' version '12.1.1'
     // Plugin for creating fat/uber JARs
     id 'com.github.johnrengelman.shadow' version '8.1.1'
 }
@@ -68,19 +68,19 @@ repositories {
 // Project dependencies
 dependencies {
     // Core dependencies
-    implementation 'org.ow2.asm:asm:9.8'                           // ByteCode manipulation
-    implementation 'org.ow2.asm:asm-util:9.8'                     // ASM utilities
+    implementation 'org.ow2.asm:asm:9.9'                           // ByteCode manipulation
+    implementation 'org.ow2.asm:asm-util:9.9'                     // ASM utilities
     implementation 'com.ibm.icu:icu4j:77.1'                       // Unicode support
     implementation 'com.alibaba.fastjson2:fastjson2:2.0.59'       // JSON processing
     implementation 'org.snakeyaml:snakeyaml-engine:2.10'           // YAML processing
     implementation 'org.apache.commons:commons-csv:1.14.1'          // CSV processing
-    implementation 'net.java.dev.jna:jna:5.18.0'                   // Native access
-    implementation 'net.java.dev.jna:jna-platform:5.18.0'          // Native access
+    implementation 'net.java.dev.jna:jna:5.18.1'                   // Native access
+    implementation 'net.java.dev.jna:jna-platform:5.18.1'          // Native access
 
     // Testing dependencies
-    testImplementation 'org.junit.jupiter:junit-jupiter-api:6.0.0-RC3'
-    testImplementation 'org.junit.jupiter:junit-jupiter-engine:6.0.0-RC3'
-    testImplementation 'org.junit.jupiter:junit-jupiter-params:6.0.0-RC3'
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:6.0.0'
+    testImplementation 'org.junit.jupiter:junit-jupiter-engine:6.0.0'
+    testImplementation 'org.junit.jupiter:junit-jupiter-params:6.0.0'
 }
 
 // JUnit configuration
