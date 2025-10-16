@@ -239,8 +239,20 @@ public class ExtendedCharClass {
                     break;
 
                 case '(':
-                    tokens.add(new Token(TokenType.LPAREN, "(", tokenStart));
-                    i++;
+                    // Check for inline comment (?#...)
+                    if (i + 2 < content.length() && content.charAt(i + 1) == '?' && content.charAt(i + 2) == '#') {
+                        // Skip to closing )
+                        int closePos = content.indexOf(')', i + 3);
+                        if (closePos != -1) {
+                            i = closePos + 1;
+                        } else {
+                            // Unterminated comment, skip to end
+                            i = content.length();
+                        }
+                    } else {
+                        tokens.add(new Token(TokenType.LPAREN, "(", tokenStart));
+                        i++;
+                    }
                     break;
 
                 case ')':
