@@ -340,7 +340,18 @@ public class IdentifierParser {
         // Track if we're at the start of the identifier
         boolean isFirstToken = true;
 
-        // Numbers are not allowed at the very beginning
+        // Handle leading ' (old-style package separator meaning main::)
+        if (isFirstToken && token.text.equals("'")) {
+            // Leading ' means main:: (e.g., 'Hello'_he_said means main::Hello::_he_said)
+            variableName.append("::");  // Leading :: means main::
+            parser.tokenIndex++;
+            token = parser.tokens.get(parser.tokenIndex);
+            nextToken = parser.tokens.get(parser.tokenIndex + 1);
+            isFirstToken = false;  // We've consumed the leading '
+            // Continue to parse the rest
+        }
+
+        // Numbers are not allowed at the very beginning (unless after a leading ' or ::)
         if (isFirstToken && token.type == LexerTokenType.NUMBER) {
             return null;
         }
