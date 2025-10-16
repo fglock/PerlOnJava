@@ -33,6 +33,10 @@ public class UnicodeResolver {
         try {
             // Special cases - Perl XPosix properties not natively supported in Java
             switch (property) {
+                case "lb=cr":
+                case "lb=CR":
+                    // Line Break = Carriage Return (U+000D)
+                    return negated ? "[^\\r]" : "[\\r]";
                 case "XPosixSpace":
                 case "XPerlSpace":
                 case "SpacePerl":
