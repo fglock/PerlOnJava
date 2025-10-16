@@ -102,12 +102,17 @@ public class UnicodeResolver {
                     break;
             }
 
-            // Remove prefixes
-            for (String prefix : new String[]{"Script=", "Block=", "In=", "Is="}) {
+            // Remove prefixes (Blk= is Perl's short form for Block=)
+            for (String prefix : new String[]{"Script=", "Block=", "Blk=", "In=", "Is="}) {
                 if (property.startsWith(prefix)) {
                     property = property.substring(prefix.length());
                     break;
                 }
+            }
+            
+            // Map Perl block aliases to Unicode block names
+            if (property.equalsIgnoreCase("ASCII")) {
+                property = "Basic_Latin";
             }
 
             // Single character properties
