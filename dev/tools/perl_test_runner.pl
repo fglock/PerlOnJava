@@ -242,6 +242,7 @@ sub run_single_test {
     local $ENV{JPERL_UNIMPLEMENTED} = $test_file =~ m{
           re/pat_rt_report.t
         | re/pat.t
+        | re/regex_sets.t
         | op/pack.t
         | op/index.t
         | re/reg_pmod.t
