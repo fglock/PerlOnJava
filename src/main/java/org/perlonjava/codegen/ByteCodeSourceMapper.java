@@ -118,20 +118,28 @@ public class ByteCodeSourceMapper {
         }
 
         LineInfo lineInfo = entry.getValue();
-        var location = new SourceLocation(
+        
+        // Create a unique location key using tokenIndex instead of line number
+        // This prevents false duplicates when multiple statements are on the same line
+        var locationKey = new SourceLocation(
+                fileNamePool.get(fileId),
+                packageNamePool.get(lineInfo.packageNameId()),
+                entry.getKey()  // Use the actual tokenIndex as the unique identifier
+        );
+
+        // Check if this token position is already assigned to a different class
+        String existingClassName = locationToClassName.putIfAbsent(locationKey, element.getClassName());
+        if (existingClassName != null && !existingClassName.equals(element.getClassName())) {
+            // Different class name already assigned to this token position - return null to avoid duplicate
+            return null;
+        }
+
+        // Return the location with the actual line number for display
+        return new SourceLocation(
                 fileNamePool.get(fileId),
                 packageNamePool.get(lineInfo.packageNameId()),
                 lineInfo.lineNumber()
         );
-
-        // Check if this SourceLocation is already assigned to a different class
-        String existingClassName = locationToClassName.putIfAbsent(location, element.getClassName());
-        if (existingClassName != null && !existingClassName.equals(element.getClassName())) {
-            // Different class name already assigned to this location - return null to avoid duplicate
-            return null;
-        }
-
-        return location;
     }
 
     /**
