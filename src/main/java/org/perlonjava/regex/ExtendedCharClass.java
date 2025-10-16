@@ -15,8 +15,6 @@ public class ExtendedCharClass {
      * @return Position after the closing ])
      */
     static int handleExtendedCharacterClass(String s, int offset, StringBuilder sb, RegexFlags regexFlags) {
-        // System.err.println("DEBUG: handleExtendedCharacterClass called at offset " + offset);
-
         int start = offset + 3; // Skip past '(?['
 
         // First, check if this is an empty extended character class
@@ -198,17 +196,31 @@ public class ExtendedCharClass {
         List<Token> tokens = new ArrayList<>();
         int i = 0;
 
-        // System.err.println("DEBUG: tokenizeExtendedClass content: '" + content + "'");
-
         while (i < content.length()) {
             // Skip whitespace (automatic /xx mode)
-            while (i < content.length() && Character.isWhitespace(content.charAt(i))) {
-                i++;
+            // In extended character classes, Pattern_White_Space includes NEL (U+0085)
+            while (i < content.length()) {
+                char ch = content.charAt(i);
+                if (Character.isWhitespace(ch) || ch == '\u0085') {  // NEL
+                    i++;
+                } else {
+                    break;
+                }
             }
 
             if (i >= content.length()) break;
 
             char c = content.charAt(i);
+            
+            // Handle comments (# to end of line)
+            if (c == '#') {
+                // Skip to end of line
+                while (i < content.length() && content.charAt(i) != '\n') {
+                    i++;
+                }
+                continue;
+            }
+
             int tokenStart = contentStart + i;
 
             switch (c) {
@@ -268,6 +280,7 @@ public class ExtendedCharClass {
                     // Parse escape sequence as a character class element
                     int escapeEnd = parseEscapeInExtendedClass(content, i);
                     String escapeSeq = content.substring(i, escapeEnd);
+                    // Wrap escape sequences in brackets to make them character class elements
                     tokens.add(new Token(TokenType.CHAR_CLASS, "[" + escapeSeq + "]", tokenStart));
                     i = escapeEnd;
                     break;
@@ -416,6 +429,15 @@ public class ExtendedCharClass {
                 return end != -1 ? end + 1 : start + 4; // \xHH
             }
             return start + 4; // \xHH
+        } else if (next == 'o') {
+            // Octal escape
+            if (start + 2 < content.length() && content.charAt(start + 2) == '{') {
+                int end = content.indexOf('}', start + 3);
+                return end != -1 ? end + 1 : start + 2;
+            }
+        } else if (next == 'c') {
+            // Control character: \cX consumes the backslash, 'c', and the next character
+            return start + 3;
         }
 
         // Default: single character escape
@@ -443,7 +465,9 @@ public class ExtendedCharClass {
             if (mapped != null) {
                 return mapped;
             }
-        } else if (charClass.startsWith("[:") && charClass.endsWith(":]")) {
+        } else if (charClass.startsWith("[:") && charClass.endsWith(":]") && charClass.length() > 4) {
+            // Valid POSIX class must have at least one character between [: and :]
+            // e.g., [:word:] is valid, but [:] is not
             String mapped = CharacterClassMapper.getMappedClass(charClass);
             if (mapped != null) {
                 return mapped;
