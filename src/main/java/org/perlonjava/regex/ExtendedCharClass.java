@@ -104,8 +104,18 @@ public class ExtendedCharClass {
                 inEscape = false;
                 // Special case: \c consumes two characters (c and the control char)
                 // This is critical for patterns like \c[ where [ is the control char
+                // However, if we're inside nested structures (depth > 1) and \c is followed
+                // by ] or ), those should close the structure, not be consumed by \c
                 if (c == 'c' && i + 1 < s.length()) {
-                    i += 2;  // Skip both 'c' and the next character
+                    char nextChar = s.charAt(i + 1);
+                    // At depth 1, \c] or \c) are valid (] closes extended class, ) is the outer paren)
+                    // At depth > 1, \c] or \c) leave \c incomplete - don't consume the ] or )
+                    if (depth > 1 && (nextChar == ']' || nextChar == ')')) {
+                        // Don't consume the ] or ) - let them be processed as structure
+                        i++;  // Just skip the 'c'
+                    } else {
+                        i += 2;  // Skip both 'c' and the next character
+                    }
                 } else {
                     i++;
                 }
