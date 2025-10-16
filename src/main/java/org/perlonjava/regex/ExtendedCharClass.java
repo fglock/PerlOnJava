@@ -3,6 +3,29 @@ package org.perlonjava.regex;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * ExtendedCharClass handles Perl's Extended Bracketed Character Classes (?[...])
+ * 
+ * Extended character classes allow set operations on character classes:
+ * - Union: (?[ [a] + [b] ]) or (?[ [a] | [b] ])
+ * - Intersection: (?[ [a-z] & [aeiou] ])
+ * - Subtraction: (?[ [a-z] - [aeiou] ])
+ * - Symmetric difference: (?[ [a-z] ^ [aeiou] ])
+ * - Complement: (?[ ! [a-z] ])
+ * 
+ * Features:
+ * - Automatic /xx mode (whitespace ignored)
+ * - Comments with # and (?#...)
+ * - Nested expressions with parentheses
+ * - Unicode properties (\p{...}, \pN)
+ * - POSIX classes ([:word:], etc.)
+ * - Escape sequences (\t, \cX, etc.)
+ * - Regex interpolation (qr// patterns)
+ * 
+ * The implementation tokenizes the content, parses it into an expression tree,
+ * and transforms it into Java's character class syntax using intersection (&&)
+ * and negation (^) operators.
+ */
 public class ExtendedCharClass {
     /**
      * Handles Perl's Extended Bracketed Character Class (?[...])
@@ -58,15 +81,21 @@ public class ExtendedCharClass {
     }
 
     /**
-     * Find the end of the extended character class, handling nested brackets
+     * Find the end of the extended character class, handling nested brackets.
+     * 
+     * This method tracks bracket depth to handle nested character classes like [a[b]c].
+     * It also handles escape sequences, especially \c which consumes two characters.
+     * 
+     * The extended character class ends when we find ]) at depth 0.
+     * 
+     * @param s     The regex string
+     * @param start Position after the opening (?[
+     * @return Position of the closing ], or -1 if not found
      */
     private static int findExtendedClassEnd(String s, int start) {
-        int depth = 1;
+        int depth = 1;  // Track bracket nesting depth
         int i = start;
         boolean inEscape = false;
-
-        // System.err.println("DEBUG: findExtendedClassEnd starting at position " + start);
-        // System.err.println("DEBUG: Looking at: '" + s.substring(start) + "'");
 
         while (i < s.length() && depth > 0) {
             char c = s.charAt(i);
@@ -74,6 +103,7 @@ public class ExtendedCharClass {
             if (inEscape) {
                 inEscape = false;
                 // Special case: \c consumes two characters (c and the control char)
+                // This is critical for patterns like \c[ where [ is the control char
                 if (c == 'c' && i + 1 < s.length()) {
                     i += 2;  // Skip both 'c' and the next character
                     // If the control char is \, we need to skip one more
@@ -260,15 +290,21 @@ public class ExtendedCharClass {
                         }
                     } else if (i + 6 < content.length() && content.charAt(i + 1) == '?') {
                         // Check for interpolated regex pattern: (?FLAGS:(?[ ... ]))
-                        // Find the : after the flags
+                        // When a qr// pattern containing (?[...]) is interpolated, it becomes:
+                        //   (?^:(?[ ... ])) or (?^i:(?[ ... ])) etc.
+                        // We need to extract just the inner (?[ ... ]) part
+                        
+                        // Find the : after the flags (e.g., (?^: or (?^i:)
                         int colonPos = i + 2;
                         while (colonPos < content.length() && content.charAt(colonPos) != ':' && content.charAt(colonPos) != ')') {
                             colonPos++;
                         }
+                        
+                        // Check if this is followed by (?[
                         if (colonPos < content.length() && content.charAt(colonPos) == ':' &&
                             colonPos + 3 < content.length() && content.charAt(colonPos + 1) == '(' &&
                             content.charAt(colonPos + 2) == '?' && content.charAt(colonPos + 3) == '[') {
-                            // Found (?FLAGS:(?[ ... ]))
+                            // Found (?FLAGS:(?[ ... ])) - this is an interpolated extended char class
                             int innerStart = colonPos + 1; // Position of inner '(?['
                             int innerEnd = findMatchingParen(content, innerStart);
                             if (innerEnd != -1) {
@@ -514,10 +550,20 @@ public class ExtendedCharClass {
     }
 
     /**
-     * Process a character class element from extended syntax
+     * Process a character class element from extended syntax.
+     * 
+     * This handles:
+     * - Nested extended character classes (?[...]) from interpolation
+     * - POSIX classes ([:word:], [:digit:], etc.)
+     * - Regular character classes ([a-z], [abc], etc.)
+     * - Escape sequences (\d, \w, \s, etc.)
+     * 
+     * @param charClass The character class string to process
+     * @return Java-compatible character class syntax
      */
     private static String processCharacterClass(String charClass) {
         // Handle nested extended character class (?[...])
+        // This occurs when a qr/(?[...])/ pattern is interpolated
         if (charClass.startsWith("(?[") && charClass.endsWith("])")) {
             // Recursively process the nested extended character class
             String nestedContent = charClass.substring(3, charClass.length() - 2);
@@ -725,6 +771,15 @@ public class ExtendedCharClass {
         }
     }
 
+    /**
+     * Binary operation node (union, intersection, subtraction, symmetric difference)
+     * 
+     * Operators:
+     * - + or | : Union (A or B)
+     * - & : Intersection (A and B)
+     * - - : Subtraction (A but not B)
+     * - ^ : Symmetric difference (A or B but not both)
+     */
     private static class BinaryOpNode extends ExprNode {
         String operator;
         ExprNode left;
@@ -770,6 +825,14 @@ public class ExtendedCharClass {
         }
     }
 
+    /**
+     * Unary operation node (complement)
+     * 
+     * The ! operator complements a character class.
+     * Important: Double negation is handled specially:
+     * - ! [^A] becomes [A] (NOT NOT A = A)
+     * - This prevents invalid Java regex like [^^A]
+     */
     private static class UnaryOpNode extends ExprNode {
         String operator;
         ExprNode operand;
@@ -788,6 +851,7 @@ public class ExtendedCharClass {
                 operandEval = unwrapBrackets(operandEval);
                 
                 // Check if already negated (starts with ^)
+                // This handles double negation: ! [^A] = [A]
                 if (operandEval.startsWith("^")) {
                     // Double negation: remove the ^
                     return "[" + operandEval.substring(1) + "]";
