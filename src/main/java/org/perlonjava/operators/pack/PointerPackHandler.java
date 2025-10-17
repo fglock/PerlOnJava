@@ -31,33 +31,41 @@ public class PointerPackHandler implements PackFormatHandler {
     @Override
     public int pack(List<RuntimeScalar> values, int valueIndex, int count, boolean hasStar,
                     ParsedModifiers modifiers, PackBuffer output) {
-        // For P format, count specifies the guaranteed length of the pointed-to string,
-        // not a repeat count. We always pack exactly one pointer.
-        RuntimeScalar value;
-        if (valueIndex >= values.size()) {
-            // If no more arguments, use empty string as per Perl behavior
-            value = new RuntimeScalar("");
-        } else {
-            value = values.get(valueIndex);
-            valueIndex++;
+        // Determine how many pointers to pack
+        int numPointers = count;
+        if (hasStar) {
+            // Pack all remaining values
+            numPointers = values.size() - valueIndex;
         }
 
-        long ptr = 0L;
+        // Pack the specified number of pointers
+        for (int i = 0; i < numPointers; i++) {
+            RuntimeScalar value;
+            if (valueIndex >= values.size()) {
+                // If no more arguments, use empty string as per Perl behavior
+                value = new RuntimeScalar("");
+            } else {
+                value = values.get(valueIndex);
+                valueIndex++;
+            }
 
-        // Check if value is defined (not undef)
-        if (value.getDefinedBoolean()) {
-            String str = value.toString();
-            // Use hashCode as a unique identifier, but as a long for 64-bit pointer
-            ptr = Integer.toUnsignedLong(str.hashCode());
-            pointerMap.put((int) ptr, str);  // Still use int key for the map
-        }
+            long ptr = 0L;
 
-        // Write as 8 bytes (64-bit pointer) 
-        // Use the already-parsed endianness
-        if (modifiers.bigEndian) {
-            PackWriter.writeLongBigEndian(output, ptr);
-        } else {
-            PackWriter.writeLongLittleEndian(output, ptr);
+            // Check if value is defined (not undef)
+            if (value.getDefinedBoolean()) {
+                String str = value.toString();
+                // Use hashCode as a unique identifier, but as a long for 64-bit pointer
+                ptr = Integer.toUnsignedLong(str.hashCode());
+                pointerMap.put((int) ptr, str);  // Still use int key for the map
+            }
+
+            // Write as 8 bytes (64-bit pointer) 
+            // Use the already-parsed endianness
+            if (modifiers.bigEndian) {
+                PackWriter.writeLongBigEndian(output, ptr);
+            } else {
+                PackWriter.writeLongLittleEndian(output, ptr);
+            }
         }
 
         return valueIndex;
