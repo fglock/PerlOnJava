@@ -6,7 +6,7 @@ import org.perlonjava.runtime.RuntimeList;
 import org.perlonjava.runtime.RuntimeScalar;
 
 import java.nio.charset.StandardCharsets;
-import java.util.Base64;
+import org.perlonjava.util.Base64Util;
 
 public class MIMEBase64 extends PerlModuleBase {
 
@@ -48,32 +48,10 @@ public class MIMEBase64 extends PerlModuleBase {
         String encoded;
         if (eolStr.isEmpty()) {
             // No line breaking when eol is empty
-            encoded = Base64.getEncoder().encodeToString(inputBytes);
+            encoded = Base64Util.encode(inputBytes);
         } else {
-            // For standard line separators, use MIME encoder
-            if (eolStr.equals("\n") || eolStr.equals("\r\n") || eolStr.equals("\r")) {
-                encoded = Base64.getMimeEncoder(76, eolStr.getBytes()).encodeToString(inputBytes);
-                // MIME encoder doesn't add trailing line separator if content fits in one line
-                if (!encoded.endsWith(eolStr)) {
-                    encoded += eolStr;
-                }
-            } else {
-                // For custom separators, manually break lines
-                String base64 = Base64.getEncoder().encodeToString(inputBytes);
-                StringBuilder result = new StringBuilder();
-
-                // Break into 76-character lines
-                for (int i = 0; i < base64.length(); i += 76) {
-                    if (i > 0) {
-                        result.append(eolStr);
-                    }
-                    result.append(base64, i, Math.min(i + 76, base64.length()));
-                }
-
-                // Always append the line ending at the end
-                result.append(eolStr);
-                encoded = result.toString();
-            }
+            // Use our custom MIME encoder with the specified line separator
+            encoded = Base64Util.encodeMime(inputBytes, eolStr);
         }
 
         return new RuntimeScalar(encoded).getList();
@@ -86,27 +64,8 @@ public class MIMEBase64 extends PerlModuleBase {
         RuntimeScalar input = args.get(0);
         String encoded = input.toString();
 
-        // First, keep only valid base64 characters (including =)
-        encoded = encoded.replaceAll("[^A-Za-z0-9+/=]", "");
-
-        // Handle padding - find first = and truncate everything after it
-        int paddingIndex = encoded.indexOf('=');
-        if (paddingIndex >= 0) {
-            // Truncate at the first padding character
-            encoded = encoded.substring(0, paddingIndex);
-
-            // Add back proper padding
-            while (encoded.length() % 4 != 0) {
-                encoded += "=";
-            }
-        }
-
-        // Handle empty string case
-        if (encoded.isEmpty()) {
-            return new RuntimeScalar("").getList();
-        }
-
-        byte[] decodedBytes = Base64.getMimeDecoder().decode(encoded);
+        // Our custom decoder handles invalid characters and padding internally
+        byte[] decodedBytes = Base64Util.decode(encoded);
         String decoded = new String(decodedBytes, StandardCharsets.ISO_8859_1);
         return new RuntimeScalar(decoded).getList();
     }
