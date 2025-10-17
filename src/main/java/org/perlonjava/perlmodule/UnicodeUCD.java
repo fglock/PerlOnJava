@@ -67,7 +67,7 @@ public class UnicodeUCD extends PerlModuleBase {
             }
             else if (normalizedProp.equals("titlecasemapping") || 
                      normalizedProp.equals("tc")) {
-                return buildSimpleCaseMappingInvmap(UProperty.SIMPLE_CASE_FOLDING);
+                return buildSimpleCaseMappingInvmap(UProperty.SIMPLE_TITLECASE_MAPPING);
             }
             else if (normalizedProp.equals("casefolding") || 
                      normalizedProp.equals("cf")) {
@@ -126,6 +126,12 @@ public class UnicodeUCD extends PerlModuleBase {
                 break;
             case UProperty.SIMPLE_UPPERCASE_MAPPING:
                 mapper = (cp) -> UCharacter.toUpperCase(String.valueOf(Character.toChars(cp)));
+                break;
+            case UProperty.SIMPLE_TITLECASE_MAPPING:
+                mapper = (cp) -> {
+                    int titleCp = UCharacter.toTitleCase(cp);
+                    return String.valueOf(Character.toChars(titleCp));
+                };
                 break;
             case UProperty.SIMPLE_CASE_FOLDING:
                 mapper = (cp) -> UCharacter.foldCase(String.valueOf(Character.toChars(cp)), true);
