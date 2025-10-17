@@ -96,6 +96,14 @@ public class Operator {
         RuntimeList result = new RuntimeList();
         List<RuntimeBase> splitElements = result.elements;
 
+        // Special case: splitting an empty string always returns an empty list
+        if (inputStr.isEmpty()) {
+            if (ctx == SCALAR) {
+                return getScalarInt(0).getList();
+            }
+            return result;
+        }
+
         // Special case: if the pattern is a single space character, treat it as /\s+/
         if (quotedRegex.type != RuntimeScalarType.REGEX && quotedRegex.toString().equals(" ")) {
             quotedRegex = RuntimeRegex.getQuotedRegex(new RuntimeScalar("\\s+"), new RuntimeScalar(""));
@@ -151,10 +159,26 @@ public class Operator {
                         splitElements.add(new RuntimeScalar(inputStr.substring(lastEnd, matcher.start())));
                     }
 
-                    // Add captured groups if any
+                    // Add captured groups if any (but skip code block captures)
+                    Pattern p = matcher.pattern();
+                    Map<String, Integer> namedGroups = p.namedGroups();
                     for (int i = 1; i <= matcher.groupCount(); i++) {
-                        String group = matcher.group(i);
-                        splitElements.add(group != null ? new RuntimeScalar(group) : scalarUndef);
+                        // Check if this is a code block capture (starts with "cb")
+                        boolean isCodeBlockCapture = false;
+                        if (namedGroups != null) {
+                            for (Map.Entry<String, Integer> entry : namedGroups.entrySet()) {
+                                if (entry.getValue() == i && entry.getKey().startsWith("cb")) {
+                                    isCodeBlockCapture = true;
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        // Only add non-code-block captures to split results
+                        if (!isCodeBlockCapture) {
+                            String group = matcher.group(i);
+                            splitElements.add(group != null ? new RuntimeScalar(group) : scalarUndef);
+                        }
                     }
 
                     lastEnd = matcher.end();
