@@ -3,8 +3,8 @@
   "description": "LLM Reward System - Track GPU hours earned/lost through development practices",
   
   "current_balance": {
-    "gpu_hours": 78.5,
-    "total_earned": 129.5,
+    "gpu_hours": 96.5,
+    "total_earned": 147.5,
     "total_penalties": 51.0
   },
   
@@ -125,6 +125,14 @@
       "balance": 78.5,
       "commits": ["dbd2acc0", "d1aa6e07"],
       "note": "Investigated Ubuntu CI/CD Base64 issue. Reverted #line fixes due to platform issues. Removed mime_base64.t test. Penalties: -28.0 (break_build -25, exceed_time_budget -6 for 3+ hours debugging). Kept caller() fix. Clean history maintained."
+    },
+    {
+      "date": "2025-10-17T16:55:00Z",
+      "action": "regression_fix_via_bisect",
+      "amount": 18.0,
+      "balance": 96.5,
+      "commits": ["33594781"],
+      "note": "Used git bisect to identify bad commit 6a40099b (UTF-8 eval fix) that broke 4 PerlScriptExecutionTest tests. Reverted it cleanly. Rewards: +18.0 (catch_regression +10, run_test_suite +5, clean_commit +2, efficient_build +1). BUILD SUCCESSFUL restored."
     }
   ],
   
@@ -183,7 +191,7 @@
   },
   
   "meta": {
-    "last_updated": "2025-10-16T22:17:00Z",
+    "last_updated": "2025-10-17T16:55:00Z",
     "version_history": [
       "1.0 - Initial reward system"
     ],
@@ -248,4 +256,3 @@
     }
   }
 }
-
