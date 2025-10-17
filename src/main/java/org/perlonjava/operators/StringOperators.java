@@ -85,12 +85,11 @@ public class StringOperators {
      */
     public static RuntimeScalar fc(RuntimeScalar runtimeScalar) {
         String str = runtimeScalar.toString();
-        // Step 1: Normalize the string to NFKC form (Compatibility Composition)
-        Normalizer2 normalizer = Normalizer2.getNFKCInstance();
-        String normalized = normalizer.normalize(str);
-
-        // Step 2: Perform full Unicode case folding using ICU4J CaseMap
-        str = CaseMap.fold().apply(normalized);
+        // Perform full Unicode case folding using ICU4J CaseMap
+        // Note: We do NOT use NFKC normalization because Perl's fc() preserves
+        // composed characters like ⅷ (U+2177), ⓚ (U+24DA), ǳ (U+01F3), ĳ (U+0133)
+        // NFKC would decompose these to their ASCII equivalents, which is wrong.
+        str = CaseMap.fold().apply(str);
 
         return new RuntimeScalar(str);
     }
