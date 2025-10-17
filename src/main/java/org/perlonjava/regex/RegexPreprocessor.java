@@ -319,25 +319,25 @@ public class RegexPreprocessor {
                     }
 
                 case '{':
-                    // Check if previous character was a quantifier or if this could be {n}+
-                    if (offset > 0 && !lastWasQuantifiable) {
-                        // This might be a literal brace, not a quantifier
+                    // Only treat '{' as a quantifier if the previous item is quantifiable.
+                    // Otherwise, '{' must be a literal (Perl allows literal braces).
+                    if (!lastWasQuantifiable) {
+                        // Literal '{' (not a quantifier), append as-is
                         sb.append(Character.toChars(c));
                         lastWasQuantifiable = true;
                     } else {
-                        // Could be a quantifier
-                        int savedOffset = offset;
+                        // Parse as quantifier
                         offset = handleQuantifier(s, offset, sb);
 
                         // Check for possessive quantifier {n,m}+
                         if (offset + 1 < length && s.charAt(offset + 1) == '+') {
                             sb.append('+');
-                            offset++;
+                            offset++; // Skip the extra +
                         }
                         // Check for non-greedy quantifier {n,m}?
                         else if (offset + 1 < length && s.charAt(offset + 1) == '?') {
                             sb.append('?');
-                            offset++;
+                            offset++; // Skip the extra ?
                         }
 
                         isQuantifier = true;
