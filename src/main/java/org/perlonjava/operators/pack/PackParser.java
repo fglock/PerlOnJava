@@ -357,12 +357,14 @@ public class PackParser {
                 i = j; // Move past closing paren
                 
                 // Parse repeat count after the group
+                // Both (B)8 and (B)[8] mean repeat the group 8 times
                 int groupRepeat = 1;
                 if (i < template.length()) {
                     if (template.charAt(i) == '*') {
                         groupRepeat = 5; // Reasonable default
                         i++;
                     } else if (Character.isDigit(template.charAt(i))) {
+                        // Numeric repeat like (B)8 means repeat the group 8 times
                         int k = i;
                         while (k < template.length() && Character.isDigit(template.charAt(k))) {
                             k++;
@@ -370,16 +372,22 @@ public class PackParser {
                         groupRepeat = Integer.parseInt(template.substring(i, k));
                         i = k;
                     } else if (template.charAt(i) == '[') {
-                        // Skip bracketed expression  
+                        // Bracket notation like (B)[8] also means repeat the group 8 times
+                        int bracketStart = i + 1; // Skip the [
                         int bracketDepth = 1;
                         i++;
                         while (i < template.length() && bracketDepth > 0) {
                             if (template.charAt(i) == '[') bracketDepth++;
                             else if (template.charAt(i) == ']') bracketDepth--;
-                            if (bracketDepth > 0) i++;
+                            i++;
                         }
-                        i++; // Move past closing bracket
-                        groupRepeat = 1;
+                        // Parse the number inside the brackets
+                        String bracketContent = template.substring(bracketStart, i - 1);
+                        if (bracketContent.matches("\\d+")) {
+                            groupRepeat = Integer.parseInt(bracketContent);
+                        } else {
+                            groupRepeat = 1; // For non-numeric bracket content, treat as 1
+                        }
                     }
                 }
                 
