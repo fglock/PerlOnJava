@@ -414,15 +414,15 @@ public class UnpackGroupProcessor {
                             }
 
                             // Parse optional count/star after the format
-                            boolean hasStarAfterSlash = false;
+                            // In slash constructs, '*' means "use the slash count", not "all remaining"
                             if (j + 1 < groupTemplate.length() && groupTemplate.charAt(j + 1) == '*') {
-                                hasStarAfterSlash = true;
                                 j++; // Move to the '*'
                             }
 
                             // Unpack the format with the count
                             // DEBUG: Unpacking format '" + stringFormat + "' " + slashCount + " times
-                            formatHandler.unpack(state, values, slashCount, hasStarAfterSlash);
+                            // Always use slashCount in slash constructs, never "all remaining"
+                            formatHandler.unpack(state, values, slashCount, false);
 
                             continue;
                         }
@@ -472,15 +472,15 @@ public class UnpackGroupProcessor {
                         }
 
                         // Parse optional count/star after string format
-                        boolean hasStarAfterSlash = false;
+                        // In slash constructs, '*' means "use the slash count", not "all remaining"
                         if (j + 1 < groupTemplate.length() && groupTemplate.charAt(j + 1) == '*') {
-                            hasStarAfterSlash = true;
                             j++; // Move to the '*'
                         }
 
                         // Unpack the string with the count from the previous numeric value
+                        // Always use slashCount in slash constructs, never "all remaining"
                         FormatHandler stringHandler = Unpack.getHandler(stringFormat, startsWithU);
-                        stringHandler.unpack(state, values, slashCount, hasStarAfterSlash);
+                        stringHandler.unpack(state, values, slashCount, false);
 
                         continue;
                     }

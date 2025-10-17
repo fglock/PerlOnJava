@@ -97,16 +97,16 @@ public class UnpackHelper {
                 }
 
                 // Parse optional count/star after the format
-                boolean hasStarAfterSlash = false;
+                // In slash constructs, '*' means "use the slash count", not "all remaining"
                 if (i + 1 < template.length() && template.charAt(i + 1) == '*') {
-                    hasStarAfterSlash = true;
                     i++; // Move to the '*'
                 }
 
                 // Unpack the format with the count
                 // Only unpack if slashCount > 0 (if count was 0 due to insufficient data, don't unpack)
-                if (slashCount > 0 || hasStarAfterSlash) {
-                    formatHandler.unpack(state, values, slashCount, hasStarAfterSlash);
+                // Always use slashCount in slash constructs, never "all remaining"
+                if (slashCount > 0) {
+                    formatHandler.unpack(state, values, slashCount, false);
                 }
 
                 return i;
@@ -179,16 +179,16 @@ public class UnpackHelper {
                 }
 
                 // Parse optional count/star after the format
-                boolean hasStarAfterSlash = false;
+                // In slash constructs, '*' means "use the slash count", not "all remaining"
                 if (i + 1 < template.length() && template.charAt(i + 1) == '*') {
-                    hasStarAfterSlash = true;
                     i++; // Move to the '*'
                 }
 
                 // Unpack the format with the count
                 // Only unpack if slashCount > 0 (if count was 0 due to insufficient data, don't unpack)
-                if (slashCount > 0 || hasStarAfterSlash) {
-                    formatHandler.unpack(state, values, slashCount, hasStarAfterSlash);
+                // Always use slashCount in slash constructs, never "all remaining"
+                if (slashCount > 0) {
+                    formatHandler.unpack(state, values, slashCount, false);
                 }
                 return i;
             }
