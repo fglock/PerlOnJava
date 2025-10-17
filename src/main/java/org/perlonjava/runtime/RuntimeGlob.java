@@ -105,6 +105,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * Sets the current RuntimeScalar object to the values associated with the given RuntimeGlob.
      * This method effectively implements the behavior of assigning one typeglob to another,
      * similar to Perl's typeglob assignment.
+     * 
+     * In Perl, *aaa = *bbb creates ALIASES, not copies. After this assignment:
+     * - @aaa and @bbb are THE SAME array (share storage)
+     * - %aaa and %bbb are THE SAME hash (share storage)
+     * - $aaa and $bbb are THE SAME scalar (share storage)
      *
      * @param value The RuntimeGlob object whose associated values are to be assigned.
      * @return The scalar value associated with the provided RuntimeGlob.
@@ -115,25 +120,32 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // Retrieve the name of the glob from the provided RuntimeGlob object.
         String globName = value.globName;
 
-        // Set the current scalar to the global code reference associated with the glob name.
-        this.set(GlobalVariable.getGlobalCodeRef(globName));
+        // Create ALIASES by making both names point to the same objects in the global maps
+        // This is the key difference from the old implementation which created references
+        
+        // Alias the CODE slot: both names point to the same code reference
+        RuntimeScalar sourceCode = GlobalVariable.getGlobalCodeRef(globName);
+        GlobalVariable.globalCodeRefs.put(this.globName, (RuntimeScalar) sourceCode);
         // Invalidate the method resolution cache
         InheritanceResolver.invalidateCache();
 
-        // Set the current scalar to the global IO (input/output) reference associated with the glob name.
-        this.setIO(GlobalVariable.getGlobalIO(globName).getIO());
+        // Alias the IO slot: both names point to the same IO object
+        RuntimeGlob sourceIO = GlobalVariable.getGlobalIO(globName);
+        GlobalVariable.globalIORefs.put(this.globName, sourceIO);
 
-        // Set the current scalar to a reference of the global array associated with the glob name.
-        this.set(GlobalVariable.getGlobalArray(globName).createReference());
+        // Alias the ARRAY slot: both names point to the same RuntimeArray object
+        RuntimeArray sourceArray = GlobalVariable.getGlobalArray(globName);
+        GlobalVariable.globalArrays.put(this.globName, sourceArray);
 
-        // Set the current scalar to a reference of the global hash associated with the glob name.
-        this.set(GlobalVariable.getGlobalHash(globName).createReference());
+        // Alias the HASH slot: both names point to the same RuntimeHash object
+        RuntimeHash sourceHash = GlobalVariable.getGlobalHash(globName);
+        GlobalVariable.globalHashes.put(this.globName, sourceHash);
 
-        // Set the current scalar to a reference of the global variable associated with the glob name.
-        this.set(GlobalVariable.getGlobalVariable(globName).createReference());
+        // Alias the SCALAR slot: both names point to the same RuntimeScalar object
+        RuntimeScalar sourceScalar = GlobalVariable.getGlobalVariable(globName);
+        GlobalVariable.globalVariables.put(this.globName, sourceScalar);
 
-        // Set the current scalar to the global format reference associated with the glob name.
-        // Share the same format reference instead of copying content
+        // Alias the FORMAT slot: both names point to the same RuntimeFormat object
         RuntimeFormat sourceFormat = GlobalVariable.getGlobalFormatRef(globName);
         if (sourceFormat.isFormatDefined()) {
             GlobalVariable.setGlobalFormatRef(this.globName, sourceFormat);
