@@ -45,47 +45,9 @@ import static org.perlonjava.perlmodule.Strict.HINT_STRICT_VARS;
  * <ul>
  *   <li>{@link #handleVariableOperator} - Main entry point for variable operations</li>
  *   <li>{@link #fetchGlobalVariable} - Emits bytecode to fetch global variables</li>
- *   <li>{@link #isBuiltinSpecialVariable} - Checks if a variable is a built-in special variable</li>
  * </ul>
  */
 public class EmitVariable {
-    
-    /**
-     * Checks if a variable is a built-in special variable that should be allowed under strict vars.
-     * 
-     * <p>Special variables are those that exist at Perl startup and are part of the language.
-     * These include:
-     * <ul>
-     *   <li>Single-character punctuation: {@code $@}, {@code $!}, {@code $_}, {@code $/}, etc.</li>
-     *   <li>Control-character variables: {@code $^O}, {@code $^V}, {@code $^X}, etc.</li>
-     *   <li>Known special names: {@code $SIG}, {@code %SIG}, {@code $ENV}, {@code %ENV},
-     *       {@code $INC}, {@code %INC}, {@code @INC}, {@code @ARGV}, {@code @_}</li>
-     * </ul>
-     * 
-     * <p>These variables are exempt from strict vars checking because they are part of
-     * Perl's core and are expected to be available without explicit declaration.
-     * 
-     * @param sigil the variable sigil ($, @, %, etc.)
-     * @param varName the variable name (without sigil or package qualifier)
-     * @return true if this is a built-in special variable, false otherwise
-     */
-    private static boolean isBuiltinSpecialVariable(String sigil, String varName) {
-        // Single-character punctuation variables (like $@, $!, $_, etc.)
-        if (varName.length() == 1 && !Character.isLetterOrDigit(varName.charAt(0))) {
-            return true;
-        }
-        // Control-character variables like $^O, $^V, etc.
-        if (varName.length() >= 2 && varName.charAt(0) == '^') {
-            return true;
-        }
-        // Known special variable names (allowed for all sigils)
-        // These include $SIG, %SIG, $ENV, %ENV, $INC, %INC, @INC, @ARGV, @_
-        if (varName.equals("SIG") || varName.equals("ENV") || varName.equals("INC") || 
-            varName.equals("ARGV") || varName.equals("_")) {
-            return true;
-        }
-        return false;
-    }
 
     /**
      * Emits bytecode to fetch a global (package) variable.
@@ -101,12 +63,9 @@ public class EmitVariable {
      *   <li>Variables that were explicitly allowed by the caller</li>
      * </ul>
      * 
-     * <p>This prevents a critical bug where variables created by previous {@code eval}
-     * statements would bypass strict checking:
-     * <pre>
-     * eval "no strict; $A = 1";  # Creates $A
-     * eval "use strict; $A = 1"; # Should fail but would succeed if we only checked existence
-     * </pre>
+     * <p>Note: The strict vars checking is done in the caller (handleVariableOperator)
+     * before this method is called. This method only fetches variables that have been
+     * determined to be accessible.
      * 
      * <h3>Variable Types Handled</h3>
      * <ul>
@@ -128,29 +87,7 @@ public class EmitVariable {
         String var = NameNormalizer.normalizeVariableName(varName, ctx.symbolTable.getCurrentPackage());
         ctx.logDebug("GETVAR lookup global " + sigil + varName + " normalized to " + var + " createIfNotExists:" + createIfNotExists);
 
-        // ===== STRICT VARS ENFORCEMENT =====
-        // Under strict vars, only allow:
-        // 1. Variables that are explicitly allowed (createIfNotExists=true)
-        // 2. Built-in special variables (like $@, %SIG, etc.)
-        //
-        // This prevents variables created by previous evals from bypassing strict:
-        //   eval "no strict; $A = 1";  # Creates $A globally
-        //   eval "use strict; $A = 1"; # Should fail even though $A exists!
-        boolean isSpecialVar = isBuiltinSpecialVariable(sigil, varName);
-
-        // If createIfNotExists is false and it's not a special variable, throw error
-        if (!createIfNotExists && !isSpecialVar) {
-            throw new PerlCompilerException(
-                    tokenIndex,
-                    "Global symbol \""
-                            + sigil + varName
-                            + "\" requires explicit package name (did you forget to declare \"my "
-                            + sigil + varName
-                            + "\"?)",
-                    ctx.errorUtil);
-        }
-
-        if (sigil.equals("$") && (createIfNotExists || isSpecialVar || GlobalVariable.existsGlobalVariable(var))) {
+        if (sigil.equals("$") && (createIfNotExists || GlobalVariable.existsGlobalVariable(var))) {
             // fetch a global variable
             ctx.mv.visitLdcInsn(var);
             ctx.mv.visitMethodInsn(
