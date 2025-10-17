@@ -7,6 +7,10 @@ import com.ibm.icu.text.UnicodeSet;
 public class UnicodeResolver {
     /**
      * Retrieves the Unicode code point for a given character name.
+     * Supports:
+     * - U+XXXX format (hex code point)
+     * - Official Unicode character names (via ICU4J)
+     * - Perl charnames module aliases (NEL, NBSP, etc.)
      *
      * @param name The name of the Unicode character.
      * @return The Unicode code point.
@@ -21,7 +25,24 @@ public class UnicodeResolver {
                 throw new IllegalArgumentException("Invalid Unicode code point: " + name);
             }
         } else {
-            codePoint = UCharacter.getCharFromName(name);
+            // First try common Perl charnames module aliases
+            // These are short names that Perl's charnames module provides
+            // for commonly used control characters and spaces
+            codePoint = switch (name) {
+                // Control characters
+                case "NEL" -> 0x0085;  // NEXT LINE (NEL)
+                case "BOM" -> 0xFEFF;  // BYTE ORDER MARK
+                
+                // Spaces (Perl allows both hyphenated and non-hyphenated forms)
+                case "NBSP", "NO-BREAK SPACE" -> 0x00A0;
+                case "ZWSP", "ZERO WIDTH SPACE" -> 0x200B;
+                case "ZWNJ", "ZERO WIDTH NON-JOINER" -> 0x200C;
+                case "ZWJ", "ZERO WIDTH JOINER" -> 0x200D;
+                
+                // Try ICU4J's official Unicode name lookup
+                default -> UCharacter.getCharFromName(name);
+            };
+            
             if (codePoint == -1) {
                 throw new IllegalArgumentException("Invalid Unicode character name: " + name);
             }
