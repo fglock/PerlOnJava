@@ -15,9 +15,60 @@ import java.util.List;
 import static org.perlonjava.perlmodule.Strict.HINT_STRICT_REFS;
 import static org.perlonjava.perlmodule.Strict.HINT_STRICT_VARS;
 
+/**
+ * Bytecode emitter for Perl variable operations.
+ * 
+ * <p>This class generates JVM bytecode for accessing and manipulating Perl variables,
+ * including:
+ * <ul>
+ *   <li>Scalar variables: {@code $var}</li>
+ *   <li>Array variables: {@code @array}</li>
+ *   <li>Hash variables: {@code %hash}</li>
+ *   <li>Typeglobs: {@code *glob}</li>
+ *   <li>Array/hash element access: {@code $array[0]}, {@code $hash{key}}</li>
+ *   <li>Array/hash slices: {@code @array[0,1,2]}, {@code @hash{keys}}</li>
+ * </ul>
+ * 
+ * <p>The class handles several important Perl semantics:
+ * <ul>
+ *   <li><b>Strict vars checking:</b> Enforces {@code use strict 'vars'} by preventing
+ *       access to undeclared global variables</li>
+ *   <li><b>Lexical vs global variables:</b> Distinguishes between {@code my/our/state}
+ *       declared variables and package globals</li>
+ *   <li><b>Special variables:</b> Allows built-in variables like {@code $@}, {@code %SIG},
+ *       {@code @INC} even under strict</li>
+ *   <li><b>Variable vivification:</b> Auto-creates variables when needed (except under strict)</li>
+ *   <li><b>Context-sensitive access:</b> Handles scalar vs list context appropriately</li>
+ * </ul>
+ * 
+ * <p>Key methods:
+ * <ul>
+ *   <li>{@link #handleVariableOperator} - Main entry point for variable operations</li>
+ *   <li>{@link #fetchGlobalVariable} - Emits bytecode to fetch global variables</li>
+ *   <li>{@link #isBuiltinSpecialVariable} - Checks if a variable is a built-in special variable</li>
+ * </ul>
+ */
 public class EmitVariable {
-    // Special variables that are always allowed under strict vars
-    // These are built-in Perl variables that exist at startup
+    
+    /**
+     * Checks if a variable is a built-in special variable that should be allowed under strict vars.
+     * 
+     * <p>Special variables are those that exist at Perl startup and are part of the language.
+     * These include:
+     * <ul>
+     *   <li>Single-character punctuation: {@code $@}, {@code $!}, {@code $_}, {@code $/}, etc.</li>
+     *   <li>Control-character variables: {@code $^O}, {@code $^V}, {@code $^X}, etc.</li>
+     *   <li>Known special names: {@code $SIG}, {@code %SIG}, {@code $ENV}, {@code %ENV},
+     *       {@code $INC}, {@code %INC}, {@code @INC}, {@code @ARGV}, {@code @_}</li>
+     * </ul>
+     * 
+     * <p>These variables are exempt from strict vars checking because they are part of
+     * Perl's core and are expected to be available without explicit declaration.
+     * 
+     * @param sigil the variable sigil ($, @, %, etc.)
+     * @param varName the variable name (without sigil or package qualifier)
+     * @return true if this is a built-in special variable, false otherwise
+     */
     private static boolean isBuiltinSpecialVariable(String sigil, String varName) {
         // Single-character punctuation variables (like $@, $!, $_, etc.)
         if (varName.length() == 1 && !Character.isLetterOrDigit(varName.charAt(0))) {
@@ -36,14 +87,55 @@ public class EmitVariable {
         return false;
     }
 
+    /**
+     * Emits bytecode to fetch a global (package) variable.
+     * 
+     * <p>This method generates JVM bytecode to access global variables stored in the
+     * {@link GlobalVariable} registry. It handles several important cases:
+     * 
+     * <h3>Strict Vars Enforcement</h3>
+     * When {@code use strict 'vars'} is enabled and {@code createIfNotExists} is false,
+     * this method enforces that only the following variables are allowed:
+     * <ul>
+     *   <li>Built-in special variables (checked via {@link #isBuiltinSpecialVariable})</li>
+     *   <li>Variables that were explicitly allowed by the caller</li>
+     * </ul>
+     * 
+     * <p>This prevents a critical bug where variables created by previous {@code eval}
+     * statements would bypass strict checking:
+     * <pre>
+     * eval "no strict; $A = 1";  # Creates $A
+     * eval "use strict; $A = 1"; # Should fail but would succeed if we only checked existence
+     * </pre>
+     * 
+     * <h3>Variable Types Handled</h3>
+     * <ul>
+     *   <li><b>Scalars ($):</b> Calls {@code GlobalVariable.getGlobalVariable()}</li>
+     *   <li><b>Arrays (@):</b> Calls {@code GlobalVariable.getGlobalArray()}</li>
+     *   <li><b>Hashes (%):</b> Calls {@code GlobalVariable.getGlobalHash()}</li>
+     *   <li><b>Stashes (%Package::):</b> Calls {@code HashSpecialVariable.getStash()}</li>
+     * </ul>
+     * 
+     * @param ctx the emitter context containing the method visitor and symbol table
+     * @param createIfNotExists if true, allows variable creation; if false, enforces strict checking
+     * @param sigil the variable sigil ($, @, %)
+     * @param varName the variable name (without sigil, may include package qualifier)
+     * @param tokenIndex the token index for error reporting
+     * @throws PerlCompilerException if strict vars is enabled and the variable is not allowed
+     */
     private static void fetchGlobalVariable(EmitterContext ctx, boolean createIfNotExists, String sigil, String varName, int tokenIndex) {
 
         String var = NameNormalizer.normalizeVariableName(varName, ctx.symbolTable.getCurrentPackage());
         ctx.logDebug("GETVAR lookup global " + sigil + varName + " normalized to " + var + " createIfNotExists:" + createIfNotExists);
 
+        // ===== STRICT VARS ENFORCEMENT =====
         // Under strict vars, only allow:
         // 1. Variables that are explicitly allowed (createIfNotExists=true)
         // 2. Built-in special variables (like $@, %SIG, etc.)
+        //
+        // This prevents variables created by previous evals from bypassing strict:
+        //   eval "no strict; $A = 1";  # Creates $A globally
+        //   eval "use strict; $A = 1"; # Should fail even though $A exists!
         boolean isSpecialVar = isBuiltinSpecialVariable(sigil, varName);
 
         // If createIfNotExists is false and it's not a special variable, throw error
@@ -108,7 +200,7 @@ public class EmitVariable {
             return;
         }
 
-        // variable not found
+        // Variable not found and not allowed under strict
         throw new PerlCompilerException(
                 tokenIndex,
                 "Global symbol \""
@@ -119,12 +211,56 @@ public class EmitVariable {
                 ctx.errorUtil);
     }
 
+    /**
+     * Main entry point for emitting bytecode for variable operations.
+     * 
+     * <p>This method handles all forms of Perl variable access and generates appropriate
+     * JVM bytecode. It distinguishes between:
+     * 
+     * <h3>Variable Types</h3>
+     * <ul>
+     *   <li><b>Simple variables:</b> {@code $var}, {@code @array}, {@code %hash}</li>
+     *   <li><b>Typeglobs:</b> {@code *name} (file handles, symbol table entries)</li>
+     *   <li><b>Code references:</b> {@code &sub} (subroutine references)</li>
+     *   <li><b>Dereferencing:</b> {@code $$ref}, {@code @$ref}, {@code %$ref}</li>
+     * </ul>
+     * 
+     * <h3>Variable Storage</h3>
+     * Variables can be stored in two places:
+     * <ul>
+     *   <li><b>Lexical (local):</b> {@code my}, {@code our}, {@code state} variables stored
+     *       in JVM local variable slots</li>
+     *   <li><b>Global (package):</b> Package variables stored in {@link GlobalVariable} registry</li>
+     * </ul>
+     * 
+     * <h3>Strict Vars Logic</h3>
+     * The method computes {@code createIfNotExists} flag based on:
+     * <ul>
+     *   <li>Fully qualified names: {@code $Package::var} (always allowed)</li>
+     *   <li>Regex variables: {@code $1}, {@code $2} (always allowed)</li>
+     *   <li>Special sort variables: {@code $a}, {@code $b} in {@code main::} (always allowed)</li>
+     *   <li>Strict mode: {@code use strict 'vars'} (disallows undeclared globals)</li>
+     *   <li>Lexical declaration: {@code my/our/state} (allowed under strict)</li>
+     * </ul>
+     * 
+     * <h3>Context Handling</h3>
+     * In scalar context, array/hash variables are automatically converted to scalar
+     * using {@code RuntimeBase.scalar()}.
+     * 
+     * @param emitterVisitor the visitor containing the emitter context and method visitor
+     * @param node the OperatorNode representing the variable operation
+     */
     static void handleVariableOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
+        // In void context, don't emit any code
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
             return;
         }
+        
         String sigil = node.operator;
         MethodVisitor mv = emitterVisitor.ctx.mv;
+        
+        // Case 1: Simple variable with identifier (most common case)
+        // Examples: $var, @array, %hash, *glob, &sub
         if (node.operand instanceof IdentifierNode identifierNode) { // $a @a %a
             String name = identifierNode.name;
             emitterVisitor.ctx.logDebug("GETVAR " + sigil + name);
@@ -155,47 +291,61 @@ public class EmitVariable {
                 return;
             }
 
+            // ===== SYMBOL TABLE LOOKUP =====
+            // Check if this variable is declared in the current lexical scope
             SymbolTable.SymbolEntry symbolEntry = emitterVisitor.ctx.symbolTable.getSymbolEntry(sigil + name);
-            // Note: @_ is lexical in PerlOnJava
+            
+            // Note: @_ is lexical in PerlOnJava (unlike standard Perl where it's package-scoped)
             boolean isDeclared = symbolEntry != null;
+            
+            // A variable is lexical if it was declared with my/our/state
+            // These are stored in JVM local variable slots, not in GlobalVariable registry
             boolean isLexical = isDeclared && (
                     symbolEntry.decl().equals("my")
                             || symbolEntry.decl().equals("state")
                             || symbolEntry.decl().equals("our")
-
-                    // XXX This breaks some tests
+                    // Note: @_ special handling is disabled as it breaks some tests
                     // || (symbolEntry.decl().equals("our") && symbolEntry.name().equals("@_"))
             );
 
             if (!isLexical) {
-                // not a declared `my` or `state` variable
-                // Fetch a global variable.
-                // Autovivify if the name is fully qualified, or if it is a regex variable like `$1`
-                // TODO special variables: `$,` `$$`
-
+                // ===== GLOBAL VARIABLE ACCESS =====
+                // This is not a lexically declared variable, so fetch it from the global registry
+                
+                // If there's a symbol entry (e.g., from 'our' declaration), use its package
                 if (symbolEntry != null) {
                     name = NameNormalizer.normalizeVariableName(name, symbolEntry.perlPackage());
-                    // System.out.println("SYMBOL " + sigil +  name + " " + symbolEntry);
                 }
 
-                // Compute normalized name to detect special variables in main::
+                // ===== STRICT VARS LOGIC =====
+                // Determine if this variable should be allowed under 'use strict "vars"'
+                
+                // Special case: $a and $b in main:: package are exempt from strict
+                // (they're used by sort() without declaration)
                 String normalizedName = NameNormalizer.normalizeVariableName(name, emitterVisitor.ctx.symbolTable.getCurrentPackage());
                 boolean isSpecialSortVar = sigil.equals("$") && ("main::a".equals(normalizedName) || "main::b".equals(normalizedName));
 
-                boolean createIfNotExists = name.contains("::") // Fully qualified name
-                        || ScalarUtils.isInteger(name)  // Regex variable always exists
-                        || isSpecialSortVar            // $a and $b are always exempt from 'strict vars'
-                        || !emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_VARS)  // `no strict "vars"`
-                        || (isDeclared && isLexical);  // Only allow if declared as lexical (my/our/state), not just any symbol entry
+                // Compute createIfNotExists flag - determines if variable can be auto-vivified
+                boolean createIfNotExists = name.contains("::")  // Fully qualified: $Package::var
+                        || ScalarUtils.isInteger(name)           // Regex capture: $1, $2, etc.
+                        || isSpecialSortVar                      // Sort variables: $a, $b
+                        || !emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_VARS)  // no strict 'vars'
+                        || (isDeclared && isLexical);            // Lexically declared (my/our/state)
+                
+                // Fetch the global variable (may throw exception if strict and not allowed)
                 fetchGlobalVariable(emitterVisitor.ctx, createIfNotExists, sigil, name, node.getIndex());
             } else {
-                // retrieve the `my` or `our` variable from local vars
+                // ===== LEXICAL VARIABLE ACCESS =====
+                // Variable is lexical (my/our/state), load it from JVM local variable slot
                 mv.visitVarInsn(Opcodes.ALOAD, symbolEntry.index());
             }
+            
+            // ===== CONTEXT CONVERSION =====
+            // In scalar context, convert array/hash to scalar (e.g., array length, hash key count)
             if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR && !sigil.equals("$")) {
-                // scalar context: transform the value in the stack to scalar
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
             }
+            
             emitterVisitor.ctx.logDebug("GETVAR end " + symbolEntry);
             return;
         }
