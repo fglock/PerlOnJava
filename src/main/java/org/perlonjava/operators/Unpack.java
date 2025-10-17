@@ -226,14 +226,14 @@ public class Unpack {
                 }
 
                 // Parse optional count/star after the format
-                boolean hasStarAfterSlash = false;
+                // In slash constructs, '*' means "use the slash count", not "all remaining"
                 if (i + 1 < template.length() && template.charAt(i + 1) == '*') {
-                    hasStarAfterSlash = true;
                     i++; // Move to the '*'
                 }
 
                 // Unpack with the count from the previous value
-                formatHandler.unpack(state, values, slashCount, hasStarAfterSlash);
+                // Always use slashCount in slash constructs, never "all remaining"
+                formatHandler.unpack(state, values, slashCount, false);
 
                 // IMPORTANT: Skip past all characters we've processed
                 // The continue statement will skip the normal i++ at the end of the loop
