@@ -150,10 +150,10 @@ public class GlobalContext {
 
         // Initialize STDOUT, STDERR, STDIN
         initStdHandles();
-        // ARGV file handle - If no files are specified, use standard input
-        if (GlobalVariable.getGlobalArray("main::ARGV").isEmpty()) {
-            GlobalVariable.getGlobalIO("main::ARGV").set(GlobalVariable.getGlobalIO("main::STDIN"));
-        }
+        // Note: We don't pre-alias ARGV to STDIN here because it prevents proper
+        // typeglob aliasing like *ARGV = *DATA in BEGIN blocks.
+        // The diamond operator <> in DiamondIO.java handles the STDIN fallback
+        // when @ARGV is empty.
 
         // Initialize built-in Perl classes
         DiamondIO.initialize(compilerOptions);
