@@ -259,9 +259,11 @@ public class RegexPreprocessorHelper {
                         sb.append("[^\\n]{").append(cleanQuantifier).append("}");
                         return endBrace;
                     } else {
-                        // It's a Unicode name
+                        // It's a Unicode name; emit literal Unicode character(s)
                         int codePoint = UnicodeResolver.getCodePointFromName(content);
-                        sb.append(String.format("x{%X}", codePoint));
+                        // Remove the previously appended backslash
+                        sb.setLength(sb.length() - 1);
+                        sb.append(Character.toChars(codePoint));
                         return endBrace;
                     }
                 } else {
@@ -507,9 +509,9 @@ public class RegexPreprocessorHelper {
                                     // Can't use quantifiers inside character class
                                     RegexPreprocessor.regexError(s, offset - 2, "Quantifier \\N{" + content + "} not allowed inside character class");
                                 } else {
-                                    // It's a Unicode name
+                                    // It's a Unicode name; emit literal Unicode character(s)
                                     int codePoint = UnicodeResolver.getCodePointFromName(content);
-                                    sb.append(String.format("x{%X}", codePoint));
+                                    sb.append(Character.toChars(codePoint));
                                     offset = endBrace;
                                 }
                             } else {

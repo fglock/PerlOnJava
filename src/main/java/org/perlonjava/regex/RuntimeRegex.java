@@ -97,8 +97,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             regex.regexFlags = fromModifiers(modifiers, patternString);
             regex.patternFlags = regex.regexFlags.toPatternFlags();
 
+            String javaPattern = null;
             try {
-                String javaPattern = preProcessRegex(patternString, regex.regexFlags);
+                javaPattern = preProcessRegex(patternString, regex.regexFlags);
 
                 regex.patternString = patternString;
 
@@ -119,13 +120,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             } catch (Exception e) {
                 if (GlobalVariable.getGlobalHash("main::ENV").get("JPERL_UNIMPLEMENTED").toString().equals("warn")
                 ) {
-//                    // Always throw known invalid Perl syntax errors (PerlCompilerException from targeted validation)
-//                    if (e instanceof PerlCompilerException && !(e instanceof PerlJavaUnimplementedException)) {
-//                        throw e; // Always throw for known invalid patterns
-//                    }
-
                     // Warn for unimplemented features and Java regex compilation errors
-                    String errorMessage = (e instanceof PerlJavaUnimplementedException) ? e.getMessage() : "Regex compilation failed: " + e.getMessage();
+                    String base = (e instanceof PerlJavaUnimplementedException) ? e.getMessage() : ("Regex compilation failed: " + e.getMessage());
+                    // Include original and preprocessed patterns to aid debugging
+                    String patternInfo = " [pattern='" + (patternString == null ? "" : patternString) + "'" +
+                            (javaPattern != null ? ", java='" + javaPattern + "'" : "") + "]";
+                    String errorMessage = base + patternInfo;
                     // Ensure error message ends with newline to prevent running into test output
                     if (!errorMessage.endsWith("\n")) {
                         errorMessage += "\n";

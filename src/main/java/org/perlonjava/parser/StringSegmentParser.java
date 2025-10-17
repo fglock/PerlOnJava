@@ -1152,7 +1152,21 @@ public abstract class StringSegmentParser {
             TokenUtils.consumeChar(parser); // consume '}'
             var name = nameBuilder.toString();
             try {
-                var codePoint = UCharacter.getCharFromName(name);
+                int codePoint;
+                // Check if it's a hex code point like U+E4
+                if (name.startsWith("U+")) {
+                    try {
+                        codePoint = Integer.parseInt(name.substring(2), 16);
+                    } catch (NumberFormatException e) {
+                        // Invalid hex format, preserve literal
+                        appendToCurrentSegment("N{" + name + "}");
+                        return;
+                    }
+                } else {
+                    // It's a Unicode character name
+                    codePoint = UCharacter.getCharFromName(name);
+                }
+                
                 var result = codePoint != -1
                         ? new String(Character.toChars(codePoint))
                         : "N{" + name + "}"; // Preserve if name not found
