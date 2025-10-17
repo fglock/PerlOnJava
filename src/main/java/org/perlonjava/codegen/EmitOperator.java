@@ -717,6 +717,126 @@ public class EmitOperator {
     }
 
     /**
+     * Handles the fc (case fold) operator with support for 'use bytes'.
+     */
+    static void handleFcOperator(OperatorNode node, EmitterVisitor emitterVisitor) {
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+
+        if (emitterVisitor.ctx.symbolTable != null &&
+                emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_BYTES)) {
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/operators/StringOperators",
+                    "fcBytes",
+                    "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                    false);
+        } else {
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/operators/StringOperators",
+                    "fc",
+                    "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                    false);
+        }
+        handleVoidContext(emitterVisitor);
+    }
+
+    /**
+     * Handles the lc (lowercase) operator with support for 'use bytes'.
+     */
+    static void handleLcOperator(OperatorNode node, EmitterVisitor emitterVisitor) {
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+
+        if (emitterVisitor.ctx.symbolTable != null &&
+                emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_BYTES)) {
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/operators/StringOperators",
+                    "lcBytes",
+                    "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                    false);
+        } else {
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/operators/StringOperators",
+                    "lc",
+                    "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                    false);
+        }
+        handleVoidContext(emitterVisitor);
+    }
+
+    /**
+     * Handles the uc (uppercase) operator with support for 'use bytes'.
+     */
+    static void handleUcOperator(OperatorNode node, EmitterVisitor emitterVisitor) {
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+
+        if (emitterVisitor.ctx.symbolTable != null &&
+                emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_BYTES)) {
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/operators/StringOperators",
+                    "ucBytes",
+                    "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                    false);
+        } else {
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/operators/StringOperators",
+                    "uc",
+                    "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                    false);
+        }
+        handleVoidContext(emitterVisitor);
+    }
+
+    /**
+     * Handles the lcfirst operator with support for 'use bytes'.
+     */
+    static void handleLcfirstOperator(OperatorNode node, EmitterVisitor emitterVisitor) {
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+
+        if (emitterVisitor.ctx.symbolTable != null &&
+                emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_BYTES)) {
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/operators/StringOperators",
+                    "lcfirstBytes",
+                    "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                    false);
+        } else {
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/operators/StringOperators",
+                    "lcfirst",
+                    "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                    false);
+        }
+        handleVoidContext(emitterVisitor);
+    }
+
+    /**
+     * Handles the ucfirst operator with support for 'use bytes'.
+     */
+    static void handleUcfirstOperator(OperatorNode node, EmitterVisitor emitterVisitor) {
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+
+        if (emitterVisitor.ctx.symbolTable != null &&
+                emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_BYTES)) {
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/operators/StringOperators",
+                    "ucfirstBytes",
+                    "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                    false);
+        } else {
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/operators/StringOperators",
+                    "ucfirst",
+                    "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                    false);
+        }
+        handleVoidContext(emitterVisitor);
+    }
+
+    /**
      * Handles array-specific unary builtin operators.
      *
      * @param emitterVisitor The visitor walking the AST
