@@ -383,7 +383,7 @@ public class RuntimeList extends RuntimeBase {
                 result.elements.addAll(arr.elements);  // Use original references
                 arr.elements = new ArrayList<>();
             } else if (elem instanceof RuntimeHash runtimeHash) {
-                RuntimeHash hash = RuntimeHash.createHash(arr);
+                RuntimeHash hash = RuntimeHash.createHashForAssignment(arr);
                 runtimeHash.elements = hash.elements;
                 // Add lvalue references to hash elements for list assignment
                 for (Map.Entry<String, RuntimeScalar> entry : hash.elements.entrySet()) {
