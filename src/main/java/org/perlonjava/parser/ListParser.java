@@ -97,7 +97,30 @@ public class ListParser {
                 Node regex = StringParser.parseRawString(parser, "/");
                 if (regex != null) {
                     matched = true;
-                    expr.elements.add(regex);
+                    // Continue parsing the expression to handle infix operators like .0 in split//.0
+                    // Start with regex as left operand, then parse any infix operators
+                    Node left = regex;
+                    int precedence = parser.getPrecedence(",");
+                    
+                    // Check for infix operators after the regex (like . for concatenation)
+                    while (true) {
+                        token = TokenUtils.peek(parser);
+                        if (token.type == LexerTokenType.EOF || ParserTables.LIST_TERMINATORS.contains(token.text)) {
+                            break;
+                        }
+                        int tokenPrecedence = parser.getPrecedence(token.text);
+                        if (tokenPrecedence <= precedence) {
+                            break;
+                        }
+                        // Parse the infix operation
+                        if (ParserTables.RIGHT_ASSOC_OP.contains(token.text)) {
+                            left = ParseInfix.parseInfixOperation(parser, left, tokenPrecedence - 1);
+                        } else {
+                            left = ParseInfix.parseInfixOperation(parser, left, tokenPrecedence);
+                        }
+                    }
+                    
+                    expr.elements.add(left);
                     token = TokenUtils.peek(parser);
                     if (token.type != LexerTokenType.EOF && !ParserTables.LIST_TERMINATORS.contains(token.text)) {
                         // Consume comma
