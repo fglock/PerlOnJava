@@ -346,7 +346,7 @@ The following areas are currently under active development to enhance the functi
   - Add special variables: `@{^CAPTURE}`, `${^LAST_SUCCESSFUL_PATTERN}`.
   - Add pack format `x`.
   - Add `do filehandle`.
-  - Add module `Storable`, `experimental`.
+  - Add module `Storable`, `experimental`, `Unicode::UCD`.
   - Add single-quote as package separator.
   - Dereferencing using `$$var{...}` and `$$var[...]` works.
   - Add declared references: `my \$x`, `my(\@arr)`, `my(\%hash)`.
