@@ -245,6 +245,7 @@ sub run_single_test {
         | re/regex_sets.t
         | op/pack.t
         | op/index.t
+        | op/split.t
         | re/reg_pmod.t
         | op/sprintf.t
         | base/lex.t }x
