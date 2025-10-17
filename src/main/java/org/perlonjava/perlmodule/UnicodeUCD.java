@@ -56,21 +56,22 @@ public class UnicodeUCD extends PerlModuleBase {
         
         try {
             // Handle case mapping properties
+            // Note: These use SIMPLE case mappings (single code point), not FULL mappings
             if (normalizedProp.equals("lowercasemapping") || 
                 normalizedProp.equals("lc")) {
-                return buildCaseMappingInvmap((cp, opt) -> UCharacter.toLowerCase(cp), 0);
+                return buildSimpleCaseMappingInvmap(UProperty.SIMPLE_LOWERCASE_MAPPING);
             }
             else if (normalizedProp.equals("uppercasemapping") || 
                      normalizedProp.equals("uc")) {
-                return buildCaseMappingInvmap((cp, opt) -> UCharacter.toUpperCase(cp), 0);
+                return buildSimpleCaseMappingInvmap(UProperty.SIMPLE_UPPERCASE_MAPPING);
             }
             else if (normalizedProp.equals("titlecasemapping") || 
                      normalizedProp.equals("tc")) {
-                return buildCaseMappingInvmap((cp, opt) -> UCharacter.toTitleCase(cp), 0);
+                return buildSimpleCaseMappingInvmap(UProperty.SIMPLE_CASE_FOLDING);
             }
             else if (normalizedProp.equals("casefolding") || 
                      normalizedProp.equals("cf")) {
-                return buildCaseMappingInvmap((cp, opt) -> UCharacter.foldCase(cp, opt), UCharacter.FOLD_CASE_DEFAULT);
+                return buildSimpleCaseMappingInvmap(UProperty.SIMPLE_CASE_FOLDING);
             }
             // Handle general category
             else if (normalizedProp.equals("generalcategory") || 
@@ -100,23 +101,38 @@ public class UnicodeUCD extends PerlModuleBase {
     }
 
     /**
-     * Build inversion map for case mapping properties.
+     * Build inversion map for case mapping properties using ICU4J.
+     * Returns FULL case mappings (can be multiple code points).
      * 
-     * Format "al" (adjustable list): invmap contains the target code point for the first
-     * element of each range. Subsequent elements get +1 for each position.
-     * For ranges with no change (offset=0), invmap is 0 (the default).
-     * For example, if range [0x41..0x5A] has invmap value 0x61, then:
-     *   0x41 -> 0x61 + 0 = 0x61
-     *   0x42 -> 0x61 + 1 = 0x62
-     *   etc.
+     * Format "al" (adjustable list): invmap contains either:
+     * - A scalar with the target code point (for simple 1-to-1 mappings)
+     * - An array reference with multiple code points (for complex mappings)
+     * For ranges with no change (mapped == cp), invmap is 0 (the default).
      */
-    private static RuntimeList buildCaseMappingInvmap(CaseMapper mapper, int options) {
+    private static RuntimeList buildSimpleCaseMappingInvmap(int property) {
         RuntimeArray invlist = new RuntimeArray();
         RuntimeArray invmap = new RuntimeArray();
         
-        int lastOffset = Integer.MAX_VALUE; // Initialize to impossible value
+        // Track the last mapping to detect range boundaries
+        String lastMappingKey = null;
         int rangeStart = -1;
-        int rangeStartMapped = 0;
+        Object rangeStartMapping = null;
+        
+        // Determine which case mapping function to use
+        FullCaseMapper mapper;
+        switch (property) {
+            case UProperty.SIMPLE_LOWERCASE_MAPPING:
+                mapper = (cp) -> UCharacter.toLowerCase(String.valueOf(Character.toChars(cp)));
+                break;
+            case UProperty.SIMPLE_UPPERCASE_MAPPING:
+                mapper = (cp) -> UCharacter.toUpperCase(String.valueOf(Character.toChars(cp)));
+                break;
+            case UProperty.SIMPLE_CASE_FOLDING:
+                mapper = (cp) -> UCharacter.foldCase(String.valueOf(Character.toChars(cp)), true);
+                break;
+            default:
+                mapper = (cp) -> String.valueOf(Character.toChars(cp));
+        }
         
         // Scan all Unicode code points (BMP + supplementary)
         for (int cp = 0; cp <= 0x10FFFF; cp++) {
@@ -125,34 +141,55 @@ public class UnicodeUCD extends PerlModuleBase {
                 continue;
             }
             
-            int mapped = mapper.map(cp, options);
-            int offset = mapped - cp;
+            String result = mapper.map(cp);
+            int[] codePoints = result.codePoints().toArray();
             
-            // Start new range if offset changes
-            if (offset != lastOffset) {
+            // Determine the mapping representation
+            Object mapping;
+            String mappingKey;
+            
+            if (codePoints.length == 1 && codePoints[0] == cp) {
+                // No change - use default
+                mapping = 0;
+                mappingKey = "default";
+            } else if (codePoints.length == 1) {
+                // Simple 1-to-1 mapping
+                int offset = codePoints[0] - cp;
+                mapping = codePoints[0];
+                mappingKey = "offset:" + offset;
+            } else {
+                // Complex mapping (multiple code points) - store as array ref
+                RuntimeArray arr = new RuntimeArray();
+                for (int codePoint : codePoints) {
+                    arr.push(new RuntimeScalar(codePoint));
+                }
+                mapping = arr.createReference();
+                mappingKey = "complex:" + cp; // Each complex mapping gets its own range
+            }
+            
+            // Start new range if mapping pattern changes
+            if (!mappingKey.equals(lastMappingKey)) {
                 if (rangeStart >= 0) {
                     invlist.push(new RuntimeScalar(rangeStart));
-                    // For no-change ranges (offset=0), store 0 as the default
-                    // Otherwise store the mapped value for the START of the range
-                    if (lastOffset == 0) {
-                        invmap.push(new RuntimeScalar(0));
+                    if (rangeStartMapping instanceof Integer) {
+                        invmap.push(new RuntimeScalar((Integer) rangeStartMapping));
                     } else {
-                        invmap.push(new RuntimeScalar(rangeStartMapped));
+                        invmap.push((RuntimeScalar) rangeStartMapping);
                     }
                 }
                 rangeStart = cp;
-                rangeStartMapped = mapped; // Target for first element
-                lastOffset = offset;
+                rangeStartMapping = mapping;
+                lastMappingKey = mappingKey;
             }
         }
         
         // Add final range
         if (rangeStart >= 0) {
             invlist.push(new RuntimeScalar(rangeStart));
-            if (lastOffset == 0) {
-                invmap.push(new RuntimeScalar(0));
+            if (rangeStartMapping instanceof Integer) {
+                invmap.push(new RuntimeScalar((Integer) rangeStartMapping));
             } else {
-                invmap.push(new RuntimeScalar(rangeStartMapped));
+                invmap.push((RuntimeScalar) rangeStartMapping);
             }
         }
         
@@ -170,6 +207,14 @@ public class UnicodeUCD extends PerlModuleBase {
             format,
             defaultVal
         );
+    }
+    
+    /**
+     * Functional interface for full case mapping (can return multiple code points).
+     */
+    @FunctionalInterface
+    private interface FullCaseMapper {
+        String map(int codePoint);
     }
 
     /**
@@ -267,14 +312,6 @@ public class UnicodeUCD extends PerlModuleBase {
         return name.toLowerCase()
                    .replaceAll("[\\s_-]", "")
                    .replace(":", "");
-    }
-
-    /**
-     * Functional interface for case mapping.
-     */
-    @FunctionalInterface
-    private interface CaseMapper {
-        int map(int codePoint, int options);
     }
 
     /**
