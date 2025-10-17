@@ -1,5 +1,6 @@
 package org.perlonjava.operators;
 
+import com.ibm.icu.lang.UCharacter;
 import com.ibm.icu.text.CaseMap;
 import com.ibm.icu.text.Normalizer2;
 import org.perlonjava.parser.NumberParser;
@@ -96,17 +97,20 @@ public class StringOperators {
 
     /**
      * Converts the string representation of the given {@link RuntimeScalar} to lowercase.
+     * Uses ICU4J for full Unicode support.
      *
      * @param runtimeScalar the {@link RuntimeScalar} to be converted to lowercase
      * @return a {@link RuntimeScalar} with the lowercase string
      */
     public static RuntimeScalar lc(RuntimeScalar runtimeScalar) {
-        // Convert the string to lowercase
-        return new RuntimeScalar(runtimeScalar.toString().toLowerCase());
+        // Convert the string to lowercase using ICU4J for proper Unicode handling
+        String str = UCharacter.toLowerCase(runtimeScalar.toString());
+        return new RuntimeScalar(str);
     }
 
     /**
      * Converts the first character of the string representation of the given {@link RuntimeScalar} to lowercase.
+     * Uses ICU4J for full Unicode support.
      *
      * @param runtimeScalar the {@link RuntimeScalar} whose first character is to be converted to lowercase
      * @return a {@link RuntimeScalar} with the first character in lowercase
@@ -117,23 +121,31 @@ public class StringOperators {
         if (str.isEmpty()) {
             return new RuntimeScalar(str);
         }
-        // Convert the first character to lowercase and concatenate with the rest of the string
-        return new RuntimeScalar(str.substring(0, 1).toLowerCase() + str.substring(1));
+        // Get the first code point and convert it to lowercase using ICU4J
+        int firstCodePoint = str.codePointAt(0);
+        int charCount = Character.charCount(firstCodePoint);
+        String firstChar = str.substring(0, charCount);
+        String rest = str.substring(charCount);
+        String lowerFirst = UCharacter.toLowerCase(firstChar);
+        return new RuntimeScalar(lowerFirst + rest);
     }
 
     /**
      * Converts the string representation of the given {@link RuntimeScalar} to uppercase.
+     * Uses ICU4J for full Unicode support.
      *
      * @param runtimeScalar the {@link RuntimeScalar} to be converted to uppercase
      * @return a {@link RuntimeScalar} with the uppercase string
      */
     public static RuntimeScalar uc(RuntimeScalar runtimeScalar) {
-        // Convert the string to uppercase
-        return new RuntimeScalar(runtimeScalar.toString().toUpperCase());
+        // Convert the string to uppercase using ICU4J for proper Unicode handling
+        String str = UCharacter.toUpperCase(runtimeScalar.toString());
+        return new RuntimeScalar(str);
     }
 
     /**
      * Converts the first character of the string representation of the given {@link RuntimeScalar} to uppercase.
+     * Uses ICU4J for full Unicode support.
      *
      * @param runtimeScalar the {@link RuntimeScalar} whose first character is to be converted to uppercase
      * @return a {@link RuntimeScalar} with the first character in uppercase
@@ -144,8 +156,13 @@ public class StringOperators {
         if (str.isEmpty()) {
             return new RuntimeScalar(str);
         }
-        // Convert the first character to uppercase and concatenate with the rest of the string
-        return new RuntimeScalar(str.substring(0, 1).toUpperCase() + str.substring(1));
+        // Get the first code point and convert it to uppercase using ICU4J
+        int firstCodePoint = str.codePointAt(0);
+        int charCount = Character.charCount(firstCodePoint);
+        String firstChar = str.substring(0, charCount);
+        String rest = str.substring(charCount);
+        String upperFirst = UCharacter.toUpperCase(firstChar);
+        return new RuntimeScalar(upperFirst + rest);
     }
 
     /**
