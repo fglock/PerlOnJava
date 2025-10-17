@@ -335,8 +335,63 @@ public class PackParser {
                 continue;
             }
 
-            // Skip parentheses (groups)
-            if (format == '(' || format == ')') {
+            // Handle groups with repeat counts
+            if (format == '(') {
+                // Find matching closing parenthesis
+                int depth = 1;
+                int j = i + 1;
+                while (j < template.length() && depth > 0) {
+                    if (template.charAt(j) == '(') depth++;
+                    else if (template.charAt(j) == ')') depth--;
+                    j++;
+                }
+                
+                if (depth > 0) {
+                    // Unmatched parenthesis - skip it
+                    i++;
+                    continue;
+                }
+                
+                // Extract group content (between parentheses)
+                String groupContent = template.substring(i + 1, j - 1);
+                i = j; // Move past closing paren
+                
+                // Parse repeat count after the group
+                int groupRepeat = 1;
+                if (i < template.length()) {
+                    if (template.charAt(i) == '*') {
+                        groupRepeat = 5; // Reasonable default
+                        i++;
+                    } else if (Character.isDigit(template.charAt(i))) {
+                        int k = i;
+                        while (k < template.length() && Character.isDigit(template.charAt(k))) {
+                            k++;
+                        }
+                        groupRepeat = Integer.parseInt(template.substring(i, k));
+                        i = k;
+                    } else if (template.charAt(i) == '[') {
+                        // Skip bracketed expression  
+                        int bracketDepth = 1;
+                        i++;
+                        while (i < template.length() && bracketDepth > 0) {
+                            if (template.charAt(i) == '[') bracketDepth++;
+                            else if (template.charAt(i) == ']') bracketDepth--;
+                            if (bracketDepth > 0) i++;
+                        }
+                        i++; // Move past closing bracket
+                        groupRepeat = 1;
+                    }
+                }
+                
+                // Recursively add dummy values for the group content, repeated groupRepeat times
+                for (int r = 0; r < groupRepeat; r++) {
+                    addDummyValuesForTemplate(groupContent, args);
+                }
+                continue;
+            }
+            
+            // Skip closing parenthesis (should be handled in group processing above)
+            if (format == ')') {
                 i++;
                 continue;
             }
@@ -384,7 +439,11 @@ public class PackParser {
             }
 
             // Add appropriate dummy values based on format type
-            for (int j = 0; j < count; j++) {
+            // Special case for P format: count is minimum string length, not repeat count
+            // P always consumes exactly 1 value regardless of count
+            int valuesToAdd = (format == 'P') ? 1 : count;
+            
+            for (int j = 0; j < valuesToAdd; j++) {
                 switch (format) {
                     case 'a', 'A', 'Z' -> {
                         // String formats - provide a string

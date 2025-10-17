@@ -640,12 +640,14 @@ public class PackHelper {
             if ("xX@".indexOf(format) >= 0) {
                 // These don't consume values
                 continue;
-            } else if ("aAZbBhHu".indexOf(format) >= 0) {
+            } else if ("aAZbBhHuP".indexOf(format) >= 0) {
                 // String/binary formats consume exactly one value regardless of repeat count
+                // P (uppercase) always consumes 1 value (count is minimum string length, not repeat)
                 count += 1;
                 // DEBUG countValuesNeeded: string format '" + format + "' adds 1, count=" + count
             } else if (isNumericFormat(format) || format == 'p' || format == '.') {
                 // Numeric formats consume 'repeatCount' values (or return MAX for *)
+                // p (lowercase) consumes repeatCount values (count is repeat count, not string length)
                 if (hasStar) {
                     // DEBUG countValuesNeeded: returning MAX_VALUE due to numeric format '" + format + "' with *
                     return Integer.MAX_VALUE;
