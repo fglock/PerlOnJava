@@ -42,6 +42,51 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return A new RuntimeHash populated with the elements from the list.
      */
     public static RuntimeHash createHash(RuntimeBase value) {
+        return createHashInternal(value, "Odd number of elements in anonymous hash");
+    }
+
+    /**
+     * Creates a hash with the elements of a list for hash assignment.
+     *
+     * @param value The RuntimeBase containing the elements to populate the hash.
+     * @return A new RuntimeHash populated with the elements from the list.
+     */
+    public static RuntimeHash createHashForAssignment(RuntimeBase value) {
+        // Check for references in the list before creating the hash
+        boolean hasReference = false;
+        int elementCount = 0;
+        Iterator<RuntimeScalar> checkIterator = value.iterator();
+        while (checkIterator.hasNext()) {
+            RuntimeScalar elem = checkIterator.next();
+            if (elem.type == RuntimeScalarType.ARRAYREFERENCE ||
+                elem.type == RuntimeScalarType.HASHREFERENCE ||
+                elem.type == RuntimeScalarType.REFERENCE) {
+                hasReference = true;
+            }
+            elementCount++;
+        }
+        
+        // Warn about references or odd elements
+        if (hasReference) {
+            org.perlonjava.operators.WarnDie.warn(
+                new RuntimeScalar("Reference found where even-sized list expected"),
+                RuntimeScalarCache.scalarEmptyString);
+            return createHashNoWarn(value);
+        } else if (elementCount % 2 != 0) {
+            return createHashInternal(value, "Odd number of elements in hash assignment");
+        } else {
+            return createHashNoWarn(value);
+        }
+    }
+
+    /**
+     * Internal method to create a hash with the elements of a list.
+     *
+     * @param value The RuntimeBase containing the elements to populate the hash.
+     * @param oddWarningMessage The warning message to emit if there's an odd number of elements.
+     * @return A new RuntimeHash populated with the elements from the list.
+     */
+    private static RuntimeHash createHashInternal(RuntimeBase value, String oddWarningMessage) {
         RuntimeHash result = new RuntimeHash();
         Map<String, RuntimeScalar> resultHash = result.elements;
         
@@ -53,10 +98,10 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             elementCount++;
         }
         
-        // Warn if odd number of elements in anonymous hash
+        // Warn if odd number of elements
         if (elementCount % 2 != 0) {
             org.perlonjava.operators.WarnDie.warn(
-                new RuntimeScalar("Odd number of elements in anonymous hash"),
+                new RuntimeScalar(oddWarningMessage),
                 RuntimeScalarCache.scalarEmptyString);
         }
         
