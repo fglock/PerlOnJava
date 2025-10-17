@@ -10,7 +10,6 @@ import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.mro.InheritanceResolver;
 import org.perlonjava.operators.ModuleOperators;
 import org.perlonjava.parser.Parser;
-import org.perlonjava.perlmodule.Strict;
 import org.perlonjava.symbols.ScopedSymbolTable;
 
 import java.lang.invoke.MethodHandle;
@@ -138,26 +137,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         EmitterContext ctx = RuntimeCode.evalContext.get(evalTag);
         ScopedSymbolTable symbolTable = ctx.symbolTable.snapShot();
 
-        // Check if the eval string contains non-ASCII characters
-        // If so, we need to enable UTF8 mode to prevent them from being
-        // UTF-8 encoded into separate bytes
-        String evalString = code.toString();
-        boolean hasUnicode = false;
-        for (int i = 0; i < evalString.length(); i++) {
-            if (evalString.charAt(i) > 127) {
-                hasUnicode = true;
-                break;
-            }
-        }
-
-        // If the string contains Unicode, enable UTF8 hint in the symbol table
-        if (hasUnicode) {
-            symbolTable.enableStrictOption(Strict.HINT_UTF8);
-        }
-
         EmitterContext evalCtx = new EmitterContext(
                 new JavaClassInfo(),  // internal java class name
-                symbolTable, // symbolTable (possibly with UTF8 enabled)
+                ctx.symbolTable.snapShot(), // symbolTable
                 null, // method visitor
                 null, // class writer
                 ctx.contextType, // call context
@@ -169,7 +151,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // evalCtx.logDebug("evalStringHelper Code: " + code);
 
         // Process the string source code to create the LexerToken list
-        Lexer lexer = new Lexer(evalString);
+        Lexer lexer = new Lexer(code.toString());
         List<LexerToken> tokens = lexer.tokenize(); // Tokenize the Perl code
         Node ast;
         Class<?> generatedClass;
