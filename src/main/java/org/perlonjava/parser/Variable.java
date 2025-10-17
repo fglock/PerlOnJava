@@ -16,6 +16,28 @@ import static org.perlonjava.parser.ParsePrimary.parsePrimary;
 import static org.perlonjava.parser.ParserNodeUtils.atUnderscore;
 import static org.perlonjava.parser.TokenUtils.peek;
 
+/**
+ * Parser for Perl variables with sigils ($, @, %, &, *).
+ * 
+ * <p>This class handles the parsing of Perl variables including:
+ * <ul>
+ *   <li>Simple variables: {@code $var}, {@code @array}, {@code %hash}</li>
+ *   <li>Braced variables: {@code ${var}}, {@code @{array}}</li>
+ *   <li>Array/hash access: {@code $array[0]}, {@code $hash{key}}</li>
+ *   <li>Dereferencing: {@code $ref->[0]}, {@code $ref->{key}}</li>
+ *   <li>Typeglobs: {@code *name}</li>
+ *   <li>Code references: {@code &sub}</li>
+ *   <li>Class field access: automatic transformation of {@code $field} to {@code $self->{field}} in methods</li>
+ * </ul>
+ * 
+ * <p>The parser also handles special cases like:
+ * <ul>
+ *   <li>Special variables: {@code $@}, {@code $_}, {@code $!}, etc.</li>
+ *   <li>Regex variables: {@code $1}, {@code $2}, etc.</li>
+ *   <li>Array size: {@code $#array}</li>
+ *   <li>Package-qualified names: {@code $Package::var}</li>
+ * </ul>
+ */
 public class Variable {
 
     /**
@@ -51,18 +73,35 @@ public class Variable {
 
     /**
      * Parses a variable from the given lexer token.
+     * 
+     * <p>This is the main entry point for parsing Perl variables. It handles various forms:
+     * <ul>
+     *   <li>Simple variables: {@code $var}, {@code @array}, {@code %hash}</li>
+     *   <li>Braced forms: {@code ${expr}}, {@code @{expr}}, {@code %{expr}}</li>
+     *   <li>Dereferencing: {@code $$ref}, {@code @$ref}, {@code %$ref}</li>
+     *   <li>Special cases: {@code $#array} (array size), {@code $#[...]} (empty string)</li>
+     *   <li>Class fields: automatic transformation in method context</li>
+     * </ul>
+     * 
+     * <p>The method also handles special parsing rules:
+     * <ul>
+     *   <li>Validates variable names according to Perl rules</li>
+     *   <li>Checks for syntax errors (e.g., parentheses after non-sub variables)</li>
+     *   <li>Vivifies typeglobs when using {@code *name} syntax</li>
+     *   <li>Transforms field access to {@code $self->{field}} in class methods</li>
+     * </ul>
      *
-     * @param parser the parser instance
-     * @param sigil  The sigil that starts the variable.
-     * @return The parsed variable node.
-     * @throws PerlCompilerException If there is a syntax error.
+     * @param parser the parser instance containing the current parsing state
+     * @param sigil  The sigil that starts the variable ($, @, %, &, *, or $#)
+     * @return The parsed variable node (OperatorNode, BinaryOperatorNode, or other AST node)
+     * @throws PerlCompilerException If there is a syntax error during parsing
      */
     public static Node parseVariable(Parser parser, String sigil) {
         Node operand;
         var nextToken = peek(parser);
 
-
-        // Special handling for $ followed by {
+        // Special case 1: $${...} - nested scalar dereference
+        // Example: $${ref} means dereference $ref to get a scalar reference, then dereference that
         if (nextToken.text.equals("$")) {
             // Check if we have ${...} pattern
             if (parser.tokens.get(parser.tokenIndex + 1).text.equals("{")) {
@@ -73,19 +112,22 @@ public class Variable {
             }
         }
 
-        // Special handling for $#[...]
+        // Special case 2: $#[...] - deprecated syntax that returns empty string
+        // This is mentioned in t/base/lex.t as a special edge case
         if (sigil.equals("$#") && nextToken.text.equals("[")) {
             // This is $#[...] which is mentioned in t/base/lex.t and it returns an empty string
             parsePrimary(parser);
             return new StringNode("", parser.tokenIndex);
         }
 
+        // Special case 3: ${...}, @{...}, %{...} - braced variable forms
         // PRE-CHECK: If next token is '{', skip identifier parsing and go directly to parseBracedVariable
         // This avoids backtracking and heredoc processing issues
         if (nextToken.text.equals("{")) {
             return parseBracedVariable(parser, sigil, false);
         }
 
+        // Normal variable parsing: try to parse an identifier
         // Store the current position before parsing the identifier
         int startIndex = parser.tokenIndex;
 
@@ -105,6 +147,8 @@ public class Variable {
                 parser.throwError("syntax error");
             }
 
+            // Typeglob vivification: *name creates a glob entry if it doesn't exist
+            // This is important for distinguishing file handles from barewords
             if (sigil.equals("*")) {
                 // Vivify the GLOB if it doesn't exist yet
                 // This helps distinguish between file handles and other barewords
@@ -112,11 +156,28 @@ public class Variable {
                 GlobalVariable.getGlobalIO(fullName);
             }
 
-            // Check if we're in a method and this variable is a field
-            // Only transform to $self->{field} if:
-            // 1. We're inside a method
-            // 2. The field exists in the current class or parent classes
-            // 3. The variable is not locally shadowed
+            // ===== CLASS FIELD TRANSFORMATION =====
+            // In Perl's class system (use feature 'class'), field variables are automatically
+            // transformed to access $self->{field} when used inside methods.
+            //
+            // Example:
+            //   class Point {
+            //     field $x;
+            //     method move($dx) {
+            //       $x += $dx;  # Automatically becomes: $self->{x} += $dx
+            //     }
+            //   }
+            //
+            // Transformation rules:
+            // 1. Only applies inside methods (not in regular subs or package code)
+            // 2. Only if the field exists in the current class or parent classes
+            // 3. Only if not shadowed by a local variable (my/our/state)
+            //
+            // Transformation by sigil:
+            // - $field  -> $self->{field}        (scalar field access)
+            // - @field  -> @{$self->{field}}     (array field dereference)
+            // - %field  -> %{$self->{field}}     (hash field dereference)
+
             String localVar = sigil + varName;
 
             // Check if this is a field (in current or parent class) and not a locally declared variable
@@ -129,19 +190,20 @@ public class Variable {
                 // This is a field and not shadowed by a local variable
                 // Transform field access based on sigil type
 
-                // Create $self
+                // Create $self variable reference
                 OperatorNode selfVar = new OperatorNode("$",
                         new IdentifierNode("self", parser.tokenIndex), parser.tokenIndex);
 
-                // Create hash subscript for field access
+                // Create hash subscript for field access: {fieldname}
                 List<Node> keyList = new ArrayList<>();
                 keyList.add(new IdentifierNode(varName, parser.tokenIndex));
                 HashLiteralNode hashSubscript = new HashLiteralNode(keyList, parser.tokenIndex);
 
-                // Create $self->{fieldname} 
+                // Create $self->{fieldname} access
                 Node fieldAccess = new BinaryOperatorNode("->", selfVar, hashSubscript, parser.tokenIndex);
 
                 // For array and hash fields, we need to dereference the reference
+                // because fields are stored as references in the object hash
                 if (sigil.equals("@") || sigil.equals("%")) {
                     // @field becomes @{$self->{field}}
                     // %field becomes %{$self->{field}}
@@ -152,7 +214,7 @@ public class Variable {
                 }
             }
 
-            // Create a normal Variable node
+            // Normal variable: create a simple variable reference node
             return new OperatorNode(sigil, new IdentifierNode(varName, parser.tokenIndex), parser.tokenIndex);
         } else if (peek(parser).text.equals("{")) {
             // Handle curly brackets - use parseBracedVariable instead of parseBlock
@@ -485,8 +547,25 @@ public class Variable {
     }
 
     /**
-     * Parses a braced variable expression like ${var} or ${expr}.
-     * This method is shared between regular variable parsing and string interpolation.
+     * Parses a braced variable expression like {@code ${var}} or {@code ${expr}}.
+     * 
+     * <p>This method handles various braced forms:
+     * <ul>
+     *   <li>Simple braced variables: {@code ${var}}, {@code @{array}}, {@code %{hash}}</li>
+     *   <li>Complex expressions: {@code ${$ref}}, {@code ${expr}}</li>
+     *   <li>Array/hash access: {@code ${array[0]}}, {@code ${hash{key}}}</li>
+     *   <li>Empty braces: {@code ${}} (returns empty string)</li>
+     * </ul>
+     * 
+     * <p>The method is shared between regular variable parsing and string interpolation.
+     * When used in string interpolation context, it handles special escaping rules for
+     * quotes inside the braces (e.g., {@code "${\"quoted\"}"})</p>
+     * 
+     * @param parser the parser instance
+     * @param sigil the sigil that precedes the braced expression ($, @, %, etc.)
+     * @param isStringInterpolation true if parsing within a string interpolation context
+     * @return A Node representing the parsed braced variable expression
+     * @throws PerlCompilerException if the braced expression is malformed or unterminated
      */
     public static Node parseBracedVariable(Parser parser, String sigil, boolean isStringInterpolation) {
         int startLineNumber = parser.ctx.errorUtil.getLineNumber(parser.tokenIndex - 1); // Save line number before peek() side effects
@@ -736,6 +815,20 @@ public class Variable {
     /**
      * Determines if a '[' in regex context should be treated as an array subscript
      * rather than a character class by looking ahead for character class patterns.
+     * 
+     * <p>This is a critical disambiguation in regex string interpolation. Consider:
+     * <pre>
+     * /$foo[$A]/    # Array subscript - interpolate $foo[$A]
+     * /$foo[$A-Z]/  # Character class - do NOT interpolate, treat as literal
+     * /$foo[0]/     # Array subscript - interpolate $foo[0]
+     * /$foo[a-z]/   # Character class - do NOT interpolate
+     * </pre>
+     * 
+     * <p>The method uses lookahead to detect the pattern:
+     * <ul>
+     *   <li>Array subscript: {@code [expr]} where expr is a simple variable or number</li>
+     *   <li>Character class: {@code [x-y]} where there's a dash indicating a range</li>
+     * </ul>
      *
      * @param parser       the parser instance
      * @param bracketIndex the index of the '[' token
