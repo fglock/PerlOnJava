@@ -1,5 +1,6 @@
 package org.perlonjava.runtime;
 
+import org.perlonjava.CompilerOptions;
 import org.perlonjava.astnode.Node;
 import org.perlonjava.astnode.OperatorNode;
 import org.perlonjava.codegen.EmitterContext;
@@ -125,16 +126,36 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     public static Class<?> evalStringHelper(RuntimeScalar code, String evalTag) throws Exception {
 
-        // Check if the result is already cached
-        String cacheKey = code.toString() + '\0' + evalTag;
+        // Retrieve the eval context that was saved at program compile-time
+        EmitterContext ctx = RuntimeCode.evalContext.get(evalTag);
+
+        // Check if the eval string contains non-ASCII characters
+        // If so, treat it as Unicode source to preserve Unicode characters during parsing
+        String evalString = code.toString();
+        boolean hasUnicode = false;
+        for (int i = 0; i < evalString.length(); i++) {
+            if (evalString.charAt(i) > 127) {
+                hasUnicode = true;
+                break;
+            }
+        }
+
+        // Clone compiler options and set isUnicodeSource if needed
+        // This only affects string parsing, not symbol table or method resolution
+        CompilerOptions evalCompilerOptions = ctx.compilerOptions;
+        if (hasUnicode) {
+            evalCompilerOptions = (CompilerOptions) ctx.compilerOptions.clone();
+            evalCompilerOptions.isUnicodeSource = true;
+        }
+
+        // Check if the result is already cached (include hasUnicode in cache key)
+        String cacheKey = code.toString() + '\0' + evalTag + '\0' + hasUnicode;
         synchronized (evalCache) {
             if (evalCache.containsKey(cacheKey)) {
                 return evalCache.get(cacheKey);
             }
         }
 
-        // Retrieve the eval context that was saved at program compile-time
-        EmitterContext ctx = RuntimeCode.evalContext.get(evalTag);
         ScopedSymbolTable symbolTable = ctx.symbolTable.snapShot();
 
         EmitterContext evalCtx = new EmitterContext(
@@ -145,13 +166,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 ctx.contextType, // call context
                 true, // is boxed
                 ctx.errorUtil, // error message utility
-                ctx.compilerOptions,
+                evalCompilerOptions, // possibly modified for Unicode source
                 ctx.unitcheckBlocks);
         // evalCtx.logDebug("evalStringHelper EmitterContext: " + evalCtx);
         // evalCtx.logDebug("evalStringHelper Code: " + code);
 
         // Process the string source code to create the LexerToken list
-        Lexer lexer = new Lexer(code.toString());
+        Lexer lexer = new Lexer(evalString);
         List<LexerToken> tokens = lexer.tokenize(); // Tokenize the Perl code
         Node ast;
         Class<?> generatedClass;
