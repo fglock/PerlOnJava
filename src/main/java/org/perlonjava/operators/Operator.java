@@ -125,6 +125,10 @@ public class Operator {
                     for (int i = 0; i < inputStr.length(); i++) {
                         splitElements.add(new RuntimeScalar(String.valueOf(inputStr.charAt(i))));
                     }
+                    // Add trailing empty field when limit < 0
+                    if (limit < 0) {
+                        splitElements.add(new RuntimeScalar(""));
+                    }
                 }
             } else {
                 Matcher matcher = pattern.matcher(inputStr);
@@ -139,6 +143,10 @@ public class Operator {
                         // if (lastEnd == 0 && matchStr.isEmpty()) {
                         // A zero-width match at the beginning of EXPR never produces an empty field
                         // System.out.println("matcher skip first");
+                    } else if (matcher.start() == matcher.end() && matcher.start() == lastEnd) {
+                        // Skip consecutive zero-width matches at the same position
+                        // This handles patterns like / */ that can match zero spaces
+                        continue;
                     } else {
                         splitElements.add(new RuntimeScalar(inputStr.substring(lastEnd, matcher.start())));
                     }
@@ -146,7 +154,7 @@ public class Operator {
                     // Add captured groups if any
                     for (int i = 1; i <= matcher.groupCount(); i++) {
                         String group = matcher.group(i);
-                        splitElements.add(new RuntimeScalar(group != null ? group : "undef"));
+                        splitElements.add(group != null ? new RuntimeScalar(group) : scalarUndef);
                     }
 
                     lastEnd = matcher.end();
@@ -154,12 +162,15 @@ public class Operator {
                 }
 
                 // Add the remaining part of the string
-                if (lastEnd < inputStr.length()) {
+                if (lastEnd <= inputStr.length()) {
                     splitElements.add(new RuntimeScalar(inputStr.substring(lastEnd)));
                 }
 
-                // Handle trailing empty strings if no capturing groups and limit is zero or negative
-                if (matcher.groupCount() == 0 && limit <= 0) {
+                // Handle trailing empty strings based on limit:
+                // - limit > 0: keep all fields (including trailing empty ones)
+                // - limit == 0: remove trailing empty fields
+                // - limit < 0: keep all fields (including trailing empty ones)
+                if (limit == 0) {
                     while (!splitElements.isEmpty() && splitElements.getLast().toString().isEmpty()) {
                         splitElements.removeLast();
                     }
