@@ -266,6 +266,11 @@ public class Unpack {
                 throw new PerlCompilerException("'/' does not take a repeat count");
             }
 
+            // Check if 'P' is used with '*' (which is invalid)
+            if (format == 'P' && isStarCount) {
+                throw new PerlCompilerException("'P' must have an explicit size in unpack");
+            }
+
             if (isStarCount) {
                 count = UnpackHelper.getRemainingCount(state, format, startsWithU);
             }
