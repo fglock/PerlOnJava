@@ -178,6 +178,7 @@ public class GlobalContext {
         Cwd.initialize();
         FileSpec.initialize();
         UnicodeNormalize.initialize();
+        UnicodeUCD.initialize();
         TimeHiRes.initialize();
         TermReadLine.initialize();
         TermReadKey.initialize();
