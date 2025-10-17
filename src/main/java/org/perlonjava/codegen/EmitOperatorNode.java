@@ -70,11 +70,16 @@ public class EmitOperatorNode {
             case "ord" -> EmitOperator.handleOrdOperator(node, emitterVisitor);
 
             // Standard unary functions
-            case "abs", "chdir", "closedir", "cos", "exit", "exp", "fc",
-                 "hex", "lc", "lcfirst", "log",
+            case "fc" -> EmitOperator.handleFcOperator(node, emitterVisitor);
+            case "lc" -> EmitOperator.handleLcOperator(node, emitterVisitor);
+            case "uc" -> EmitOperator.handleUcOperator(node, emitterVisitor);
+            case "lcfirst" -> EmitOperator.handleLcfirstOperator(node, emitterVisitor);
+            case "ucfirst" -> EmitOperator.handleUcfirstOperator(node, emitterVisitor);
+            case "abs", "chdir", "closedir", "cos", "exit", "exp",
+                 "hex", "log",
                  "oct", "pos", "quotemeta", "rand", "ref",
                  "rewinddir", "rmdir", "sin", "sleep", "sqrt",
-                 "srand", "study", "telldir", "uc", "ucfirst" ->
+                 "srand", "study", "telldir" ->
                     EmitOperator.handleUnaryDefaultCase(node, node.operator, emitterVisitor);
 
             // Miscellaneous operators

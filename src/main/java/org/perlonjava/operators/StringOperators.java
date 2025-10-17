@@ -96,6 +96,20 @@ public class StringOperators {
     }
 
     /**
+     * Performs full Unicode case folding under 'use bytes' pragma.
+     * Under 'use bytes', operates on the UTF-8 bytes of the input, only folding ASCII bytes.
+     *
+     * @param runtimeScalar the {@link RuntimeScalar} to be case folded
+     * @return a {@link RuntimeScalar} with the case-folded bytes
+     */
+    public static RuntimeScalar fcBytes(RuntimeScalar runtimeScalar) {
+        // Under 'use bytes', we operate on the UTF-8 bytes of the input
+        RuntimeScalar asBytes = toUtf8Bytes(runtimeScalar);
+        // Case-fold only ASCII bytes (A-Z -> a-z), leave others unchanged
+        return caseFoldBytesAsciiOnly(asBytes);
+    }
+
+    /**
      * Converts the string representation of the given {@link RuntimeScalar} to lowercase.
      * Uses ICU4J for full Unicode support.
      *
@@ -106,6 +120,15 @@ public class StringOperators {
         // Convert the string to lowercase using ICU4J for proper Unicode handling
         String str = UCharacter.toLowerCase(runtimeScalar.toString());
         return new RuntimeScalar(str);
+    }
+
+    /**
+     * Converts to lowercase under 'use bytes' pragma.
+     * Operates on the UTF-8 bytes of the input, only affecting ASCII.
+     */
+    public static RuntimeScalar lcBytes(RuntimeScalar runtimeScalar) {
+        RuntimeScalar asBytes = toUtf8Bytes(runtimeScalar);
+        return caseFoldBytesAsciiOnly(asBytes);
     }
 
     /**
@@ -487,5 +510,109 @@ public class StringOperators {
      */
     public static RuntimeScalar joinForInterpolation(RuntimeScalar runtimeScalar, RuntimeBase list) {
         return joinInternal(runtimeScalar, list, false);
+    }
+
+    /**
+     * Helper method to convert a string to UTF-8 bytes representation.
+     * Each byte becomes a character in the result string.
+     */
+    private static RuntimeScalar toUtf8Bytes(RuntimeScalar runtimeScalar) {
+        String str = runtimeScalar.toString();
+        byte[] utf8Bytes = str.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        
+        // Convert bytes to a string where each byte becomes a character
+        StringBuilder result = new StringBuilder(utf8Bytes.length);
+        for (byte b : utf8Bytes) {
+            result.append((char) (b & 0xFF));
+        }
+        
+        return new RuntimeScalar(result.toString());
+    }
+
+    /**
+     * Case-fold bytes, only affecting ASCII characters (A-Z -> a-z).
+     * Non-ASCII bytes are left unchanged.
+     */
+    private static RuntimeScalar caseFoldBytesAsciiOnly(RuntimeScalar runtimeScalar) {
+        String str = runtimeScalar.toString();
+        StringBuilder result = new StringBuilder(str.length());
+        
+        for (int i = 0; i < str.length(); i++) {
+            char c = str.charAt(i);
+            // Only lowercase ASCII A-Z (0x41-0x5A)
+            if (c >= 'A' && c <= 'Z') {
+                result.append((char)(c + 32)); // Convert to lowercase
+            } else {
+                result.append(c);
+            }
+        }
+        
+        return new RuntimeScalar(result.toString());
+    }
+
+    /**
+     * Uppercase bytes, only affecting ASCII characters (a-z -> A-Z).
+     * Non-ASCII bytes are left unchanged.
+     */
+    private static RuntimeScalar uppercaseBytesAsciiOnly(RuntimeScalar runtimeScalar) {
+        String str = runtimeScalar.toString();
+        StringBuilder result = new StringBuilder(str.length());
+        
+        for (int i = 0; i < str.length(); i++) {
+            char c = str.charAt(i);
+            // Only uppercase ASCII a-z (0x61-0x7A)
+            if (c >= 'a' && c <= 'z') {
+                result.append((char)(c - 32)); // Convert to uppercase
+            } else {
+                result.append(c);
+            }
+        }
+        
+        return new RuntimeScalar(result.toString());
+    }
+
+    /**
+     * Converts to uppercase under 'use bytes' pragma.
+     * Operates on the UTF-8 bytes of the input, only affecting ASCII.
+     */
+    public static RuntimeScalar ucBytes(RuntimeScalar runtimeScalar) {
+        RuntimeScalar asBytes = toUtf8Bytes(runtimeScalar);
+        return uppercaseBytesAsciiOnly(asBytes);
+    }
+
+    /**
+     * Converts first character to lowercase under 'use bytes' pragma.
+     * Operates on the UTF-8 bytes of the input, only affecting ASCII.
+     */
+    public static RuntimeScalar lcfirstBytes(RuntimeScalar runtimeScalar) {
+        RuntimeScalar asBytes = toUtf8Bytes(runtimeScalar);
+        String str = asBytes.toString();
+        if (str.isEmpty()) {
+            return asBytes;
+        }
+        // Only lowercase first byte if it's ASCII A-Z
+        char first = str.charAt(0);
+        if (first >= 'A' && first <= 'Z') {
+            return new RuntimeScalar((char)(first + 32) + str.substring(1));
+        }
+        return asBytes;
+    }
+
+    /**
+     * Converts first character to titlecase under 'use bytes' pragma.
+     * Operates on the UTF-8 bytes of the input, only affecting ASCII.
+     */
+    public static RuntimeScalar ucfirstBytes(RuntimeScalar runtimeScalar) {
+        RuntimeScalar asBytes = toUtf8Bytes(runtimeScalar);
+        String str = asBytes.toString();
+        if (str.isEmpty()) {
+            return asBytes;
+        }
+        // Only uppercase first byte if it's ASCII a-z
+        char first = str.charAt(0);
+        if (first >= 'a' && first <= 'z') {
+            return new RuntimeScalar((char)(first - 32) + str.substring(1));
+        }
+        return asBytes;
     }
 }
