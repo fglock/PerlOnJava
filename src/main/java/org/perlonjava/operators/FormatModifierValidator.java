@@ -76,6 +76,18 @@ public class FormatModifierValidator {
             throw new PerlCompilerException("Can't use both '<' and '>' after type '" + formatChar + "' in " + context);
         }
 
+        // Check for duplicate modifiers (warn, don't throw)
+        Set<Character> seen = new HashSet<>();
+        for (char modifierChar : modifiers) {
+            if (seen.contains(modifierChar)) {
+                // Duplicate modifier - issue warning
+                org.perlonjava.operators.WarnDie.warn(
+                    new org.perlonjava.runtime.RuntimeScalar("Duplicate modifier '" + modifierChar + "' after '" + formatChar + "' in " + context),
+                    org.perlonjava.runtime.RuntimeScalarCache.scalarEmptyString);
+            }
+            seen.add(modifierChar);
+        }
+
         ValidationRule rule = VALIDATION_TABLE.get(formatChar);
         if (rule == null) {
             // No specific validation rule - allow all modifiers for this format
