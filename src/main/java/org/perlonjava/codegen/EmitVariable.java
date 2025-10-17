@@ -16,12 +16,49 @@ import static org.perlonjava.perlmodule.Strict.HINT_STRICT_REFS;
 import static org.perlonjava.perlmodule.Strict.HINT_STRICT_VARS;
 
 public class EmitVariable {
+    // Special variables that are always allowed under strict vars
+    // These are built-in Perl variables that exist at startup
+    private static boolean isBuiltinSpecialVariable(String sigil, String varName) {
+        // Single-character punctuation variables (like $@, $!, $_, etc.)
+        if (varName.length() == 1 && !Character.isLetterOrDigit(varName.charAt(0))) {
+            return true;
+        }
+        // Control-character variables like $^O, $^V, etc.
+        if (varName.length() >= 2 && varName.charAt(0) == '^') {
+            return true;
+        }
+        // Known special variable names (allowed for all sigils)
+        // These include $SIG, %SIG, $ENV, %ENV, $INC, %INC, @INC, @ARGV, @_
+        if (varName.equals("SIG") || varName.equals("ENV") || varName.equals("INC") || 
+            varName.equals("ARGV") || varName.equals("_")) {
+            return true;
+        }
+        return false;
+    }
+
     private static void fetchGlobalVariable(EmitterContext ctx, boolean createIfNotExists, String sigil, String varName, int tokenIndex) {
 
         String var = NameNormalizer.normalizeVariableName(varName, ctx.symbolTable.getCurrentPackage());
         ctx.logDebug("GETVAR lookup global " + sigil + varName + " normalized to " + var + " createIfNotExists:" + createIfNotExists);
 
-        if (sigil.equals("$") && (createIfNotExists || GlobalVariable.existsGlobalVariable(var))) {
+        // Under strict vars, only allow:
+        // 1. Variables that are explicitly allowed (createIfNotExists=true)
+        // 2. Built-in special variables (like $@, %SIG, etc.)
+        boolean isSpecialVar = isBuiltinSpecialVariable(sigil, varName);
+
+        // If createIfNotExists is false and it's not a special variable, throw error
+        if (!createIfNotExists && !isSpecialVar) {
+            throw new PerlCompilerException(
+                    tokenIndex,
+                    "Global symbol \""
+                            + sigil + varName
+                            + "\" requires explicit package name (did you forget to declare \"my "
+                            + sigil + varName
+                            + "\"?)",
+                    ctx.errorUtil);
+        }
+
+        if (sigil.equals("$") && (createIfNotExists || isSpecialVar || GlobalVariable.existsGlobalVariable(var))) {
             // fetch a global variable
             ctx.mv.visitLdcInsn(var);
             ctx.mv.visitMethodInsn(
@@ -141,11 +178,15 @@ public class EmitVariable {
                     // System.out.println("SYMBOL " + sigil +  name + " " + symbolEntry);
                 }
 
+                // Compute normalized name to detect special variables in main::
+                String normalizedName = NameNormalizer.normalizeVariableName(name, emitterVisitor.ctx.symbolTable.getCurrentPackage());
+                boolean isSpecialSortVar = sigil.equals("$") && ("main::a".equals(normalizedName) || "main::b".equals(normalizedName));
+
                 boolean createIfNotExists = name.contains("::") // Fully qualified name
                         || ScalarUtils.isInteger(name)  // Regex variable always exists
+                        || isSpecialSortVar            // $a and $b are always exempt from 'strict vars'
                         || !emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_VARS)  // `no strict "vars"`
-                        || isDeclared
-                        || (!name.isEmpty() && name.codePointAt(0) < 0x20); // starts with control char;
+                        || (isDeclared && isLexical);  // Only allow if declared as lexical (my/our/state), not just any symbol entry
                 fetchGlobalVariable(emitterVisitor.ctx, createIfNotExists, sigil, name, node.getIndex());
             } else {
                 // retrieve the `my` or `our` variable from local vars
