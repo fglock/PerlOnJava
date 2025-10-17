@@ -29,12 +29,13 @@ public class UnicodeUCD extends PerlModuleBase {
         unicodeUCD.defineExport("EXPORT_OK", 
             "prop_invmap", "prop_invlist", "prop_aliases", "prop_values",
             "charinfo", "charblock", "charscript", "charprop",
-            "num", "charnames"
+            "num", "charnames", "all_casefolds"
         );
         
         try {
             unicodeUCD.registerMethod("prop_invmap", null);
             unicodeUCD.registerMethod("prop_invlist", null);
+            unicodeUCD.registerMethod("all_casefolds", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Unicode::UCD method: " + e.getMessage());
         }
@@ -327,5 +328,88 @@ public class UnicodeUCD extends PerlModuleBase {
         RuntimeList fullResult = prop_invmap(args, ctx);
         // Return just the first element (invlist)
         return new RuntimeList(fullResult.elements.get(0));
+    }
+
+    /**
+     * Returns all case folding mappings as a hash reference.
+     * 
+     * Returns a hash where keys are decimal code points and values are hash refs with:
+     * - code: hex string of the code point (e.g., "0041")
+     * - status: "C" (common), "F" (full), "S" (simple), "T" (turkic)
+     * - simple: hex string of simple case fold (empty if none)
+     * - full: hex string(s) of full case fold (space-separated if multiple)
+     * - mapping: same as full
+     * - turkic: hex string of turkic-specific fold (empty if none)
+     *
+     * @param args Unused
+     * @param ctx Context
+     * @return RuntimeList containing hash reference
+     */
+    public static RuntimeList all_casefolds(RuntimeArray args, int ctx) {
+        RuntimeHash result = new RuntimeHash();
+        
+        // Scan all Unicode code points
+        for (int cp = 0; cp <= 0x10FFFF; cp++) {
+            // Skip surrogates
+            if (cp >= 0xD800 && cp <= 0xDFFF) {
+                continue;
+            }
+            
+            // Get case folding for this code point
+            String folded = UCharacter.foldCase(String.valueOf(Character.toChars(cp)), true);
+            int[] foldedCodePoints = folded.codePoints().toArray();
+            
+            // Skip if it folds to itself (no case folding)
+            if (foldedCodePoints.length == 1 && foldedCodePoints[0] == cp) {
+                continue;
+            }
+            
+            // Create entry for this code point
+            RuntimeHash entry = new RuntimeHash();
+            
+            // code: hex string of original code point
+            entry.put("code", new RuntimeScalar(String.format("%04X", cp)));
+            
+            // Determine status and create fold strings
+            String fullFold = formatCodePoints(foldedCodePoints);
+            String simpleFold = "";
+            String status;
+            
+            if (foldedCodePoints.length == 1) {
+                // Simple case folding (1-to-1 mapping)
+                simpleFold = fullFold;
+                status = "C"; // Common
+            } else {
+                // Full case folding (1-to-many mapping)
+                simpleFold = ""; // No simple fold for multi-char results
+                status = "F"; // Full
+            }
+            
+            entry.put("status", new RuntimeScalar(status));
+            entry.put("simple", new RuntimeScalar(simpleFold));
+            entry.put("full", new RuntimeScalar(fullFold));
+            entry.put("mapping", new RuntimeScalar(fullFold));
+            
+            // Turkic-specific folding (for Turkish/Azeri)
+            // ICU4J doesn't expose turkic-specific folding directly, so we leave it empty
+            entry.put("turkic", new RuntimeScalar(""));
+            
+            // Add to result hash with decimal code point as key
+            result.put(String.valueOf(cp), entry.createReference());
+        }
+        
+        return new RuntimeList(result.createReference());
+    }
+    
+    /**
+     * Format an array of code points as space-separated hex strings.
+     */
+    private static String formatCodePoints(int[] codePoints) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < codePoints.length; i++) {
+            if (i > 0) sb.append(" ");
+            sb.append(String.format("%04X", codePoints[i]));
+        }
+        return sb.toString();
     }
 }
