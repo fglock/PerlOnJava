@@ -318,8 +318,14 @@ diff perl_out jperl_out
 
 ### Bytecode Analysis
 ```bash
-# Understand compilation
+# View AST structure (parser output)
+./jperl --parse -e 'code'
+
+# View bytecode (emitter output)
 ./jperl --disassemble -e 'code' 2>&1 | grep -A 20 "methodName"
+
+# Compare with Perl's bytecode (requires B::Concise)
+perl -MO=Concise -e 'code'
 ```
 
 ### Extract Failing Tests
@@ -328,6 +334,33 @@ When debugging large test files:
 2. Extract minimal reproduction
 3. Test in isolation
 4. Add debug output only to extracted version
+
+### Deep Dive Parser Issues
+When encountering parser errors:
+```bash
+# 1. Simplify to minimal failing case
+./jperl -e 'complex expression' 2>&1  # Full error
+./jperl -e 'simpler version' 2>&1     # Isolate issue
+
+# 2. Compare AST with Perl bytecode
+perl -MO=Concise -e 'expression' 2>&1  # Shows Perl's parse tree
+./jperl --parse -e 'expression'        # Shows our AST
+
+# 3. Check operator precedence
+# Perl uses complex precedence rules - verify with B::Concise
+# Look for: multiconcat, regcomp, match, split operations
+
+# 4. Test edge cases systematically
+./jperl -e 'op'           # Minimal
+./jperl -e 'op.0'         # With concatenation
+./jperl -e 'op,list'      # With list context
+./jperl -e 'map{op}list'  # In block context
+```
+
+**Key Insights:**
+- `split//.0` means: match `//` then concatenate `.0` to result, use as pattern
+- Parser must continue expression parsing after regex match for infix operators
+- Use `B::Concise` to understand Perl's parse order: match → concat → regcomp → split
 
 ## Key Code Locations
 
@@ -398,6 +431,10 @@ print ($result eq $expected ? "PASS" : "FAIL: got '$result', expected '$expected
 - **MUST use `./gradlew clean shadowJar`** - `compileJava` alone won't work
 - AST transformations needed, not just annotations
 - Test with `--parse` flag to verify
+- When parsing operators with special syntax (split, map, grep):
+  - Parse first argument as full expression (not just primary)
+  - Continue parsing for infix operators (., +, -, etc.)
+  - Don't stop at first token - check for operator continuation
 
 ### Performance Patterns
 - One missing operator can block entire test files
@@ -409,6 +446,8 @@ print ($result eq $expected ? "PASS" : "FAIL: got '$result', expected '$expected
 - Using wrong build command for parser changes
 - Fixing symptoms instead of root causes
 - Not creating minimal test cases
+- Stopping expression parsing too early (missing infix operators)
+- Not comparing with Perl's B::Concise output for complex expressions
 
 ## When to Create Prompt Documents
 
@@ -741,25 +780,34 @@ After implementing:
 1. Testing only your target file is NOT enough! Unit tests (`make test`) catch subtle bugs that integration tests miss.
 2. NEVER use `git add .` or `git add -A` - they will add temporary garbage files from test runs!
 
-## Understanding 0/0 Test Results
+## Understanding Test Results
 
-Tests showing `0/0` (no tests run) fall into three categories:
+### 0/0 Test Results
+Tests showing `0/0` (no tests run) fall into categories:
 
-### 1. **Correctly Skipped Tests** ✓
-Tests that detect missing features and skip themselves gracefully:
-- **Missing extensions**: Fcntl, Encode, IPC modules, PerlIO layers
-- **Platform incompatibilities**: Detected at runtime via Config checks
-- **Output format**: `1..0 # Skip [reason]` with exit code 0
-- **Examples**: io/eintr.t, io/layers.t, io/msg.t, io/sem.t, io/semctl.t, io/shm.t
+**1. Correctly Skipped Tests** ✓ - Missing extensions, platform checks, exit code 0
+**2. Compilation Failures** ! - Parser/bytecode errors before tests run
+**3. TAP Format** - `0/0` is valid: "0 tests run out of 0 planned"
 
-### 2. **Compilation Failures** !
-Tests that fail during compilation before any tests can run:
-- **Bytecode errors**: Method too large, invalid bytecode generation
-- **Parser errors**: Syntax errors, unimplemented features
-- **Cannot self-skip**: Failure happens before skip_all() can execute
-- **Examples**: 
-  - io/pipe.t - Bytecode generation failure (requires fork)
-  - io/fs.t - Bareword filehandle issue (FIXED 2025-10-13)
+### Infrastructure Test Failures
+Some test failures indicate missing infrastructure, not bugs:
 
-### 3. **TAP Format**
-The `0/0` output is correct TAP format: "0 tests run out of 0 planned" signals to the test harness that the entire test file was skipped. This is expected behavior, not an error.
+**Test Infrastructure Issues:**
+- `runperl()` - Requires subprocess execution (test 32 in split.t)
+- `fresh_perl_is()` - Runs code in subprocess
+- `-Mre=Debug,COMPILE` - Requires Perl's regex debug output
+- Typeglob aliasing - `*a = *b` should make arrays share storage
+
+**Real Bugs to Fix:**
+- Parser errors on valid Perl syntax
+- Incorrect operator precedence
+- Missing expression continuation after operators
+
+**Quick Check:**
+```bash
+# If test uses these, it's infrastructure:
+grep -E "runperl|fresh_perl|Debug,COMPILE" t/op/test.t
+
+# If it's a parser error, it's a real bug:
+./jperl -e 'failing_code' 2>&1 | grep -E "syntax error|Expected token"
+```
