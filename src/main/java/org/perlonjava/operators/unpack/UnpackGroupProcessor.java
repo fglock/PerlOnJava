@@ -59,6 +59,14 @@ public class UnpackGroupProcessor {
         // Extract group content
         String groupContent = template.substring(position + 1, closePos);
 
+        // Validate that group doesn't start with a count
+        if (!groupContent.isEmpty()) {
+            char firstChar = groupContent.charAt(0);
+            if (firstChar == '*' || Character.isDigit(firstChar) || firstChar == '[') {
+                throw new PerlCompilerException("()-group starts with a count in unpack");
+            }
+        }
+
         // Check for endianness modifier after the group
         char groupEndian = ' '; // default: no specific endianness
         int nextPos = closePos + 1;

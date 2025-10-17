@@ -54,6 +54,14 @@ public class PackGroupHandler {
         String groupContent = template.substring(openPos + 1, closePos);
         // DEBUG: found group at positions " + openPos + " to " + closePos + ", content: '" + groupContent + "'
 
+        // Validate that group doesn't start with a count
+        if (!groupContent.isEmpty()) {
+            char firstChar = groupContent.charAt(0);
+            if (firstChar == '*' || Character.isDigit(firstChar) || firstChar == '[') {
+                throw new PerlCompilerException("()-group starts with a count in pack");
+            }
+        }
+
         // Parse group modifiers and repeat count
         GroupInfo groupInfo = PackParser.parseGroupInfo(template, closePos);
 
