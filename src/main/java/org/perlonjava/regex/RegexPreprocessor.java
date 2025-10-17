@@ -58,12 +58,98 @@ public class RegexPreprocessor {
         s = transformSimpleConditionals(s);
         s = removeUnderscoresFromEscapes(s);
         s = normalizeQuantifiers(s);
+        
+        // Expand multi-character case folds when case-insensitive flag is set
+        if (regexFlags.isCaseInsensitive()) {
+            s = expandMultiCharFolds(s);
+        }
+        
         StringBuilder sb = new StringBuilder();
         handleRegex(s, 0, sb, regexFlags, false);
         String result = sb.toString();
         return result;
     }
 
+    /**
+     * Expand characters with multi-character case folds into alternations.
+     * For example: ß → (?:ß|ss|SS|Ss|sS)
+     * This is needed because Java's UNICODE_CASE flag doesn't handle multi-char folds.
+     */
+    private static String expandMultiCharFolds(String pattern) {
+        StringBuilder result = new StringBuilder();
+        int i = 0;
+        int len = pattern.length();
+        boolean inCharClass = false;
+        boolean escaped = false;
+        
+        while (i < len) {
+            char ch = pattern.charAt(i);
+            
+            // Track if we're inside a character class [...]
+            if (!escaped) {
+                if (ch == '[') {
+                    inCharClass = true;
+                } else if (ch == ']') {
+                    inCharClass = false;
+                }
+            }
+            
+            // Handle escape sequences
+            if (ch == '\\' && !escaped) {
+                escaped = true;
+                result.append(ch);
+                i++;
+                continue;
+            }
+            
+            // If this is an escaped character or we're in a char class, don't expand
+            if (escaped || inCharClass) {
+                result.append(ch);
+                escaped = false;
+                i++;
+                continue;
+            }
+            
+            // Check if this character has a multi-char fold
+            int codePoint = pattern.codePointAt(i);
+            if (MultiCharFoldMapper.hasMultiCharFold(codePoint)) {
+                // Expand it (e.g., ß → (?:ß|ss|SS|Ss|sS))
+                String expansion = MultiCharFoldMapper.expandToAlternation(codePoint);
+                result.append(expansion);
+                i += Character.charCount(codePoint);
+            } else {
+                // Check if we're at the start of a reverse fold sequence (e.g., ss → ß)
+                boolean foundReverseFold = false;
+                // Try longest sequences first (3, then 2 characters)
+                for (int seqLen = 3; seqLen >= 2 && !foundReverseFold; seqLen--) {
+                    if (i + seqLen <= len) {
+                        String sequence = pattern.substring(i, i + seqLen);
+                        if (MultiCharFoldMapper.hasReverseFold(sequence)) {
+                            Integer reverseFoldChar = MultiCharFoldMapper.getReverseFold(sequence);
+                            // Expand to include both the sequence and its reverse fold
+                            result.append("(?:");
+                            result.append(sequence);
+                            result.append("|");
+                            result.appendCodePoint(reverseFoldChar);
+                            result.append(")");
+                            i += seqLen;
+                            foundReverseFold = true;
+                        }
+                    }
+                }
+                
+                if (!foundReverseFold) {
+                    result.appendCodePoint(codePoint);
+                    i += Character.charCount(codePoint);
+                }
+            }
+            
+            escaped = false;
+        }
+        
+        return result.toString();
+    }
+    
     /**
      * Remove underscores from \x{...} and \o{...} escape sequences.
      * Perl allows underscores in numeric literals for readability, but Java doesn't.
