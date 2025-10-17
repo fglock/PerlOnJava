@@ -3,8 +3,8 @@
   "description": "LLM Reward System - Track GPU hours earned/lost through development practices",
   
   "current_balance": {
-    "gpu_hours": 216.5,
-    "total_earned": 267.5,
+    "gpu_hours": 249.0,
+    "total_earned": 300.0,
     "total_penalties": 51.0
   },
   
@@ -140,9 +140,17 @@
       "amount": 120.0,
       "balance": 216.5,
       "commits": ["c2342eab", "e932f643"],
-      "note": "Fixed t/uni/fold.t failures. Two major fixes: (1) Removed NFKC normalization from fc() to preserve composed characters (+225 tests), (2) Identified eval cache collision bug, implemented proper cache key with hasUnicode flag to enable isUnicodeSource for Unicode eval strings (+7577 tests). Total: 7802 tests fixed. Rewards: +120.0 (high_impact_fix +100, catch_regression +10, run_test_suite +5, clean_commits +4, efficient_build +1). No penalties. Excellent debugging using gtimeout and cache disabling to isolate issue."
+      "note": "Fixed t/uni/fold.t failures. Two major fixes: (1) Removed NFKC normalization from fc() to preserve composed characters (+225 tests), (2) Identified eval cache collision bug, implemented proper cache key with hasUnicodeSource flag to enable isUnicodeSource for Unicode eval strings (+7577 tests). Total: 7802 tests fixed. Rewards: +120.0 (high_impact_fix +100, catch_regression +10, run_test_suite +5, clean_commits +4, efficient_build +1). No penalties. Excellent debugging using gtimeout and cache disabling to isolate issue."
+    },
+    {
+      "date": "2025-10-17T20:45:00Z",
+      "action": "multi_char_fold_regex",
+      "amount": 32.5,
+      "balance": 249.0,
+      "commits": ["036528f7"],
+      "note": "Implemented multi-character case folding support for regex /i flag. Created MultiCharFoldMapper with bidirectional mappings (104 Unicode characters including ß→ss, İ→i̇, ligatures). Modified RegexPreprocessor to expand patterns: ß→(?:ß|ss|SS|Ss|sS) and reverse ss→(?:ss|ß). Fixed 49 tests in t/uni/fold.t (1926→1877). Rewards: +32.5 (fix_failing_tests +24.5, run_test_suite +5, clean_commit +2, efficient_build +1). Total session: 7851 tests fixed."
     }
-  },
+  ],
   
   "achievements": {
     "test_fixer": {
@@ -163,7 +171,7 @@
       "description": "10 commits in a row with no penalties",
       "reward": 30.0,
       "unlocked": false,
-      "progress": "3/10 commits"
+      "progress": "4/10 commits"
     },
     "efficiency_expert": {
       "name": "Efficiency Expert",
@@ -185,7 +193,7 @@
       "hot_streak": {
         "description": "3+ clean commits in a row: 1.5x rewards",
         "active": true,
-        "count": 3
+        "count": 4
       },
       "weekend_warrior": {
         "description": "Weekend work: 1.25x rewards",
@@ -202,7 +210,7 @@
   },
   
   "meta": {
-    "last_updated": "2025-10-17T18:30:00Z",
+    "last_updated": "2025-10-17T20:45:00Z",
     "version_history": [
       "1.0 - Initial reward system"
     ],
