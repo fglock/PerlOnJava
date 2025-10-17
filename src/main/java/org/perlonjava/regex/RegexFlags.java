@@ -64,7 +64,11 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
     public int toPatternFlags() {
         int flags = 0;
         if (isCaseInsensitive) {
-            flags |= CASE_INSENSITIVE;
+            // For proper Unicode case-insensitive matching, we need both flags:
+            // - CASE_INSENSITIVE: enables case-insensitive matching
+            // - UNICODE_CASE: enables Unicode-aware case folding (not just ASCII)
+            // Without UNICODE_CASE, only ASCII A-Z matches a-z
+            flags |= CASE_INSENSITIVE | UNICODE_CASE;
         }
         if (isMultiLine) {
             flags |= MULTILINE;
