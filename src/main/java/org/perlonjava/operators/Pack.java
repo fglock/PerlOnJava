@@ -60,8 +60,8 @@ public class Pack {
         handlers.put('h', new HexStringPackHandler('h'));
         handlers.put('H', new HexStringPackHandler('H'));
         handlers.put('u', new UuencodePackHandler());
-        handlers.put('p', new PointerPackHandler());
-        handlers.put('P', new PointerPackHandler());
+        handlers.put('p', new PointerPackHandler('p'));
+        handlers.put('P', new PointerPackHandler('P'));
         // W format is handled specially like U format (see switch statement below)
         // handlers.put('W', new WideCharacterPackHandler());
         handlers.put('x', new ControlPackHandler('x'));

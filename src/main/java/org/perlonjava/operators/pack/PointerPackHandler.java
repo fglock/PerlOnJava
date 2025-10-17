@@ -8,6 +8,9 @@ import java.util.Map;
 
 /**
  * Handler for pointer formats 'p' and 'P'.
+ * 
+ * - 'p' format: count is a repeat count (p3 packs 3 pointers)
+ * - 'P' format: count is minimum string length (P3 packs 1 pointer with min 3 bytes)
  */
 public class PointerPackHandler implements PackFormatHandler {
     /**
@@ -15,6 +18,18 @@ public class PointerPackHandler implements PackFormatHandler {
      * Maps hash codes to their corresponding string values for later retrieval by unpack.
      */
     private static final Map<Integer, String> pointerMap = new HashMap<>();
+    
+    /** The format character ('p' or 'P') */
+    private final char format;
+
+    /**
+     * Creates a new PointerPackHandler for the specified format.
+     * 
+     * @param format The format character ('p' or 'P')
+     */
+    public PointerPackHandler(char format) {
+        this.format = format;
+    }
 
     /**
      * Retrieves a string value associated with a pointer hash code.
@@ -31,11 +46,20 @@ public class PointerPackHandler implements PackFormatHandler {
     @Override
     public int pack(List<RuntimeScalar> values, int valueIndex, int count, boolean hasStar,
                     ParsedModifiers modifiers, PackBuffer output) {
-        // Determine how many pointers to pack
-        int numPointers = count;
-        if (hasStar) {
-            // Pack all remaining values
-            numPointers = values.size() - valueIndex;
+        // For 'p' format: count is repeat count (p3 packs 3 pointers)
+        // For 'P' format: count is minimum string length (P3 packs 1 pointer, string must be >=3 bytes)
+        int numPointers;
+        if (format == 'p') {
+            // 'p' format: count is a repeat count
+            numPointers = count;
+            if (hasStar) {
+                // Pack all remaining values
+                numPointers = values.size() - valueIndex;
+            }
+        } else {
+            // 'P' format: always pack exactly 1 pointer
+            // The count parameter specifies minimum string length (not used in packing, just in unpacking)
+            numPointers = 1;
         }
 
         // Pack the specified number of pointers
