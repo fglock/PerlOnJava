@@ -3,7 +3,9 @@ package org.perlonjava.runtime;
 import org.perlonjava.codegen.CustomClassLoader;
 import org.perlonjava.parser.ParserTables;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -39,6 +41,7 @@ public class GlobalVariable {
     // Global class loader for all generated classes - not final so we can replace it
     public static CustomClassLoader globalClassLoader =
             new CustomClassLoader(GlobalVariable.class.getClassLoader());
+    
     // Regular expression for regex variables like $main::1
     static Pattern regexVariablePattern = Pattern.compile("^main::(\\d+)$");
 
@@ -47,6 +50,7 @@ public class GlobalVariable {
      * Also destroys and recreates the global class loader to allow GC of old classes.
      */
     public static void resetAllGlobals() {
+        // Clear all global state
         globalVariables.clear();
         globalArrays.clear();
         globalHashes.clear();
