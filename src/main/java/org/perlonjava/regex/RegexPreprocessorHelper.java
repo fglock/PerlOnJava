@@ -156,6 +156,28 @@ public class RegexPreprocessorHelper {
                 }
                 return end - 1;
             }
+        } else if (nextChar == 's' || nextChar == 'S') {
+            // Perl's \s matches Unicode whitespace, Java's \s only matches ASCII whitespace
+            // Expand \s to match all Perl whitespace characters:
+            // \t \n \f \r space (ASCII: 09-0D, 20)
+            // U+000B (vertical tab - Perl includes this)
+            // U+1680 (OGHAM SPACE MARK)
+            // U+2000-U+200A (EN QUAD through HAIR SPACE)
+            // U+2028 (LINE SEPARATOR)
+            // U+2029 (PARAGRAPH SEPARATOR)
+            // U+202F (NARROW NO-BREAK SPACE)
+            // U+205F (MEDIUM MATHEMATICAL SPACE)
+            // U+3000 (IDEOGRAPHIC SPACE)
+            sb.setLength(sb.length() - 1); // Remove the backslash
+            if (nextChar == 's') {
+                // Positive: matches whitespace
+                // Use \x20 instead of literal space to avoid issues with /x modifier
+                sb.append("[\\t\\n\\u000B\\f\\r\\x20\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]");
+            } else {
+                // Negative: matches non-whitespace
+                sb.append("[^\\t\\n\\u000B\\f\\r\\x20\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]");
+            }
+            return offset;
         } else if (nextChar == 'h') {
             // \h - horizontal whitespace
             sb.setLength(sb.length() - 1); // Remove the backslash
