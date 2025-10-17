@@ -105,7 +105,6 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * Sets the current RuntimeScalar object to the values associated with the given RuntimeGlob.
      * This method effectively implements the behavior of assigning one typeglob to another,
      * similar to Perl's typeglob assignment.
-     * 
      * In Perl, *aaa = *bbb creates ALIASES, not copies. After this assignment:
      * - @aaa and @bbb are THE SAME array (share storage)
      * - %aaa and %bbb are THE SAME hash (share storage)
@@ -115,7 +114,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * @return The scalar value associated with the provided RuntimeGlob.
      */
     public RuntimeScalar set(RuntimeGlob value) {
-        markGlobAsAssigned();
+        // Retrieve the RuntimeScalar value associated with the provided RuntimeGlob.
+        RuntimeScalar result = value.scalar();
 
         // Retrieve the name of the glob from the provided RuntimeGlob object.
         String globName = value.globName;
