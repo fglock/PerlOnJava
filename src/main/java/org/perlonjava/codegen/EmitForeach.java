@@ -170,7 +170,18 @@ public class EmitForeach {
         mv.visitInsn(Opcodes.POP);
 
         if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
-            EmitOperator.emitUndef(mv);
+            // Foreach loop returns empty string when it completes normally
+            // This is different from an empty list in scalar context (which would be undef)
+            if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR || emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME) {
+                // Return empty string
+                mv.visitFieldInsn(Opcodes.GETSTATIC, "org/perlonjava/runtime/RuntimeScalarCache",
+                        "scalarEmptyString", "Lorg/perlonjava/runtime/RuntimeScalarReadOnly;");
+            } else {
+                // LIST context: Return empty list
+                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "()V", false);
+            }
         }
 
         emitterVisitor.ctx.logDebug("FOR1 end");
@@ -227,5 +238,20 @@ public class EmitForeach {
 
         emitterVisitor.ctx.javaClassInfo.decrementStackLevel(1);
         mv.visitInsn(Opcodes.POP);
+
+        if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
+            // Foreach loop returns empty string when it completes normally
+            // This is different from an empty list in scalar context (which would be undef)
+            if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR || emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME) {
+                // Return empty string
+                mv.visitFieldInsn(Opcodes.GETSTATIC, "org/perlonjava/runtime/RuntimeScalarCache",
+                        "scalarEmptyString", "Lorg/perlonjava/runtime/RuntimeScalarReadOnly;");
+            } else {
+                // LIST context: Return empty list
+                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "()V", false);
+            }
+        }
     }
 }
