@@ -144,11 +144,12 @@ public class StringOperators {
     }
 
     /**
-     * Converts the first character of the string representation of the given {@link RuntimeScalar} to uppercase.
-     * Uses ICU4J for full Unicode support.
+     * Converts the first character of the string representation of the given {@link RuntimeScalar} to titlecase.
+     * Uses ICU4J for full Unicode support. Note: titlecase is different from uppercase for some characters
+     * like digraphs (e.g., DŽ U+01C4 titlecases to Dž U+01C5, not DŽ).
      *
-     * @param runtimeScalar the {@link RuntimeScalar} whose first character is to be converted to uppercase
-     * @return a {@link RuntimeScalar} with the first character in uppercase
+     * @param runtimeScalar the {@link RuntimeScalar} whose first character is to be converted to titlecase
+     * @return a {@link RuntimeScalar} with the first character in titlecase
      */
     public static RuntimeScalar ucfirst(RuntimeScalar runtimeScalar) {
         String str = runtimeScalar.toString();
@@ -156,13 +157,14 @@ public class StringOperators {
         if (str.isEmpty()) {
             return new RuntimeScalar(str);
         }
-        // Get the first code point and convert it to uppercase using ICU4J
+        // Get the first code point and convert it to titlecase using ICU4J
         int firstCodePoint = str.codePointAt(0);
         int charCount = Character.charCount(firstCodePoint);
-        String firstChar = str.substring(0, charCount);
         String rest = str.substring(charCount);
-        String upperFirst = UCharacter.toUpperCase(firstChar);
-        return new RuntimeScalar(upperFirst + rest);
+        // Use toTitleCase for proper titlecase conversion (not uppercase)
+        int titleCodePoint = UCharacter.toTitleCase(firstCodePoint);
+        String titleFirst = String.valueOf(Character.toChars(titleCodePoint));
+        return new RuntimeScalar(titleFirst + rest);
     }
 
     /**
