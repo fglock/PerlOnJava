@@ -215,6 +215,28 @@ public abstract class NumericFormatHandler implements FormatHandler {
 
         @Override
         public void unpack(UnpackState state, List<RuntimeBase> output, int count, boolean isStarCount) {
+            // For UTF-8 strings, n format reads CHARACTER CODES (masking to 0xFF), not UTF-8 bytes
+            if (state.isUTF8Data() && state.isCharacterMode()) {
+                // Read 2 character codes and assemble into a short
+                for (int i = 0; i < count; i++) {
+                    if (state.remainingCodePoints() < 2) {
+                        break;
+                    }
+                    // Network byte order = big-endian
+                    int b1 = state.nextCodePoint() & 0xFF;
+                    int b2 = state.nextCodePoint() & 0xFF;
+                    int value = (b1 << 8) | b2;
+                    
+                    if (signed) {
+                        output.add(new RuntimeScalar((short) value));
+                    } else {
+                        output.add(new RuntimeScalar(value));
+                    }
+                }
+                return;
+            }
+            
+            // For non-UTF-8 strings, use original byte buffer logic
             // Save current mode
             boolean wasCharacterMode = state.isCharacterMode();
 
@@ -267,6 +289,30 @@ public abstract class NumericFormatHandler implements FormatHandler {
 
         @Override
         public void unpack(UnpackState state, List<RuntimeBase> output, int count, boolean isStarCount) {
+            // For UTF-8 strings, N format reads CHARACTER CODES (masking to 0xFF), not UTF-8 bytes
+            // This matches Perl's behavior where unpack("C*", $utf8_string) returns character codes
+            if (state.isUTF8Data() && state.isCharacterMode()) {
+                // Read 4 character codes and assemble into a long
+                for (int i = 0; i < count; i++) {
+                    if (state.remainingCodePoints() < 4) {
+                        break;
+                    }
+                    long value = 0;
+                    // Network byte order = big-endian
+                    for (int j = 0; j < 4; j++) {
+                        int charCode = state.nextCodePoint() & 0xFF;  // Mask to byte
+                        value = (value << 8) | charCode;
+                    }
+                    if (signed) {
+                        output.add(new RuntimeScalar((int) value));
+                    } else {
+                        output.add(new RuntimeScalar(value & 0xFFFFFFFFL));
+                    }
+                }
+                return;
+            }
+            
+            // For non-UTF-8 strings, use original byte buffer logic
             // Save current mode
             boolean wasCharacterMode = state.isCharacterMode();
 
@@ -372,6 +418,29 @@ public abstract class NumericFormatHandler implements FormatHandler {
 
         @Override
         public void unpack(UnpackState state, List<RuntimeBase> output, int count, boolean isStarCount) {
+            // For UTF-8 strings, V format reads CHARACTER CODES (masking to 0xFF), not UTF-8 bytes
+            if (state.isUTF8Data() && state.isCharacterMode()) {
+                // Read 4 character codes and assemble into a long
+                for (int i = 0; i < count; i++) {
+                    if (state.remainingCodePoints() < 4) {
+                        break;
+                    }
+                    long value = 0;
+                    // VAX byte order = little-endian
+                    for (int j = 0; j < 4; j++) {
+                        int charCode = state.nextCodePoint() & 0xFF;  // Mask to byte
+                        value |= (long) charCode << (j * 8);
+                    }
+                    if (signed) {
+                        output.add(new RuntimeScalar((int) value));
+                    } else {
+                        output.add(new RuntimeScalar(value & 0xFFFFFFFFL));
+                    }
+                }
+                return;
+            }
+            
+            // For non-UTF-8 strings, use original byte buffer logic
             // Save current mode
             boolean wasCharacterMode = state.isCharacterMode();
 
@@ -394,7 +463,7 @@ public abstract class NumericFormatHandler implements FormatHandler {
                 if (signed) {
                     // Convert to signed int (sign extend from 32 bits)
                     output.add(new RuntimeScalar((int) value));
-                } else {
+                } else{
                     // Unsigned
                     output.add(new RuntimeScalar(value));
                 }
