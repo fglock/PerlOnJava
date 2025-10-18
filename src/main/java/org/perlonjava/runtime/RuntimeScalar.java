@@ -250,8 +250,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return 1;
     }
 
-    // Getters
+    // Inlineable fast path for getNumber()
     public RuntimeScalar getNumber() {
+        if (type == INTEGER || type == DOUBLE) {
+            return this;
+        }
+        return getNumberLarge();
+    }
+
+    // Slow path for getNumber()
+    public RuntimeScalar getNumberLarge() {
         // Cases 0-8 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         return switch (type) {
             case INTEGER, DOUBLE -> this;
@@ -260,7 +268,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case VSTRING -> NumberParser.parseNumber(this);
             case BOOLEAN -> (boolean) value ? scalarOne : scalarZero;
             case GLOB -> scalarOne;  // Assuming globs are truthy, so 1
-            case REGEX -> scalarOne; // Assuming regexes are truthy, so 1
             case JAVAOBJECT -> value != null ? scalarOne : scalarZero;
             case TIED_SCALAR -> this.tiedFetch().getNumber();
             case DUALVAR -> ((DualVar) this.value).numericValue();
@@ -268,7 +275,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         };
     }
 
+    // Inlineable fast path for getInt()
     public int getInt() {
+        if (type == INTEGER ) {
+            return (int) this.value;
+        }
+        return getIntLarge();
+    }
+
+    // Slow path for getInt()
+    private int getIntLarge() {
         // Cases 0-8 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         return switch (type) {
             case INTEGER -> (int) value;
@@ -278,7 +294,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case VSTRING -> 0;
             case BOOLEAN -> (boolean) value ? 1 : 0;
             case GLOB -> 1;  // Assuming globs are truthy, so 1
-            case REGEX -> 1; // Assuming regexes are truthy, so 1
             case JAVAOBJECT -> value != null ? 1 : 0;
             case TIED_SCALAR -> this.tiedFetch().getInt();
             case DUALVAR -> ((DualVar) this.value).numericValue().getInt();
@@ -434,7 +449,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case VSTRING -> 0L;
             case BOOLEAN -> (boolean) value ? 1L : 0L;
             case GLOB -> 1L;
-            case REGEX -> 1L;
             case JAVAOBJECT -> value != null ? 1L : 0L;
             case TIED_SCALAR -> this.tiedFetch().getLong();
             case DUALVAR -> ((DualVar) this.value).numericValue().getLong();
@@ -442,7 +456,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         };
     }
 
+    // Inlineable fast path for getDouble()
     public double getDouble() {
+        if (type == INTEGER ) {
+            return (int) this.value;
+        }
+        return getDoubleLarge();
+    }
+
+    // Slow path for getDouble()
+    private double getDoubleLarge() {
         // Cases 0-8 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         return switch (type) {
             case INTEGER -> (int) value;
@@ -452,7 +475,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case VSTRING -> 0.0;
             case BOOLEAN -> (boolean) value ? 1.0 : 0.0;
             case GLOB -> 1.0;
-            case REGEX -> 1.0;
             case JAVAOBJECT -> value != null ? 1.0 : 0.0;
             case TIED_SCALAR -> this.tiedFetch().getDouble();
             case DUALVAR -> ((DualVar) this.value).numericValue().getDouble();
@@ -460,7 +482,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         };
     }
 
+    // Inlineable fast path for getBoolean()
     public boolean getBoolean() {
+        if (type == INTEGER) {
+            return (int) value != 0;
+        }
+        return getBooleanLarge();
+    }
+
+    // Slow path for getBoolean()
+    private boolean getBooleanLarge() {
         // Cases 0-8 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         return switch (type) {
             case INTEGER -> (int) value != 0;
@@ -473,7 +504,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case VSTRING -> true;
             case BOOLEAN -> (boolean) value;
             case GLOB -> true;
-            case REGEX -> true;
             case JAVAOBJECT -> value != null;
             case TIED_SCALAR -> this.tiedFetch().getBoolean();
             case DUALVAR -> ((DualVar) this.value).stringValue().getBoolean();
@@ -623,7 +653,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     @Override
-    public String toString() {
+    // Inlineable fast path for toString()
+    public String  toString() {
+        if (type == STRING || type == BYTE_STRING) {
+            return (String) this.value;
+        }
+        return toStringLarge();
+    }
+
+    // Slow path for toString()
+    private String toStringLarge() {
         // Cases 0-8 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         return switch (type) {
             case INTEGER -> Integer.toString((int) value);
@@ -633,11 +672,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case VSTRING -> (String) value;
             case BOOLEAN -> (boolean) value ? "1" : "";
             case GLOB -> value == null ? "" : value.toString();
-            case REGEX -> value.toString();
             case JAVAOBJECT -> value.toString();
             case TIED_SCALAR -> this.tiedFetch().toString();
             case DUALVAR -> ((DualVar) this.value).stringValue().toString();
-            default -> Overload.stringify(this).toString();
+            default -> {
+                if (type == REGEX) yield value.toString();
+                yield  Overload.stringify(this).toString();
+            }
         };
     }
 
@@ -1017,7 +1058,20 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return this;
     }
 
+    // Inlineable fast path for $v++
     public RuntimeScalar postAutoIncrement() {
+        if (this.type == INTEGER) {
+            int intValue = (int) this.value;
+            if (intValue < Integer.MAX_VALUE) {
+                this.value = intValue + 1;
+                return new RuntimeScalar(intValue); // return old value directly
+            }
+        }
+        return postAutoIncrementLarge();
+    }
+
+    // Slow path for $v++
+    private RuntimeScalar postAutoIncrementLarge() {
         // For undef, the old value should be 0, not undef
         RuntimeScalar old = this.type == RuntimeScalarType.UNDEF ? 
             new RuntimeScalar(0) : new RuntimeScalar(this);

@@ -7,7 +7,7 @@ my $s = "a";
 
 sub loop_with_string {
     my $i = 0;
-    while ( $i < 400 ) {
+    while ( $i < 2000 ) {
         $s++;
         $count++;
         $i++;
