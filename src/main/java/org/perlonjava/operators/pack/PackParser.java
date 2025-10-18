@@ -308,6 +308,30 @@ public class PackParser {
      * <p>This method works by actually packing dummy data with the template and measuring
      * the resulting byte length. This approach handles all format types correctly, including
      * variable-length formats like bit strings and hex strings.</p>
+     * 
+     * <p><b>Implementation Note - Byte Length Calculation:</b></p>
+     * <p>The method measures the result using ISO-8859-1 byte encoding, which treats each
+     * character code (0-255) as a single byte. For packed data that contains only characters
+     * 0-255, this gives the correct byte count.</p>
+     * 
+     * <p><b>Known Limitation with W/U Formats:</b></p>
+     * <p>For templates containing W or U formats with characters > 255, there's a subtle
+     * issue with how byte length is calculated:
+     * <ul>
+     *   <li><b>Perl behavior:</b> x[W] skips 1 character position in character mode,
+     *       but the actual UTF-8 byte length depends on the character value</li>
+     *   <li><b>Current implementation:</b> Uses ISO-8859-1 encoding which takes only the
+     *       low byte of high Unicode characters (e.g., U+1FFC becomes 0xFC, not 0xE1 0x9F 0xBC)</li>
+     *   <li><b>Result:</b> x[W] with default dummy values (character 0) skips 1 byte,
+     *       matching most test cases but potentially incorrect for high Unicode values</li>
+     * </ul>
+     * 
+     * <p>This limitation affects bracketed skip constructs like x[W] when mixed with
+     * binary formats (N, V, etc.) in the same template. Most tests pass because they
+     * use default dummy values (0), but edge cases with high Unicode characters may
+     * produce unexpected results.</p>
+     * 
+     * <p><b>See also:</b> tests 5072-5154 for W format with binary format interaction</p>
      *
      * @param template the pack template string
      * @return the number of bytes the template would produce when packed
@@ -350,6 +374,27 @@ public class PackParser {
     /**
      * Adds dummy values to args list for packing the given template.
      * Different format types need different dummy values to pack correctly.
+     * 
+     * <p><b>Dummy Value Strategy:</b></p>
+     * <ul>
+     *   <li><b>Numeric formats (c, C, s, i, etc.):</b> Use 0 as dummy value</li>
+     *   <li><b>String formats (a, A, Z, b, B, h, H):</b> Use appropriate string values</li>
+     *   <li><b>Unicode formats (U, W):</b> Use 0 as dummy value</li>
+     * </ul>
+     * 
+     * <p><b>Note on W/U Format Handling:</b></p>
+     * <p>Previous versions used a high Unicode character (0x1FFC = 8188) as a dummy value
+     * for W/U formats to ensure correct UTF-8 byte length calculation. However, this
+     * approach was removed because:
+     * <ul>
+     *   <li>Most x[W] constructs in tests use actual data at runtime, not dummy values</li>
+     *   <li>The byte length measurement uses ISO-8859-1, not true UTF-8, so high characters
+     *       don't produce accurate UTF-8 byte counts anyway</li>
+     *   <li>Using 0 as dummy value is simpler and matches other numeric formats</li>
+     * </ul>
+     * 
+     * <p>See {@link #calculatePackedSize(String)} for details on the known limitation
+     * with W/U format byte length calculation.</p>
      *
      * @param template the pack template string
      * @param args     the RuntimeList to add dummy values to

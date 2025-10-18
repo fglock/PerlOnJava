@@ -358,6 +358,63 @@ For recursive operations that need depth limits:
 - Increment on entry, decrement in `finally` block
 - Throw exception when depth exceeds limit
 
+## 🏗️ Known Architectural Issues (2025-10-18)
+
+### W Format UTF-8/Binary Mixing (Tests 5072-5154)
+
+**Problem:** Mixing Unicode formats (W/U) with binary formats (N/V/I) in pack/unpack creates alignment issues.
+
+**Example:**
+```perl
+$p = pack("W N4", 0x1FFC, 0x12345678, 0x23456781, 0x34567812, 0x45678123);
+@v = unpack("x[W] N4", $p);  # Expects: skip 1 char, read 4 ints
+```
+
+**What Happens:**
+1. `pack("W", 0x1FFC)` produces character U+1FFC (internally: UTF-8 bytes 0xE1 0x9F 0xBC)
+2. `pack("N", 0x12345678)` produces bytes 0x12 0x34 0x56 0x78
+3. Result: 5-character string with UTF-8 flag set
+4. Internal bytes: [0xE1, 0x9F, 0xBC, 0x12, 0x34, 0x56, 0x78, ...]
+
+**Unpack Issue:**
+- `x[W]` should skip 1 character (logical view)
+- But how many **bytes** is that?
+  - In char mode: 1 character = 1 position
+  - In byte mode: 1 character = 3 UTF-8 bytes
+- `N4` reads from physical UTF-8 bytes, so if we skip wrong amount, misalignment!
+
+**Current Status:**
+- `PackParser.calculatePackedSize()` uses ISO-8859-1 encoding to measure byte length
+- For W with default dummy value (0), this returns 1 byte
+- For high Unicode (e.g., 0x1FFC), returns 1 byte (low byte only) not 3 (UTF-8 bytes)
+- **Result:** Tests with default/low values pass, tests with high Unicode fail
+
+**Documented In:**
+- `PackParser.calculatePackedSize()` - comprehensive Javadoc
+- `docs/PACK_UNPACK_ARCHITECTURE.md` - full explanation
+
+**Potential Solutions:**
+1. Make x[W] always work in character mode (skip 1 char position)
+2. Make x[W] calculate true UTF-8 byte length (complex!)
+3. Document as known limitation and suggest workarounds
+
+**Current Approach:** Option 3 - documented limitation with test analysis.
+
+### Group-Relative Positioning in Pack (Tests 14677+)
+
+**Problem:** The `.` format in pack doesn't support group-relative positioning yet.
+
+**Example:**
+```perl
+pack("(a)5 .2", 1..5, -3)  # Should work but doesn't
+```
+
+**Status:** Not implemented. Unpack has full support, pack needs similar baseline tracking.
+
+**Requires:** Adding group baseline management to PackGroupHandler (similar to UnpackGroupProcessor).
+
+---
+
 ## 💡 Key Takeaways
 
 1. **Always rebuild jar:** `./gradlew build` before testing with `./jperl`
@@ -366,7 +423,10 @@ For recursive operations that need depth limits:
 4. **Target systematic errors** - one fix = many tests
 5. **Never `git add .`** - adds garbage temp files
 6. **Time-box investigations** - document if >60 minutes
+7. **Document architectural limitations** - some issues are complex, document them!
 
 ---
 
 **Remember:** Testing your specific file is NOT enough. Unit tests catch subtle bugs that integration tests miss. Always run `make test` before committing!
+
+**New:** See `dev/design/PACK_UNPACK_ARCHITECTURE.md` for comprehensive architecture documentation.

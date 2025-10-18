@@ -7,6 +7,62 @@ import java.util.List;
 
 /**
  * Handler for control formats 'x', 'X', '@', '.'.
+ * 
+ * <p><b>Format Descriptions:</b></p>
+ * <ul>
+ *   <li><b>x:</b> Insert null bytes (forward padding/skip)
+ *       <ul>
+ *         <li>x - skip/insert 1 null byte</li>
+ *         <li>x5 - skip/insert 5 null bytes</li>
+ *         <li>x! - pad to alignment boundary</li>
+ *       </ul>
+ *   </li>
+ *   <li><b>X:</b> Back up (remove bytes from end)
+ *       <ul>
+ *         <li>X - back up 1 byte</li>
+ *         <li>X3 - back up 3 bytes</li>
+ *         <li>X! - back up to alignment boundary</li>
+ *       </ul>
+ *   </li>
+ *   <li><b>@:</b> Absolute positioning
+ *       <ul>
+ *         <li>@10 - move to position 10 (pad with nulls or truncate)</li>
+ *         <li>@0 - truncate to beginning</li>
+ *         <li>@! - pad to alignment boundary</li>
+ *       </ul>
+ *   </li>
+ *   <li><b>.:</b> Dynamic positioning based on value
+ *       <ul>
+ *         <li>. - move to absolute position specified by next value</li>
+ *         <li>.0 - move relative to current position (offset from next value)</li>
+ *       </ul>
+ *   </li>
+ * </ul>
+ * 
+ * <p><b>Critical Distinction - '.' Format:</b></p>
+ * <ul>
+ *   <li><b>. (no count or count &gt; 0):</b> Absolute positioning - move to position N
+ *       <ul>
+ *         <li>Example: pack("a5 .", "hello", 2) → "he" (truncate to position 2)</li>
+ *         <li>Negative positions throw error: "'.' outside of string in pack"</li>
+ *       </ul>
+ *   </li>
+ *   <li><b>.0 (count == 0):</b> Relative positioning - move current + N
+ *       <ul>
+ *         <li>Example: pack("a5 .0", "hello", -3) → "he" (back up 3 from current)</li>
+ *         <li>Allows negative offsets to truncate from current position</li>
+ *       </ul>
+ *   </li>
+ * </ul>
+ * 
+ * <p><b>Error Handling:</b></p>
+ * <ul>
+ *   <li>'X' with count &gt; current size: throws "'X' outside of string in pack"</li>
+ *   <li>'.' with negative absolute position: throws "'.' outside of string in pack"</li>
+ *   <li>'.0' with negative offset that goes before start: throws error</li>
+ * </ul>
+ * 
+ * @see org.perlonjava.operators.Pack
  */
 public class ControlPackHandler implements PackFormatHandler {
     private final char format;
@@ -142,20 +198,32 @@ public class ControlPackHandler implements PackFormatHandler {
                 handleAbsolutePosition(count, output);
                 break;
             case '.':
-                // . means null-fill or truncate to absolute position specified by value
+                // . means null-fill or truncate to position specified by value
+                // .  (no count or count > 0): absolute positioning
+                // .0 (count == 0): relative positioning (current + offset)
                 if (valueIndex >= values.size()) {
                     throw new PerlCompilerException("pack: '.' requires a position value");
                 }
                 RuntimeScalar posValue = values.get(valueIndex);
                 valueIndex++;
-                int targetPos = (int) posValue.getDouble();
+                int offset = (int) posValue.getDouble();
 
-                // Handle negative positions: throw error (can't position before string start)
+                int currentSize = output.size();
+                int targetPos;
+                
+                if (count == 0) {
+                    // .0 means relative to current position
+                    targetPos = currentSize + offset;
+                } else {
+                    // . means absolute position
+                    targetPos = offset;
+                }
+
+                // Handle negative target positions: throw error (can't position before string start)
                 if (targetPos < 0) {
                     throw new PerlCompilerException("'.' outside of string in pack");
                 }
 
-                int currentSize = output.size();
                 if (targetPos > currentSize) {
                     // Null-fill to reach the target position
                     for (int k = currentSize; k < targetPos; k++) {
