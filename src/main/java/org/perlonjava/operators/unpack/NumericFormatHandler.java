@@ -64,6 +64,31 @@ public abstract class NumericFormatHandler implements FormatHandler {
 
         @Override
         public void unpack(UnpackState state, List<RuntimeBase> output, int count, boolean isStarCount) {
+            // For UTF-8 strings, s/S formats read CHARACTER CODES (masking to 0xFF), not UTF-8 bytes
+            if (state.isUTF8Data() && state.isCharacterMode()) {
+                // Read 2 character codes and assemble into a short
+                // Respects current byte order (little-endian by default, can be changed by < or >)
+                ByteBuffer buffer = state.getBuffer();
+                boolean isBigEndian = (buffer.order() == java.nio.ByteOrder.BIG_ENDIAN);
+                
+                for (int i = 0; i < count; i++) {
+                    if (state.remainingCodePoints() < 2) {
+                        break;
+                    }
+                    int b1 = state.nextCodePoint() & 0xFF;
+                    int b2 = state.nextCodePoint() & 0xFF;
+                    int value = isBigEndian ? ((b1 << 8) | b2) : ((b2 << 8) | b1);
+                    
+                    if (signed) {
+                        output.add(new RuntimeScalar((short) value));
+                    } else {
+                        output.add(new RuntimeScalar(value & 0xFFFF));
+                    }
+                }
+                return;
+            }
+            
+            // For non-UTF-8 strings, use original byte buffer logic
             // Save current mode
             boolean wasCharacterMode = state.isCharacterMode();
 
@@ -107,6 +132,40 @@ public abstract class NumericFormatHandler implements FormatHandler {
 
         @Override
         public void unpack(UnpackState state, List<RuntimeBase> output, int count, boolean isStarCount) {
+            // For UTF-8 strings, I/L formats read CHARACTER CODES (masking to 0xFF), not UTF-8 bytes
+            if (state.isUTF8Data() && state.isCharacterMode()) {
+                // Read 4 character codes and assemble into an int
+                // Respects current byte order (little-endian by default, can be changed by < or >)
+                ByteBuffer buffer = state.getBuffer();
+                boolean isBigEndian = (buffer.order() == java.nio.ByteOrder.BIG_ENDIAN);
+                
+                for (int i = 0; i < count; i++) {
+                    if (state.remainingCodePoints() < 4) {
+                        break;
+                    }
+                    long value;
+                    if (isBigEndian) {
+                        value = ((long)(state.nextCodePoint() & 0xFF) << 24) |
+                                ((state.nextCodePoint() & 0xFF) << 16) |
+                                ((state.nextCodePoint() & 0xFF) << 8) |
+                                (state.nextCodePoint() & 0xFF);
+                    } else {
+                        value = (state.nextCodePoint() & 0xFF) |
+                                ((state.nextCodePoint() & 0xFF) << 8) |
+                                ((state.nextCodePoint() & 0xFF) << 16) |
+                                ((long)(state.nextCodePoint() & 0xFF) << 24);
+                    }
+                    
+                    if (signed) {
+                        output.add(new RuntimeScalar((int) value));
+                    } else {
+                        output.add(new RuntimeScalar(value & 0xFFFFFFFFL));
+                    }
+                }
+                return;
+            }
+            
+            // For non-UTF-8 strings, use original byte buffer logic
             // Save current mode
             boolean wasCharacterMode = state.isCharacterMode();
 
@@ -154,6 +213,55 @@ public abstract class NumericFormatHandler implements FormatHandler {
 
         @Override
         public void unpack(UnpackState state, List<RuntimeBase> output, int count, boolean isStarCount) {
+            // For UTF-8 strings, q/Q formats read CHARACTER CODES (masking to 0xFF), not UTF-8 bytes
+            if (state.isUTF8Data() && state.isCharacterMode()) {
+                // Read 8 character codes and assemble into a long
+                // Respects current byte order (little-endian by default, can be changed by < or >)
+                ByteBuffer buffer = state.getBuffer();
+                boolean isBigEndian = (buffer.order() == java.nio.ByteOrder.BIG_ENDIAN);
+                
+                for (int i = 0; i < count; i++) {
+                    if (state.remainingCodePoints() < 8) {
+                        break;
+                    }
+                    long value;
+                    if (isBigEndian) {
+                        value = ((long)(state.nextCodePoint() & 0xFF) << 56) |
+                                ((long)(state.nextCodePoint() & 0xFF) << 48) |
+                                ((long)(state.nextCodePoint() & 0xFF) << 40) |
+                                ((long)(state.nextCodePoint() & 0xFF) << 32) |
+                                ((long)(state.nextCodePoint() & 0xFF) << 24) |
+                                ((long)(state.nextCodePoint() & 0xFF) << 16) |
+                                ((long)(state.nextCodePoint() & 0xFF) << 8) |
+                                (long)(state.nextCodePoint() & 0xFF);
+                    } else {
+                        value = (long)(state.nextCodePoint() & 0xFF) |
+                                ((long)(state.nextCodePoint() & 0xFF) << 8) |
+                                ((long)(state.nextCodePoint() & 0xFF) << 16) |
+                                ((long)(state.nextCodePoint() & 0xFF) << 24) |
+                                ((long)(state.nextCodePoint() & 0xFF) << 32) |
+                                ((long)(state.nextCodePoint() & 0xFF) << 40) |
+                                ((long)(state.nextCodePoint() & 0xFF) << 48) |
+                                ((long)(state.nextCodePoint() & 0xFF) << 56);
+                    }
+                    
+                    if (signed) {
+                        output.add(new RuntimeScalar(value));
+                    } else {
+                        // For unsigned Q format, preserve precision
+                        if (value < 0) {
+                            output.add(new RuntimeScalar(Long.toUnsignedString(value)));
+                        } else if (value > 9007199254740992L) { // 2^53
+                            output.add(new RuntimeScalar(Long.toString(value)));
+                        } else {
+                            output.add(new RuntimeScalar(value));
+                        }
+                    }
+                }
+                return;
+            }
+            
+            // For non-UTF-8 strings, use original byte buffer logic
             // Save current mode
             boolean wasCharacterMode = state.isCharacterMode();
 
@@ -366,6 +474,28 @@ public abstract class NumericFormatHandler implements FormatHandler {
 
         @Override
         public void unpack(UnpackState state, List<RuntimeBase> output, int count, boolean isStarCount) {
+            // For UTF-8 strings, v format reads CHARACTER CODES (masking to 0xFF), not UTF-8 bytes
+            if (state.isUTF8Data() && state.isCharacterMode()) {
+                // Read 2 character codes and assemble into a short
+                for (int i = 0; i < count; i++) {
+                    if (state.remainingCodePoints() < 2) {
+                        break;
+                    }
+                    // VAX byte order = little-endian
+                    int b1 = state.nextCodePoint() & 0xFF;
+                    int b2 = state.nextCodePoint() & 0xFF;
+                    int value = b1 | (b2 << 8);
+                    
+                    if (signed) {
+                        output.add(new RuntimeScalar((short) value));
+                    } else {
+                        output.add(new RuntimeScalar(value));
+                    }
+                }
+                return;
+            }
+            
+            // For non-UTF-8 strings, use original byte buffer logic
             // Save current mode
             boolean wasCharacterMode = state.isCharacterMode();
 
