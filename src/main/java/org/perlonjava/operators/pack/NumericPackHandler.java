@@ -9,6 +9,45 @@ import java.util.List;
 
 /**
  * Handler for numeric formats (c, C, s, S, i, I, l, L, q, Q, j, J, f, F, d, D, n, N, v, V, w).
+ * 
+ * <p><b>Format Categories:</b></p>
+ * <ul>
+ *   <li><b>8-bit:</b> c (signed char), C (unsigned char)</li>
+ *   <li><b>16-bit:</b> s (signed short), S (unsigned short), n (network/big-endian), v (VAX/little-endian)</li>
+ *   <li><b>32-bit:</b> i, l (signed int/long), I, L (unsigned), N (network), V (VAX)</li>
+ *   <li><b>64-bit:</b> q (signed quad), Q (unsigned quad), j (signed intmax), J (unsigned intmax)</li>
+ *   <li><b>Float:</b> f, F (single precision), d, D (double precision)</li>
+ *   <li><b>Special:</b> w (BER compressed integer - variable length)</li>
+ * </ul>
+ * 
+ * <p><b>Endianness Handling:</b></p>
+ * <ul>
+ *   <li>Native formats (s, S, i, I, l, L, etc.) support &lt; and &gt; modifiers</li>
+ *   <li>Fixed formats (n, N = big-endian, v, V = little-endian) ignore modifiers</li>
+ * </ul>
+ * 
+ * <p><b>Overload Support:</b></p>
+ * <p>For the 'w' format (BER compression), special handling is needed for blessed objects
+ * like Math::BigInt that use operator overloading:
+ * <ul>
+ *   <li>Call {@code value.getNumber()} to invoke numeric overload (0+)</li>
+ *   <li>Use {@code numericValue.toString()} to get the numeric string representation</li>
+ *   <li><b>Critical:</b> Do NOT use {@code value.toString()} for blessed objects,
+ *       as it returns the hash representation (e.g., "HASH(0x7f8b3c80)")</li>
+ * </ul>
+ * 
+ * <p><b>BER Compression ('w' format):</b></p>
+ * <p>The 'w' format uses BER (Basic Encoding Rules) compression for unsigned integers.
+ * Each byte contains 7 bits of data, with the high bit indicating whether more bytes follow:
+ * <ul>
+ *   <li>0x00-0x7F: Single byte (0xxxxxxx)</li>
+ *   <li>0x80-0x3FFF: Two bytes (1xxxxxxx 0xxxxxxx)</li>
+ *   <li>Larger values: Continue adding bytes with high bit set until final byte</li>
+ * </ul>
+ * Example: 5000000000 (0x12A05F200) is encoded as: 0x95 0xA0 0xAF 0xD0 0x00
+ * 
+ * @see org.perlonjava.runtime.Overload
+ * @see org.perlonjava.runtime.RuntimeScalar#getNumber()
  */
 public class NumericPackHandler implements PackFormatHandler {
     private static final boolean TRACE_PACK = false;

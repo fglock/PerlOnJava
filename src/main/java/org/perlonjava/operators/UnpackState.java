@@ -8,7 +8,56 @@ import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 
 /**
- * Maintains state during unpacking operations.
+ * Maintains state during unpack operations, managing the dual representation
+ * of data as both character codes and bytes, along with position tracking.
+ * 
+ * <p><b>Data Representation:</b></p>
+ * <ul>
+ *   <li><b>Character codes (codePoints array):</b> Logical view of the string as an array
+ *       of Unicode code points. Each element represents one character (0 to 0x10FFFF+).</li>
+ *   <li><b>Byte data (originalBytes):</b> Physical representation as UTF-8 encoded bytes
+ *       (for strings with characters > 255) or ISO-8859-1 bytes (for binary data).</li>
+ *   <li><b>isUTF8Data flag:</b> True if the string contains characters > 255, indicating
+ *       that originalBytes contains UTF-8 encoded data.</li>
+ * </ul>
+ * 
+ * <p><b>Position Tracking:</b></p>
+ * <ul>
+ *   <li><b>Character position (codePointIndex):</b> Current index in the codePoints array.</li>
+ *   <li><b>Byte position:</b> Current position in the ByteBuffer wrapping originalBytes.</li>
+ *   <li><b>Group baselines:</b> Stacks (groupCharBase, groupByteBase) track the starting
+ *       positions of nested groups for relative addressing (e.g., .(.). format).</li>
+ * </ul>
+ * 
+ * <p><b>Mode Management:</b></p>
+ * <ul>
+ *   <li><b>Character mode (default):</b> Formats read from the codePoints array.
+ *       Used by: a, A, Z, C, U, W formats.</li>
+ *   <li><b>Byte mode:</b> Formats read from the ByteBuffer wrapping originalBytes.
+ *       Used by: s, S, i, I, l, L, q, Q, n, N, v, V, f, d formats.</li>
+ *   <li><b>Mode switches:</b> C0 forces byte mode, U0 forces character mode.</li>
+ * </ul>
+ * 
+ * <p><b>Critical Insight:</b> Perl internally stores UTF-8 bytes but tracks character
+ * length separately. When unpacking strings with the UTF-8 flag set:
+ * <ul>
+ *   <li>C format reads character codes (0-255) from codePoints</li>
+ *   <li>N/V/I formats read raw bytes from originalBytes (UTF-8 encoded)</li>
+ *   <li>x format skips characters in character mode, bytes in byte mode</li>
+ * </ul>
+ * 
+ * <p><b>Group-Relative Positioning:</b> The . and .! formats support multi-level
+ * group-relative positioning:
+ * <ul>
+ *   <li>.0 - Position relative to current position (always 0)</li>
+ *   <li>. or .1 - Position relative to current (innermost) group</li>
+ *   <li>.2 - Position relative to parent group</li>
+ *   <li>.* - Absolute position from start of string</li>
+ * </ul>
+ * 
+ * @see org.perlonjava.operators.Unpack
+ * @see org.perlonjava.operators.unpack.UnpackGroupProcessor
+ * @see org.perlonjava.operators.unpack.DotFormatHandler
  */
 public class UnpackState {
     public final boolean isUTF8Data;

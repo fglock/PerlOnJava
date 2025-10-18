@@ -8,8 +8,50 @@ import java.nio.ByteBuffer;
 import java.util.List;
 
 /**
- * Base class for numeric format handlers.
- * All numeric formats work with bytes, not characters.
+ * Base class for numeric format handlers (s, S, i, I, l, L, q, Q, n, N, v, V, f, d, etc.).
+ * 
+ * <p><b>Key Principle:</b> All numeric formats operate in <b>byte mode</b>, not character mode.
+ * This means they read from the ByteBuffer wrapping the UTF-8 encoded bytes, not from the
+ * character code array.</p>
+ * 
+ * <p><b>Mode Switching Behavior:</b></p>
+ * <ul>
+ *   <li><b>Before reading:</b> Save current mode and switch to byte mode if in character mode</li>
+ *   <li><b>During reading:</b> Read from ByteBuffer using appropriate byte order (endianness)</li>
+ *   <li><b>After reading:</b> Restore original mode (if was in character mode, switch back)</li>
+ * </ul>
+ * 
+ * <p><b>Why Byte Mode?</b></p>
+ * <p>Numeric formats represent multi-byte values in specific byte orders. For example, the
+ * 32-bit integer 0x12345678 in big-endian is stored as bytes: 0x12, 0x34, 0x56, 0x78.
+ * Reading from the ByteBuffer ensures correct byte order interpretation according to the
+ * format's endianness (N=big-endian, V=little-endian, etc.).</p>
+ * 
+ * <p><b>UTF-8 String Handling:</b></p>
+ * <p>When unpacking from a string with the UTF-8 flag set (characters > 255), the originalBytes
+ * array contains UTF-8 encoded bytes. Numeric formats still read from this byte representation:
+ * <ul>
+ *   <li>Example: Character U+1FFC is stored as UTF-8 bytes: 0xE1, 0x9F, 0xBC</li>
+ *   <li>A subsequent 'n' format reads the next 2 bytes: 0x9F, 0xBC as a short</li>
+ * </ul>
+ * 
+ * <p><b>Contrast with Character Mode Formats:</b></p>
+ * <ul>
+ *   <li><b>C format:</b> Reads character codes (0-255) from codePoints array</li>
+ *   <li><b>N format:</b> Reads 4 bytes from ByteBuffer</li>
+ * </ul>
+ * 
+ * <p><b>Format Handlers:</b></p>
+ * <ul>
+ *   <li><b>ShortHandler:</b> Reads 2 bytes (signed/unsigned)</li>
+ *   <li><b>LongHandler:</b> Reads 4 bytes (signed/unsigned)</li>
+ *   <li><b>QuadHandler:</b> Reads 8 bytes (signed/unsigned)</li>
+ *   <li><b>FloatHandler:</b> Reads 4 bytes as float</li>
+ *   <li><b>DoubleHandler:</b> Reads 8 bytes as double</li>
+ * </ul>
+ * 
+ * @see UnpackState#switchToByteMode()
+ * @see UnpackState#switchToCharacterMode()
  */
 public abstract class NumericFormatHandler implements FormatHandler {
 
