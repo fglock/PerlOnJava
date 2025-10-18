@@ -138,6 +138,53 @@ public class UnpackState {
         return !groupCharBase.isEmpty() || !groupByteBase.isEmpty();
     }
 
+    /**
+     * Returns the current group nesting depth.
+     * Used by dot format to determine which group level to use as baseline.
+     * 
+     * @return number of active groups (0 if no groups, 1 for innermost, etc.)
+     */
+    public int getGroupDepth() {
+        return isCharacterMode() ? groupCharBase.size() : groupByteBase.size();
+    }
+
+    /**
+     * Get the position relative to the Nth group level up.
+     * 
+     * @param level 1 = innermost group, 2 = parent group, etc.
+     * @return position relative to the specified group level, or absolute if level > depth
+     */
+    public int getRelativePosition(int level) {
+        if (isCharacterMode()) {
+            int depth = groupCharBase.size();
+            if (depth == 0 || level > depth) {
+                // No groups or level exceeds depth: return absolute position
+                return getCurrentCodePointIndex();
+            }
+            // Get the base at the specified level (1 = top of stack, 2 = one below, etc.)
+            // Stack index: size-level gives us the Nth element from top
+            int baseIndex = depth - level;
+            if (baseIndex < 0) baseIndex = 0;
+            
+            // Convert Deque to array to access by index
+            Integer[] bases = groupCharBase.toArray(new Integer[0]);
+            int base = bases[baseIndex];
+            return getCurrentCodePointIndex() - base;
+        } else {
+            int depth = groupByteBase.size();
+            if (depth == 0 || level > depth) {
+                // No groups or level exceeds depth: return absolute position
+                return getBytePosition();
+            }
+            int baseIndex = depth - level;
+            if (baseIndex < 0) baseIndex = 0;
+            
+            Integer[] bases = groupByteBase.toArray(new Integer[0]);
+            int base = bases[baseIndex];
+            return getBytePosition() - base;
+        }
+    }
+
     public boolean isCharacterMode() {
         return characterMode;
     }
