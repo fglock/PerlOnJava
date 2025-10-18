@@ -132,6 +132,27 @@ public class UnpackState {
     }
 
     /**
+     * Get the byte position relative to the Nth group level up.
+     * 
+     * @param level 1 = innermost group, 2 = parent group, etc.
+     * @return byte position relative to the specified group level, or absolute if level > depth
+     */
+    public int getRelativeBytePosition(int level) {
+        int depth = groupByteBase.size();
+        if (depth == 0 || level > depth) {
+            // No groups or level exceeds depth: return absolute byte position
+            return getBytePosition();
+        }
+        // Get the base at the specified level
+        int baseIndex = depth - level;
+        if (baseIndex < 0) baseIndex = 0;
+        
+        Integer[] bases = groupByteBase.toArray(new Integer[0]);
+        int base = bases[baseIndex];
+        return getBytePosition() - base;
+    }
+
+    /**
      * Returns true if there is an active group baseline on the stack.
      */
     public boolean hasGroupBase() {
