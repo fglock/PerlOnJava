@@ -346,7 +346,7 @@ Update any CI/CD configuration that references test paths:
 
 ## Detailed Migration Script
 
-Create `scripts/reorganize_tests.sh`:
+Create `dev/tools/reorganize_tests.sh`:
 
 ```bash
 #!/bin/bash
@@ -420,7 +420,7 @@ echo "4. Commit changes"
 
 2. **Run migration:**
    ```bash
-   bash scripts/reorganize_tests.sh
+   bash dev/tools/reorganize_tests.sh
    ```
 
 3. **Count tests after migration:**
