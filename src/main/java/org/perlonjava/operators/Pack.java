@@ -51,6 +51,12 @@ import java.util.Stack;
  * @see org.perlonjava.operators.pack.PackWriter
  */
 public class Pack {
+    /**
+     * Enable trace output for pack operations.
+     * Set to true to debug pack template processing.
+     */
+    private static final boolean TRACE_PACK = false;
+    
     public static final Map<Character, PackFormatHandler> handlers = new HashMap<>();
 
     static {
@@ -187,6 +193,13 @@ public class Pack {
 
         RuntimeScalar templateScalar = args.getFirst();
         String template = templateScalar.toString();
+        
+        if (TRACE_PACK) {
+            System.err.println("TRACE Pack.pack() called:");
+            System.err.println("  template: [" + template + "]");
+            System.err.println("  args count: " + (args.size() - 1));
+            System.err.flush();
+        }
 
         // Validate bracket matching using proper stack-based algorithm
         String bracketError = validateBracketMatching(template);
@@ -210,40 +223,79 @@ public class Pack {
         // Track if 'U' was used in normal mode (not byte mode)
         boolean hasUnicodeInNormalMode = false;
 
+        /**
+         * Main parsing loop - process template character by character
+         * 
+         * The template is processed left-to-right. Each character determines:
+         * 1. What type of data to pack (format character like 's', 'i', 'a', etc.)
+         * 2. How many values to consume (repeat count)
+         * 3. How to modify the operation (modifiers like '<', '>', '!')
+         * 
+         * Key concepts:
+         * - Groups (): Allow applying repeat counts to multiple formats
+         * - Slash constructs (n/a*): Pack length-prefixed data  
+         * - Mode switches (C0/U0): Change between byte and character mode
+         * - Repeat counts: *, digits, or [n] notation
+         * 
+         * The loop variable 'i' tracks current position. Some operations advance
+         * 'i' beyond the current character to skip processed content.
+         */
         for (int i = 0; i < template.length(); i++) {
             char format = template.charAt(i);
             // DEBUG: main loop i=" + i + ", format='" + format + "' (code " + (int) format + ")"
 
-            // Skip spaces
+            // Skip spaces - whitespace is ignored for formatting/readability
             if (Character.isWhitespace(format)) {
                 // DEBUG: skipping whitespace
                 continue;
             }
 
-            // Skip comments
+            // Skip comments - run from # to end of line
             if (format == '#') {
                 i = PackParser.skipComment(template, i);
                 continue;
             }
 
-            // Check for misplaced brackets - this should not happen since we validate at the beginning
-            // but kept as a safety check
+            // Safety check for misplaced brackets (should be caught in validation)
             if (format == '[' || format == ']') {
                 throw new PerlCompilerException("Mismatched brackets in template");
             }
 
-            // Handle commas (skip with warning)
+            // Handle commas - ignored for Perl compatibility (would warn in Perl)
             if (format == ',') {
                 // WARNING: Invalid type ',' in pack
                 // In Perl, this would use warn() but continue execution
                 continue;
             }
 
-            // Handle parentheses for grouping
+            /**
+             * Handle groups - RECURSIVE PROCESSING
+             * 
+             * Format: (template)count or (template)[count]
+             * Example: (si)3 packs 3 short-int pairs
+             * 
+             * Processing:
+             * 1. handleGroup finds the matching ')' 
+             * 2. Extracts the group content
+             * 3. Recursively calls Pack.pack() for the group content
+             * 4. Repeats for the specified count
+             * 
+             * NESTING: Each group recursion should increment depth counter.
+             * Deep nesting (>100 levels) should throw "Too deeply nested ()-groups"
+             */
             if (format == '(') {
+                if (TRACE_PACK) {
+                    System.err.println("TRACE Pack: Found '(' at position " + i);
+                    System.err.println("  Calling PackGroupHandler.handleGroup");
+                    System.err.flush();
+                }
                 PackGroupHandler.GroupResult result = PackGroupHandler.handleGroup(template, i, values, output, valueIndex, Pack::pack);
                 i = result.position();
                 valueIndex = result.valueIndex();
+                if (TRACE_PACK) {
+                    System.err.println("TRACE Pack: Group processed, new position: " + i);
+                    System.err.flush();
+                }
                 continue;
             }
 
