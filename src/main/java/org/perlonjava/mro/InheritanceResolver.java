@@ -10,6 +10,8 @@ import java.util.*;
  * for method resolution and linearized class hierarchies to improve performance.
  */
 public class InheritanceResolver {
+    private static final boolean TRACE_METHOD_RESOLUTION = false;
+    
     // Cache for linearized class hierarchies
     static final Map<String, List<String>> linearizedClassesCache = new HashMap<>();
     // Per-package MRO settings
@@ -237,17 +239,44 @@ public class InheritanceResolver {
     /**
      * Searches for a method in the class hierarchy starting from a specific index.
      * Uses method caching to improve performance for both found and not-found methods.
+     * 
+     * <p><b>Method Resolution Process:</b>
+     * <ol>
+     *   <li>Check method cache for previously resolved lookups</li>
+     *   <li>Linearize the class hierarchy using C3 or DFS algorithm</li>
+     *   <li>Search each class in order for the method</li>
+     *   <li>For each class, normalize method name: {@code ClassName::methodName}</li>
+     *   <li>Check if method exists in global symbol table</li>
+     *   <li>Fall back to AUTOLOAD if method not found (except for overload markers)</li>
+     * </ol>
+     * 
+     * <p><b>Overload Methods:</b>
+     * Overload marker methods like {@code ((} and {@code ()} are exempt from AUTOLOAD
+     * because they should be explicitly defined by the overload pragma.
      *
-     * @param methodName     The name of the method to find
-     * @param perlClassName  The Perl class name to start the search from
+     * @param methodName     The name of the method to find (e.g., "((", "(0+", "normal_method")
+     * @param perlClassName  The Perl class name to start the search from (e.g., "Math::BigInt::")
      * @param cacheKey       The cache key to use for the method cache (null to use default cache key)
      * @param startFromIndex The index in the linearized hierarchy to start searching from (used for SUPER:: calls)
      * @return RuntimeScalar representing the found method, or null if not found
      */
     public static RuntimeScalar findMethodInHierarchy(String methodName, String perlClassName, String cacheKey, int startFromIndex) {
+        if (TRACE_METHOD_RESOLUTION) {
+            System.err.println("TRACE InheritanceResolver.findMethodInHierarchy:");
+            System.err.println("  methodName: '" + methodName + "'");
+            System.err.println("  perlClassName: '" + perlClassName + "'");
+            System.err.println("  startFromIndex: " + startFromIndex);
+            System.err.flush();
+        }
+        
         if (cacheKey == null) {
             // Normalize the method name for consistent caching
             cacheKey = NameNormalizer.normalizeVariableName(methodName, perlClassName);
+        }
+        
+        if (TRACE_METHOD_RESOLUTION) {
+            System.err.println("  cacheKey: '" + cacheKey + "'");
+            System.err.flush();
         }
 
         // Check if ISA changed for this class - if so, invalidate relevant caches
@@ -257,28 +286,50 @@ public class InheritanceResolver {
 
         // Check the method cache - handles both found and not-found cases
         if (methodCache.containsKey(cacheKey)) {
+            if (TRACE_METHOD_RESOLUTION) {
+                System.err.println("  Found in cache: " + (methodCache.get(cacheKey) != null ? "YES" : "NULL"));
+                System.err.flush();
+            }
             return methodCache.get(cacheKey);
         }
 
         // Get the linearized inheritance hierarchy using the appropriate MRO
         List<String> linearizedClasses = linearizeHierarchy(perlClassName);
+        
+        if (TRACE_METHOD_RESOLUTION) {
+            System.err.println("  Linearized classes: " + linearizedClasses);
+            System.err.flush();
+        }
 
         // Search through the class hierarchy starting from the specified index
         for (int i = startFromIndex; i < linearizedClasses.size(); i++) {
             String className = linearizedClasses.get(i);
             String normalizedClassMethodName = NameNormalizer.normalizeVariableName(methodName, className);
 
+            if (TRACE_METHOD_RESOLUTION) {
+                System.err.println("  Checking class: '" + className + "'");
+                System.err.println("  Normalized name: '" + normalizedClassMethodName + "'");
+                System.err.println("  Exists: " + GlobalVariable.existsGlobalCodeRef(normalizedClassMethodName));
+                System.err.flush();
+            }
+
             // Check if method exists in current class
             if (GlobalVariable.existsGlobalCodeRef(normalizedClassMethodName)) {
                 RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(normalizedClassMethodName);
                 // Cache the found method
                 cacheMethod(cacheKey, codeRef);
+                
+                if (TRACE_METHOD_RESOLUTION) {
+                    System.err.println("  FOUND method!");
+                    System.err.flush();
+                }
+                
                 return codeRef;
             }
 
             // Method not found in current class, check AUTOLOAD
             if (!autoloadEnabled || methodName.equals("((") || methodName.equals("()")) {
-                // refuse to AUTOLOAD tie() flags
+                // refuse to AUTOLOAD tie() flags and overload markers
             } else {
                 // Check for AUTOLOAD in current class
                 String autoloadName = className + "::AUTOLOAD";

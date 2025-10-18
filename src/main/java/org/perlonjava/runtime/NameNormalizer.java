@@ -98,7 +98,12 @@ public class NameNormalizer {
             normalized.append(variable);
         } else {
             // Prepend default package
-            normalized.append(defaultPackage).append("::").append(variable);
+            // Check if defaultPackage already ends with :: to avoid Math::BigInt::::((
+            if (defaultPackage.endsWith("::")) {
+                normalized.append(defaultPackage).append(variable);
+            } else {
+                normalized.append(defaultPackage).append("::").append(variable);
+            }
         }
 
         // Convert to string and store in cache
