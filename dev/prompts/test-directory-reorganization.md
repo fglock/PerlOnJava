@@ -40,10 +40,22 @@ src/test/resources/
   │   │   └── ...
   │   └── ... (all current tests)
   │
-  ├── lib/                       # Standard Perl lib/ module tests
-  │   ├── Benchmark.t            # From perl5/lib/Benchmark.t
+  ├── lib/                       # Standard Perl lib/ tests (mirrors perl5/lib/ structure)
+  │   ├── Benchmark.t            # From perl5/lib/Benchmark.t (single test)
   │   ├── English.t              # From perl5/lib/English.t
-  │   └── ...
+  │   ├── B/                     # Module with multiple tests
+  │   │   ├── Deparse.t          # From perl5/lib/B/Deparse.t
+  │   │   ├── Deparse-core.t     # From perl5/lib/B/Deparse-core.t
+  │   │   └── Deparse-subclass.t
+  │   ├── DBM_Filter/            # Module with test subdirectory
+  │   │   └── t/
+  │   │       ├── 01error.t      # From perl5/lib/DBM_Filter/t/01error.t
+  │   │       ├── 02core.t
+  │   │       └── compress.t
+  │   └── File/                  # Nested module structure
+  │       ├── Basename.t         # From perl5/lib/File/Basename.t
+  │       ├── Compare.t
+  │       └── Copy.t
   │
   ├── ext/                       # Standard Perl ext/ module tests
   │   ├── File-Find/
@@ -62,10 +74,11 @@ src/test/resources/
 ## Benefits
 
 1. **Clear Separation:** PerlOnJava tests vs standard Perl tests
-2. **Standard Structure:** Mirrors perl5/ test organization
-3. **Easy Sync:** Can sync entire directories from perl5/
+2. **Exact Mirror:** `lib/` mirrors `perl5/lib/` structure exactly - tests in same relative paths
+3. **Easy Sync:** Can sync entire directory trees from perl5/
 4. **No Confusion:** Developers immediately know test origin
 5. **Scalability:** Room for thousands of standard Perl tests
+6. **Preserves Structure:** Modules with multiple tests keep their organization (e.g., `DBM_Filter/t/`)
 
 ## Migration Steps
 
@@ -171,15 +184,18 @@ Examples:
 
 ### lib/
 Tests for standard Perl core library modules (from perl5/lib/).
-These tests verify compatibility with standard Perl module behavior.
+**Structure mirrors perl5/lib/ exactly** - tests are in the same relative paths.
 
 Examples:
-- Benchmark.t - Tests for Benchmark.pm
-- English.t - Tests for English.pm
+- Benchmark.t - Single test for Benchmark.pm
+- English.t - Single test for English.pm
+- B/Deparse.t, B/Deparse-core.t - Multiple tests for B::Deparse
+- DBM_Filter/t/*.t - Tests in subdirectory for DBM_Filter.pm
+- File/Basename.t - Test for File::Basename
 
 ### ext/
 Tests for standard Perl extensions (from perl5/ext/).
-Extensions are modules that may have XS components.
+**Structure mirrors perl5/ext/ exactly** - preserves module directory structure.
 
 Examples:
 - File-Find/t/find.t - Tests for File::Find
@@ -188,9 +204,11 @@ Examples:
 ### dist/
 Tests for dual-life distributions (from perl5/dist/).
 These modules exist both in core Perl and on CPAN.
+**Structure mirrors perl5/dist/ exactly**.
 
 ### cpan/
 Tests for CPAN modules bundled with Perl (from perl5/cpan/).
+**Structure mirrors perl5/cpan/ exactly**.
 
 ## Running Tests
 
@@ -203,13 +221,29 @@ Run specific test directory:
 ```bash
 ./perl_test_runner.pl unit/
 ./perl_test_runner.pl lib/
+./perl_test_runner.pl lib/B/          # Just B::Deparse tests
+./perl_test_runner.pl lib/DBM_Filter/ # Just DBM_Filter tests
 ```
 
 Run specific test file:
 ```bash
 ./jperl src/test/resources/unit/array.t
 ./jperl src/test/resources/lib/Benchmark.t
+./jperl src/test/resources/lib/B/Deparse.t
+./jperl src/test/resources/lib/DBM_Filter/t/01error.t
 ```
+
+## Adding New Tests
+
+### For PerlOnJava-specific tests:
+Place in `unit/` with descriptive names.
+
+### For standard Perl tests:
+**Mirror the perl5/ structure exactly:**
+- If perl5 has `lib/Module.t`, put it in `lib/Module.t`
+- If perl5 has `lib/Module/Name.t`, put it in `lib/Module/Name.t`
+- If perl5 has `lib/Module/t/*.t`, put them in `lib/Module/t/*.t`
+- If perl5 has `ext/Module-Name/t/*.t`, put them in `ext/Module-Name/t/*.t`
 ```
 
 #### src/test/resources/unit/README.md
@@ -414,12 +448,12 @@ echo "4. Commit changes"
 
 ## Future: Adding Standard Perl Tests
 
-After reorganization, adding standard Perl tests is straightforward:
+After reorganization, adding standard Perl tests is straightforward. The key principle: **mirror the perl5/ structure exactly**.
 
-### Example: Adding Benchmark.t
+### Example 1: Single Test File
 
 ```bash
-# Copy from perl5
+# Copy Benchmark.t (single test file)
 cp perl5/lib/Benchmark.t src/test/resources/lib/
 
 # Test it
@@ -429,15 +463,75 @@ cp perl5/lib/Benchmark.t src/test/resources/lib/
 ./perl_test_runner.pl lib/
 ```
 
-### Example: Adding File::Find tests
+### Example 2: Module with Multiple Tests (Co-located)
 
 ```bash
-# Copy entire test directory
-mkdir -p src/test/resources/ext/File-Find
-cp -r perl5/ext/File-Find/t src/test/resources/ext/File-Find/
+# B::Deparse has multiple test files in lib/B/
+mkdir -p src/test/resources/lib/B
+cp perl5/lib/B/Deparse.t src/test/resources/lib/B/
+cp perl5/lib/B/Deparse-core.t src/test/resources/lib/B/
+cp perl5/lib/B/Deparse-subclass.t src/test/resources/lib/B/
 
 # Test them
+./jperl src/test/resources/lib/B/Deparse.t
+./perl_test_runner.pl lib/B/
+```
+
+### Example 3: Module with t/ Subdirectory
+
+```bash
+# DBM_Filter has tests in lib/DBM_Filter/t/
+mkdir -p src/test/resources/lib/DBM_Filter/t
+cp perl5/lib/DBM_Filter/t/*.t src/test/resources/lib/DBM_Filter/t/
+
+# Test them
+./jperl src/test/resources/lib/DBM_Filter/t/01error.t
+./perl_test_runner.pl lib/DBM_Filter/
+```
+
+### Example 4: Extension Module Tests
+
+```bash
+# File::Find tests are in ext/File-Find/t/
+mkdir -p src/test/resources/ext/File-Find/t
+cp perl5/ext/File-Find/t/*.t src/test/resources/ext/File-Find/t/
+
+# Test them
+./jperl src/test/resources/ext/File-Find/t/find.t
 ./perl_test_runner.pl ext/File-Find/
+```
+
+### Bulk Copy Script
+
+For copying entire module test suites:
+
+```bash
+#!/bin/bash
+# copy_module_tests.sh <module-path>
+# Example: ./copy_module_tests.sh lib/DBM_Filter
+
+MODULE_PATH="$1"
+PERL5_BASE="perl5"
+TARGET_BASE="src/test/resources"
+
+if [ -d "$PERL5_BASE/$MODULE_PATH/t" ]; then
+    # Module has t/ subdirectory
+    mkdir -p "$TARGET_BASE/$MODULE_PATH/t"
+    cp "$PERL5_BASE/$MODULE_PATH/t"/*.t "$TARGET_BASE/$MODULE_PATH/t/" 2>/dev/null
+    echo "Copied tests from $MODULE_PATH/t/"
+elif [ -f "$PERL5_BASE/$MODULE_PATH.t" ]; then
+    # Single test file
+    mkdir -p "$(dirname "$TARGET_BASE/$MODULE_PATH.t")"
+    cp "$PERL5_BASE/$MODULE_PATH.t" "$TARGET_BASE/$MODULE_PATH.t"
+    echo "Copied $MODULE_PATH.t"
+else
+    # Look for multiple test files in same directory
+    DIR=$(dirname "$PERL5_BASE/$MODULE_PATH")
+    BASE=$(basename "$MODULE_PATH")
+    mkdir -p "$TARGET_BASE/$(dirname "$MODULE_PATH")"
+    cp "$DIR/$BASE"*.t "$TARGET_BASE/$(dirname "$MODULE_PATH")/" 2>/dev/null
+    echo "Copied tests for $MODULE_PATH"
+fi
 ```
 
 ## Rollback Plan
