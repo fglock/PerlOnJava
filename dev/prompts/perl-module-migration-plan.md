@@ -121,14 +121,22 @@ Categorize by priority:
    - Check for features not yet implemented
    - Test basic loading: `./jperl -e 'use Module;'`
 
-3. **Copy associated tests:**
+3. **Copy associated tests (mirror perl5/ structure exactly):**
    ```bash
-   # From lib/Module.t
-   cp perl5/lib/Module.t src/test/resources/lib/
+   # Single test file
+   cp perl5/lib/Benchmark.t src/test/resources/lib/
    
-   # From ext/Module-Name/t/*.t
-   mkdir -p src/test/resources/ext/Module-Name/t
-   cp perl5/ext/Module-Name/t/*.t src/test/resources/ext/Module-Name/t/
+   # Multiple tests co-located
+   mkdir -p src/test/resources/lib/B
+   cp perl5/lib/B/Deparse*.t src/test/resources/lib/B/
+   
+   # Tests in t/ subdirectory
+   mkdir -p src/test/resources/lib/DBM_Filter/t
+   cp perl5/lib/DBM_Filter/t/*.t src/test/resources/lib/DBM_Filter/t/
+   
+   # Extension tests
+   mkdir -p src/test/resources/ext/File-Find/t
+   cp perl5/ext/File-Find/t/*.t src/test/resources/ext/File-Find/t/
    ```
 
 4. **Update test runner:**
