@@ -1,5 +1,7 @@
 package org.perlonjava.runtime;
 
+import org.perlonjava.parser.NumberParser;
+
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarFalse;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
 
@@ -26,6 +28,7 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
  * </ol>
  */
 public class Overload {
+    private static final boolean TRACE_OVERLOAD = false;
 
     /**
      * Converts a {@link RuntimeScalar} object to its string representation following
@@ -66,23 +69,66 @@ public class Overload {
     public static RuntimeScalar numify(RuntimeScalar runtimeScalar) {
         // Prepare overload context and check if object is eligible for overloading
         int blessId = RuntimeScalarType.blessedId(runtimeScalar);
+        
+        if (TRACE_OVERLOAD) {
+            System.err.println("TRACE Overload.numify:");
+            System.err.println("  Input scalar: " + runtimeScalar);
+            System.err.println("  Input type: " + runtimeScalar.type);
+            System.err.println("  blessId: " + blessId);
+            if (blessId != 0) {
+                System.err.println("  Blessed as: " + NameNormalizer.getBlessStr(blessId));
+            }
+            System.err.flush();
+        }
+        
         if (blessId != 0) {
             OverloadContext ctx = OverloadContext.prepare(blessId);
+            
+            if (TRACE_OVERLOAD) {
+                System.err.println("  OverloadContext: " + (ctx != null ? "FOUND" : "NULL"));
+                System.err.flush();
+            }
+            
             if (ctx != null) {
                 // Try primary overload method
                 RuntimeScalar result = ctx.tryOverload("(0+", new RuntimeArray(runtimeScalar));
+                
+                if (TRACE_OVERLOAD) {
+                    System.err.println("  tryOverload (0+: " + (result != null ? result : "NULL"));
+                    System.err.flush();
+                }
+                
                 if (result != null) return result;
                 // Try fallback
                 result = ctx.tryOverloadFallback(runtimeScalar, "(\"\"", "(bool");
+                
+                if (TRACE_OVERLOAD) {
+                    System.err.println("  tryOverloadFallback: " + (result != null ? result : "NULL"));
+                    System.err.flush();
+                }
+                
                 if (result != null) return result;
                 // Try nomethod
                 result = ctx.tryOverloadNomethod(runtimeScalar, "0+");
+                
+                if (TRACE_OVERLOAD) {
+                    System.err.println("  tryOverloadNomethod: " + (result != null ? result : "NULL"));
+                    System.err.flush();
+                }
+                
                 if (result != null) return result;
             }
         }
 
         // Default number conversion for non-blessed or non-overloaded objects
-        return new RuntimeScalar(((RuntimeBase) runtimeScalar.value).getDoubleRef());
+        RuntimeScalar defaultResult = new RuntimeScalar(((RuntimeBase) runtimeScalar.value).getDoubleRef());
+        
+        if (TRACE_OVERLOAD) {
+            System.err.println("  Returning DEFAULT hash code: " + defaultResult);
+            System.err.flush();
+        }
+        
+        return defaultResult;
     }
 
     /**

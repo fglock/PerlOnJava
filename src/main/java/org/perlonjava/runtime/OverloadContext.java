@@ -10,8 +10,47 @@ import static org.perlonjava.runtime.RuntimeScalarCache.*;
 /**
  * Helper class to manage overloading context for a given scalar in Perl-style object system.
  * Handles method overloading and fallback mechanisms for blessed objects.
+ * 
+ * <p><b>How Perl Overloading Works:</b>
+ * <ul>
+ *   <li>Classes use {@code use overload} to define operator overloads</li>
+ *   <li>The overload pragma creates special methods in the class namespace:
+ *     <ul>
+ *       <li>{@code ((} - marker method indicating overload is enabled</li>
+ *       <li>{@code ()} - fallback method</li>
+ *       <li>{@code (0+} - numeric conversion method</li>
+ *       <li>{@code ("")} - string conversion method</li>
+ *       <li>etc. for other operators</li>
+ *     </ul>
+ *   </li>
+ *   <li>When an overloaded operator is used, we:
+ *     <ol>
+ *       <li>Check if the object is blessed</li>
+ *       <li>Look for {@code ((} method to see if overload is enabled</li>
+ *       <li>Look for the specific operator method (e.g., {@code (0+})</li>
+ *       <li>Try fallback mechanisms if direct method not found</li>
+ *     </ol>
+ *   </li>
+ * </ul>
+ * 
+ * <p><b>Math::BigInt Example:</b>
+ * <pre>
+ * package Math::BigInt;
+ * use overload
+ *     '0+' => sub { $_[0]->bstr() },  # Creates (0+ method
+ *     '""' => \&bstr,                  # Creates ("" method
+ *     # ... other operators
+ *     ;
+ * # The overload pragma also creates (( and () markers
+ * </pre>
+ * 
+ * @see InheritanceResolver#findMethodInHierarchy
+ * @see Overload#numify
+ * @see Overload#stringify
  */
 public class OverloadContext {
+    private static final boolean TRACE_OVERLOAD_CONTEXT = false;
+    
     /**
      * The Perl class name of the blessed object
      */
@@ -55,9 +94,22 @@ public class OverloadContext {
         // Resolve Perl class name from blessing ID
         String perlClassName = NameNormalizer.getBlessStr(blessId);
 
+        if (TRACE_OVERLOAD_CONTEXT) {
+            System.err.println("TRACE OverloadContext.prepare:");
+            System.err.println("  blessId: " + blessId);
+            System.err.println("  perlClassName: " + perlClassName);
+            System.err.flush();
+        }
+
         // Look for overload markers in the class hierarchy
         RuntimeScalar methodOverloaded = InheritanceResolver.findMethodInHierarchy("((", perlClassName, null, 0);
         RuntimeScalar methodFallback = InheritanceResolver.findMethodInHierarchy("()", perlClassName, null, 0);
+
+        if (TRACE_OVERLOAD_CONTEXT) {
+            System.err.println("  methodOverloaded ((): " + (methodOverloaded != null ? "FOUND" : "NULL"));
+            System.err.println("  methodFallback (): " + (methodFallback != null ? "FOUND" : "NULL"));
+            System.err.flush();
+        }
 
         // Create context if overloading is enabled
         OverloadContext context = null;

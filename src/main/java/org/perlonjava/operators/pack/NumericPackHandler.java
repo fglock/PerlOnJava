@@ -2,6 +2,7 @@ package org.perlonjava.operators.pack;
 
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.RuntimeScalarType;
 
 import java.math.BigInteger;
 import java.util.List;
@@ -10,6 +11,8 @@ import java.util.List;
  * Handler for numeric formats (c, C, s, S, i, I, l, L, q, Q, j, J, f, F, d, D, n, N, v, V, w).
  */
 public class NumericPackHandler implements PackFormatHandler {
+    private static final boolean TRACE_PACK = false;
+    
     private final char format;
 
     public NumericPackHandler(char format) {
@@ -170,7 +173,27 @@ public class NumericPackHandler implements PackFormatHandler {
                     // which have numeric overloading but don't pass looksLikeNumber() check
                     RuntimeScalar numericValue = value.getNumber();
                     double doubleValue = numericValue.getDouble();
-                    String stringValue = value.toString();
+                    // IMPORTANT: Use numericValue.toString(), not value.toString()!
+                    // For blessed objects like Math::BigInt, value.toString() returns the hash representation
+                    // but numericValue.toString() returns the actual number after numeric overload
+                    String stringValue = numericValue.toString();
+
+                    if (TRACE_PACK) {
+                        System.err.println("TRACE NumericPackHandler 'w' format:");
+                        System.err.println("  Original value: " + value);
+                        System.err.println("  Original value type: " + value.type);
+                        System.err.println("  Original value isBlessed: " + value.isBlessed());
+                        System.err.println("  Original value blessedId: " + RuntimeScalarType.blessedId(value));
+                        System.err.println("  numericValue: " + numericValue);
+                        System.err.println("  numericValue type: " + numericValue.type);
+                        System.err.println("  doubleValue: " + doubleValue);
+                        System.err.println("  stringValue: '" + stringValue + "'");
+                        System.err.println("  numericValue.toString(): '" + numericValue.toString() + "'");
+                        System.err.println("  isNaN: " + Double.isNaN(doubleValue));
+                        System.err.println("  isInfinite: " + Double.isInfinite(doubleValue));
+                        System.err.println("  matches \\d{10,}e0: " + stringValue.matches("\\d{10,}e0"));
+                        System.err.flush();
+                    }
 
                     // Check for NaN or Infinity (invalid for BER compression)
                     if (Double.isNaN(doubleValue) || Double.isInfinite(doubleValue)) {
