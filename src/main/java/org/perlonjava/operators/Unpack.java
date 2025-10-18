@@ -213,6 +213,11 @@ public class Unpack {
                 }
                 char stringFormat = template.charAt(i);
 
+                // Check if '/' is followed by a repeat count (which is invalid)
+                if (stringFormat == '*' || (stringFormat >= '0' && stringFormat <= '9') || stringFormat == '[') {
+                    throw new PerlCompilerException("'/' does not take a repeat count");
+                }
+
                 // Check if it's a group
                 if (stringFormat == '(') {
                     i = UnpackGroupProcessor.processSlashGroup(template, i, slashCount, state, values, startsWithU, modeStack);

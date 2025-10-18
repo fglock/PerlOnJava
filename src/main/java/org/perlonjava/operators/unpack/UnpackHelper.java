@@ -71,6 +71,11 @@ public class UnpackHelper {
 
             char stringFormat = template.charAt(i);
 
+            // Check if '/' is followed by a repeat count (which is invalid)
+            if (stringFormat == '*' || (stringFormat >= '0' && stringFormat <= '9') || stringFormat == '[') {
+                throw new PerlCompilerException("'/' does not take a repeat count");
+            }
+
             // Check if it's a group
             if (stringFormat == '(') {
                 // Find the matching closing parenthesis
@@ -152,6 +157,11 @@ public class UnpackHelper {
 
             char stringFormat = template.charAt(i);
             // DEBUG: String format after '/' is: '" + stringFormat + "'
+
+            // Check if '/' is followed by a repeat count (which is invalid)
+            if (stringFormat == '*' || (stringFormat >= '0' && stringFormat <= '9') || stringFormat == '[') {
+                throw new PerlCompilerException("'/' does not take a repeat count");
+            }
 
             // Check if it's a group
             if (stringFormat == '(') {
