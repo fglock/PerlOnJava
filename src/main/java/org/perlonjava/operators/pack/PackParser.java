@@ -26,6 +26,11 @@ import java.util.List;
  * @see GroupInfo
  */
 public class PackParser {
+    /**
+     * Enable trace output for pack parser operations.
+     * Set to true to debug template parsing.
+     */
+    private static final boolean TRACE_PACK = false;
 
     /**
      * Parses endianness and native size modifiers from a pack template.
@@ -132,6 +137,12 @@ public class PackParser {
 
                 String countStr = template.substring(position + 2, j);
 
+                if (TRACE_PACK) {
+                    System.err.println("TRACE PackParser.parseRepeatCount:");
+                    System.err.println("  bracket content: [" + countStr + "]");
+                    System.err.flush();
+                }
+
                 // Check if it's purely numeric
                 if (countStr.matches("\\d+")) {
                     result.count = Integer.parseInt(countStr);
@@ -139,6 +150,24 @@ public class PackParser {
                     // Empty brackets - treat as count 0
                     result.count = 0;
                 } else {
+                    // Validate bracket content - if it starts with digit but contains non-format chars,
+                    // it's malformed (e.g., "4c" is neither a number nor a valid template)
+                    if (countStr.length() > 0 && Character.isDigit(countStr.charAt(0))) {
+                        // If it starts with a digit, check if the rest is valid
+                        // Valid: all digits (handled above) or digit followed by valid format chars
+                        // Invalid: digit followed by mix of digits and format chars like "4c"
+                        boolean hasDigit = false;
+                        boolean hasLetter = false;
+                        for (char c : countStr.toCharArray()) {
+                            if (Character.isDigit(c)) hasDigit = true;
+                            else if (Character.isLetter(c)) hasLetter = true;
+                        }
+                        // If both digits and letters, it's malformed
+                        if (hasDigit && hasLetter) {
+                            throw new PerlCompilerException("Malformed integer in []");
+                        }
+                    }
+                    
                     // Template-based count - calculate the size of the template
                     result.count = calculateTemplateSize(countStr);
                 }
