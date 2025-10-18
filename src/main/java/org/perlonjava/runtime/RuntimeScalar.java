@@ -977,31 +977,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public RuntimeScalar preAutoIncrement() {
-        // Check if object is eligible for overloading
-        int blessId = blessedId(this);
-        if (blessId != 0) {
-            // Prepare overload context and check if object is eligible for overloading
-            OverloadContext ctx = OverloadContext.prepare(blessId);
-            if (ctx != null) {
-                // Try direct overload method for ++
-                RuntimeScalar result = ctx.tryOverload("(++", new RuntimeArray(this));
-                if (result != null) {
-                    // The ++ operator has already modified this operand
-                    // Just return this (which has been modified)
-                    return this;
-                }
-
-                // Try fallback to + operator with undef as third argument (mutator indicator)
-                result = ctx.tryOverload("(+", new RuntimeArray(this, scalarOne, scalarUndef));
-                if (result != null) {
-                    // For fallback, + should NOT modify operand, so we handle assignment
-                    this.type = result.type;
-                    this.value = result.value;
-                    return this;
-                }
-            }
-        }
-
         // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         switch (type) {
             case INTEGER -> { // 0
@@ -1051,6 +1026,31 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.value = 1;
             }
             default -> { // All reference types (CODE, REFERENCE, ARRAYREFERENCE, etc.)
+                // Check if object is eligible for overloading
+                int blessId = blessedId(this);
+                if (blessId != 0) {
+                    // Prepare overload context and check if object is eligible for overloading
+                    OverloadContext ctx = OverloadContext.prepare(blessId);
+                    if (ctx != null) {
+                        // Try direct overload method for ++
+                        RuntimeScalar result = ctx.tryOverload("(++", new RuntimeArray(this));
+                        if (result != null) {
+                            // The ++ operator has already modified this operand
+                            // Just return this (which has been modified)
+                            return this;
+                        }
+
+                        // Try fallback to + operator with undef as third argument (mutator indicator)
+                        result = ctx.tryOverload("(+", new RuntimeArray(this, scalarOne, scalarUndef));
+                        if (result != null) {
+                            // For fallback, + should NOT modify operand, so we handle assignment
+                            this.type = result.type;
+                            this.value = result.value;
+                            return this;
+                        }
+                    }
+                }
+
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = 1;
             }
@@ -1075,31 +1075,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // For undef, the old value should be 0, not undef
         RuntimeScalar old = this.type == RuntimeScalarType.UNDEF ? 
             new RuntimeScalar(0) : new RuntimeScalar(this);
-
-        // Check if object is eligible for overloading
-        int blessId = blessedId(this);
-        if (blessId != 0) {
-            // Prepare overload context and check if object is eligible for overloading
-            OverloadContext ctx = OverloadContext.prepare(blessId);
-            if (ctx != null) {
-                // Try direct overload method for ++
-                RuntimeScalar result = ctx.tryOverload("(++", new RuntimeArray(this));
-                if (result != null) {
-                    // The ++ operator has already modified this operand
-                    // Return the old value
-                    return old;
-                }
-
-                // Try fallback to + operator with undef as third argument (mutator indicator)
-                result = ctx.tryOverload("(+", new RuntimeArray(this, scalarOne, scalarUndef));
-                if (result != null) {
-                    // For fallback, + should NOT modify operand, so we handle assignment
-                    this.type = result.type;
-                    this.value = result.value;
-                    return old;
-                }
-            }
-        }
 
         // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         switch (type) {
@@ -1149,6 +1124,31 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.value = 1;
             }
             default -> { // All reference types
+                // Check if object is eligible for overloading
+                int blessId = blessedId(this);
+                if (blessId != 0) {
+                    // Prepare overload context and check if object is eligible for overloading
+                    OverloadContext ctx = OverloadContext.prepare(blessId);
+                    if (ctx != null) {
+                        // Try direct overload method for ++
+                        RuntimeScalar result = ctx.tryOverload("(++", new RuntimeArray(this));
+                        if (result != null) {
+                            // The ++ operator has already modified this operand
+                            // Return the old value
+                            return old;
+                        }
+
+                        // Try fallback to + operator with undef as third argument (mutator indicator)
+                        result = ctx.tryOverload("(+", new RuntimeArray(this, scalarOne, scalarUndef));
+                        if (result != null) {
+                            // For fallback, + should NOT modify operand, so we handle assignment
+                            this.type = result.type;
+                            this.value = result.value;
+                            return old;
+                        }
+                    }
+                }
+
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = 1;
             }
@@ -1157,31 +1157,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public RuntimeScalar preAutoDecrement() {
-        // Check if object is eligible for overloading
-        int blessId = blessedId(this);
-        if (blessId != 0) {
-            // Prepare overload context and check if object is eligible for overloading
-            OverloadContext ctx = OverloadContext.prepare(blessId);
-            if (ctx != null) {
-                // Try direct overload method for --
-                RuntimeScalar result = ctx.tryOverload("(--", new RuntimeArray(this));
-                if (result != null) {
-                    // The -- operator has already modified this operand
-                    // Just return this (which has been modified)
-                    return this;
-                }
-
-                // Try fallback to - operator with undef as third argument (mutator indicator)
-                result = ctx.tryOverload("(-", new RuntimeArray(this, scalarOne, scalarUndef));
-                if (result != null) {
-                    // For fallback, - should NOT modify operand, so we handle assignment
-                    this.type = result.type;
-                    this.value = result.value;
-                    return this;
-                }
-            }
-        }
-
         // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         switch (type) {
             case INTEGER -> // 0
@@ -1229,6 +1204,31 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.value = -1;
             }
             default -> { // All reference types
+                // Check if object is eligible for overloading
+                int blessId = blessedId(this);
+                if (blessId != 0) {
+                    // Prepare overload context and check if object is eligible for overloading
+                    OverloadContext ctx = OverloadContext.prepare(blessId);
+                    if (ctx != null) {
+                        // Try direct overload method for --
+                        RuntimeScalar result = ctx.tryOverload("(--", new RuntimeArray(this));
+                        if (result != null) {
+                            // The -- operator has already modified this operand
+                            // Just return this (which has been modified)
+                            return this;
+                        }
+
+                        // Try fallback to - operator with undef as third argument (mutator indicator)
+                        result = ctx.tryOverload("(-", new RuntimeArray(this, scalarOne, scalarUndef));
+                        if (result != null) {
+                            // For fallback, - should NOT modify operand, so we handle assignment
+                            this.type = result.type;
+                            this.value = result.value;
+                            return this;
+                        }
+                    }
+                }
+
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = -1;
             }
@@ -1242,31 +1242,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     public RuntimeScalar postAutoDecrement() {
         RuntimeScalar old = new RuntimeScalar(this);
-
-        // Check if object is eligible for overloading
-        int blessId = blessedId(this);
-        if (blessId != 0) {
-            // Prepare overload context and check if object is eligible for overloading
-            OverloadContext ctx = OverloadContext.prepare(blessId);
-            if (ctx != null) {
-                // Try direct overload method for --
-                RuntimeScalar result = ctx.tryOverload("(--", new RuntimeArray(this));
-                if (result != null) {
-                    // The -- operator has already modified this operand
-                    // Return the old value
-                    return old;
-                }
-
-                // Try fallback to - operator with undef as third argument (mutator indicator)
-                result = ctx.tryOverload("(-", new RuntimeArray(this, scalarOne, scalarUndef));
-                if (result != null) {
-                    // For fallback, - should NOT modify operand, so we handle assignment
-                    this.type = result.type;
-                    this.value = result.value;
-                    return old;
-                }
-            }
-        }
 
         // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         switch (type) {
@@ -1314,6 +1289,31 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.value = -1;
             }
             default -> { // All reference types
+                // Check if object is eligible for overloading
+                int blessId = blessedId(this);
+                if (blessId != 0) {
+                    // Prepare overload context and check if object is eligible for overloading
+                    OverloadContext ctx = OverloadContext.prepare(blessId);
+                    if (ctx != null) {
+                        // Try direct overload method for --
+                        RuntimeScalar result = ctx.tryOverload("(--", new RuntimeArray(this));
+                        if (result != null) {
+                            // The -- operator has already modified this operand
+                            // Return the old value
+                            return old;
+                        }
+
+                        // Try fallback to - operator with undef as third argument (mutator indicator)
+                        result = ctx.tryOverload("(-", new RuntimeArray(this, scalarOne, scalarUndef));
+                        if (result != null) {
+                            // For fallback, - should NOT modify operand, so we handle assignment
+                            this.type = result.type;
+                            this.value = result.value;
+                            return old;
+                        }
+                    }
+                }
+
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = -1;
             }
