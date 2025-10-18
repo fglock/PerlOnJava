@@ -150,9 +150,9 @@ public class ControlPackHandler implements PackFormatHandler {
                 valueIndex++;
                 int targetPos = (int) posValue.getDouble();
 
-                // Handle negative positions: treat as 0 (truncate to beginning)
+                // Handle negative positions: throw error (can't position before string start)
                 if (targetPos < 0) {
-                    targetPos = 0;
+                    throw new PerlCompilerException("'.' outside of string in pack");
                 }
 
                 int currentSize = output.size();
