@@ -170,11 +170,19 @@ public class UnpackGroupProcessor {
             // Save position before unpacking to detect infinite loops
             int positionBefore = state.getPosition();
 
-            // Call unpack recursively with the group template
-            RuntimeList groupResult = unpackFunction.unpack(effectiveContent, state, startsWithU, modeStack);
+            // Push group baseline for this repetition
+            state.pushGroupBase();
+            
+            try {
+                // Call unpack recursively with the group template
+                RuntimeList groupResult = unpackFunction.unpack(effectiveContent, state, startsWithU, modeStack);
 
-            // Add all unpacked values to the output
-            values.addAll(groupResult.elements);
+                // Add all unpacked values to the output
+                values.addAll(groupResult.elements);
+            } finally {
+                // Always pop group baseline, even if an exception occurs
+                state.popGroupBase();
+            }
 
             // For * groups, stop if no progress was made (prevents infinite loops)
             if (groupRepeatCount == Integer.MAX_VALUE) {
@@ -568,6 +576,9 @@ public class UnpackGroupProcessor {
                     positionHistory.remove(0);
                 }
             }
+            
+            // Pop the group baseline after processing this repetition
+            state.popGroupBase();
         }
 
         // Restore mode after processing all repetitions
