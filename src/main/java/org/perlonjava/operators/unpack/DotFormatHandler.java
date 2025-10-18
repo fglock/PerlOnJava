@@ -10,11 +10,22 @@ import java.util.List;
  * Handler for the '.' format in unpack - returns the current offset in the string
  */
 public class DotFormatHandler implements FormatHandler {
+    private static final boolean TRACE_UNPACK = false;
+    
     @Override
     public void unpack(UnpackState state, List<RuntimeBase> values, int count, boolean isStarCount) {
         // Get the current position (absolute and relative to current group)
         int currentPos = state.getPosition();
         int relativePos = state.getRelativePosition();
+
+        if (TRACE_UNPACK) {
+            System.err.println("TRACE DotFormatHandler.unpack:");
+            System.err.println("  currentPos: " + currentPos);
+            System.err.println("  relativePos: " + relativePos);
+            System.err.println("  hasGroupBase: " + state.hasGroupBase());
+            System.err.println("  count: " + count + ", isStarCount: " + isStarCount);
+            System.err.flush();
+        }
 
         // Parse optional positioning argument
         if (count == 0) {
