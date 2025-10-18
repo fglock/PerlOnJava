@@ -139,8 +139,17 @@ public class PackParser {
 
                 if (TRACE_PACK) {
                     System.err.println("TRACE PackParser.parseRepeatCount:");
+                    System.err.println("  template: [" + template + "]");
+                    System.err.println("  position: " + position + ", char: '" + template.charAt(position) + "'");
+                    System.err.println("  position+2: " + (position + 2) + ", j: " + j);
                     System.err.println("  bracket content: [" + countStr + "]");
                     System.err.flush();
+                }
+
+                // Check for forbidden characters inside brackets
+                // @ is not allowed as it's for positioning, not repeat counts
+                if (countStr.contains("@")) {
+                    throw new PerlCompilerException("Within []-length '@' not allowed in pack");
                 }
 
                 // Check if it's purely numeric

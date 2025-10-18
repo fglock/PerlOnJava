@@ -256,15 +256,19 @@ public class Pack {
                 continue;
             }
 
-            // Safety check for misplaced brackets (should be caught in validation)
+            // Safety check for misplaced brackets
+            // Brackets should only appear immediately after a format character, not standalone
             if (format == '[' || format == ']') {
-                throw new PerlCompilerException("Mismatched brackets in template");
+                throw new PerlCompilerException("Invalid type '" + format + "' in pack");
             }
 
-            // Handle commas - ignored for Perl compatibility (would warn in Perl)
+            // Handle commas - ignored for Perl compatibility but emit warning
             if (format == ',') {
-                // WARNING: Invalid type ',' in pack
-                // In Perl, this would use warn() but continue execution
+                // Emit warning like Perl does
+                WarnDie.warn(
+                    new RuntimeScalar("Invalid type ',' in pack"),
+                    RuntimeScalarCache.scalarEmptyString
+                );
                 continue;
             }
 
