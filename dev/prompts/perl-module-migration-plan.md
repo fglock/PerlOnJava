@@ -21,8 +21,11 @@ This document outlines a strategy for migrating standard Perl modules from the `
 
 ### 3. Test Files
 **Location:** `src/test/resources/`
-- Contains `.t` test files for PerlOnJava-specific testing
-- Examples: `array.t`, `hash.t`, `regex/`, `pack/`
+- Contains `.t` test files for testing
+- **Current structure:** Mixed PerlOnJava and standard Perl tests
+- **Planned structure:** Separate subdirectories (see Test Directory Reorganization)
+  - `unit/` - PerlOnJava-specific tests
+  - `lib/`, `ext/`, `dist/`, `cpan/` - Standard Perl tests
 - **Current count:** ~100+ test files
 
 ## Standard Perl Module Structure (perl5/)
@@ -47,6 +50,26 @@ This document outlines a strategy for migrating standard Perl modules from the `
    - `cpan/Test-Simple/lib/Test/More.pm`
    - `cpan/JSON-PP/lib/JSON/PP.pm`
    - Tests: `cpan/*/t/*.t`
+
+## Prerequisites
+
+### Test Directory Reorganization
+
+**Before starting module migration**, reorganize the test directory structure:
+
+1. **Run reorganization script:**
+   ```bash
+   ./scripts/reorganize_tests.sh
+   ```
+
+2. **This will:**
+   - Move all current tests to `src/test/resources/unit/`
+   - Create `lib/`, `ext/`, `dist/`, `cpan/` directories
+   - Prepare structure for standard Perl tests
+
+3. **See:** `dev/prompts/test-directory-reorganization.md` for details
+
+**Why this matters:** Separates PerlOnJava-specific tests from standard Perl module tests, preventing confusion and enabling clean integration.
 
 ## Migration Strategy
 
@@ -101,10 +124,11 @@ Categorize by priority:
 3. **Copy associated tests:**
    ```bash
    # From lib/Module.t
-   cp perl5/lib/Module.t src/test/resources/lib/Module.t
+   cp perl5/lib/Module.t src/test/resources/lib/
    
    # From ext/Module-Name/t/*.t
-   cp perl5/ext/Module-Name/t/*.t src/test/resources/ext/Module-Name/
+   mkdir -p src/test/resources/ext/Module-Name/t
+   cp perl5/ext/Module-Name/t/*.t src/test/resources/ext/Module-Name/t/
    ```
 
 4. **Update test runner:**
@@ -178,14 +202,17 @@ src/main/java/org/perlonjava/perlmodule/  # Java implementations
   └── FileSpec.java
 
 src/test/resources/        # Test files
+  ├── unit/                # PerlOnJava-specific tests
+  │   ├── array.t
+  │   ├── hash.t
+  │   └── regex/
   ├── lib/                 # Tests for lib/ modules
   │   ├── Benchmark.t
   │   └── English.t
-  ├── ext/                 # Tests for ext/ modules
-  │   └── File-Find/
-  │       └── find.t
-  └── unit/                # PerlOnJava-specific tests
-      └── array.t
+  └── ext/                 # Tests for ext/ modules
+      └── File-Find/
+          └── t/
+              └── find.t
 ```
 
 #### 3.2 Alternative: Mirror perl5/ Structure
@@ -201,6 +228,7 @@ src/main/perl/
           └── lib/Storable.pm
 
 src/test/resources/
+  ├── unit/                # PerlOnJava-specific tests
   ├── lib/                 # Tests from perl5/lib/
   ├── ext/                 # Tests from perl5/ext/
   └── dist/                # Tests from perl5/dist/
@@ -218,15 +246,18 @@ Update `perl_test_runner.pl` to discover tests from new locations:
 ```perl
 # Add to test discovery
 my @test_dirs = (
-    't',                    # Core tests
-    'src/test/resources',   # Unit tests
+    't',                           # Core Perl tests (op/, re/, io/, etc.)
+    'src/test/resources/unit',     # PerlOnJava unit tests
     'src/test/resources/lib',      # lib/ module tests
     'src/test/resources/ext',      # ext/ module tests
+    'src/test/resources/dist',     # dist/ module tests
+    'src/test/resources/cpan',     # cpan/ module tests
 );
 
-# Scan for *.t files
+# Scan for *.t files recursively
 for my $dir (@test_dirs) {
-    find_tests($dir);
+    next unless -d $dir;
+    find_tests_recursive($dir);
 }
 ```
 
