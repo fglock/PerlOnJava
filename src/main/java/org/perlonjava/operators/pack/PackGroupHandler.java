@@ -228,6 +228,11 @@ public class PackGroupHandler {
         char stringFormat = template.charAt(stringPos);
         // DEBUG: string format after '/' is '" + stringFormat + "'
 
+        // Check if '/' is followed by a repeat count (which is invalid)
+        if (stringFormat == '*' || (stringFormat >= '0' && stringFormat <= '9') || stringFormat == '[') {
+            throw new PerlCompilerException("'/' does not take a repeat count");
+        }
+
         // Parse string count
         ParsedCount stringCountInfo = PackParser.parseRepeatCount(template, stringPos);
         // In Perl, N/S without explicit count means "pack all remaining values" (like N/S*)
