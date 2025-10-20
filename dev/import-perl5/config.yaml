@@ -29,6 +29,66 @@ imports:
     target: t/test.pl
     patch: test.pl.patch
 
+  # Pod modules from cpan (needed for Pod documentation parsing)
+  # Pod::Simple - Core Pod parser
+  - source: perl5/cpan/Pod-Simple/lib/Pod
+    target: src/main/perl/lib/Pod
+    type: directory
+
+  # Pod::Text and Pod::Man from podlators
+  - source: perl5/cpan/podlators/lib/Pod/Text.pm
+    target: src/main/perl/lib/Pod/Text.pm
+
+  - source: perl5/cpan/podlators/lib/Pod/Man.pm
+    target: src/main/perl/lib/Pod/Man.pm
+
+  - source: perl5/cpan/podlators/lib/Pod/ParseLink.pm
+    target: src/main/perl/lib/Pod/ParseLink.pm
+
+  - source: perl5/cpan/podlators/lib/Pod/Text
+    target: src/main/perl/lib/Pod/Text
+    type: directory
+
+  # Pod::Usage
+  - source: perl5/cpan/Pod-Usage/lib/Pod/Usage.pm
+    target: src/main/perl/lib/Pod/Usage.pm
+
+  # Pod::Checker
+  - source: perl5/cpan/Pod-Checker/lib/Pod/Checker.pm
+    target: src/main/perl/lib/Pod/Checker.pm
+
+  # Pod::Escapes
+  - source: perl5/cpan/Pod-Escapes/lib/Pod/Escapes.pm
+    target: src/main/perl/lib/Pod/Escapes.pm
+
+  # Text::Tabs and Text::Wrap (needed by Pod tests)
+  - source: perl5/cpan/Text-Tabs/lib/Text
+    target: src/main/perl/lib/Text
+    type: directory
+
+  # Note: Encode is implemented in Java (src/main/java/org/perlonjava/perlmodule/Encode.java)
+
+  # Pod tests
+  - source: perl5/cpan/Pod-Simple/t
+    target: src/test/resources/Pod/Pod-Simple
+    type: directory
+
+  - source: perl5/cpan/podlators/t
+    target: src/test/resources/Pod/podlators
+    type: directory
+
+  - source: perl5/cpan/Pod-Usage/t
+    target: src/test/resources/Pod/Pod-Usage
+    type: directory
+
+  - source: perl5/cpan/Pod-Checker/t
+    target: src/test/resources/Pod/Pod-Checker
+    type: directory
+
+  - source: perl5/cpan/Pod-Escapes/t
+    target: src/test/resources/Pod/Pod-Escapes
+    type: directory
+
   # Add more imports below as needed
   # Example with minimal fields:
   # - source: perl5/lib/SomeModule.pm
