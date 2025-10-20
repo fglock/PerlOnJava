@@ -1,9 +1,7 @@
 use strict;
-use Test::More;
 use warnings;
+use Test::More;
 use feature 'say';
-
-print "1..45\n";
 
 #######################
 # Tests for Perl `local` operator
@@ -16,70 +14,68 @@ our %global_hash = (key => 'value');
 # Simple scalar case
 {
     local $global_var = "temporarily changed";
-    say $global_var eq "temporarily changed" ? "ok # local scalar variable changed" : "not ok";
+    is($global_var, "temporarily changed", 'local scalar variable changed');
 }
-say $global_var eq "original" ? "ok # local scalar variable restored" : "not ok";
+is($global_var, "original", 'local scalar variable restored');
 
 # Array case
 {
     local @global_array = (4, 5, 6);
-    say @global_array == 3 && $global_array[0] == 4 ? "ok # local array changed" : "not ok";
+    ok(@global_array == 3 && $global_array[0] == 4, 'local array changed');
 }
-say @global_array == 3 && $global_array[0] == 1 ? "ok # local array restored" : "not ok";
+ok(@global_array == 3 && $global_array[0] == 1, 'local array restored');
 
 # Hash case
 {
     local %global_hash = (new_key => 'new_value');
-    print exists $global_hash{new_key} ? "" : "not ";
-    say "ok # local hash changed";
+    ok(exists $global_hash{new_key}, 'local hash changed');
 }
-say exists $global_hash{key} ? "ok # local hash restored" : "not ok";
+ok(exists $global_hash{key}, 'local hash restored');
 
 # Case: local with a for loop and exceptions
 {
     local $global_var = "for-loop scope";
     for my $i (1..3) {
-        say $global_var eq "for-loop scope" ? "ok # local variable inside for-loop" : "not ok";
+        is($global_var, "for-loop scope", 'local variable inside for-loop');
     }
 }
-say $global_var eq "original" ? "ok # local variable restored after for-loop" : "not ok";
+is($global_var, "original", 'local variable restored after for-loop');
 
 # Edge case: local inside a subroutine
 sub modify_global_var {
     local $global_var = "inside subroutine";
-    say $global_var eq "inside subroutine" ? "ok # local variable in subroutine" : "not ok";
+    is($global_var, "inside subroutine", 'local variable in subroutine');
 }
 modify_global_var();
-say $global_var eq "original" ? "ok # local variable restored after subroutine" : "not ok";
+is($global_var, "original", 'local variable restored after subroutine');
 
 # Special case: local with nested scopes
 {
     local $global_var = "outer scope";
     {
         local $global_var = "inner scope";
-        say $global_var eq "inner scope" ? "ok # inner scope local" : "not ok";
+        is($global_var, "inner scope", 'inner scope local');
     }
-    say $global_var eq "outer scope" ? "ok # outer scope local" : "not ok";
+    is($global_var, "outer scope", 'outer scope local');
 }
-say $global_var eq "original" ? "ok # variable restored after nested scopes" : "not ok";
+is($global_var, "original", 'variable restored after nested scopes');
 
 # Special case: localizing package globals
 our $package_var = "package original";
 {
     local $::package_var = "package temporary";
-    say $::package_var eq "package temporary" ? "ok # local package variable changed" : "not ok";
+    is($::package_var, "package temporary", 'local package variable changed');
 }
-say $::package_var eq "package original" ? "ok # local package variable restored" : "not ok";
+is($::package_var, "package original", 'local package variable restored');
 
 # Special case: localizing special variables
 $@ = "";
 {
     local $@ = "error occurred";
     eval { die "Test error" };
-    print $@ =~ "Test error" ? "" : "not ";
-    say "ok # localized \$@ during eval <" . substr($@, 0, 20) . ">";
+    like($@, qr/Test error/, 'localized $@ during eval');
 }
-say $@ eq "" ? "ok # \$@ restored after eval <$@>" : "not ok";
+is($@, "", '$@ restored after eval');
 
 # Test for `next` in a loop
 $global_var = "original";
@@ -87,9 +83,9 @@ $global_var = "original";
     for my $i (1..3) {
         local $global_var = "next scope";
         next if $i == 2;
-        say $global_var eq "next scope" ? "ok # local variable with next" : "not ok";
+        is($global_var, "next scope", 'local variable with next');
     }
-    say $global_var eq "original" ? "ok # local variable restored after next" : "not ok";
+    is($global_var, "original", 'local variable restored after next');
 }
 
 # Test for `redo` in a loop
@@ -100,9 +96,9 @@ $global_var = "original";
         local $global_var = "redo scope";
         $count++;
         redo if $count == 1;  # redo the first iteration
-        say $global_var eq "redo scope" ? "ok # local variable with redo" : "not ok";
+        is($global_var, "redo scope", 'local variable with redo');
     }
-    say $global_var eq "original" ? "ok # local variable restored after redo" : "not ok";
+    is($global_var, "original", 'local variable restored after redo');
 }
 
 # Test for `last` in a loop
@@ -111,9 +107,9 @@ $global_var = "original";
     for my $i (1..3) {
         local $global_var = "last scope";
         last if $i == 2;
-        say $global_var eq "last scope" ? "ok # local variable with last" : "not ok";
+        is($global_var, "last scope", 'local variable with last');
     }
-    say $global_var eq "original" ? "ok # local variable restored after last" : "not ok";
+    is($global_var, "original", 'local variable restored after last');
 }
 
 # Test for `return` in a subroutine
@@ -121,65 +117,66 @@ $global_var = "original";
 sub test_return {
     local $global_var = "return scope";
     return if $global_var eq "return scope";
-    say "not ok # this should not be printed";
+    fail('this should not be printed');
 }
 test_return();
-say $global_var eq "original" ? "ok # local variable restored after return" : "not ok";
+is($global_var, "original", 'local variable restored after return');
 
 # New test cases for 3-argument for loop
 $global_var = "original";
 {
     for (my $i = 0; $i < 3; $i++) {
         local $global_var = "3-arg for scope";
-        say $global_var eq "3-arg for scope" ? "ok # local variable in 3-arg for loop" : "not ok";
+        is($global_var, "3-arg for scope", 'local variable in 3-arg for loop');
     }
 }
-say $global_var eq "original" ? "ok # local variable restored after 3-arg for loop" : "not ok";
+is($global_var, "original", 'local variable restored after 3-arg for loop');
 
 # Test for local array with modifications
 {
     local @global_array = (7, 8, 9);
     $global_array[0] = 10;
-    say @global_array == 3 && $global_array[0] == 10 ? "ok # local array modified" : "not ok";
+    ok(@global_array == 3 && $global_array[0] == 10, 'local array modified');
 }
-say @global_array == 3 && $global_array[0] == 1 ? "ok # local array restored after modification" : "not ok";
+ok(@global_array == 3 && $global_array[0] == 1, 'local array restored after modification');
 
 # Test for local hash with modifications
 {
     local %global_hash = (another_key => 'another_value');
     $global_hash{another_key} = 'modified_value';
-    say exists $global_hash{another_key} && $global_hash{another_key} eq 'modified_value' ? "ok # local hash modified" : "not ok";
+    ok(exists $global_hash{another_key} && $global_hash{another_key} eq 'modified_value', 'local hash modified');
 }
-say exists $global_hash{key} ? "ok # local hash restored after modification" : "not ok";
+ok(exists $global_hash{key}, 'local hash restored after modification');
 
 # Test for local array element
 {
     local $global_array[0] = 10;
-    say $global_array[0] == 10 ? "ok # local array element changed" : "not ok";
+    is($global_array[0], 10, 'local array element changed');
 }
-say $global_array[0] == 1 ? "ok # local array element restored" : "not ok";
+is($global_array[0], 1, 'local array element restored');
 
 # Test for local hash element
 {
     local $global_hash{key} = 'temporary_value';
-    say $global_hash{key} eq 'temporary_value' ? "ok # local hash element changed" : "not ok";
+    is($global_hash{key}, 'temporary_value', 'local hash element changed');
 }
-say $global_hash{key} eq 'value' ? "ok # local hash element restored" : "not ok";
+is($global_hash{key}, 'value', 'local hash element restored');
 
 # Test for new local hash element
 {
     local $global_hash{key_new} = 'temporary_value';
-    say $global_hash{key_new} eq 'temporary_value' ? "ok # local hash element changed" : "not ok";
+    is($global_hash{key_new}, 'temporary_value', 'local hash element changed');
 }
-say !defined($global_hash{key_new}) ? "ok # local hash element restored" : "not ok # <$global_hash{key_new}>";
+ok(!defined($global_hash{key_new}), 'local hash element restored');
 
 # Test for new local array element
 {
     local $global_array[10] = 'temporary_value';
-    say $global_array[10] eq 'temporary_value' ? "ok # local array element changed" : "not ok";
+    is($global_array[10], 'temporary_value', 'local array element changed');
 }
-print "not " if scalar(@global_array) >= 10;
-say "ok # local array element restored, array size " . scalar(@global_array);
+ok(scalar(@global_array) < 10, 'local array element restored, array size ' . scalar(@global_array));
+
+done_testing();
 
 __END__
 
@@ -194,5 +191,3 @@ open my $fh, "<", "/etc/passwd" or die "Cannot open file: $!";
     }
 }
 say "ok # filehandle localized";
-
-done_testing();
