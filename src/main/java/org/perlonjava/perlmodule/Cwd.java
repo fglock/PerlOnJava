@@ -5,6 +5,7 @@ import org.perlonjava.runtime.RuntimeList;
 import org.perlonjava.runtime.RuntimeScalar;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 
 /**
@@ -87,8 +88,16 @@ public class Cwd extends PerlModuleBase {
             String baseDir = System.getProperty("user.dir");
             // Determine the path to resolve
             String path = args.size() > 0 ? args.get(0).toString() : baseDir;
-            // Resolve the path relative to the base directory
-            String absPath = Paths.get(baseDir, path).toRealPath().toString();
+            
+            // If path is already absolute, don't prepend baseDir
+            Path pathObj = Paths.get(path);
+            String absPath;
+            if (pathObj.isAbsolute()) {
+                absPath = pathObj.toRealPath().toString();
+            } else {
+                // Resolve relative path against the base directory
+                absPath = Paths.get(baseDir, path).toRealPath().toString();
+            }
             return new RuntimeScalar(absPath).getList();
         } catch (IOException e) {
             System.err.println("Error resolving absolute path: " + e.getMessage());
