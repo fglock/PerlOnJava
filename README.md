@@ -14,15 +14,16 @@ Users can also add their own database JDBC drivers, making it a flexible solutio
 4. [Quick Start](#quick-start)
 5. [Features and Limitations](docs/FEATURE_MATRIX.md)
 6. [Build Instructions](docs/BUILD.md)
-7. [Running with Docker](docs/DOCKER.md)
-8. [Running the JAR File](#running-the-jar-file)
-9. [Debugging Tools](#debugging-tools)
-10. [Architecture](docs/ARCHITECTURE.md)
-11. [Porting Modules](docs/PORTING_MODULES.md)
-12. [Milestones](MILESTONES.md)
-13. [Community and Support](docs/SUPPORT.md)
-14. [License](#license)
-15. [Additional Resources](docs/RESOURCES.md)
+7. [Testing](docs/TESTING.md)
+8. [Running with Docker](docs/DOCKER.md)
+9. [Running the JAR File](#running-the-jar-file)
+10. [Debugging Tools](#debugging-tools)
+11. [Architecture](docs/ARCHITECTURE.md)
+12. [Porting Modules](docs/PORTING_MODULES.md)
+13. [Milestones](MILESTONES.md)
+14. [Community and Support](docs/SUPPORT.md)
+15. [License](#license)
+16. [Additional Resources](docs/RESOURCES.md)
 
 ## Introduction
 
@@ -93,6 +94,33 @@ jperl -E "say 'Hello World'"
    $dbh->do("CREATE TABLE test (id INT, name VARCHAR(50))");
    $dbh->do("INSERT INTO test VALUES (1, 'Hello World')");
    ```
+
+## Testing
+
+PerlOnJava provides a two-level testing strategy for development and validation:
+
+### Fast Unit Tests (Recommended for Development)
+
+```bash
+make test        # Fast unit tests (default)
+make test-unit   # Same as above
+```
+
+Runs tests from `src/test/resources/unit/` in seconds with parallel execution.
+
+### Comprehensive Test Suite
+
+```bash
+make test-all    # All tests including module tests
+```
+
+Runs all tests including Benchmark.pm and other Perl core modules. Takes longer but provides comprehensive validation with detailed JSON reports.
+
+See [Testing Guide](docs/TESTING.md) for detailed information about:
+- Test organization and categories
+- Using `perl_test_runner.pl` (like `prove`)
+- JUnit/Gradle integration for CI/CD
+- Performance tips and debugging
 
 ## Running the JAR File
 
