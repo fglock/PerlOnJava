@@ -24,6 +24,10 @@ public class ByteCodeSourceMapper {
     private static final ArrayList<String> fileNamePool = new ArrayList<>();
     private static final Map<String, Integer> fileNameToId = new HashMap<>();
 
+    // Pool of subroutine names to optimize memory usage
+    private static final ArrayList<String> subroutineNamePool = new ArrayList<>();
+    private static final Map<String, Integer> subroutineNameToId = new HashMap<>();
+
     /**
      * Gets or creates a unique identifier for a package name.
      *
@@ -47,6 +51,19 @@ public class ByteCodeSourceMapper {
         return fileNameToId.computeIfAbsent(fileName, name -> {
             fileNamePool.add(name);
             return fileNamePool.size() - 1;
+        });
+    }
+
+    /**
+     * Gets or creates a unique identifier for a subroutine name.
+     *
+     * @param subroutineName The name of the subroutine
+     * @return The unique identifier for the subroutine name
+     */
+    private static int getOrCreateSubroutineId(String subroutineName) {
+        return subroutineNameToId.computeIfAbsent(subroutineName, name -> {
+            subroutineNamePool.add(name);
+            return subroutineNamePool.size() - 1;
         });
     }
 
@@ -89,10 +106,17 @@ public class ByteCodeSourceMapper {
         // Get or create the SourceFileInfo object for the file
         SourceFileInfo info = sourceFiles.computeIfAbsent(fileId, SourceFileInfo::new);
 
-        // Map the token index to a LineInfo object containing the line number and package ID
+        // Get current subroutine name (empty string for main code)
+        String subroutineName = ctx.symbolTable.getCurrentSubroutine();
+        if (subroutineName == null) {
+            subroutineName = "";  // Use empty string for main code
+        }
+
+        // Map the token index to a LineInfo object containing the line number, package ID, and subroutine ID
         info.tokenToLineInfo.put(tokenIndex, new LineInfo(
                 ctx.errorUtil.getLineNumber(tokenIndex), // Get the line number for the token
-                getOrCreatePackageId(ctx.symbolTable.getCurrentPackage()) // Get or create the package ID
+                getOrCreatePackageId(ctx.symbolTable.getCurrentPackage()), // Get or create the package ID
+                getOrCreateSubroutineId(subroutineName) // Get or create the subroutine ID
         ));
     }
 
@@ -108,23 +132,31 @@ public class ByteCodeSourceMapper {
 
         SourceFileInfo info = sourceFiles.get(fileId);
         if (info == null) {
-            return new SourceLocation(element.getFileName(), "", tokenIndex);
+            return new SourceLocation(element.getFileName(), "", tokenIndex, null);
         }
 
         // Use TreeMap's floorEntry to find the nearest defined token index
         Map.Entry<Integer, LineInfo> entry = info.tokenToLineInfo.floorEntry(tokenIndex);
         if (entry == null) {
-            return new SourceLocation(element.getFileName(), "", element.getLineNumber());
+            return new SourceLocation(element.getFileName(), "", element.getLineNumber(), null);
         }
 
         LineInfo lineInfo = entry.getValue();
+        
+        // Retrieve subroutine name
+        String subroutineName = subroutineNamePool.get(lineInfo.subroutineNameId());
+        // If subroutine name is empty string (main code), convert to null
+        if (subroutineName != null && subroutineName.isEmpty()) {
+            subroutineName = null;
+        }
         
         // Create a unique location key using tokenIndex instead of line number
         // This prevents false duplicates when multiple statements are on the same line
         var locationKey = new SourceLocation(
                 fileNamePool.get(fileId),
                 packageNamePool.get(lineInfo.packageNameId()),
-                entry.getKey()  // Use the actual tokenIndex as the unique identifier
+                entry.getKey(),  // Use the actual tokenIndex as the unique identifier
+                subroutineName
         );
 
         // Check if this token position is already assigned to a different class
@@ -138,7 +170,8 @@ public class ByteCodeSourceMapper {
         return new SourceLocation(
                 fileNamePool.get(fileId),
                 packageNamePool.get(lineInfo.packageNameId()),
-                lineInfo.lineNumber()
+                lineInfo.lineNumber(),
+                subroutineName
         );
     }
 
@@ -156,15 +189,15 @@ public class ByteCodeSourceMapper {
     }
 
     /**
-     * Associates a line number with its package context.
+     * Associates a line number with its package context and subroutine name.
      */
-    private record LineInfo(int lineNumber, int packageNameId) {
+    private record LineInfo(int lineNumber, int packageNameId, int subroutineNameId) {
     }
 
     /**
      * Represents a location in the source code, including file name,
-     * package name, and line number.
+     * package name, line number, and subroutine name.
      */
-    public record SourceLocation(String sourceFileName, String packageName, int lineNumber) {
+    public record SourceLocation(String sourceFileName, String packageName, int lineNumber, String subroutineName) {
     }
 }

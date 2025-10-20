@@ -139,10 +139,6 @@ Categorize by priority:
    cp perl5/ext/File-Find/t/*.t src/test/resources/ext/File-Find/t/
    ```
 
-4. **Update test runner:**
-   - Add new test paths to `perl_test_runner.pl`
-   - Or implement automatic test discovery
-
 5. **Verify:**
    ```bash
    ./jperl src/test/resources/lib/Module.t
@@ -223,81 +219,20 @@ src/test/resources/        # Test files
               └── find.t
 ```
 
-#### 3.2 Alternative: Mirror perl5/ Structure
-
-```
-src/main/perl/
-  ├── lib/                 # From perl5/lib/
-  ├── ext/                 # From perl5/ext/
-  │   └── File-Find/
-  │       └── lib/File/Find.pm
-  └── dist/                # From perl5/dist/
-      └── Storable/
-          └── lib/Storable.pm
-
-src/test/resources/
-  ├── unit/                # PerlOnJava-specific tests
-  ├── lib/                 # Tests from perl5/lib/
-  ├── ext/                 # Tests from perl5/ext/
-  └── dist/                # Tests from perl5/dist/
-```
-
-**Pros:** Maintains standard Perl structure, easier to sync with upstream
-**Cons:** More complex directory structure
-
 ### Phase 4: Test Infrastructure
-
-#### 4.1 Extend Test Runner
-
-Update `perl_test_runner.pl` to discover tests from new locations:
-
-```perl
-# Add to test discovery
-my @test_dirs = (
-    't',                           # Core Perl tests (op/, re/, io/, etc.)
-    'src/test/resources/unit',     # PerlOnJava unit tests
-    'src/test/resources/lib',      # lib/ module tests
-    'src/test/resources/ext',      # ext/ module tests
-    'src/test/resources/dist',     # dist/ module tests
-    'src/test/resources/cpan',     # cpan/ module tests
-);
-
-# Scan for *.t files recursively
-for my $dir (@test_dirs) {
-    next unless -d $dir;
-    find_tests_recursive($dir);
-}
-```
-
-#### 4.2 Test Execution Context
-
-Ensure proper `@INC` setup for module tests:
-
-```perl
-# For lib/ tests
-BEGIN {
-    unshift @INC, 'src/main/perl/lib';
-}
-
-# For ext/ tests
-BEGIN {
-    unshift @INC, 'src/main/perl/lib';
-    unshift @INC, 'src/main/perl/ext/Module-Name/lib';
-}
-```
 
 ### Phase 5: Automation
 
 #### 5.1 Migration Script
 
-Create `scripts/migrate_module.pl`:
+Create `dev/.../migrate_module.pl`:
 
 ```perl
 #!/usr/bin/env perl
 use strict;
 use warnings;
 
-# Usage: ./scripts/migrate_module.pl Module::Name
+# Usage: .../migrate_module.pl Module::Name
 
 my $module_name = shift or die "Usage: $0 Module::Name\n";
 

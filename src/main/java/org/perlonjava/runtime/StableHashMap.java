@@ -1,17 +1,21 @@
 package org.perlonjava.runtime;
 
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * StableHashMap is a HashMap that maintains its capacity after growth.
+ * StableHashMap is a LinkedHashMap that maintains insertion order and capacity after growth.
  * Once the map has grown to accommodate elements, it doesn't shrink back
  * even when elements are removed. This mimics Perl's hash behavior.
+ * <p>
+ * Uses LinkedHashMap to maintain insertion order, providing deterministic iteration
+ * order which is important for compatibility with Perl code that relies on
+ * consistent hash key ordering (e.g., when sorted).
  * <p>
  * This optimization avoids repeated resizing when elements are frequently
  * added and removed.
  */
-public class StableHashMap<K, V> extends HashMap<K, V> {
+public class StableHashMap<K, V> extends LinkedHashMap<K, V> {
     private int maxCapacityReached = 16;  // Track the maximum capacity we've grown to
     private int maxSizeReached = 0;       // Track the maximum number of elements we've had
 

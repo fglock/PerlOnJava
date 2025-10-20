@@ -45,14 +45,14 @@ public class Time {
     }
 
     /**
-     * Returns a list of CPU time statistics for the current thread.
-     * The list contains user CPU time and system CPU time in seconds.
+     * Returns CPU time statistics for the current thread.
+     * In list context, returns (user, system, cuser, csys) times in seconds.
+     * In scalar context, returns only the user CPU time in seconds.
      *
-     * @return a RuntimeList containing user and system CPU time.
+     * @param ctx the context (RuntimeContextType.SCALAR or RuntimeContextType.LIST)
+     * @return a RuntimeScalar (scalar context) or RuntimeList (list context) containing CPU time
      */
-    public static RuntimeList times() {
-        RuntimeList res = new RuntimeList();
-
+    public static RuntimeBase times(int ctx) {
         ThreadMXBean bean = ManagementFactory.getThreadMXBean();
         long cpu = bean.isCurrentThreadCpuTimeSupported() ?
                 bean.getCurrentThreadCpuTime() : 0L;
@@ -60,11 +60,21 @@ public class Time {
                 bean.getCurrentThreadUserTime() : 0L;
         long system = cpu - user;
 
-        res.add(user / 1.0E9); // user CPU time
-        res.add(system / 1.0E9); // System CPU time
-        res.add(0); // we don't have this information
-        res.add(0); // we don't have this information
-        return res;
+        double userTime = user / 1.0E9;  // user CPU time in seconds
+        double systemTime = system / 1.0E9;  // system CPU time in seconds
+
+        if (ctx == RuntimeContextType.SCALAR) {
+            // In scalar context, return just the user CPU time
+            return new RuntimeScalar(userTime);
+        } else {
+            // In list context, return all four values
+            RuntimeList res = new RuntimeList();
+            res.add(userTime);  // user CPU time
+            res.add(systemTime);  // system CPU time
+            res.add(0);  // child user CPU time (not available in Java)
+            res.add(0);  // child system CPU time (not available in Java)
+            return res;
+        }
     }
 
     /**
