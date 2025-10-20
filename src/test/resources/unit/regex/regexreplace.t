@@ -51,35 +51,30 @@ $string = "Hello World\n";
 $pattern = qr/\n/;
 $replacement = "\\n";
 $substituted = $string =~ s/$pattern/$replacement/r;
-print "not " if $substituted ne "Hello World\\n"; say 'ok # \n becomes \\\\n with backslash';
+ok($substituted eq "Hello World\\n", '\\n becomes \\\\n with backslash');
 
 ###################
 # Tests for /r modifier bug
 
-# Test 8: /r modifier with no match should return original string
+# /r modifier with no match should return original string
 $string = "Hello World";
 $substituted = $string =~ s/foo/bar/r;
-print "not " if $substituted ne "Hello World";
-say "ok 8 # s///r with no match returns original: got [$substituted]";
+ok($substituted eq "Hello World", "s///r with no match returns original: got [$substituted]");
 
-# Test 9: /r modifier with pattern that doesn't match
+# /r modifier with pattern that doesn't match
 $string = "/[[=foo=]]/";
 $substituted = $string =~ s/ default_ (on | off) //rx;
-print "not " if $substituted ne "/[[=foo=]]/";
-say "ok 9 # s///r with non-matching pattern returns original: got [$substituted]";
+ok($substituted eq "/[[=foo=]]/", "s///r with non-matching pattern returns original: got [$substituted]");
 
-# Test 10: /r modifier preserves original string
+# /r modifier preserves original string
 $string = "test123";
 $substituted = $string =~ s/123/456/r;
-print "not " if $string ne "test123";
-say "ok 10 # s///r preserves original string: [$string]";
-print "not " if $substituted ne "test456";
-say "ok 11 # s///r returns modified string: [$substituted]";
+ok($string eq "test123", "s///r preserves original string: [$string]");
+ok($substituted eq "test456", "s///r returns modified string: [$substituted]");
 
-# Test 12: Empty pattern with /r
+# Empty pattern with /r
 $string = "test";
 $substituted = $string =~ s/nomatch//r;
-print "not " if $substituted ne "test";
-say "ok 12 # s///r with non-matching empty replacement returns original: got [$substituted]";
+ok($substituted eq "test", "s///r with non-matching empty replacement returns original: got [$substituted]");
 
 done_testing();
