@@ -1,8 +1,7 @@
 use strict;
+use Test::More;
 use warnings;
 use feature 'say';
-
-print "1..12\n";
 
 ###################
 # Perl Possessive Quantifier Tests
@@ -79,3 +78,4 @@ $pattern = qr/.*+fox/;  # Fails - possessive .* takes everything
 $match = $string =~ $pattern;
 print "not " if $match; say "ok 12 # '...fox...' does not match '.*+fox'";
 
+done_testing();

@@ -1,8 +1,7 @@
 use feature 'say';
 use strict;
+use Test::More;
 use warnings;
-
-print "1..11\n";
 
 {
     package NotHolder;
@@ -32,25 +31,20 @@ my $true_obj = NotHolder->new(1);
 my $false_obj = NotHolder->new(0);
 
 # Test direct negation
-print "not " unless !$true_obj->as_bool() == 0;
-say "ok # direct negation of true value works";
+ok(!$true_obj->as_bool() == 0, 'direct negation of true value works');
 
-print "not " unless !$false_obj->as_bool() == 1;
-say "ok # direct negation of false value works";
+ok(!$false_obj->as_bool() == 1, 'direct negation of false value works');
 
 # Test overloaded negation operator
 my $negated_true = !$true_obj;
-print "not " if $negated_true->as_bool();
-say "ok # negation operator works on true object";
+ok(!($negated_true->as_bool()), 'negation operator works on true object');
 
 my $negated_false = !$false_obj;
-print "not " unless $negated_false->as_bool();
-say "ok # negation operator works on false object";
+ok($negated_false->as_bool(), 'negation operator works on false object');
 
 # Test double negation
 my $double_neg = !!$true_obj;
-print "not " unless $double_neg->as_bool();
-say "ok # double negation returns to original value";
+ok($double_neg->as_bool(), 'double negation returns to original value');
 
 # Test in conditional contexts
 if (!$true_obj) {
@@ -60,22 +54,19 @@ say "ok # negation works in if condition";
 
 # Test chained negation
 my $triple_neg = !!!$true_obj;
-print "not " if $triple_neg->as_bool();
-say "ok # triple negation works";
+ok(!($triple_neg->as_bool()), 'triple negation works');
 
 # Test negation in boolean expressions
-print "not " unless (!$true_obj || $true_obj);
-say "ok # negation works in OR expression";
+ok((!$true_obj || $true_obj), 'negation works in OR expression');
 
-print "not " if (!$true_obj && $true_obj);
-say "ok # negation works in AND expression";
+ok(!((!$true_obj && $true_obj)), 'negation works in AND expression');
 
 # Test negation with comparison operators
-print "not " unless !$false_obj == !$false_obj;
-say "ok # negated values compare correctly";
+ok(!$false_obj == !$false_obj, 'negated values compare correctly');
 
 # Test in array context
 my @objects = (!$true_obj, !$false_obj);
 print "not " if $objects[0]->as_bool();
-print "not " unless $objects[1]->as_bool();
-say "ok # negation works in array context";
+ok($objects[1]->as_bool(), 'negation works in array context');
+
+done_testing();

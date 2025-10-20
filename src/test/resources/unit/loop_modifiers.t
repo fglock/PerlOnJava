@@ -1,8 +1,7 @@
 use feature 'say';
 use strict;
+use Test::More;
 use warnings;
-
-print "1..5\n";
 
 ###################
 # `next` Tests with `do ... while ...`
@@ -32,8 +31,7 @@ $next_do_while_count = 0;
         next if $next_do_while_count == 2;    # Skip when count is 2
     } while ( $next_do_while_count < 4 );
 }
-print "not " if $next_do_while_count != 2;
-say "ok # `next` outside a loop";
+ok(!($next_do_while_count != 2), '`next` outside a loop');
 
 ###################
 # `next` Tests with `for` modifier
@@ -41,23 +39,20 @@ say "ok # `next` outside a loop";
 my $next_for_count = 0;
 $next_for_count++ for 1 .. 3;
 $next_for_count == 2 && next for 1 .. 3;    # Skip when count is 2
-print "not " if $next_for_count != 3;
-say "ok # `next` in `for` modifier";
-
+ok(!($next_for_count != 3), '`next` in `for` modifier');
 
 ###################
 # `while` loop
 
 my $while_mod_count = 0;
 $while_mod_count++ while 0;     # never executes
-print "not " if $while_mod_count != 0;
-say "ok # `while` loop with statement modifier";
+ok(!($while_mod_count != 0), '`while` loop with statement modifier');
 
 ###################
 # `do-while` loop
 
 $while_mod_count = 0;
 do { $while_mod_count++ } while 0;  # executes once
-print "not " if $while_mod_count != 1;
-say "ok # `do-while` loop with statement modifier executes at least once";
+ok(!($while_mod_count != 1), '`do-while` loop with statement modifier executes at least once');
 
+done_testing();

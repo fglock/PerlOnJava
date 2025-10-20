@@ -1,7 +1,6 @@
 use strict;
+use Test::More;
 use feature 'say';
-
-print "1..10\n";
 
 ###################
 # Perl @- and @+ Operator Tests
@@ -10,7 +9,7 @@ print "1..10\n";
 my $string = "Hello World";
 my $pattern = qr/(World)/;
 my $match = $string =~ $pattern;
-print "not " if !$match; say "ok # 'Hello World' matches 'World'";
+ok($match, '\'Hello World\' matches \'World\'');
 
 # Test @- and @+ arrays for start and end positions
 if ($match) {
@@ -25,7 +24,7 @@ if ($match) {
 $string = "Hello beautiful World";
 $pattern = qr/(beautiful) (World)/;
 $match = $string =~ $pattern;
-print "not " if !$match; say "ok # 'Hello beautiful World' matches 'beautiful World'";
+ok($match, '\'Hello beautiful World\' matches \'beautiful World\'');
 
 # Test @- and @+ for multiple capture groups
 if ($match) {
@@ -43,7 +42,7 @@ if ($match) {
 $string = "Just a simple string";
 $pattern = qr/simple/;
 $match = $string =~ $pattern;
-print "not " if !$match; say "ok # 'Just a simple string' matches 'simple'";
+ok($match, '\'Just a simple string\' matches \'simple\'');
 
 # Test @- and @+ with no capture groups
 if ($match) {
@@ -55,7 +54,7 @@ if ($match) {
 $string = "No match here";
 $pattern = qr/not_here/;
 $match = $string =~ $pattern;
-print "not " if $match; say "ok # 'No match here' does not match 'not_here'";
+ok(!($match), '\'No match here\' does not match \'not_here\'');
 
 ## # Ensure @- and @+ are not populated when there's no match
 ## if (!$match) {
@@ -63,4 +62,4 @@ print "not " if $match; say "ok # 'No match here' does not match 'not_here'";
 ##     say "ok # @- and @+ are not undef when no match occurs";
 ## }
 
-
+done_testing();

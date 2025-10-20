@@ -1,8 +1,7 @@
 use feature 'say';
 use strict;
+use Test::More;
 use warnings;
-
-print "1..14\n";
 
 # Test classes for overload
 {
@@ -37,63 +36,51 @@ my $false_basic = BoolHolder->new(0);
 my $advanced = AdvancedBool->new(1);
 
 # Test basic boolean overloading
-print "not " unless $basic;
-say "ok # basic boolean overload works (true)";
+ok($basic, 'basic boolean overload works (true)');
 
-print "not " if $false_basic;
-say "ok # basic boolean overload works (false)";
+ok(!($false_basic), 'basic boolean overload works (false)');
 
 # Test inherited and overridden boolean overload
-print "not " if $advanced;
-say "ok # advanced boolean overload with SUPER works";
+ok(!($advanced), 'advanced boolean overload with SUPER works');
 
 # Test explicit boolean conversion
-print "not " unless $basic->as_bool();
-say "ok # explicit boolean conversion works";
+ok($basic->as_bool(), 'explicit boolean conversion works');
 
 # Test in if conditions
 if ($basic) {
-    print "not " unless $basic;
-    say "ok # boolean in if condition works";
+    ok($basic, 'boolean in if condition works');
 }
 
 # Test in logical operations
 my $and_result = $basic && $false_basic;
-print "not " if $and_result;
-say "ok # logical AND works";
+ok(!($and_result), 'logical AND works');
 
 my $or_result = $basic || $false_basic;
-print "not " unless $or_result;
-say "ok # logical OR works";
+ok($or_result, 'logical OR works');
 
 # Test logical NOT operator
-print "not " if !$basic;
-say "ok # logical NOT works with true value";
+ok($basic, 'logical NOT works with true value');
 
-print "not " unless !$false_basic;
-say "ok # logical NOT works with false value";
+ok(!$false_basic, 'logical NOT works with false value');
 
 # Test double negation
-print "not " unless !!$basic;
-say "ok # double negation works";
+ok(!!$basic, 'double negation works');
 
 # Test inheritance
-print "not " if !$advanced->isa('BoolHolder');
-say "ok # inheritance verified";
+ok($advanced->isa('BoolHolder'), 'inheritance verified');
 
 # Test method existence
-print "not " if !$advanced->can('as_bool');
-say "ok # boolean conversion method exists";
+ok($advanced->can('as_bool'), 'boolean conversion method exists');
 
 # Test overload in eval context
 eval {
     my $bool = $basic ? 1 : 0;
 };
-print "not " if $@;
-say "ok # overload works in eval context";
+ok(!($@), 'overload works in eval context');
 
 # Test boolification in array operations
 my @objects = ($basic, $advanced);
 print "not " unless $objects[0];
-print "not " if $objects[1];
-say "ok # boolification works in array operations";
+ok(!($objects[1]), 'boolification works in array operations');
+
+done_testing();

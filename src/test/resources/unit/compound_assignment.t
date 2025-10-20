@@ -15,9 +15,8 @@
 #
 
 use strict;
+use Test::More;
 use feature "say";
-
-print "1..16\n";
 
 ###################
 # Compound Assignment Operators
@@ -25,97 +24,81 @@ print "1..16\n";
 # Addition Assignment
 my $a = 5;
 $a += 3;
-print "not " if $a != 8;
-say "ok # 5 += 3 equals 8";
+ok(!($a != 8), '5 += 3 equals 8');
 
 # Subtraction Assignment
 $a = 10;
 $a -= 2;
-print "not " if $a != 8;
-say "ok # 10 -= 2 equals 8";
+ok(!($a != 8), '10 -= 2 equals 8');
 
 # Multiplication Assignment
 $a = 4;
 $a *= 2;
-print "not " if $a != 8;
-say "ok # 4 *= 2 equals 8";
+ok(!($a != 8), '4 *= 2 equals 8');
 
 # Division Assignment
 $a = 16;
 $a /= 2;
-print "not " if $a != 8;
-say "ok # 16 /= 2 equals 8";
+ok(!($a != 8), '16 /= 2 equals 8');
 
 # Modulus Assignment
 $a = 10;
 $a %= 3;
-print "not " if $a != 1;
-say "ok # 10 %= 3 equals 1";
+ok(!($a != 1), '10 %= 3 equals 1');
 
 # Exponentiation Assignment
 $a = 2;
 $a **= 3;
-print "not " if $a != 8;
-say "ok # 2 **= 3 equals 8";
+ok(!($a != 8), '2 **= 3 equals 8');
 
 # Bitwise AND Assignment
 $a = 12;     # 1100 in binary
 $a &= 10;    # 1010 in binary
-print "not " if $a != 8;
-say "ok # 12 &= 10 equals 8";
+ok(!($a != 8), '12 &= 10 equals 8');
 
 # Bitwise OR Assignment
 $a = 5;      # 0101 in binary
 $a |= 3;     # 0011 in binary
-print "not " if $a != 7;
-say "ok # 5 |= 3 equals 7";
+ok(!($a != 7), '5 |= 3 equals 7');
 
 # Bitwise XOR Assignment
 $a = 5;      # 0101 in binary
 $a ^= 3;     # 0011 in binary
-print "not " if $a != 6;
-say "ok # 5 ^= 3 equals 6";
+ok(!($a != 6), '5 ^= 3 equals 6');
 
 # Bitwise Shift Left Assignment
 $a = 2;      # 0010 in binary
 $a <<= 2;    # Shift left by 2 bits
-print "not " if $a != 8;
-say "ok # 2 <<= 2 equals 8";
+ok(!($a != 8), '2 <<= 2 equals 8');
 
 # Bitwise Shift Right Assignment
 $a = 8;      # 1000 in binary
 $a >>= 2;    # Shift right by 2 bits
-print "not " if $a != 2;
-say "ok # 8 >>= 2 equals 2";
+ok(!($a != 2), '8 >>= 2 equals 2');
 
 # String Concatenation Assignment
 my $str = "Hello";
 $str .= ", World!";
-print "not " if $str ne "Hello, World!";
-say "ok # 'Hello' .= ', World!' equals 'Hello, World!'";
+ok(!($str ne "Hello, World!"), '\'Hello\' .= \', World!\' equals \'Hello, World!\'');
 
 # Repeat Assignment
 $str = "a";
 $str x= 3;
-print "not " if $str ne "aaa";
-say "ok # 'a' x= 3 equals 'aaa'";
+ok(!($str ne "aaa"), '\'a\' x= 3 equals \'aaa\'');
 
 # Logical AND Assignment
 $a = 1;
 $a &&= 0;
-print "not " if $a != 0;
-say "ok # 1 &&= 0 equals 0";
+ok(!($a != 0), '1 &&= 0 equals 0');
 
 # Logical OR Assignment
 $a = 0;
 $a ||= 1;
-print "not " if $a != 1;
-say "ok # 0 ||= 1 equals 1";
+ok(!($a != 1), '0 ||= 1 equals 1');
 
 # Defined-or Assignment
 my $undefined;
 $undefined //= "default";
-print "not " if $undefined ne "default";
-say "ok # undefined //= 'default' equals 'default'";
+ok(!($undefined ne "default"), 'undefined //= \'default\' equals \'default\'');
 
-
+done_testing();

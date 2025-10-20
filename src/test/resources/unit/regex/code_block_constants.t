@@ -1,11 +1,10 @@
 #!/usr/bin/env perl
 
 use strict;
+use Test::More;
 use warnings;
 
 # Test regex (?{...}) code blocks with constant folding and $^R variable
-
-print "1..19\n";
 
 my $test = 1;
 
@@ -317,3 +316,5 @@ my $test = 1;
 }
 
 # All tests complete
+
+done_testing();

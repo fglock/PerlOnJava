@@ -1,8 +1,7 @@
 use strict;
+use Test::More;
 use warnings;
 use feature 'say';
-
-print "1..2\n";
 
 ###################
 # Perl m?PAT? Operator Tests
@@ -23,3 +22,4 @@ for my $state ( 1, 0 ) {
 # print "not " if !$match;
 # say "ok # After reset: 'apple' found again";
 
+done_testing();
