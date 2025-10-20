@@ -1,4 +1,5 @@
 use strict;
+use Test::More;
 use warnings;
 use feature 'say';
 
@@ -194,3 +195,4 @@ open my $fh, "<", "/etc/passwd" or die "Cannot open file: $!";
 }
 say "ok # filehandle localized";
 
+done_testing();

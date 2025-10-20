@@ -1,12 +1,11 @@
 #!/usr/bin/env perl
 
 use strict;
+use Test::More;
 use warnings;
 
 # Test regex (??{...}) recursive/dynamic patterns
 # These patterns insert a regex at runtime based on code execution
-
-print "1..10\n";
 
 my $test = 1;
 
@@ -222,3 +221,5 @@ my $test = 1;
     }
     $test++;
 }
+
+done_testing();

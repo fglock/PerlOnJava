@@ -1,8 +1,7 @@
 use strict;
+use Test::More;
 use warnings;
 use feature 'say';
-
-print "1..13\n";
 
 ###################
 # Perl Atomic Group Tests
@@ -91,3 +90,4 @@ print "not " if !$match; say "ok 13 # 'abc' matches '(?>ab?)c'";
 #$string = "a" x 100 . "b";
 #$pattern = qr/(?>a*)b/;
 
+done_testing();

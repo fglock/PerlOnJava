@@ -1,8 +1,7 @@
 use feature 'say';
 use strict;
+use Test::More;
 use warnings;
-
-print "1..6\n";
 
 {
     package StringOnly;
@@ -43,28 +42,24 @@ my $str_obj = StringOnly->new(42);
 my $num_obj = NumericOnly->new(42);
 
 # Test StringOnly class - defined string operation
-print "not " if "$str_obj" ne "42";
-say "ok # string overload works";
+ok(!("$str_obj" ne "42"), 'string overload works');
 
 # Test StringOnly class - fallback numeric
-print "not " if (0 + $str_obj) != 42;
-say "ok # numeric fallback works on StringOnly";
+ok(!((0 + $str_obj) != 42), 'numeric fallback works on StringOnly');
 
 # Test NumericOnly class - defined numeric operation
-print "not " if (0 + $num_obj) != 42;
-say "ok # numeric overload works";
+ok(!((0 + $num_obj) != 42), 'numeric overload works');
 
 # Test NumericOnly class - fallback string
 my $num_str = "$num_obj";
-print "not " if $num_str ne "42";
-say "ok # string fallback works on NumericOnly (got: '$num_str')";
+ok(!($num_str ne "42"), 'string fallback works on NumericOnly (got: \'$num_str\')');
 
 # Test in operations
 my $sum = 10 + $str_obj;
-print "not " if $sum != 52;
-say "ok # numeric fallback works in addition";
+ok(!($sum != 52), 'numeric fallback works in addition');
 
 # Test string concatenation
 my $concat = "Value: " . $num_obj;
-print "not " if $concat ne "Value: 42";
-say "ok # string fallback works in concatenation (got: '$concat')";
+ok(!($concat ne "Value: 42"), 'string fallback works in concatenation (got: \'$concat\')');
+
+done_testing();

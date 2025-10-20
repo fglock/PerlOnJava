@@ -1,8 +1,7 @@
 use feature 'say';
 use strict;
+use Test::More;
 use warnings;
-
-print "1..9\n";
 
 # Test classes for overload
 {
@@ -36,44 +35,37 @@ my $basic = NumberHolder->new(42);
 my $advanced = AdvancedNumber->new(100);
 
 # Test basic string overloading
-print "not " if "$basic" ne "Number: 42";
-say "ok # basic string overload works";
+ok(!("$basic" ne "Number: 42"), 'basic string overload works');
 
 # Test inherited and overridden string overload
-print "not " if "$advanced" ne "Advanced Number: 100";
-say "ok # advanced string overload with SUPER works";
+ok(!("$advanced" ne "Advanced Number: 100"), 'advanced string overload with SUPER works');
 
 # Test explicit string conversion
-print "not " if $basic->as_string() ne "Number: 42";
-say "ok # explicit string conversion works";
+ok(!($basic->as_string() ne "Number: 42"), 'explicit string conversion works');
 
 # Test in string concatenation
 my $concat = "Value is: " . $basic;
-print "not " if $concat ne "Value is: Number: 42";
-say "ok # string concatenation works";
+ok(!($concat ne "Value is: Number: 42"), 'string concatenation works');
 
 # Test in interpolation
 my $interpolated = "The value: $advanced";
-print "not " if $interpolated ne "The value: Advanced Number: 100";
-say "ok # string interpolation works";
+ok(!($interpolated ne "The value: Advanced Number: 100"), 'string interpolation works');
 
 # Test inheritance
-print "not " if !$advanced->isa('NumberHolder');
-say "ok # inheritance verified";
+ok($advanced->isa('NumberHolder'), 'inheritance verified');
 
 # Test method existence
-print "not " if !$advanced->can('as_string');
-say "ok # string conversion method exists";
+ok($advanced->can('as_string'), 'string conversion method exists');
 
 # Test overload in eval context
 eval {
     my $str = "$basic";
 };
-print "not " if $@;
-say "ok # overload works in eval context";
+ok(!($@), 'overload works in eval context');
 
 # Test stringification in array join
 my @objects = ($basic, $advanced);
 my $joined = join ", ", @objects;
-print "not " if $joined ne "Number: 42, Advanced Number: 100";
-say "ok # stringification works in join";
+ok(!($joined ne "Number: 42, Advanced Number: 100"), 'stringification works in join');
+
+done_testing();

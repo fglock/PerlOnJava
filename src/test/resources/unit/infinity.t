@@ -1,31 +1,31 @@
 use strict;
+use Test::More;
 use feature 'say';
-
-print "1..8\n";
 
 # Test positive infinity
 my $x = "Inf";
-print "not " if (0 + $x) != "Inf"; say "ok # Positive infinity";
-print "not " if (-$x) != "-Inf"; say "ok # Negative infinity";
-print "not " if (0 - $x) != "-Inf"; say "ok # Negative infinity";
+ok(!((0 + $x) != "Inf"), 'Positive infinity');
+ok(!((-$x) != "-Inf"), 'Negative infinity');
+ok(!((0 - $x) != "-Inf"), 'Negative infinity');
 
 # Test negative infinity
 $x = "-Inf";
-print "not " if (0 + $x) != "-Inf"; say "ok # Negative infinity";
+ok(!((0 + $x) != "-Inf"), 'Negative infinity');
 
 # Test NaN (Not a Number)
 $x = "NaN";
-print "not " if (0 + $x) == (0 + $x); say "ok # NaN (Not a Number)";
+ok(!((0 + $x) == (0 + $x)), 'NaN (Not a Number)');
 
 # Test case-insensitivity for Inf
 $x = "inf";
-print "not " if (0 + $x) != "Inf"; say "ok # Case-insensitive positive infinity";
+ok(!((0 + $x) != "Inf"), 'Case-insensitive positive infinity');
 
 # Test case-insensitivity for -Inf
 $x = "-inf";
-print "not " if (0 + $x) != "-Inf"; say "ok # Case-insensitive negative infinity";
+ok(!((0 + $x) != "-Inf"), 'Case-insensitive negative infinity');
 
 # Test case-insensitivity for NaN
 $x = "nan";
-print "not " if (0 + $x) == (0 + $x); say "ok # Case-insensitive NaN";
+ok(!((0 + $x) == (0 + $x)), 'Case-insensitive NaN');
 
+done_testing();
