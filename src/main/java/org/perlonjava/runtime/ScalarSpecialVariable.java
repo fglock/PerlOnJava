@@ -75,10 +75,11 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
 
     /**
      * Retrieves the RuntimeScalar value of the special variable based on its type.
+     * Made public to allow RuntimeScalar copy constructor to access it.
      *
      * @return The RuntimeScalar value of the special variable, or null if not available.
      */
-    private RuntimeScalar getValueAsScalar() {
+    public RuntimeScalar getValueAsScalar() {
         try {
             RuntimeScalar result = switch (variableId) {
                 case CAPTURE -> {

@@ -66,17 +66,19 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             elementCount++;
         }
         
-        // Warn about references or odd elements
-        if (hasReference) {
-            org.perlonjava.operators.WarnDie.warn(
-                new RuntimeScalar("Reference found where even-sized list expected"),
-                RuntimeScalarCache.scalarEmptyString);
-            return createHashNoWarn(value);
-        } else if (elementCount % 2 != 0) {
-            return createHashInternal(value, "Odd number of elements in hash assignment");
-        } else {
-            return createHashNoWarn(value);
+        // Warn about odd elements, with special message if there are references
+        if (elementCount % 2 != 0) {
+            if (hasReference) {
+                org.perlonjava.operators.WarnDie.warn(
+                    new RuntimeScalar("Reference found where even-sized list expected"),
+                    RuntimeScalarCache.scalarEmptyString);
+            } else {
+                org.perlonjava.operators.WarnDie.warn(
+                    new RuntimeScalar("Odd number of elements in hash assignment"),
+                    RuntimeScalarCache.scalarEmptyString);
+            }
         }
+        return createHashNoWarn(value);
     }
 
     /**
@@ -216,17 +218,19 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                     }
                 }
 
-                // Warn about references or odd elements
-                if (hasReference) {
-                    // If we have a reference, always warn about it
-                    org.perlonjava.operators.WarnDie.warn(
-                        new RuntimeScalar("Reference found where even-sized list expected"),
-                        RuntimeScalarCache.scalarEmptyString);
-                } else if (originalSize % 2 != 0) {
-                    // Only warn about odd elements if no reference
-                    org.perlonjava.operators.WarnDie.warn(
-                        new RuntimeScalar("Odd number of elements in hash assignment"),
-                        RuntimeScalarCache.scalarEmptyString);
+                // Warn about odd elements, with special message if there are references
+                if (originalSize % 2 != 0) {
+                    if (hasReference) {
+                        // If we have a reference and odd elements, warn about reference
+                        org.perlonjava.operators.WarnDie.warn(
+                            new RuntimeScalar("Reference found where even-sized list expected"),
+                            RuntimeScalarCache.scalarEmptyString);
+                    } else {
+                        // Only warn about odd elements if no reference
+                        org.perlonjava.operators.WarnDie.warn(
+                            new RuntimeScalar("Odd number of elements in hash assignment"),
+                            RuntimeScalarCache.scalarEmptyString);
+                    }
                 }
 
                 // Create a new hash from the provided list and replace our elements

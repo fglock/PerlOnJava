@@ -99,6 +99,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public RuntimeScalar(RuntimeScalar scalar) {
+        // Handle special variables that compute their value dynamically
+        if (scalar instanceof ScalarSpecialVariable) {
+            // ScalarSpecialVariable doesn't store value in type/value fields
+            // Instead it computes the value dynamically, so we need to get it
+            scalar = ((ScalarSpecialVariable) scalar).getValueAsScalar();
+        }
+        
         if (scalar.type == TIED_SCALAR) {
             RuntimeScalar temp = scalar.tiedFetch();
             this.type = temp.type;

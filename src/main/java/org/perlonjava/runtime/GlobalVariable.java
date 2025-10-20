@@ -76,22 +76,24 @@ public class GlobalVariable {
      * @return The RuntimeScalar representing the global variable.
      */
     public static RuntimeScalar getGlobalVariable(String key) {
+        // Check if this is a regex capture variable
+        Matcher matcher = regexVariablePattern.matcher(key);
+        if (matcher.matches() && !key.equals("main::0")) {
+            // Regex capture variable like $1
+            // Extract the numeric capture group as a string
+            String capturedNumber = matcher.group(1);
+            // Convert the capture group to an integer
+            int position = Integer.parseInt(capturedNumber);
+            // Always create a NEW instance for capture variables to get current regex match state
+            // Don't cache these because they need to reflect the most recent regex match
+            return new ScalarSpecialVariable(ScalarSpecialVariable.Id.CAPTURE, position);
+        }
+        
+        // For non-capture variables, use caching
         RuntimeScalar var = globalVariables.get(key);
         if (var == null) {
-            // Need to initialize global variable
-            Matcher matcher = regexVariablePattern.matcher(key);
-            if (matcher.matches() && !key.equals("main::0")) {
-                // Regex capture variable like $1
-                // Extract the numeric capture group as a string
-                String capturedNumber = matcher.group(1);
-                // Convert the capture group to an integer
-                int position = Integer.parseInt(capturedNumber);
-                // Initialize the regex capture variable
-                var = new ScalarSpecialVariable(ScalarSpecialVariable.Id.CAPTURE, position);
-            } else {
-                // Normal "non-magic" global variable
-                var = new RuntimeScalar();
-            }
+            // Normal "non-magic" global variable
+            var = new RuntimeScalar();
             globalVariables.put(key, var);
         }
         return var;

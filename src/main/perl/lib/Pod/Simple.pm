@@ -15,7 +15,7 @@ our $VERSION = '3.47';
 
 our @Known_formatting_codes = qw(I B C L E F S U X Z);
 our %Known_formatting_codes = map(($_=>1), @Known_formatting_codes);
-our @Known_directives       = qw(head1 head2 head3 head4 head5 head6 item over back);
+our @Known_directives       = qw(head1 head2 head3 head4 head5 head6 item over back pod begin end for);
 our %Known_directives       = map(($_=>'Plain'), @Known_directives);
 our $NL = $/ unless defined $NL;
 
@@ -419,7 +419,9 @@ sub parse_string_document {
     ) {
       #print(">> $1\n"),
       my $matched_length = length($1) + length($2);
-      $self->parse_lines($1)
+      # Collect lines instead of calling parse_lines directly from within regex loop
+      # This avoids potential issues with jperl's handling of method calls within /g loops
+      push @lines, $1
        if $matched_length
         or pos($line_group) != length($line_group);
        # I.e., unless it's a zero-length "empty line" at the very
@@ -438,6 +440,10 @@ sub parse_string_document {
         }
       }
     }
+  }
+  # Now call parse_lines for each collected line
+  foreach my $line (@lines) {
+    $self->parse_lines($line);
   }
   $self->parse_lines(undef); # to signal EOF
   return $self;

@@ -107,8 +107,16 @@ public class FileHandle {
         // Handle scalar variable file handles
         // Modern Perl idiom: open my $fh, '<', 'filename'; print $fh "text";
         else if (token.text.equals("$")) {
-            // Parse the scalar variable
-            fileHandle = ParsePrimary.parsePrimary(parser);
+            // When bracketed like {$fh} or {$obj{key}}, parse as a full expression
+            // This allows complex expressions like {$_[0]{output_fh}}
+            if (hasBracket) {
+                // Parse the full expression inside the braces, stopping at }
+                // Use precedence for comma to allow most expressions but stop at }
+                fileHandle = parser.parseExpression(parser.getPrecedence(","));
+            } else {
+                // Parse the scalar variable without postfix operators initially
+                fileHandle = ParsePrimary.parsePrimary(parser);
+            }
 
             // When not bracketed, we need to disambiguate between:
             // - print $fh "text";  # $fh is a file handle
