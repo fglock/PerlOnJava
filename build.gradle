@@ -110,9 +110,12 @@ allprojects {
     }
 }
 
-// JUnit platform configuration
+// JUnit platform configuration - default test task runs only unit tests
 test {
-    useJUnitPlatform()
+    useJUnitPlatform {
+        includeTags 'unit'
+        excludeTags 'full'
+    }
 }
 
 // Fast unit tests only (tests in unit/ directory)
