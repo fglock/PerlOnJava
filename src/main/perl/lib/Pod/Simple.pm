@@ -15,7 +15,7 @@ our $VERSION = '3.47';
 
 our @Known_formatting_codes = qw(I B C L E F S U X Z);
 our %Known_formatting_codes = map(($_=>1), @Known_formatting_codes);
-our @Known_directives       = qw(head1 head2 head3 head4 head5 head6 item over back pod begin end for);
+our @Known_directives       = qw(head1 head2 head3 head4 head5 head6 item over back);
 our %Known_directives       = map(($_=>'Plain'), @Known_directives);
 our $NL = $/ unless defined $NL;
 
@@ -418,32 +418,12 @@ sub parse_string_document {
       #m/([^\n\r]*)((?:\r?\n)?)/g
     ) {
       #print(">> $1\n"),
-      my $matched_length = length($1) + length($2);
-      # Collect lines instead of calling parse_lines directly from within regex loop
-      # This avoids potential issues with jperl's handling of method calls within /g loops
-      push @lines, $1
-       if $matched_length
+      $self->parse_lines($1)
+       if length($1) or length($2)
         or pos($line_group) != length($line_group);
        # I.e., unless it's a zero-length "empty line" at the very
        #  end of "foo\nbar\n" (i.e., between the \n and the EOS).
-      
-      # Fix for jperl: Protection against infinite loop when regex /g matches empty string
-      # In Perl5, the /g flag auto-advances pos() when match is zero-length, but jperl doesn't.
-      # When we match empty at the end of string, break to avoid infinite loop.
-      if ($matched_length == 0) {
-        if (pos($line_group) < length($line_group)) {
-          # Empty match in middle of string - manually advance pos
-          pos($line_group) = pos($line_group) + 1;
-        } else {
-          # Empty match at end of string - stop matching
-          last;
-        }
-      }
     }
-  }
-  # Now call parse_lines for each collected line
-  foreach my $line (@lines) {
-    $self->parse_lines($line);
   }
   $self->parse_lines(undef); # to signal EOF
   return $self;
