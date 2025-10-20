@@ -8,7 +8,7 @@ my $epsilon = 1e-9;
 
 # Test single constant
 use constant PI => 4 * atan2(1, 1);
-print "not " if abs(PI - 3.141592653589793) > $epsilon; say "ok # PI constant <" . PI . ">";
+ok(abs(PI - 3.141592653589793) <= $epsilon, "PI constant <" . PI . ">");
 
 # Test multiple constants
 use constant {

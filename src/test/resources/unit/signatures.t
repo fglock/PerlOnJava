@@ -83,8 +83,7 @@ ok(!(prefix_only('test', a => 1, b => 2) ne 'test'), 'Nameless slurpy hash');
 sub multi_optional ($a = 1, $b = 2, $c = 3) {
     return $a + $b + $c;
 }
-print "not " if multi_optional(10) != 15;  # 10 + 2 + 3
-say "ok # Multiple optional parameters";
+ok(multi_optional(10) == 15, 'Multiple optional parameters');  # 10 + 2 + 3
 
 # Attribute with signature
 sub marked :lvalue ($x) {
