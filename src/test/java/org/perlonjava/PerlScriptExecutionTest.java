@@ -49,23 +49,24 @@ public class PerlScriptExecutionTest {
      * @throws IOException if an I/O error occurs while accessing the resources.
      */
     static Stream<String> providePerlScripts() throws IOException {
-        // Locate the specific resource directory containing Perl scripts (now in unit/ subdirectory)
+        // Locate the test resources directory by finding a known resource first
         URL resourceUrl = PerlScriptExecutionTest.class.getClassLoader().getResource("unit/array.t");
         if (resourceUrl == null) {
             throw new IOException("Resource directory not found");
         }
         Path resourcePath;
         try {
-            resourcePath = Paths.get(resourceUrl.toURI()).getParent();
+            // Get the parent directory twice to get to src/test/resources root
+            resourcePath = Paths.get(resourceUrl.toURI()).getParent().getParent();
         } catch (URISyntaxException e) {
             throw new RuntimeException(e);
         }
 
-        // Return a stream of filenames for all Perl scripts in the directory and subdirectories
+        // Return a stream of filenames for all Perl scripts in the entire resources directory and subdirectories
         return Files.walk(resourcePath)
                 .filter(path -> path.toString().endsWith(".t"))
                 .map(resourcePath::relativize) // Get the relative path to ensure subdirectory structure is preserved
-                .map(path -> "unit/" + path.toString()); // Prepend unit/ to maintain correct resource path
+                .map(Path::toString); // Convert to string path
     }
 
     /**
