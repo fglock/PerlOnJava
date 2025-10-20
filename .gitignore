@@ -11,6 +11,7 @@ target/
 .gradle/
 .java-version
 build/
+bin/
 gradle/
 gradlew
 gradlew.bat
@@ -40,6 +41,7 @@ test_*.pl
 test_*.tmp
 pack_test_*.log
 out.json
+test_results.json
 logs/
 .perlonjava_env_ready
 *.diff

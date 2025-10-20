@@ -1,4 +1,4 @@
-.PHONY: all clean test build run wrapper dev
+.PHONY: all clean test test-unit test-all test-gradle test-gradle-unit test-gradle-all build run wrapper dev
 
 all: build
 
@@ -21,11 +21,38 @@ else
 	./gradlew clean compileJava installDist
 endif
 
-test: wrapper
+# Default test target - fast unit tests using perl_test_runner.pl
+test: test-unit
+
+# Fast unit tests only (from src/test/resources/unit/ directory)
+# Uses perl_test_runner.pl with TAP output and parallel execution
+test-unit:
+	@echo "Running fast unit tests..."
+	perl dev/tools/perl_test_runner.pl --jobs 8 --timeout 10 src/test/resources/unit
+
+# Comprehensive tests including all modules (slower)
+# Runs all tests from src/test/resources/
+test-all:
+	@echo "Running comprehensive test suite..."
+	perl dev/tools/perl_test_runner.pl --jobs 8 --timeout 30 --output test_results.json src/test/resources
+
+# Alternative: Run tests using JUnit/Gradle (for CI/CD integration)
+test-gradle: test-gradle-unit
+
+# Fast unit tests via Gradle/JUnit
+test-gradle-unit: wrapper
 ifeq ($(OS),Windows_NT)
-	gradlew.bat test --rerun-tasks
+	gradlew.bat testUnit --rerun-tasks
 else
-	./gradlew test --rerun-tasks
+	./gradlew testUnit --rerun-tasks
+endif
+
+# All tests via Gradle/JUnit
+test-gradle-all: wrapper
+ifeq ($(OS),Windows_NT)
+	gradlew.bat testAll --rerun-tasks
+else
+	./gradlew testAll --rerun-tasks
 endif
 
 clean: wrapper

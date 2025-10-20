@@ -2,6 +2,7 @@ package org.perlonjava;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -49,6 +50,28 @@ public class PerlScriptExecutionTest {
      * @throws IOException if an I/O error occurs while accessing the resources.
      */
     static Stream<String> providePerlScripts() throws IOException {
+        return getPerlScripts(false);
+    }
+
+    /**
+     * Provides a stream of unit test Perl script filenames (only from unit/ directory).
+     * These are fast-running tests.
+     *
+     * @return a Stream of unit test Perl script filenames.
+     * @throws IOException if an I/O error occurs while accessing the resources.
+     */
+    static Stream<String> provideUnitTestScripts() throws IOException {
+        return getPerlScripts(true);
+    }
+
+    /**
+     * Helper method to get Perl scripts, optionally filtered to unit tests only.
+     *
+     * @param unitOnly if true, only return scripts from unit/ directory
+     * @return a Stream of Perl script filenames.
+     * @throws IOException if an I/O error occurs while accessing the resources.
+     */
+    private static Stream<String> getPerlScripts(boolean unitOnly) throws IOException {
         // Locate the test resources directory by finding a known resource first
         URL resourceUrl = PerlScriptExecutionTest.class.getClassLoader().getResource("unit/array.t");
         if (resourceUrl == null) {
@@ -62,10 +85,21 @@ public class PerlScriptExecutionTest {
             throw new RuntimeException(e);
         }
 
-        // Return a stream of filenames for all Perl scripts in the entire resources directory and subdirectories
-        return Files.walk(resourcePath)
-                .filter(path -> path.toString().endsWith(".t"))
-                .map(resourcePath::relativize) // Get the relative path to ensure subdirectory structure is preserved
+        // Return a stream of filenames for Perl scripts
+        Stream<Path> pathStream = Files.walk(resourcePath)
+                .filter(path -> path.toString().endsWith(".t"));
+        
+        if (unitOnly) {
+            // Only include tests from the unit/ directory
+            pathStream = pathStream.filter(path -> {
+                Path relative = resourcePath.relativize(path);
+                String pathStr = relative.toString();
+                return pathStr.startsWith("unit/") || pathStr.startsWith("unit\\");
+            });
+        }
+        
+        return pathStream
+                .map(resourcePath::relativize) // Get the relative path
                 .map(Path::toString); // Convert to string path
     }
 
@@ -113,15 +147,41 @@ public class PerlScriptExecutionTest {
     }
 
     /**
-     * Parameterized test that executes Perl scripts and verifies their output.
+     * Parameterized test that executes unit test Perl scripts and verifies their output.
+     * Only runs tests from the unit/ directory (fast tests).
      * The test fails if the output contains "not ok" at the beginning of a line,
      * which indicates a failed test in TAP (Test Anything Protocol) format.
      *
      * @param filename the name of the Perl script file to be executed.
      */
-    @ParameterizedTest(name = "Test using resource file: {0}")
+    @ParameterizedTest(name = "Unit test: {0}")
+    @MethodSource("provideUnitTestScripts")
+    @Tag("unit")
+    void testUnitTests(String filename) {
+        executeTest(filename);
+    }
+
+    /**
+     * Parameterized test that executes all Perl scripts and verifies their output.
+     * Runs all tests including comprehensive module tests (slower).
+     * The test fails if the output contains "not ok" at the beginning of a line,
+     * which indicates a failed test in TAP (Test Anything Protocol) format.
+     *
+     * @param filename the name of the Perl script file to be executed.
+     */
+    @ParameterizedTest(name = "Full test: {0}")
     @MethodSource("providePerlScripts")
-    void testUsingResourceFile(String filename) {
+    @Tag("full")
+    void testAllTests(String filename) {
+        executeTest(filename);
+    }
+
+    /**
+     * Executes a single Perl test file and verifies the output.
+     *
+     * @param filename the name of the Perl script file to be executed.
+     */
+    private void executeTest(String filename) {
         // Load the Perl script as an InputStream
         InputStream inputStream = getClass().getClassLoader().getResourceAsStream(filename);
         assertNotNull(inputStream, "Resource file not found: " + filename);

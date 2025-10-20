@@ -115,6 +115,31 @@ test {
     useJUnitPlatform()
 }
 
+// Fast unit tests only (tests in unit/ directory)
+tasks.register('testUnit', Test) {
+    description = 'Runs fast unit tests only (from unit/ directory)'
+    group = 'verification'
+    
+    useJUnitPlatform {
+        includeTags 'unit'
+        excludeTags 'full'
+    }
+    
+    shouldRunAfter test
+}
+
+// All tests including comprehensive module tests
+tasks.register('testAll', Test) {
+    description = 'Runs all tests including comprehensive module tests'
+    group = 'verification'
+    
+    useJUnitPlatform {
+        includeTags 'full'
+    }
+    
+    shouldRunAfter testUnit
+}
+
 // Shadow JAR configuration for creating standalone executable
 shadowJar {
     archiveClassifier.set('')
