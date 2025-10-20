@@ -64,7 +64,7 @@ public class Encode extends PerlModuleBase {
         Encode encode = new Encode();
         encode.initializeExporter();
         encode.defineExport("EXPORT", "encode", "decode", "encode_utf8", "decode_utf8",
-                "is_utf8", "find_encoding", "from_to");
+                "is_utf8", "find_encoding", "from_to", "resolve_alias", "encodings");
         try {
             encode.registerMethod("encode", null);
             encode.registerMethod("decode", null);
@@ -73,6 +73,8 @@ public class Encode extends PerlModuleBase {
             encode.registerMethod("is_utf8", null);
             encode.registerMethod("find_encoding", null);
             encode.registerMethod("from_to", null);
+            encode.registerMethod("resolve_alias", null);
+            encode.registerMethod("encodings", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Encode method: " + e.getMessage());
         }
@@ -250,6 +252,55 @@ public class Encode extends PerlModuleBase {
         } catch (Exception e) {
             throw new RuntimeException("Cannot convert from " + fromEnc + " to " + toEnc + ": " + e.getMessage());
         }
+    }
+
+    /**
+     * resolve_alias($encoding_name)
+     * Resolves an encoding alias to its canonical name.
+     * Returns the canonical encoding name if found, undef otherwise.
+     */
+    public static RuntimeList resolve_alias(RuntimeArray args, int ctx) {
+        if (args.isEmpty()) {
+            return scalarUndef.getList();
+        }
+
+        String encodingName = args.get(0).toString();
+
+        // Check if it's an alias we know
+        Charset charset = CHARSET_ALIASES.get(encodingName);
+        if (charset != null) {
+            return new RuntimeScalar(charset.name()).getList();
+        }
+
+        // Try to get charset by name and return its canonical name
+        try {
+            charset = Charset.forName(encodingName);
+            return new RuntimeScalar(charset.name()).getList();
+        } catch (IllegalCharsetNameException | UnsupportedCharsetException e) {
+            // Return undef if encoding not found
+            return scalarUndef.getList();
+        }
+    }
+
+    /**
+     * encodings([$type])
+     * Returns a list of all available encoding names.
+     * Optional $type parameter can be ":all" to include all encodings.
+     */
+    public static RuntimeList encodings(RuntimeArray args, int ctx) {
+        RuntimeArray result = new RuntimeArray();
+        
+        // Add all our known aliases
+        for (String alias : CHARSET_ALIASES.keySet()) {
+            result.push(new RuntimeScalar(alias));
+        }
+        
+        // Add all available charsets from Java
+        for (Charset charset : Charset.availableCharsets().values()) {
+            result.push(new RuntimeScalar(charset.name()));
+        }
+        
+        return result.getList();
     }
 
     /**
