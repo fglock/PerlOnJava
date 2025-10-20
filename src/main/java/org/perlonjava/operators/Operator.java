@@ -279,7 +279,11 @@ public class Operator {
         var lvalue = new RuntimeSubstrLvalue((RuntimeScalar) args[0], result, originalOffset, originalLength);
 
         if (replacement != null) {
+            // When replacement is provided, save the extracted substring before modifying
+            String extractedSubstring = result;
             lvalue.set(replacement);
+            // Return the extracted substring, not the lvalue (which now contains the replacement)
+            return new RuntimeScalar(extractedSubstring);
         }
 
         return lvalue;

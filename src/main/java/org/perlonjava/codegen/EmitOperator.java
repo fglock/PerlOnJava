@@ -553,7 +553,9 @@ public class EmitOperator {
     }
 
     static void handleTimeRelatedOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
-        node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
+        if (node.operand != null) {
+            node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
+        }
         emitterVisitor.pushCallContext();
         emitOperator(node, emitterVisitor);
     }

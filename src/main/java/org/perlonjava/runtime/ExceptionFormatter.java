@@ -57,11 +57,12 @@ public class ExceptionFormatter {
                 // Artificial caller stack entry created at `use` statement
                 var callerInfo = CallerStack.peek(callerStackIndex);
                 if (callerInfo != null) {
-                    stackTrace.add(new ArrayList<>(List.of(
-                            callerInfo.packageName(),
-                            callerInfo.filename(),
-                            String.valueOf(callerInfo.line())
-                    )));
+                    var entry = new ArrayList<String>();
+                    entry.add(callerInfo.packageName());
+                    entry.add(callerInfo.filename());
+                    entry.add(String.valueOf(callerInfo.line()));
+                    entry.add(null);  // No subroutine name available for use statements
+                    stackTrace.add(entry);
                     lastFileName = callerInfo.filename();
                     callerStackIndex++;
                 }
@@ -70,11 +71,20 @@ public class ExceptionFormatter {
                 // parseStackTraceElement returns null if location already seen in a different class
                 var loc = ByteCodeSourceMapper.parseStackTraceElement(element, locationToClassName);
                 if (loc != null) {
-                    stackTrace.add(new ArrayList<>(List.of(
-                            loc.packageName(),
-                            loc.sourceFileName(),
-                            String.valueOf(loc.lineNumber())
-                    )));
+                    // Get subroutine name from the source location (now preserved in bytecode metadata)
+                    String subName = loc.subroutineName();
+                    
+                    // Prepend package name if subroutine name doesn't already include it
+                    if (subName != null && !subName.isEmpty() && !subName.contains("::")) {
+                        subName = loc.packageName() + "::" + subName;
+                    }
+                    
+                    var entry = new ArrayList<String>();
+                    entry.add(loc.packageName());
+                    entry.add(loc.sourceFileName());
+                    entry.add(String.valueOf(loc.lineNumber()));
+                    entry.add(subName);  // Add subroutine name
+                    stackTrace.add(entry);
                     lastFileName = loc.sourceFileName();
                 }
             }
@@ -83,11 +93,12 @@ public class ExceptionFormatter {
         // Add the outermost artificial stack entry if different from last file
         var callerInfo = CallerStack.peek(callerStackIndex);
         if (callerInfo != null && !lastFileName.equals(callerInfo.filename())) {
-            stackTrace.add(new ArrayList<>(List.of(
-                    callerInfo.packageName(),
-                    callerInfo.filename(),
-                    String.valueOf(callerInfo.line())
-            )));
+            var entry = new ArrayList<String>();
+            entry.add(callerInfo.packageName());
+            entry.add(callerInfo.filename());
+            entry.add(String.valueOf(callerInfo.line()));
+            entry.add(null);  // No subroutine name available
+            stackTrace.add(entry);
         }
         return stackTrace;
     }

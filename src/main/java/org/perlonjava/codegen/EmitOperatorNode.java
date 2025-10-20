@@ -83,10 +83,10 @@ public class EmitOperatorNode {
                     EmitOperator.handleUnaryDefaultCase(node, node.operator, emitterVisitor);
 
             // Miscellaneous operators
-            case "time", "times" -> EmitOperator.handleTimeOperator(emitterVisitor, node);
+            case "time" -> EmitOperator.handleTimeOperator(emitterVisitor, node);
             case "wantarray" -> EmitOperator.handleWantArrayOperator(emitterVisitor, node);
             case "undef" -> EmitOperator.handleUndefOperator(emitterVisitor, node);
-            case "gmtime", "localtime", "caller", "reset", "select" ->
+            case "gmtime", "localtime", "caller", "reset", "select", "times" ->
                     EmitOperator.handleTimeRelatedOperator(emitterVisitor, node);
             case "prototype" -> EmitOperator.handlePrototypeOperator(emitterVisitor, node);
             case "require" -> EmitOperator.handleRequireOperator(emitterVisitor, node);

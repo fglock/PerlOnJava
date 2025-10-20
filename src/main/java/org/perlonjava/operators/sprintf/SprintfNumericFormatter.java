@@ -306,7 +306,8 @@ public class SprintfNumericFormatter {
         if (cleanFlags.contains("-")) format.append("-");
         if (cleanFlags.contains("+")) format.append("+");
         if (cleanFlags.contains(" ")) format.append(" ");
-        if (cleanFlags.contains("0")) format.append("0");
+        // Only append '0' flag if width > 0, otherwise Java's formatter treats it as invalid
+        if (cleanFlags.contains("0") && width > 0) format.append("0");
         if (cleanFlags.contains("#")) format.append("#");
 
         if (width > 0) format.append(width);
@@ -343,7 +344,8 @@ public class SprintfNumericFormatter {
         if (cleanFlags.contains("-")) format.append("-");
         if (cleanFlags.contains("+")) format.append("+");
         if (cleanFlags.contains(" ")) format.append(" ");
-        if (cleanFlags.contains("0")) format.append("0");
+        // Only append '0' flag if width > 0, otherwise Java's formatter treats it as invalid
+        if (cleanFlags.contains("0") && width > 0) format.append("0");
 
         if (width > 0) format.append(width);
         format.append(".").append(precision).append(conversion);

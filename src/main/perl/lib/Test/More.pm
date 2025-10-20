@@ -7,7 +7,7 @@ use Data::Dumper;
 
 our @EXPORT = qw(
     plan ok is isnt like unlike cmp_ok can_ok isa_ok
-    pass fail diag done_testing is_deeply subtest
+    pass fail diag note done_testing is_deeply subtest
     use_ok require_ok BAIL_OUT
     skip
     skip_internal
@@ -137,6 +137,12 @@ sub fail (;$) {ok(0, $_[0])}
 sub diag {
     my ($message) = @_;
     print STDERR "$Test_Indent# $message\n";
+}
+
+sub note {
+    my ($message) = @_;
+    return unless defined $message;
+    print "$Test_Indent# $message\n";
 }
 
 sub done_testing {

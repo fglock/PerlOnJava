@@ -51,7 +51,9 @@ public class ParseMapGrepSort {
         operand.handle = null;
         if (block == null) {
             // create default block for `sort`: { $a cmp $b }
-            block = new BlockNode(List.of(new BinaryOperatorNode("cmp", new OperatorNode("$", new IdentifierNode("main::a", parser.tokenIndex), parser.tokenIndex), new OperatorNode("$", new IdentifierNode("main::b", parser.tokenIndex), parser.tokenIndex), parser.tokenIndex)), parser.tokenIndex);
+            // Use the current package's $a and $b variables
+            String currentPackage = parser.ctx.symbolTable.getCurrentPackage();
+            block = new BlockNode(List.of(new BinaryOperatorNode("cmp", new OperatorNode("$", new IdentifierNode(currentPackage + "::a", parser.tokenIndex), parser.tokenIndex), new OperatorNode("$", new IdentifierNode(currentPackage + "::b", parser.tokenIndex), parser.tokenIndex), parser.tokenIndex)), parser.tokenIndex);
         }
         if (block instanceof BlockNode) {
             block = new SubroutineNode(null, null, null, block, false, parser.tokenIndex);

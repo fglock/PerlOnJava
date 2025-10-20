@@ -8,7 +8,6 @@
 #
 # t/test.pl - most of Test::More functionality without the fuss
 
-
 # NOTE:
 #
 # Do not rely on features found only in more modern Perls here, as some CPAN
@@ -25,6 +24,12 @@
 #
 # In this file, we use the latter "Baby Perl" approach, and increment
 # will be worked over by t/op/inc.t
+#
+# see t/test_pl.pod for documentation
+
+# This file sets for its caller $::IS_ASCII and $::IS_EBCDIC appropriately;
+# and $::devnull to be the string to use to specify /dev/null on this
+# platform.
 
 $| = 1;
 our $Level = 1;
@@ -732,6 +737,9 @@ my $is_mswin    = $^O eq 'MSWin32';
 my $is_vms      = $^O eq 'VMS';
 my $is_cygwin   = $^O eq 'cygwin';
 
+# /dev/null appears to be surprisingly portable.
+$::devnull = ($is_mswin ? 'nul' : '/dev/null');
+
 sub _quote_args {
     my ($runperl, $args) = @_;
 
@@ -833,14 +841,13 @@ sub _create_runperl { # Create the string to qx in runperl().
         # needing a pipeline, so that the fork tests have a sane environment
         # without these surprises.
 
-        # /dev/null appears to be surprisingly portable.
-        $runperl = $runperl . ($is_mswin ? ' <nul' : ' </dev/null');
+        $runperl = "$runperl <$::devnull";
     }
     if (defined $args{args}) {
 	$runperl = _quote_args($runperl, $args{args});
     }
     if (exists $args{stderr} && $args{stderr} eq 'devnull') {
-        $runperl = $runperl . ($is_mswin ? ' 2>nul' : ' 2>/dev/null');
+        $runperl = "$runperl 2>$::devnull";
     }
     elsif ($args{stderr}) {
         $runperl = $runperl . ' 2>&1';
@@ -1355,10 +1362,14 @@ sub setup_multiple_progs {
 
         open my $fh, '<', $file or die "Cannot open $file: $!\n" ;
         my $found;
+        my $preamble = "";
         while (<$fh>) {
             if (/^__END__/) {
                 $found = $found + 1; # don't use ++
                 last;
+            }
+            if (/^#\s+PREAMBLE\s+(.*)$/) {
+                $preamble .= "$1\n";
             }
         }
         # This is an internal error, and should never happen. All bar one of
@@ -1374,6 +1385,12 @@ sub setup_multiple_progs {
             unless $found;
 
         my ($t, @p) = _setup_one_file($fh, $file);
+        if (length $preamble) {
+            # @p consists of ($linenumber, $source) pairs, so we only want
+            # to prepend the preamble to the odd numbered elements.
+            # Additionally, the first two elements are (0, $filename).
+            $_ = $preamble . $_ for @p[ grep { $_ % 2 } 2 .. $#p ];
+        }
         $tests += $t;
         push @prgs, @p;
 
@@ -1387,10 +1404,11 @@ sub run_multiple_progs {
     my $up = shift;
     my @prgs;
     if ($up) {
-	# The tests in lib run in a temporary subdirectory of t, and always
-	# pass in a list of "programs" to run
-	@prgs = @_;
-    } else {
+        # The tests in lib run in a temporary subdirectory of t, and always
+        # pass in a list of "programs" to run
+        @prgs = @_;
+    }
+    else {
         # The tests below t run in t and pass in a file handle. In theory we
         # can pass (caller)[1] as the second argument to report errors with
         # the filename of our caller, as the handle is always DATA. However,
@@ -1408,7 +1426,8 @@ sub run_multiple_progs {
     if (! eval {require Config; 1}) {
         warn "test.pl had problems loading Config: $@";
         $taint_disabled = '';
-    } else {
+    }
+    else {
         $taint_disabled = $Config::Config{taint_disabled};
     }
 
@@ -1416,7 +1435,8 @@ sub run_multiple_progs {
 
     my $count_failures = 0;
     my ($file, $line);
-  PROGRAM:
+
+    PROGRAM:
     while (defined ($line = shift @prgs)) {
         $_ = shift @prgs;
         unless ($line) {
@@ -1424,14 +1444,14 @@ sub run_multiple_progs {
             if (defined $file) {
                 print "# From $file\n";
             }
-	    next;
-	}
-	my $switch = "";
-	my @temps ;
-	my @temp_path;
-	if (s/^(\s*-\w+)//) {
-	    $switch = $1;
-	}
+            next;
+        }
+        my $switch = "";
+        my @temps ;
+        my @temp_path;
+        if (s/^(\s*-\w+)//) {
+            $switch = $1;
+        }
 
         s/^# NOTE.*\n//mg; # remove any NOTE comments in the content
 
@@ -1440,192 +1460,200 @@ sub run_multiple_progs {
         # tests.
         s/([<=>])CONFLICT\1/$1 x 7/ge;
 
-	my ($prog, $expected) = split(/\nEXPECT(?:\n|$)/, $_, 2);
+        my ($prog, $expected) = split(/\nEXPECT(?:\n|$)/, $_, 2);
 
-	my %reason;
-	foreach my $what (qw(skip todo)) {
-	    $prog =~ s/^#\s*\U$what\E\s*(.*)\n//m and $reason{$what} = $1;
-	    # If the SKIP reason starts ? then it's taken as a code snippet to
-	    # evaluate. This provides the flexibility to have conditional SKIPs
-	    if ($reason{$what} && $reason{$what} =~ s/^\?//) {
-		my $temp = eval $reason{$what};
-		if ($@) {
-		    die "# In \U$what\E code reason:\n# $reason{$what}\n$@";
-		}
-		$reason{$what} = $temp;
-	    }
-	}
+        my %reason;
+        foreach my $what (qw(skip todo)) {
+            $prog =~ s/^#\s*\U$what\E\s*(.*)\n//m and $reason{$what} = $1;
+            # If the SKIP reason starts ? then it's taken as a code snippet to
+            # evaluate. This provides the flexibility to have conditional SKIPs
+            if ($reason{$what} && $reason{$what} =~ s/^\?//) {
+                my $temp = eval $reason{$what};
+                if ($@) {
+                    die "# In \U$what\E code reason:\n# $reason{$what}\n$@";
+                }
+                $reason{$what} = $temp;
+            }
+        }
 
-    my $name = '';
-    if ($prog =~ s/^#\s*NAME\s+(.+)\n//m) {
-        $name = $1;
-    } elsif (defined $file) {
-        $name = "test from $file at line $line";
-    }
+        my $name = '';
+        if ($prog =~ s/^#\s*NAME\s+(.+)\n//m) {
+            $name = $1;
+        }
+        elsif (defined $file) {
+            $name = "test from $file at line $line";
+        }
 
         if ($switch=~/[Tt]/ and $taint_disabled eq "define") {
             $reason{skip} ||= "This perl does not support taint";
         }
 
-	if ($reason{skip}) {
-	SKIP:
-	  {
-	    skip($name ? "$name - $reason{skip}" : $reason{skip}, 1);
-	  }
-	  next PROGRAM;
-	}
+        if ($reason{skip}) {
+        SKIP:
+            {
+                skip($name ? "$name - $reason{skip}" : $reason{skip}, 1);
+            }
+            next PROGRAM;
+        }
 
-	if ($prog =~ /--FILE--/) {
-	    my @files = split(/\n?--FILE--\s*([^\s\n]*)\s*\n/, $prog) ;
-	    shift @files ;
-	    die "Internal error: test $_ didn't split into pairs, got " .
-		scalar(@files) . "[" . join("%%%%", @files) ."]\n"
-		    if @files % 2;
-	    while (@files > 2) {
-		my $filename = shift @files;
-		my $code = shift @files;
-		push @temps, $filename;
-		if ($filename =~ m#(.*)/# && $filename !~ m#^\.\./#) {
-		    require File::Path;
-		    File::Path::mkpath($1);
-		    push(@temp_path, $1);
-		}
-		open my $fh, '>', $filename or die "Cannot open $filename: $!\n";
-		print $fh $code;
-		close $fh or die "Cannot close $filename: $!\n";
-	    }
-	    shift @files;
-	    $prog = shift @files;
-	}
+        if ($prog =~ /--FILE--/) {
+            my @files = split(/\n?--FILE--\s*([^\s\n]*)\s*\n/, $prog) ;
+            shift @files ;
+            die "Internal error: test $_ didn't split into pairs, got " .
+                scalar(@files) . "[" . join("%%%%", @files) ."]\n"
+                    if @files % 2;
+            while (@files > 2) {
+                my $filename = shift @files;
+                my $code = shift @files;
+                push @temps, $filename;
+                if ($filename =~ m#(.*)/# && $filename !~ m#^\.\./#) {
+                    require File::Path;
+                    File::Path::mkpath($1);
+                    push(@temp_path, $1);
+                }
+                open my $fh, '>', $filename or die "Cannot open $filename: $!\n";
+                print $fh $code;
+                close $fh or die "Cannot close $filename: $!\n";
+            }
+            shift @files;
+            $prog = shift @files;
+        }
 
-	open my $fh, '>', $tmpfile or die "Cannot open >$tmpfile: $!";
-	print $fh q{
+        open my $fh, '>', $tmpfile or die "Cannot open >$tmpfile: $!";
+        print $fh q{
         BEGIN {
             push @INC, '.';
             open STDERR, '>&', STDOUT
               or die "Can't dup STDOUT->STDERR: $!;";
         }
-	};
-	print $fh "\n#line 1\n";  # So the line numbers don't get messed up.
-	print $fh $prog,"\n";
-	close $fh or die "Cannot close $tmpfile: $!";
-	my $results = runperl( stderr => 1, progfile => $tmpfile,
-			       stdin => undef, $up
-			       ? (switches => ["-I$up/lib", $switch], nolib => 1)
-			       : (switches => [$switch])
-			        );
-	my $status = $?;
-	$results =~ s/\n+$//;
-	# allow expected output to be written as if $prog is on STDIN
-	$results =~ s/$::tempfile_regexp/-/g;
-	if ($^O eq 'VMS') {
-	    # some tests will trigger VMS messages that won't be expected
-	    $results =~ s/\n?%[A-Z]+-[SIWEF]-[A-Z]+,.*//;
+        };
+        print $fh "\n#line 1\n";  # So the line numbers don't get messed up.
+        print $fh $prog,"\n";
+        close $fh or die "Cannot close $tmpfile: $!";
+        my $results = runperl( stderr => 1, progfile => $tmpfile,
+                               stdin => undef, $up
+                               ? (switches => ["-I$up/lib", $switch], nolib => 1)
+                               : (switches => [$switch])
+                                );
+        my $status = $?;
 
-	    # pipes double these sometimes
-	    $results =~ s/\n\n/\n/g;
-	}
-	# bison says 'parse error' instead of 'syntax error',
-	# various yaccs may or may not capitalize 'syntax'.
-	$results =~ s/^(syntax|parse) error/syntax error/mig;
-	# allow all tests to run when there are leaks
-	$results =~ s/Scalars leaked: \d+\n//g;
+        # allow expected output to be written as if $prog is on STDIN
+        $results =~ s/$::tempfile_regexp/-/g;
+        if ($^O eq 'VMS') {
+            # some tests will trigger VMS messages that won't be expected
+            $results =~ s/\n?%[A-Z]+-[SIWEF]-[A-Z]+,.*//;
 
-	$expected =~ s/\n+$//;
-	my $prefix = ($results =~ s#^PREFIX(\n|$)##) ;
-	# any special options? (OPTIONS foo bar zap)
-	my $option_regex = 0;
-	my $option_random = 0;
-	my $fatal = $FATAL;
-	if ($expected =~ s/^OPTIONS? (.+)(?:\n|\Z)//) {
-	    foreach my $option (split(' ', $1)) {
-		if ($option eq 'regex') { # allow regular expressions
-		    $option_regex = 1;
-		}
-		elsif ($option eq 'random') { # all lines match, but in any order
-		    $option_random = 1;
-		}
-		elsif ($option eq 'fatal') { # perl should fail
-		    $fatal = 1;
-		}
+            # pipes double these sometimes
+            $results =~ s/\n\n/\n/g;
+        }
+        # bison says 'parse error' instead of 'syntax error',
+        # various yaccs may or may not capitalize 'syntax'.
+        $results =~ s/^(syntax|parse) error/syntax error/mig;
+        # allow all tests to run when there are leaks
+        $results =~ s/Scalars leaked: \d+\n//g;
+
+        # avoid repetition in test expectation files, as this is a common message
+        $results =~ s/^Execution of - aborted due to compilation errors\.\n//m;
+
+        # trim multiple trailing blanks
+        $results =~ s/\n+$//;
+
+        $expected =~ s/\n+$//;
+        my $prefix = ($results =~ s#^PREFIX(\n|$)##) ;
+        # any special options? (OPTIONS foo bar zap)
+        my $option_regex = 0;
+        my $option_random = 0;
+        my $fatal = $FATAL;
+        if ($expected =~ s/^OPTIONS? (.+)(?:\n|\Z)//) {
+            foreach my $option (split(' ', $1)) {
+                if ($option eq 'regex') { # allow regular expressions
+                    $option_regex = 1;
+                }
+                elsif ($option eq 'random') { # all lines match, but in any order
+                    $option_random = 1;
+                }
+                elsif ($option eq 'fatal') { # perl should fail
+                    $fatal = 1;
+                }
                 elsif ($option eq 'nonfatal') {
                     # used to turn off default fatal
                     $fatal = 0;
                 }
-		else {
-		    die "$0: Unknown OPTION '$option'\n";
-		}
-	    }
-	}
-	die "$0: can't have OPTION regex and random\n"
-	    if $option_regex + $option_random > 1;
-	my $ok = 0;
-	if ($results =~ s/^SKIPPED\n//) {
-	    print "$results\n" ;
-	    $ok = 1;
-	}
-	else {
-	    if ($option_random) {
-	        my @got = sort split "\n", $results;
-	        my @expected = sort split "\n", $expected;
-
-	        $ok = "@got" eq "@expected";
-	    }
-	    elsif ($option_regex) {
-	        $ok = $results =~ /^$expected/;
-	    }
-	    elsif ($prefix) {
-	        $ok = $results =~ /^\Q$expected/;
-	    }
-	    else {
-	        $ok = $results eq $expected;
-	    }
-
-	    if ($ok && $fatal && !($status >> 8)) {
-		$ok = 0;
-	    }
-	}
-
-	local $::TODO = $reason{todo};
-
-	unless ($ok) {
-        my $err_line = '';
-        $err_line   .= "FILE: $file ; line $line\n" if defined $file;
-        $err_line   .= "PROG: $switch\n$prog\n" .
-			           "EXPECTED:\n$expected\n";
-        $err_line   .= "EXIT STATUS: != 0\n" if $fatal;
-        $err_line   .= "GOT:\n$results\n";
-        $err_line   .= "EXIT STATUS: " . ($status >> 8) . "\n" if $fatal;
-        if ($::TODO) {
-            $err_line =~ s/^/# /mg;
-            print $err_line;  # Harness can't filter it out from STDERR.
+                else {
+                    die "$0: Unknown OPTION '$option'\n";
+                }
+            }
+        }
+        die "$0: can't have OPTION regex and random\n"
+            if $option_regex + $option_random > 1;
+        my $ok = 0;
+        if ($results =~ s/^SKIPPED\n//) {
+            print "$results\n" ;
+            $ok = 1;
         }
         else {
-            print STDERR $err_line;
-            ++$count_failures;
-            die "PERL_TEST_ABORT_FIRST_FAILURE set Test Failure"
-                if $ENV{PERL_TEST_ABORT_FIRST_FAILURE};
+            if ($option_random) {
+                my @got = sort split "\n", $results;
+                my @expected = sort split "\n", $expected;
+
+                $ok = "@got" eq "@expected";
+            }
+            elsif ($option_regex) {
+                $ok = $results =~ /^$expected/;
+            }
+            elsif ($prefix) {
+                $ok = $results =~ /^\Q$expected/;
+            }
+            else {
+                $ok = $results eq $expected;
+            }
+
+            if ($ok && $fatal && !($status >> 8)) {
+                $ok = 0;
+            }
         }
-    }
+
+        local $::TODO = $reason{todo};
+
+        unless ($ok) {
+            my $err_line = '';
+            $err_line   .= "FILE: $file ; line $line\n" if defined $file;
+            $err_line   .= "PROG: $switch\n$prog\n" .
+                                       "EXPECTED:\n$expected\n";
+            $err_line   .= "EXIT STATUS: != 0\n" if $fatal;
+            $err_line   .= "GOT:\n$results\n";
+            $err_line   .= "EXIT STATUS: " . ($status >> 8) . "\n" if $fatal;
+            if ($::TODO) {
+                $err_line =~ s/^/# /mg;
+                print $err_line;  # Harness can't filter it out from STDERR.
+            }
+            else {
+                print STDERR $err_line;
+                ++$count_failures;
+                die "PERL_TEST_ABORT_FIRST_FAILURE set Test Failure"
+                    if $ENV{PERL_TEST_ABORT_FIRST_FAILURE};
+            }
+        }
 
         if (defined $file) {
             _ok($ok, "at $file line $line", $name);
-        } else {
+        }
+        else {
             # We don't have file and line number data for the test, so report
             # errors as coming from our caller.
             local $Level = $Level + 1;
             ok($ok, $name);
         }
 
-	foreach (@temps) {
-	    unlink $_ if $_;
-	}
-	foreach (@temp_path) {
-	    File::Path::rmtree $_ if -d $_;
-	}
+        foreach (@temps) {
+            unlink $_ if $_;
+        }
+        foreach (@temp_path) {
+            File::Path::rmtree $_ if -d $_;
+        }
     }
 
-    if ( $count_failures ) {
+    if ($count_failures) {
         print STDERR <<'EOS';
 #
 # Note: 'run_multiple_progs' run has one or more failures
@@ -1635,7 +1663,6 @@ sub run_multiple_progs {
 #
 EOS
     }
-
 
     return;
 }
@@ -1864,34 +1891,35 @@ sub warning_like {
 # NOTE:  If the test file uses 'threads', then call the watchdog() function
 #        _AFTER_ the 'threads' module is loaded.
 { # Closure
-    my $watchdog;
+    my $watchdog_process;
     my $watchdog_thread;
+    my $watchdog_alarm;
+
+    # Add END block to terminate and clean up any watchdog
+    END { watchdog(0); };
 
 sub watchdog ($;$)
 {
     my $timeout = shift;
 
-    # If cancelling, use the state variables to know which method was used to
-    # create the watchdog.
-    if ($timeout == 0) {
-        if ($watchdog_thread) {
-            $watchdog_thread->kill('KILL');
-            undef $watchdog_thread;
-        }
-        elsif ($watchdog) {
-            kill('KILL', $watchdog);
-            undef $watchdog;
-        }
-        else {
-            alarm(0);
-        }
-
-        return;
+    # Cancel any existing timer, so the caller can set multiple ones without
+    # cancelling first.  For safety, handle the case where somehow more than
+    # one type of watchdog got set.
+    if ($watchdog_thread) {
+        $watchdog_thread->kill('KILL');
+        undef $watchdog_thread;
+    }
+    if ($watchdog_process) {
+        kill('KILL', $watchdog_process);
+        undef $watchdog_process;
+    }
+    if ($watchdog_alarm) {
+        alarm(0);
+        undef $watchdog_alarm;
     }
 
-    # Make sure these aren't defined.
-    undef $watchdog;
-    undef $watchdog_thread;
+    # We are done if this call was just to cancel
+    return if $timeout == 0;
 
     my $method = shift || "";
 
@@ -1918,10 +1946,12 @@ sub watchdog ($;$)
     # shut up use only once warning
     my $threads_on = $threads::threads && $threads::threads;
 
-    # Don't use a watchdog process if 'threads' is loaded -
-    #   use a watchdog thread instead
-    if (!$threads_on || $method eq "process") {
-
+    # Use a watchdog process unless 'threads' is loaded and is killable by a
+    # signal
+    if (   ! $threads_on
+        || (defined $ENV{PERL_SIGNALS} && $ENV{PERL_SIGNALS} eq "unsafe")
+        || $method eq "process")
+    {
         # On Windows and VMS, try launching a watchdog process
         #   using system(1, ...) (see perlport.pod).  system() returns
         #   immediately on these platforms with effectively a pid of the new
@@ -1939,12 +1969,11 @@ sub watchdog ($;$)
             return if ($pid_to_kill <= 0);
 
             # Launch watchdog process
-            undef $watchdog;
             eval {
                 local $SIG{'__WARN__'} = sub {
-                    _diag("Watchdog warning: $_[0]");
-                };
-                my $sig = $is_vms ? 'TERM' : 'KILL';
+                                             _diag("Watchdog warning: $_[0]");
+                                             };
+                my $sig = ($is_vms) ? 'TERM' : 'KILL';
                 my $prog = "sleep($timeout);" .
                            "warn qq/# $timeout_msg" . '\n/;' .
                            "kill(q/$sig/, $pid_to_kill);";
@@ -1966,38 +1995,29 @@ sub watchdog ($;$)
                     if ($runperl =~ m/\s/) {
                         $runperl = qq{"$runperl"};
                     }
-                    $watchdog = system({ $runperl } 1, $runperl, '-e', $prog);
+                    $watchdog_process =
+                                system({ $runperl } 1, $runperl, '-e', $prog);
                 }
                 else {
                     my $cmd = _create_runperl(prog => $prog);
-                    $watchdog = system(1, $cmd);
+                    $watchdog_process = system(1, $cmd);
                 }
             };
-            if ($@ || ($watchdog <= 0)) {
-                _diag('Failed to start watchdog');
-                _diag($@) if $@;
-                undef($watchdog);
-                return;
+
+            if ($@ || $watchdog_process <= 0) {
+                $@ = "\n$@" if $@;
+                _diag("Failed to start watchdog$@\nTrying alternate method");
+                undef($watchdog_process);
+                goto WATCHDOG_VIA_ALARM;
             }
 
-            # Add END block to parent to terminate and
-            #   clean up watchdog process
-            eval("END { local \$! = 0; local \$? = 0;
-                        wait() if kill('KILL', $watchdog); };");
             return;
         }
 
         # Try using fork() to generate a watchdog process
-        undef $watchdog;
-        eval { $watchdog = fork() };
-        if (defined($watchdog)) {
-            if ($watchdog) {   # Parent process
-                # Add END block to parent to terminate and
-                #   clean up watchdog process
-                eval "END { local \$! = 0; local \$? = 0;
-                            wait() if kill('KILL', $watchdog); };";
-                return;
-            }
+        eval { $watchdog_process = fork() };
+        if (defined($watchdog_process)) {
+            return if $watchdog_process;  # Parent process
 
             ### Watchdog process code
 
@@ -2030,8 +2050,8 @@ sub watchdog ($;$)
         # fork() failed - fall through and try using a thread
     }
 
-    # Use a watchdog thread because either 'threads' is loaded,
-    #   or fork() failed
+    # Use a watchdog thread because either 'threads' is loaded, or fork()
+    # failed
     if (eval {require threads; 1}) {
         $watchdog_thread = 'threads'->create(sub {
                 # Load POSIX if available
@@ -2070,7 +2090,7 @@ sub watchdog ($;$)
         return;
     }
 
-    # If everything above fails, then just use an alarm timeout
+    # If everything above fails, then just use an alarm timeout.
 WATCHDOG_VIA_ALARM:
     if (eval { alarm($timeout); 1; }) {
         # Load POSIX if available
@@ -2078,12 +2098,13 @@ WATCHDOG_VIA_ALARM:
 
         # Alarm handler will do the actual 'killing'
         $SIG{'ALRM'} = sub {
-            select(STDERR); $| = 1;
-            _diag($timeout_msg);
-            POSIX::_exit(1) if (defined(&POSIX::_exit));
-            my $sig = $is_vms ? 'TERM' : 'KILL';
-            kill($sig, $pid_to_kill);
-        };
+                             select(STDERR); $| = 1;
+                             _diag($timeout_msg);
+                             POSIX::_exit(1) if (defined(&POSIX::_exit));
+                             my $sig = ($is_vms) ? 'TERM' : 'KILL';
+                             kill($sig, $pid_to_kill);
+                           };
+        $watchdog_alarm = 1;
     }
 }
 } # End closure

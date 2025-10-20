@@ -419,25 +419,48 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         ArrayList<ArrayList<String>> stackTrace = ExceptionFormatter.formatException(t);
         int stackTraceSize = stackTrace.size();
 
+        // Skip the first frame which is the caller() builtin itself
         if (stackTraceSize > 0) {
             frame++;
         }
 
 //        // Show debug info
-//        System.out.println("# Runtime stack trace: frame=" + frame);
+//        System.err.println("# Runtime stack trace: frame=" + frame + " size=" + stackTraceSize);
 //        for (int i = 0; i < stackTraceSize; i++) {
-//            System.out.println("#   " + i + ": " + stackTrace.get(i));
+//            ArrayList<String> entry = stackTrace.get(i);
+//            String subName = entry.size() > 3 ? entry.get(3) : "NO_SUB";
+//            System.err.println("#   " + i + ": pkg=" + entry.get(0) + " file=" + entry.get(1) + " line=" + entry.get(2) + " sub=" + subName);
 //        }
-//        System.out.println();
+//        System.err.println();
 
         if (frame >= 0 && frame < stackTraceSize) {
             // Runtime stack trace
             if (ctx == RuntimeContextType.SCALAR) {
                 res.add(new RuntimeScalar(stackTrace.get(frame).getFirst()));
             } else {
-                res.add(new RuntimeScalar(stackTrace.get(frame).get(0)));
-                res.add(new RuntimeScalar(stackTrace.get(frame).get(1)));
-                res.add(new RuntimeScalar(stackTrace.get(frame).get(2)));
+                ArrayList<String> frameInfo = stackTrace.get(frame);
+                res.add(new RuntimeScalar(frameInfo.get(0)));  // package
+                res.add(new RuntimeScalar(frameInfo.get(1)));  // filename
+                res.add(new RuntimeScalar(frameInfo.get(2)));  // line
+                
+                // The subroutine name at frame N is actually stored at frame N-1
+                // because it represents the sub that IS CALLING frame N
+                String subName = null;
+                if (frame > 0 && frame - 1 < stackTraceSize) {
+                    ArrayList<String> prevFrame = stackTrace.get(frame - 1);
+                    if (prevFrame.size() > 3) {
+                        subName = prevFrame.get(3);
+                    }
+                }
+                
+                if (subName != null && !subName.isEmpty()) {
+                    res.add(new RuntimeScalar(subName));  // subroutine
+                } else {
+                    // If no subroutine name or empty, add undef
+                    res.add(RuntimeScalarCache.scalarUndef);
+                }
+                // TODO: Add more caller() return values:
+                // hasargs, wantarray, evaltext, is_require, hints, bitmask, hinthash
             }
         }
         return res;
