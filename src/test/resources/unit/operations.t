@@ -216,8 +216,7 @@ ok(!($a != 6), '5 ^ 3 equals 6');
 
 # Bitwise NOT
 $a = ~5;
-print "not " if ($a & 0xFFFF) != 65530;
-say "ok # ~5 equals 65530: <" . ($a & 0xFFFF) . ">";
+ok(($a & 0xFFFF) == 65530, "~5 equals 65530: <" . ($a & 0xFFFF) . ">");
 
 # Left Shift
 $a = 5 << 1;

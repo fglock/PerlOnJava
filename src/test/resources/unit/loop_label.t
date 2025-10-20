@@ -8,11 +8,12 @@ use warnings;
 
 # Test simple `next` in a `for` loop
 my @array = (1, 2, 3, 4);
+my $printed = 0;
 for my $i (@array) {
     next if $i == 2;  # Skip when $i is 2
-    print "not " if $i == 2;  # This shouldn't print because $i == 2 is skipped
+    $printed = 1 if $i == 2;  # This shouldn't execute because $i == 2 is skipped
 }
-say "ok # Simple `next` in `for` loop";
+ok(!$printed, 'Simple `next` in `for` loop');
 
 # Test `next LABEL` in a nested `for` loop
 my $counter = 0;

@@ -47,10 +47,11 @@ my $double_neg = !!$true_obj;
 ok($double_neg->as_bool(), 'double negation returns to original value');
 
 # Test in conditional contexts
+my $condition_passed = 1;
 if (!$true_obj) {
-    print "not ";
+    $condition_passed = 0;
 }
-say "ok # negation works in if condition";
+ok($condition_passed, 'negation works in if condition');
 
 # Test chained negation
 my $triple_neg = !!!$true_obj;
@@ -66,7 +67,7 @@ ok(!$false_obj == !$false_obj, 'negated values compare correctly');
 
 # Test in array context
 my @objects = (!$true_obj, !$false_obj);
-print "not " if $objects[0]->as_bool();
+ok(!$objects[0]->as_bool(), 'first negated object is false');
 ok($objects[1]->as_bool(), 'negation works in array context');
 
 done_testing();

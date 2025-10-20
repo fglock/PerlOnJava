@@ -12,8 +12,7 @@ my $match;
 
 for my $state ( 1, 0 ) {
     $match = $string =~ m?apple?;
-    print "not " if $match != $state;
-    say "ok # match: 'apple' " . ($match ? "found" : "not found");
+    ok($match == $state, "match: 'apple' " . ($match ? "found" : "not found"));
 }
 
 # # Use reset() to allow matching again
