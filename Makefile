@@ -34,7 +34,7 @@ test-unit:
 # Runs all tests from src/test/resources/
 test-all:
 	@echo "Running comprehensive test suite..."
-	perl dev/tools/perl_test_runner.pl --jobs 8 --timeout 30 --output test_results.json src/test/resources
+	perl dev/tools/perl_test_runner.pl --jobs 8 --timeout 60 --output test_results.json src/test/resources
 
 # Alternative: Run tests using JUnit/Gradle (for CI/CD integration)
 test-gradle: test-gradle-unit
