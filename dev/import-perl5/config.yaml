@@ -1,0 +1,46 @@
+# Configuration for importing Perl5 modules and tests into PerlOnJava
+#
+# Each entry specifies:
+#   source: Path relative to project root (typically perl5/...)
+#   target: Path relative to project root where file/dir should be copied
+#   type:   'file' (default) or 'directory' for bulk directory copies
+#   patch:  Optional patch file (relative to dev/import-perl5/patches/)
+#
+# To add a new import:
+# 1. Add an entry below
+# 2. If a patch is needed, create it with: diff -u original modified > patches/filename.patch
+# 3. Run: perl dev/import-perl5/sync.pl
+
+imports:
+  # Perl modules imported to src/main/perl/lib/
+  - source: perl5/lib/Benchmark.pm
+    target: src/main/perl/lib/Benchmark.pm
+
+  - source: perl5/lib/Benchmark.t
+    target: src/test/resources/Benchmark/Benchmark.t
+
+  # Bulk import all test files from perl5/t/ to t/
+  - source: perl5/t
+    target: t
+    type: directory
+
+  # Specific patched files (applied after directory import above)
+  - source: perl5/t/test.pl
+    target: t/test.pl
+    patch: test.pl.patch
+
+  # Add more imports below as needed
+  # Example with minimal fields:
+  # - source: perl5/lib/SomeModule.pm
+  #   target: src/main/perl/lib/SomeModule.pm
+  #
+  # Example with patch:
+  # - source: perl5/lib/SomeModule.pm
+  #   target: src/main/perl/lib/SomeModule.pm
+  #   patch: SomeModule.pm.patch
+  #
+  # Example directory import:
+  # - source: perl5/some_directory
+  #   target: target_directory
+  #   type: directory
+
