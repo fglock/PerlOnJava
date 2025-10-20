@@ -458,9 +458,16 @@ sub parse_tap_output {
         $status = 'error';
     }
 
-    # Remove duplicates
-    my %seen;
-    @missing_features = grep !$seen{$_}++, @missing_features;
+    # Only track missing features if the test didn't pass
+    # This prevents false positives from test descriptions/comments mentioning features
+    if ($status ne 'pass') {
+        # Remove duplicates
+        my %seen;
+        @missing_features = grep !$seen{$_}++, @missing_features;
+    } else {
+        # Test passed - clear any false positive feature detections
+        @missing_features = ();
+    }
 
     return {
         status => $status,
