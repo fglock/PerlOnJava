@@ -375,7 +375,10 @@ sub parse_tap_output {
 
     # Parse TAP output
     for my $line (@lines) {
-        $line =~ s/^\s+|\s+$//g;  # trim
+        # Skip indented lines (subtest output) - check BEFORE trimming
+        next if $line =~ /^\s+/;
+        
+        $line =~ s/^\s+|\s+$//g;  # trim trailing whitespace
         next unless $line;
 
         # Test plan
@@ -385,7 +388,7 @@ sub parse_tap_output {
             next;
         }
 
-        # Test results
+        # Test results (only count top-level tests, not subtest internals)
         if ($line =~ /^ok\s+\d+/) {
             $ok_count++;
             $actual_tests_run++;
