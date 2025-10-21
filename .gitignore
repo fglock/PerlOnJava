@@ -53,3 +53,8 @@ logs/
 !MILESTONES.md
 !README.md
 test_output.log
+# Test artifacts - do not commit
+src/test/resources/*.txt
+src/test/resources/*.pod
+src/test/resources/**/*.OUT
+src/test/resources/**/tmp/
