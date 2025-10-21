@@ -108,7 +108,7 @@ imports:
 
   # Testing.pm - Helper module for Data::Dumper tests
   - source: perl5/dist/Data-Dumper/t/lib/Testing.pm
-    target: t/lib/Testing.pm
+    target: src/test/resources/Data/Data-Dumper/t/lib/Testing.pm
 
   # Add more imports below as needed
   # Example with minimal fields:
