@@ -89,6 +89,23 @@ imports:
     target: src/test/resources/Pod/Pod-Escapes
     type: directory
 
+  # Getopt::Long - Command line options parser
+  - source: perl5/cpan/Getopt-Long/lib/Getopt
+    target: src/main/perl/lib/Getopt
+    type: directory
+
+  - source: perl5/cpan/Getopt-Long/t
+    target: src/test/resources/Getopt/Getopt-Long
+    type: directory
+
+  # Data::Dumper - Stringified perl data structures
+  - source: perl5/dist/Data-Dumper/Dumper.pm
+    target: src/main/perl/lib/Data/Dumper.pm
+
+  - source: perl5/dist/Data-Dumper/t
+    target: src/test/resources/Data/Data-Dumper
+    type: directory
+
   # Add more imports below as needed
   # Example with minimal fields:
   # - source: perl5/lib/SomeModule.pm
