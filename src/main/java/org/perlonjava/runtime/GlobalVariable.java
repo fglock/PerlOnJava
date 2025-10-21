@@ -84,9 +84,12 @@ public class GlobalVariable {
             String capturedNumber = matcher.group(1);
             // Convert the capture group to an integer
             int position = Integer.parseInt(capturedNumber);
-            // Always create a NEW instance for capture variables to get current regex match state
-            // Don't cache these because they need to reflect the most recent regex match
-            return new ScalarSpecialVariable(ScalarSpecialVariable.Id.CAPTURE, position);
+            // IMPORTANT: Resolve the capture value IMMEDIATELY to a concrete RuntimeScalar
+            // This prevents issues where the value would be evaluated later after
+            // globalMatcher has been modified by subsequent regex operations
+            // (e.g., when $1 is passed as an argument and a regex runs before it's accessed)
+            ScalarSpecialVariable specialVar = new ScalarSpecialVariable(ScalarSpecialVariable.Id.CAPTURE, position);
+            return specialVar.getValueAsScalar();
         }
         
         // For non-capture variables, use caching
