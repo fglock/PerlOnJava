@@ -53,10 +53,13 @@ public class XSLoader extends PerlModuleBase {
             Method initialize = clazz.getMethod("initialize");
             initialize.invoke(null);
             return scalarTrue.getList();
+        } catch (ClassNotFoundException e) {
+            // XS module not found - throw exception so eval fails
+            // This allows modules like Data::Dumper to fall back to pure Perl
+            throw new RuntimeException("Can't load '" + className + "' for module " + moduleName + ": " + e.getMessage());
         } catch (Exception e) {
-            // System.err.println("Failed to load Java module: " + moduleName + " (class: " + className + ")");
-            // e.printStackTrace();
-            return scalarFalse.getList();
+            // Other errors - throw as well
+            throw new RuntimeException("Failed to initialize module " + moduleName + ": " + e.getMessage(), e);
         }
     }
 }
