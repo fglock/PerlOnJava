@@ -125,7 +125,10 @@ public class Variable {
         // PRE-CHECK: If next token is '{', skip identifier parsing and go directly to parseBracedVariable
         // This avoids backtracking and heredoc processing issues
         if (nextToken.text.equals("{")) {
-            return parseBracedVariable(parser, sigil, false);
+            Node result = parseBracedVariable(parser, sigil, false);
+            // After parsing ${...}, check if there's array/hash access: ${...}[...] or ${...}{...}
+            result = parseArrayHashAccess(parser, result, false);
+            return result;
         }
 
         // Normal variable parsing: try to parse an identifier
@@ -219,7 +222,10 @@ public class Variable {
             return new OperatorNode(sigil, new IdentifierNode(varName, parser.tokenIndex), parser.tokenIndex);
         } else if (peek(parser).text.equals("{")) {
             // Handle curly brackets - use parseBracedVariable instead of parseBlock
-            return parseBracedVariable(parser, sigil, false);
+            Node result = parseBracedVariable(parser, sigil, false);
+            // After parsing ${...}, check if there's array/hash access: ${...}[...] or ${...}{...}
+            result = parseArrayHashAccess(parser, result, false);
+            return result;
         }
 
         // Not a variable name, not a block. This could be a dereference like @$a

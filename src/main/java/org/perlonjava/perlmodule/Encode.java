@@ -4,6 +4,10 @@ import org.perlonjava.runtime.RuntimeArray;
 import org.perlonjava.runtime.RuntimeList;
 import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.runtime.RuntimeScalarCache;
+import org.perlonjava.runtime.RuntimeHash;
+import org.perlonjava.runtime.RuntimeScalarType;
+import org.perlonjava.runtime.NameNormalizer;
+import org.perlonjava.operators.ModuleOperators;
 
 import java.nio.charset.Charset;
 import java.nio.charset.IllegalCharsetNameException;
@@ -57,7 +61,7 @@ public class Encode extends PerlModuleBase {
     }
 
     public Encode() {
-        super("Encode", true);
+        super("Encode", false);  // Don't set %INC, let Encode.pm do that
     }
 
     public static void initialize() {
@@ -207,9 +211,21 @@ public class Encode extends PerlModuleBase {
 
         try {
             Charset charset = getCharset(encodingName);
-            // For now, return the charset name as a string
-            // TODO: Create proper encoding object
-            return new RuntimeScalar(charset.name()).getList();
+            
+            // Create an encoding object - just a blessed hashref with the charset name
+            // The Encode::XS package provides the decode/encode methods
+            RuntimeHash encodingObj = new RuntimeHash();
+            encodingObj.put("Name", new RuntimeScalar(charset.name()));
+            encodingObj.put("name", new RuntimeScalar(charset.name()));
+            
+            // Bless the object into Encode::XS package
+            encodingObj.setBlessId(NameNormalizer.getBlessId("Encode::XS"));
+            
+            // Create a reference to the hash
+            RuntimeScalar blessed = new RuntimeScalar(encodingObj);
+            blessed.type = RuntimeScalarType.HASHREFERENCE;
+            
+            return blessed.getList();
         } catch (Exception e) {
             // Return undef if encoding not found
             return scalarUndef.getList();

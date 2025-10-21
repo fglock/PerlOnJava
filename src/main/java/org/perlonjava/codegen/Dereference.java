@@ -396,7 +396,21 @@ public class Dereference {
         EmitterVisitor scalarVisitor =
                 emitterVisitor.with(RuntimeContextType.SCALAR); // execute operands in scalar context
 
-        node.left.accept(scalarVisitor); // target - left parameter
+        // Handle ${expr}{key} pattern: unwrap OperatorNode("$", BlockNode) to just the block contents
+        // because ${expr}{key} means expr->{key}, not $$expr->{key}
+        // Note: ${...} creates OperatorNode("$", BlockNode), while $$var creates OperatorNode("$", OperatorNode)
+        Node leftNode = node.left;
+        if (leftNode instanceof OperatorNode opNode && opNode.operator.equals("$") && opNode.operand instanceof BlockNode blockNode) {
+            // This is ${expr}{key}, unwrap to expr->{key}
+            // If the block contains a single expression, use that; otherwise use the block
+            if (blockNode.elements.size() == 1) {
+                leftNode = blockNode.elements.get(0);
+            } else {
+                leftNode = blockNode;
+            }
+        }
+        
+        leftNode.accept(scalarVisitor); // target - left parameter
 
         // emit the {0} as a RuntimeList
         ListNode nodeRight = ((HashLiteralNode) node.right).asListNode();
