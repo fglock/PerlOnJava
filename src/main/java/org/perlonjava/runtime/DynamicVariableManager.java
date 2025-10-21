@@ -50,6 +50,20 @@ public class DynamicVariableManager {
     }
 
     /**
+     * Pushes a generic DynamicState object onto the stack.
+     * This allows non-RuntimeBase objects like RegexState to use the dynamic variable mechanism.
+     *
+     * @param state the dynamic state to be pushed onto the stack.
+     * @return the same DynamicState object that was pushed.
+     */
+    public static DynamicState pushLocalVariable(DynamicState state) {
+        // Save the current state and push it onto the stack.
+        state.dynamicSaveState();
+        variableStack.push(state);
+        return state;
+    }
+
+    /**
      * Pops dynamic variables from the stack until the stack size matches the specified target local level.
      * This is useful for restoring the stack to a previous state by removing any variables added after that state.
      *

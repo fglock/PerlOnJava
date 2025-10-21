@@ -6,21 +6,35 @@ import java.util.regex.Matcher;
 
 /**
  * RegexState holds a snapshot of all regex-related state.
- * Used to save and restore regex state when entering/exiting eval blocks.
+ * Used to save and restore regex state when entering/exiting blocks with regex operations.
+ * Implements DynamicState to integrate with the local variable management system.
  */
-public class RegexState {
-    public final Matcher globalMatcher;
-    public final String globalMatchString;
-    public final String lastMatchedString;
-    public final int lastMatchStart;
-    public final int lastMatchEnd;
-    public final String lastSuccessfulMatchedString;
-    public final int lastSuccessfulMatchStart;
-    public final int lastSuccessfulMatchEnd;
-    public final String lastSuccessfulMatchString;
-    public final RuntimeRegex lastSuccessfulPattern;
+public class RegexState implements DynamicState {
+    private Matcher globalMatcher;
+    private String globalMatchString;
+    private String lastMatchedString;
+    private int lastMatchStart;
+    private int lastMatchEnd;
+    private String lastSuccessfulMatchedString;
+    private int lastSuccessfulMatchStart;
+    private int lastSuccessfulMatchEnd;
+    private String lastSuccessfulMatchString;
+    private RuntimeRegex lastSuccessfulPattern;
 
+    /**
+     * Creates a marker object for regex state management.
+     * The actual state is saved when dynamicSaveState() is called.
+     */
     public RegexState() {
+        // State will be saved in dynamicSaveState()
+    }
+
+    /**
+     * Saves the current regex state from RuntimeRegex static fields.
+     * Called automatically when pushed onto the DynamicVariableManager stack.
+     */
+    @Override
+    public void dynamicSaveState() {
         // Save all the static fields from RuntimeRegex
         this.globalMatcher = RuntimeRegex.globalMatcher;
         this.globalMatchString = RuntimeRegex.globalMatchString;
@@ -34,7 +48,12 @@ public class RegexState {
         this.lastSuccessfulPattern = RuntimeRegex.lastSuccessfulPattern;
     }
 
-    public void restore() {
+    /**
+     * Restores the saved regex state back to RuntimeRegex static fields.
+     * Called automatically when popped from the DynamicVariableManager stack.
+     */
+    @Override
+    public void dynamicRestoreState() {
         // Restore all the static fields to RuntimeRegex
         RuntimeRegex.globalMatcher = this.globalMatcher;
         RuntimeRegex.globalMatchString = this.globalMatchString;

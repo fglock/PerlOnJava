@@ -4,6 +4,7 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.Node;
 import org.perlonjava.astvisitor.FindDeclarationVisitor;
+import org.perlonjava.astvisitor.RegexDetectorVisitor;
 
 /**
  * The Local class provides methods to handle the setup and teardown of local variables
@@ -13,19 +14,23 @@ public class Local {
 
     /**
      * Sets up a local variable to manage dynamic variable stack levels if a 'local' operator
-     * is present in the AST node.
+     * or regex operations are present in the AST node.
      *
      * @param ctx The emitter context containing the symbol table.
-     * @param ast The abstract syntax tree node to be checked for a 'local' operator.
+     * @param ast The abstract syntax tree node to be checked for a 'local' operator or regex operations.
      * @param mv  The method visitor used to generate bytecode instructions.
-     * @return A localRecord containing information about the presence of a 'local' operator
+     * @return A localRecord containing information about the presence of operations requiring state management
      * and the index of the dynamic variable stack.
      */
     static localRecord localSetup(EmitterContext ctx, Node ast, MethodVisitor mv) {
         // Check if the code contains a 'local' operator
         boolean containsLocalOperator = FindDeclarationVisitor.findOperator(ast, "local") != null;
+        // Check if the code contains regex operations that need state preservation
+        boolean containsRegex = RegexDetectorVisitor.containsRegex(ast);
+        boolean needsDynamicState = containsLocalOperator || containsRegex;
+        
         int dynamicIndex = -1;
-        if (containsLocalOperator) {
+        if (needsDynamicState) {
             // Allocate a local variable to store the dynamic variable stack index
             dynamicIndex = ctx.symbolTable.allocateLocalVariable();
             // Get the current level of the dynamic variable stack and store it
@@ -35,8 +40,28 @@ public class Local {
                     "()I",
                     false);
             mv.visitVarInsn(Opcodes.ISTORE, dynamicIndex);
+            
+            // If there are regex operations, push a RegexState marker onto the stack
+            // This will save regex state when entering the block
+            if (containsRegex) {
+                // Create new RegexState marker
+                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RegexState");
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                        "org/perlonjava/runtime/RegexState",
+                        "<init>",
+                        "()V",
+                        false);
+                // Push onto DynamicVariableManager (calls dynamicSaveState)
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/DynamicVariableManager",
+                        "pushLocalVariable",
+                        "(Lorg/perlonjava/runtime/DynamicState;)Lorg/perlonjava/runtime/DynamicState;",
+                        false);
+                mv.visitInsn(Opcodes.POP); // Discard return value
+            }
         }
-        return new localRecord(containsLocalOperator, dynamicIndex);
+        return new localRecord(needsDynamicState, dynamicIndex);
     }
 
     /**

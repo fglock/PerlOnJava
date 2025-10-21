@@ -86,8 +86,12 @@ sub wrap
 				: $separator2)
 			: $separator;
 	}
+	warn "WRAP DEBUG: After while, \$remainder='$remainder' length=".length($remainder)."\n";
+	warn "WRAP DEBUG: Before adding remainder, \$r='$r' length=".length($r)."\n";
 	$r .= $remainder;
+	warn "WRAP DEBUG: After adding remainder, \$r='$r' length=".length($r)."\n";
 
+	warn "WRAP DEBUG: pos(t)=".(defined pos($t) ? pos($t) : "undef")." length(t)=".length($t)."\n";
 	$r .= $lead . substr($t, pos($t), length($t) - pos($t))
 		if pos($t) ne length($t);
 
