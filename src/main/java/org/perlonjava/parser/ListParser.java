@@ -135,6 +135,7 @@ public class ListParser {
             }
         }
 
+        boolean parsedHandle = false;
         if (wantFileHandle) {
             if (TokenUtils.peek(parser).text.equals("(")) {
                 TokenUtils.consume(parser);
@@ -148,10 +149,13 @@ public class ListParser {
                 parser.tokenIndex = currentIndex;
                 parser.debugHeredocState("FILEHANDLE_AFTER_BACKTRACK");
                 hasParen = false;
+            } else {
+                parsedHandle = true;
             }
         }
 
-        if (wantBlockNode) {
+        // Only try wantBlockNode if we didn't already successfully parse a filehandle
+        if (wantBlockNode && !parsedHandle) {
             if (TokenUtils.peek(parser).text.equals("(")) {
                 TokenUtils.consume(parser);
                 hasParen = true;
@@ -160,9 +164,11 @@ public class ListParser {
                 TokenUtils.consume(parser);
                 expr.handle = ParseBlock.parseBlock(parser);
                 TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
-            }
-            if (!isSpaceAfterPrintBlock(parser) || looksLikeEmptyList(parser)) {
-                parser.throwError("syntax error");
+                parsedHandle = true;
+                // Only check for space after print block if we actually parsed a block
+                if (!isSpaceAfterPrintBlock(parser) || looksLikeEmptyList(parser)) {
+                    parser.throwError("syntax error");
+                }
             }
         }
 
@@ -290,6 +296,9 @@ public class ListParser {
             } else if (token.text.equals("&")) {
                 // Looks like a subroutine call, not an infix `&`
                 parser.ctx.logDebug("parseZeroOrMoreList looks like subroutine call");
+            } else if (token.text.equals("x") && nextToken.text.equals("(")) {
+                // Looks like a function call `x(...)`, not the repetition operator `x`
+                parser.ctx.logDebug("parseZeroOrMoreList looks like function call x(...)");
             } else if (token.text.equals("%") && (nextToken.text.equals("$") || nextToken.type == LexerTokenType.IDENTIFIER)) {
                 // Looks like a hash deref, not an infix `%`
                 parser.ctx.logDebug("parseZeroOrMoreList looks like Hash");

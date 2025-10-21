@@ -74,6 +74,21 @@ public class EmitForeach {
         node.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "iterator", "()Ljava/util/Iterator;", false);
 
+        // Save the current dynamic level before localizing $_ for the loop
+        // We need to track this separately because Local.localSetup only tracks explicit 'local' operators
+        int localVarDynamicIndex = -1;
+        if (loopVariableIsGlobal && node.useNewScope) {
+            // Allocate a local variable to store the dynamic variable stack index
+            localVarDynamicIndex = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            // Get the current level of the dynamic variable stack and store it
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/DynamicVariableManager",
+                    "getLocalLevel",
+                    "()I",
+                    false);
+            mv.visitVarInsn(Opcodes.ISTORE, localVarDynamicIndex);
+        }
+
         // Now localize $_ AFTER evaluating the list but BEFORE starting the loop
         // This prevents the inner loop from corrupting the outer loop's $_
         if (loopVariableIsGlobal && node.useNewScope) {
@@ -188,6 +203,17 @@ public class EmitForeach {
         mv.visitJumpInsn(Opcodes.GOTO, loopStart);
 
         mv.visitLabel(loopEnd);
+        
+        // Restore the localized loop variable
+        if (localVarDynamicIndex != -1) {
+            mv.visitVarInsn(Opcodes.ILOAD, localVarDynamicIndex);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/DynamicVariableManager",
+                    "popToLocalLevel",
+                    "(I)V",
+                    false);
+        }
+        
         Local.localTeardown(localRecord, mv);
 
         emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
