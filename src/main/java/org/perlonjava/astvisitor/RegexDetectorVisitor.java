@@ -42,10 +42,11 @@ public class RegexDetectorVisitor implements Visitor {
 
     @Override
     public void visit(OperatorNode node) {
-        // Check for regex operators: m//, s///, tr///, y///, qr//
+        // Check for regex operators: match, substitute, transliterate, quote regex
+        // Note: These are the actual operator names in the AST, not the Perl syntax
         String op = node.operator;
-        if ("m".equals(op) || "s".equals(op) || "tr".equals(op) || 
-            "y".equals(op) || "qr".equals(op)) {
+        if ("matchRegex".equals(op) || "replaceRegex".equals(op) || 
+            "tr".equals(op) || "y".equals(op) || "quoteRegex".equals(op)) {
             hasRegexOperation = true;
             return;
         }

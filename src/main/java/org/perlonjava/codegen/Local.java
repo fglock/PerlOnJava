@@ -74,7 +74,7 @@ public class Local {
      */
     static void localTeardown(localRecord localRecord, MethodVisitor mv) {
         // Add `local` teardown logic
-        if (localRecord.containsLocalOperator()) {
+        if (localRecord.needsDynamicState()) {
             // Restore the dynamic variable stack to the recorded level
             mv.visitVarInsn(Opcodes.ILOAD, localRecord.dynamicIndex());
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
@@ -89,9 +89,9 @@ public class Local {
      * A record to store information about the presence of a 'local' operator
      * and the index of the dynamic variable stack.
      *
-     * @param containsLocalOperator Indicates if a 'local' operator is present.
+     * @param needsDynamicState Indicates if dynamic state management is needed (local or regex ops).
      * @param dynamicIndex          The index of the dynamic variable stack.
      */
-    record localRecord(boolean containsLocalOperator, int dynamicIndex) {
+    record localRecord(boolean needsDynamicState, int dynamicIndex) {
     }
 }
