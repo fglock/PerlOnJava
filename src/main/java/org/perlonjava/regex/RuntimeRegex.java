@@ -52,8 +52,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     public static String lastSuccessfulMatchString = null;
     // ${^LAST_SUCCESSFUL_PATTERN}
     public static RuntimeRegex lastSuccessfulPattern = null;
-    // Indicates if \G assertion is used
-    private final boolean useGAssertion = false;
     // Compiled regex pattern
     public Pattern pattern;
     int patternFlags;
@@ -379,7 +377,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         while (matcher.find()) {
             // If \G is used, ensure the match starts at the expected position
-            if (regex.useGAssertion && isPosDefined && matcher.start() != startPos) {
+            if (regex.regexFlags.useGAssertion() && isPosDefined && matcher.start() != startPos) {
                 break;
             }
 
