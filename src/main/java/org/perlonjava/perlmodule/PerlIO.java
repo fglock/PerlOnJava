@@ -47,8 +47,10 @@ public class PerlIO extends PerlModuleBase {
     // Optional arguments like 'output', 'details' are accepted but currently ignored
     public static RuntimeList get_layers(RuntimeArray args, int ctx) {
         RuntimeIO fh = args.get(0).getRuntimeIO();
+        
+        // For tied handles, return an empty list (Perl returns empty list, not an error)
         if (fh instanceof TieHandle) {
-            throw new PerlCompilerException("can't get_layers on tied handle");
+            return new RuntimeArray().getList();
         }
         
         // Parse optional arguments (output => 1, details => 1, etc.)

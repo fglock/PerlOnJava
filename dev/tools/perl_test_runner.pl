@@ -260,6 +260,16 @@ sub run_single_test {
     # These tests can crash the JVM with StackOverflowError during regex backtracking
     local $ENV{PERL_SKIP_BIG_MEM_TESTS} = 1;
 
+    # Add lib path for Pod/podlators tests
+    local $ENV{PERL5LIB} = $ENV{PERL5LIB};
+    my $working_dir = undef;
+    if ($test_file =~ m{Pod/podlators/}) {
+        my $podlators_lib = File::Spec->rel2abs('src/test/resources/Pod/podlators/lib');
+        $ENV{PERL5LIB} = $ENV{PERL5LIB} ? "$podlators_lib:$ENV{PERL5LIB}" : $podlators_lib;
+        # Change to podlators directory so tests can find t/data
+        $working_dir = File::Spec->rel2abs('src/test/resources/Pod/podlators');
+    }
+
     # Save current directory
     my $old_dir = File::Spec->rel2abs('.');
 
@@ -267,11 +277,14 @@ sub run_single_test {
     ## my $test_dir = $test_file;
     ## $test_dir =~ s{/[^/]+$}{};
 
-    chdir($test_dir) if $test_dir && -d $test_dir;
+    chdir($working_dir) if $working_dir && -d $working_dir;
+    chdir($test_dir) if !$working_dir && $test_dir && -d $test_dir;
 
     # Use absolute path for jperl
     my $abs_jperl = File::Spec->rel2abs($jperl_path, $old_dir);
-    my $test_name = File::Spec->abs2rel($test_file, $test_dir || '.');
+    my $test_name = $working_dir 
+        ? File::Spec->abs2rel(File::Spec->rel2abs($test_file, $old_dir), $working_dir)
+        : File::Spec->abs2rel($test_file, $test_dir || '.');
 
     # Try to use system timeout command if available
     my $timeout_cmd = '';

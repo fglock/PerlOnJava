@@ -182,6 +182,18 @@ public class FileHandle {
                 "main::STDIN".equals(normalizedName);
     }
 
+    /**
+     * Checks if a bare name represents a standard filehandle.
+     *
+     * @param name The bare filehandle name (e.g., "STDOUT")
+     * @return true if the name is a standard filehandle
+     */
+    public static boolean isStandardFilehandleName(String name) {
+        return "STDOUT".equals(name) ||
+                "STDERR".equals(name) ||
+                "STDIN".equals(name);
+    }
+
     public static String normalizeBarewordHandle(Parser parser, String name) {
         // Determine the package context for the file handle
         String packageName = parser.ctx.symbolTable.getCurrentPackage();

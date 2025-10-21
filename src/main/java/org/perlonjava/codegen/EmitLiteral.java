@@ -477,7 +477,10 @@ public class EmitLiteral {
             return;
         }
 
-        if (ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_SUBS)) {
+        // Standard filehandles (STDIN, STDOUT, STDERR) are always allowed as barewords
+        // even under strict subs, as they are predefined global filehandles
+        if (ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_SUBS) 
+                && !org.perlonjava.parser.FileHandle.isStandardFilehandleName(node.name)) {
             throw new PerlCompilerException(
                     node.tokenIndex,
                     "Bareword \"" + node.name + "\" not allowed while \"strict subs\" in use",

@@ -14,6 +14,7 @@ import java.util.List;
 
 import static org.perlonjava.parser.ParsePrimary.parsePrimary;
 import static org.perlonjava.parser.ParserNodeUtils.atUnderscore;
+import static org.perlonjava.parser.ParserTables.CORE_PROTOTYPES;
 import static org.perlonjava.parser.TokenUtils.peek;
 
 /**
@@ -665,6 +666,33 @@ public class Variable {
             if (isMaybeOperator(bracedVarName, parser)) {
                 // Reset and parse as expression
                 parser.tokenIndex = savedIndex;
+            }
+            // Check if this is a builtin function followed by -> or (
+            // In this case, it's a function call, not a variable: @{shift->...} or @{shift(...)}
+            else if (isBuiltinFunction(bracedVarName) && parser.tokenIndex < parser.tokens.size()) {
+                var nextToken = parser.tokens.get(parser.tokenIndex);
+                if (nextToken.text.equals("->") || nextToken.text.equals("(")) {
+                    // This is a function call, not a variable - parse as expression
+                    parser.tokenIndex = savedIndex;
+                } else {
+                    // Builtin function name but not followed by -> or (, treat as variable
+                    Node operand = new OperatorNode(sigil, new IdentifierNode(bracedVarName, parser.tokenIndex), parser.tokenIndex);
+                    
+                    try {
+                        int beforeAccess = parser.tokenIndex;
+                        operand = parseArrayHashAccessInBraces(parser, operand, isStringInterpolation);
+                        
+                        // Check if we successfully parsed to the closing brace
+                        if (TokenUtils.peek(parser).text.equals("}")) {
+                            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+                            return operand;
+                        } else {
+                            parser.tokenIndex = savedIndex;
+                        }
+                    } catch (Exception e) {
+                        parser.tokenIndex = savedIndex;
+                    }
+                }
             } else {
                 Node operand = new OperatorNode(sigil, new IdentifierNode(bracedVarName, parser.tokenIndex), parser.tokenIndex);
 
@@ -810,6 +838,15 @@ public class Variable {
         return "s".equals(identifier) || "m".equals(identifier) || "q".equals(identifier) ||
                 "qx".equals(identifier) || "qr".equals(identifier) || "y".equals(identifier) ||
                 "tr".equals(identifier) || "qq".equals(identifier) || "qw".equals(identifier);
+    }
+
+    /**
+     * Checks if an identifier is a builtin Perl function.
+     * This is used to distinguish between @{shift->...} (function call) and @{somevar->...} (variable).
+     */
+    private static boolean isBuiltinFunction(String identifier) {
+        // All builtin functions are registered in CORE_PROTOTYPES
+        return CORE_PROTOTYPES.containsKey(identifier);
     }
 
     /**
