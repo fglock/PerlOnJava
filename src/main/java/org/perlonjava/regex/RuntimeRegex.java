@@ -346,6 +346,17 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         RuntimeScalar posScalar = RuntimePosLvalue.pos(string);
         boolean isPosDefined = posScalar.getDefinedBoolean();
         int startPos = isPosDefined ? posScalar.getInt() : 0;
+        
+        // Check if previous call had zero-length match at this position (for SCALAR context)
+        // This prevents infinite loops in: while ($str =~ /pat/g)  
+        if (regex.regexFlags.isGlobalMatch() && ctx == RuntimeContextType.SCALAR) {
+            String patternKey = regex.patternString;
+            if (RuntimePosLvalue.hadZeroLengthMatchAt(string, startPos, patternKey)) {
+                // Previous match was zero-length at this position - fail to break loop
+                posScalar.set(scalarUndef);
+                return RuntimeScalarCache.scalarFalse;
+            }
+        }
 
         // Start matching from the current position if defined
         if (isPosDefined) {
@@ -357,7 +368,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         List<RuntimeBase> matchedGroups = result.elements;
 
         int capture = 1;
-        int previousPos = startPos; // Track the previous position
+        int previousPos = startPos; // Track the previous position  
+        int previousMatchEnd = -1;  // Track end of previous match
         // System.err.println("DEBUG: Resetting globalMatcher to null at start of matchRegex");
         globalMatcher = null;
         // Reset stored match information (but preserve last successful match info)
@@ -402,13 +414,39 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
             if (regex.regexFlags.isGlobalMatch()) {
                 // Update the position for the next match
+                int matchStart = matcher.start();
+                int matchEnd = matcher.end();
+                
+                // Detect zero-length match that would cause infinite loop
+                if (matchEnd == matchStart && matchStart == previousMatchEnd) {
+                    // Consecutive zero-length match at same position - advance by 1 or stop
+                    if (matchEnd >= inputStr.length()) {
+                        // At end of string, stop matching
+                        break;
+                    }
+                    // In middle of string, advance by 1 to avoid infinite loop
+                    matchEnd = matchStart + 1;
+                }
+                
+                previousMatchEnd = matchEnd;
+                
                 if (ctx == RuntimeContextType.SCALAR || ctx == RuntimeContextType.VOID) {
                     // Set pos to the end of the current match to prepare for the next search
-                    posScalar.set(matcher.end());
+                    posScalar.set(matchEnd);
+                    // Record zero-length match for cross-call tracking
+                    if (matchEnd == matchStart) {
+                        RuntimePosLvalue.recordZeroLengthMatch(string, matchEnd, regex.patternString);
+                    } else {
+                        RuntimePosLvalue.recordNonZeroLengthMatch(string);
+                    }
                     break; // Break out of the loop after the first match in SCALAR context
                 } else {
-                    startPos = matcher.end();
+                    startPos = matchEnd;
                     posScalar.set(startPos);
+                    // Update matcher region if we advanced past a zero-length match
+                    if (startPos > matchStart) {
+                        matcher.region(startPos, inputStr.length());
+                    }
                 }
             }
 
