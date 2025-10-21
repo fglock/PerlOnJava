@@ -721,14 +721,71 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return this.hashDeref().get(index);
     }
 
+    // Method to implement `$v->{key}` when "no strict refs" is in effect
+    public RuntimeScalar hashDerefGetNonStrict(RuntimeScalar index, String packageName) {
+        return switch (type) {
+            case HASHREFERENCE -> ((RuntimeHash) value).get(index);
+            case TIED_SCALAR -> tiedFetch().hashDerefGetNonStrict(index, packageName);
+            case STRING, BYTE_STRING -> {
+                // For strings ending in "::", return the package stash (symbol table)
+                String str = this.toString();
+                if (str.endsWith("::")) {
+                    yield HashSpecialVariable.getStash(str).get(index);
+                }
+                // For other strings, symbolic hash references are not allowed
+                throw new PerlCompilerException("Can't use string (\"" + this + "\") as a HASH ref while \"strict refs\" in use");
+            }
+            case UNDEF -> AutovivificationHash.createAutovivifiedHash(this).get(index);
+            default -> throw new PerlCompilerException("Not a HASH reference");
+        };
+    }
+
     // Method to implement `delete $v->{key}`
     public RuntimeScalar hashDerefDelete(RuntimeScalar index) {
         return this.hashDeref().delete(index);
     }
 
+    // Method to implement `delete $v->{key}` when "no strict refs" is in effect
+    public RuntimeScalar hashDerefDeleteNonStrict(RuntimeScalar index, String packageName) {
+        return switch (type) {
+            case HASHREFERENCE -> ((RuntimeHash) value).delete(index);
+            case TIED_SCALAR -> tiedFetch().hashDerefDeleteNonStrict(index, packageName);
+            case STRING, BYTE_STRING -> {
+                // For strings ending in "::", return the package stash (symbol table)
+                String str = this.toString();
+                if (str.endsWith("::")) {
+                    yield HashSpecialVariable.getStash(str).delete(index);
+                }
+                // For other strings, symbolic hash references are not allowed
+                throw new PerlCompilerException("Can't use string (\"" + this + "\") as a HASH ref while \"strict refs\" in use");
+            }
+            case UNDEF -> AutovivificationHash.createAutovivifiedHash(this).delete(index);
+            default -> throw new PerlCompilerException("Not a HASH reference");
+        };
+    }
+
     // Method to implement `exists $v->{key}`
     public RuntimeScalar hashDerefExists(RuntimeScalar index) {
         return this.hashDeref().exists(index);
+    }
+
+    // Method to implement `exists $v->{key}` when "no strict refs" is in effect
+    public RuntimeScalar hashDerefExistsNonStrict(RuntimeScalar index, String packageName) {
+        return switch (type) {
+            case HASHREFERENCE -> ((RuntimeHash) value).exists(index);
+            case TIED_SCALAR -> tiedFetch().hashDerefExistsNonStrict(index, packageName);
+            case STRING, BYTE_STRING -> {
+                // For strings ending in "::", return the package stash (symbol table)
+                String str = this.toString();
+                if (str.endsWith("::")) {
+                    yield HashSpecialVariable.getStash(str).exists(index);
+                }
+                // For other strings, symbolic hash references are not allowed
+                throw new PerlCompilerException("Can't use string (\"" + this + "\") as a HASH ref while \"strict refs\" in use");
+            }
+            case UNDEF -> AutovivificationHash.createAutovivifiedHash(this).exists(index);
+            default -> throw new PerlCompilerException("Not a HASH reference");
+        };
     }
 
     // Method to implement `$v->[10]`

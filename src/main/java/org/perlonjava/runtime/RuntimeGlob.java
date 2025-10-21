@@ -193,6 +193,25 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         };
     }
 
+    @Override
+    public RuntimeScalar hashDerefGetNonStrict(RuntimeScalar index, String packageName) {
+        // Globs are not affected by strict refs, delegate to regular method
+        return hashDerefGet(index);
+    }
+
+    @Override
+    public RuntimeScalar hashDerefDeleteNonStrict(RuntimeScalar index, String packageName) {
+        // Globs don't support delete, same as regular method
+        throw new PerlCompilerException("Can't delete from typeglob");
+    }
+
+    @Override
+    public RuntimeScalar hashDerefExistsNonStrict(RuntimeScalar index, String packageName) {
+        // Globs don't really support exists, but check if slot is defined
+        RuntimeScalar result = hashDerefGet(index);
+        return RuntimeScalarCache.getScalarBoolean(result.getDefinedBoolean());
+    }
+
     public RuntimeScalar getIO() {
         return this.IO;
     }

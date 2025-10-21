@@ -8,6 +8,7 @@ import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
 
 import static org.perlonjava.codegen.EmitSubroutine.handleSelfCallOperator;
+import static org.perlonjava.perlmodule.Strict.HINT_STRICT_REFS;
 
 public class Dereference {
     /**
@@ -411,15 +412,32 @@ public class Dereference {
         emitterVisitor.ctx.logDebug("visit -> (HashLiteralNode) autoquote " + node.right);
         nodeRight.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
 
-        String methodName = switch (hashOperation) {
-            case "get" -> "hashDerefGet";
-            case "delete" -> "hashDerefDelete";
-            case "exists" -> "hashDerefExists";
-            default ->
-                    throw new PerlCompilerException(node.tokenIndex, "Not implemented: hash operation: " + hashOperation, emitterVisitor.ctx.errorUtil);
-        };
+        String methodName;
+        String methodSignature;
+        if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_REFS)) {
+            // Strict refs: use regular methods
+            methodName = switch (hashOperation) {
+                case "get" -> "hashDerefGet";
+                case "delete" -> "hashDerefDelete";
+                case "exists" -> "hashDerefExists";
+                default ->
+                        throw new PerlCompilerException(node.tokenIndex, "Not implemented: hash operation: " + hashOperation, emitterVisitor.ctx.errorUtil);
+            };
+            methodSignature = "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;";
+        } else {
+            // No strict refs: use NonStrict methods that handle stashes
+            methodName = switch (hashOperation) {
+                case "get" -> "hashDerefGetNonStrict";
+                case "delete" -> "hashDerefDeleteNonStrict";
+                case "exists" -> "hashDerefExistsNonStrict";
+                default ->
+                        throw new PerlCompilerException(node.tokenIndex, "Not implemented: hash operation: " + hashOperation, emitterVisitor.ctx.errorUtil);
+            };
+            methodSignature = "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;";
+            emitterVisitor.pushCurrentPackage();
+        }
 
-        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", methodName, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", methodName, methodSignature, false);
         EmitOperator.handleVoidContext(emitterVisitor);
     }
 }
