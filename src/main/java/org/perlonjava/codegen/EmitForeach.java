@@ -69,8 +69,34 @@ public class EmitForeach {
         Local.localRecord localRecord = Local.localSetup(emitterVisitor.ctx, node, mv);
 
         // Obtain the iterator for the list
+        // IMPORTANT: Evaluate the list expression BEFORE localizing $_
+        // This allows split() and other functions to use the outer loop's $_ value
         node.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "iterator", "()Ljava/util/Iterator;", false);
+
+        // Now localize $_ AFTER evaluating the list but BEFORE starting the loop
+        // This prevents the inner loop from corrupting the outer loop's $_
+        if (loopVariableIsGlobal && node.useNewScope) {
+            boolean isWarningEnabled = Warnings.warningManager.isWarningEnabled("redefine");
+            if (isWarningEnabled) {
+                // disable warnings
+                Warnings.warningManager.setWarningState("redefine", false);
+            }
+
+            // Localize the global variable
+            mv.visitLdcInsn(globalVarName);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/GlobalRuntimeScalar",
+                    "makeLocal",
+                    "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                    false);
+            mv.visitInsn(Opcodes.POP);  // We don't need the return value
+
+            if (isWarningEnabled) {
+                // restore warnings
+                Warnings.warningManager.setWarningState("redefine", true);
+            }
+        }
 
         mv.visitLabel(loopStart);
 

@@ -161,11 +161,9 @@ public class StatementParser {
                     String fullName = NameNormalizer.normalizeVariableName(identifier, parser.ctx.symbolTable.getCurrentPackage());
                     identifierNode.name = fullName;
 
-                    return new BlockNode(
-                            List.of(
-                                    new OperatorNode("local", varNode, parser.tokenIndex),
-                                    new For1Node(label, true, varNode, initialization, body, continueNode, parser.tokenIndex)
-                            ), parser.tokenIndex);
+                    // Don't wrap in BlockNode with local $_ - let For1Node handle localization
+                    // after evaluating the list expression to avoid clearing $_ before split() etc
+                    return new For1Node(label, true, varNode, initialization, body, continueNode, parser.tokenIndex);
                 }
             }
         }

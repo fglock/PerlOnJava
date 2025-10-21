@@ -400,11 +400,9 @@ public class StatementResolver {
                         yield new BlockNode(List.of(expression), parser.tokenIndex);
                     }
 
-                    yield new BlockNode(
-                            List.of(
-                                    new OperatorNode("local", scalarUnderscore(parser), parser.tokenIndex),
-                                    new For1Node(null, false, scalarUnderscore(parser), modifierExpression, expression, null, parser.tokenIndex)
-                            ), parser.tokenIndex);
+                    // Don't wrap in BlockNode with local $_ - let For1Node handle localization
+                    // after evaluating the list expression to avoid clearing $_ before split() etc
+                    yield new For1Node(null, true, scalarUnderscore(parser), modifierExpression, expression, null, parser.tokenIndex);
                 }
 
                 case "while", "until" -> {
