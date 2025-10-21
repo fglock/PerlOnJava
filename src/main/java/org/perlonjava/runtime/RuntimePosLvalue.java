@@ -60,16 +60,59 @@ public class RuntimePosLvalue {
     }
 
     /**
+     * Check if the last match at this position was zero-length with the given pattern.
+     * This is used to prevent infinite loops in global regex matches.
+     */
+    public static boolean hadZeroLengthMatchAt(RuntimeScalar perlVariable, int position, String patternKey) {
+        CacheEntry cachedEntry = positionCache.get(perlVariable);
+        if (cachedEntry == null) {
+            return false;
+        }
+        return cachedEntry.lastMatchWasZeroLength &&
+                cachedEntry.lastMatchPosition == position &&
+                patternKey.equals(cachedEntry.lastMatchPattern);
+    }
+
+    /**
+     * Record that a zero-length match occurred at the given position with the given pattern.
+     */
+    public static void recordZeroLengthMatch(RuntimeScalar perlVariable, int position, String patternKey) {
+        CacheEntry cachedEntry = positionCache.get(perlVariable);
+        if (cachedEntry != null) {
+            cachedEntry.lastMatchWasZeroLength = true;
+            cachedEntry.lastMatchPosition = position;
+            cachedEntry.lastMatchPattern = patternKey;
+        }
+    }
+
+    /**
+     * Clear the zero-length match tracking (called after successful non-zero-length match).
+     */
+    public static void recordNonZeroLengthMatch(RuntimeScalar perlVariable) {
+        CacheEntry cachedEntry = positionCache.get(perlVariable);
+        if (cachedEntry != null) {
+            cachedEntry.lastMatchWasZeroLength = false;
+            cachedEntry.lastMatchPattern = null;
+        }
+    }
+
+    /**
      * A cache entry that stores the hash of a {@code RuntimeScalar} value and its regex position.
      * This helps in determining if the cached position is still valid for the given scalar.
      */
     private static class CacheEntry {
         int valueHash; // Hash of the RuntimeScalar value to detect changes
         RuntimeScalar regexPosition; // Cached position of the regex match
+        boolean lastMatchWasZeroLength; // Track if last match was zero-length
+        int lastMatchPosition; // Position of last zero-length match
+        String lastMatchPattern; // Pattern that had the zero-length match
 
         CacheEntry(int valueHash, RuntimeScalar regexPosition) {
             this.valueHash = valueHash;
             this.regexPosition = regexPosition;
+            this.lastMatchWasZeroLength = false;
+            this.lastMatchPosition = -1;
+            this.lastMatchPattern = null;
         }
     }
 }
