@@ -29,6 +29,10 @@ imports:
     target: t/test.pl
     patch: test.pl.patch
 
+  - source: perl5/t/re/pat.t
+    target: t/re/pat.t
+    patch: pat.t.patch
+
   # Pod modules from cpan (needed for Pod documentation parsing)
   # Pod::Simple - Core Pod parser
   - source: perl5/cpan/Pod-Simple/lib/Pod
