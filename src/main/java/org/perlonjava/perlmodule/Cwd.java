@@ -51,10 +51,16 @@ public class Cwd extends PerlModuleBase {
      * @return A RuntimeList containing the current working directory.
      */
     public static RuntimeList getcwd(RuntimeArray args, int ctx) {
-        // Use getCanonicalPath to resolve any symbolic links or relative paths
-        // String cwd = new File(".").getCanonicalPath();
-        String cwd = System.getProperty("user.dir");
-        return new RuntimeScalar(cwd).getList();
+        try {
+            // Normalize the path to handle Windows 8.3 short paths
+            // This ensures getcwd() matches abs_path('.')
+            String cwd = Paths.get(System.getProperty("user.dir")).toRealPath().toString();
+            return new RuntimeScalar(cwd).getList();
+        } catch (IOException e) {
+            // Fallback to raw path if normalization fails
+            String cwd = System.getProperty("user.dir");
+            return new RuntimeScalar(cwd).getList();
+        }
     }
 
     /**
