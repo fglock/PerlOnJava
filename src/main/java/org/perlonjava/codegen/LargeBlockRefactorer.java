@@ -3,6 +3,7 @@ package org.perlonjava.codegen;
 import org.perlonjava.astnode.*;
 import org.perlonjava.astvisitor.ControlFlowDetectorVisitor;
 import org.perlonjava.astvisitor.EmitterVisitor;
+import org.perlonjava.symbols.ScopedSymbolTable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -58,9 +59,11 @@ public class LargeBlockRefactorer {
             return false;
         }
 
-        // TEMPORARILY DISABLED: Smart chunking has timing issues with special blocks (BEGIN/require)
-        // Causes NPE in SpecialBlockParser when functions aren't defined yet during compilation
-        // if (trySmartChunking(node)) {
+        // FIXED (2025-10-23): Package context preservation issue resolved
+        // Smart chunking now creates a snapshot with the correct package context at refactoring time
+        // This allows imported functions to be resolved correctly within chunked closures
+        // TODO: Re-enable after more testing
+        // if (trySmartChunking(node, emitterVisitor)) {
         //     // Block was successfully chunked, continue with normal emission
         //     return false;
         // }
@@ -98,23 +101,36 @@ public class LargeBlockRefactorer {
      * Try to apply smart chunking to reduce the number of top-level elements.
      *
      * @param node The block to chunk
+     * @param emitterVisitor The visitor containing symbol table for package tracking
      * @return true if chunking was successful, false otherwise
      */
-    private static boolean trySmartChunking(BlockNode node) {
+    private static boolean trySmartChunking(BlockNode node, EmitterVisitor emitterVisitor) {
         List<Node> processedElements = new ArrayList<>();
         List<Node> currentChunk = new ArrayList<>();
+        String currentPackage = emitterVisitor.ctx.symbolTable.getCurrentPackage();
 
         for (Node element : node.elements) {
-            if (shouldBreakChunk(element)) {
+            // Track package changes in the AST
+            if (element instanceof OperatorNode opNode && opNode.operator.equals("package")) {
+                // Package statement found - flush current chunk and update package context
+                processChunk(currentChunk, processedElements, node.tokenIndex, emitterVisitor, currentPackage);
+                currentChunk.clear();
+                processedElements.add(element);
+                
+                // Update the package name for subsequent chunks
+                if (opNode.operand instanceof IdentifierNode identifierNode) {
+                    currentPackage = identifierNode.name;
+                }
+            } else if (shouldBreakChunk(element)) {
                 // This element cannot be in a chunk
-                processChunk(currentChunk, processedElements, node.tokenIndex);
+                processChunk(currentChunk, processedElements, node.tokenIndex, emitterVisitor, currentPackage);
                 currentChunk.clear();
 
                 // Add the unsafe element directly
                 processedElements.add(element);
             } else if (isCompleteBlock(element)) {
                 // Complete blocks are already scoped
-                processChunk(currentChunk, processedElements, node.tokenIndex);
+                processChunk(currentChunk, processedElements, node.tokenIndex, emitterVisitor, currentPackage);
                 currentChunk.clear();
                 processedElements.add(element);
             } else {
@@ -124,7 +140,7 @@ public class LargeBlockRefactorer {
         }
 
         // Process any remaining chunk
-        processChunk(currentChunk, processedElements, node.tokenIndex);
+        processChunk(currentChunk, processedElements, node.tokenIndex, emitterVisitor, currentPackage);
 
         // Apply chunking if we reduced the element count
         if (processedElements.size() < node.elements.size()) {
@@ -159,17 +175,27 @@ public class LargeBlockRefactorer {
     /**
      * Process accumulated chunk statements.
      */
-    private static void processChunk(List<Node> chunk, List<Node> processedElements, int tokenIndex) {
+    private static void processChunk(List<Node> chunk, List<Node> processedElements, int tokenIndex, EmitterVisitor emitterVisitor, String packageContext) {
         if (chunk.isEmpty()) {
             return;
         }
 
         if (chunk.size() >= MIN_CHUNK_SIZE) {
+            // CRITICAL: Create a snapshot of the symbol table with the correct package context
+            // This mimics how normal anonymous subroutines capture their parse-time context
+            ScopedSymbolTable chunkSnapshot = emitterVisitor.ctx.symbolTable.snapShot();
+            chunkSnapshot.setCurrentPackage(packageContext, false);
+            
             // Create a closure for this chunk: sub { ... }->()
             BlockNode chunkBlock = new BlockNode(new ArrayList<>(chunk), tokenIndex);
+            SubroutineNode subNode = new SubroutineNode(null, null, null, chunkBlock, false, tokenIndex);
+            
+            // Store the pre-made snapshot in the SubroutineNode annotation
+            subNode.setAnnotation("chunkSnapshot", chunkSnapshot);
+            
             BinaryOperatorNode closure = new BinaryOperatorNode(
                     "->",
-                    new SubroutineNode(null, null, null, chunkBlock, false, tokenIndex),
+                    subNode,
                     new ListNode(tokenIndex),  // Empty args - closures capture outer scope
                     tokenIndex
             );

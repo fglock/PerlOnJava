@@ -45,7 +45,16 @@ public class EmitSubroutine {
         ctx.logDebug("AnonSub ctx.symbolTable.getAllVisibleVariables");
 
         // Create a new symbol table for the subroutine
-        ScopedSymbolTable newSymbolTable = ctx.symbolTable.snapShot();
+        // For smart chunking, use the pre-made snapshot that captures the correct package context
+        ScopedSymbolTable newSymbolTable;
+        Object chunkSnapshot = node.getAnnotation("chunkSnapshot");
+        if (chunkSnapshot instanceof ScopedSymbolTable snapshot) {
+            // Smart chunking: use the pre-made snapshot with correct package context
+            newSymbolTable = snapshot;
+        } else {
+            // Normal anonymous subroutine - create snapshot from current context
+            newSymbolTable = ctx.symbolTable.snapShot();
+        }
 
         String[] newEnv = newSymbolTable.getVariableNames();
         ctx.logDebug("AnonSub " + newSymbolTable);
