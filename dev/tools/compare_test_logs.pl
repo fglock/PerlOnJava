@@ -94,6 +94,8 @@ sub parse_log {
         # Match lines like: [123/619] t/op/hash.t ... ✓ 26937/26942 ok (1.23s)
         if (/\]\s+(\S+\.t)\s+.*?(\d+)\/(\d+)\s+ok/) {
             my ($test, $passed, $total) = ($1, $2, $3);
+            # Normalize test path by removing leading 't/' prefix if present
+            $test =~ s{^t/}{};
             $results{$test} = {
                 passed => $passed,
                 total => $total,
