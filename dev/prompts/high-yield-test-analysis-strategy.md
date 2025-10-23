@@ -3,33 +3,6 @@
 ## 🎯 Core Principle
 **Target systematic errors for exponential impact.** One fix can unlock hundreds of tests.
 
-## 🚨 CRITICAL: Work on Branches, Not Main
-
-**NEVER work directly on main/master!** Windows CI/CD failures block merges.
-
-```bash
-# ✅ CORRECT - Branch workflow
-git checkout -b feature-name      # Create feature branch
-# ... make changes ...
-make test                         # MUST pass locally
-git commit -m "Fix: description"
-git push origin feature-name      # Push branch
-# Create Pull Request / Merge Request
-# Wait for CI/CD to pass on ALL platforms (Linux, Mac, Windows)
-# Only then merge to main
-
-# ❌ WRONG - Direct commits to main
-git checkout main
-# ... make changes ...
-git commit                        # CI/CD fails on Windows!
-git push                          # BREAKS MAIN BRANCH!
-```
-
-**Why this matters (2025-10-22):**
-- Tests pass on Mac/Linux but fail on Windows (path separators, case sensitivity, etc.)
-- Direct commits to main break CI/CD for everyone
-- Must verify ALL platforms pass before merging
-
 ## 🚨 CRITICAL: Build & Test Before Commit
 
 **YOU WILL BREAK THE BUILD if you skip this!**
@@ -45,9 +18,7 @@ make test              # MUST pass! Catches regressions
 git commit             # Safe
 ```
 
-**Recent incidents:** 
-- **Windows CI/CD failure (2025-10-22):** string_interpolation.t failed on Windows only
-- local() fix (2025-10-13), pack mode fix (2025-10-08) - broke unit tests
+**Recent incidents:** local() fix (2025-10-13), pack mode fix (2025-10-08), PackBuffer fix (2025-10-07) - all broke unit tests despite passing integration tests.
 
 ## 🔧 Build Commands - CRITICAL for Different Changes
 
@@ -76,54 +47,38 @@ make                            # Incremental - use for iteration only
 - `./jperl` uses the jar file, not loose classes
 - **Always run `./gradlew build` after changes before testing with `./jperl`**
 
-## 🐛 Debugging Strategy - TRACE Flag Pattern
+## 🐛 Debugging Strategy
 
-**New Pattern (2025-10-18):** Add trace flags for systematic debugging:
-
-```java
-// Add to class being debugged:
-private static final boolean TRACE_PACK = false;  // Toggle for debugging
-
-// Use throughout code:
-if (TRACE_PACK) {
-    System.err.println("TRACE: method entry, param=" + param);
-    System.err.flush();  // Force output
-}
-```
-
-**Benefits:**
-- Leave trace code in place, toggle with flag
-- No need to remove/re-add debug statements
-- Forces you to understand code flow
-- Easy to re-enable when bugs resurface
-
-**Example from pack.t fix:**
-```java
-// Pack.java
-private static final boolean TRACE_PACK = false;
-
-public static RuntimeScalar pack(RuntimeList args) {
-    if (TRACE_PACK) {
-        System.err.println("TRACE Pack.pack() called:");
-        System.err.println("  template: [" + template + "]");
-        System.err.flush();
-    }
-    // ... rest of code
-}
-```
-
-**When prints don't appear:**
-1. Check if jar was rebuilt: `./gradlew build -x test`
-2. Verify trace flag is true
-3. Check stderr redirection: `2>&1`
-4. Try System.err.flush() after each print
+**TRACE flags:** Add `private static final boolean TRACE_X = false;` + conditional prints
+**When prints don't appear:** Rebuild jar! (`./gradlew build`)
 
 ## 🔍 Quick Start: Finding High-Yield Targets
 
-### 1. Blocked Tests (Highest ROI - 100+ tests)
+### 1. Compare Test Runs (NEW - 2025-10-22)
 ```bash
-perl dev/tools/perl_test_runner.pl t 2>&1 | tee logs/baseline.log
-grep -A 15 "incomplete test files" logs/baseline.log
+# Run full test suite
+perl dev/tools/perl_test_runner.pl t 2>&1 | tee logs/current_run.log
+
+# Compare with previous run to find regressions/progress
+./dev/tools/compare_test_logs.pl logs/previous.log logs/current_run.log
+
+# Quick summary only
+./dev/tools/compare_test_logs.pl --summary-only logs/previous.log logs/current_run.log
+
+# Focus on regressions in large test files
+./dev/tools/compare_test_logs.pl --min-total 1000 --no-show-progress logs/previous.log logs/current_run.log
+```
+
+**Key Features:**
+- Identifies which test files regressed/improved
+- Shows exact test count differences
+- Filters by file size or test count difference
+- Catches regressions early (like the 27K test drop we found)
+
+### 2. Blocked Tests (Highest ROI - 100+ tests)
+```bash
+# Find incomplete/errored test files
+grep -A 15 "incomplete test files" logs/current_run.log
 ```
 
 **Common blockers:**
@@ -131,13 +86,10 @@ grep -A 15 "incomplete test files" logs/baseline.log
 - `"Variable does not contain"` → Parser issue, use `--parse`
 - `"Not implemented: X"` → Missing feature
 
-### 2. Systematic Patterns (10-50 tests each)
+### 3. Systematic Patterns (10-50 tests each)
 ```bash
 # Find tests with moderate failure rates (good ROI)
 jq -r '.results | to_entries[] | select(.value.ok_count > 50 and .value.not_ok_count > 15 and .value.not_ok_count < 100) | "\(.value.not_ok_count) failures - \(.key)"' out.json | sort -rn | head -20
-
-# Look for repeated error messages
-./jperl t/op/TESTFILE.t 2>&1 | grep "^not ok" | head -20
 ```
 
 ## ⏱️ Time Management
@@ -149,6 +101,53 @@ jq -r '.results | to_entries[] | select(.value.ok_count > 50 and .value.not_ok_c
 | Hard | 60-90 min | Create prompt doc |
 
 **Checkpoints:** 15 min (reproduced?), 30 min (root cause?), 60 min (document & move on?)
+
+### Regression Response Protocol
+
+**When test count drops unexpectedly:**
+
+1. **Compare logs immediately:**
+   ```bash
+   perl dev/tools/compare_test_logs.pl logs/baseline.log logs/current.log --summary
+   ```
+
+2. **Identify breaking commit:**
+   ```bash
+   git log --oneline -10
+   ```
+
+3. **Revert the commit:**
+   ```bash
+   # Option A: Clean revert (recommended)
+   git revert <breaking-commit-hash>
+   
+   # Option B: Hard reset (if not pushed)
+   git reset --hard <last-good-commit>
+   ```
+
+4. **CRITICAL: Rebuild and test:**
+   ```bash
+   make                        # Must rebuild!
+   ./jperl t/op/pack.t         # Verify key files work
+   ./jperl t/re/pat.t
+   ./jperl t/op/hash.t
+   ```
+
+5. **Verify restoration:**
+   ```bash
+   # Run full suite
+   perl dev/tools/perl_test_runner.pl t > logs/after_revert.log
+   # Compare
+   perl dev/tools/compare_test_logs.pl logs/baseline.log logs/after_revert.log --summary
+   ```
+
+**⚠️ CRITICAL LESSON (2025-10-22):**
+- `git reset`/`git revert` removes COMMITS from history
+- **BUT CODE CHANGES MAY STILL BE IN WORKING TREE!**
+- `git reset --soft` keeps changes staged
+- Always check: `git diff` and `git status`
+- **Always rebuild after ANY git operation**
+- **Always test after rebuild**
 
 ## 🎨 High-Impact Fix Patterns
 
@@ -181,51 +180,18 @@ Small validation fixes unlock many tests:
 - Check error order/precedence
 - One validation often fixes multiple tests
 
-### Thread-Safe Recursion Depth Tracking (New Pattern 2025-10-18)
-```java
-// Prevent stack overflow in recursive operations
-private static final ThreadLocal<Integer> nestingDepth = ThreadLocal.withInitial(() -> 0);
-private static final int MAX_NESTING_DEPTH = 100;
-
-public static Result handleRecursive(...) {
-    int currentDepth = nestingDepth.get() + 1;
-    if (currentDepth > MAX_NESTING_DEPTH) {
-        throw new PerlCompilerException("Too deeply nested in operation");
-    }
-    nestingDepth.set(currentDepth);
-    try {
-        return handleRecursiveInternal(...);
-    } finally {
-        nestingDepth.set(currentDepth - 1);  // Always decrement
-    }
-}
-```
+### Thread-Safe Recursion (use ThreadLocal + try/finally)
 
 ## 🔬 Debug Commands
 
-### AST & Parser Issues
 ```bash
-# View AST structure
+# AST/Parser
 ./jperl --parse -e 'code'
-
-# Compare with Perl's parse tree
 perl -MO=Concise -e 'code'
+./jperl --disassemble -e 'code'
 
-# View bytecode
-./jperl --disassemble -e 'code' 2>&1 | grep -A 20 "methodName"
-
-# Test systematically
-./jperl -e 'minimal'       # Simplest case
-./jperl -e 'with_context'  # Add complexity
-```
-
-### Extract Failing Tests
-```bash
-# Find specific failure
-./jperl t/op/test.t 2>&1 | grep -A 3 "^not ok NUMBER"
-
-# Test in isolation
-./jperl -e 'extracted_code'
+# Extract failures
+./jperl t/op/test.t 2>&1 | grep -A 3 "^not ok"
 ```
 
 ## 📍 Key Code Locations
@@ -238,12 +204,22 @@ perl -MO=Concise -e 'code'
 
 ## ✅ Testing Strategy
 
+### Incremental Verification
 1. Create minimal test case
 2. Test with `--parse` if parser issue
-3. Apply fix and test
-4. Test full file: `./jperl t/op/test.t`
-5. **Run `make test` (MANDATORY)**
-6. Review unit test failures
+3. Apply fix
+4. Test minimal case
+5. Test full test file: `./jperl t/op/test.t`
+6. **Run `make test` (MANDATORY - catches regressions!)**
+7. Review unit test failures - they reveal edge cases
+
+### Minimal Test Template
+```perl
+#!/usr/bin/perl
+use strict;
+my $result = operation();
+print ($result eq "expected" ? "PASS" : "FAIL: got '$result'\n");
+```
 
 ## 🚧 Critical Insights
 
@@ -265,7 +241,23 @@ perl -MO=Concise -e 'code'
 - Fixing symptoms instead of root causes
 - Not creating minimal test cases
 
-## 🔒 Git Safety
+## 📝 Environment Setup (Quick)
+
+```bash
+# Kill hanging processes
+pkill -f "java.*org.perlonjava" || true
+
+# Clean and rebuild
+./gradlew clean shadowJar
+
+# Verify
+echo 'print "Ready\n"' | ./jperl
+```
+
+## 🔒 Git Safety (Condensed)
+
+### Files to NEVER Commit
+Add to `.gitignore`: `test_*.pl`, `debug_*.pl`, `*.tmp`, `*.log`, `logs/`
 
 ### Safe Commit Workflow
 ```bash
@@ -290,19 +282,43 @@ git show --name-only | head -20
 
 ### Pre-Commit Checklist
 - [ ] Run `make test` (catches regressions)
-- [ ] Clean temp files: `rm -f test_*.pl debug_*.pl *.tmp`
-- [ ] Check for garbage: `git status --short | grep "^??"`
-- [ ] Stage specific files only (no `git add .`)
-- [ ] Verify commit: `git show --name-only`
+- [ ] Clean temp files
+- [ ] Check for garbage
+- [ ] Stage specific files only
 
-### Emergency Cleanup
+### Emergency: Reverting Regressions
+
+**CRITICAL: git reset/revert removes COMMITS, not CODE!**
+
 ```bash
-# Unstage garbage files
-git reset HEAD test_*.pl debug_*.pl *.tmp
+# When regression detected:
 
-# Undo last commit (keep changes)
-git reset --soft HEAD~1
+# 1. Find the breaking commit
+git log --oneline -10
+
+# 2. OPTION A: Revert the commit (keeps history, creates new commit)
+git revert <commit-hash>    # Creates anti-commit
+make                         # REBUILD!
+./jperl t/op/pack.t         # TEST!
+
+# 3. OPTION B: Reset to before breaking commit (rewrites history)
+git reset --hard <good-commit-hash>
+make                         # REBUILD!
+./jperl t/op/pack.t         # TEST!
+
+# 4. CRITICAL: If you used git rebase/reset to clean history:
+#    YOU MUST MANUALLY FIX THE CODE!
+#    The commits are gone but code changes remain in working tree.
+
+# 5. Verify the fix restored baseline:
+perl dev/tools/compare_test_logs.pl logs/baseline.log logs/current.log --summary
 ```
+
+**Today's lesson (2025-10-22):**
+- Cleaned git history with `git reset --soft` + rebase
+- But CODE still had smart chunking enabled!
+- Git history ≠ Working tree
+- Always REBUILD and TEST after any git operation
 
 ## 🎯 Success Metrics
 
@@ -316,9 +332,30 @@ git reset --soft HEAD~1
 - 10-50 tests/hour: Good investment  
 - <10 tests/hour: Consider documenting for later
 
-## 📋 When to Create Prompt Documents
+## 📋 Quick Reference
 
-If investigation exceeds 60 minutes OR architectural changes needed: document problem, root cause, solution, and expected impact.
+### When to Create Prompt Documents
+- Investigation exceeds 60 minutes
+- Multiple interconnected systems
+- Architectural changes needed
+- High value but complex
+
+### Template (Keep under 400 words!)
+```markdown
+# Fix [Issue]
+
+## Problem
+[1-2 sentences]
+
+## Root Cause
+[2-3 sentences, evidence]
+
+## Solution
+[Bullet points, concise]
+
+## Expected Impact
+[1 sentence, test count]
+```
 
 ## 🔥 Recent Patterns (2025-10-18)
 
@@ -340,75 +377,24 @@ For recursive operations that need depth limits:
 - Increment on entry, decrement in `finally` block
 - Throw exception when depth exceeds limit
 
-## 🏗️ Known Architectural Issues (2025-10-18)
+## 🏗️ Known Architectural Issues
 
-### W Format UTF-8/Binary Mixing (Tests 5072-5154)
-
-**Problem:** Mixing Unicode formats (W/U) with binary formats (N/V/I) in pack/unpack creates alignment issues.
-
-**Example:**
-```perl
-$p = pack("W N4", 0x1FFC, 0x12345678, 0x23456781, 0x34567812, 0x45678123);
-@v = unpack("x[W] N4", $p);  # Expects: skip 1 char, read 4 ints
-```
-
-**What Happens:**
-1. `pack("W", 0x1FFC)` produces character U+1FFC (internally: UTF-8 bytes 0xE1 0x9F 0xBC)
-2. `pack("N", 0x12345678)` produces bytes 0x12 0x34 0x56 0x78
-3. Result: 5-character string with UTF-8 flag set
-4. Internal bytes: [0xE1, 0x9F, 0xBC, 0x12, 0x34, 0x56, 0x78, ...]
-
-**Unpack Issue:**
-- `x[W]` should skip 1 character (logical view)
-- But how many **bytes** is that?
-  - In char mode: 1 character = 1 position
-  - In byte mode: 1 character = 3 UTF-8 bytes
-- `N4` reads from physical UTF-8 bytes, so if we skip wrong amount, misalignment!
-
-**Current Status:**
-- `PackParser.calculatePackedSize()` uses ISO-8859-1 encoding to measure byte length
-- For W with default dummy value (0), this returns 1 byte
-- For high Unicode (e.g., 0x1FFC), returns 1 byte (low byte only) not 3 (UTF-8 bytes)
-- **Result:** Tests with default/low values pass, tests with high Unicode fail
-
-**Documented In:**
-- `PackParser.calculatePackedSize()` - comprehensive Javadoc
-- `docs/PACK_UNPACK_ARCHITECTURE.md` - full explanation
-
-**Potential Solutions:**
-1. Make x[W] always work in character mode (skip 1 char position)
-2. Make x[W] calculate true UTF-8 byte length (complex!)
-3. Document as known limitation and suggest workarounds
-
-**Current Approach:** Option 3 - documented limitation with test analysis.
-
-### Group-Relative Positioning in Pack (Tests 14677+)
-
-**Problem:** The `.` format in pack doesn't support group-relative positioning yet.
-
-**Example:**
-```perl
-pack("(a)5 .2", 1..5, -3)  # Should work but doesn't
-```
-
-**Status:** Not implemented. Unpack has full support, pack needs similar baseline tracking.
-
-**Requires:** Adding group baseline management to PackGroupHandler (similar to UnpackGroupProcessor).
+### Pack/Unpack Complex Cases
+Some advanced pack/unpack patterns have documented limitations:
+- **W format UTF-8/binary mixing:** Character vs byte alignment issues
+- **Group-relative positioning (`.`):** Not fully implemented in pack
+- **See:** `dev/design/PACK_UNPACK_ARCHITECTURE.md` for details
 
 ---
 
 ## 💡 Key Takeaways
 
-1. **Always rebuild jar:** `./gradlew build` before testing with `./jperl`
-2. **Always run `make test`** before committing - catches regressions
-3. **Use TRACE flags** instead of ad-hoc debug statements
-4. **Target systematic errors** - one fix = many tests
-5. **Never `git add .`** - adds garbage temp files
-6. **Time-box investigations** - document if >60 minutes
-7. **Document architectural limitations** - some issues are complex, document them!
+1. **Use compare_test_logs.pl** to track regressions between runs
+2. **Always rebuild jar:** `./gradlew build` before testing with `./jperl`
+3. **Always run `make test`** before committing - catches regressions
+4. **Use TRACE flags** instead of ad-hoc debug statements
+5. **Target systematic errors** - one fix = many tests
+6. **Never `git add .`** - adds garbage temp files
+7. **Time-box investigations** - document if >60 minutes
 
----
-
-**Remember:** Testing your specific file is NOT enough. Unit tests catch subtle bugs that integration tests miss. Always run `make test` before committing!
-
-**New:** See `dev/design/PACK_UNPACK_ARCHITECTURE.md` for comprehensive architecture documentation.
+**Remember:** Testing your specific file is NOT enough. Unit tests catch subtle bugs. Always run `make test` before committing!
