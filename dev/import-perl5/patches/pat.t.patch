@@ -1,0 +1,109 @@
+--- perl5/t/re/pat.t	2025-10-13 09:35:44
++++ t/re/pat.t	2025-10-22 09:57:03
+@@ -714,7 +714,7 @@
+         $_ = "aced";
+         #12           3  4  5
+         /((a?(*ACCEPT)())())()/
+-            or die "Failed to match";
++            or warn "Failed to match";
+         is($1,"a",$message . "buffer 1 is defined with expected value");
+         is($2,"a",$message . "buffer 2 is defined with expected value");
+         ok(!defined($3),$message . "buffer 3 is not defined");
+@@ -723,7 +723,7 @@
+         ok(!defined($6),$message . "buffer 6 is not defined");
+         $message= 'NO ACCEPT and CLOSE - ';
+         /((a?())())()/
+-            or die "Failed to match";
++            or warn "Failed to match";
+         is($1,"a",$message . "buffer 1 is defined with expected value");
+         is($2,"a",$message . "buffer 2 is defined with expected value");
+         is($3,"", $message . "buffer 3 is defined with expected value");
+@@ -733,7 +733,7 @@
+         #12           3  4  5
+         $message = 'ACCEPT and CLOSE - ';
+         /((a?(*ACCEPT)(c))(e))(d)/
+-            or die "Failed to match";
++            or warn "Failed to match";
+         is($1,"a",$message . "buffer 1 is defined with expected value");
+         is($2,"a",$message . "buffer 2 is defined with expected value");
+         ok(!defined($3),$message . "buffer 3 is not defined");
+@@ -742,7 +742,7 @@
+         ok(!defined($6),$message . "buffer 6 is not defined");
+         $message= 'NO ACCEPT and CLOSE - ';
+         /((a?(c))(e))(d)/
+-            or die "Failed to match";
++            or warn "Failed to match";
+         is($1,"ace", $message . "buffer 1 is defined with expected value");
+         is($2,"ac", $message . "buffer 2 is defined with expected value");
+         is($3,"c", $message . "buffer 3 is defined with expected value");
+@@ -897,7 +897,7 @@
+     }
+ 
+ 
+-    {
++    eval {
+         my $message = 'pos inside (?{ })';
+         my $str = 'abcde';
+         our ($foo, $bar);
+@@ -959,7 +959,7 @@
+                      "'abcd' 'e|' 'abcde' " .
+                      "'abcde|' 'ab' 'cde' " .
+                      "'abcde|' 'abc' 'de'", $message);
+-    }
++    } or fail("pos inside (?{ }) - not implemented");
+ 
+     {
+         my $message = '\G anchor checks';
+@@ -1183,11 +1183,11 @@
+         sub new {bless []}
+ 
+         my $message  = "Ref stringification";
+-      ::ok(do { \my $v} =~ /^SCALAR/,   "Scalar ref stringification") or diag($message);
+-      ::ok(do {\\my $v} =~ /^REF/,      "Ref ref stringification") or diag($message);
+-      ::ok([]           =~ /^ARRAY/,    "Array ref stringification") or diag($message);
+-      ::ok({}           =~ /^HASH/,     "Hash ref stringification") or diag($message);
+-      ::ok('S' -> new   =~ /^Object S/, "Object stringification") or diag($message);
++      ::ok(do { \my $v} =~ /^SCALAR/,   "Scalar ref stringification") or ::diag($message);
++      ::ok(do {\\my $v} =~ /^REF/,      "Ref ref stringification") or ::diag($message);
++      ::ok([]           =~ /^ARRAY/,    "Array ref stringification") or ::diag($message);
++      ::ok({}           =~ /^HASH/,     "Hash ref stringification") or ::diag($message);
++      ::ok('S' -> new   =~ /^Object S/, "Object stringification") or ::diag($message);
+     }
+ 
+     {
+@@ -2461,7 +2461,7 @@
+                 "GH Issue #18865 'XaaXbbXb' - test optimization");
+         }
+     }
+-    {
++    eval {
+         # Test that ${^LAST_SUCCESSFUL_PATTERN} works as expected.
+         # It should match like the empty pattern does, and it should be dynamic
+         # in the same was as $1 is dynamic.
+@@ -2511,7 +2511,7 @@
+         ok($str =~ s/bar//,"matched bar");
+         ok($str =~ s/$copy/PQR/, 'replaced $copy with PQR');
+         is($str, "PQR", 'final string should be PQR');
+-    }
++    } or fail('${^LAST_SUCCESSFUL_PATTERN} - not implemented');
+ 
+ 
+     # Various tests for regexes with code blocks interpolated from an
+@@ -2521,7 +2521,7 @@
+     # "eval"', or would assert fail, or crash, or produce unpredictable
+     # results.
+ 
+-    {
++    eval {
+         local $" = '-'; # separator when interpolating arrays
+ 
+         my $pat;
+@@ -2625,7 +2625,7 @@
+         unlike "",             $pat,               "code in array 16 not 1";
+         unlike "XAB-B-=EC",    $pat,               "code in array 16 not 2";
+ 
+-    }
++    } or fail("(??{}) code blocks in arrays - not implemented");
+ 
+     {
+         # github #21661
