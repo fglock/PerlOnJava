@@ -56,8 +56,24 @@ public class EmitSubroutine {
             newSymbolTable = ctx.symbolTable.snapShot();
         }
 
-        String[] newEnv = newSymbolTable.getVariableNames();
+        String[] allEnv = newSymbolTable.getVariableNames();
         ctx.logDebug("AnonSub " + newSymbolTable);
+
+        // Filter out primitives and internal variables (like 'wantarray') from being captured
+        // These should NOT become instance fields in the closure class
+        // Only Perl variables with non-empty decl should be captured
+        String[] newEnv = new String[allEnv.length];
+        for (int i = 0; i < allEnv.length; i++) {
+            if (allEnv[i] != null) {
+                SymbolTable.SymbolEntry entry = visibleVariables.get(i);
+                String entryDecl = (entry != null) ? entry.decl() : null;
+                // Keep only variables that have a non-empty decl (are Perl variables)
+                if (entry != null && entryDecl != null && !entryDecl.isEmpty()) {
+                    newEnv[i] = allEnv[i];
+                }
+                // Otherwise newEnv[i] remains null (filtered out)
+            }
+        }
 
         // Reset the index counter to start after the closure variables
         // This prevents allocateLocalVariable() from creating slots that overlap with uninitialized slots
@@ -78,9 +94,10 @@ public class EmitSubroutine {
                         ctx.errorUtil, // Error message utility
                         ctx.compilerOptions,
                         null);
+        // Pass the filtered env to EmitterMethodCreator so primitives aren't captured
         Class<?> generatedClass =
                 EmitterMethodCreator.createClassWithMethod(
-                        subCtx, node.block, node.useTryCatch
+                        subCtx, node.block, node.useTryCatch, newEnv
                 );
         String newClassNameDot = subCtx.javaClassInfo.javaClassName.replace('/', '.');
         ctx.logDebug("Generated class name: " + newClassNameDot + " internal " + subCtx.javaClassInfo.javaClassName);
@@ -95,20 +112,24 @@ public class EmitSubroutine {
         mv.visitTypeInsn(Opcodes.NEW, subCtx.javaClassInfo.javaClassName);
         mv.visitInsn(Opcodes.DUP);
 
-        // 2. Load all captured variables for the constructor
-        int newIndex = 0;
-        for (Integer currentIndex : visibleVariables.keySet()) {
-            if (newIndex >= skipVariables) {
-                mv.visitVarInsn(Opcodes.ALOAD, currentIndex); // Load the captured variable
+        // 2. Load all captured variables for the constructor (skip nulls in newEnv)
+        // We need to load from currentIndex (the actual slot in the parent scope)
+        // but only for variables that are non-null in newEnv
+        for (Map.Entry<Integer, SymbolTable.SymbolEntry> entry : visibleVariables.entrySet()) {
+            Integer currentIndex = entry.getKey();
+            // Only load if this slot is past skipVariables and is captured (non-null in newEnv)
+            if (currentIndex >= skipVariables && currentIndex < newEnv.length && newEnv[currentIndex] != null) {
+                mv.visitVarInsn(Opcodes.ALOAD, currentIndex); // Load the captured variable from parent scope
             }
-            newIndex++;
         }
 
-        // 3. Build the constructor descriptor
+        // 3. Build the constructor descriptor (skip nulls in newEnv)
         StringBuilder constructorDescriptor = new StringBuilder("(");
         for (int i = skipVariables; i < newEnv.length; i++) {
-            String descriptor = EmitterMethodCreator.getVariableDescriptor(newEnv[i]);
-            constructorDescriptor.append(descriptor);
+            if (newEnv[i] != null) {
+                String descriptor = EmitterMethodCreator.getVariableDescriptor(newEnv[i]);
+                constructorDescriptor.append(descriptor);
+            }
         }
         constructorDescriptor.append(")V");
 
