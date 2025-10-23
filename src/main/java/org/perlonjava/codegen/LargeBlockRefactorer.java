@@ -1,6 +1,7 @@
 package org.perlonjava.codegen;
 
 import org.perlonjava.astnode.*;
+import org.perlonjava.astvisitor.BytecodeSizeEstimator;
 import org.perlonjava.astvisitor.ControlFlowDetectorVisitor;
 import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.symbols.ScopedSymbolTable;
@@ -24,8 +25,9 @@ public class LargeBlockRefactorer {
     // Smart chunking control - permanently enabled to handle large files like TestProp.pl
     private static final boolean SMART_CHUNKING_ENABLED = true;
 
-    // Reusable visitor for control flow detection
+    // Reusable visitors
     private static final ControlFlowDetectorVisitor controlFlowDetector = new ControlFlowDetectorVisitor();
+    private static final BytecodeSizeEstimator sizeEstimator = new BytecodeSizeEstimator();
 
     /**
      * Process a block and refactor it if necessary to avoid method size limits.
@@ -40,19 +42,24 @@ public class LargeBlockRefactorer {
             return false;
         }
 
+        // Mark this block IMMEDIATELY before any processing to prevent infinite recursion
+        // This must happen BEFORE shouldRefactorBlock() because that method calls node.accept()
+        // which can recursively visit nested blocks (e.g. if-statement bodies)
+        node.setAnnotation("blockAlreadyRefactored", true);
+
         // Check if refactoring is enabled via environment variable OR constant
         String largeCodeMode = System.getenv("JPERL_LARGECODE");
         boolean refactorEnabled = "refactor".equals(largeCodeMode) || SMART_CHUNKING_ENABLED;
 
-        // Skip if block is already a subroutine or is a special block
-        if (node.getBooleanAnnotation("blockIsSubroutine")) {
-            return false;
-        }
+        // NOTE: Removed blockIsSubroutine check to allow recursive refactoring
+        // Subroutine bodies can now be chunked if they're too large
 
         // Determine if we need to refactor
         boolean needsRefactoring = shouldRefactorBlock(node, emitterVisitor, refactorEnabled);
 
         if (!needsRefactoring) {
+            // Block doesn't need refactoring, clear the annotation
+            node.setAnnotation("blockAlreadyRefactored", null);
             return false;
         }
 
@@ -65,13 +72,17 @@ public class LargeBlockRefactorer {
         // FIXED (2025-10-23): Package context preservation issue resolved
         // Smart chunking now creates a snapshot with the correct package context at refactoring time
         // This allows imported functions to be resolved correctly within chunked closures
-        // TODO: Re-enable after more testing
-        // if (trySmartChunking(node, emitterVisitor)) {
-        //     // Block was successfully chunked, continue with normal emission
-        //     return false;
-        // }
+        
+        // Only use smart chunking if we're NOT in a goto label context
+        // Goto label contexts require whole-block refactoring to preserve label semantics
+        boolean inGotoContext = !emitterVisitor.ctx.javaClassInfo.gotoLabelStack.isEmpty();
+        
+        if (!inGotoContext && trySmartChunking(node, emitterVisitor)) {
+            // Block was successfully chunked, continue with normal emission
+            return false;
+        }
 
-        // Fallback: Try whole-block refactoring
+        // Fallback: Try whole-block refactoring (used for goto contexts)
         return tryWholeBlockRefactoring(emitterVisitor, node);  // Block was refactored and emitted
 
         // No refactoring was possible
@@ -81,13 +92,24 @@ public class LargeBlockRefactorer {
      * Determine if a block should be refactored based on size and context.
      */
     private static boolean shouldRefactorBlock(BlockNode node, EmitterVisitor emitterVisitor, boolean refactorEnabled) {
-        // Check element count threshold
+        // Quick check: very small blocks don't need refactoring
         if (node.elements.size() <= LARGE_BLOCK_ELEMENT_COUNT) {
             return false;
         }
 
-        // Check if we're in a context that allows refactoring
-        return refactorEnabled || !emitterVisitor.ctx.javaClassInfo.gotoLabelStack.isEmpty();
+        // If explicitly enabled, check bytecode size
+        if (refactorEnabled) {
+            // Use BytecodeSizeEstimator for accurate size measurement
+            sizeEstimator.reset();
+            node.accept(sizeEstimator);
+            int estimatedSize = sizeEstimator.getEstimatedSize();
+            
+            // Only refactor if block is genuinely large
+            return estimatedSize > LARGE_BYTECODE_SIZE;
+        }
+        
+        // Also refactor blocks with goto labels (but these will use whole-block refactoring)
+        return !emitterVisitor.ctx.javaClassInfo.gotoLabelStack.isEmpty();
     }
 
     /**
