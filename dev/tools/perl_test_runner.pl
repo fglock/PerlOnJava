@@ -26,34 +26,41 @@ GetOptions(
     'help'      => \$help,
 ) or die "Error in command line arguments\n";
 
-if ($help || @ARGV != 1) {
+if ($help || @ARGV < 1) {
     print_usage();
     exit($help ? 0 : 1);
 }
 
-my $test_path = $ARGV[0];
+my @test_paths = @ARGV;
 
-# Accept either a directory or a specific .t file
-my $test_dir;
+# Accept either directories or specific .t files
 my @test_files;
 
-if (-f $test_path && $test_path =~ /\.t$/) {
-    # Single test file
-    $test_dir = '.';  # Use current directory as base
-    @test_files = ($test_path);
-    print "Running single test file: $test_path\n";
-} elsif (-d $test_path) {
-    # Directory of tests
-    $test_dir = $test_path;
-    print "Finding test files in $test_dir...\n";
-    @test_files = find_test_files($test_dir);
-} else {
-    die "Error: '$test_path' is not a valid test directory or .t file\n";
+for my $test_path (@test_paths) {
+    if (-f $test_path && $test_path =~ /\.t$/) {
+        # Single test file
+        push @test_files, $test_path;
+        print "Adding test file: $test_path\n";
+    } elsif (-d $test_path) {
+        # Directory of tests
+        print "Finding test files in $test_path...\n";
+        my @dir_files = find_test_files($test_path);
+        push @test_files, @dir_files;
+    } else {
+        warn "Warning: '$test_path' is not a valid test directory or .t file, skipping\n";
+    }
+}
+
+unless (@test_files) {
+    die "Error: No valid test files found\n";
 }
 
 unless (-x $jperl_path) {
     die "Error: jperl not found or not executable at '$jperl_path'\n";
 }
+
+# Base directory for relative path display (current directory)
+my $test_dir = '.';
 
 # Global state
 my %results;
@@ -609,7 +616,7 @@ sub save_results {
 
 sub print_usage {
     print <<"EOF";
-Usage: $0 [OPTIONS] TEST_DIRECTORY
+Usage: $0 [OPTIONS] TEST_DIRECTORY [TEST_DIRECTORY2 ...]
 
 Run Perl tests against PerlOnJava
 
@@ -623,6 +630,7 @@ Options:
 Examples:
   $0 ../perl5/t
   $0 --jperl ./jperl --timeout 5 --jobs 8 ../perl5/t
+  $0 src/test/resources/unit perl5_t
   $0 -j 2 --output results.json ../perl5/t
 EOF
 }
