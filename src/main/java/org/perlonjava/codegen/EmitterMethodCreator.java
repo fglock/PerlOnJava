@@ -12,6 +12,7 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.*;
+import java.util.Arrays;
 
 /**
  * EmitterMethodCreator is a utility class that uses the ASM library to dynamically generate Java
@@ -89,13 +90,34 @@ public class EmitterMethodCreator implements Opcodes {
      * @return The generated class.
      */
     public static Class<?> createClassWithMethod(EmitterContext ctx, Node ast, boolean useTryCatch) {
-        byte[] classData = getBytecode(ctx, ast, useTryCatch);
+        return createClassWithMethod(ctx, ast, useTryCatch, null);
+    }
+
+    /**
+     * Create a class with a method that executes the given AST, optionally using a filtered env.
+     * The filtered env allows callers to exclude certain variables (e.g., primitives like wantarray)
+     * from being captured as instance fields in closure classes.
+     *
+     * @param ctx         The emitter context
+     * @param ast         The AST to execute
+     * @param useTryCatch Whether to wrap in try-catch
+     * @param filteredEnv Optional filtered environment array (null = use symbol table)
+     * @return The generated class
+     */
+    public static Class<?> createClassWithMethod(EmitterContext ctx, Node ast, boolean useTryCatch, String[] filteredEnv) {
+        byte[] classData = getBytecode(ctx, ast, useTryCatch, filteredEnv);
         return loadBytecode(ctx, classData);
     }
 
     public static byte[] getBytecode(EmitterContext ctx, Node ast, boolean useTryCatch) {
+        return getBytecode(ctx, ast, useTryCatch, null);
+    }
+
+    public static byte[] getBytecode(EmitterContext ctx, Node ast, boolean useTryCatch, String[] filteredEnv) {
         try {
-            String[] env = ctx.symbolTable.getVariableNames();
+            // Use filtered env if provided (for closures excluding primitives)
+            // Otherwise get from symbol table (for normal code)
+            String[] env = (filteredEnv != null) ? filteredEnv : ctx.symbolTable.getVariableNames();
 
             // Create a ClassWriter with COMPUTE_FRAMES and COMPUTE_MAXS options for automatic frame and max
             // stack size calculation
@@ -112,10 +134,13 @@ public class EmitterMethodCreator implements Opcodes {
             ctx.logDebug("Create class: " + ctx.javaClassInfo.javaClassName);
 
             // Add instance fields to the class for closure variables
-            for (String fieldName : env) {
-                String descriptor = getVariableDescriptor(fieldName);
-                ctx.logDebug("Create instance field: " + descriptor);
-                cw.visitField(Opcodes.ACC_PUBLIC, fieldName, descriptor, null, null).visitEnd();
+            for (int i = 0; i < env.length; i++) {
+                String fieldName = env[i];
+                if (fieldName != null) {  // Skip null entries (filtered variables like primitives)
+                    String descriptor = getVariableDescriptor(fieldName);
+                    ctx.logDebug("Create instance field: " + descriptor);
+                    cw.visitField(Opcodes.ACC_PUBLIC, fieldName, descriptor, null, null).visitEnd();
+                }
             }
 
             // Add instance field for __SUB__ code reference
@@ -124,8 +149,10 @@ public class EmitterMethodCreator implements Opcodes {
             // Add a constructor with parameters for initializing the fields
             StringBuilder constructorDescriptor = new StringBuilder("(");
             for (int i = skipVariables; i < env.length; i++) {
-                String descriptor = getVariableDescriptor(env[i]);
-                constructorDescriptor.append(descriptor);
+                if (env[i] != null) {  // Skip null entries
+                    String descriptor = getVariableDescriptor(env[i]);
+                    constructorDescriptor.append(descriptor);
+                }
             }
             constructorDescriptor.append(")V");
             ctx.logDebug("constructorDescriptor: " + constructorDescriptor);
@@ -140,13 +167,20 @@ public class EmitterMethodCreator implements Opcodes {
                     "<init>",
                     "()V",
                     false); // Call the superclass constructor
+            // Initialize instance fields from constructor parameters
+            // Use paramIndex for compact parameter loading (skipping nulls in env)
+            int paramIndex = 1; // Start at 1 (0 is 'this')
             for (int i = skipVariables; i < env.length; i++) {
+                if (env[i] == null) {
+                    continue; // Skip null entries
+                }
                 String descriptor = getVariableDescriptor(env[i]);
 
                 mv.visitVarInsn(Opcodes.ALOAD, 0); // Load 'this'
-                mv.visitVarInsn(Opcodes.ALOAD, i - 2); // Load the constructor argument
+                mv.visitVarInsn(Opcodes.ALOAD, paramIndex); // Load the constructor argument
                 mv.visitFieldInsn(
                         Opcodes.PUTFIELD, ctx.javaClassInfo.javaClassName, env[i], descriptor); // Set the instance field
+                paramIndex++;
             }
             mv.visitInsn(Opcodes.RETURN); // Return void
             mv.visitMaxs(0, 0); // Automatically computed
@@ -170,8 +204,11 @@ public class EmitterMethodCreator implements Opcodes {
             // Skip some indices because they are reserved for special arguments (this, "@_" and call
             // context)
             for (int i = skipVariables; i < env.length; i++) {
-                // Skip null entries (gaps in sparse array)
                 if (env[i] == null) {
+                    // Initialize gaps (filtered-out variables) with null to satisfy JVM verifier
+                    // This prevents "top" type errors when later code might reference these slots
+                    mv.visitInsn(Opcodes.ACONST_NULL);
+                    mv.visitVarInsn(Opcodes.ASTORE, i);
                     continue;
                 }
                 String descriptor = getVariableDescriptor(env[i]);
@@ -191,10 +228,13 @@ public class EmitterMethodCreator implements Opcodes {
             int maxPreInitSlots = Math.max(currentVarIndex, env.length) + 50;
             ctx.logDebug("Pre-initializing slots from " + env.length + " to " + maxPreInitSlots + 
                         " (currentVarIndex=" + currentVarIndex + ")");
-            for (int i = env.length; i < maxPreInitSlots; i++) {
-                mv.visitInsn(Opcodes.ACONST_NULL);
-                mv.visitVarInsn(Opcodes.ASTORE, i);
-            }
+            // NOTE: Pre-initialization disabled to avoid type conflicts with primitives
+            // The JVM verifier gets confused when we pre-init as reference types
+            // but later code uses the same slots for primitives (int, long, double)
+            // for (int i = env.length; i < maxPreInitSlots; i++) {
+            //     mv.visitInsn(Opcodes.ACONST_NULL);
+            //     mv.visitVarInsn(Opcodes.ASTORE, i);
+            // }
 
             // Create a label for the return point
             ctx.javaClassInfo.returnLabel = new Label();
