@@ -9,6 +9,17 @@ The import system consists of:
 - **`sync.pl`**: Script that performs the import and applies patches
 - **`patches/`**: Directory containing patch files for imported files
 
+### Smart Import Destinations
+
+The sync script automatically routes imports to appropriate locations:
+
+- **Unit tests** → `src/test/resources/unit/` (committed to git)
+- **Module tests** → `perl5_t/` (NOT committed to git)
+- **Core test suite** → `t/` (NOT committed to git)
+- **Modules** → `src/main/perl/lib/` (committed to git)
+
+This keeps the repository size manageable while supporting comprehensive testing.
+
 ## Quick Start
 
 ### Initial Setup
@@ -32,13 +43,19 @@ perl dev/import-perl5/sync.pl
 The script will:
 1. Read `config.yaml`
 2. Copy directories (using rsync) and individual files to their target locations
-3. Apply patches if specified
-4. Report success or errors
+3. Automatically redirect module tests to `perl5_t/` (not in git)
+4. Apply patches if specified
+5. Report success or errors
 
-This replaces the manual workflow of:
-```bash
-rsync -a perl5/t/ t/
-git checkout t
+**Important:** Module tests (anything in `src/test/resources/` except `unit/`) are automatically redirected to `perl5_t/` and excluded from git. This keeps the repository clean while allowing comprehensive testing.
+
+Example:
+```yaml
+# In config.yaml:
+- source: perl5/lib/Benchmark.t
+  target: src/test/resources/Benchmark/Benchmark.t
+
+# Actual destination: perl5_t/Benchmark/Benchmark.t (not in git)
 ```
 
 ### Adding a New Import
@@ -185,6 +202,16 @@ dev/import-perl5/
 │   ├── test.pl.patch
 │   └── Module.pm.patch
 └── README.md           # This file
+
+Project structure after sync:
+src/test/resources/
+└── unit/               # Fast unit tests (IN GIT)
+
+perl5_t/                # Module tests (NOT IN GIT)
+├── Benchmark/
+└── ...
+
+t/                      # Core test suite (NOT IN GIT)
 ```
 
 ## Examples

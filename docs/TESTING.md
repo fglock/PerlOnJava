@@ -20,6 +20,10 @@ Runs only the fast unit tests from `src/test/resources/unit/`. These tests:
 ### Comprehensive Test Suite
 
 ```bash
+# First, sync external module tests (one-time or when updating)
+perl dev/import-perl5/sync.pl
+
+# Then run all tests
 make test-all
 ```
 
@@ -29,6 +33,7 @@ Runs all tests including comprehensive module tests. These tests:
 - 📊 Generate detailed JSON report (`test_results.json`)
 - 🎯 Identify high-priority opportunities (incomplete tests)
 - 📈 Provide feature impact analysis
+- 📁 Uses external `perl5_t/` directory (not in git)
 
 ## Testing Approaches
 
@@ -90,25 +95,32 @@ make test-gradle-all
 
 ```
 src/test/resources/
-├── unit/              # Fast unit tests (seconds)
-│   ├── array.t
-│   ├── hash.t
-│   ├── regex/
-│   └── ...
-├── Benchmark/         # Module tests (slower)
+└── unit/              # Fast unit tests (seconds) - IN GIT
+    ├── array.t
+    ├── hash.t
+    ├── regex/
+    └── ...
+
+perl5_t/               # Module tests (slower) - NOT IN GIT
+├── Benchmark/         # Synced via import-perl5/sync.pl
 │   └── Benchmark.t
 ├── cpan/              # CPAN module tests
 ├── dist/              # Distribution tests
 └── lib/               # Library tests
+
+t/                     # Perl 5 core test suite - NOT IN GIT
+└── ...                # Synced from perl5/t/
 ```
 
 ### Test Categories
 
-| Category | Location | Speed | Purpose |
-|----------|----------|-------|---------|
-| **Unit Tests** | `unit/` | Fast (seconds) | Core functionality, operators, syntax |
-| **Module Tests** | `Benchmark/`, `lib/`, etc. | Slow (minutes) | Perl core modules, CPAN compatibility |
-| **Integration Tests** | `dist/`, `ext/` | Varies | Package integration, extensions |
+| Category | Location | Speed | In Git? | Purpose |
+|----------|----------|-------|---------|---------|
+| **Unit Tests** | `src/test/resources/unit/` | Fast (seconds) | ✅ Yes | Core functionality, operators, syntax |
+| **Module Tests** | `perl5_t/` | Slow (minutes) | ❌ No | Perl core modules, CPAN compatibility |
+| **Core Test Suite** | `t/` | Varies | ❌ No | Perl 5 standard test suite |
+
+**Note:** Module tests in `perl5_t/` and the core test suite in `t/` are synced from the Perl 5 repository using `dev/import-perl5/sync.pl` and are not committed to git. This keeps the repository size manageable while still allowing comprehensive testing.
 
 ## Development Workflow
 
@@ -128,6 +140,9 @@ make test-unit
 ### Before Committing (Comprehensive Validation)
 
 ```bash
+# Sync external tests (if not already done)
+perl dev/import-perl5/sync.pl
+
 # Run full test suite
 make test-all
 
@@ -283,6 +298,29 @@ Check for infinite loops, use timeout command:
 ```bash
 timeout 30s ./jperl problematic_test.t
 ```
+
+## Syncing External Tests
+
+The `perl5_t/` directory and `t/` directory are not in git. To populate them:
+
+```bash
+# Clone Perl 5 source (one-time setup)
+git clone https://github.com/Perl/perl5.git
+
+# Sync tests from perl5 to perl5_t/ and t/
+perl dev/import-perl5/sync.pl
+```
+
+This will:
+1. Copy module tests to `perl5_t/` (e.g., `Benchmark.t`)
+2. Copy the core test suite to `t/`
+3. Apply any necessary patches
+4. Create necessary directories
+
+**When to sync:**
+- Initial setup (after cloning PerlOnJava)
+- When Perl 5 tests are updated
+- When `config.yaml` changes
 
 ## See Also
 
