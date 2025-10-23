@@ -35,9 +35,10 @@ public class EmitSubroutine {
         }
         MethodVisitor mv = ctx.mv;
 
-        // Mark the block as subroutine block,
-        // this prevents the "code too large" transform in emitBlock()
-        node.block.setAnnotation("blockIsSubroutine", true);
+        // NOTE: We intentionally DO NOT mark the block as "blockIsSubroutine" anymore
+        // This allows recursive refactoring - if the subroutine body is too large,
+        // LargeBlockRefactorer can chunk it further
+        // node.block.setAnnotation("blockIsSubroutine", true);
 
         // Retrieve closure variable list
         // Alternately, scan the AST for variables and capture only the ones that are used
