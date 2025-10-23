@@ -90,6 +90,8 @@ public class BytecodeSizeEstimator implements Visitor {
     /**
      * Reset the estimator for reuse
      */
+    private static final boolean TRACE = false;
+    
     public void reset() {
         estimatedSize = 0;
     }
@@ -147,11 +149,13 @@ public class BytecodeSizeEstimator implements Visitor {
 
     @Override
     public void visit(BlockNode node) {
+        if (TRACE) System.err.println("TRACE BytecodeSizeEstimator: visit BlockNode, elements=" + node.elements.size());
         // Mirror EmitBlock.emitBlock() patterns
         estimatedSize += SIMPLE_INSTRUCTION * 2; // Enter/exit scope overhead
 
         // Visit all statements in the block
         for (Node element : node.elements) {
+            if (TRACE) System.err.println("TRACE BytecodeSizeEstimator:   visiting element " + element.getClass().getSimpleName());
             element.accept(this);
         }
     }
