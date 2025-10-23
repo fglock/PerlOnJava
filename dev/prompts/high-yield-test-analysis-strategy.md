@@ -3,6 +3,33 @@
 ## 🎯 Core Principle
 **Target systematic errors for exponential impact.** One fix can unlock hundreds of tests.
 
+## 🚨 CRITICAL: Work on Branches, Not Main
+
+**NEVER work directly on main/master!** Windows CI/CD failures block merges.
+
+```bash
+# ✅ CORRECT - Branch workflow
+git checkout -b feature-name      # Create feature branch
+# ... make changes ...
+make test                         # MUST pass locally
+git commit -m "Fix: description"
+git push origin feature-name      # Push branch
+# Create Pull Request / Merge Request
+# Wait for CI/CD to pass on ALL platforms (Linux, Mac, Windows)
+# Only then merge to main
+
+# ❌ WRONG - Direct commits to main
+git checkout main
+# ... make changes ...
+git commit                        # CI/CD fails on Windows!
+git push                          # BREAKS MAIN BRANCH!
+```
+
+**Why this matters (2025-10-22):**
+- Tests pass on Mac/Linux but fail on Windows (path separators, case sensitivity, etc.)
+- Direct commits to main break CI/CD for everyone
+- Must verify ALL platforms pass before merging
+
 ## 🚨 CRITICAL: Build & Test Before Commit
 
 **YOU WILL BREAK THE BUILD if you skip this!**
@@ -18,7 +45,9 @@ make test              # MUST pass! Catches regressions
 git commit             # Safe
 ```
 
-**Recent incidents:** local() fix (2025-10-13), pack mode fix (2025-10-08), PackBuffer fix (2025-10-07) - all broke unit tests despite passing integration tests.
+**Recent incidents:** 
+- **Windows CI/CD failure (2025-10-22):** string_interpolation.t failed on Windows only
+- local() fix (2025-10-13), pack mode fix (2025-10-08) - broke unit tests
 
 ## 🔧 Build Commands - CRITICAL for Different Changes
 
@@ -209,22 +238,12 @@ perl -MO=Concise -e 'code'
 
 ## ✅ Testing Strategy
 
-### Incremental Verification
 1. Create minimal test case
 2. Test with `--parse` if parser issue
-3. Apply fix
-4. Test minimal case
-5. Test full test file: `./jperl t/op/test.t`
-6. **Run `make test` (MANDATORY - catches regressions!)**
-7. Review unit test failures - they reveal edge cases
-
-### Minimal Test Template
-```perl
-#!/usr/bin/perl
-use strict;
-my $result = operation();
-print ($result eq "expected" ? "PASS" : "FAIL: got '$result'\n");
-```
+3. Apply fix and test
+4. Test full file: `./jperl t/op/test.t`
+5. **Run `make test` (MANDATORY)**
+6. Review unit test failures
 
 ## 🚧 Critical Insights
 
@@ -246,23 +265,7 @@ print ($result eq "expected" ? "PASS" : "FAIL: got '$result'\n");
 - Fixing symptoms instead of root causes
 - Not creating minimal test cases
 
-## 📝 Environment Setup (Quick)
-
-```bash
-# Kill hanging processes
-pkill -f "java.*org.perlonjava" || true
-
-# Clean and rebuild
-./gradlew clean shadowJar
-
-# Verify
-echo 'print "Ready\n"' | ./jperl
-```
-
-## 🔒 Git Safety (Condensed)
-
-### Files to NEVER Commit
-Add to `.gitignore`: `test_*.pl`, `debug_*.pl`, `*.tmp`, `*.log`, `logs/`
+## 🔒 Git Safety
 
 ### Safe Commit Workflow
 ```bash
@@ -313,30 +316,9 @@ git reset --soft HEAD~1
 - 10-50 tests/hour: Good investment  
 - <10 tests/hour: Consider documenting for later
 
-## 📋 Quick Reference
+## 📋 When to Create Prompt Documents
 
-### When to Create Prompt Documents
-- Investigation exceeds 60 minutes
-- Multiple interconnected systems
-- Architectural changes needed
-- High value but complex
-
-### Template (Keep under 400 words!)
-```markdown
-# Fix [Issue]
-
-## Problem
-[1-2 sentences]
-
-## Root Cause
-[2-3 sentences, evidence]
-
-## Solution
-[Bullet points, concise]
-
-## Expected Impact
-[1 sentence, test count]
-```
+If investigation exceeds 60 minutes OR architectural changes needed: document problem, root cause, solution, and expected impact.
 
 ## 🔥 Recent Patterns (2025-10-18)
 
