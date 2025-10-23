@@ -2,6 +2,7 @@ package org.perlonjava.codegen;
 
 import org.objectweb.asm.*;
 import org.objectweb.asm.util.TraceClassVisitor;
+import org.perlonjava.astnode.BlockNode;
 import org.perlonjava.astnode.Node;
 import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.runtime.GlobalVariable;
@@ -201,6 +202,15 @@ public class EmitterMethodCreator implements Opcodes {
 
             // Prepare to visit the AST to generate bytecode
             EmitterVisitor visitor = new EmitterVisitor(ctx);
+
+            // CRITICAL: Wrap non-BlockNode AST in a BlockNode to enable smart chunking
+            // This allows large main scripts to be chunked, preventing "Method too large" errors
+            if (!(ast instanceof BlockNode)) {
+                // Create a BlockNode wrapping the AST
+                BlockNode wrapper = new BlockNode(new java.util.ArrayList<>(), ast.getIndex());
+                wrapper.elements.add(ast);
+                ast = wrapper;
+            }
 
             // Setup local variables and environment for the method
             Local.localRecord localRecord = Local.localSetup(ctx, ast, mv);
