@@ -32,6 +32,10 @@ t/
 !t/README.md
 !t/test.pl
 
+# Ignore external module tests (imported from Perl 5 modules)
+# These are synced via dev/import-perl5/sync.pl but not committed to git
+perl5_t/
+
 # Ignore temporary analysis and debug files
 *_failures.txt
 debug_*.pl

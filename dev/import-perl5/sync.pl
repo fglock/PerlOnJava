@@ -83,10 +83,14 @@ sub main {
     my $patches_dir = File::Spec->catdir($script_dir, 'patches');
     my $config_file = File::Spec->catdir($script_dir, 'config.yaml');
     
+    # Define the external test directory for module tests (outside git)
+    my $external_test_dir = 'perl5_t';
+    
     print "PerlOnJava Perl5 Import Tool\n";
     print "=" x 60 . "\n";
     print "Project root: $project_root\n";
-    print "Config file: $config_file\n\n";
+    print "Config file: $config_file\n";
+    print "External test dir: $external_test_dir/ (not in git)\n\n";
     
     # Check if config exists
     unless (-f $config_file) {
@@ -109,10 +113,21 @@ sub main {
     # Process each import
     for my $import (@$imports) {
         my $source = File::Spec->catfile($project_root, $import->{source});
-        my $target = File::Spec->catfile($project_root, $import->{target});
-        my $type = $import->{type} || 'file';
+        my $target_path = $import->{target};
         
-        print "Processing: $import->{source}\n";
+        # Redirect module tests to external directory (outside git)
+        # Module tests are those in src/test/resources/ but NOT in src/test/resources/unit/
+        if ($target_path =~ m{^src/test/resources/} && $target_path !~ m{^src/test/resources/unit/}) {
+            # Extract the relative path after src/test/resources/
+            my ($module_path) = $target_path =~ m{^src/test/resources/(.+)};
+            $target_path = "$external_test_dir/$module_path";
+            print "Processing: $import->{source} [→ external test dir]\n";
+        } else {
+            print "Processing: $import->{source}\n";
+        }
+        
+        my $target = File::Spec->catfile($project_root, $target_path);
+        my $type = $import->{type} || 'file';
         
         # Check if source exists
         if ($type eq 'directory') {
@@ -158,7 +173,7 @@ sub main {
             }
             
             # Copy file
-            print "  Copying to: $import->{target}\n";
+            print "  Copying to: $target_path\n";
             unless (copy($source, $target)) {
                 warn "  ERROR: Copy failed: $!\n\n";
                 $error_count++;

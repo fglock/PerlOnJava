@@ -31,10 +31,17 @@ test-unit:
 	perl dev/tools/perl_test_runner.pl --jobs 8 --timeout 10 src/test/resources/unit
 
 # Comprehensive tests including all modules (slower)
-# Runs all tests from src/test/resources/
+# Runs unit tests + external module tests from perl5_t/ (synced via sync.pl)
+# Note: Run 'perl dev/import-perl5/sync.pl' first to populate perl5_t/
 test-all:
 	@echo "Running comprehensive test suite..."
-	perl dev/tools/perl_test_runner.pl --jobs 8 --timeout 60 --output test_results.json src/test/resources
+	@if [ -d perl5_t ]; then \
+		perl dev/tools/perl_test_runner.pl --jobs 8 --timeout 60 --output test_results.json src/test/resources/unit perl5_t; \
+	else \
+		echo "Warning: perl5_t/ not found. Run 'perl dev/import-perl5/sync.pl' first."; \
+		echo "Running unit tests only..."; \
+		perl dev/tools/perl_test_runner.pl --jobs 8 --timeout 60 --output test_results.json src/test/resources/unit; \
+	fi
 
 # Alternative: Run tests using JUnit/Gradle (for CI/CD integration)
 test-gradle: test-gradle-unit
