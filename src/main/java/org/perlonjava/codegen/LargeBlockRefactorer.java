@@ -20,6 +20,9 @@ public class LargeBlockRefactorer {
     private static final int LARGE_BLOCK_ELEMENT_COUNT = 8;  // Lowered from 16 for more aggressive refactoring
     private static final int LARGE_BYTECODE_SIZE = 30000;
     private static final int MIN_CHUNK_SIZE = 4;  // Minimum statements to extract as a chunk
+    
+    // Smart chunking control - permanently enabled to handle large files like TestProp.pl
+    private static final boolean SMART_CHUNKING_ENABLED = true;
 
     // Reusable visitor for control flow detection
     private static final ControlFlowDetectorVisitor controlFlowDetector = new ControlFlowDetectorVisitor();
@@ -37,9 +40,9 @@ public class LargeBlockRefactorer {
             return false;
         }
 
-        // Check if refactoring is enabled via environment variable
+        // Check if refactoring is enabled via environment variable OR constant
         String largeCodeMode = System.getenv("JPERL_LARGECODE");
-        boolean refactorEnabled = "refactor".equals(largeCodeMode);
+        boolean refactorEnabled = "refactor".equals(largeCodeMode) || SMART_CHUNKING_ENABLED;
 
         // Skip if block is already a subroutine or is a special block
         if (node.getBooleanAnnotation("blockIsSubroutine")) {
