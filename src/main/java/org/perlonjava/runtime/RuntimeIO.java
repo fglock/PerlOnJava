@@ -9,6 +9,7 @@ package org.perlonjava.runtime;
  */
 
 import org.perlonjava.io.*;
+import org.perlonjava.operators.WarnDie;
 
 import java.io.File;
 import java.io.IOException;
@@ -394,18 +395,41 @@ public class RuntimeIO implements RuntimeScalarReference {
             }
         }
 
+        // Handle different modes
+        if (mode.equals(">") || mode.equals(">>")) {
+            // Check if the scalar is read-only before attempting write operations
+            try {
+                if (mode.equals(">")) {
+                    // Truncate for write mode - this will throw if read-only
+                    targetScalar.set("");
+                } else if (mode.equals(">>")) {
+                    // For append mode, test if scalar is writable by setting it to itself
+                    targetScalar.set(targetScalar.toString());
+                }
+            } catch (RuntimeException e) {
+                if (e.getMessage() != null && e.getMessage().contains("Modification of a read-only value attempted")) {
+                    // Handle read-only scalar gracefully
+                    // Set $! to EACCES (13) - Permission denied
+                    GlobalVariable.getGlobalVariable("main::!").set(13);
+                    // Issue warning if $^W is set (lexical warning support for runtime is TODO)
+                    // $^W is stored as main::W (W is ASCII 87, so 87 - 'A' + 1 = 23)
+                    if (GlobalVariable.getGlobalVariable("main::" + Character.toString('W' - 'A' + 1)).getBoolean()) {
+                        WarnDie.warn(new RuntimeScalar("Modification of a read-only value attempted"), new RuntimeScalar(""));
+                    }
+                    return null;
+                }
+                throw e; // Re-throw if it's a different error
+            }
+        }
+        // For "<" (read) mode, no special handling needed
+
         // Create ScalarBackedIO
         ScalarBackedIO scalarIO = new ScalarBackedIO(targetScalar);
-
-        // Handle different modes
-        if (mode.equals(">")) {
-            // Truncate for write mode
-            targetScalar.set("");
-        } else if (mode.equals(">>")) {
+        
+        if (mode.equals(">>")) {
             // Enable append mode - writes always go to the end
             scalarIO.setAppendMode(true);
         }
-        // For "<" (read) mode, no special handling needed
 
         fh.ioHandle = scalarIO;
         addHandle(fh.ioHandle);
