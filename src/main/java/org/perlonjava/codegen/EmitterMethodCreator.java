@@ -313,6 +313,8 @@ public class EmitterMethodCreator implements Opcodes {
             }
             return classData;
         } catch (ArrayIndexOutOfBoundsException e) {
+            // Print full stack trace for debugging
+            e.printStackTrace();
             throw new PerlCompilerException(
                     ast.getIndex(),
                     "Internal compiler error: Failed to generate bytecode. " +
