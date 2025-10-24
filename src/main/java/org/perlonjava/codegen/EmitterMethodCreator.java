@@ -200,7 +200,8 @@ public class EmitterMethodCreator implements Opcodes {
             int currentVarIndex = ctx.symbolTable.getCurrentLocalVariableIndex();
             // Add a buffer of 10 slots for runtime allocations (local variables, temporaries, etc.)
             // Reduced from 50 to avoid ASM Frame.merge errors in complex code
-            int maxPreInitSlots = Math.max(currentVarIndex, env.length) + 10;
+            // Cap at 200 to avoid JVM limits and ASM errors
+            int maxPreInitSlots = Math.min(Math.max(currentVarIndex, env.length) + 10, 200);
             ctx.logDebug("Pre-initializing slots from " + env.length + " to " + maxPreInitSlots + 
                         " (currentVarIndex=" + currentVarIndex + ")");
             for (int i = env.length; i < maxPreInitSlots; i++) {
