@@ -16,8 +16,9 @@ imports:
   - source: perl5/lib/Benchmark.pm
     target: src/main/perl/lib/Benchmark.pm
 
+  # Module tests go to perl5_t/ (external, not in git)
   - source: perl5/lib/Benchmark.t
-    target: src/test/resources/Benchmark/Benchmark.t
+    target: perl5_t/Benchmark/Benchmark.t
 
   # Bulk import all test files from perl5/t/ to t/
   - source: perl5/t
