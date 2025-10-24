@@ -263,15 +263,26 @@ sub run_single_test {
     # Save current directory
     my $old_dir = File::Spec->rel2abs('.');
 
-    ## # Change to test directory for relative paths
-    ## my $test_dir = $test_file;
-    ## $test_dir =~ s{/[^/]+$}{};
+    # For perl5_t tests (especially Pod tests), change to the test directory
+    # so they can find their test data files with relative paths
+    my $local_test_dir = $test_dir;
+    if ($test_file =~ m{^perl5_t/}) {
+        # For tests in a t/ subdirectory, chdir to the parent of t/
+        # e.g., perl5_t/Pod/podlators/t/man/snippets.t -> perl5_t/Pod/podlators
+        if ($test_file =~ m{^(.*)/t/[^/]+/[^/]+$}) {
+            $local_test_dir = $1;
+        } else {
+            # Otherwise, extract directory from test file path
+            $local_test_dir = $test_file;
+            $local_test_dir =~ s{/[^/]+$}{};
+        }
+    }
 
-    chdir($test_dir) if $test_dir && -d $test_dir;
+    chdir($local_test_dir) if $local_test_dir && -d $local_test_dir;
 
     # Use absolute path for jperl
     my $abs_jperl = File::Spec->rel2abs($jperl_path, $old_dir);
-    my $test_name = File::Spec->abs2rel($test_file, $test_dir || '.');
+    my $test_name = File::Spec->abs2rel($test_file, $local_test_dir || '.');
 
     # Try to use system timeout command if available
     my $timeout_cmd = '';
