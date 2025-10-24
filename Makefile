@@ -30,17 +30,30 @@ test-unit:
 	@echo "Running fast unit tests..."
 	perl dev/tools/perl_test_runner.pl --jobs 8 --timeout 10 src/test/resources/unit
 
-# Comprehensive tests - Perl 5 core test suite (slower)
-# Runs: t/ (Perl 5 core tests, synced via sync.pl)
-# Note: Run 'perl dev/import-perl5/sync.pl' first to populate t/
-test-all:
-	@echo "Running comprehensive test suite..."
+# Perl 5 core test suite (t/ directory)
+# Run 'perl dev/import-perl5/sync.pl' first to populate t/
+test-perl5:
+	@echo "Running Perl 5 core test suite..."
 	@if [ -d t ]; then \
 		perl dev/tools/perl_test_runner.pl --jobs 8 --timeout 60 --output test_results.json t; \
 	else \
 		echo "Error: t/ directory not found. Run 'perl dev/import-perl5/sync.pl' first."; \
 		exit 1; \
 	fi
+
+# Perl 5 module tests (perl5_t/ directory)
+# Run 'perl dev/import-perl5/sync.pl' first to populate perl5_t/
+test-modules:
+	@echo "Running Perl 5 module tests..."
+	@if [ -d perl5_t ]; then \
+		perl dev/tools/perl_test_runner.pl --jobs 8 --timeout 60 --output test_modules_results.json perl5_t; \
+	else \
+		echo "Error: perl5_t/ directory not found. Run 'perl dev/import-perl5/sync.pl' first."; \
+		exit 1; \
+	fi
+
+# Comprehensive tests - runs both Perl 5 core tests and module tests
+test-all: test-perl5 test-modules
 
 # Alternative: Run tests using JUnit/Gradle (for CI/CD integration)
 test-gradle: test-gradle-unit
