@@ -245,6 +245,7 @@ public record OperatorHandler(String className, String methodName, int methodTyp
         put("fork", "fork", "org/perlonjava/operators/SystemOperator", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("kill", "kill", "org/perlonjava/operators/KillOperator", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("umask", "umask", "org/perlonjava/operators/UmaskOperator", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("wait", "waitForChild", "org/perlonjava/operators/WaitpidOperator", "()Lorg/perlonjava/runtime/RuntimeScalar;");
         put("waitpid", "waitpid", "org/perlonjava/operators/WaitpidOperator", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("utime", "utime", "org/perlonjava/operators/UtimeOperator", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("chown", "chown", "org/perlonjava/operators/ChownOperator", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
