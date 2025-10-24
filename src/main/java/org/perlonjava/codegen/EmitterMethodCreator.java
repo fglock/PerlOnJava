@@ -98,8 +98,20 @@ public class EmitterMethodCreator implements Opcodes {
             String[] env = ctx.symbolTable.getVariableNames();
 
             // Create a ClassWriter with COMPUTE_FRAMES and COMPUTE_MAXS options for automatic frame and max
-            // stack size calculation
-            ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
+            // stack size calculation. Use a custom ClassWriter that can access the class loader for
+            // better frame computation on complex code.
+            ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS) {
+                @Override
+                protected String getCommonSuperClass(String type1, String type2) {
+                    try {
+                        return super.getCommonSuperClass(type1, type2);
+                    } catch (RuntimeException e) {
+                        // If ASM can't determine common superclass, fall back to Object
+                        // This can happen with complex class hierarchies
+                        return "java/lang/Object";
+                    }
+                }
+            };
             ctx.cw = cw;
 
             // The context type is determined by the caller.
@@ -186,9 +198,9 @@ public class EmitterMethodCreator implements Opcodes {
             // We initialize slots from env.length up to the current variable index + buffer
             // The symbol table tracks how many slots were allocated during parsing
             int currentVarIndex = ctx.symbolTable.getCurrentLocalVariableIndex();
-            // Add a buffer of 50 slots for runtime allocations (local variables, temporaries, etc.)
-            // This is especially important for complex subroutines like those in Pod::Simple
-            int maxPreInitSlots = Math.max(currentVarIndex, env.length) + 50;
+            // Add a buffer of 10 slots for runtime allocations (local variables, temporaries, etc.)
+            // Reduced from 50 to avoid ASM Frame.merge errors in complex code
+            int maxPreInitSlots = Math.max(currentVarIndex, env.length) + 10;
             ctx.logDebug("Pre-initializing slots from " + env.length + " to " + maxPreInitSlots + 
                         " (currentVarIndex=" + currentVarIndex + ")");
             for (int i = env.length; i < maxPreInitSlots; i++) {
