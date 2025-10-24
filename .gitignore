@@ -62,4 +62,6 @@ logs/
 !LICENSE.md
 !MILESTONES.md
 !README.md
-test_output.log
+test_*.log
+test_*.json
+
