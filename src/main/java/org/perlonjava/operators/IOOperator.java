@@ -300,7 +300,7 @@ public class IOOperator {
             fh = RuntimeIO.open(mode);
         }
         if (fh == null) {
-            return scalarFalse;
+            return scalarUndef;
         }
 
         // Check if the filehandle already contains a GLOB
