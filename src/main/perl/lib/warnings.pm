@@ -85,6 +85,7 @@ our %Offsets = (
     'deprecated::subsequent_use_version'=> 154,
     'experimental::keyword_all'		=> 156,
     'experimental::keyword_any'		=> 158,
+    'experimental::bitwise'		=> 160,
 );
 
 # NoOp warnings - warnings that have been removed but kept for compatibility
