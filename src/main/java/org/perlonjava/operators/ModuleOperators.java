@@ -36,8 +36,29 @@ public class ModuleOperators {
         String code = null;
         String actualFileName = null;
 
+        // Check if the argument is an ARRAY reference (for @INC filter with state support)
+        if (runtimeScalar.type == RuntimeScalarType.REFERENCE &&
+                runtimeScalar.value instanceof RuntimeArray) {
+            // `do` ARRAY reference - array should contain [coderef, state...]
+            RuntimeArray arr = (RuntimeArray) runtimeScalar.value;
+            if (arr.size() > 0) {
+                RuntimeScalar firstElem = arr.get(0);
+                // The first element should be a CODE ref or filehandle
+                if (firstElem.type == RuntimeScalarType.CODE ||
+                        (firstElem.type == RuntimeScalarType.REFERENCE &&
+                                firstElem.scalarDeref() != null &&
+                                firstElem.scalarDeref().type == RuntimeScalarType.CODE) ||
+                        firstElem.type == RuntimeScalarType.GLOB ||
+                        firstElem.type == RuntimeScalarType.GLOBREFERENCE) {
+                    // Recursively handle the first element
+                    // Pass remaining array elements as potential state
+                    RuntimeBase result = doFile(firstElem, setINC, isRequire, ctx);
+                    return result;
+                }
+            }
+        }
         // Check if the argument is a CODE reference (for @INC filter support)
-        if (runtimeScalar.type == RuntimeScalarType.CODE ||
+        else if (runtimeScalar.type == RuntimeScalarType.CODE ||
                 (runtimeScalar.type == RuntimeScalarType.REFERENCE &&
                         runtimeScalar.scalarDeref() != null &&
                         runtimeScalar.scalarDeref().type == RuntimeScalarType.CODE)) {
@@ -66,20 +87,36 @@ public class ModuleOperators {
             } else {
                 // Save current $_ 
                 RuntimeScalar savedDefaultVar = GlobalVariable.getGlobalVariable("main::_");
-                GlobalVariable.getGlobalVariable("main::_").set("");
+                StringBuilder accumulatedCode = new StringBuilder();
 
                 try {
-                    // Call the CODE reference with no arguments
+                    // Call the CODE reference repeatedly as a generator
+                    // Each call should populate $_ with the next chunk of code
+                    // Continue until it returns 0/false (EOF)
                     RuntimeArray args = new RuntimeArray();
-                    RuntimeBase result = codeRef.apply(args, RuntimeContextType.SCALAR);
-
-                    // Get the content from $_
-                    RuntimeScalar defaultVar = GlobalVariable.getGlobalVariable("main::_");
-                    code = defaultVar.toString();
-
-                    // Return value of 0 means EOF (no MORE content after this call)
-                    // But the content in $_ is still valid and should be used!
-                    // Only set code to null if $_ is actually empty
+                    boolean continueReading = true;
+                    
+                    while (continueReading) {
+                        GlobalVariable.getGlobalVariable("main::_").set("");
+                        
+                        // Call the CODE reference
+                        RuntimeBase result = codeRef.apply(args, RuntimeContextType.SCALAR);
+                        
+                        // Get the content from $_
+                        RuntimeScalar defaultVar = GlobalVariable.getGlobalVariable("main::_");
+                        String chunk = defaultVar.toString();
+                        
+                        // Accumulate the chunk if not empty
+                        if (!chunk.isEmpty()) {
+                            accumulatedCode.append(chunk);
+                        }
+                        
+                        // Check if we should continue
+                        // Return value of 0/false means EOF
+                        continueReading = result.scalar().getBoolean();
+                    }
+                    
+                    code = accumulatedCode.toString();
                     if (code.isEmpty()) {
                         code = null;
                     }
