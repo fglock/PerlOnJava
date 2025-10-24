@@ -32,6 +32,10 @@ t/
 !t/README.md
 !t/test.pl
 
+# Ignore perl5_t/ directory (module tests from perl5/lib/*.t)
+# These are synced from perl5 repo via sync.pl, not committed here
+perl5_t/
+
 # Ignore temporary analysis and debug files
 *_failures.txt
 debug_*.pl
