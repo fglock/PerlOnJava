@@ -30,6 +30,10 @@ imports:
     target: t/test.pl
     patch: test.pl.patch
 
+  - source: perl5/t/re/pat.t
+    target: t/re/pat.t
+    patch: pat.t.patch
+
   # Add more imports below as needed
   # Example with minimal fields:
   # - source: perl5/lib/SomeModule.pm
