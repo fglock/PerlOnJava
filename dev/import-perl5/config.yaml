@@ -66,6 +66,10 @@ imports:
     type: directory
 
   # Pod module tests from CPAN distributions
+  - source: perl5/cpan/Pod-Checker/lib/Pod
+    target: src/main/perl/lib/Pod
+    type: directory
+
   - source: perl5/cpan/Pod-Checker/t
     target: perl5_t/Pod/Pod-Checker
     type: directory
