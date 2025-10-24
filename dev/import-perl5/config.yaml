@@ -34,6 +34,62 @@ imports:
     target: t/re/pat.t
     patch: pat.t.patch
 
+  # Pod modules from CPAN distributions
+  # Pod::Simple - Core POD parser
+  - source: perl5/cpan/Pod-Simple/lib/Pod
+    target: src/main/perl/lib/Pod
+    type: directory
+
+  # Pod::Escapes - Character escapes for POD
+  - source: perl5/cpan/Pod-Escapes/lib/Pod
+    target: src/main/perl/lib/Pod
+    type: directory
+
+  # podlators - Pod::Man and Pod::Text formatters
+  - source: perl5/cpan/podlators/lib/Pod
+    target: src/main/perl/lib/Pod
+    type: directory
+
+  # Pod::Usage - Pod documentation usage information
+  - source: perl5/cpan/Pod-Usage/lib/Pod
+    target: src/main/perl/lib/Pod
+    type: directory
+
+  # Text::Tabs - Required by Pod modules for text wrapping
+  - source: perl5/cpan/Text-Tabs/lib/Text
+    target: src/main/perl/lib/Text
+    type: directory
+
+  # Test::Podlators and Test::RRA - Test helper modules (must be in @INC)
+  - source: perl5/cpan/podlators/t/lib/Test
+    target: src/main/perl/lib/Test
+    type: directory
+
+  # Pod module tests from CPAN distributions
+  - source: perl5/cpan/Pod-Checker/t
+    target: perl5_t/Pod/Pod-Checker
+    type: directory
+
+  - source: perl5/cpan/Pod-Escapes/t
+    target: perl5_t/Pod/Pod-Escapes
+    type: directory
+
+  - source: perl5/cpan/Pod-Perldoc/t
+    target: perl5_t/Pod/Pod-Perldoc
+    type: directory
+
+  - source: perl5/cpan/Pod-Simple/t
+    target: perl5_t/Pod/Pod-Simple
+    type: directory
+
+  - source: perl5/cpan/Pod-Usage/t
+    target: perl5_t/Pod/Pod-Usage
+    type: directory
+
+  - source: perl5/cpan/podlators/t
+    target: perl5_t/Pod/podlators/t
+    type: directory
+
   # Add more imports below as needed
   # Example with minimal fields:
   # - source: perl5/lib/SomeModule.pm
