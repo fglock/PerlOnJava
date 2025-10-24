@@ -62,6 +62,16 @@ public class WaitpidOperator {
     }
 
     /**
+     * Implements Perl's wait operator (waits for any child process)
+     *
+     * @return RuntimeScalar with PID of terminated child, or -1 if no children
+     */
+    public static RuntimeScalar waitForChild() {
+        // wait() is equivalent to waitpid(-1, 0)
+        return waitpid(SCALAR, new RuntimeScalar(-1), new RuntimeScalar(0));
+    }
+
+    /**
      * Implements Perl's waitpid operator using native system calls
      *
      * @param args RuntimeBase containing the PID to wait for; RuntimeBase containing wait flags
