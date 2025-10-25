@@ -376,6 +376,7 @@ public class PrototypeArgs {
                operatorName.equals("binmode") ||
                operatorName.equals("fileno") ||
                operatorName.equals("getc") ||
+               operatorName.equals("open") ||
                operatorName.equals("read") ||
                operatorName.equals("sysread") ||
                operatorName.equals("syswrite") ||
@@ -451,6 +452,22 @@ public class PrototypeArgs {
 //        for (Node element : argList.elements) {
 //            element.setAnnotation("context", "LIST");
 //        }
+
+        // Check if this is the first argument and might be a bareword filehandle
+        // For operators like truncate, seek, tell, eof, binmode, etc.
+        if (!argList.elements.isEmpty() && argList.elements.getFirst() instanceof IdentifierNode idNode) {
+            String operatorName = parser.ctx.symbolTable.getCurrentSubroutine();
+            if (isFilehandleOperator(operatorName)) {
+                // Try to parse as bareword filehandle
+                Node filehandleNode = FileHandle.parseBarewordHandle(parser, idNode.name);
+                if (filehandleNode != null) {
+                    // It's a known filehandle, use the typeglob reference
+                    // filehandleNode.setAnnotation("context", "SCALAR");
+                    argList.elements.set(0, filehandleNode);
+                }
+            }
+        }
+
         args.elements.addAll(argList.elements);
     }
 
