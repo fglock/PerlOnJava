@@ -74,7 +74,7 @@ public class GlobalContext {
         GlobalVariable.getGlobalVariable(encodeSpecialVar("TAINT")); // ${^TAINT}
         GlobalVariable.getGlobalVariable("main::>");  // TODO
         GlobalVariable.getGlobalVariable("main::<");  // TODO
-        GlobalVariable.getGlobalVariable("main::;");  // TODO
+        GlobalVariable.getGlobalVariable("main::;").set("\034");  // initialize $; (SUBSEP) to \034
         GlobalVariable.getGlobalVariable("main::(");  // TODO
         GlobalVariable.getGlobalVariable("main::)");  // TODO
         GlobalVariable.getGlobalVariable("main::=");  // TODO
