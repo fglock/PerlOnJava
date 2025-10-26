@@ -166,8 +166,17 @@ public class Dereference {
                     emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeHash",
                             hashOperation, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
                 } else {
-                    // Multiple elements
-                    nodeRight.accept(scalarVisitor);
+                    // Multiple elements: join them with $; (SUBSEP)
+                    // Get the $; global variable (SUBSEP)
+                    emitterVisitor.ctx.mv.visitLdcInsn("main::;");
+                    emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/GlobalVariable",
+                            "getGlobalVariable", "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                    // Emit the list of elements
+                    nodeRight.accept(emitterVisitor.with(RuntimeContextType.LIST));
+                    // Call join(separator, list)
+                    emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/operators/StringOperators",
+                            "join", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                    // Use the joined string as the hash key
                     emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeHash",
                             hashOperation, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
                 }

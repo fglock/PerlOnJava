@@ -37,6 +37,7 @@ public class HashUtil extends PerlModuleBase {
             hashUtil.registerMethod("lock_hash", "lock_hash", "\\%");
             hashUtil.registerMethod("unlock_hash", "unlock_hash", "\\%");
             hashUtil.registerMethod("hash_seed", "hash_seed", null);
+            hashUtil.registerMethod("num_buckets", "num_buckets", "\\%");
 
             // Additional methods not yet implemented:
             // lock_value, unlock_value, lock_keys_plus, hash_value, 
@@ -218,5 +219,50 @@ public class HashUtil extends PerlModuleBase {
     public static RuntimeList hash_seed(RuntimeArray args, int ctx) {
         // Return a constant seed value for now
         return new RuntimeScalar(0).getList();
+    }
+
+    /**
+     * Get the number of buckets in a hash
+     * This returns just the total number of buckets (the second part of bucket_ratio)
+     */
+    public static RuntimeList num_buckets(RuntimeArray args, int ctx) {
+        if (args.size() == 0) {
+            throw new IllegalArgumentException("num_buckets requires a hash argument");
+        }
+
+        RuntimeScalar hashRef = args.get(0);
+        RuntimeHash hash;
+
+        // Handle both direct hash and hash reference
+        if (hashRef.type == RuntimeScalarType.HASHREFERENCE) {
+            hash = (RuntimeHash) hashRef.value;
+        } else {
+            // Try to convert to hash
+            hash = hashRef.hashDeref();
+        }
+
+        // Get the total number of buckets
+        int buckets = getNumBuckets(hash);
+        return new RuntimeScalar(buckets).getList();
+    }
+
+    /**
+     * Get the total number of buckets for a RuntimeHash
+     */
+    private static int getNumBuckets(RuntimeHash hash) {
+        Map<String, RuntimeScalar> elements = hash.elements;
+
+        // Check if it's a StableHashMap
+        if (elements instanceof StableHashMap<String, RuntimeScalar> stableMap) {
+            // Parse the bucket ratio to get the total buckets
+            String ratio = stableMap.getBucketRatio();
+            String[] parts = ratio.split("/");
+            if (parts.length == 2) {
+                return Integer.parseInt(parts[1]);
+            }
+        }
+
+        // Fallback for other map types
+        return getHashMapCapacity(elements);
     }
 }
