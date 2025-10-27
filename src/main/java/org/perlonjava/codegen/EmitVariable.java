@@ -654,6 +654,22 @@ public class EmitVariable {
             return;
         } else if (node.operand instanceof OperatorNode sigilNode) { //  [my our] followed by [$ @ %]
             String sigil = sigilNode.operator;
+            
+            // Handle my \\$x - reference to a declared reference
+            if (sigil.equals("\\") && node.annotations != null && 
+                Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"))) {
+                // This is my \\$x which means: create a declared reference and then take a reference to it
+                // The operand is \$x, so we need to emit the declared reference creation
+                // and then take a reference to it
+                
+                // First, emit the declared reference variable (the inner part)
+                sigilNode.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                
+                // The variable is now on the stack, and we're in an assignment context
+                // The assignment operator will handle storing the reference
+                return;
+            }
+            
             if ("$@%".contains(sigil)) {
                 Node identifierNode = sigilNode.operand;
                 if (identifierNode instanceof IdentifierNode) { // my $a
@@ -762,20 +778,25 @@ public class EmitVariable {
                         // Create and fetch a global variable
                         fetchGlobalVariable(emitterVisitor.ctx, true, sigil, name, node.getIndex());
                     }
-                    // For declared references in non-void context, we need different handling
+                    // Store the variable in a JVM local variable
+                    emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, varIndex);
+                    
+                    // For declared references in non-void context, return a reference to the variable
                     if (isDeclaredReference && emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
-                        // Duplicate the variable for storage
-                        emitterVisitor.ctx.mv.visitInsn(Opcodes.DUP);
-                        // Store in a JVM local variable
-                        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, varIndex);
-                        // The original is still on the stack for the assignment
+                        // Load the variable back from the local variable slot
+                        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, varIndex);
+                        // Create a reference to it
+                        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                                "org/perlonjava/runtime/RuntimeBase",
+                                "createReference",
+                                "()Lorg/perlonjava/runtime/RuntimeScalar;",
+                                false);
                     } else {
                         // Normal handling for non-declared references
                         if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
-                            emitterVisitor.ctx.mv.visitInsn(Opcodes.DUP);
+                            // Load the variable back for the return value
+                            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, varIndex);
                         }
-                        // Store in a JVM local variable
-                        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, varIndex);
                     }
 
                     if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR && !sigil.equals("$")) {
