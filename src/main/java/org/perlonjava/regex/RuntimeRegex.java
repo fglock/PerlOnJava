@@ -53,7 +53,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     // ${^LAST_SUCCESSFUL_PATTERN}
     public static RuntimeRegex lastSuccessfulPattern = null;
     // Indicates if \G assertion is used
-    private final boolean useGAssertion = false;
+    private boolean useGAssertion = false;
     // Compiled regex pattern
     public Pattern pattern;
     int patternFlags;
@@ -96,6 +96,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
             regex.regexFlags = fromModifiers(modifiers, patternString);
             regex.patternFlags = regex.regexFlags.toPatternFlags();
+            regex.useGAssertion = regex.regexFlags.useGAssertion();
 
             String javaPattern = null;
             try {
@@ -377,10 +378,35 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         lastMatchStart = -1;
         lastMatchEnd = -1;
 
+        // For patterns ending with \G, we need to validate match end position
+        boolean startsWithGMatch = false;
+        boolean endsWithGMatch = false;
+        if (regex.useGAssertion) {
+            String origPattern = regex.patternString;
+            startsWithGMatch = origPattern != null && origPattern.startsWith("\\G");
+            endsWithGMatch = origPattern != null && origPattern.endsWith("\\G");
+        }
+
         while (matcher.find()) {
-            // If \G is used, ensure the match starts at the expected position
-            if (regex.useGAssertion && isPosDefined && matcher.start() != startPos) {
-                break;
+            // If \G is used, validate match position
+            if (regex.useGAssertion) {
+                if (startsWithGMatch && !endsWithGMatch) {
+                    // Pattern starts with \G: match must start at startPos
+                    if (matcher.start() != startPos) {
+                        break;
+                    }
+                } else if (endsWithGMatch && !startsWithGMatch) {
+                    // Pattern ends with \G: match must end at startPos
+                    if (matcher.end() != startPos) {
+                        // Skip this match, keep looking
+                        continue;
+                    }
+                } else if (startsWithGMatch && endsWithGMatch) {
+                    // Pattern both starts and ends with \G: zero-width match at startPos
+                    if (matcher.start() != startPos || matcher.end() != startPos) {
+                        break;
+                    }
+                }
             }
 
             found = true;
@@ -551,6 +577,11 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         Pattern pattern = regex.pattern;
         Matcher matcher = pattern.matcher(inputStr);
 
+        // Use RuntimePosLvalue to get the current position for \G handling
+        RuntimeScalar posScalar = RuntimePosLvalue.pos(string);
+        boolean isPosDefined = posScalar.getDefinedBoolean();
+        int gPos = isPosDefined ? posScalar.getInt() : 0;
+
         // The result string after substitutions
         StringBuilder resultBuffer = new StringBuilder();
         int found = 0;
@@ -561,11 +592,55 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // Don't reset globalMatcher here - only reset it if we actually find a match
         // This preserves capture variables from previous matches when substitution doesn't match
 
+        // Track the position for \G handling in global matches
+        int currentGPos = gPos;
+
+        // For patterns ending with \G, we need to find matches ending at specific positions
+        // Check pattern structure once before the loop
+        boolean startsWithG = false;
+        boolean endsWithG = false;
+        if (regex.useGAssertion) {
+            String origPattern = regex.patternString;
+            startsWithG = origPattern != null && origPattern.startsWith("\\G");
+            endsWithG = origPattern != null && origPattern.endsWith("\\G");
+
+            // For patterns starting with \G, set the matcher region to start from gPos
+            if (startsWithG && isPosDefined) {
+                matcher.region(gPos, inputStr.length());
+                // When using region(), we need to manually add the prefix part
+                // that comes before the region start
+                if (gPos > 0) {
+                    resultBuffer.append(inputStr, 0, gPos);
+                }
+            }
+        }
+
         // Perform the substitution
         while (matcher.find()) {
+            // For \G anchor, validate match position
+            if (regex.useGAssertion) {
+                if (startsWithG && !endsWithG) {
+                    // Pattern starts with \G: match must start at currentGPos
+                    if (matcher.start() != currentGPos) {
+                        break;
+                    }
+                } else if (endsWithG && !startsWithG) {
+                    // Pattern ends with \G: match must end at currentGPos
+                    if (matcher.end() != currentGPos) {
+                        // This match doesn't end at \G, skip it
+                        continue;
+                    }
+                } else if (startsWithG && endsWithG) {
+                    // Pattern both starts and ends with \G: must be a zero-width match at currentGPos
+                    if (matcher.start() != currentGPos || matcher.end() != currentGPos) {
+                        break;
+                    }
+                }
+            }
+
             found++;
 
-            // Initialize $1, $2, @+, @- only when we have a match
+            // Initialize $1, $2, @+, @-, $`, $&, $' only when we have a match
             globalMatcher = matcher;
             globalMatchString = inputStr;
             // Store match information
@@ -597,6 +672,17 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 // Append the text before the match and the replacement to the result buffer
                 // matcher.appendReplacement(resultBuffer, replacementStr);
                 matcher.appendReplacement(resultBuffer, Matcher.quoteReplacement(replacementStr));
+            }
+
+            // Update currentGPos for \G in global matches
+            if (regex.useGAssertion && regex.regexFlags.isGlobalMatch()) {
+                // For \G in global matches, update the \G position for the next iteration
+                // The \G position moves by the difference between replacement and match length
+                int matchLength = matcher.end() - matcher.start();
+                int replacementLength = replacementStr != null ? replacementStr.length() : 0;
+                int lengthDiff = replacementLength - matchLength;
+                // Update \G position: it moves forward by the size of the replacement
+                currentGPos = matcher.end() + lengthDiff;
             }
 
             // If not a global match, break after the first replacement

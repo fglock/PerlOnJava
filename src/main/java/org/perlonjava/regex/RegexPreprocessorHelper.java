@@ -198,6 +198,13 @@ public class RegexPreprocessorHelper {
             sb.setLength(sb.length() - 1); // Remove the backslash
             sb.append("[^\\n\\x0B\\f\\r\\x85\\x{2028}\\x{2029}]");
             return offset;
+        } else if (nextChar == 'G') {
+            // \G - matches at the position where the last match ended
+            // Java regex doesn't support \G, so we remove it and handle it manually in RuntimeRegex
+            // The useGAssertion flag will be set and we'll validate match positions manually
+            sb.setLength(sb.length() - 1); // Remove the backslash
+            // Don't add anything - \G is handled in RuntimeRegex.matchRegex/replaceRegex
+            return offset;
         } else if (nextChar == 'K') {
             // \K - keep assertion (reset start of match)
             // Convert to positive lookbehind for everything before this point
