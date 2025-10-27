@@ -290,8 +290,15 @@ public class EmitVariable {
             case "@":
                 // `@$a`
                 emitterVisitor.ctx.logDebug("GETVAR `@$a`");
-                node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "arrayDeref", "()Lorg/perlonjava/runtime/RuntimeArray;", false);
+                if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_REFS)) {
+                    node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "arrayDeref", "()Lorg/perlonjava/runtime/RuntimeArray;", false);
+                } else {
+                    // no strict refs - allow symbolic references
+                    node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    emitterVisitor.pushCurrentPackage();
+                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "arrayDerefNonStrict", "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeArray;", false);
+                }
                 if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
                 }
@@ -299,8 +306,15 @@ public class EmitVariable {
             case "%":
                 // `%$a`
                 emitterVisitor.ctx.logDebug("GETVAR `%$a`");
-                node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "hashDeref", "()Lorg/perlonjava/runtime/RuntimeHash;", false);
+                if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_REFS)) {
+                    node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "hashDeref", "()Lorg/perlonjava/runtime/RuntimeHash;", false);
+                } else {
+                    // no strict refs - allow symbolic references
+                    node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    emitterVisitor.pushCurrentPackage();
+                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "hashDerefNonStrict", "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeHash;", false);
+                }
                 return;
             case "$":
                 // `$$a`
