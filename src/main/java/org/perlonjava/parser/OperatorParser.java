@@ -476,14 +476,18 @@ public class OperatorParser {
         // Handle operators with a single operand
         // For scalar, values, keys, each: parse with precedence that includes postfix operators ([], {}, ->)
         // Named unary operators have precedence between 20 and 21 in Perl
-        // This allows expressions like: values $hashref->%* or keys $hashref->%*
+        // This allows expressions like: values $hashref->%* or keys $hashref->%* or scalar((nil) x 3, 1)
         if (operator.equals("scalar") || operator.equals("values") || operator.equals("keys") || operator.equals("each")) {
             operand = parser.parseExpression(parser.getPrecedence("=~")); // precedence 20
-            // For values/keys/each, check if operand is null (no argument provided)
+            // Check if operand is null (no argument provided)
             if (operand == null) {
                 throw new PerlCompilerException(currentIndex, "Not enough arguments for " + operator, parser.ctx.errorUtil);
             }
-            operand = ensureOneOperand(parser, token, operand);
+            // scalar can accept comma expressions like scalar((nil) x 3, 1)
+            // but values/keys/each need single operand check
+            if (!operator.equals("scalar")) {
+                operand = ensureOneOperand(parser, token, operand);
+            }
         } else {
             operand = ParsePrimary.parsePrimary(parser);
             // Check if operand is null (no argument provided)

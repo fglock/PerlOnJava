@@ -918,6 +918,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
 
         return switch (type) {
+            case UNDEF -> {
+                // Don't autovivify read-only scalars (like constants)
+                if (this instanceof RuntimeScalarReadOnly) {
+                    yield new RuntimeHash();
+                }
+                yield AutovivificationHash.createAutovivifiedHash(this);
+            }
             case HASHREFERENCE -> (RuntimeHash) value;
             case TIED_SCALAR -> tiedFetch().hashDerefNonStrict(packageName);
             default -> {
@@ -946,6 +953,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
 
         return switch (type) {
+            case UNDEF -> {
+                // Don't autovivify read-only scalars (like constants)
+                // This matches Perl's behavior where 1->[0] returns undef without error
+                if (this instanceof RuntimeScalarReadOnly) {
+                    yield new RuntimeArray();
+                }
+                yield AutovivificationArray.createAutovivifiedArray(this);
+            }
             case ARRAYREFERENCE -> (RuntimeArray) value;
             case TIED_SCALAR -> tiedFetch().arrayDerefNonStrict(packageName);
             default -> {
