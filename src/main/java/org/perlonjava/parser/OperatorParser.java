@@ -753,6 +753,37 @@ public class OperatorParser {
     }
 
     static OperatorNode parseLocal(Parser parser, LexerToken token, int currentIndex) {
+        // Check if this is a declared reference (local \$x, local \@array, etc.)
+        boolean isDeclaredReference = false;
+        if (peek(parser).type == LexerTokenType.OPERATOR && peek(parser).text.equals("\\")) {
+            isDeclaredReference = true;
+
+            // Check if declared_refs feature is enabled
+            if (!parser.ctx.symbolTable.isFeatureCategoryEnabled("declared_refs")) {
+                throw new PerlCompilerException(
+                        currentIndex,
+                        "The experimental declared_refs feature is not enabled",
+                        parser.ctx.errorUtil
+                );
+            }
+
+            // Emit experimental warning if warnings are enabled
+            if (parser.ctx.symbolTable.isWarningCategoryEnabled("experimental::declared_refs")) {
+                // Use WarnDie.warn to respect $SIG{__WARN__} handler
+                try {
+                    WarnDie.warn(
+                            new RuntimeScalar("Declaring references is experimental"),
+                            new RuntimeScalar(parser.ctx.errorUtil.errorMessage(currentIndex, ""))
+                    );
+                } catch (Exception e) {
+                    // If warning system isn't initialized yet, fall back to System.err
+                    System.err.println(parser.ctx.errorUtil.errorMessage(currentIndex, "Declaring references is experimental"));
+                }
+            }
+
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "\\");
+        }
+
         Node operand;
         // Handle 'local' keyword as a unary operator with an operand
         if (peek(parser).text.equals("(")) {
@@ -760,7 +791,54 @@ public class OperatorParser {
         } else {
             operand = parser.parseExpression(parser.getPrecedence("++"));
         }
-        return new OperatorNode(token.text, operand, currentIndex);
+
+        // Check for declared references inside parentheses: local(\$x)
+        if (operand instanceof ListNode listNode) {
+            for (Node element : listNode.elements) {
+                if (element instanceof OperatorNode operandNode) {
+                    // Check if this element is a reference operator (backslash)
+                    // This handles cases like local(\$x) where the backslash is inside the parentheses
+                    if (operandNode.operator.equals("\\") && operandNode.operand instanceof OperatorNode) {
+                        // This is a declared reference inside parentheses: local(\$x), local(\@arr), local(\%hash)
+
+                        // Check if declared_refs feature is enabled
+                        if (!parser.ctx.symbolTable.isFeatureCategoryEnabled("declared_refs")) {
+                            throw new PerlCompilerException(
+                                    operandNode.tokenIndex,
+                                    "The experimental declared_refs feature is not enabled",
+                                    parser.ctx.errorUtil
+                            );
+                        }
+
+                        // Emit experimental warning if warnings are enabled
+                        if (parser.ctx.symbolTable.isWarningCategoryEnabled("experimental::declared_refs")) {
+                            // Use WarnDie.warn to respect $SIG{__WARN__} handler
+                            try {
+                                WarnDie.warn(
+                                        new RuntimeScalar("Declaring references is experimental"),
+                                        new RuntimeScalar(parser.ctx.errorUtil.errorMessage(operandNode.tokenIndex, ""))
+                                );
+                            } catch (Exception e) {
+                                // If warning system isn't initialized yet, fall back to System.err
+                                System.err.println(parser.ctx.errorUtil.errorMessage(operandNode.tokenIndex, "Declaring references is experimental"));
+                            }
+                        }
+
+                        // Mark the nodes as declared references
+                        operandNode.setAnnotation("isDeclaredReference", true);
+                        if (operandNode.operand instanceof OperatorNode varNode) {
+                            varNode.setAnnotation("isDeclaredReference", true);
+                        }
+                    }
+                }
+            }
+        }
+
+        OperatorNode localNode = new OperatorNode(token.text, operand, currentIndex);
+        if (isDeclaredReference) {
+            localNode.setAnnotation("isDeclaredReference", true);
+        }
+        return localNode;
     }
 
     static OperatorNode parseReverse(Parser parser, LexerToken token, int currentIndex) {
