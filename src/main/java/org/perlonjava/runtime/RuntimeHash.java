@@ -212,11 +212,10 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 // This reuses the existing StableHashMap and its capacity
                 Iterator<RuntimeScalar> iter = value.iterator();
                 while (iter.hasNext()) {
-                    RuntimeScalar key = iter.next();
-                    if (iter.hasNext()) {
-                        RuntimeScalar val = iter.hasNext() ? iter.next() : RuntimeScalarCache.scalarUndef;
-                        this.elements.put(key.toString(), val);
-                    }
+                    String key = iter.next().toString();
+                    // Create a new RuntimeScalar to properly handle aliasing and avoid read-only issues
+                    RuntimeScalar val = iter.hasNext() ? new RuntimeScalar(iter.next()) : new RuntimeScalar();
+                    this.elements.put(key, val);
                 }
 
                 // Create a RuntimeArray that wraps this hash
