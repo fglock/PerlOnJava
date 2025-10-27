@@ -76,13 +76,41 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
     @Override
     public RuntimeHash hashDeref() {
         vivify();  // Ensure the scalar exists in parent hash
-        return lvalue.hashDeref();  // Delegate to the actual scalar
+        RuntimeHash result = lvalue.hashDeref();  // Delegate to the actual scalar
+        // Update proxy's type and value to match lvalue after vivification
+        this.type = lvalue.type;
+        this.value = lvalue.value;
+        return result;
     }
 
     @Override
     public RuntimeArray arrayDeref() {
         vivify();  // Ensure the scalar exists in parent hash
-        return lvalue.arrayDeref();  // Delegate to the actual scalar
+        RuntimeArray result = lvalue.arrayDeref();  // Delegate to the actual scalar
+        // Update proxy's type and value to match lvalue after vivification
+        this.type = lvalue.type;
+        this.value = lvalue.value;
+        return result;
+    }
+
+    @Override
+    public RuntimeArray arrayDerefNonStrict(String packageName) {
+        vivify();  // Ensure the scalar exists in parent hash/array
+        RuntimeArray result = lvalue.arrayDerefNonStrict(packageName);  // Delegate to the actual scalar
+        // Update proxy's type and value to match lvalue after vivification
+        this.type = lvalue.type;
+        this.value = lvalue.value;
+        return result;
+    }
+
+    @Override
+    public RuntimeHash hashDerefNonStrict(String packageName) {
+        vivify();  // Ensure the scalar exists in parent hash/array
+        RuntimeHash result = lvalue.hashDerefNonStrict(packageName);  // Delegate to the actual scalar
+        // Update proxy's type and value to match lvalue after vivification
+        this.type = lvalue.type;
+        this.value = lvalue.value;
+        return result;
     }
 
     /**
