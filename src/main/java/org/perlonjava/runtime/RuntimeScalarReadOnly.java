@@ -154,4 +154,31 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
         // This matches Perl's behavior where 1->[0] returns undef without error
         return new RuntimeArray();
     }
+
+    @Override
+    public RuntimeArray arrayDerefNonStrict(String packageName) {
+        // Don't call vivify() for read-only scalars
+        // For symbolic references, look up the global variable
+        if (this.type == RuntimeScalarType.STRING || this.type == RuntimeScalarType.BYTE_STRING) {
+            String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
+            return GlobalVariable.getGlobalArray(varName);
+        }
+        // For other types, behave like arrayDeref() (return empty array)
+        return new RuntimeArray();
+    }
+
+    @Override
+    public RuntimeHash hashDerefNonStrict(String packageName) {
+        // Don't call vivify() for read-only scalars
+        // For symbolic references, look up the global variable
+        if (this.type == RuntimeScalarType.STRING || this.type == RuntimeScalarType.BYTE_STRING) {
+            String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
+            return GlobalVariable.getGlobalHash(varName);
+        }
+        // For other types, behave like hashDeref() (throw error)
+        if (this.type == UNDEF) {
+            throw new PerlCompilerException("Can't use an undefined value as a HASH reference");
+        }
+        throw new PerlCompilerException("Can't use value as a HASH reference");
+    }
 }
