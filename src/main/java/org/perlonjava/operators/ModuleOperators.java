@@ -21,11 +21,94 @@ import static org.perlonjava.runtime.GlobalVariable.getGlobalHash;
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
 
+/**
+ * ModuleOperators implements Perl's module loading operators: `do`, `require`, and `use`.
+ * 
+ * <p>This class handles multiple forms of code loading:
+ * <ul>
+ *   <li><b>do FILE</b> - Executes a file without checking %INC</li>
+ *   <li><b>do \&coderef</b> - Executes code reference as @INC filter (generator pattern)</li>
+ *   <li><b>do [\&coderef, state...]</b> - @INC filter with state parameters</li>
+ *   <li><b>do $filehandle</b> - Reads and executes from filehandle</li>
+ *   <li><b>do [$filehandle, \&filter, state...]</b> - Filehandle with filter chain</li>
+ *   <li><b>require FILE</b> - Loads module once, checks %INC, requires true value</li>
+ *   <li><b>require VERSION</b> - Version checking</li>
+ * </ul>
+ * 
+ * <h2>@INC Filter Support</h2>
+ * <p>When a code reference is passed to `do`, it's called repeatedly as a generator:
+ * <ul>
+ *   <li>Each call should populate $_ with a chunk of code</li>
+ *   <li>Return 0/false to signal EOF</li>
+ *   <li>Return true to continue reading</li>
+ *   <li>Optional state parameters are passed as @_ (starting at $_[1])</li>
+ * </ul>
+ * 
+ * <h2>Error Handling</h2>
+ * <p>Errors are stored in special variables:
+ * <ul>
+ *   <li><b>$@</b> - Compilation/execution errors</li>
+ *   <li><b>$!</b> - I/O errors (file not found, permissions, etc.)</li>
+ * </ul>
+ * 
+ * @see <a href="https://perldoc.perl.org/functions/do">perldoc do</a>
+ * @see <a href="https://perldoc.perl.org/functions/require">perldoc require</a>
+ */
 public class ModuleOperators {
+    
+    /**
+     * Public entry point for `do` operator.
+     * 
+     * <p>Always sets %INC and keeps the entry regardless of execution result.
+     * This differs from `require` which removes %INC entries on failure.
+     * 
+     * @param runtimeScalar The file, coderef, filehandle, or array reference to execute
+     * @param ctx Execution context (scalar or list)
+     * @return Result of execution (undef on error)
+     */
     public static RuntimeBase doFile(RuntimeScalar runtimeScalar, int ctx) {
         return doFile(runtimeScalar, true, false, ctx); // do FILE always sets %INC and keeps it
     }
 
+    /**
+     * Internal implementation of `do` and `require` operators.
+     * 
+     * <p>This method handles the complex dispatch logic for different argument types:
+     * 
+     * <h3>1. Array Reference: [\&coderef, state...]</h3>
+     * <p>When the first element is a code reference:
+     * <ul>
+     *   <li>Extract the coderef from array[0]</li>
+     *   <li>Pass array[1..N] as state parameters to the coderef</li>
+     *   <li>Call coderef repeatedly until it returns false</li>
+     *   <li>Each call populates $_ with code chunks</li>
+     * </ul>
+     * 
+     * <h3>2. Code Reference: \&generator</h3>
+     * <p>When a coderef is passed directly:
+     * <ul>
+     *   <li>Call repeatedly as generator (no state parameters)</li>
+     *   <li>Each call should set $_ to next chunk</li>
+     *   <li>Return false to signal EOF</li>
+     * </ul>
+     * 
+     * <h3>3. Filehandle: $fh</h3>
+     * <p>Read entire contents from filehandle and execute.
+     * 
+     * <h3>4. Filename: "Module/Name.pm"</h3>
+     * <p>Standard file loading:
+     * <ul>
+     *   <li>Search @INC directories</li>
+     *   <li>Check for .pmc (compiled) version first</li>
+     *   <li>Read file and execute</li>
+     * </ul>
+     * 
+     * @param runtimeScalar The argument to do/require
+     * @param setINC Whether to set %INC entry for this file
+     * @param isRequire True if called from require (affects %INC cleanup on failure)
+     * @param ctx Execution context (scalar or list)
+     * @return Result of execution (undef on error, with $@ or $! set)
+     */
     private static RuntimeBase doFile(RuntimeScalar runtimeScalar, boolean setINC, boolean isRequire, int ctx) {
         // Clear error variables at start
         GlobalVariable.setGlobalVariable("main::@", "");
@@ -36,41 +119,114 @@ public class ModuleOperators {
         String code = null;
         String actualFileName = null;
 
-        // Check if the argument is an ARRAY reference (for @INC filter with state support)
-        if (runtimeScalar.type == RuntimeScalarType.REFERENCE &&
+        // Variables for handling array references with state
+        RuntimeCode codeRef = null;
+        RuntimeArray stateArgs = null;
+
+        // ===== STEP 1: Handle ARRAY reference =====
+        // Array format: [coderef|filehandle, state...]
+        if (runtimeScalar.type == RuntimeScalarType.ARRAYREFERENCE &&
                 runtimeScalar.value instanceof RuntimeArray) {
-            // `do` ARRAY reference - array should contain [coderef, state...]
             RuntimeArray arr = (RuntimeArray) runtimeScalar.value;
             if (arr.size() > 0) {
                 RuntimeScalar firstElem = arr.get(0);
-                // The first element should be a CODE ref or filehandle
+                
+                // Case 1a: Array with CODE reference [&coderef, state...]
+                // Extract coderef and state parameters for later execution
                 if (firstElem.type == RuntimeScalarType.CODE ||
                         (firstElem.type == RuntimeScalarType.REFERENCE &&
                                 firstElem.scalarDeref() != null &&
-                                firstElem.scalarDeref().type == RuntimeScalarType.CODE) ||
-                        firstElem.type == RuntimeScalarType.GLOB ||
+                                firstElem.scalarDeref().type == RuntimeScalarType.CODE)) {
+                    // Extract the coderef from first element
+                    if (firstElem.type == RuntimeScalarType.CODE) {
+                        codeRef = (RuntimeCode) firstElem.value;
+                    } else if (firstElem.value instanceof RuntimeCode) {
+                        codeRef = (RuntimeCode) firstElem.value;
+                    } else {
+                        RuntimeScalar deref = firstElem.scalarDeref();
+                        if (deref != null && deref.value instanceof RuntimeCode) {
+                            codeRef = (RuntimeCode) deref.value;
+                        }
+                    }
+                    
+                    // Create arguments array from remaining elements (state parameters)
+                    // These will be passed as @_ to the coderef
+                    // Note: $_[0] is reserved for filename (undef for generators), state starts at $_[1]
+                    stateArgs = new RuntimeArray();
+                    stateArgs.push(new RuntimeScalar());  // $_[0] = undef (filename placeholder)
+                    for (int i = 1; i < arr.size(); i++) {
+                        stateArgs.push(arr.get(i));       // $_[1..N] = state parameters
+                    }
+                    // Fall through to CODE handling below
+                }
+                // Case 1b: Array with filehandle [$fh, &filter, state...]
+                // Read from filehandle, apply filter if present, then execute
+                else if (firstElem.type == RuntimeScalarType.GLOB ||
                         firstElem.type == RuntimeScalarType.GLOBREFERENCE) {
-                    // Recursively handle the first element
-                    // Pass remaining array elements as potential state
-                    RuntimeBase result = doFile(firstElem, setINC, isRequire, ctx);
-                    return result;
+                    // Read content from filehandle
+                    code = Readline.readline(firstElem, RuntimeContextType.LIST).toString();
+                    
+                    // Check if there's a filter (second element)
+                    if (arr.size() > 1) {
+                        RuntimeScalar secondElem = arr.get(1);
+                        if (secondElem.type == RuntimeScalarType.CODE ||
+                                (secondElem.type == RuntimeScalarType.REFERENCE &&
+                                        secondElem.scalarDeref() != null &&
+                                        secondElem.scalarDeref().type == RuntimeScalarType.CODE)) {
+                            // Extract filter coderef
+                            RuntimeCode filterRef = null;
+                            if (secondElem.type == RuntimeScalarType.CODE) {
+                                filterRef = (RuntimeCode) secondElem.value;
+                            } else if (secondElem.value instanceof RuntimeCode) {
+                                filterRef = (RuntimeCode) secondElem.value;
+                            } else {
+                                RuntimeScalar deref = secondElem.scalarDeref();
+                                if (deref != null && deref.value instanceof RuntimeCode) {
+                                    filterRef = (RuntimeCode) deref.value;
+                                }
+                            }
+                            
+                            if (filterRef != null) {
+                                // Apply filter to the content
+                                RuntimeScalar savedDefaultVar = GlobalVariable.getGlobalVariable("main::_");
+                                try {
+                                    // Set $_ to the content
+                                    GlobalVariable.getGlobalVariable("main::_").set(code);
+                                    
+                                    // Build filter args: $_[0] = undef, $_[1..N] = state
+                                    RuntimeArray filterArgs = new RuntimeArray();
+                                    filterArgs.push(new RuntimeScalar());  // $_[0] = undef
+                                    for (int i = 2; i < arr.size(); i++) {
+                                        filterArgs.push(arr.get(i));  // $_[1..N] = state
+                                    }
+                                    
+                                    // Call the filter
+                                    filterRef.apply(filterArgs, RuntimeContextType.SCALAR);
+                                    
+                                    // Get modified content from $_
+                                    code = GlobalVariable.getGlobalVariable("main::_").toString();
+                                } finally {
+                                    // Restore $_
+                                    GlobalVariable.getGlobalVariable("main::_").set(savedDefaultVar.toString());
+                                }
+                            }
+                        }
+                    }
+                    // Continue to execution phase with the (possibly filtered) code
                 }
             }
         }
-        // Check if the argument is a CODE reference (for @INC filter support)
-        else if (runtimeScalar.type == RuntimeScalarType.CODE ||
+        
+        // ===== STEP 2: Handle direct CODE reference =====
+        // Check if the argument is a CODE reference (not already extracted from array)
+        if (codeRef == null && (runtimeScalar.type == RuntimeScalarType.CODE ||
                 (runtimeScalar.type == RuntimeScalarType.REFERENCE &&
                         runtimeScalar.scalarDeref() != null &&
-                        runtimeScalar.scalarDeref().type == RuntimeScalarType.CODE)) {
-            // `do` CODE reference - execute the subroutine as an @INC filter
-            // The subroutine should populate $_ with file content
-            // Return value of 0 means EOF
-
-            RuntimeCode codeRef = null;
+                        runtimeScalar.scalarDeref().type == RuntimeScalarType.CODE))) {
+            // Extract the coderef
             if (runtimeScalar.type == RuntimeScalarType.CODE) {
                 codeRef = (RuntimeCode) runtimeScalar.value;
             } else {
-                // For REFERENCE type, the value is already the RuntimeCode
                 if (runtimeScalar.value instanceof RuntimeCode) {
                     codeRef = (RuntimeCode) runtimeScalar.value;
                 } else {
@@ -80,60 +236,69 @@ public class ModuleOperators {
                     }
                 }
             }
-
-            if (codeRef == null) {
-                // Not a valid CODE reference
-                code = null;
-            } else {
-                // Save current $_ 
-                RuntimeScalar savedDefaultVar = GlobalVariable.getGlobalVariable("main::_");
-                StringBuilder accumulatedCode = new StringBuilder();
-
-                try {
-                    // Call the CODE reference repeatedly as a generator
-                    // Each call should populate $_ with the next chunk of code
-                    // Continue until it returns 0/false (EOF)
-                    RuntimeArray args = new RuntimeArray();
-                    boolean continueReading = true;
-                    
-                    while (continueReading) {
-                        GlobalVariable.getGlobalVariable("main::_").set("");
-                        
-                        // Call the CODE reference
-                        RuntimeBase result = codeRef.apply(args, RuntimeContextType.SCALAR);
-                        
-                        // Get the content from $_
-                        RuntimeScalar defaultVar = GlobalVariable.getGlobalVariable("main::_");
-                        String chunk = defaultVar.toString();
-                        
-                        // Accumulate the chunk if not empty
-                        if (!chunk.isEmpty()) {
-                            accumulatedCode.append(chunk);
-                        }
-                        
-                        // Check if we should continue
-                        // Return value of 0/false means EOF
-                        continueReading = result.scalar().getBoolean();
-                    }
-                    
-                    code = accumulatedCode.toString();
-                    if (code.isEmpty()) {
-                        code = null;
-                    }
-                } catch (Exception e) {
-                    // If there's an error executing the CODE ref, treat as no content
-                    code = null;
-                    throw e; // Re-throw to maintain error handling
-                } finally {
-                    // Restore $_
-                    GlobalVariable.getGlobalVariable("main::_").set(savedDefaultVar.toString());
-                }
+            
+            // Create args with filename placeholder if not already set (no state for direct coderef)
+            if (stateArgs == null) {
+                stateArgs = new RuntimeArray();
+                stateArgs.push(new RuntimeScalar());  // $_[0] = undef (filename placeholder)
             }
-        } else if (runtimeScalar.type == RuntimeScalarType.GLOB || runtimeScalar.type == RuntimeScalarType.GLOBREFERENCE) {
-            // `do` filehandle
+        }
+
+        // ===== STEP 3: Execute CODE reference as generator =====
+        // This handles both array-extracted and direct code references
+        if (codeRef != null) {
+            RuntimeScalar savedDefaultVar = GlobalVariable.getGlobalVariable("main::_");
+            StringBuilder accumulatedCode = new StringBuilder();
+
+            try {
+                // Generator pattern: call repeatedly until false is returned
+                // Each call should populate $_ with a chunk of code
+                // State parameters (if any) are passed as @_
+                boolean continueReading = true;
+                
+                while (continueReading) {
+                    // Clear $_ before each call
+                    GlobalVariable.getGlobalVariable("main::_").set("");
+                    
+                    // Call the CODE reference with state arguments
+                    // The coderef should populate $_ with content
+                    RuntimeBase result = codeRef.apply(stateArgs, RuntimeContextType.SCALAR);
+                    
+                    // Get the content from $_
+                    RuntimeScalar defaultVar = GlobalVariable.getGlobalVariable("main::_");
+                    String chunk = defaultVar.toString();
+                    
+                    // Accumulate the chunk if not empty
+                    if (!chunk.isEmpty()) {
+                        accumulatedCode.append(chunk);
+                    }
+                    
+                    // Check if we should continue
+                    // Return value of 0/false means EOF
+                    continueReading = result.scalar().getBoolean();
+                }
+                
+                code = accumulatedCode.toString();
+                if (code.isEmpty()) {
+                    code = null;
+                }
+            } catch (Exception e) {
+                // If there's an error executing the CODE ref, treat as no content
+                code = null;
+                throw e; // Re-throw to maintain error handling
+            } finally {
+                // Restore $_ to its previous value
+                GlobalVariable.getGlobalVariable("main::_").set(savedDefaultVar.toString());
+            }
+        } 
+        // ===== STEP 4: Handle filehandle =====
+        else if (runtimeScalar.type == RuntimeScalarType.GLOB || runtimeScalar.type == RuntimeScalarType.GLOBREFERENCE) {
+            // Read entire contents from filehandle
             code = Readline.readline(runtimeScalar, RuntimeContextType.LIST).toString();
-        } else {
-            // `do` filename
+        } 
+        // ===== STEP 5: Handle filename (standard file loading) =====
+        // Only process as filename if code hasn't been set yet
+        else if (code == null) {
 
             // Check if the filename is an absolute path or starts with ./ or ../
             Path filePath = Paths.get(fileName);
@@ -290,9 +455,49 @@ public class ModuleOperators {
         }
     }
 
+    /**
+     * Implements Perl's `require` operator.
+     * 
+     * <p>The `require` operator has two distinct behaviors:
+     * 
+     * <h3>1. Version Checking: require VERSION</h3>
+     * <p>When given a numeric or vstring value:
+     * <ul>
+     *   <li>Compare against current Perl version</li>
+     *   <li>Throw exception if version requirement not met</li>
+     *   <li>Return 1 if version is sufficient</li>
+     * </ul>
+     * 
+     * <h3>2. Module Loading: require MODULE</h3>
+     * <p>When given a string (module name or filename):
+     * <ul>
+     *   <li>Check if already loaded in %INC (return 1 if so)</li>
+     *   <li>Search @INC directories for the file</li>
+     *   <li>Compile and execute the file</li>
+     *   <li>Require that execution returns a true value</li>
+     *   <li>Add entry to %INC on success</li>
+     *   <li>Remove from %INC or mark as undef on failure</li>
+     * </ul>
+     * 
+     * <h3>Error Handling</h3>
+     * <p>`require` is stricter than `do`:
+     * <ul>
+     *   <li>Throws exception if file not found</li>
+     *   <li>Throws exception if compilation fails</li>
+     *   <li>Throws exception if module returns false value</li>
+     *   <li>Marks compilation failures as undef in %INC (cached failure)</li>
+     * </ul>
+     * 
+     * @param runtimeScalar Module name, filename, or version to require
+     * @return Always returns 1 on success (or throws exception)
+     * @throws PerlCompilerException if version insufficient, file not found, 
+     *         compilation fails, or module returns false
+     * @see <a href="https://perldoc.perl.org/functions/require">perldoc require</a>
+     */
     public static RuntimeScalar require(RuntimeScalar runtimeScalar) {
         // https://perldoc.perl.org/functions/require
 
+        // ===== CASE 1: Version checking =====
         if (runtimeScalar.type == RuntimeScalarType.INTEGER || runtimeScalar.type == RuntimeScalarType.DOUBLE || runtimeScalar.type == RuntimeScalarType.VSTRING || runtimeScalar.type == RuntimeScalarType.BOOLEAN) {
             // `require VERSION` - use version comparison
             String currentVersionStr = Configuration.perlVersion;
