@@ -55,6 +55,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // Temporary storage for anonymous subroutines and eval string compiler context
     public static HashMap<String, Class<?>> anonSubs = new HashMap<>(); // temp storage for makeCodeObject()
     public static HashMap<String, EmitterContext> evalContext = new HashMap<>(); // storage for eval string compiler context
+    // Runtime eval counter for generating unique filenames when $^P is set
+    private static int runtimeEvalCounter = 1;
     // Method object representing the compiled subroutine
     public MethodHandle methodHandle;
     public boolean isStatic;
@@ -148,11 +150,32 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             evalCompilerOptions.isUnicodeSource = true;
         }
 
+        // Check $^P to determine if we should use caching
+        // When debugging is enabled, we want each eval to get a unique filename
+        int debugFlags = GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("P")).getInt();
+        boolean isDebugging = debugFlags != 0;
+        
+        // Override the filename with a runtime-generated eval number when debugging
+        String actualFileName = evalCompilerOptions.fileName;
+        if (isDebugging) {
+            synchronized (RuntimeCode.class) {
+                actualFileName = "(eval " + runtimeEvalCounter++ + ")";
+            }
+        }
+        
         // Check if the result is already cached (include hasUnicode in cache key)
+        // Skip caching when $^P is set, so each eval gets a unique filename
         String cacheKey = code.toString() + '\0' + evalTag + '\0' + hasUnicode;
-        synchronized (evalCache) {
-            if (evalCache.containsKey(cacheKey)) {
-                return evalCache.get(cacheKey);
+        Class<?> cachedClass = null;
+        if (!isDebugging) {
+            synchronized (evalCache) {
+                if (evalCache.containsKey(cacheKey)) {
+                    cachedClass = evalCache.get(cacheKey);
+                }
+            }
+            
+            if (cachedClass != null) {
+                return cachedClass;
             }
         }
 
@@ -211,12 +234,75 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             );
         }
 
-        // Cache the result
-        synchronized (evalCache) {
-            evalCache.put(cacheKey, generatedClass);
+        // Cache the result (unless debugging is enabled)
+        if (!isDebugging) {
+            synchronized (evalCache) {
+                evalCache.put(cacheKey, generatedClass);
+            }
         }
 
+        // Store source lines in symbol table if $^P flags are set
+        storeSourceLines(evalString, actualFileName, ast);
+
         return generatedClass;
+    }
+
+    /**
+     * Stores source lines in the symbol table for debugger support when $^P flags are set.
+     *
+     * @param evalString The source code string to store
+     * @param filename   The filename (e.g., "(eval 1)")
+     * @param ast        The AST to check for subroutine definitions
+     */
+    private static void storeSourceLines(String evalString, String filename, Node ast) {
+        // Check $^P for debugger flags
+        int debugFlags = GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("P")).getInt();
+        // 0x02 (2): Line-by-line debugging (also saves source like 0x400)
+        // 0x400 (1024): Save source code lines
+        // 0x800 (2048): Include evals that generate no subroutines
+        // 0x1000 (4096): Include source that did not compile
+        boolean shouldSaveSource = (debugFlags & 0x02) != 0 || (debugFlags & 0x400) != 0;
+        boolean saveWithoutSubs = (debugFlags & 0x800) != 0;
+        
+        if (shouldSaveSource) {
+            // Note: We can't reliably detect subroutine definitions from the AST because
+            // subroutines are processed at parse-time and removed from the AST.
+            // Use a simple heuristic: check if the eval string contains "sub " followed by
+            // an identifier or block.
+            boolean definesSubs = evalString.matches("(?s).*\\bsub\\s+(?:\\w+|\\{).*");
+            
+            // Only save if either:
+            // - The eval defines subroutines, OR
+            // - The 0x800 flag is set (save evals without subs)
+            if (!definesSubs && !saveWithoutSubs) {
+                return;  // Skip this eval
+            }
+            // Store in the symbol table as @{"_<(eval N)"}
+            String symbolKey = "_<" + filename;
+            
+            // Split the eval string into lines (without including trailing empty strings)
+            String[] lines = evalString.split("\n");
+            
+            // Create the array with the format expected by the debugger:
+            // [0] = undef, [1..n] = lines with \n, [n+1] = \n, [n+2] = ;
+            String arrayKey = "main::" + symbolKey;
+            RuntimeArray sourceArray = GlobalVariable.getGlobalArray(arrayKey);
+            sourceArray.elements.clear();
+            
+            // Index 0: undef
+            sourceArray.elements.add(RuntimeScalarCache.scalarUndef);
+            
+            // Indexes 1..n: each line with "\n" appended
+            for (String line : lines) {
+                sourceArray.elements.add(new RuntimeScalar(line + "\n"));
+            }
+            
+            // Index n+1: "\n"
+            sourceArray.elements.add(new RuntimeScalar("\n"));
+            
+            // Index n+2: ";"
+            sourceArray.elements.add(new RuntimeScalar(";"));
+        }
     }
 
     // make sure we return a RuntimeScalar from __SUB__
