@@ -480,6 +480,10 @@ public class OperatorParser {
             operand = parser.parseExpression(parser.getPrecedence("=~")); // precedence 20
         } else {
             operand = ParsePrimary.parsePrimary(parser);
+            // Check if operand is null (no argument provided)
+            if (operand == null) {
+                throw new PerlCompilerException(currentIndex, "Not enough arguments for " + operator, parser.ctx.errorUtil);
+            }
             operand = ensureOneOperand(parser, token, operand);
         }
         return new OperatorNode(operator, operand, currentIndex);
