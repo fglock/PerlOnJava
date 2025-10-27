@@ -25,12 +25,9 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
-      - name: Make gradlew executable (Unix)
-        if: runner.os != 'Windows'
-        run: chmod +x gradlew
-
-      - name: Build with Gradle
-        run: ./gradlew build --no-daemon
+      - name: Build with Make
+        shell: bash
+        run: make build
 
       - name: Upload test results
         if: failure()
