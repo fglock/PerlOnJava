@@ -376,7 +376,6 @@ public class PrototypeArgs {
                operatorName.equals("binmode") ||
                operatorName.equals("fileno") ||
                operatorName.equals("getc") ||
-               operatorName.equals("open") ||
                operatorName.equals("read") ||
                operatorName.equals("sysread") ||
                operatorName.equals("syswrite") ||
@@ -452,22 +451,6 @@ public class PrototypeArgs {
 //        for (Node element : argList.elements) {
 //            element.setAnnotation("context", "LIST");
 //        }
-
-        // Check if this is the first argument and might be a bareword filehandle
-        // For operators like truncate, seek, tell, eof, binmode, etc.
-        if (!argList.elements.isEmpty() && argList.elements.getFirst() instanceof IdentifierNode idNode) {
-            String operatorName = parser.ctx.symbolTable.getCurrentSubroutine();
-            if (isFilehandleOperator(operatorName)) {
-                // Try to parse as bareword filehandle
-                Node filehandleNode = FileHandle.parseBarewordHandle(parser, idNode.name);
-                if (filehandleNode != null) {
-                    // It's a known filehandle, use the typeglob reference
-                    // filehandleNode.setAnnotation("context", "SCALAR");
-                    argList.elements.set(0, filehandleNode);
-                }
-            }
-        }
-
         args.elements.addAll(argList.elements);
     }
 
@@ -488,37 +471,55 @@ public class PrototypeArgs {
 
         Node codeRef = parseRequiredArgument(parser, isOptional);
         if (codeRef != null) {
-            // Unwrap reference to code reference: \(&code) should be treated as &code
-            // This matches Perl's behavior where prototype (&) unwraps REF to CODE
-            if (codeRef instanceof OperatorNode opNode && opNode.operator.equals("\\")) {
-                // Check for direct OperatorNode operand (e.g., \@array, \%hash, \$scalar)
-                if (opNode.operand instanceof OperatorNode innerOp) {
-                    if (innerOp.operator.equals("&")) {
-                        // This is actually a direct \&code, not wrapped in parens - leave as is
-                    } else if (innerOp.operator.equals("@") || innerOp.operator.equals("%") || innerOp.operator.equals("$")) {
-                        // Reject non-code references like \@array, \%hash, \$scalar
-                        String subName = parser.ctx.symbolTable.getCurrentSubroutine();
-                        if (subName != null && !subName.isEmpty()) {
-                            parser.throwError("Type of arg 1 to " + subName + " must be block or sub {} (not single ref constructor)");
-                        } else {
-                            parser.throwError("Type of arg 1 must be block or sub {} (not single ref constructor)");
-                        }
+            // Check if a bare array, hash, or scalar sigil was passed (e.g., @array, %hash, $scalar)
+            // These should be rejected for (&) prototype
+            if (codeRef instanceof OperatorNode opNode) {
+                if (opNode.operator.equals("@") || opNode.operator.equals("%") || opNode.operator.equals("$")) {
+                    // Reject bare arrays, hashes, and scalars
+                    String subName = parser.ctx.symbolTable.getCurrentSubroutine();
+                    if (subName != null && !subName.isEmpty()) {
+                        parser.throwError("Type of arg 1 to " + subName + " must be block or sub {} (not " + 
+                            (opNode.operator.equals("@") ? "array" : 
+                             opNode.operator.equals("%") ? "hash" : "scalar variable") + ")");
+                    } else {
+                        parser.throwError("Type of arg 1 must be block or sub {} (not " + 
+                            (opNode.operator.equals("@") ? "array" : 
+                             opNode.operator.equals("%") ? "hash" : "scalar variable") + ")");
                     }
                 }
-                // Check if it's a ListNode containing operators (e.g., \(&code))
-                else if (opNode.operand instanceof ListNode listNode && !listNode.elements.isEmpty()) {
-                    Node firstElement = listNode.elements.get(0);
-                    if (firstElement instanceof OperatorNode innerOp && innerOp.operator.equals("&")) {
-                        // Unwrap: use the inner &code node instead of \&code
-                        codeRef = innerOp;
-                    } else if (firstElement instanceof OperatorNode innerOp &&
-                            (innerOp.operator.equals("@") || innerOp.operator.equals("%") || innerOp.operator.equals("$"))) {
-                        // Reject non-code references
-                        String subName = parser.ctx.symbolTable.getCurrentSubroutine();
-                        if (subName != null && !subName.isEmpty()) {
-                            parser.throwError("Type of arg 1 to " + subName + " must be block or sub {} (not single ref constructor)");
-                        } else {
-                            parser.throwError("Type of arg 1 must be block or sub {} (not single ref constructor)");
+                
+                // Unwrap reference to code reference: \(&code) should be treated as &code
+                // This matches Perl's behavior where prototype (&) unwraps REF to CODE
+                if (opNode.operator.equals("\\")) {
+                    // Check for direct OperatorNode operand (e.g., \@array, \%hash, \$scalar)
+                    if (opNode.operand instanceof OperatorNode innerOp) {
+                        if (innerOp.operator.equals("&")) {
+                            // This is actually a direct \&code, not wrapped in parens - leave as is
+                        } else if (innerOp.operator.equals("@") || innerOp.operator.equals("%") || innerOp.operator.equals("$")) {
+                            // Reject non-code references like \@array, \%hash, \$scalar
+                            String subName = parser.ctx.symbolTable.getCurrentSubroutine();
+                            if (subName != null && !subName.isEmpty()) {
+                                parser.throwError("Type of arg 1 to " + subName + " must be block or sub {} (not single ref constructor)");
+                            } else {
+                                parser.throwError("Type of arg 1 must be block or sub {} (not single ref constructor)");
+                            }
+                        }
+                    }
+                    // Check if it's a ListNode containing operators (e.g., \(&code))
+                    else if (opNode.operand instanceof ListNode listNode && !listNode.elements.isEmpty()) {
+                        Node firstElement = listNode.elements.get(0);
+                        if (firstElement instanceof OperatorNode innerOp && innerOp.operator.equals("&")) {
+                            // Unwrap: use the inner &code node instead of \&code
+                            codeRef = innerOp;
+                        } else if (firstElement instanceof OperatorNode innerOp &&
+                                (innerOp.operator.equals("@") || innerOp.operator.equals("%") || innerOp.operator.equals("$"))) {
+                            // Reject non-code references
+                            String subName = parser.ctx.symbolTable.getCurrentSubroutine();
+                            if (subName != null && !subName.isEmpty()) {
+                                parser.throwError("Type of arg 1 to " + subName + " must be block or sub {} (not single ref constructor)");
+                            } else {
+                                parser.throwError("Type of arg 1 must be block or sub {} (not single ref constructor)");
+                            }
                         }
                     }
                 }
@@ -559,8 +560,35 @@ public class PrototypeArgs {
         char refType = isGroup ? ' ' : prototype.charAt(prototypeIndex);
         String expectedType = isGroup ? "reference" : "reference to " + refType;
 
+        // Set flag for \& to prevent &sub from being called
+        boolean oldParsingTakeReference = parser.parsingTakeReference;
+        if (refType == '&') {
+            parser.parsingTakeReference = true;
+        }
+        
         Node referenceArg = parseArgumentWithComma(parser, isOptional, needComma, expectedType);
+        
+        // Restore flag
+        parser.parsingTakeReference = oldParsingTakeReference;
         if (referenceArg != null) {
+            // For \& prototype, check for invalid forms like &foo(), foo(), or bareword foo
+            if (refType == '&') {
+                String subName = parser.ctx.symbolTable.getCurrentSubroutine();
+                String subNamePart = (subName == null || subName.isEmpty()) ? "" : " to " + subName;
+                
+                // Check for function calls: &foo() or foo()
+                if (referenceArg instanceof BinaryOperatorNode binOp && binOp.operator.equals("(")) {
+                    parser.throwError("Type of arg " + (args.elements.size() + 1) + subNamePart +
+                            " must be subroutine (not subroutine entry)");
+                }
+                
+                // Check for bareword (identifier without &)
+                if (referenceArg instanceof IdentifierNode) {
+                    parser.throwError("Type of arg " + (args.elements.size() + 1) + subNamePart +
+                            " must be subroutine (not subroutine entry)");
+                }
+            }
+            
             // Check if user passed an explicit reference when prototype expects auto-reference
             if (refType == '$' && referenceArg instanceof OperatorNode opNode &&
                     opNode.operator.equals("\\")) {
