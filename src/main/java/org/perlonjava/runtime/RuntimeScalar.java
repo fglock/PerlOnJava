@@ -714,6 +714,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return this.hashDeref().get(index);
     }
 
+    // Method to implement `$v->{key}`, when "no strict refs" is in effect
+    public RuntimeScalar hashDerefGetNonStrict(RuntimeScalar index, String packageName) {
+        return this.hashDerefNonStrict(packageName).get(index);
+    }
+
     // Method to implement `delete $v->{key}`
     public RuntimeScalar hashDerefDelete(RuntimeScalar index) {
         return this.hashDeref().delete(index);
@@ -891,6 +896,77 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             default -> {
                 String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
                 yield GlobalVariable.getGlobalVariable(varName);
+            }
+        };
+    }
+
+    // Method to implement `%$v`, when "no strict refs" is in effect
+    public RuntimeHash hashDerefNonStrict(String packageName) {
+        // Check if object is eligible for overloading
+        int blessId = blessedId(this);
+        if (blessId != 0) {
+            // Prepare overload context and check if object is eligible for overloading
+            OverloadContext ctx = OverloadContext.prepare(blessId);
+            if (ctx != null) {
+                // Try overload method
+                RuntimeScalar result = ctx.tryOverload("(%{}", new RuntimeArray(this));
+                // If the subroutine returns the object itself then it will not be called again
+                if (result != null && result.value.hashCode() != this.value.hashCode()) {
+                    return result.hashDerefNonStrict(packageName);
+                }
+            }
+        }
+
+        return switch (type) {
+            case UNDEF -> {
+                // Don't autovivify read-only scalars (like constants)
+                if (this instanceof RuntimeScalarReadOnly) {
+                    yield new RuntimeHash();
+                }
+                yield AutovivificationHash.createAutovivifiedHash(this);
+            }
+            case HASHREFERENCE -> (RuntimeHash) value;
+            case TIED_SCALAR -> tiedFetch().hashDerefNonStrict(packageName);
+            default -> {
+                // Symbolic reference: treat the scalar's string value as a variable name
+                String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
+                yield GlobalVariable.getGlobalHash(varName);
+            }
+        };
+    }
+
+    // Method to implement `@$v`, when "no strict refs" is in effect
+    public RuntimeArray arrayDerefNonStrict(String packageName) {
+        // Check if object is eligible for overloading
+        int blessId = blessedId(this);
+        if (blessId != 0) {
+            // Prepare overload context and check if object is eligible for overloading
+            OverloadContext ctx = OverloadContext.prepare(blessId);
+            if (ctx != null) {
+                // Try overload method
+                RuntimeScalar result = ctx.tryOverload("(@{}", new RuntimeArray(this));
+                // If the subroutine returns the object itself then it will not be called again
+                if (result != null && result.value.hashCode() != this.value.hashCode()) {
+                    return result.arrayDerefNonStrict(packageName);
+                }
+            }
+        }
+
+        return switch (type) {
+            case UNDEF -> {
+                // Don't autovivify read-only scalars (like constants)
+                // This matches Perl's behavior where 1->[0] returns undef without error
+                if (this instanceof RuntimeScalarReadOnly) {
+                    yield new RuntimeArray();
+                }
+                yield AutovivificationArray.createAutovivifiedArray(this);
+            }
+            case ARRAYREFERENCE -> (RuntimeArray) value;
+            case TIED_SCALAR -> tiedFetch().arrayDerefNonStrict(packageName);
+            default -> {
+                // Symbolic reference: treat the scalar's string value as a variable name
+                String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
+                yield GlobalVariable.getGlobalArray(varName);
             }
         };
     }
