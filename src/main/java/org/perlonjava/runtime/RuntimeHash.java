@@ -52,27 +52,16 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return A new RuntimeHash populated with the elements from the list.
      */
     public static RuntimeHash createHashForAssignment(RuntimeBase value) {
-        // Check for references in the list before creating the hash
-        boolean hasReference = false;
+        // Count elements to check for odd number
         int elementCount = 0;
         Iterator<RuntimeScalar> checkIterator = value.iterator();
         while (checkIterator.hasNext()) {
-            RuntimeScalar elem = checkIterator.next();
-            if (elem.type == RuntimeScalarType.ARRAYREFERENCE ||
-                elem.type == RuntimeScalarType.HASHREFERENCE ||
-                elem.type == RuntimeScalarType.REFERENCE) {
-                hasReference = true;
-            }
+            checkIterator.next();
             elementCount++;
         }
         
-        // Warn about references or odd elements
-        if (hasReference) {
-            org.perlonjava.operators.WarnDie.warn(
-                new RuntimeScalar("Reference found where even-sized list expected"),
-                RuntimeScalarCache.scalarEmptyString);
-            return createHashNoWarn(value);
-        } else if (elementCount % 2 != 0) {
+        // Warn about odd elements (Perl does not warn about references in hash assignment)
+        if (elementCount % 2 != 0) {
             return createHashInternal(value, "Odd number of elements in hash assignment");
         } else {
             return createHashNoWarn(value);
@@ -194,17 +183,10 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             case PLAIN_HASH -> {
                 // Store the original list size for scalar context
                 int originalSize = 0;
-                boolean hasReference = false;
                 for (RuntimeBase elem : value.elements) {
                     if (elem instanceof RuntimeArray) {
                         originalSize += ((RuntimeArray) elem).elements.size();
-                    } else if (elem instanceof RuntimeScalar scalar) {
-                        // Check if this is a reference (not a simple scalar)
-                        if (scalar.type == RuntimeScalarType.ARRAYREFERENCE ||
-                            scalar.type == RuntimeScalarType.HASHREFERENCE ||
-                            scalar.type == RuntimeScalarType.REFERENCE) {
-                            hasReference = true;
-                        }
+                    } else if (elem instanceof RuntimeScalar) {
                         originalSize++;
                     } else {
                         // Count elements by iterating
@@ -216,23 +198,25 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                     }
                 }
 
-                // Warn about references or odd elements
-                if (hasReference) {
-                    // If we have a reference, always warn about it
-                    org.perlonjava.operators.WarnDie.warn(
-                        new RuntimeScalar("Reference found where even-sized list expected"),
-                        RuntimeScalarCache.scalarEmptyString);
-                } else if (originalSize % 2 != 0) {
-                    // Only warn about odd elements if no reference
+                // Warn about odd elements (Perl does not warn about references in hash assignment)
+                if (originalSize % 2 != 0) {
                     org.perlonjava.operators.WarnDie.warn(
                         new RuntimeScalar("Odd number of elements in hash assignment"),
                         RuntimeScalarCache.scalarEmptyString);
                 }
 
-                // Create a new hash from the provided list and replace our elements
-                // Use createHashNoWarn to avoid double warnings
-                RuntimeHash hash = createHashNoWarn(value);
-                this.elements = hash.elements;
+                // Clear existing elements but keep the same Map instance to preserve capacity
+                this.elements.clear();
+                
+                // Populate the hash from the provided list
+                // This reuses the existing StableHashMap and its capacity
+                Iterator<RuntimeScalar> iter = value.iterator();
+                while (iter.hasNext()) {
+                    String key = iter.next().toString();
+                    // Create a new RuntimeScalar to properly handle aliasing and avoid read-only issues
+                    RuntimeScalar val = iter.hasNext() ? new RuntimeScalar(iter.next()) : new RuntimeScalar();
+                    this.elements.put(key, val);
+                }
 
                 // Create a RuntimeArray that wraps this hash
                 // In list context: returns the deduplicated key-value pairs
@@ -575,6 +559,24 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     }
 
     /**
+     * Preallocates hash bucket capacity.
+     * This is called when Perl code does: keys %hash = $number
+     *
+     * @param capacity The requested capacity (number of elements to preallocate for)
+     */
+    public void preallocateCapacity(int capacity) {
+        if (this.type == AUTOVIVIFY_HASH) {
+            AutovivificationHash.vivify(this);
+        }
+
+        // For PLAIN_HASH, set the minimum capacity in StableHashMap
+        if (this.type == PLAIN_HASH && elements instanceof StableHashMap) {
+            ((StableHashMap<String, RuntimeScalar>) elements).setMinimumCapacity(capacity);
+        }
+        // For TIED_HASH and other types, we can't really preallocate, so just ignore
+    }
+
+    /**
      * The values() operator for hashes.
      *
      * @return A RuntimeArray containing the values of the hash.
@@ -730,7 +732,12 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return The current RuntimeHash instance after undefining its elements.
      */
     public RuntimeHash undefine() {
-        this.elements.clear();
+        // For PLAIN_HASH, reset to a fresh StableHashMap with default capacity
+        if (this.type == PLAIN_HASH) {
+            this.elements = new StableHashMap<>();
+        } else {
+            this.elements.clear();
+        }
         return this;
     }
 

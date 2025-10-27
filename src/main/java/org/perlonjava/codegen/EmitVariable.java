@@ -427,10 +427,27 @@ public class EmitVariable {
                     }
 
                     if (nodeLeft.operator.equals("keys")) {
-                        // `keys %x = 3`   lvalue keys is a no-op
-                        mv.visitInsn(Opcodes.SWAP); // move the target first
-                        mv.visitInsn(Opcodes.POP);
-                        break;
+                        // `keys %x = $number`  - preallocate hash capacity
+                        // The left side has evaluated keys %x, but we need the hash itself
+                        // Stack before: nothing (we'll emit both sides fresh)
+                        // Emit the hash operand directly instead of calling keys
+                        if (nodeLeft.operand != null) {
+                            nodeLeft.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
+                        }
+                        // Stack: [hash]
+                        node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                        // Stack: [hash, value]
+                        mv.visitInsn(Opcodes.DUP2);  // Stack: [hash, value, hash, value]
+                        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, 
+                            "org/perlonjava/runtime/RuntimeScalar",
+                            "getInt", "()I", false); // Stack: [hash, value, hash, int]
+                        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                            "org/perlonjava/runtime/RuntimeHash",
+                            "preallocateCapacity", "(I)V", false); // Stack: [hash, value]
+                        mv.visitInsn(Opcodes.SWAP); // Stack: [value, hash]
+                        mv.visitInsn(Opcodes.POP);  // Stack: [value]
+                        // value is left on stack as the result of the assignment
+                        return;  // Skip normal assignment processing
                     }
 
                     if (nodeLeft.operator.equals("\\")) {

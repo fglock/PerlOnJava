@@ -148,4 +148,30 @@ public class StableHashMap<K, V> extends LinkedHashMap<K, V> {
     public String getBucketRatio() {
         return getUsedBuckets() + "/" + getStableCapacity();
     }
+
+    /**
+     * Set the minimum capacity for the hash map.
+     * This is used when Perl code does: keys %hash = $number
+     * to preallocate hash buckets.
+     *
+     * @param requestedSize The requested minimum number of elements
+     */
+    public void setMinimumCapacity(int requestedSize) {
+        if (requestedSize <= 0) {
+            return; // No change for non-positive sizes
+        }
+
+        // Calculate the capacity needed for this size
+        int targetCapacity = calculateCapacityForSize(requestedSize);
+
+        // If requested capacity is larger than what we've seen, grow
+        if (targetCapacity > maxCapacityReached) {
+            maxCapacityReached = targetCapacity;
+
+            // Force rehash by ensuring the map to preallocate space
+            // We can do this by adding and removing a temporary entry if needed
+            // Or we can rely on the next put() operation to trigger growth
+            // For now, just update our max capacity tracking
+        }
+    }
 }
