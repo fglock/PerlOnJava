@@ -46,6 +46,7 @@ public class GlobalContext {
         }
         GlobalVariable.getGlobalVariable("main::" + Character.toString('O' - 'A' + 1)).set(SystemUtils.getPerlOsName());    // initialize $^O
         GlobalVariable.getGlobalVariable("main::" + Character.toString('V' - 'A' + 1)).set(Configuration.getPerlVersionVString());    // initialize $^V
+        GlobalVariable.getGlobalVariable("main::" + Character.toString('T' - 'A' + 1)).set((int)(System.currentTimeMillis() / 1000));    // initialize $^T to epoch time
 
         // Initialize $^X - the name used to execute the current copy of Perl
         // PERLONJAVA_EXECUTABLE is set by the `jperl` or `jperl.bat` launcher
@@ -71,7 +72,7 @@ public class GlobalContext {
         GlobalVariable.getGlobalVariable("main::?");
         GlobalVariable.getGlobalVariable("main::0").set(compilerOptions.fileName);
         GlobalVariable.getGlobalVariable(GLOBAL_PHASE).set(""); // ${^GLOBAL_PHASE}
-        GlobalVariable.getGlobalVariable(encodeSpecialVar("TAINT")); // ${^TAINT}
+        GlobalVariable.globalVariables.put(encodeSpecialVar("TAINT"), RuntimeScalarCache.scalarZero); // ${^TAINT} - read-only, always 0 (taint mode not implemented)
         GlobalVariable.getGlobalVariable("main::>");  // TODO
         GlobalVariable.getGlobalVariable("main::<");  // TODO
         GlobalVariable.getGlobalVariable("main::;").set("\034");  // initialize $; (SUBSEP) to \034

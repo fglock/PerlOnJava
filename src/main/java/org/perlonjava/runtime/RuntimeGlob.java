@@ -186,8 +186,20 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             case "CODE" -> GlobalVariable.getGlobalCodeRef(this.globName);
             case "IO" -> IO;
             case "SCALAR" -> GlobalVariable.getGlobalVariable(this.globName);
-            case "ARRAY" -> GlobalVariable.getGlobalArray(this.globName).createReference();
-            case "HASH" -> GlobalVariable.getGlobalHash(this.globName).createReference();
+            case "ARRAY" -> {
+                // Only return reference if array exists (has elements or was explicitly created)
+                if (GlobalVariable.existsGlobalArray(this.globName)) {
+                    yield GlobalVariable.getGlobalArray(this.globName).createReference();
+                }
+                yield new RuntimeScalar(); // Return undef if array doesn't exist
+            }
+            case "HASH" -> {
+                // Only return reference if hash exists (has elements or was explicitly created)
+                if (GlobalVariable.existsGlobalHash(this.globName)) {
+                    yield GlobalVariable.getGlobalHash(this.globName).createReference();
+                }
+                yield new RuntimeScalar(); // Return undef if hash doesn't exist
+            }
             case "FORMAT" -> GlobalVariable.getGlobalFormatRef(this.globName);
             default -> new RuntimeScalar();
         };
