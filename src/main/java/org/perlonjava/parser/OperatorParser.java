@@ -474,10 +474,16 @@ public class OperatorParser {
         String operator = token.text;
         Node operand;
         // Handle operators with a single operand
-        // For scalar, parse with precedence that includes postfix operators ([], {}, ->)
+        // For scalar, values, keys, each: parse with precedence that includes postfix operators ([], {}, ->)
         // Named unary operators have precedence between 20 and 21 in Perl
-        if (operator.equals("scalar")) {
+        // This allows expressions like: values $hashref->%* or keys $hashref->%*
+        if (operator.equals("scalar") || operator.equals("values") || operator.equals("keys") || operator.equals("each")) {
             operand = parser.parseExpression(parser.getPrecedence("=~")); // precedence 20
+            // For values/keys/each, check if operand is null (no argument provided)
+            if (operand == null) {
+                throw new PerlCompilerException(currentIndex, "Not enough arguments for " + operator, parser.ctx.errorUtil);
+            }
+            operand = ensureOneOperand(parser, token, operand);
         } else {
             operand = ParsePrimary.parsePrimary(parser);
             // Check if operand is null (no argument provided)

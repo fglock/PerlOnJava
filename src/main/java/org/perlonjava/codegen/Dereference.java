@@ -8,6 +8,7 @@ import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
 
 import static org.perlonjava.codegen.EmitSubroutine.handleSelfCallOperator;
+import static org.perlonjava.perlmodule.Strict.HINT_STRICT_REFS;
 
 public class Dereference {
     /**
@@ -66,6 +67,49 @@ public class Dereference {
                             arrayOperation, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
                 }
 
+                EmitOperator.handleVoidContext(emitterVisitor);
+                return;
+            }
+            if (sigil.equals("$") && sigilNode.operand instanceof BlockNode) {
+                /*  ${$ref->[2]}[10]
+                 *  BinaryOperatorNode: [
+                 *    OperatorNode: $
+                 *      BlockNode: $ref->[2]
+                 *    ArrayLiteralNode:
+                 *      NumberNode: 10
+                 *
+                 * In Perl, ${EXPR}[index] does NOT call scalarDeref on EXPR.
+                 * Instead, it evaluates EXPR and applies the subscript directly.
+                 * This allows ${$aref}[0] to work even though ${$aref} alone would fail.
+                 */
+                emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) ${BLOCK}[] ");
+                
+                // Evaluate the block expression to get a RuntimeScalar (might be array/hash ref)
+                sigilNode.operand.accept(scalarVisitor);
+                
+                // Now apply the subscript using arrayDerefGet method
+                ArrayLiteralNode right = (ArrayLiteralNode) node.right;
+                if (right.elements.size() == 1) {
+                    Node elem = right.elements.getFirst();
+                    elem.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
+                            "arrayDerefGet", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                } else {
+                    // Multiple indices - use slice
+                    ListNode nodeRight = right.asListNode();
+                    nodeRight.accept(emitterVisitor.with(RuntimeContextType.LIST));
+                    emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
+                            "arrayDerefGetSlice", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
+                    
+                    // Handle context conversion
+                    if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+                        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList",
+                                "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                    } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                        emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
+                    }
+                }
+                
                 EmitOperator.handleVoidContext(emitterVisitor);
                 return;
             }
@@ -181,6 +225,68 @@ public class Dereference {
                             hashOperation, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
                 }
 
+                EmitOperator.handleVoidContext(emitterVisitor);
+                return;
+            }
+            if (sigil.equals("$") && sigilNode.operand instanceof BlockNode) {
+                /*  ${$ref->{key}}{"key2"}
+                 *  BinaryOperatorNode: {
+                 *    OperatorNode: $
+                 *      BlockNode: $ref->{key}
+                 *    HashLiteralNode:
+                 *      StringNode: "key2"
+                 *
+                 * In Perl, ${EXPR}{key} does NOT call scalarDeref on EXPR.
+                 * Instead, it evaluates EXPR and applies the subscript directly.
+                 * This allows ${$href}{key} to work even though ${$href} alone would fail.
+                 */
+                emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) ${BLOCK}{} ");
+                
+                // Evaluate the block expression to get a RuntimeScalar (might be array/hash ref)
+                sigilNode.operand.accept(scalarVisitor);
+                
+                // Now apply the subscript using hashDerefGet method
+                ListNode nodeRight = ((HashLiteralNode) node.right).asListNode();
+                
+                Node nodeZero = nodeRight.elements.getFirst();
+                if (nodeRight.elements.size() == 1 && nodeZero instanceof IdentifierNode) {
+                    // Convert IdentifierNode to StringNode:  {a} to {"a"}
+                    nodeRight.elements.set(0, new StringNode(((IdentifierNode) nodeZero).name, ((IdentifierNode) nodeZero).tokenIndex));
+                    nodeZero = nodeRight.elements.getFirst();
+                }
+                
+                // Apply hash subscript
+                if (nodeRight.elements.size() == 1) {
+                    // Single element
+                    Node elem = nodeRight.elements.getFirst();
+                    elem.accept(scalarVisitor);
+                    if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_REFS)) {
+                        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
+                                "hashDerefGet", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                    } else {
+                        emitterVisitor.pushCurrentPackage();
+                        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
+                                "hashDerefGetNonStrict", "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                    }
+                } else {
+                    // Multiple elements - this is a hash slice, but that's not commonly used with ${}
+                    // For now, handle it like the regular case by joining with SUBSEP
+                    emitterVisitor.ctx.mv.visitLdcInsn("main::;");
+                    emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/GlobalVariable",
+                            "getGlobalVariable", "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                    nodeRight.accept(emitterVisitor.with(RuntimeContextType.LIST));
+                    emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/operators/StringOperators",
+                            "join", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                    if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_REFS)) {
+                        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
+                                "hashDerefGet", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                    } else {
+                        emitterVisitor.pushCurrentPackage();
+                        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
+                                "hashDerefGetNonStrict", "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                    }
+                }
+                
                 EmitOperator.handleVoidContext(emitterVisitor);
                 return;
             }
