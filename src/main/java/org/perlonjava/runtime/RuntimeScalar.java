@@ -776,6 +776,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 yield AutovivificationArray.createAutovivifiedArray(this);
             }
             case ARRAYREFERENCE -> (RuntimeArray) value;
+            case GLOB -> {
+                // When dereferencing a typeglob as an array, return the array slot
+                RuntimeGlob glob = (RuntimeGlob) value;
+                yield GlobalVariable.getGlobalArray(glob.globName);
+            }
             case STRING, BYTE_STRING ->
                     throw new PerlCompilerException("Can't use string (\"" + this + "\") as an ARRAY ref while \"strict refs\" in use");
             case TIED_SCALAR -> tiedFetch().arrayDeref();
@@ -836,6 +841,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case HASHREFERENCE ->
                 // Simple case: already a hash reference, just return the hash
                     (RuntimeHash) value;
+            case GLOB -> {
+                // When dereferencing a typeglob as a hash, return the hash slot
+                RuntimeGlob glob = (RuntimeGlob) value;
+                yield GlobalVariable.getGlobalHash(glob.globName);
+            }
             case STRING, BYTE_STRING ->
                 // Strict refs violation: attempting to use a string as a hash ref
                     throw new PerlCompilerException("Can't use string (\"" + this + "\") as a HASH ref while \"strict refs\" in use");
