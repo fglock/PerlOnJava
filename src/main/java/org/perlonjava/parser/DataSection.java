@@ -14,14 +14,14 @@ import java.util.Set;
 public class DataSection {
 
     /**
-     * Set of parser instances that have already processed their DATA section
+     * Set of package names that have already processed their DATA section
      */
-    private static final Set<Parser> processedParsers = new HashSet<>();
+    private static final Set<String> processedPackages = new HashSet<>();
 
     /**
-     * Set of parser instances that have already created placeholder DATA handles
+     * Set of package names that have already created placeholder DATA handles
      */
-    private static final Set<Parser> placeholderCreated = new HashSet<>();
+    private static final Set<String> placeholderCreated = new HashSet<>();
 
     /**
      * Creates a placeholder DATA filehandle for a package early in parsing.
@@ -30,12 +30,13 @@ public class DataSection {
      * @param parser the parser instance
      */
     public static void createPlaceholderDataHandle(Parser parser) {
-        if (placeholderCreated.contains(parser)) {
-            return; // Already created placeholder for this parser
+        String handleName = parser.ctx.symbolTable.getCurrentPackage() + "::DATA";
+        
+        if (placeholderCreated.contains(handleName)) {
+            return; // Already created placeholder for this package
         }
 
-        placeholderCreated.add(parser);
-        String handleName = parser.ctx.symbolTable.getCurrentPackage() + "::DATA";
+        placeholderCreated.add(handleName);
 
         parser.ctx.logDebug("Creating placeholder DATA handle for package: " + handleName);
 
@@ -94,13 +95,15 @@ public class DataSection {
     }
 
     static int parseDataSection(Parser parser, int tokenIndex, List<LexerToken> tokens, LexerToken token) {
-        // Check if this parser instance has already processed its DATA section
-        if (processedParsers.contains(parser)) {
+        String handleName = parser.ctx.symbolTable.getCurrentPackage() + "::DATA";
+        
+        // Check if this package has already processed its DATA section
+        if (processedPackages.contains(handleName)) {
             return tokens.size();
         }
 
         if (token.text.equals("__DATA__") || (token.text.equals("__END__") && parser.isTopLevelScript)) {
-            processedParsers.add(parser);
+            processedPackages.add(handleName);
             tokenIndex++;
 
             // Skip any whitespace immediately after __DATA__
