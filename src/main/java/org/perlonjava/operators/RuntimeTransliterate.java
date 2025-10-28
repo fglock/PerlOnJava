@@ -52,7 +52,7 @@ public class RuntimeTransliterate {
         // For complement mode, we need to track replacement index
         Map<Integer, Integer> complementMap = new HashMap<>();
         int replacementIndex = 0;
-
+        
         for (int i = 0; i < input.length(); i++) {
             int codePoint = input.codePointAt(i);
 
