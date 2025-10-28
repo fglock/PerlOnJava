@@ -47,11 +47,12 @@ public class RuntimeTransliterate {
         StringBuilder result = new StringBuilder();
         int count = 0;
         Integer lastChar = null;
+        boolean lastCharWasTransliterated = false;  // Track if last char came from transliteration
 
         // For complement mode, we need to track replacement index
         Map<Integer, Integer> complementMap = new HashMap<>();
         int replacementIndex = 0;
-
+        
         for (int i = 0; i < input.length(); i++) {
             int codePoint = input.codePointAt(i);
 
@@ -78,10 +79,12 @@ public class RuntimeTransliterate {
                     if (deleteUnmatched && replacementChars.isEmpty()) {
                         // Delete mode with empty replacement
                         lastChar = null;
+                        lastCharWasTransliterated = false;
                     } else if (replacementChars.isEmpty()) {
                         // Empty replacement, non-delete mode - keep character as is
-                        if (!squashDuplicates || lastChar == null || lastChar != codePoint) {
+                        if (!squashDuplicates || lastChar == null || !lastCharWasTransliterated || lastChar != codePoint) {
                             appendCodePoint(result, codePoint);
+                            lastCharWasTransliterated = true;
                         }
                         lastChar = codePoint;
                     } else {
@@ -112,6 +115,7 @@ public class RuntimeTransliterate {
                                 } else if (deleteUnmatched) {
                                     // With /d modifier, delete characters that have no replacement
                                     lastChar = null;
+                                    lastCharWasTransliterated = false;
                                     continue;  // Skip this character (delete it)
                                 } else {
                                     // Use last replacement character
@@ -121,9 +125,10 @@ public class RuntimeTransliterate {
                             }
                         }
 
-                        if (!squashDuplicates || lastChar == null || !lastChar.equals(mappedChar)) {
+                        if (!squashDuplicates || lastChar == null || !lastCharWasTransliterated || !lastChar.equals(mappedChar)) {
                             appendCodePoint(result, mappedChar);
                             lastChar = mappedChar;
+                            lastCharWasTransliterated = true;
                         }
                     }
                 } else {
@@ -133,22 +138,24 @@ public class RuntimeTransliterate {
                         // We need to preserve it for squashing logic
                     } else if (translationMap.containsKey(codePoint)) {
                         int mappedChar = translationMap.get(codePoint);
-                        // Handle squash duplicates
-                        if (!squashDuplicates || lastChar == null || !lastChar.equals(mappedChar)) {
+                        // Handle squash duplicates - only squash if the last char was also transliterated
+                        if (!squashDuplicates || lastChar == null || !lastCharWasTransliterated || !lastChar.equals(mappedChar)) {
                             appendCodePoint(result, mappedChar);
                             lastChar = mappedChar;
-                        } else {
+                            lastCharWasTransliterated = true;
                         }
                     } else {
                         // No mapping found (shouldn't happen if compilation is correct)
                         appendCodePoint(result, codePoint);
                         lastChar = codePoint;
+                        lastCharWasTransliterated = false;
                     }
                 }
             } else {
                 // Character not matched - keep as is
                 appendCodePoint(result, codePoint);
                 lastChar = codePoint;
+                lastCharWasTransliterated = false;
             }
         }
 
