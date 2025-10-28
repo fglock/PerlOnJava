@@ -152,12 +152,10 @@ public class Time {
         try {
             TimeUnit.MILLISECONDS.sleep(s);
         } catch (InterruptedException e) {
-            // Handle interruption if needed
-            RuntimeScalar alarmHandler = getGlobalHash("main::SIG").get("ALRM");
-            if (alarmHandler.getDefinedBoolean()) {
-                RuntimeArray args = new RuntimeArray();
-                RuntimeCode.apply(alarmHandler, args, RuntimeContextType.SCALAR);
-            }
+            // Sleep was interrupted (likely by alarm())
+            // Process any pending signals through the signal queue
+            PerlSignalQueue.checkPendingSignals();
+            // If the signal handler threw an exception (die), it will propagate from checkPendingSignals()
         }
         long endTime = System.nanoTime();
         long actualSleepTime = endTime - startTime;
@@ -221,6 +219,29 @@ public class Time {
         if (Thread.interrupted()) {
             // The interrupt was handled via signal processing
         }
+    }
+
+    /**
+     * Check if an alarm is currently active.
+     * Used by regex engine to decide whether to use timeout wrapper.
+     *
+     * @return true if alarm is active, false otherwise
+     */
+    public static boolean hasActiveAlarm() {
+        return currentAlarmTask != null && !currentAlarmTask.isDone();
+    }
+
+    /**
+     * Get the remaining time in seconds until the alarm fires.
+     *
+     * @return seconds remaining, or 0 if no alarm active
+     */
+    public static int getAlarmRemainingSeconds() {
+        if (!hasActiveAlarm()) {
+            return 0;
+        }
+        long elapsedTime = (System.currentTimeMillis() - alarmStartTime) / 1000;
+        return Math.max(0, alarmDuration - (int) elapsedTime);
     }
 
     /**
