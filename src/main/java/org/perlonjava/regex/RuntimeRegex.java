@@ -103,6 +103,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
                 regex.patternString = patternString;
 
+                // Check for pending signals before potentially long regex compilation
+                org.perlonjava.operators.Time.checkPendingSignals();
+                
                 // Compile the regex pattern
                 regex.pattern = Pattern.compile(javaPattern, regex.patternFlags);
 

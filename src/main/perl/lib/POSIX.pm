@@ -178,7 +178,13 @@ our %EXPORT_TAGS = (
 
 # Process management functions
 sub fork { POSIX::_fork() }
-sub _exit { POSIX::_do_exit(@_) }
+sub _exit {
+    # Exit immediately without cleanup
+    # For PerlOnJava, just call Perl's exit
+    my $code = @_ ? shift : 0;
+    CORE::exit($code);
+}
+sub _do_exit { _exit(@_) }  # Alias for XS compatibility
 sub kill { POSIX::_kill(@_) }
 sub wait { POSIX::_wait() }
 sub waitpid { POSIX::_waitpid(@_) }
