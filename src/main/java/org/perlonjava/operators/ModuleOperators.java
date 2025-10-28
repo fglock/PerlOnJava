@@ -122,6 +122,9 @@ public class ModuleOperators {
         // Variables for handling array references with state
         RuntimeCode codeRef = null;
         RuntimeArray stateArgs = null;
+        
+        // Variable for storing @INC hook reference
+        RuntimeScalar incHookRef = null;
 
         // ===== STEP 1: Handle ARRAY reference =====
         // Array format: [coderef|filehandle, state...]
@@ -331,6 +334,54 @@ public class ModuleOperators {
                 }
 
                 for (RuntimeBase dir : inc) {
+                    RuntimeScalar dirScalar = dir.scalar();
+                    
+                    // Check if this @INC entry is a CODE reference, ARRAY reference, or blessed object
+                    if (dirScalar.type == RuntimeScalarType.CODE || 
+                        dirScalar.type == RuntimeScalarType.REFERENCE ||
+                        dirScalar.type == RuntimeScalarType.ARRAYREFERENCE ||
+                        dirScalar.type == RuntimeScalarType.HASHREFERENCE) {
+                        
+                        RuntimeBase hookResult = tryIncHook(dirScalar, fileName);
+                        if (hookResult != null) {
+                            // Hook returned something useful
+                            RuntimeScalar hookResultScalar = hookResult.scalar();
+                            
+                            // Check if it's a filehandle (GLOB) or array ref with filehandle
+                            RuntimeScalar filehandle = null;
+                            
+                            if (hookResultScalar.type == RuntimeScalarType.GLOB || 
+                                hookResultScalar.type == RuntimeScalarType.GLOBREFERENCE) {
+                                filehandle = hookResultScalar;
+                            } else if (hookResultScalar.type == RuntimeScalarType.ARRAYREFERENCE &&
+                                    hookResultScalar.value instanceof RuntimeArray) {
+                                RuntimeArray resultArray = (RuntimeArray) hookResultScalar.value;
+                                if (resultArray.size() > 0) {
+                                    RuntimeScalar firstElem = resultArray.get(0);
+                                    if (firstElem.type == RuntimeScalarType.GLOB || 
+                                        firstElem.type == RuntimeScalarType.GLOBREFERENCE) {
+                                        filehandle = firstElem;
+                                    }
+                                }
+                            }
+                            
+                            if (filehandle != null) {
+                                // Read content from the filehandle using the same method as STEP 4
+                                try {
+                                    code = Readline.readline(filehandle, RuntimeContextType.LIST).toString();
+                                    actualFileName = fileName;
+                                    incHookRef = dirScalar;
+                                    break;
+                                } catch (Exception e) {
+                                    // Continue to next @INC entry
+                                }
+                            }
+                        }
+                        // If hook returned undef or we couldn't use the result, continue to next @INC entry
+                        continue;
+                    }
+                    
+                    // Original string handling for directory paths
                     String dirName = dir.toString();
                     if (dirName.equals(GlobalContext.JAR_PERLLIB)) {
                         // Try to find in jar at "src/main/perl/lib"
@@ -385,7 +436,7 @@ public class ModuleOperators {
                 }
             }
 
-            if (fullName == null) {
+            if (fullName == null && code == null) {
                 GlobalVariable.setGlobalVariable("main::!", "No such file or directory");
                 return new RuntimeScalar(); // return undef
             }
@@ -393,6 +444,7 @@ public class ModuleOperators {
 
         CompilerOptions parsedArgs = new CompilerOptions();
         parsedArgs.fileName = actualFileName;
+        parsedArgs.incHook = incHookRef;
         if (code == null) {
             try {
                 code = FileUtils.readFileWithEncodingDetection(Paths.get(parsedArgs.fileName), parsedArgs);
@@ -405,7 +457,23 @@ public class ModuleOperators {
 
         // Set %INC if requested (before execution)
         if (setINC) {
-            getGlobalHash("main::INC").put(fileName, new RuntimeScalar(parsedArgs.fileName));
+            // Check if the hook already set %INC to a custom value
+            RuntimeHash incHash = getGlobalHash("main::INC");
+            RuntimeScalar existingIncValue = incHash.elements.get(fileName);
+            
+            // Only set %INC if the hook didn't already set it
+            if (existingIncValue == null || !existingIncValue.defined().getBoolean()) {
+                // If we used an @INC hook, store the hook reference; otherwise store the filename
+                RuntimeScalar incValue = (parsedArgs.incHook != null) 
+                    ? parsedArgs.incHook 
+                    : new RuntimeScalar(parsedArgs.fileName);
+                incHash.put(fileName, incValue);
+            } else if (parsedArgs.incHook != null) {
+                // Hook set %INC to a custom value - use that for actualFileName if it's a string
+                if (existingIncValue.type == RuntimeScalarType.STRING) {
+                    parsedArgs.fileName = existingIncValue.toString();
+                }
+            }
         }
 
         RuntimeList result;
@@ -566,5 +634,103 @@ public class ModuleOperators {
         // If module_true was enabled, result will be 1
         // If module_true was disabled, result will be the module's actual return value
         return result;
+    }
+
+    /**
+     * Try to call an @INC hook to load a module.
+     * 
+     * <p>@INC can contain:
+     * <ul>
+     *   <li>CODE reference: call it with ($coderef, $filename)</li>
+     *   <li>ARRAY reference: call $array->[0] with ($array, $filename)</li>
+     *   <li>Blessed object: call $obj->INC($filename) if the method exists</li>
+     * </ul>
+     * 
+     * <p>The hook can return:
+     * <ul>
+     *   <li>undef: this hook can't handle it, continue to next @INC entry</li>
+     *   <li>A filehandle: read the module code from this filehandle</li>
+     *   <li>An array ref [$fh, \&filter, state...]: filehandle with optional filter and state</li>
+     * </ul>
+     * 
+     * @param hook The @INC hook (CODE, ARRAY, or blessed reference)
+     * @param fileName The file name being required
+     * @return The result from the hook (undef, filehandle, or array ref), or null if hook can't be called
+     */
+    private static RuntimeBase tryIncHook(RuntimeScalar hook, String fileName) {
+        RuntimeCode codeRef = null;
+        RuntimeScalar selfArg = hook;
+        
+        // First check if it's a blessed object (takes priority over plain refs)
+        int blessIdInt = RuntimeScalarType.blessedId(hook);
+        
+        // Case 1: Blessed object - try to call INC method
+        if (blessIdInt != 0) {
+            String blessId = NameNormalizer.getBlessStr(blessIdInt);
+            if (blessId != null && !blessId.equals("main")) {
+                // Try to find the INC method or AUTOLOAD
+                try {
+                    // Try direct INC method first
+                    RuntimeScalar method = GlobalVariable.getGlobalCodeRef(blessId + "::INC");
+                    if (method.defined().getBoolean() && method.type == RuntimeScalarType.CODE) {
+                        codeRef = (RuntimeCode) method.value;
+                    } else {
+                        // Try AUTOLOAD
+                        method = GlobalVariable.getGlobalCodeRef(blessId + "::AUTOLOAD");
+                        if (method.defined().getBoolean() && method.type == RuntimeScalarType.CODE) {
+                            // Set up $AUTOLOAD variable
+                            GlobalVariable.getGlobalVariable(blessId + "::AUTOLOAD").set(blessId + "::INC");
+                            codeRef = (RuntimeCode) method.value;
+                        }
+                    }
+                } catch (Exception e) {
+                    // Method not found, return null
+                    return null;
+                }
+            }
+        }
+        // Case 2: CODE reference
+        else if (hook.type == RuntimeScalarType.CODE) {
+            codeRef = (RuntimeCode) hook.value;
+        }
+        // Case 3: REFERENCE to CODE
+        else if (hook.type == RuntimeScalarType.REFERENCE && hook.value instanceof RuntimeCode) {
+            codeRef = (RuntimeCode) hook.value;
+        }
+        // Case 4: ARRAY reference (not blessed) - call first element as coderef with array as $self
+        else if (hook.type == RuntimeScalarType.ARRAYREFERENCE && hook.value instanceof RuntimeArray) {
+            RuntimeArray arr = (RuntimeArray) hook.value;
+            if (arr.size() > 0) {
+                RuntimeScalar firstElem = arr.get(0);
+                if (firstElem.type == RuntimeScalarType.CODE) {
+                    codeRef = (RuntimeCode) firstElem.value;
+                } else if (firstElem.type == RuntimeScalarType.REFERENCE && firstElem.value instanceof RuntimeCode) {
+                    codeRef = (RuntimeCode) firstElem.value;
+                }
+            }
+        }
+        
+        if (codeRef == null) {
+            return null;
+        }
+        
+        // Call the hook with ($self, $filename)
+        RuntimeArray args = new RuntimeArray();
+        args.push(selfArg);
+        args.push(new RuntimeScalar(fileName));
+        
+        try {
+            RuntimeBase result = codeRef.apply(args, RuntimeContextType.SCALAR);
+            
+            // If result is undef, return null to continue to next @INC entry
+            if (result == null || !result.scalar().defined().getBoolean()) {
+                return null;
+            }
+            
+            return result;
+        } catch (Exception e) {
+            // If hook throws an exception, continue to next @INC entry
+            return null;
+        }
     }
 }

@@ -2,6 +2,7 @@ package org.perlonjava;
 
 import org.perlonjava.runtime.GlobalVariable;
 import org.perlonjava.runtime.RuntimeArray;
+import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.runtime.ScalarUtils;
 
 import java.util.ArrayList;
@@ -71,6 +72,7 @@ public class CompilerOptions implements Cloneable {
     public boolean unicodeArgs = false; // -CA
     public boolean unicodeLocale = false; // -CL
     List<ArgumentParser.ModuleUseStatement> moduleUseStatements = new ArrayList<>(); // For -m -M
+    public RuntimeScalar incHook = null; // For storing @INC hook reference
 
     @Override
     public CompilerOptions clone() {
