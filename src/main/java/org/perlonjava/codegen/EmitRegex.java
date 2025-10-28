@@ -67,6 +67,23 @@ public class EmitRegex {
             }
         }
 
+        // Check if using !~ with s///r (which doesn't make sense)
+        if (node.right instanceof OperatorNode operatorNode
+                && operatorNode.operator.equals("replaceRegex")
+                && operatorNode.operand instanceof ListNode listNode
+                && listNode.elements.size() >= 2) {
+            // Check if the modifiers (second element) contain 'r'
+            Node modifiersNode = listNode.elements.get(1);
+            if (modifiersNode instanceof StringNode stringNode) {
+                String modifiers = stringNode.value;
+                if (modifiers.contains("r")) {
+                    throw new PerlCompilerException(node.tokenIndex,
+                            "Using !~ with s///r doesn't make sense",
+                            emitterVisitor.ctx.errorUtil);
+                }
+            }
+        }
+
         emitterVisitor.visit(
                 new OperatorNode("not",
                         new BinaryOperatorNode(
