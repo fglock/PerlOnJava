@@ -152,12 +152,10 @@ public class Time {
         try {
             TimeUnit.MILLISECONDS.sleep(s);
         } catch (InterruptedException e) {
-            // Handle interruption if needed
-            RuntimeScalar alarmHandler = getGlobalHash("main::SIG").get("ALRM");
-            if (alarmHandler.getDefinedBoolean()) {
-                RuntimeArray args = new RuntimeArray();
-                RuntimeCode.apply(alarmHandler, args, RuntimeContextType.SCALAR);
-            }
+            // Sleep was interrupted (likely by alarm())
+            // Process any pending signals through the signal queue
+            PerlSignalQueue.checkPendingSignals();
+            // If the signal handler threw an exception (die), it will propagate from checkPendingSignals()
         }
         long endTime = System.nanoTime();
         long actualSleepTime = endTime - startTime;

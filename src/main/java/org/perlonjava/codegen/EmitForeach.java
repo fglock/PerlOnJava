@@ -74,6 +74,9 @@ public class EmitForeach {
 
         mv.visitLabel(loopStart);
 
+        // Check for pending signals (alarm, etc.) at loop entry
+        EmitStatement.emitSignalCheck(mv);
+
         // Check if iterator has more elements
         mv.visitInsn(Opcodes.DUP);
         mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "hasNext", "()Z", true);
@@ -197,6 +200,9 @@ public class EmitForeach {
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "iterator", "()Ljava/util/Iterator;", false);
 
         mv.visitLabel(loopStart);
+
+        // Check for pending signals (alarm, etc.) at loop entry
+        EmitStatement.emitSignalCheck(mv);
 
         // Check if iterator has more elements
         mv.visitInsn(Opcodes.DUP);
