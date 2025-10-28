@@ -17,6 +17,21 @@ import org.perlonjava.runtime.RuntimeContextType;
 public class EmitStatement {
 
     /**
+     * Emits bytecode to check for pending signals (like SIGALRM from alarm()).
+     * This is a lightweight check - just a volatile boolean read if no signals are pending.
+     * Should be called at safe execution points like loop entries.
+     *
+     * @param mv The MethodVisitor to emit bytecode to.
+     */
+    public static void emitSignalCheck(MethodVisitor mv) {
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/PerlSignalQueue",
+                "checkPendingSignals",
+                "()V",
+                false);
+    }
+
+    /**
      * Emits bytecode for an if statement, including support for 'unless'.
      *
      * @param emitterVisitor The visitor used for code emission.
@@ -102,6 +117,9 @@ public class EmitStatement {
 
             // Visit the start label (this is where the loop condition and body are)
             mv.visitLabel(startLabel);
+
+            // Check for pending signals (alarm, etc.) at loop entry
+            emitSignalCheck(mv);
 
             // Visit the condition node in scalar context
             if (node.condition != null) {
@@ -198,6 +216,9 @@ public class EmitStatement {
 
         // Start of the loop body
         mv.visitLabel(startLabel);
+
+        // Check for pending signals (alarm, etc.) at loop entry
+        emitSignalCheck(mv);
 
         // Visit the loop body
         node.body.accept(emitterVisitor.with(RuntimeContextType.VOID));
