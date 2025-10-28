@@ -10,6 +10,10 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  */
 public class PerlSignalQueue {
     private static final Queue<SignalEvent> signalQueue = new ConcurrentLinkedQueue<>();
+    
+    // Volatile flag for ultra-fast signal checking in hot paths
+    // Reading a volatile boolean is ~2 CPU cycles, much faster than queue.isEmpty()
+    private static volatile boolean hasPendingSignal = false;
 
     /**
      * Enqueue a signal for processing in the main thread.
@@ -19,6 +23,20 @@ public class PerlSignalQueue {
      */
     public static void enqueue(String signal, RuntimeScalar handler) {
         signalQueue.offer(new SignalEvent(signal, handler));
+        hasPendingSignal = true;  // Set flag for fast checking
+    }
+
+    /**
+     * Lightweight signal check - called frequently at safe execution points.
+     * If no signals are pending, this is just a volatile boolean read (~2 CPU cycles).
+     * Signal handlers may throw PerlCompilerException which will propagate.
+     */
+    public static void checkPendingSignals() {
+        if (!hasPendingSignal) {
+            return;  // Fast path: no signals pending
+        }
+        // Slow path: process signals (rare)
+        processSignalsImpl();
     }
 
     /**
@@ -27,21 +45,23 @@ public class PerlSignalQueue {
      * Signal handlers may throw PerlDieException which will propagate.
      */
     public static void processSignals() {
+        processSignalsImpl();
+    }
+    
+    /**
+     * Internal implementation of signal processing.
+     */
+    private static void processSignalsImpl() {
         SignalEvent event;
         while ((event = signalQueue.poll()) != null) {
-            try {
-                // Execute the handler - this may throw PerlDieException
-                RuntimeArray args = new RuntimeArray();
-                args.push(new RuntimeScalar(event.signal));
-                RuntimeCode.apply(event.handler, args, RuntimeContextType.VOID);
-            } catch (Exception e) {
-                // Let PerlCompilerException propagate, but catch other exceptions
-                if (e instanceof PerlCompilerException) {
-                    throw e;
-                }
-                System.err.println("Signal handler error for " + event.signal + ": " + e.getMessage());
-            }
+            // Execute the handler - this may throw PerlCompilerException (from die)
+            RuntimeArray args = new RuntimeArray();
+            args.push(new RuntimeScalar(event.signal));
+            RuntimeCode.apply(event.handler, args, RuntimeContextType.VOID);
+            // Note: If the handler throws an exception, it will propagate immediately
+            // and we won't process remaining signals in the queue
         }
+        hasPendingSignal = false;  // Clear flag after processing all signals
     }
 
     /**
