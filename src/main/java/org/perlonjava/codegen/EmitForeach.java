@@ -5,6 +5,7 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
 import org.perlonjava.astvisitor.EmitterVisitor;
+import org.perlonjava.operators.Time;
 import org.perlonjava.perlmodule.Warnings;
 import org.perlonjava.runtime.RuntimeContextType;
 
@@ -73,6 +74,15 @@ public class EmitForeach {
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "iterator", "()Ljava/util/Iterator;", false);
 
         mv.visitLabel(loopStart);
+
+        // Check for pending signals (alarm) before each loop iteration
+        mv.visitMethodInsn(
+                Opcodes.INVOKESTATIC,
+                "org/perlonjava/operators/Time",
+                "checkPendingSignals",
+                "()V",
+                false
+        );
 
         // Check if iterator has more elements
         mv.visitInsn(Opcodes.DUP);
@@ -197,6 +207,15 @@ public class EmitForeach {
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "iterator", "()Ljava/util/Iterator;", false);
 
         mv.visitLabel(loopStart);
+
+        // Check for pending signals (alarm) before each loop iteration
+        mv.visitMethodInsn(
+                Opcodes.INVOKESTATIC,
+                "org/perlonjava/operators/Time",
+                "checkPendingSignals",
+                "()V",
+                false
+        );
 
         // Check if iterator has more elements
         mv.visitInsn(Opcodes.DUP);

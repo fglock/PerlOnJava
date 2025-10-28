@@ -2,6 +2,7 @@ package org.perlonjava.codegen;
 
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
+import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
 import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.runtime.RuntimeContextType;
@@ -68,6 +69,16 @@ public class EmitBlock {
                 emitterVisitor.ctx.logDebug("Skipping null element in block at index " + i);
                 continue;
             }
+
+            // Check for pending signals (alarm) before each statement
+            // This allows alarm-based timeouts to interrupt long-running code
+            mv.visitMethodInsn(
+                    Opcodes.INVOKESTATIC,
+                    "org/perlonjava/operators/Time",
+                    "checkPendingSignals",
+                    "()V",
+                    false
+            );
 
             ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, element.getIndex());
 

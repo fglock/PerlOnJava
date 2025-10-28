@@ -215,7 +215,9 @@ public class Time {
      */
     public static void checkPendingSignals() {
         // Process any queued signals
-        PerlSignalQueue.processSignals();
+        if (PerlSignalQueue.hasPendingSignals()) {
+            PerlSignalQueue.processSignals();
+        }
 
         // Clear interrupt flag if it was set by alarm
         if (Thread.interrupted()) {

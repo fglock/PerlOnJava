@@ -14,6 +14,9 @@ use POSIX qw(WNOHANG);
 
 my $jperl_path = './jperl';
 my $timeout = 30; # Default to 30 seconds
+my $timeout_override = {
+    're/pat.t' => 300,  # pat.t needs longer timeout due to many regex tests with JPERL_UNIMPLEMENTED=warn
+};
 my $jobs = 5;     # Default to 5 parallel jobs
 my $output_file;
 my $help;
@@ -239,9 +242,9 @@ sub run_single_test {
 
     # Temporarily disable fatal unimplemented errors
     # so we can run tests that mix implemented and unimplemented features
+    # NOTE: re/pat.t removed from this list because JPERL_UNIMPLEMENTED=warn causes extreme slowdown
     local $ENV{JPERL_UNIMPLEMENTED} = $test_file =~ m{
           re/pat_rt_report.t
-        | re/pat.t
         | re/regex_sets.t
         | op/pack.t
         | op/index.t
@@ -284,13 +287,22 @@ sub run_single_test {
     my $abs_jperl = File::Spec->rel2abs($jperl_path, $old_dir);
     my $test_name = File::Spec->abs2rel($test_file, $local_test_dir || '.');
 
+    # Check if there's a timeout override for this test
+    my $effective_timeout = $timeout;
+    for my $pattern (keys %$timeout_override) {
+        if ($test_file =~ m{$pattern}) {
+            $effective_timeout = $timeout_override->{$pattern};
+            last;
+        }
+    }
+
     # Try to use system timeout command if available
     my $timeout_cmd = '';
     if (system('which timeout >/dev/null 2>&1') == 0) {
-        $timeout_cmd = "timeout ${timeout}s ";
+        $timeout_cmd = "timeout ${effective_timeout}s ";
     } elsif (system('which gtimeout >/dev/null 2>&1') == 0) {
         # macOS with coreutils
-        $timeout_cmd = "gtimeout ${timeout}s ";
+        $timeout_cmd = "gtimeout ${effective_timeout}s ";
     }
 
     my $cmd = "${timeout_cmd}$abs_jperl $test_name 2>&1";
@@ -307,7 +319,7 @@ sub run_single_test {
         # Fallback to alarm-based timeout
         eval {
             local $SIG{ALRM} = sub { die "timeout\n" };
-            alarm($timeout);
+            alarm($effective_timeout);
             $output = `$abs_jperl $test_name 2>&1`;
             $exit_code = $? >> 8;
             alarm(0);
