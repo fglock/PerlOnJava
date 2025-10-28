@@ -325,6 +325,24 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             return replaceRegex(quotedRegex, string, ctx);
         }
 
+        // Check if alarm is active - if so, use timeout wrapper to prevent catastrophic backtracking
+        if (org.perlonjava.operators.Time.hasActiveAlarm()) {
+            int timeoutSeconds = org.perlonjava.operators.Time.getAlarmRemainingSeconds();
+            if (timeoutSeconds > 0) {
+                return matchRegexWithTimeout(quotedRegex, string, ctx, timeoutSeconds + 1);
+            }
+        }
+
+        // Fast path: no alarm active, use direct matching
+        return matchRegexDirect(quotedRegex, string, ctx);
+    }
+
+    /**
+     * Direct regex matching without timeout wrapper (fast path).
+     */
+    private static RuntimeBase matchRegexDirect(RuntimeScalar quotedRegex, RuntimeScalar string, int ctx) {
+        RuntimeRegex regex = resolveRegex(quotedRegex);
+
         if (regex.regexFlags.isMatchExactlyOnce() && regex.matched) {
             // m?PAT? already matched once; now return false
             if (ctx == RuntimeContextType.LIST) {
@@ -501,6 +519,61 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             return RuntimeScalarCache.getScalarBoolean(found);
         } else {
             return scalarUndef;
+        }
+    }
+
+    /**
+     * Regex matching with timeout wrapper to handle catastrophic backtracking.
+     * Runs the regex in a separate thread with a timeout.
+     *
+     * @param quotedRegex The regex pattern object
+     * @param string      The string to match against
+     * @param ctx         The context (LIST, SCALAR, VOID)
+     * @param timeoutSeconds Maximum seconds to allow for matching
+     * @return Match result, or throws exception if timeout
+     */
+    private static RuntimeBase matchRegexWithTimeout(RuntimeScalar quotedRegex, RuntimeScalar string, int ctx, int timeoutSeconds) {
+        java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newSingleThreadExecutor();
+        java.util.concurrent.Future<RuntimeBase> future = executor.submit(() -> {
+            return matchRegexDirect(quotedRegex, string, ctx);
+        });
+
+        try {
+            // Wait for result with timeout
+            RuntimeBase result = future.get(timeoutSeconds, java.util.concurrent.TimeUnit.SECONDS);
+            return result;
+        } catch (java.util.concurrent.TimeoutException e) {
+            // Regex timed out - cancel it and process alarm signal
+            future.cancel(true);
+            executor.shutdownNow();
+            // Check for pending signals - alarm handler will fire here
+            org.perlonjava.runtime.PerlSignalQueue.checkPendingSignals();
+            // If we get here, no alarm handler or it didn't die - return false
+            if (ctx == RuntimeContextType.LIST) {
+                return new RuntimeList();
+            } else {
+                return RuntimeScalarCache.scalarFalse;
+            }
+        } catch (java.util.concurrent.ExecutionException e) {
+            // Exception thrown during regex matching - unwrap and rethrow
+            executor.shutdownNow();
+            Throwable cause = e.getCause();
+            if (cause instanceof RuntimeException) {
+                throw (RuntimeException) cause;
+            }
+            throw new PerlCompilerException("Regex matching failed: " + cause.getMessage());
+        } catch (InterruptedException e) {
+            // Thread was interrupted - clean up and check signals
+            future.cancel(true);
+            executor.shutdownNow();
+            org.perlonjava.runtime.PerlSignalQueue.checkPendingSignals();
+            if (ctx == RuntimeContextType.LIST) {
+                return new RuntimeList();
+            } else {
+                return RuntimeScalarCache.scalarFalse;
+            }
+        } finally {
+            executor.shutdown();
         }
     }
 
