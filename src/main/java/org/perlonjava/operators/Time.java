@@ -222,6 +222,29 @@ public class Time {
     }
 
     /**
+     * Check if an alarm is currently active.
+     * Used by regex engine to decide whether to use timeout wrapper.
+     *
+     * @return true if alarm is active, false otherwise
+     */
+    public static boolean hasActiveAlarm() {
+        return currentAlarmTask != null && !currentAlarmTask.isDone();
+    }
+
+    /**
+     * Get the remaining time in seconds until the alarm fires.
+     *
+     * @return seconds remaining, or 0 if no alarm active
+     */
+    public static int getAlarmRemainingSeconds() {
+        if (!hasActiveAlarm()) {
+            return 0;
+        }
+        long elapsedTime = (System.currentTimeMillis() - alarmStartTime) / 1000;
+        return Math.max(0, alarmDuration - (int) elapsedTime);
+    }
+
+    /**
      * Shuts down the alarm scheduler to allow clean JVM exit.
      * This method is called by the shutdown hook and can also be called manually.
      */

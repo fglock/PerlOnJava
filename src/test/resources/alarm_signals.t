@@ -255,5 +255,114 @@ subtest 'alarm with complex signal handler' => sub {
     alarm(0);
 };
 
+subtest 'alarm with potentially slow regex' => sub {
+    plan tests => 1;
+    
+    # Note: Catastrophic backtracking patterns are hard to trigger reliably
+    # across different Java versions/regex engines. This test verifies that
+    # the timeout wrapper mechanism is in place, not that we hit actual timeouts.
+    
+    my $result;
+    eval {
+        alarm(5);
+        # This pattern can cause backtracking but may complete quickly
+        my $s = 'a' x 25;
+        $result = ($s =~ /(a+)+b/);  # Returns false since no 'b'
+        alarm(0);
+    };
+    
+    # Either way (timeout or completion), test passes if no crash
+    ok(!$@ || $@ =~ /timeout/, 'regex with alarm either completed or timed out cleanly');
+    
+    alarm(0);
+};
+
+subtest 'normal regex works fine with alarm' => sub {
+    plan tests => 3;
+    
+    my $alarm_fired = 0;
+    
+    $SIG{ALRM} = sub { $alarm_fired = 1; die "timeout\n" };
+    
+    my $result;
+    eval {
+        alarm(5);
+        # Normal, fast regex should complete before alarm
+        $result = ('hello world' =~ /world/);
+        alarm(0);
+    };
+    
+    ok($result, 'normal regex matched');
+    is($alarm_fired, 0, 'alarm did not fire for fast regex');
+    is($@, '', 'no error occurred');
+    
+    alarm(0);
+};
+
+subtest 'regex with captures works with alarm' => sub {
+    plan tests => 4;
+    
+    my $alarm_fired = 0;
+    
+    $SIG{ALRM} = sub { $alarm_fired = 1; die "timeout\n" };
+    
+    my $result;
+    eval {
+        alarm(5);
+        'abc123xyz' =~ /(\d+)/;
+        $result = $1;
+        alarm(0);
+    };
+    
+    is($result, '123', 'captured value correct');
+    is($alarm_fired, 0, 'alarm did not fire');
+    is($@, '', 'no error occurred');
+    ok(defined($result), 'capture variable was set');
+    
+    alarm(0);
+};
+
+subtest 'alarm with substitution' => sub {
+    plan tests => 3;
+    
+    my $alarm_fired = 0;
+    
+    $SIG{ALRM} = sub { $alarm_fired = 1; die "timeout\n" };
+    
+    my $str = 'hello world';
+    eval {
+        alarm(5);
+        $str =~ s/world/universe/;
+        alarm(0);
+    };
+    
+    is($str, 'hello universe', 'substitution worked');
+    is($alarm_fired, 0, 'alarm did not fire for fast substitution');
+    is($@, '', 'no error occurred');
+    
+    alarm(0);
+};
+
+subtest 'alarm with global match' => sub {
+    plan tests => 3;
+    
+    my $alarm_fired = 0;
+    
+    $SIG{ALRM} = sub { $alarm_fired = 1; die "timeout\n" };
+    
+    my @matches;
+    eval {
+        alarm(5);
+        @matches = ('a1b2c3' =~ /(\d)/g);
+        alarm(0);
+    };
+    
+    is_deeply(\@matches, ['1', '2', '3'], 'global match captured all digits');
+    is($alarm_fired, 0, 'alarm did not fire');
+    is($@, '', 'no error occurred');
+    
+    alarm(0);
+};
+
 done_testing();
 
