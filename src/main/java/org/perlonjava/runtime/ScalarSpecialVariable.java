@@ -137,6 +137,16 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
     }
 
     /**
+     * Retrieves the long representation of the special variable.
+     *
+     * @return The long value of the special variable.
+     */
+    @Override
+    public long getLong() {
+        return this.getValueAsScalar().getLong();
+    }
+
+    /**
      * Retrieves the double representation of the special variable.
      *
      * @return The double value of the special variable.
