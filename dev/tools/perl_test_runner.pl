@@ -242,9 +242,9 @@ sub run_single_test {
 
     # Temporarily disable fatal unimplemented errors
     # so we can run tests that mix implemented and unimplemented features
-    # NOTE: re/pat.t removed from this list because JPERL_UNIMPLEMENTED=warn causes extreme slowdown
     local $ENV{JPERL_UNIMPLEMENTED} = $test_file =~ m{
           re/pat_rt_report.t
+        | re/pat.t
         | re/regex_sets.t
         | op/pack.t
         | op/index.t
