@@ -893,7 +893,20 @@ public class EmitOperator {
                     node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
                 }
             } else {
-                node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
+                // Determine context based on operand type
+                // Function calls and scalar expressions should use SCALAR context
+                // Arrays, hashes, and lists should use LIST context
+                int contextType = RuntimeContextType.LIST;
+                
+                if (node.operand instanceof BinaryOperatorNode binOp && binOp.operator.equals("(")) {
+                    // Function call - use SCALAR context to get single return value
+                    contextType = RuntimeContextType.SCALAR;
+                } else if (node.operand instanceof OperatorNode op && op.operator.equals("$")) {
+                    // Scalar variable - use SCALAR context
+                    contextType = RuntimeContextType.SCALAR;
+                }
+                
+                node.operand.accept(emitterVisitor.with(contextType));
                 emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                         "org/perlonjava/runtime/RuntimeBase",
                         "createReference",
