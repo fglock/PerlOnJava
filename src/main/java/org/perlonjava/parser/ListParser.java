@@ -51,7 +51,7 @@ public class ListParser {
             if (expr.elements.size() > 1) {
                 parser.throwError("syntax error");
             }
-        } else if (token.type == LexerTokenType.EOF || ParserTables.LIST_TERMINATORS.contains(token.text) || token.text.equals(",")) {
+        } else if (token.type == LexerTokenType.EOF || isListTerminator(parser, token) || token.text.equals(",")) {
             // No argument
             expr = new ListNode(parser.tokenIndex);
         } else {
@@ -105,7 +105,7 @@ public class ListParser {
                     // Check for infix operators after the regex (like . for concatenation)
                     while (true) {
                         token = TokenUtils.peek(parser);
-                        if (token.type == LexerTokenType.EOF || ParserTables.LIST_TERMINATORS.contains(token.text)) {
+                        if (token.type == LexerTokenType.EOF || isListTerminator(parser, token)) {
                             break;
                         }
                         int tokenPrecedence = parser.getPrecedence(token.text);
@@ -122,7 +122,7 @@ public class ListParser {
                     
                     expr.elements.add(left);
                     token = TokenUtils.peek(parser);
-                    if (token.type != LexerTokenType.EOF && !ParserTables.LIST_TERMINATORS.contains(token.text)) {
+                    if (token.type != LexerTokenType.EOF && !isListTerminator(parser, token)) {
                         // Consume comma
                         PrototypeArgs.consumeCommaIfPresent(parser, false);
                     }
@@ -175,7 +175,7 @@ public class ListParser {
                 TokenUtils.consume(parser);
                 expr.elements.addAll(parseList(parser, ")", 0));
             } else {
-                while (token.type != LexerTokenType.EOF && !ParserTables.LIST_TERMINATORS.contains(token.text)) {
+                while (token.type != LexerTokenType.EOF && !isListTerminator(parser, token)) {
                     // Argument without parentheses
                     expr.elements.add(parser.parseExpression(parser.getPrecedence(",")));
                     token = TokenUtils.peek(parser);
@@ -210,6 +210,31 @@ public class ListParser {
             token = TokenUtils.peek(parser);
         }
         return token;
+    }
+
+    /**
+     * Checks if a token is a list terminator, with special handling for autoquoting.
+     * Keywords like "and", "or", "xor" should not terminate a list if followed by "=>",
+     * as they should be treated as hash keys in that context.
+     */
+    static boolean isListTerminator(Parser parser, LexerToken token) {
+        if (!ParserTables.LIST_TERMINATORS.contains(token.text)) {
+            return false;
+        }
+        
+        // Special case: and/or/xor before => should be treated as barewords, not terminators
+        if (token.text.equals("and") || token.text.equals("or") || token.text.equals("xor")) {
+            // Look ahead to see if => follows
+            int saveIndex = parser.tokenIndex;
+            TokenUtils.consume(parser); // consume and/or/xor
+            LexerToken nextToken = TokenUtils.peek(parser);
+            parser.tokenIndex = saveIndex; // restore
+            if (nextToken.text.equals("=>")) {
+                return false; // Not a terminator, it's a hash key
+            }
+        }
+        
+        return true;
     }
 
     /**
@@ -269,8 +294,22 @@ public class ListParser {
         LexerToken token1 = parser.tokens.get(parser.tokenIndex); // Next token including spaces
         LexerToken nextToken = TokenUtils.peek(parser);  // After spaces
 
-        if (token.type == LexerTokenType.EOF || ParserTables.LIST_TERMINATORS.contains(token.text)
-                || token.text.equals("->")) {
+        // Check if this is a list terminator, but we need to restore position for the check
+        boolean isTerminator = false;
+        if (ParserTables.LIST_TERMINATORS.contains(token.text)) {
+            // Special case: check if and/or/xor followed by =>
+            if (token.text.equals("and") || token.text.equals("or") || token.text.equals("xor")) {
+                if (nextToken.text.equals("=>")) {
+                    isTerminator = false; // Not a terminator, it's a hash key
+                } else {
+                    isTerminator = true;
+                }
+            } else {
+                isTerminator = true;
+            }
+        }
+        
+        if (token.type == LexerTokenType.EOF || isTerminator || token.text.equals("->")) {
             isEmptyList = true;
         } else if (token.text.equals("-")) {
             // -d, -e, -f, -l, -p, -x

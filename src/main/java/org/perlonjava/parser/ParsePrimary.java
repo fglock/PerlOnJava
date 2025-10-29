@@ -214,6 +214,16 @@ public class ParsePrimary {
      * @throws PerlCompilerException if the operator is not recognized or used incorrectly
      */
     static Node parseOperator(Parser parser, LexerToken token, String operator) {
+        // Check for autoquoting: keyword operators before => should be treated as barewords
+        // This handles cases like: and => {...}, or => {...}, xor => {...}
+        if (operator.equals("and") || operator.equals("or") || operator.equals("xor")) {
+            String peekTokenText = peek(parser).text;
+            if (peekTokenText.equals("=>")) {
+                // Autoquote: convert operator keyword to string literal
+                return new StringNode(token.text, parser.tokenIndex);
+            }
+        }
+        
         Node operand = null;
         switch (token.text) {
             case "(":
