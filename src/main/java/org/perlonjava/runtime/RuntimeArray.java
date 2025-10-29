@@ -876,13 +876,23 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         // Create a new RuntimeArray to save the current state
         RuntimeArray currentState = new RuntimeArray();
         // Copy the current elements to the new state
-        currentState.elements = new ArrayList<>(this.elements);
+        // For tied arrays, preserve the TieArray object
+        if (this.type == TIED_ARRAY) {
+            currentState.elements = this.elements; // Keep the TieArray reference
+            currentState.type = TIED_ARRAY;
+        } else {
+            currentState.elements = new ArrayList<>(this.elements);
+        }
         // Copy the current blessId to the new state
         currentState.blessId = this.blessId;
         // Push the current state onto the stack
         dynamicStateStack.push(currentState);
-        // Clear the array elements
-        this.elements.clear();
+        // Clear the array elements (for tied arrays, this calls CLEAR)
+        if (this.type == TIED_ARRAY) {
+            TieArray.tiedClear(this);
+        } else {
+            this.elements.clear();
+        }
         // Reset the blessId
         this.blessId = 0;
     }
@@ -900,6 +910,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             RuntimeArray previousState = dynamicStateStack.pop();
             // Restore the elements from the saved state
             this.elements = previousState.elements;
+            // Restore the type from the saved state (important for tied arrays)
+            this.type = previousState.type;
             // Restore the blessId from the saved state
             this.blessId = previousState.blessId;
         }
