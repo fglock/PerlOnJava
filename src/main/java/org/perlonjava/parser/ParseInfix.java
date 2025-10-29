@@ -95,7 +95,7 @@ public class ParseInfix {
                     left = new StringNode(((IdentifierNode) left).name, ((IdentifierNode) left).tokenIndex);
                 }
                 token = peek(parser);
-                if (token.type == LexerTokenType.EOF || ParserTables.LIST_TERMINATORS.contains(token.text) || token.text.equals(",") || token.text.equals("=>")) {
+                if (token.type == LexerTokenType.EOF || ListParser.isListTerminator(parser, token) || token.text.equals(",") || token.text.equals("=>")) {
                     // "postfix" comma
                     return ListNode.makeList(left);
                 }

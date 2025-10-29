@@ -87,7 +87,7 @@ public class PrototypeArgs {
     private static boolean isArgumentTerminator(Parser parser) {
         var next = TokenUtils.peek(parser);
         return next.type == LexerTokenType.EOF ||
-                ParserTables.LIST_TERMINATORS.contains(next.text) ||
+                ListParser.isListTerminator(parser, next) ||
                 Parser.isExpressionTerminator(next) ||
                 // Assignment operators should terminate argument parsing
                 next.text.equals("=") ||
