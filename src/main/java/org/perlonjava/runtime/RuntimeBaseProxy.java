@@ -200,6 +200,55 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
         return ret;
     }
 
+    // Non-strict versions (allow symbolic references)
+    // Note: We don't call vivify() here because for symbolic references (STRING/BYTE_STRING),
+    // we're not modifying the scalar - we're just using its string value to look up a global variable.
+    // For RuntimeScalarReadOnly (immutable scalars like string literals), lvalue is null and we can't vivify.
+    // Instead, we call the method directly on 'this' which will handle symbolic references correctly.
+    public RuntimeScalar hashDerefGetNonStrict(RuntimeScalar index, String currentPackage) {
+        if (lvalue == null) {
+            // For read-only scalars, call the method on 'this' directly
+            // This will use the RuntimeScalar implementation which handles symbolic references
+            return super.hashDerefGetNonStrict(index, currentPackage);
+        }
+        return lvalue.hashDerefGetNonStrict(index, currentPackage);
+    }
+
+    public RuntimeScalar hashDerefDeleteNonStrict(RuntimeScalar index, String currentPackage) {
+        if (lvalue == null) {
+            return super.hashDerefDeleteNonStrict(index, currentPackage);
+        }
+        return lvalue.hashDerefDeleteNonStrict(index, currentPackage);
+    }
+
+    public RuntimeScalar hashDerefExistsNonStrict(RuntimeScalar index, String currentPackage) {
+        if (lvalue == null) {
+            return super.hashDerefExistsNonStrict(index, currentPackage);
+        }
+        return lvalue.hashDerefExistsNonStrict(index, currentPackage);
+    }
+
+    public RuntimeScalar arrayDerefGetNonStrict(RuntimeScalar index, String currentPackage) {
+        if (lvalue == null) {
+            return super.arrayDerefGetNonStrict(index, currentPackage);
+        }
+        return lvalue.arrayDerefGetNonStrict(index, currentPackage);
+    }
+
+    public RuntimeScalar arrayDerefDeleteNonStrict(RuntimeScalar index, String currentPackage) {
+        if (lvalue == null) {
+            return super.arrayDerefDeleteNonStrict(index, currentPackage);
+        }
+        return lvalue.arrayDerefDeleteNonStrict(index, currentPackage);
+    }
+
+    public RuntimeScalar arrayDerefExistsNonStrict(RuntimeScalar index, String currentPackage) {
+        if (lvalue == null) {
+            return super.arrayDerefExistsNonStrict(index, currentPackage);
+        }
+        return lvalue.arrayDerefExistsNonStrict(index, currentPackage);
+    }
+
     /**
      * Performs a pre-increment operation on the underlying scalar.
      *
