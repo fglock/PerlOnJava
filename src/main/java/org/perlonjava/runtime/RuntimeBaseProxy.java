@@ -200,6 +200,37 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
         return ret;
     }
 
+    // Non-strict versions (allow symbolic references)
+    public RuntimeScalar hashDerefGetNonStrict(RuntimeScalar index, String currentPackage) {
+        vivify();
+        return lvalue.hashDerefGetNonStrict(index, currentPackage);
+    }
+
+    public RuntimeScalar hashDerefDeleteNonStrict(RuntimeScalar index, String currentPackage) {
+        vivify();
+        return lvalue.hashDerefDeleteNonStrict(index, currentPackage);
+    }
+
+    public RuntimeScalar hashDerefExistsNonStrict(RuntimeScalar index, String currentPackage) {
+        vivify();
+        return lvalue.hashDerefExistsNonStrict(index, currentPackage);
+    }
+
+    public RuntimeScalar arrayDerefGetNonStrict(RuntimeScalar index, String currentPackage) {
+        vivify();
+        return lvalue.arrayDerefGetNonStrict(index, currentPackage);
+    }
+
+    public RuntimeScalar arrayDerefDeleteNonStrict(RuntimeScalar index, String currentPackage) {
+        vivify();
+        return lvalue.arrayDerefDeleteNonStrict(index, currentPackage);
+    }
+
+    public RuntimeScalar arrayDerefExistsNonStrict(RuntimeScalar index, String currentPackage) {
+        vivify();
+        return lvalue.arrayDerefExistsNonStrict(index, currentPackage);
+    }
+
     /**
      * Performs a pre-increment operation on the underlying scalar.
      *

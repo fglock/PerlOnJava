@@ -315,6 +315,9 @@ public class EmitVariable {
                     emitterVisitor.pushCurrentPackage();
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "hashDerefNonStrict", "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeHash;", false);
                 }
+                if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeHash", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                }
                 return;
             case "$":
                 // `$$a`
