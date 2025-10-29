@@ -48,7 +48,7 @@ public class EmitBinaryOperator {
             right = new StringNode(identifierNode.name, node.tokenIndex);
         }
 
-        // Special case for modulus and division operators under "use integer"
+        // Special case for modulus, division, and shift operators under "use integer"
         if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_INTEGER)) {
             if (node.operator.equals("%")) {
                 // Use integer modulus when "use integer" is in effect
@@ -70,6 +70,30 @@ public class EmitBinaryOperator {
                         Opcodes.INVOKESTATIC,
                         "org/perlonjava/operators/MathOperators",
                         "integerDivide",
+                        "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                        false);
+                EmitOperator.handleVoidContext(emitterVisitor);
+                return;
+            } else if (node.operator.equals("<<")) {
+                // Use integer left shift when "use integer" is in effect
+                node.left.accept(scalarVisitor); // left parameter
+                right.accept(scalarVisitor); // right parameter
+                emitterVisitor.ctx.mv.visitMethodInsn(
+                        Opcodes.INVOKESTATIC,
+                        "org/perlonjava/operators/BitwiseOperators",
+                        "integerShiftLeft",
+                        "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                        false);
+                EmitOperator.handleVoidContext(emitterVisitor);
+                return;
+            } else if (node.operator.equals(">>")) {
+                // Use integer right shift when "use integer" is in effect
+                node.left.accept(scalarVisitor); // left parameter
+                right.accept(scalarVisitor); // right parameter
+                emitterVisitor.ctx.mv.visitMethodInsn(
+                        Opcodes.INVOKESTATIC,
+                        "org/perlonjava/operators/BitwiseOperators",
+                        "integerShiftRight",
                         "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
                         false);
                 EmitOperator.handleVoidContext(emitterVisitor);

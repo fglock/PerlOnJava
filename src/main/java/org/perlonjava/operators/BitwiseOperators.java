@@ -5,6 +5,7 @@ import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.runtime.RuntimeScalarCache;
 import org.perlonjava.runtime.RuntimeScalarType;
+import org.perlonjava.runtime.ScalarUtils;
 
 /**
  * This class provides methods for performing bitwise operations on RuntimeScalar objects.
@@ -16,6 +17,7 @@ public class BitwiseOperators {
     /**
      * Performs a bitwise AND operation on two RuntimeScalar objects.
      * If both arguments are strings, it performs the operation character by character.
+     * In Perl, references and non-numeric values are stringified before bitwise operations.
      *
      * @param runtimeScalar The first operand.
      * @param arg2          The second operand.
@@ -33,7 +35,8 @@ public class BitwiseOperators {
                     RuntimeScalarCache.scalarEmptyString);
         }
 
-        if (runtimeScalar.isString() && arg2.isString()) {
+        // In Perl, if either operand is a reference or doesn't look like a number, use string operations
+        if (!ScalarUtils.looksLikeNumber(runtimeScalar) || !ScalarUtils.looksLikeNumber(arg2)) {
             return bitwiseAndDot(runtimeScalar, arg2);
         }
         return bitwiseAndBinary(runtimeScalar, arg2);
@@ -60,13 +63,15 @@ public class BitwiseOperators {
     /**
      * Performs a bitwise OR operation on two RuntimeScalar objects.
      * If both arguments are strings, it performs the operation character by character.
+     * In Perl, references and non-numeric values are stringified before bitwise operations.
      *
      * @param runtimeScalar The first operand.
      * @param arg2          The second operand.
      * @return A new RuntimeScalar with the result of the bitwise OR operation.
      */
     public static RuntimeScalar bitwiseOr(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
-        if (runtimeScalar.isString() && arg2.isString()) {
+        // In Perl, if either operand is a reference or doesn't look like a number, use string operations
+        if (!ScalarUtils.looksLikeNumber(runtimeScalar) || !ScalarUtils.looksLikeNumber(arg2)) {
             return bitwiseOrDot(runtimeScalar, arg2);
         }
         return bitwiseOrBinary(runtimeScalar, arg2);
@@ -95,24 +100,22 @@ public class BitwiseOperators {
      * <p>
      * Perl's XOR behavior:
      * - If both operands are pure numeric types (INTEGER/DOUBLE), use numeric XOR
-     * - Otherwise (strings, blessed objects, etc.), use string XOR
+     * - Otherwise (strings, blessed objects, references, etc.), use string XOR
      * <p>
-     * Note: isString() returns true for STRING types, but blessed objects need
-     * special handling - they should use string XOR after stringification.
+     * Note: References and non-numeric values are stringified before bitwise operations.
      *
      * @param runtimeScalar The first operand.
      * @param arg2          The second operand.
      * @return A new RuntimeScalar with the result of the bitwise XOR operation.
      */
     public static RuntimeScalar bitwiseXor(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
-        // Use numeric XOR only if BOTH operands are pure numeric types (not strings)
-        // For everything else (strings, blessed objects, etc.), use string XOR
-        if (!runtimeScalar.isString() && !arg2.isString() &&
-                !runtimeScalar.isBlessed() && !arg2.isBlessed()) {
+        // Use numeric XOR only if BOTH operands look like numbers
+        // For everything else (strings, blessed objects, references, etc.), use string XOR
+        if (ScalarUtils.looksLikeNumber(runtimeScalar) && ScalarUtils.looksLikeNumber(arg2)) {
             // Both are pure numbers (INTEGER or DOUBLE), use numeric XOR
             return bitwiseXorBinary(runtimeScalar, arg2);
         }
-        // At least one is a string or blessed object, use string XOR
+        // At least one is a string, reference, or blessed object, use string XOR
         return bitwiseXorDot(runtimeScalar, arg2);
     }
 
@@ -137,12 +140,14 @@ public class BitwiseOperators {
     /**
      * Performs a bitwise NOT operation on a RuntimeScalar object.
      * If the argument is a string, it performs the operation character by character.
+     * In Perl, references and non-numeric values are stringified before bitwise operations.
      *
      * @param runtimeScalar The operand.
      * @return A new RuntimeScalar with the result of the bitwise NOT operation.
      */
     public static RuntimeScalar bitwiseNot(RuntimeScalar runtimeScalar) {
-        if (runtimeScalar.isString()) {
+        // In Perl, if the operand is a reference or doesn't look like a number, use string operations
+        if (!ScalarUtils.looksLikeNumber(runtimeScalar)) {
             return bitwiseNotDot(runtimeScalar);
         }
         return bitwiseNotBinary(runtimeScalar);
@@ -272,6 +277,8 @@ public class BitwiseOperators {
 
     /**
      * Performs a left shift operation on a RuntimeScalar object.
+     * Perl shifts treat negative numbers as unsigned (UV) by default.
+     * Negative shift amounts reverse the direction (left shift becomes right shift).
      *
      * @param runtimeScalar The operand to be shifted.
      * @param arg2          The number of positions to shift.
@@ -313,39 +320,34 @@ public class BitwiseOperators {
         }
 
         long value = runtimeScalar.getLong();
-        int shift = arg2.getInt();
-
-        // For shifts that would overflow long, use double to match pow() behavior
-        if (shift >= 63) {
-            if (shift >= 1024) {
-                // Prevent infinity for extremely large shifts
-                return new RuntimeScalar(0.0);
-            }
-            if (value == 0) {
-                return new RuntimeScalar(0L);
-            }
-            // Use double arithmetic for large shifts to match pow() behavior
-            double result = value * Math.pow(2.0, shift);
-            return new RuntimeScalar(result);
+        long shift = arg2.getLong();
+        
+        // Handle negative shift (reverse direction: left shift becomes right shift)
+        if (shift < 0) {
+            shift = -shift;
+            return shiftRightInternal(value, shift, false);
         }
 
-        // For smaller shifts, check if the result would overflow
-        if (shift > 0) {
-            // Check if the shift would cause overflow
-            long result = value << shift;
-            // If sign changed unexpectedly (overflow), use double
-            if ((value > 0 && result < 0) || (value < 0 && result > 0)) {
-                double doubleResult = value * Math.pow(2.0, shift);
-                return new RuntimeScalar(doubleResult);
-            }
-            return new RuntimeScalar(result);
+        // Perl uses 32-bit word size for shift operations
+        // Shifts >= 32 return 0
+        if (shift >= 32) {
+            return RuntimeScalarCache.scalarZero;
         }
-
-        return new RuntimeScalar(value << shift);
+        
+        // Treat value as unsigned 32-bit (UV semantics)
+        // Mask to 32 bits first to handle negative numbers correctly
+        long unsignedValue = value & 0xFFFFFFFFL;
+        
+        // Perform the shift
+        long result = (unsignedValue << shift) & 0xFFFFFFFFL;
+        
+        return new RuntimeScalar(result);
     }
 
     /**
      * Performs a right shift operation on a RuntimeScalar object.
+     * Perl shifts treat negative numbers as unsigned (UV) by default.
+     * Negative shift amounts reverse the direction (right shift becomes left shift).
      *
      * @param runtimeScalar The operand to be shifted.
      * @param arg2          The number of positions to shift.
@@ -375,31 +377,169 @@ public class BitwiseOperators {
                 if (doubleValue > 0) {
                     // +Inf should convert to UV_MAX (32-bit), then shift right
                     long uvMax = 4294967295L; // 2^32 - 1
-                    int shift = arg2.getInt();
+                    long shift = arg2.getLong();
                     if (shift >= 32) {
-                        return new RuntimeScalar(0L);
+                        return RuntimeScalarCache.scalarZero;
                     }
-                    return new RuntimeScalar(uvMax >> shift);
+                    return new RuntimeScalar(uvMax >>> shift);
                 } else {
                     // -Inf should convert to 0 for unsigned interpretation
-                    return new RuntimeScalar(0L);
+                    return RuntimeScalarCache.scalarZero;
                 }
             }
             if (Double.isNaN(doubleValue)) {
                 // NaN should convert to 0
-                return new RuntimeScalar(0L);
+                return RuntimeScalarCache.scalarZero;
             }
         }
 
-        // Use long for consistency
         long value = runtimeScalar.getLong();
-        int shift = arg2.getInt();
-
-        // Handle shifts >= 64 (long size in bits)
-        if (shift >= 64) {
-            return new RuntimeScalar(value < 0 ? -1L : 0L);
+        long shift = arg2.getLong();
+        
+        // Handle negative shift (reverse direction: right shift becomes left shift)
+        if (shift < 0) {
+            shift = -shift;
+            // For left shift with negative amount, treat as normal left shift
+            if (shift >= 32) {
+                return RuntimeScalarCache.scalarZero;
+            }
+            long unsignedValue = value & 0xFFFFFFFFL;
+            long result = (unsignedValue << shift) & 0xFFFFFFFFL;
+            return new RuntimeScalar(result);
+        }
+        
+        return shiftRightInternal(value, shift, false);
+    }
+    
+    /**
+     * Internal helper for right shift operations.
+     * 
+     * @param value The value to shift
+     * @param shift The shift amount (must be non-negative)
+     * @param signed If true, use signed (arithmetic) shift; if false, use unsigned (logical) shift
+     * @return A new RuntimeScalar with the shifted value
+     */
+    private static RuntimeScalar shiftRightInternal(long value, long shift, boolean signed) {
+        // Perl uses 32-bit word size for shift operations
+        // Unsigned shifts >= 32 return 0
+        if (shift >= 32) {
+            if (signed) {
+                // For signed right shift, stick to -1 or 0
+                return new RuntimeScalar(value < 0 ? -1 : 0);
+            }
+            return RuntimeScalarCache.scalarZero;
+        }
+        
+        if (signed) {
+            // Signed (arithmetic) shift - sign bit propagates
+            // First convert to signed 32-bit, then shift, then mask
+            int signedValue = (int) value;
+            long result = signedValue >> shift;
+            return new RuntimeScalar(result);
+        } else {
+            // Unsigned (logical) shift - zero fill
+            // Treat as unsigned 32-bit value
+            long unsignedValue = value & 0xFFFFFFFFL;
+            long result = unsignedValue >>> shift;
+            return new RuntimeScalar(result);
+        }
+    }
+    
+    /**
+     * Performs a left shift operation with signed (integer) semantics.
+     * This is used when "use integer" pragma is in effect.
+     *
+     * @param runtimeScalar The operand to be shifted.
+     * @param arg2          The number of positions to shift.
+     * @return A new RuntimeScalar with the result of the integer left shift operation.
+     */
+    public static RuntimeScalar integerShiftLeft(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
+        // Check for uninitialized values and generate warnings
+        if (!runtimeScalar.getDefinedBoolean()) {
+            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in left bitshift (<<)"),
+                    RuntimeScalarCache.scalarEmptyString);
+        }
+        if (!arg2.getDefinedBoolean()) {
+            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in left bitshift (<<)"),
+                    RuntimeScalarCache.scalarEmptyString);
         }
 
-        return new RuntimeScalar(value >> shift);
+        // Convert string type to number if necessary
+        if (runtimeScalar.isString()) {
+            runtimeScalar = NumberParser.parseNumber(runtimeScalar);
+        }
+
+        int value = runtimeScalar.getInt();
+        long shift = arg2.getLong();
+        
+        // Handle negative shift (reverse direction: left becomes right)
+        if (shift < 0) {
+            shift = -shift;
+            // For shifts >= 32, stick to -1 or 0 depending on sign
+            if (shift >= 32) {
+                return new RuntimeScalar(value < 0 ? -1 : 0);
+            }
+            // Perform signed (arithmetic) right shift
+            int result = value >> (int)shift;
+            return new RuntimeScalar(result);
+        }
+
+        // Shifts >= 32 return 0
+        if (shift >= 32) {
+            return RuntimeScalarCache.scalarZero;
+        }
+        
+        // Perform signed left shift
+        int result = value << (int)shift;
+        return new RuntimeScalar(result);
+    }
+    
+    /**
+     * Performs a right shift operation with signed (integer) semantics.
+     * This is used when "use integer" pragma is in effect.
+     *
+     * @param runtimeScalar The operand to be shifted.
+     * @param arg2          The number of positions to shift.
+     * @return A new RuntimeScalar with the result of the integer right shift operation.
+     */
+    public static RuntimeScalar integerShiftRight(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
+        // Check for uninitialized values and generate warnings
+        if (!runtimeScalar.getDefinedBoolean()) {
+            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in right bitshift (>>)"),
+                    RuntimeScalarCache.scalarEmptyString);
+        }
+        if (!arg2.getDefinedBoolean()) {
+            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in right bitshift (>>)"),
+                    RuntimeScalarCache.scalarEmptyString);
+        }
+
+        // Convert string type to number if necessary
+        if (runtimeScalar.isString()) {
+            runtimeScalar = NumberParser.parseNumber(runtimeScalar);
+        }
+
+        int value = runtimeScalar.getInt();
+        long shift = arg2.getLong();
+        
+        // Handle negative shift (reverse direction: right becomes left)
+        if (shift < 0) {
+            shift = -shift;
+            // Shifts >= 32 return 0
+            if (shift >= 32) {
+                return RuntimeScalarCache.scalarZero;
+            }
+            // Perform signed left shift
+            int result = value << (int)shift;
+            return new RuntimeScalar(result);
+        }
+
+        // For shifts >= 32, stick to -1 or 0 depending on sign
+        if (shift >= 32) {
+            return new RuntimeScalar(value < 0 ? -1 : 0);
+        }
+        
+        // Perform signed (arithmetic) right shift
+        int result = value >> (int)shift;
+        return new RuntimeScalar(result);
     }
 }
