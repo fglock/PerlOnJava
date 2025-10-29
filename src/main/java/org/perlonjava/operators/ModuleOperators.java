@@ -13,7 +13,6 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.List;
 
 import static org.perlonjava.perlmodule.Feature.featureManager;
 import static org.perlonjava.runtime.ExceptionFormatter.findInnermostCause;
@@ -304,8 +303,11 @@ public class ModuleOperators {
         else if (code == null) {
 
             // Check if the filename is an absolute path or starts with ./ or ../
+            // and if it exists on the filesystem
             Path filePath = Paths.get(fileName);
-            if (filePath.isAbsolute() || fileName.startsWith("./") || fileName.startsWith("../")) {
+            boolean tryDirectPath = filePath.isAbsolute() || fileName.startsWith("./") || fileName.startsWith("../");
+            
+            if (tryDirectPath) {
                 // For absolute or explicit relative paths, resolve using RuntimeIO.getPath
                 filePath = RuntimeIO.resolvePath(fileName);
                 if (Files.exists(filePath)) {
@@ -317,42 +319,77 @@ public class ModuleOperators {
                     fullName = filePath;
                     actualFileName = fullName.toString();
                 }
-            } else {
-                // Otherwise, search in INC directories
-                List<RuntimeScalar> inc = GlobalVariable.getGlobalArray("main::INC").elements;
+            }
+            
+            // If we haven't found the file yet, search in INC directories
+            // This handles:
+            // 1. Relative module names (e.g., Foo::Bar)
+            // 2. Absolute/relative paths that don't exist on filesystem (try @INC hooks only)
+            if (fullName == null) {
+                // Search in INC directories
+                RuntimeArray incArray = GlobalVariable.getGlobalArray("main::INC");
 
                 // Make sure the jar files are in @INC - the Perl test files can remove it
                 boolean seen = false;
-                for (RuntimeBase dir : inc) {
+                int incSize = incArray.size();
+                for (int i = 0; i < incSize; i++) {
+                    RuntimeScalar dir = incArray.get(i);
+                    // Handle tied scalars
+                    if (dir.type == RuntimeScalarType.TIED_SCALAR) {
+                        dir = dir.tiedFetch();
+                    }
                     if (dir.toString().equals(GlobalContext.JAR_PERLLIB)) {
                         seen = true;
                         break;
                     }
                 }
                 if (!seen) {
-                    inc.add(new RuntimeScalar(GlobalContext.JAR_PERLLIB));
+                    incArray.push(new RuntimeScalar(GlobalContext.JAR_PERLLIB));
                 }
 
-                for (RuntimeBase dir : inc) {
-                    RuntimeScalar dirScalar = dir.scalar();
+                // Iterate using indexed access to properly handle tied arrays
+                incSize = incArray.size();
+                for (int i = 0; i < incSize; i++) {
+                    RuntimeScalar dirScalar = incArray.get(i);
+                    
+                    // If this is a tied scalar, fetch the actual value
+                    if (dirScalar.type == RuntimeScalarType.TIED_SCALAR) {
+                        dirScalar = dirScalar.tiedFetch();
+                    }
+                    
+                    // For absolute/relative paths (starting with /, ./, ../), only try hooks
+                    // Regular directory entries should be skipped for such paths
+                    boolean isHook = dirScalar.type == RuntimeScalarType.CODE || 
+                                     dirScalar.type == RuntimeScalarType.REFERENCE ||
+                                     dirScalar.type == RuntimeScalarType.ARRAYREFERENCE ||
+                                     dirScalar.type == RuntimeScalarType.HASHREFERENCE;
+                    
+                    if (tryDirectPath && !isHook) {
+                        // Skip regular directory entries for absolute/relative paths
+                        continue;
+                    }
                     
                     // Check if this @INC entry is a CODE reference, ARRAY reference, or blessed object
-                    if (dirScalar.type == RuntimeScalarType.CODE || 
-                        dirScalar.type == RuntimeScalarType.REFERENCE ||
-                        dirScalar.type == RuntimeScalarType.ARRAYREFERENCE ||
-                        dirScalar.type == RuntimeScalarType.HASHREFERENCE) {
+                    if (isHook) {
                         
                         RuntimeBase hookResult = tryIncHook(dirScalar, fileName);
                         if (hookResult != null) {
                             // Hook returned something useful
                             RuntimeScalar hookResultScalar = hookResult.scalar();
                             
-                            // Check if it's a filehandle (GLOB) or array ref with filehandle
+                            // Check if it's a filehandle (GLOB), array ref with filehandle, or scalar ref with code
                             RuntimeScalar filehandle = null;
                             
                             if (hookResultScalar.type == RuntimeScalarType.GLOB || 
                                 hookResultScalar.type == RuntimeScalarType.GLOBREFERENCE) {
                                 filehandle = hookResultScalar;
+                            } else if (hookResultScalar.type == RuntimeScalarType.REFERENCE) {
+                                // Hook returned a scalar reference - treat the dereferenced value as code
+                                RuntimeScalar derefValue = hookResultScalar.scalarDeref();
+                                code = derefValue.toString();
+                                actualFileName = fileName;
+                                incHookRef = dirScalar;
+                                break;
                             } else if (hookResultScalar.type == RuntimeScalarType.ARRAYREFERENCE &&
                                     hookResultScalar.value instanceof RuntimeArray) {
                                 RuntimeArray resultArray = (RuntimeArray) hookResultScalar.value;
@@ -382,7 +419,7 @@ public class ModuleOperators {
                     }
                     
                     // Original string handling for directory paths
-                    String dirName = dir.toString();
+                    String dirName = dirScalar.toString();
                     if (dirName.equals(GlobalContext.JAR_PERLLIB)) {
                         // Try to find in jar at "src/main/perl/lib"
                         String resourcePath = "/lib/" + fileName;
