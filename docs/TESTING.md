@@ -284,6 +284,40 @@ Check for infinite loops, use timeout command:
 timeout 30s ./jperl problematic_test.t
 ```
 
+## Importing Perl5 Test Suite
+
+PerlOnJava can import and run tests from the official Perl5 repository to verify compatibility and behavior.
+
+### Setup
+
+To import Perl test files and verify their behavior under PerlOnJava:
+
+1. Clone the Perl5 repository (if not already done):
+   ```bash
+   rm -rf perl5  # if it exists
+   git clone https://github.com/Perl/perl5.git
+   ```
+
+2. Run the import script to copy tests and apply patches:
+   ```bash
+   perl dev/import-perl5/sync.pl
+   ```
+
+This will copy all files from `perl5/t/` to `t/` and apply any necessary patches for PerlOnJava compatibility.
+
+### Running Imported Tests
+
+To run the imported Perl5 tests:
+
+```bash
+perl dev/tools/perl_test_runner.pl --output out.json t
+```
+
+See `dev/import-perl5/README.md` for more details on:
+- The import system architecture
+- How to add patches for PerlOnJava compatibility
+- Managing test expectations
+
 ## See Also
 
 - [Build Guide](BUILD.md) - Building PerlOnJava
