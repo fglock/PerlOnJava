@@ -243,6 +243,7 @@ sub run_single_test {
           re/pat_rt_report.t
         | re/pat.t
         | re/regex_sets.t
+        | re/regexp_unicode_prop.t
         | op/pack.t
         | op/index.t
         | op/split.t
