@@ -200,6 +200,70 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
         return ret;
     }
 
+    // Method to implement `$v->{key}`, when "no strict refs" is in effect
+    @Override
+    public RuntimeScalar hashDerefGetNonStrict(RuntimeScalar index, String packageName) {
+        vivify();
+        RuntimeScalar ret = lvalue.hashDerefGetNonStrict(index, packageName);
+        this.type = lvalue.type;
+        this.value = lvalue.value;
+        return ret;
+    }
+
+    // Method to implement `delete $v->{key}`, when "no strict refs" is in effect
+    @Override
+    public RuntimeScalar hashDerefDeleteNonStrict(RuntimeScalar index, String packageName) {
+        vivify();
+        RuntimeScalar ret = lvalue.hashDerefDeleteNonStrict(index, packageName);
+        this.type = lvalue.type;
+        this.value = lvalue.value;
+        return ret;
+    }
+
+    // Method to implement `exists $v->{key}`, when "no strict refs" is in effect
+    @Override
+    public RuntimeScalar hashDerefExistsNonStrict(RuntimeScalar index, String packageName) {
+        vivify();
+        RuntimeScalar ret = lvalue.hashDerefExistsNonStrict(index, packageName);
+        this.type = lvalue.type;
+        this.value = lvalue.value;
+        return ret;
+    }
+
+    // Method to implement `$v->[index]`, when "no strict refs" is in effect
+    @Override
+    public RuntimeScalar arrayDerefGetNonStrict(RuntimeScalar index, String packageName) {
+        // Don't vivify read-only scalars (like constants from constant subroutines)
+        if (lvalue == null && this instanceof RuntimeScalarReadOnly) {
+            return RuntimeScalarCache.scalarUndef;
+        }
+        vivify();
+        RuntimeScalar ret = lvalue.arrayDerefGetNonStrict(index, packageName);
+        this.type = lvalue.type;
+        this.value = lvalue.value;
+        return ret;
+    }
+
+    // Method to implement `delete $v->[index]`, when "no strict refs" is in effect
+    @Override
+    public RuntimeScalar arrayDerefDeleteNonStrict(RuntimeScalar index, String packageName) {
+        vivify();
+        RuntimeScalar ret = lvalue.arrayDerefDeleteNonStrict(index, packageName);
+        this.type = lvalue.type;
+        this.value = lvalue.value;
+        return ret;
+    }
+
+    // Method to implement `exists $v->[index]`, when "no strict refs" is in effect
+    @Override
+    public RuntimeScalar arrayDerefExistsNonStrict(RuntimeScalar index, String packageName) {
+        vivify();
+        RuntimeScalar ret = lvalue.arrayDerefExistsNonStrict(index, packageName);
+        this.type = lvalue.type;
+        this.value = lvalue.value;
+        return ret;
+    }
+
     /**
      * Performs a pre-increment operation on the underlying scalar.
      *
