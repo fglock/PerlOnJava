@@ -275,13 +275,7 @@ public class UnicodeResolver {
                 if (userProp != null) {
                     return wrapCharClass(userProp, negated);
                 }
-                // If the property doesn't exist yet, it might be a forward reference
-                // Return a pattern that will never match anything - this allows the regex to compile
-                // In real Perl, this would be deferred until match time, but implementing full
-                // deferred resolution is complex. For now, return an empty character class.
-                // Note: This means forward-referenced properties won't work, but at least
-                // the regex will compile.
-                return "(?!)"; // Negative lookahead that never matches
+                // Property not found - fall through to throw error below
             }
             
             // Special cases - Perl XPosix properties not natively supported in Java
