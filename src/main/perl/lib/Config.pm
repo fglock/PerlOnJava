@@ -195,8 +195,8 @@ $os_name =~ s/\s+/_/g;
     useperlio => 'define',
     
     # Extensions available in PerlOnJava
-    extensions => 'Socket IO::Socket',
-    dynamic_ext => 'Socket IO::Socket',
+    extensions => 'Fcntl IO File/Glob Socket IO::Socket',
+    dynamic_ext => 'Fcntl IO File/Glob Socket IO::Socket',
     static_ext => '',
     
     # File operations
