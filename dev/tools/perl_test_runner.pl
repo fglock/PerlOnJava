@@ -278,6 +278,11 @@ sub run_single_test {
             $local_test_dir =~ s{/[^/]+$}{};
         }
     }
+    # For tests in t/ directory (t/op/, t/base/, etc.), change to t/
+    # so they can find ./test.pl via require
+    elsif ($test_file =~ m{^t/}) {
+        $local_test_dir = 't';
+    }
 
     chdir($local_test_dir) if $local_test_dir && -d $local_test_dir;
 

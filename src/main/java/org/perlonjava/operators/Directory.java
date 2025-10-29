@@ -36,14 +36,66 @@ public class Directory {
         //            directory handle as the argument. On systems that don't support
         //            fchdir(2), passing handles raises an exception.
 
-        String dirName = runtimeScalar.toString();
+        String dirName;
+        
+        // Check if argument is a filehandle or dirhandle
+        if (runtimeScalar.value instanceof RuntimeIO || runtimeScalar.value instanceof RuntimeGlob) {
+            // Try to get RuntimeIO from the scalar
+            RuntimeIO io = RuntimeIO.getRuntimeIO(runtimeScalar);
+            if (io != null) {
+                // This is a filehandle or dirhandle - fchdir is not supported
+                throw new PerlCompilerException("The fchdir function is unimplemented");
+            }
+        }
+        
+        // Handle chdir() with no arguments - check environment variables
+        if (!runtimeScalar.defined().getBoolean()) {
+            // Try HOME, then LOGDIR, then SYS$LOGIN (for VMS only)
+            RuntimeHash envHash = GlobalVariable.getGlobalHash("main::ENV");
+            RuntimeScalar homeDir = envHash.get("HOME");
+            if (homeDir != null && homeDir.defined().getBoolean() && !homeDir.toString().isEmpty()) {
+                dirName = homeDir.toString();
+            } else {
+                RuntimeScalar logDir = envHash.get("LOGDIR");
+                if (logDir != null && logDir.defined().getBoolean() && !logDir.toString().isEmpty()) {
+                    dirName = logDir.toString();
+                } else {
+                    // Check SYS$LOGIN only on VMS
+                    String osName = GlobalVariable.getGlobalVariable("main::^O").toString();
+                    if ("VMS".equalsIgnoreCase(osName)) {
+                        RuntimeScalar sysLogin = envHash.get("SYS$LOGIN");
+                        if (sysLogin != null && sysLogin.defined().getBoolean() && !sysLogin.toString().isEmpty()) {
+                            dirName = sysLogin.toString();
+                        } else {
+                            // No environment variable set - fail with EINVAL
+                            getGlobalVariable("main::!").set(22);  // EINVAL
+                            return scalarFalse;
+                        }
+                    } else {
+                        // Not VMS and no HOME/LOGDIR - fail with EINVAL
+                        getGlobalVariable("main::!").set(22);  // EINVAL
+                        return scalarFalse;
+                    }
+                }
+            }
+        } else {
+            dirName = runtimeScalar.toString();
+        }
+        
+        // Check for empty string - should fail with ENOENT
+        if (dirName.isEmpty()) {
+            getGlobalVariable("main::!").set(2);  // ENOENT
+            return scalarFalse;
+        }
+        
         File absoluteDir = RuntimeIO.resolveFile(dirName);
 
         if (absoluteDir.exists() && absoluteDir.isDirectory()) {
             System.setProperty("user.dir", absoluteDir.getAbsolutePath());
             return scalarTrue;
         } else {
-            getGlobalVariable("main::!").set("chdir failed: No such directory '" + dirName + "'");
+            // Set errno to ENOENT (No such file or directory)
+            getGlobalVariable("main::!").set(2);  // ENOENT
             return scalarFalse;
         }
     }
