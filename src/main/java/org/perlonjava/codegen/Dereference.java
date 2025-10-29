@@ -243,8 +243,9 @@ public class Dereference {
                  */
                 emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) ${BLOCK}{} ");
                 
-                // Evaluate the block expression to get a RuntimeScalar (might be array/hash ref)
-                sigilNode.operand.accept(scalarVisitor);
+                // Evaluate the $BLOCK expression to get a RuntimeScalar (might be array/hash ref)
+                // We need to evaluate the whole $BLOCK, not just BLOCK
+                sigilNode.accept(scalarVisitor);
                 
                 // Now apply the subscript using hashDerefGet method
                 ListNode nodeRight = ((HashLiteralNode) node.right).asListNode();
