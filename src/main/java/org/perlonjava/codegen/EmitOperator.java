@@ -893,15 +893,7 @@ public class EmitOperator {
                     node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
                 }
             } else {
-                // For most cases, evaluate in SCALAR context to get a reference to the value
-                // Only use LIST context for actual list-producing operations
-                int contextType = RuntimeContextType.SCALAR;
-                if (node.operand instanceof ListNode || 
-                    (node.operand instanceof OperatorNode op && 
-                     (op.operator.equals("@") || op.operator.equals("%")))) {
-                    contextType = RuntimeContextType.LIST;
-                }
-                node.operand.accept(emitterVisitor.with(contextType));
+                node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
                 emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                         "org/perlonjava/runtime/RuntimeBase",
                         "createReference",
