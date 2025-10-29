@@ -4,6 +4,7 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
 import org.perlonjava.astvisitor.EmitterVisitor;
+import org.perlonjava.perlmodule.Strict;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
 
@@ -469,16 +470,32 @@ public class Dereference {
             Node elem = right.elements.getFirst();
             elem.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
 
-            String methodName = switch (arrayOperation) {
-                case "get" -> "arrayDerefGet";
-                case "delete" -> "arrayDerefDelete";
-                case "exists" -> "arrayDerefExists";
-                default ->
-                        throw new PerlCompilerException(node.tokenIndex, "Not implemented: array operation: " + arrayOperation, emitterVisitor.ctx.errorUtil);
-            };
-
-            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
-                    methodName, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+            // Check if strict refs is enabled at compile time
+            if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_REFS)) {
+                // Use strict version (throws error on symbolic references)
+                String methodName = switch (arrayOperation) {
+                    case "get" -> "arrayDerefGet";
+                    case "delete" -> "arrayDerefDelete";
+                    case "exists" -> "arrayDerefExists";
+                    default ->
+                            throw new PerlCompilerException(node.tokenIndex, "Not implemented: array operation: " + arrayOperation, emitterVisitor.ctx.errorUtil);
+                };
+                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
+                        methodName, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+            } else {
+                // Use non-strict version (allows symbolic references)
+                String methodName = switch (arrayOperation) {
+                    case "get" -> "arrayDerefGetNonStrict";
+                    case "delete" -> "arrayDerefDeleteNonStrict";
+                    case "exists" -> "arrayDerefExistsNonStrict";
+                    default ->
+                            throw new PerlCompilerException(node.tokenIndex, "Not implemented: array operation: " + arrayOperation, emitterVisitor.ctx.errorUtil);
+                };
+                // Push the current package name for symbolic reference resolution
+                emitterVisitor.pushCurrentPackage();
+                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
+                        methodName, "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+            }
         } else {
             // Multiple indices: use slice method (only for get operation)
             if (!arrayOperation.equals("get")) {
@@ -489,8 +506,18 @@ public class Dereference {
             ListNode nodeRight = right.asListNode();
             nodeRight.accept(emitterVisitor.with(RuntimeContextType.LIST));
 
-            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
-                    "arrayDerefGetSlice", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
+            // Check if strict refs is enabled at compile time
+            if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_REFS)) {
+                // Use strict version (throws error on symbolic references)
+                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
+                        "arrayDerefGetSlice", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
+            } else {
+                // Use non-strict version (allows symbolic references)
+                // Push the current package name for symbolic reference resolution
+                emitterVisitor.pushCurrentPackage();
+                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
+                        "arrayDerefGetSliceNonStrict", "(Lorg/perlonjava/runtime/RuntimeList;Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeList;", false);
+            }
 
             // Context conversion: list slice in scalar/void contexts
             if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
@@ -526,15 +553,30 @@ public class Dereference {
         emitterVisitor.ctx.logDebug("visit -> (HashLiteralNode) autoquote " + node.right);
         nodeRight.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
 
-        String methodName = switch (hashOperation) {
-            case "get" -> "hashDerefGet";
-            case "delete" -> "hashDerefDelete";
-            case "exists" -> "hashDerefExists";
-            default ->
-                    throw new PerlCompilerException(node.tokenIndex, "Not implemented: hash operation: " + hashOperation, emitterVisitor.ctx.errorUtil);
-        };
-
-        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", methodName, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        // Check if strict refs is enabled at compile time
+        if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_REFS)) {
+            // Use strict version (throws error on symbolic references)
+            String methodName = switch (hashOperation) {
+                case "get" -> "hashDerefGet";
+                case "delete" -> "hashDerefDelete";
+                case "exists" -> "hashDerefExists";
+                default ->
+                        throw new PerlCompilerException(node.tokenIndex, "Not implemented: hash operation: " + hashOperation, emitterVisitor.ctx.errorUtil);
+            };
+            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", methodName, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        } else {
+            // Use non-strict version (allows symbolic references)
+            String methodName = switch (hashOperation) {
+                case "get" -> "hashDerefGetNonStrict";
+                case "delete" -> "hashDerefDeleteNonStrict";
+                case "exists" -> "hashDerefExistsNonStrict";
+                default ->
+                        throw new PerlCompilerException(node.tokenIndex, "Not implemented: hash operation: " + hashOperation, emitterVisitor.ctx.errorUtil);
+            };
+            // Push the current package name for symbolic reference resolution
+            emitterVisitor.pushCurrentPackage();
+            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", methodName, "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        }
         EmitOperator.handleVoidContext(emitterVisitor);
     }
 }
