@@ -449,6 +449,13 @@ sub untaint {
     return -1;
 }
 
+# DESTROY method - called when handle is being destroyed
+# In PerlOnJava, this is called by JVM garbage collector
+sub DESTROY {
+    # Empty DESTROY is fine - the actual cleanup happens in Java
+    # This just needs to exist so FileHandle can import it
+}
+
 1;
 
 __END__
