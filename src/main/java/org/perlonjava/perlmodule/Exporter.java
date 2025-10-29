@@ -174,13 +174,21 @@ public class Exporter extends PerlModuleBase {
 
             if (symbolString.startsWith(":")) {
                 String tagName = symbolString.substring(1);
-                RuntimeScalar tagValue = exportTags.get(tagName);
-                if (tagValue == null || tagValue.type != RuntimeScalarType.ARRAYREFERENCE) {
-                    throw new PerlCompilerException("Invalid or unknown export tag: " + tagName);
-                }
-                RuntimeArray tagSymbols = tagValue.arrayDeref();
-                if (tagSymbols != null) {
-                    tagArray.elements.addAll(tagSymbols.elements);
+                
+                // Handle special :DEFAULT tag - it means "use @EXPORT"
+                if ("DEFAULT".equals(tagName)) {
+                    if (export != null && !export.elements.isEmpty()) {
+                        tagArray.elements.addAll(export.elements);
+                    }
+                } else {
+                    RuntimeScalar tagValue = exportTags.get(tagName);
+                    if (tagValue == null || tagValue.type != RuntimeScalarType.ARRAYREFERENCE) {
+                        throw new PerlCompilerException("Invalid or unknown export tag: " + tagName);
+                    }
+                    RuntimeArray tagSymbols = tagValue.arrayDeref();
+                    if (tagSymbols != null) {
+                        tagArray.elements.addAll(tagSymbols.elements);
+                    }
                 }
             } else {
                 tagArray.elements.add(symbolObj);
