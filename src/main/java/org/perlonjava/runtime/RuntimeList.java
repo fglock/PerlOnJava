@@ -324,13 +324,20 @@ public class RuntimeList extends RuntimeBase {
     }
 
     /**
-     * Throws an exception as creating a reference of a list is not implemented.
+     * Creates a reference from a list.
+     * For single-element lists (e.g., from constant subs), creates a reference to that element.
+     * For empty or multi-element lists, this is an error in scalar context.
      *
-     * @throws PerlCompilerException Always thrown as creating a reference is not implemented.
+     * @return A RuntimeScalar reference to the list element
+     * @throws PerlCompilerException if the list doesn't contain exactly one element
      */
     public RuntimeScalar createReference() {
-        // TODO
-        throw new PerlCompilerException("TODO - create reference of list not implemented");
+        if (elements.size() == 1) {
+            // Single element list - create reference to that element
+            return elements.get(0).scalar().createReference();
+        }
+        // Empty or multi-element list in reference context is an error
+        throw new PerlCompilerException("Can't create reference to list with " + elements.size() + " elements");
     }
 
     /**
