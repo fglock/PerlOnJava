@@ -56,9 +56,10 @@ public class RuntimeTransliterate {
         for (int i = 0; i < input.length(); i++) {
             int codePoint = input.codePointAt(i);
 
-            // Handle surrogate pairs for Unicode
-            if (Character.isHighSurrogate(input.charAt(i)) && i + 1 < input.length()) {
-                i++; // Skip the low surrogate
+            // Handle surrogate pairs for Unicode - only skip if it's a valid supplementary code point
+            // codePointAt() already combines surrogate pairs, so we just need to skip the second char unit
+            if (Character.isSupplementaryCodePoint(codePoint)) {
+                i++; // Skip the low surrogate of a valid surrogate pair
             }
 
             boolean matched = false;
@@ -395,23 +396,35 @@ public class RuntimeTransliterate {
                     if (pos + 2 < input.length() && input.charAt(pos + 2) == '{') {
                         int closePos = input.indexOf('}', pos + 3);
                         if (closePos > pos + 3) {
-                            String content = input.substring(pos + 3, closePos);
-
-                            // Check if it's a Unicode code point \N{U+XXXX}
-                            if (content.startsWith("U+")) {
-                                try {
-                                    int codePoint = Integer.parseInt(content.substring(2), 16);
-                                    result.add(codePoint);
-                                    return closePos - pos + 1;
-                                } catch (NumberFormatException e) {
-                                    // Invalid format
-                                }
+                            String content = input.substring(pos + 3, closePos).trim();
+                            
+                            // Check for empty character name
+                            if (content.isEmpty()) {
+                                throw new RuntimeException("Unknown charname ''");
                             }
 
-                            // For named characters, we'd need a lookup table
-                            // For now, throw error for named sequences
-                            throw new RuntimeException("\\" + "N{" + content +
-                                    "} must not be a named sequence in transliteration operator");
+                            // Try to resolve the Unicode character name
+                            try {
+                                int codePoint = org.perlonjava.regex.UnicodeResolver.getCodePointFromName(content);
+                                result.add(codePoint);
+                                return closePos - pos + 1;
+                            } catch (IllegalArgumentException e) {
+                                // Check if it's a named sequence (multi-character)
+                                // Named sequences are not allowed in tr///
+                                String errorMsg = e.getMessage();
+                                if (errorMsg != null && errorMsg.contains("named sequence")) {
+                                    throw new RuntimeException("\\" + "N{" + content +
+                                            "} must not be a named sequence in transliteration operator");
+                                }
+                                // For any other error (invalid or unknown name), also reject as named sequence
+                                // because ICU4J returns -1 for both cases and we can't distinguish them easily
+                                // Perl 5 gives a specific error for named sequences, but we'll be conservative
+                                throw new RuntimeException("\\" + "N{" + content +
+                                        "} must not be a named sequence in transliteration operator");
+                            }
+                        } else if (closePos == pos + 3) {
+                            // Empty \N{} - this is the case where closePos is immediately after {
+                            throw new RuntimeException("Unknown charname ''");
                         }
                     }
                     result.add((int) 'N');
