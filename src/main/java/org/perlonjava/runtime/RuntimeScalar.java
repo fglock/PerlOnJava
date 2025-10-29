@@ -730,9 +730,19 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return this.hashDeref().delete(index);
     }
 
+    // Method to implement `delete $v->{key}`, when "no strict refs" is in effect
+    public RuntimeScalar hashDerefDeleteNonStrict(RuntimeScalar index, String packageName) {
+        return this.hashDerefNonStrict(packageName).delete(index);
+    }
+
     // Method to implement `exists $v->{key}`
     public RuntimeScalar hashDerefExists(RuntimeScalar index) {
         return this.hashDeref().exists(index);
+    }
+
+    // Method to implement `exists $v->{key}`, when "no strict refs" is in effect
+    public RuntimeScalar hashDerefExistsNonStrict(RuntimeScalar index, String packageName) {
+        return this.hashDerefNonStrict(packageName).exists(index);
     }
 
     // Method to implement `$v->[10]`
@@ -740,9 +750,19 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return this.arrayDeref().get(index);
     }
 
+    // Method to implement `$v->[10]`, when "no strict refs" is in effect
+    public RuntimeScalar arrayDerefGetNonStrict(RuntimeScalar index, String packageName) {
+        return this.arrayDerefNonStrict(packageName).get(index);
+    }
+
     // Method to implement `$v->[10, 20]` (slice)
     public RuntimeList arrayDerefGetSlice(RuntimeList indices) {
         return this.arrayDeref().getSlice(indices);
+    }
+
+    // Method to implement `$v->[10, 20]` (slice), when "no strict refs" is in effect
+    public RuntimeList arrayDerefGetSliceNonStrict(RuntimeList indices, String packageName) {
+        return this.arrayDerefNonStrict(packageName).getSlice(indices);
     }
 
     // Method to implement `delete $v->[10]`
@@ -750,9 +770,19 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return this.arrayDeref().delete(index);
     }
 
+    // Method to implement `delete $v->[10]`, when "no strict refs" is in effect
+    public RuntimeScalar arrayDerefDeleteNonStrict(RuntimeScalar index, String packageName) {
+        return this.arrayDerefNonStrict(packageName).delete(index);
+    }
+
     // Method to implement `exists $v->[10]`
     public RuntimeScalar arrayDerefExists(RuntimeScalar index) {
         return this.arrayDeref().exists(index);
+    }
+
+    // Method to implement `exists $v->[10]`, when "no strict refs" is in effect
+    public RuntimeScalar arrayDerefExistsNonStrict(RuntimeScalar index, String packageName) {
+        return this.arrayDerefNonStrict(packageName).exists(index);
     }
 
     // Method to implement `@$v`
