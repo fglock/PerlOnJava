@@ -357,14 +357,7 @@ public class FilterUtilCall extends PerlModuleBase {
         String filteredRemaining = applyFilters(remainingPart);
         
         // Return the BEGIN part + filtered remaining part
-        String result = beginPart + filteredRemaining;
-        System.err.println("DEBUG preprocessWithBeginFilters:");
-        System.err.println("  Original: " + sourceCode);
-        System.err.println("  BEGIN part: " + beginPart);
-        System.err.println("  Remaining part: " + remainingPart);
-        System.err.println("  Filtered remaining: " + filteredRemaining);
-        System.err.println("  Result: " + result);
-        return result;
+        return beginPart + filteredRemaining;
     }
 
     /**
