@@ -28,14 +28,7 @@ public class ReferenceOperators {
             if (str.isEmpty()) {
                 str = "main";
             }
-            int blessId = NameNormalizer.getBlessId(str);
-            
-            // For GLOBREFERENCE containing RuntimeIO, store blessId on RuntimeIO
-            if (runtimeScalar.type == RuntimeScalarType.GLOBREFERENCE && runtimeScalar.value instanceof RuntimeIO rio) {
-                rio.blessId = blessId;
-            } else {
-                ((RuntimeBase) runtimeScalar.value).setBlessId(blessId);
-            }
+            ((RuntimeBase) runtimeScalar.value).setBlessId(NameNormalizer.getBlessId(str));
         } else {
             throw new PerlCompilerException("Can't bless non-reference value");
         }
@@ -93,12 +86,7 @@ public class ReferenceOperators {
                 str = blessId == 0 ? "HASH" : NameNormalizer.getBlessStr(blessId);
                 break;
             case GLOBREFERENCE:
-                // For GLOBREFERENCE containing RuntimeIO, get blessId from RuntimeIO
-                if (runtimeScalar.value instanceof RuntimeIO rio) {
-                    blessId = rio.blessId;
-                } else {
-                    blessId = ((RuntimeBase) runtimeScalar.value).blessId;
-                }
+                blessId = ((RuntimeBase) runtimeScalar.value).blessId;
                 str = blessId == 0 ? "GLOB" : NameNormalizer.getBlessStr(blessId);
                 break;
             default:
