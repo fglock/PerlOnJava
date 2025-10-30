@@ -126,7 +126,8 @@ public class Overload {
         }
 
         // Default number conversion for non-blessed or non-overloaded objects
-        RuntimeScalar defaultResult = new RuntimeScalar(((RuntimeBase) runtimeScalar.value).getDoubleRef());
+        // Use RuntimeScalarReference interface which both RuntimeBase and RuntimeIO implement
+        RuntimeScalar defaultResult = new RuntimeScalar(((RuntimeScalarReference) runtimeScalar.value).getDoubleRef());
         
         if (TRACE_OVERLOAD) {
             System.err.println("  Returning DEFAULT hash code: " + defaultResult);

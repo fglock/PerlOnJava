@@ -58,13 +58,7 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
  * @see DirectoryIO
  * @see RuntimeScalarReference
  */
-public class RuntimeIO implements RuntimeScalarReference {
-
-    /**
-     * The blessId for this IO object, allowing it to be blessed into a package.
-     * Default is 0 (unblessed). Non-zero values indicate the object has been blessed.
-     */
-    public int blessId = 0;
+public class RuntimeIO extends RuntimeScalar {
 
     /**
      * Mapping of Perl file modes to their corresponding Java NIO StandardOpenOption sets.

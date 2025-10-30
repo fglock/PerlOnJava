@@ -714,7 +714,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 if (value == null) {
                     yield "GLOB(0x" + scalarUndef.hashCode() + ")";
                 }
-                yield ((RuntimeGlob) value).toStringRef();
+                yield ((RuntimeBase) value).toStringRef();
             }
             case REFERENCE -> {
                 // Determine the proper type name for the reference

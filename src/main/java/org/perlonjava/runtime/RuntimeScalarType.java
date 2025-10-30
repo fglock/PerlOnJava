@@ -29,14 +29,7 @@ public class RuntimeScalarType {
 
     // Get blessing ID as an integer
     public static int blessedId(RuntimeScalar runtimeScalar) {
-        if ((runtimeScalar.type & REFERENCE_BIT) != 0) {
-            // For GLOBREFERENCE containing RuntimeIO, get blessId from RuntimeIO
-            if (runtimeScalar.type == GLOBREFERENCE && runtimeScalar.value instanceof RuntimeIO rio) {
-                return rio.blessId;
-            }
-            return ((RuntimeBase) runtimeScalar.value).blessId;
-        }
-        return 0;
+        return (runtimeScalar.type & REFERENCE_BIT) != 0 ? ((RuntimeBase) runtimeScalar.value).blessId : 0;
     }
 
     public static boolean isReference(RuntimeScalar runtimeScalar) {
