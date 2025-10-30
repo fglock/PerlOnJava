@@ -123,4 +123,17 @@ sub tell {
     tell($_[0]);
 }
 
+sub getpos {
+    @_ == 1 or croak 'usage: $io->getpos()';
+    my $fh = $_[0];
+    my $pos = tell($fh);
+    return undef if $pos < 0;
+    return $pos;
+}
+
+sub setpos {
+    @_ == 2 or croak 'usage: $io->setpos(POS)';
+    seek($_[0], $_[1], 0);
+}
+
 1;

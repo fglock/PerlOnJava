@@ -309,6 +309,21 @@ sub getlines {
     <$fh>;
 }
 
+sub gets {
+    my $fh = shift;
+    scalar <$fh>;
+}
+
+sub _open_mode_string {
+    my ($mode) = @_;
+    $mode =~ /^\+?(<|>>?)$/
+      or $mode =~ s/^r(\+?)$/$1</
+      or $mode =~ s/^w(\+?)$/$1>/
+      or $mode =~ s/^a(\+?)$/$1>>/
+      or croak "IO::Handle: bad open mode: $mode";
+    $mode;
+}
+
 sub write {
     my $fh = shift;
     my $buf = shift;

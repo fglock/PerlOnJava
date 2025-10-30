@@ -59,7 +59,8 @@ public class CoreOperatorResolver {
                  "glob", "gmtime", "hex", "int", "lc", "lcfirst", "length", "localtime", "log",
                  "oct", "ord", "pop", "pos", "prototype", "quotemeta", "rand", "ref", "reset",
                  "rmdir", "shift", "sin", "sleep", "sqrt", "srand", "study", "uc",
-                 "ucfirst", "undef" -> OperatorParser.parseOperatorWithOneOptionalArgument(parser, token);
+                 "ucfirst" -> OperatorParser.parseOperatorWithOneOptionalArgument(parser, token);
+            case "undef" -> OperatorParser.parseUndef(parser, token, currentIndex);
             case "select" -> OperatorParser.parseSelect(parser, token, currentIndex);
             case "stat", "lstat" -> OperatorParser.parseStat(parser, token, currentIndex);
             case "readpipe" -> OperatorParser.parseReadpipe(parser);
