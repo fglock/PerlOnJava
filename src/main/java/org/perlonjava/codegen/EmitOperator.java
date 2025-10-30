@@ -617,6 +617,16 @@ public class EmitOperator {
                     "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeBase;",
                     false);
             
+            // Cast to the appropriate type for the bytecode verifier
+            if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+                // In scalar context, stat returns RuntimeScalar
+                emitterVisitor.ctx.mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeScalar");
+            } else if (emitterVisitor.ctx.contextType == RuntimeContextType.LIST) {
+                // In list context, stat returns RuntimeList
+                emitterVisitor.ctx.mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeList");
+            }
+            // In RUNTIME or VOID context, leave as RuntimeBase (no cast needed)
+            
             // Handle void context
             if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
                 handleVoidContext(emitterVisitor);
