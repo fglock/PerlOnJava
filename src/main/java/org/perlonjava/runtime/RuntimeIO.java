@@ -58,7 +58,7 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
  * @see DirectoryIO
  * @see RuntimeScalarReference
  */
-public class RuntimeIO implements RuntimeScalarReference {
+public class RuntimeIO extends RuntimeScalar {
 
     /**
      * Mapping of Perl file modes to their corresponding Java NIO StandardOpenOption sets.
