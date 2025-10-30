@@ -218,6 +218,8 @@ public class ModuleOperators {
                         }
                     }
                     // Continue to execution phase with the (possibly filtered) code
+                    // Enable BEGIN filter preprocessing since the filtered code might contain BEGIN blocks
+                    shouldApplyFilters = true;
                 }
             }
         }
