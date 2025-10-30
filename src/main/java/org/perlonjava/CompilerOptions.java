@@ -37,6 +37,7 @@ public class CompilerOptions implements Cloneable {
     public boolean tokenizeOnly = false;
     public boolean parseOnly = false;
     public boolean compileOnly = false;
+    public boolean applySourceFilters = false; // Enable BEGIN filter preprocessing
     public boolean processOnly = false; // For -n
     public boolean processAndPrint = false; // For -p
     public boolean inPlaceEdit = false; // New field for in-place editing

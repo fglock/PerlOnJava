@@ -110,6 +110,12 @@ public class PerlLanguageProvider {
         ctx.logDebug("parse code: " + compilerOptions.code);
         ctx.logDebug("  call context " + ctx.contextType);
 
+        // Apply any BEGIN-block filters before tokenization if requested
+        // This is a workaround for the limitation that our architecture tokenizes all source upfront
+        if (compilerOptions.applySourceFilters) {
+            compilerOptions.code = org.perlonjava.perlmodule.FilterUtilCall.preprocessWithBeginFilters(compilerOptions.code);
+        }
+
         // Create the LexerToken list
         Lexer lexer = new Lexer(compilerOptions.code);
         List<LexerToken> tokens = lexer.tokenize(); // Tokenize the Perl code

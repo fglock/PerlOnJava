@@ -124,6 +124,9 @@ public class ModuleOperators {
         
         // Variable for storing @INC hook reference
         RuntimeScalar incHookRef = null;
+        
+        // Flag to indicate if source filters should be applied
+        boolean shouldApplyFilters = false;
 
         // ===== STEP 1: Handle ARRAY reference =====
         // Array format: [coderef|filehandle, state...]
@@ -297,6 +300,9 @@ public class ModuleOperators {
         else if (runtimeScalar.type == RuntimeScalarType.GLOB || runtimeScalar.type == RuntimeScalarType.GLOBREFERENCE) {
             // Read entire contents from filehandle
             code = Readline.readline(runtimeScalar, RuntimeContextType.LIST).toString();
+            // Enable source filter preprocessing for filehandle sources
+            // This allows BEGIN blocks to install filters that transform the remaining source
+            shouldApplyFilters = true;
         } 
         // ===== STEP 5: Handle filename (standard file loading) =====
         // Only process as filename if code hasn't been set yet
@@ -482,6 +488,7 @@ public class ModuleOperators {
         CompilerOptions parsedArgs = new CompilerOptions();
         parsedArgs.fileName = actualFileName;
         parsedArgs.incHook = incHookRef;
+        parsedArgs.applySourceFilters = shouldApplyFilters;  // Enable source filter preprocessing if needed
         if (code == null) {
             try {
                 code = FileUtils.readFileWithEncodingDetection(Paths.get(parsedArgs.fileName), parsedArgs);
