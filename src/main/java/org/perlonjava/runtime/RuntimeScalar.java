@@ -698,6 +698,42 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 yield ((RuntimeGlob) value).toStringRef();
             }
             case VSTRING -> "VSTRING(0x" + value.hashCode() + ")";
+            case ARRAYREFERENCE -> {
+                if (value == null) {
+                    yield "ARRAY(0x" + scalarUndef.hashCode() + ")";
+                }
+                yield ((RuntimeArray) value).toStringRef();
+            }
+            case HASHREFERENCE -> {
+                if (value == null) {
+                    yield "HASH(0x" + scalarUndef.hashCode() + ")";
+                }
+                yield ((RuntimeHash) value).toStringRef();
+            }
+            case GLOBREFERENCE -> {
+                if (value == null) {
+                    yield "GLOB(0x" + scalarUndef.hashCode() + ")";
+                }
+                yield ((RuntimeGlob) value).toStringRef();
+            }
+            case REFERENCE -> {
+                // Determine the proper type name for the reference
+                // References to references show as "REF", references to plain scalars show as "SCALAR"
+                String typeName = "SCALAR";
+                int valueBlessId = 0;
+                if (value instanceof RuntimeScalar scalar) {
+                    valueBlessId = ((RuntimeBase) value).blessId;
+                    typeName = switch (scalar.type) {
+                        case VSTRING -> "VSTRING";
+                        case REGEX, ARRAYREFERENCE, HASHREFERENCE, CODE, GLOBREFERENCE, REFERENCE -> "REF";
+                        case GLOB -> "GLOB";
+                        default -> "SCALAR";
+                    };
+                }
+                String refStr = typeName + "(0x" + Integer.toHexString(value.hashCode()) + ")";
+                // For REFERENCE type, the blessId is on the value, not on the reference itself
+                yield (valueBlessId == 0 ? refStr : NameNormalizer.getBlessStr(valueBlessId) + "=" + refStr);
+            }
             default -> "SCALAR(0x" + Integer.toHexString(value.hashCode()) + ")";
         };
         return (blessId == 0 ? ref : NameNormalizer.getBlessStr(blessId) + "=" + ref);
