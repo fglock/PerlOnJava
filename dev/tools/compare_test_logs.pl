@@ -92,8 +92,14 @@ sub parse_log {
     open my $fh, '<', $file or die "Cannot open $file: $!\n";
     while (<$fh>) {
         # Match lines like: [123/619] t/op/hash.t ... ✓ 26937/26942 ok (1.23s)
+        # or: [123/619] perl5_t/t/op/hash.t ... ✓ 26937/26942 ok (1.23s)
         if (/\]\s+(\S+\.t)\s+.*?(\d+)\/(\d+)\s+ok/) {
             my ($test, $passed, $total) = ($1, $2, $3);
+            # Normalize path: strip perl5_t/ prefix and leading t/ for comparison
+            # Old logs: uni/variables.t
+            # New logs: perl5_t/t/uni/variables.t -> t/uni/variables.t -> uni/variables.t
+            $test =~ s{^perl5_t/}{};
+            $test =~ s{^t/}{};
             $results{$test} = {
                 passed => $passed,
                 total => $total,
