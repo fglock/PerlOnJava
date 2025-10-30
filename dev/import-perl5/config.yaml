@@ -20,18 +20,30 @@ imports:
   - source: perl5/lib/Benchmark.t
     target: perl5_t/Benchmark/Benchmark.t
 
-  # Bulk import all test files from perl5/t/ to t/
+  # Perl 5 test infrastructure files
+  - source: perl5/TestInit.pm
+    target: perl5_t/TestInit.pm
+
+  - source: perl5/MANIFEST
+    target: perl5_t/MANIFEST
+
+  - source: perl5/Porting
+    target: perl5_t/Porting
+    type: directory
+
+  # Bulk import all core test files from perl5/t/ to perl5_t/t/
+  # This creates a complete Perl 5 test environment under perl5_t/
   - source: perl5/t
-    target: t
+    target: perl5_t/t
     type: directory
 
   # Specific patched files (applied after directory import above)
   - source: perl5/t/test.pl
-    target: t/test.pl
+    target: perl5_t/t/test.pl
     patch: test.pl.patch
 
   - source: perl5/t/re/pat.t
-    target: t/re/pat.t
+    target: perl5_t/t/re/pat.t
     patch: pat.t.patch
 
   # Pod modules from CPAN distributions
