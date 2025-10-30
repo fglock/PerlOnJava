@@ -1090,6 +1090,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public RuntimeScalar undefine() {
+        // Special handling for CODE type - don't set the ref to undef,
+        // just clear the code from the global symbol table
+        if (type == RuntimeScalarType.CODE && value instanceof RuntimeCode) {
+            // Clear the code value but keep the type as CODE
+            this.value = new RuntimeCode(null, null);
+            // Invalidate the method resolution cache
+            org.perlonjava.mro.InheritanceResolver.invalidateCache();
+            return this;
+        }
+        // For all other types, set to undef
         this.type = UNDEF;
         this.value = null;
         return this;
