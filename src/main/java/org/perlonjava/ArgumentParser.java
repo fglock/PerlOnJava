@@ -562,7 +562,7 @@ public class ArgumentParser {
         System.out.println();
         System.out.println("This is perl 5, version " + version + " built for JVM");
         System.out.println();
-        System.out.println("Copyright 1987-2024, Larry Wall");
+        System.out.println("Copyright 1987-2025, Larry Wall");
         System.out.println();
         System.out.println("Perl may be copied only under the terms of either the Artistic License or the");
         System.out.println("GNU General Public License, which may be found in the Perl 5 source kit.");

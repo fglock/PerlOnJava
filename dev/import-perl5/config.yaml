@@ -27,6 +27,21 @@ imports:
   - source: perl5/MANIFEST
     target: perl5_t/MANIFEST
 
+  - source: perl5/README
+    target: perl5_t/README
+
+  - source: perl5/Artistic
+    target: perl5_t/Artistic
+
+  - source: perl5/Copying
+    target: perl5_t/Copying
+
+  - source: perl5/AUTHORS
+    target: perl5_t/AUTHORS
+
+  - source: perl5/Changes
+    target: perl5_t/Changes
+
   - source: perl5/Porting
     target: perl5_t/Porting
     type: directory
