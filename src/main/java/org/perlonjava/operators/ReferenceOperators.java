@@ -30,14 +30,11 @@ public class ReferenceOperators {
             }
             int blessId = NameNormalizer.getBlessId(str);
             
-            // Handle RuntimeIO (GLOBREFERENCE) specially since it doesn't extend RuntimeBase
-            if (runtimeScalar.type == RuntimeScalarType.GLOBREFERENCE && runtimeScalar.value instanceof RuntimeIO) {
-                // Store blessId on the RuntimeScalar itself since RuntimeIO doesn't have one
-                runtimeScalar.blessId = blessId;
-            } else if (runtimeScalar.value instanceof RuntimeBase rb) {
-                rb.setBlessId(blessId);
+            // For GLOBREFERENCE containing RuntimeIO, store blessId on RuntimeIO
+            if (runtimeScalar.type == RuntimeScalarType.GLOBREFERENCE && runtimeScalar.value instanceof RuntimeIO rio) {
+                rio.blessId = blessId;
             } else {
-                throw new PerlCompilerException("Can't bless this type of reference");
+                ((RuntimeBase) runtimeScalar.value).setBlessId(blessId);
             }
         } else {
             throw new PerlCompilerException("Can't bless non-reference value");
@@ -96,9 +93,9 @@ public class ReferenceOperators {
                 str = blessId == 0 ? "HASH" : NameNormalizer.getBlessStr(blessId);
                 break;
             case GLOBREFERENCE:
-                // Handle RuntimeIO specially - blessId is on the wrapper RuntimeScalar
-                if (runtimeScalar.value instanceof RuntimeIO) {
-                    blessId = runtimeScalar.blessId;
+                // For GLOBREFERENCE containing RuntimeIO, get blessId from RuntimeIO
+                if (runtimeScalar.value instanceof RuntimeIO rio) {
+                    blessId = rio.blessId;
                 } else {
                     blessId = ((RuntimeBase) runtimeScalar.value).blessId;
                 }
