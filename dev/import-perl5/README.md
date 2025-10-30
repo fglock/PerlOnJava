@@ -187,13 +187,17 @@ dev/import-perl5/
 └── README.md           # This file
 
 Project root after sync:
-├── t/                  # Perl 5 core test suite (NOT IN GIT)
-├── perl5_t/            # Module tests from perl5/lib/*.t (NOT IN GIT)
+├── perl5_t/            # Complete Perl 5 test environment (NOT IN GIT)
+│   ├── t/              # Core test suite from perl5/t/
+│   ├── TestInit.pm     # Test infrastructure from perl5/
+│   ├── MANIFEST        # Manifest file from perl5/
+│   ├── Porting/        # Porting tools and tests from perl5/
+│   └── Benchmark/      # Module tests from perl5/lib/*.t
 ├── src/main/perl/lib/  # Imported Perl modules (IN GIT)
 └── src/test/resources/unit/  # PerlOnJava unit tests (IN GIT)
 ```
 
-**Important**: Both `t/` and `perl5_t/` directories are excluded from git and must be synced using `sync.pl` before running comprehensive tests.
+**Important**: The `perl5_t/` directory is excluded from git and must be synced using `sync.pl` before running comprehensive tests. This directory contains a complete Perl 5 test environment with all necessary infrastructure files.
 
 ## Examples
 
