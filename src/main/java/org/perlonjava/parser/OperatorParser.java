@@ -620,6 +620,22 @@ public class OperatorParser {
         return new OperatorNode(token.text, operand, currentIndex);
     }
 
+    static OperatorNode parseUndef(Parser parser, LexerToken token, int currentIndex) {
+        ListNode operand;
+        // Handle 'undef' operator with special parsing context
+        // Similar to 'defined', we need to prevent &subr from being auto-called
+        boolean parsingTakeReference = parser.parsingTakeReference;
+        parser.parsingTakeReference = true;    // don't call `&subr` while parsing "Take reference"
+        operand = ListParser.parseZeroOrOneList(parser, 0);
+        parser.parsingTakeReference = parsingTakeReference;
+        if (operand.elements.isEmpty()) {
+            // `undef` without arguments returns undef
+            return new OperatorNode(token.text, null, currentIndex);
+        }
+
+        return new OperatorNode(token.text, operand, currentIndex);
+    }
+
     static Node parseSpecialQuoted(Parser parser, LexerToken token, int startIndex) {
         // Handle special-quoted domain-specific arguments
         String operator = token.text;
