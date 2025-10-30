@@ -30,23 +30,29 @@ test-unit:
 	@echo "Running fast unit tests..."
 	perl dev/tools/perl_test_runner.pl --jobs 8 --timeout 10 src/test/resources/unit
 
-# Perl 5 core test suite (t/ directory)
-# Run 'perl dev/import-perl5/sync.pl' first to populate t/
+# Perl 5 core test suite (perl5_t/t/ directory)
+# Run 'perl dev/import-perl5/sync.pl' first to populate perl5_t/
 test-perl5:
 	@echo "Running Perl 5 core test suite..."
-	@if [ -d t ]; then \
-		perl dev/tools/perl_test_runner.pl --jobs 8 --timeout 60 --output test_results.json t; \
+	@if [ -d perl5_t/t ]; then \
+		perl dev/tools/perl_test_runner.pl --jobs 8 --timeout 60 --output test_results.json perl5_t/t; \
 	else \
-		echo "Error: t/ directory not found. Run 'perl dev/import-perl5/sync.pl' first."; \
+		echo "Error: perl5_t/t/ directory not found. Run 'perl dev/import-perl5/sync.pl' first."; \
 		exit 1; \
 	fi
 
-# Perl 5 module tests (perl5_t/ directory)
+# Perl 5 module tests (auto-discovers all subdirectories in perl5_t/ except t/)
 # Run 'perl dev/import-perl5/sync.pl' first to populate perl5_t/
 test-modules:
 	@echo "Running Perl 5 module tests..."
 	@if [ -d perl5_t ]; then \
-		perl dev/tools/perl_test_runner.pl --jobs 8 --timeout 60 --output test_modules_results.json perl5_t; \
+		MODULE_DIRS=$$(find perl5_t -maxdepth 1 -type d ! -name perl5_t ! -name t -name '[A-Z]*' 2>/dev/null | sort); \
+		if [ -n "$$MODULE_DIRS" ]; then \
+			echo "Found module test directories: $$MODULE_DIRS"; \
+			perl dev/tools/perl_test_runner.pl --jobs 8 --timeout 60 --output test_modules_results.json $$MODULE_DIRS; \
+		else \
+			echo "Warning: No module test directories found in perl5_t/. Run 'perl dev/import-perl5/sync.pl' first."; \
+		fi \
 	else \
 		echo "Error: perl5_t/ directory not found. Run 'perl dev/import-perl5/sync.pl' first."; \
 		exit 1; \
