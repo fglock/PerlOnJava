@@ -32,7 +32,11 @@ public class EmitOperatorFileTest {
                     fileOperand = currentNode;
                     break;
                 }
+            } else if (opNode.operand instanceof OperatorNode) {
+                // Continue traversing if the operand is another filetest operator
+                currentNode = opNode.operand;
             } else {
+                // Found the file operand
                 fileOperand = opNode.operand;
                 break;
             }
@@ -52,7 +56,7 @@ public class EmitOperatorFileTest {
                 emitterVisitor.ctx.mv.visitInsn(Opcodes.AASTORE);
             }
 
-            if (fileOperand instanceof IdentifierNode && ((IdentifierNode) fileOperand).name.equals("_")) {
+            if (fileOperand == null || (fileOperand instanceof IdentifierNode && ((IdentifierNode) fileOperand).name.equals("_"))) {
                 emitterVisitor.ctx.mv.visitMethodInsn(
                         Opcodes.INVOKESTATIC,
                         "org/perlonjava/operators/FileTestOperator",

@@ -1,6 +1,8 @@
 package org.perlonjava.operators;
 
 import org.perlonjava.io.ClosedIOHandle;
+import org.perlonjava.runtime.RuntimeBase;
+import org.perlonjava.runtime.RuntimeContextType;
 import org.perlonjava.runtime.RuntimeIO;
 import org.perlonjava.runtime.RuntimeList;
 import org.perlonjava.runtime.RuntimeScalar;
@@ -20,6 +22,7 @@ import static org.perlonjava.operators.FileTestOperator.lastFileHandle;
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeIO.resolvePath;
 import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
 
@@ -64,6 +67,36 @@ public class Stat {
 
     public static RuntimeList lstatLastHandle() {
         return lstat(lastFileHandle);
+    }
+    
+    /**
+     * stat with context awareness
+     * @param arg the file or filehandle to stat
+     * @param ctx the calling context (SCALAR, LIST, VOID, or RUNTIME)
+     * @return RuntimeScalar in scalar context, RuntimeList otherwise
+     */
+    public static RuntimeBase stat(RuntimeScalar arg, int ctx) {
+        RuntimeList result = stat(arg);
+        if (ctx == RuntimeContextType.SCALAR) {
+            // stat in scalar context: empty list -> "", non-empty list -> 1
+            return result.isEmpty() ? new RuntimeScalar("") : scalarTrue;
+        }
+        return result;
+    }
+    
+    /**
+     * lstat with context awareness
+     * @param arg the file or filehandle to lstat
+     * @param ctx the calling context (SCALAR, LIST, VOID, or RUNTIME)
+     * @return RuntimeScalar in scalar context, RuntimeList otherwise
+     */
+    public static RuntimeBase lstat(RuntimeScalar arg, int ctx) {
+        RuntimeList result = lstat(arg);
+        if (ctx == RuntimeContextType.SCALAR) {
+            // lstat in scalar context: empty list -> "", non-empty list -> 1
+            return result.isEmpty() ? new RuntimeScalar("") : scalarTrue;
+        }
+        return result;
     }
 
     public static RuntimeList stat(RuntimeScalar arg) {

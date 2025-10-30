@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
 /**
@@ -321,6 +322,19 @@ public class RuntimeList extends RuntimeBase {
         }
         // XXX expand the last element
         return elements.getLast().scalar();
+    }
+
+    /**
+     * Special scalar conversion for stat/lstat operators.
+     * In Perl, stat in scalar context returns:
+     * - "" (empty string) if stat fails (empty list)
+     * - 1 (true) if stat succeeds (non-empty list)
+     */
+    public RuntimeScalar statScalar() {
+        if (isEmpty()) {
+            return new RuntimeScalar(""); // Empty string, not undef
+        }
+        return scalarTrue; // Return 1 for success
     }
 
     /**
