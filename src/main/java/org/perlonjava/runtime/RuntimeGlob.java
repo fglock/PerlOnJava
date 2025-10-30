@@ -209,7 +209,20 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 }
                 yield new RuntimeScalar(); // Return undef if code doesn't exist
             }
-            case "IO" -> IO;
+            case "IO" -> {
+                // In Perl, accessing the IO slot returns a blessed reference to the IO object
+                // Change the type from GLOB to GLOBREFERENCE so it can be blessed
+                if (IO.type == RuntimeScalarType.GLOB && IO.value instanceof RuntimeIO) {
+                    RuntimeScalar ioRef = new RuntimeScalar();
+                    ioRef.type = RuntimeScalarType.GLOBREFERENCE;
+                    ioRef.value = IO.value;
+                    // Note: blessId is stored on the RuntimeScalar (IO), not on the RuntimeIO
+                    // Preserve any existing blessing from the wrapper scalar
+                    ioRef.blessId = IO.blessId;
+                    yield ioRef;
+                }
+                yield IO;
+            }
             case "SCALAR" -> GlobalVariable.getGlobalVariable(this.globName);
             case "ARRAY" -> {
                 // Only return reference if array exists (has elements or was explicitly created)
