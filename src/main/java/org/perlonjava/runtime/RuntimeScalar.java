@@ -853,6 +853,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 RuntimeGlob glob = (RuntimeGlob) value;
                 yield GlobalVariable.getGlobalArray(glob.globName);
             }
+            case GLOBREFERENCE -> {
+                // GLOBREFERENCE (like *STDOUT{IO}) is not an array reference
+                throw new PerlCompilerException("Not an ARRAY reference");
+            }
             case STRING, BYTE_STRING ->
                     throw new PerlCompilerException("Can't use string (\"" + this + "\") as an ARRAY ref while \"strict refs\" in use");
             case TIED_SCALAR -> tiedFetch().arrayDeref();
@@ -918,6 +922,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 RuntimeGlob glob = (RuntimeGlob) value;
                 yield GlobalVariable.getGlobalHash(glob.globName);
             }
+            case GLOBREFERENCE -> {
+                // GLOBREFERENCE (like *STDOUT{IO}) is not a hash reference
+                throw new PerlCompilerException("Not a HASH reference");
+            }
             case STRING, BYTE_STRING ->
                 // Strict refs violation: attempting to use a string as a hash ref
                     throw new PerlCompilerException("Can't use string (\"" + this + "\") as a HASH ref while \"strict refs\" in use");
@@ -951,7 +959,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case STRING, BYTE_STRING ->
                     throw new PerlCompilerException("Can't use string (\"" + this + "\") as a SCALAR ref while \"strict refs\" in use");
             case TIED_SCALAR -> tiedFetch().scalarDeref();
-            default -> throw new PerlCompilerException("Variable does not contain a scalar reference");
+            case GLOBREFERENCE -> {
+                // GLOBREFERENCE (like *STDOUT{IO}) is not a scalar reference
+                throw new PerlCompilerException("Not a SCALAR reference");
+            }
+            default -> throw new PerlCompilerException("Not a SCALAR reference");
         };
     }
 
