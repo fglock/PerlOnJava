@@ -86,7 +86,8 @@ public class ReferenceOperators {
                 str = blessId == 0 ? "HASH" : NameNormalizer.getBlessStr(blessId);
                 break;
             case GLOBREFERENCE:
-                str = "GLOB";
+                blessId = ((RuntimeBase) runtimeScalar.value).blessId;
+                str = blessId == 0 ? "GLOB" : NameNormalizer.getBlessStr(blessId);
                 break;
             default:
                 return scalarEmptyString;

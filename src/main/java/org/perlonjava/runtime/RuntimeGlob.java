@@ -275,7 +275,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * @return A string representation of the typeglob reference.
      */
     public String toStringRef() {
-        String ref = "GLOB(0x" + this.hashCode() + ")";
+        String ref = "GLOB(0x" + Integer.toHexString(this.hashCode()) + ")";
         return (blessId == 0
                 ? ref
                 : NameNormalizer.getBlessStr(blessId) + "=" + ref);
