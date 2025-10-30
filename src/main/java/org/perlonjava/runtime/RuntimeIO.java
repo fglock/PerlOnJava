@@ -148,6 +148,13 @@ public class RuntimeIO implements RuntimeScalarReference {
     public DirectoryIO directoryIO;
 
     /**
+     * The name of the glob that owns this IO handle (e.g., "main::STDOUT").
+     * Used for stringification when the filehandle is used in string context.
+     * Null if this handle is not associated with a named glob.
+     */
+    public String globName;
+
+    /**
      * Flag indicating if this handle has unflushed output.
      * Used to determine when automatic flushing is needed.
      */
@@ -757,11 +764,14 @@ public class RuntimeIO implements RuntimeScalarReference {
 
     /**
      * Returns a string representation of this I/O handle.
-     * Format: GLOB(0xHASHCODE)
+     * Format: globName if known (e.g., "main::STDOUT"), otherwise GLOB(0xHASHCODE)
      *
      * @return string representation
      */
     public String toString() {
+        if (globName != null) {
+            return globName;
+        }
         return "GLOB(0x" + this.hashCode() + ")";
     }
 

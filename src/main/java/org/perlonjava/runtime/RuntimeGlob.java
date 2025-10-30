@@ -236,10 +236,16 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
 
     public RuntimeGlob setIO(RuntimeScalar io) {
         this.IO = io;
+        // If the IO scalar contains a RuntimeIO, set its glob name
+        if (io.value instanceof RuntimeIO runtimeIO) {
+            runtimeIO.globName = this.globName;
+        }
         return this;
     }
 
     public RuntimeGlob setIO(RuntimeIO io) {
+        // Set the glob name in the RuntimeIO for proper stringification
+        io.globName = this.globName;
         this.IO = new RuntimeScalar(io);
         return this;
     }
