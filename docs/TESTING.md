@@ -303,14 +303,17 @@ To import Perl test files and verify their behavior under PerlOnJava:
    perl dev/import-perl5/sync.pl
    ```
 
-This will copy all files from `perl5/t/` to `t/` and apply any necessary patches for PerlOnJava compatibility.
+This will copy all files from `perl5/` to `perl5_t/`, creating a complete Perl 5 test environment including:
+- Core tests (`perl5_t/t/`)
+- Test infrastructure (`TestInit.pm`, `MANIFEST`)
+- Supporting files (`Porting/` directory)
 
 ### Running Imported Tests
 
 To run the imported Perl5 tests:
 
 ```bash
-perl dev/tools/perl_test_runner.pl --output out.json t
+perl dev/tools/perl_test_runner.pl --output out.json perl5_t/t
 ```
 
 See `dev/import-perl5/README.md` for more details on:

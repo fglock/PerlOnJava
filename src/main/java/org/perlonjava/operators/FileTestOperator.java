@@ -155,12 +155,11 @@ public class FileTestOperator {
                     return fileTest(operator, globVar);
                 }
             } catch (Exception e) {
-                // Ignore, treat as non-existent filehandle
+                // Ignore, treat as filename
             }
 
-            // It looks like a filehandle but isn't one, return EBADF and appropriate result
-            getGlobalVariable("main::!").set(9);
-            return operator.equals("-l") ? scalarFalse : scalarUndef;
+            // It looks like a filehandle but isn't one - fall through to treat as filename
+            // Don't return error here, as it could be a legitimate uppercase filename
         }
 
         // Handle string filenames

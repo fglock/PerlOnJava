@@ -26,30 +26,30 @@ GetOptions(
     'help'      => \$help,
 ) or die "Error in command line arguments\n";
 
-if ($help || @ARGV != 1) {
+if ($help || @ARGV < 1) {
     print_usage();
     exit($help ? 0 : 1);
 }
 
-my $test_path = $ARGV[0];
-
-# Accept either a directory or a specific .t file
-my $test_dir;
+# Accept either a directory or a specific .t file, or multiple directories
+my $test_dir = '.';
 my @test_files;
 
-if (-f $test_path && $test_path =~ /\.t$/) {
-    # Single test file
-    $test_dir = '.';  # Use current directory as base
-    @test_files = ($test_path);
-    print "Running single test file: $test_path\n";
-} elsif (-d $test_path) {
-    # Directory of tests
-    $test_dir = $test_path;
-    print "Finding test files in $test_dir...\n";
-    @test_files = find_test_files($test_dir);
-} else {
-    die "Error: '$test_path' is not a valid test directory or .t file\n";
+for my $test_path (@ARGV) {
+    if (-f $test_path && $test_path =~ /\.t$/) {
+        # Single test file
+        push @test_files, $test_path;
+        print "Adding test file: $test_path\n";
+    } elsif (-d $test_path) {
+        # Directory of tests
+        print "Finding test files in $test_path...\n";
+        push @test_files, find_test_files($test_path);
+    } else {
+        die "Error: '$test_path' is not a valid test directory or .t file\n";
+    }
 }
+
+die "Error: No test files found\n" unless @test_files;
 
 unless (-x $jperl_path) {
     die "Error: jperl not found or not executable at '$jperl_path'\n";
@@ -267,8 +267,13 @@ sub run_single_test {
     # For perl5_t tests (especially Pod tests), change to the test directory
     # so they can find their test data files with relative paths
     my $local_test_dir = $test_dir;
-    if ($test_file =~ m{^perl5_t/}) {
-        # For tests in a t/ subdirectory, chdir to the parent of t/
+    if ($test_file =~ m{^perl5_t/t/}) {
+        # For core Perl 5 tests in perl5_t/t/, chdir to perl5_t/t
+        # so they can find TestInit.pm via require
+        $local_test_dir = 'perl5_t/t';
+    }
+    elsif ($test_file =~ m{^perl5_t/}) {
+        # For module tests in perl5_t subdirectories
         # e.g., perl5_t/Pod/podlators/t/man/snippets.t -> perl5_t/Pod/podlators
         if ($test_file =~ m{^(.*)/t/[^/]+/[^/]+$}) {
             $local_test_dir = $1;
@@ -626,7 +631,7 @@ sub save_results {
 
 sub print_usage {
     print <<"EOF";
-Usage: $0 [OPTIONS] TEST_DIRECTORY
+Usage: $0 [OPTIONS] TEST_DIRECTORY [TEST_DIRECTORY2 ...]
 
 Run Perl tests against PerlOnJava
 
@@ -641,5 +646,6 @@ Examples:
   $0 ../perl5/t
   $0 --jperl ./jperl --timeout 5 --jobs 8 ../perl5/t
   $0 -j 2 --output results.json ../perl5/t
+  $0 perl5_t/Benchmark perl5_t/Pod
 EOF
 }
