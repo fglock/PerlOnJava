@@ -380,11 +380,19 @@ public class FileTestOperator {
     }
 
     public static RuntimeScalar chainedFileTest(String[] operators, RuntimeScalar fileHandle) {
-        RuntimeScalar currentHandle = fileHandle;
-        for (String operator : operators) {
-            currentHandle = fileTest(operator, currentHandle);
+        // Execute operators from right to left
+        // First operator uses the provided fileHandle, subsequent ones use lastFileHandle (_)
+        RuntimeScalar result = null;
+        for (int i = 0; i < operators.length; i++) {
+            if (i == 0) {
+                // First operator (rightmost in the source) uses the provided fileHandle
+                result = fileTest(operators[i], fileHandle);
+            } else {
+                // Subsequent operators use lastFileHandle (_)
+                result = fileTest(operators[i], lastFileHandle);
+            }
         }
-        return currentHandle;
+        return result;
     }
 
     public static RuntimeScalar chainedFileTestLastHandle(String[] operators) {
