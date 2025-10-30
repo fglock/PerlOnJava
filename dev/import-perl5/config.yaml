@@ -46,6 +46,10 @@ imports:
     target: perl5_t/Porting
     type: directory
 
+  - source: perl5/lib
+    target: perl5_t/lib
+    type: directory
+
   # Bulk import all core test files from perl5/t/ to perl5_t/t/
   # This creates a complete Perl 5 test environment under perl5_t/
   - source: perl5/t
