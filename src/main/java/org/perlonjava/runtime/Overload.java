@@ -56,6 +56,11 @@ public class Overload {
         }
 
         // Default string conversion for non-blessed or non-overloaded objects
+        // For REFERENCE type, use the REFERENCE's toStringRef() to get "REF(...)" format
+        // For other reference types, use the value's toStringRef()
+        if (runtimeScalar.type == RuntimeScalarType.REFERENCE) {
+            return new RuntimeScalar(runtimeScalar.toStringRef());
+        }
         return new RuntimeScalar(((RuntimeBase) runtimeScalar.value).toStringRef());
     }
 
