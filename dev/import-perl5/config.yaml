@@ -46,9 +46,9 @@ imports:
     target: perl5_t/Porting
     type: directory
 
-  - source: perl5/lib
-    target: perl5_t/lib
-    type: directory
+  # NOTE: perl5_t/lib directory should exist (for opendir tests) but remain empty
+  # to avoid module loading conflicts. PerlOnJava uses src/main/perl/lib instead.
+  # The sync.pl script will create an empty perl5_t/lib directory if needed.
 
   # Bulk import all core test files from perl5/t/ to perl5_t/t/
   # This creates a complete Perl 5 test environment under perl5_t/

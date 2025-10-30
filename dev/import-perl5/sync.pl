@@ -185,6 +185,14 @@ sub main {
         $success_count++;
     }
     
+    # Create empty perl5_t/lib directory (needed for opendir tests but must stay empty)
+    my $lib_dir = File::Spec->catdir($project_root, 'perl5_t', 'lib');
+    unless (-d $lib_dir) {
+        print "Creating empty perl5_t/lib directory...\n";
+        make_path($lib_dir) or warn "Could not create $lib_dir: $!\n";
+        print "  ✓ Created empty lib directory\n\n";
+    }
+    
     # Summary
     print "=" x 60 . "\n";
     print "Summary:\n";
