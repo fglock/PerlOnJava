@@ -1,275 +1,272 @@
-# Perl5 Import System
+# Perl5 Import Tools
 
-This directory contains tools for importing Perl modules and test files from standard Perl5 into PerlOnJava.
+This directory contains tools for importing and synchronizing Perl modules and tests from the perl5/ repository into PerlOnJava.
 
 ## Overview
 
-The import system consists of:
-- **`config.yaml`**: Declarative configuration listing what to import
-- **`sync.pl`**: Script that performs the import and applies patches
-- **`patches/`**: Directory containing patch files for imported files
+The import system helps maintain modules that are (nearly) identical to their perl5/ counterparts, allowing easy updates when perl5 changes.
+
+## Files
+
+- **config.yaml** - Configuration file listing all imports
+- **sync.pl** - Main synchronization script
+- **add_module.pl** - Interactive tool to add new modules
+- **add_similar_modules.sh** - Batch script to add all similar modules
+- **patches/** - Directory containing patches for modified files
+- **SIMILAR_MODULES.md** - Analysis of modules similar to perl5/ sources
 
 ## Quick Start
 
-### Initial Setup
-
-First, clone the Perl5 repository:
-
-```bash
-cd /path/to/PerlOnJava
-rm -rf perl5  # if it exists
-git clone https://github.com/Perl/perl5.git
-```
-
-### Importing Files
-
-After cloning perl5, run the import script to sync all files:
+### Synchronize All Configured Imports
 
 ```bash
 perl dev/import-perl5/sync.pl
 ```
 
-The script will:
-1. Read `config.yaml`
-2. Copy directories (using rsync) and individual files to their target locations
-3. Apply patches if specified
-4. Report success or errors
+This copies all files listed in config.yaml from perl5/ to their target locations and applies any patches.
 
-This replaces the manual workflow of:
+### Add a New Module
+
 ```bash
-rsync -a perl5/t/ t/
-git checkout t
+# Preview what would be added (dry run - default)
+perl dev/import-perl5/add_module.pl Text::Wrap
+
+# Actually add to config.yaml
+perl dev/import-perl5/add_module.pl --apply Text::Wrap
+
+# Then sync
+perl dev/import-perl5/sync.pl
 ```
 
-### Adding a New Import
+### Add Multiple Similar Modules
 
-1. **Add an entry to `config.yaml`:**
+```bash
+# Add all modules that match their perl5/ sources
+bash dev/import-perl5/add_similar_modules.sh
+perl dev/import-perl5/sync.pl
+```
+
+## Tools
+
+### sync.pl
+
+Main synchronization script that imports files from perl5/ based on config.yaml.
+
+**Features:**
+- Copies individual files or entire directories
+- Applies patches automatically
+- Creates necessary directories
+- Validates sources exist
+- Reports success/failure summary
+
+**Usage:**
+```bash
+perl dev/import-perl5/sync.pl
+```
+
+### add_module.pl
+
+Interactive tool to add new modules to the sync configuration.
+
+**Features:**
+- Finds module in src/main/perl/lib
+- Locates original source in perl5/
+- Calculates similarity percentage
+- Detects duplicates automatically
+- Finds and suggests test files
+- Categorizes source location
+- Dry-run by default for safety
+
+**Usage:**
+```bash
+# Dry run (preview)
+perl dev/import-perl5/add_module.pl Module::Name
+perl dev/import-perl5/add_module.pl File/Path.pm
+
+# Apply changes
+perl dev/import-perl5/add_module.pl --apply Module::Name
+
+# Help
+perl dev/import-perl5/add_module.pl --help
+```
+
+**Examples:**
+```bash
+perl dev/import-perl5/add_module.pl Digest::MD5
+perl dev/import-perl5/add_module.pl File/Basename.pm
+perl dev/import-perl5/add_module.pl --apply Text::Wrap
+```
+
+### add_similar_modules.sh
+
+Batch script to add all modules identified as similar (95%+ match) to their perl5/ sources.
+
+**Usage:**
+```bash
+bash dev/import-perl5/add_similar_modules.sh
+```
+
+See SIMILAR_MODULES.md for the complete list of modules this will add.
+
+## Configuration Format
+
+config.yaml uses a simple YAML structure:
 
 ```yaml
 imports:
-  - source: perl5/lib/YourModule.pm
-    target: src/main/perl/lib/YourModule.pm
-    patch: null  # or YourModule.pm.patch if needed
-    description: "Brief description of the module"
+  # Individual file
+  - source: perl5/lib/Module.pm
+    target: src/main/perl/lib/Module.pm
+
+  # File with patch
+  - source: perl5/lib/Module.pm
+    target: src/main/perl/lib/Module.pm
+    patch: Module.pm.patch
+
+  # Directory import
+  - source: perl5/cpan/Some-Module/lib
+    target: src/main/perl/lib
+    type: directory
+
+  # Test files
+  - source: perl5/cpan/Some-Module/t
+    target: perl5_t/Some-Module
+    type: directory
 ```
 
-2. **If a patch is needed:**
+## Patches
 
-   a. Copy the original file to a temporary location:
+When a file needs modifications for PerlOnJava compatibility:
+
+1. Make your changes to the target file
+2. Create a patch:
    ```bash
-   cp perl5/lib/YourModule.pm /tmp/YourModule.pm.orig
+   diff -u original modified > patches/filename.patch
    ```
-
-   b. Make your modifications to the target file:
-   ```bash
-   # Edit the file at src/main/perl/lib/YourModule.pm
-   ```
-
-   c. Generate the patch:
-   ```bash
-   cd /path/to/PerlOnJava
-   diff -u /tmp/YourModule.pm.orig src/main/perl/lib/YourModule.pm \
-     > dev/import-perl5/patches/YourModule.pm.patch
-   ```
-
-   d. Update `config.yaml` to reference the patch:
+3. Add patch reference in config.yaml:
    ```yaml
-   patch: YourModule.pm.patch
+   - source: perl5/path/to/file
+     target: target/path
+     patch: filename.patch
    ```
 
-3. **Run the sync script to verify:**
+## Workflow
+
+### Adding a New Module from perl5/
+
+1. Copy the module to `src/main/perl/lib/`:
+   ```bash
+   cp perl5/lib/Module.pm src/main/perl/lib/
+   ```
+
+2. Test it works in PerlOnJava
+
+3. Add to sync configuration:
+   ```bash
+   perl dev/import-perl5/add_module.pl --apply Module.pm
+   ```
+
+4. Verify:
    ```bash
    perl dev/import-perl5/sync.pl
    ```
 
-## Configuration Format
+### Updating Modules from perl5/
 
-The `config.yaml` file uses a simple, easy-to-maintain format:
+When perl5/ is updated:
 
-```yaml
-imports:
-  - source: perl5/lib/Module.pm      # Source path (relative to project root)
-    target: src/main/perl/lib/Module.pm  # Target path (relative to project root)
-    type: file                       # Optional: 'file' (default) or 'directory'
-    patch: Module.pm.patch           # Optional: patch file name
+```bash
+# Just run sync
+perl dev/import-perl5/sync.pl
+
+# This will update all configured modules
 ```
 
-### Fields
+### Adding Tests
 
-- **`source`** (required): Path to the source file/directory in the perl5 directory, relative to project root
-- **`target`** (required): Path where the file/directory should be copied, relative to project root
-- **`type`** (optional): Either `file` (default) or `directory` for bulk directory copies using rsync
-- **`patch`** (optional): Name of patch file in `patches/` directory (applied after copying)
-
-## Common Use Cases
-
-### Importing a Single File Without Modifications
+Tests go to `perl5_t/` directory:
 
 ```yaml
-- source: perl5/lib/SomeModule.pm
-  target: src/main/perl/lib/SomeModule.pm
-```
+- source: perl5/lib/Module.t
+  target: perl5_t/Module.t
 
-### Importing a Single File With Patches
-
-```yaml
-- source: perl5/lib/SomeModule.pm
-  target: src/main/perl/lib/SomeModule.pm
-  patch: SomeModule.pm.patch
-```
-
-### Bulk Importing a Directory
-
-```yaml
-- source: perl5/t
-  target: t
+- source: perl5/cpan/Some-Module/t
+  target: perl5_t/Some-Module
   type: directory
 ```
 
-This uses `rsync -a` to efficiently copy the entire directory tree.
-
-### Patching Files After Bulk Import
-
-To apply patches to specific files after a bulk import, add them after the directory import:
-
-```yaml
-- source: perl5/t
-  target: t
-  type: directory
-
-- source: perl5/t/test.pl
-  target: t/test.pl
-  patch: test.pl.patch
-```
-
-The patched version will override the file copied by the directory import.
-
-## Creating Patches
-
-### Method 1: Using diff
-
-```bash
-# 1. Start with the original file
-cp perl5/lib/Module.pm /tmp/Module.pm.orig
-
-# 2. Make your changes to the target location
-vi src/main/perl/lib/Module.pm
-
-# 3. Generate the patch
-diff -u /tmp/Module.pm.orig src/main/perl/lib/Module.pm \
-  > dev/import-perl5/patches/Module.pm.patch
-```
-
-### Method 2: Using git
-
-If the file is already in git:
-
-```bash
-# 1. Make your changes
-vi src/main/perl/lib/Module.pm
-
-# 2. Generate patch from git diff
-git diff src/main/perl/lib/Module.pm > dev/import-perl5/patches/Module.pm.patch
-
-# 3. Reset the file (patch will be applied by sync.pl)
-git checkout src/main/perl/lib/Module.pm
-```
+The `add_module.pl` script automatically suggests test locations.
 
 ## Directory Structure
 
 ```
+perl5/                    # Upstream perl5 repository
+src/main/perl/lib/       # PerlOnJava modules
+perl5_t/                 # Test files (external, not in git)
 dev/import-perl5/
-├── config.yaml          # Configuration file
-├── sync.pl             # Import script
-├── patches/            # Patch files directory
-│   ├── test.pl.patch
-│   └── Module.pm.patch
-└── README.md           # This file
-
-Project root after sync:
-├── perl5_t/            # Complete Perl 5 test environment (NOT IN GIT)
-│   ├── t/              # Core test suite from perl5/t/
-│   ├── TestInit.pm     # Test infrastructure from perl5/
-│   ├── MANIFEST        # Manifest file from perl5/
-│   ├── Porting/        # Porting tools and tests from perl5/
-│   └── Benchmark/      # Module tests from perl5/lib/*.t
-├── src/main/perl/lib/  # Imported Perl modules (IN GIT)
-└── src/test/resources/unit/  # PerlOnJava unit tests (IN GIT)
+  ├── config.yaml        # Import configuration
+  ├── sync.pl            # Sync script
+  ├── add_module.pl      # Module addition tool
+  ├── add_similar_modules.sh
+  ├── patches/           # Patch files
+  ├── README.md          # This file
+  └── SIMILAR_MODULES.md # Analysis document
 ```
 
-**Important**: The `perl5_t/` directory is excluded from git and must be synced using `sync.pl` before running comprehensive tests. This directory contains a complete Perl 5 test environment with all necessary infrastructure files.
+## Tips
 
-## Examples
+1. **Always use add_module.pl** - It prevents duplicates and finds tests automatically
 
-The repository includes these example imports:
+2. **Dry run first** - The default mode is `--dry-run`, so you can preview changes
 
-1. **`Benchmark.pm`**: Core benchmarking module imported without modifications
-2. **`test.pl`**: Test utilities imported with compatibility patches
+3. **Check similarity** - If similarity is < 95%, the module may have significant changes
 
-See `config.yaml` for the full configuration.
+4. **Update regularly** - Run `sync.pl` after updating the perl5/ directory
+
+5. **Keep patches minimal** - Try to minimize differences from upstream perl5/
+
+6. **Test after sync** - Always test after synchronizing to catch any breaking changes
+
+## Example Session
+
+```bash
+# Find similar modules
+cd /Users/fglock/projects/PerlOnJava
+perl dev/import-perl5/add_module.pl Text::Wrap
+
+# Output shows 100% similarity
+# Add it
+perl dev/import-perl5/add_module.pl --apply Text::Wrap
+
+# Sync to copy the file
+perl dev/import-perl5/sync.pl
+
+# Test it
+./jperl -e 'use Text::Wrap; print "OK\n"'
+```
 
 ## Troubleshooting
 
-### Patch Fails to Apply
+**"Module not found" error:**
+- Make sure the module exists in `src/main/perl/lib/`
+- Use the correct path format (Module::Name or File/Path.pm)
 
-If a patch fails to apply, it usually means the source file has changed:
+**"Module is already configured" message:**
+- The module is already in config.yaml
+- Just run `sync.pl` to update it
 
-1. Check if the perl5 source has been updated
-2. Regenerate the patch with the new source file
-3. Update `config.yaml` if needed
+**"No good match found" error:**
+- The module differs significantly from perl5/ version
+- May need manual porting or custom implementation
+- Consider not adding to sync.pl
 
-### Source File Not Found
+**Patch fails to apply:**
+- The source file changed in perl5/
+- Need to regenerate the patch
+- Or remove the patch if no longer needed
 
-Ensure the `source` path in `config.yaml` is correct and relative to the project root.
+## See Also
 
-### Permission Issues
-
-Make sure the script is executable:
-```bash
-chmod +x dev/import-perl5/sync.pl
-```
-
-## Maintenance
-
-### Updating Imported Files
-
-When you want to update to a newer version of a Perl5 file:
-
-1. Update the file in `perl5/` directory
-2. Run `sync.pl` to copy and patch
-3. Test to ensure compatibility
-4. If new issues arise, update the patch file
-
-### Tracking Changes
-
-You can track what's been imported and patched by:
-- Reviewing `config.yaml`
-- Checking the `patches/` directory
-- Running `sync.pl` with a dry-run option (future enhancement)
-
-## Future Enhancements
-
-Potential improvements to consider:
-- Dry-run mode (`--dry-run`)
-- Verbose mode (`--verbose`)
-- Individual file sync (`--file=Module.pm`)
-- Automatic patch generation
-- Verification/checksum tracking
-- Integration with build system
-
-## Contributing
-
-When adding new imports:
-1. Keep `config.yaml` organized (group by type: modules, tests, etc.)
-2. Add descriptive comments
-3. Document why patches are needed
-4. Test the import process
-5. Commit both the config changes and patch files
-
-## Questions?
-
-For questions or issues with the import system, refer to:
-- Project documentation in `docs/`
-- Main README at project root
-- Development notes in `dev/README.md`
-
+- SIMILAR_MODULES.md - List of modules identified as similar to perl5/
+- config.yaml - Current import configuration
+- perl5_t/ - Test file directory structure
