@@ -221,6 +221,78 @@ public class ModuleOperators {
                     // Enable BEGIN filter preprocessing since the filtered code might contain BEGIN blocks
                     shouldApplyFilters = true;
                 }
+                // Case 1c: Array with scalar reference [\'string', $fh, &filter, state...]
+                // Concatenate multiple sources (scalar ref + filehandle + optional filter)
+                // The filter only applies to filehandle content, not scalar ref "prefix" content
+                else if (firstElem.type == RuntimeScalarType.REFERENCE) {
+                    StringBuilder unfilteredPrefix = new StringBuilder(); // Scalar refs (unfiltered)
+                    StringBuilder filterableContent = new StringBuilder(); // Filehandle content (filterable)
+                    RuntimeCode filterRef = null;
+                    int filterIndex = -1;
+                    
+                    // Process array elements
+                    for (int i = 0; i < arr.size(); i++) {
+                        RuntimeScalar elem = arr.get(i);
+                        
+                        // Check if this is a filter (CODE ref)
+                        boolean isFilter = elem.type == RuntimeScalarType.CODE ||
+                                          (elem.type == RuntimeScalarType.REFERENCE &&
+                                           elem.scalarDeref() != null &&
+                                           elem.scalarDeref().type == RuntimeScalarType.CODE);
+                        
+                        if (isFilter) {
+                            // Found the filter - extract it
+                            filterIndex = i;
+                            if (elem.type == RuntimeScalarType.CODE) {
+                                filterRef = (RuntimeCode) elem.value;
+                            } else if (elem.value instanceof RuntimeCode) {
+                                filterRef = (RuntimeCode) elem.value;
+                            } else {
+                                RuntimeScalar deref = elem.scalarDeref();
+                                if (deref != null && deref.value instanceof RuntimeCode) {
+                                    filterRef = (RuntimeCode) deref.value;
+                                }
+                            }
+                            break; // Stop after finding filter
+                        }
+                        // Scalar reference - goes to unfiltered prefix
+                        else if (elem.type == RuntimeScalarType.REFERENCE) {
+                            RuntimeScalar deref = elem.scalarDeref();
+                            if (deref != null) {
+                                unfilteredPrefix.append(deref.toString());
+                            }
+                        }
+                        // Filehandle - goes to filterable content
+                        else if (elem.type == RuntimeScalarType.GLOB || elem.type == RuntimeScalarType.GLOBREFERENCE) {
+                            filterableContent.append(Readline.readline(elem, RuntimeContextType.LIST).toString());
+                        }
+                    }
+                    
+                    // Apply filter to filehandle content only
+                    if (filterRef != null) {
+                        RuntimeScalar savedDefaultVar = GlobalVariable.getGlobalVariable("main::_");
+                        try {
+                            GlobalVariable.getGlobalVariable("main::_").set(filterableContent.toString());
+                            
+                            // Build filter args with remaining elements as state
+                            RuntimeArray filterArgs = new RuntimeArray();
+                            filterArgs.push(new RuntimeScalar());  // $_[0] = undef
+                            for (int j = filterIndex + 1; j < arr.size(); j++) {
+                                filterArgs.push(arr.get(j));  // $_[1..N] = state
+                            }
+                            
+                            filterRef.apply(filterArgs, RuntimeContextType.SCALAR);
+                            filterableContent = new StringBuilder(GlobalVariable.getGlobalVariable("main::_").toString());
+                        } finally {
+                            GlobalVariable.getGlobalVariable("main::_").set(savedDefaultVar.toString());
+                        }
+                    }
+                    
+                    // Concatenate unfiltered prefix + filtered filehandle content
+                    code = unfilteredPrefix.toString() + filterableContent.toString();
+                    // Enable BEGIN filter preprocessing
+                    shouldApplyFilters = true;
+                }
             }
         }
         
@@ -305,7 +377,21 @@ public class ModuleOperators {
             // Enable source filter preprocessing for filehandle sources
             // This allows BEGIN blocks to install filters that transform the remaining source
             shouldApplyFilters = true;
-        } 
+        }
+        // ===== STEP 4b: Handle scalar reference (do \$scalar) =====
+        else if (runtimeScalar.type == RuntimeScalarType.REFERENCE) {
+            // Dereference to get the scalar value
+            RuntimeScalar deref = runtimeScalar.scalarDeref();
+            if (deref != null) {
+                // Treat the dereferenced value as source code
+                code = deref.toString();
+                // Enable source filter preprocessing for scalar ref sources
+                // This allows BEGIN blocks to install filters
+                shouldApplyFilters = true;
+                // Use a special filename for error reporting
+                actualFileName = "(eval)";
+            }
+        }
         // ===== STEP 5: Handle filename (standard file loading) =====
         // Only process as filename if code hasn't been set yet
         else if (code == null) {
