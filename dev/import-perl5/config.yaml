@@ -125,6 +125,220 @@ imports:
     target: perl5_t/Pod/podlators/t
     type: directory
 
+  # From CPAN distribution
+  - source: perl5/cpan/Digest/lib/Digest.pm
+    target: src/main/perl/lib/Digest.pm
+
+  # Tests for distribution
+  - source: perl5/cpan/Digest/t
+    target: perl5_t/Digest
+    type: directory
+
+  # From core library
+  - source: perl5/lib/File/Basename.pm
+    target: src/main/perl/lib/File/Basename.pm
+
+  # Related test
+  - source: perl5/lib/File/Basename.t
+    target: perl5_t/File/Basename.t
+
+  # From core library
+  - source: perl5/lib/Tie/Array.pm
+    target: src/main/perl/lib/Tie/Array.pm
+
+  # From core library
+  - source: perl5/lib/Tie/Handle.pm
+    target: src/main/perl/lib/Tie/Handle.pm
+
+  # From core library
+  - source: perl5/lib/Tie/Hash.pm
+    target: src/main/perl/lib/Tie/Hash.pm
+
+  # Related test
+  - source: perl5/lib/Tie/Hash.t
+    target: perl5_t/Tie/Hash.t
+
+  # From core library
+  - source: perl5/lib/Tie/Scalar.pm
+    target: src/main/perl/lib/Tie/Scalar.pm
+
+  # Related test
+  - source: perl5/lib/Tie/Scalar.t
+    target: perl5_t/Tie/Scalar.t
+
+  # From core library
+  - source: perl5/lib/Unicode/UCD.pm
+    target: src/main/perl/lib/Unicode/UCD.pm
+
+  # Related test
+  - source: perl5/lib/Unicode/UCD.t
+    target: perl5_t/Unicode/UCD.t
+
+  # From core library
+  - source: perl5/lib/_charnames.pm
+    target: src/main/perl/lib/_charnames.pm
+
+  # From core library
+  - source: perl5/lib/charnames.pm
+    target: src/main/perl/lib/charnames.pm
+
+  # Related test
+  - source: perl5/lib/charnames.t
+    target: perl5_t/charnames.t
+
+  # From core library
+  - source: perl5/lib/integer.pm
+    target: src/main/perl/lib/integer.pm
+
+  # Related test
+  - source: perl5/lib/integer.t
+    target: perl5_t/integer.t
+
+  # From core library
+  - source: perl5/lib/locale.pm
+    target: src/main/perl/lib/locale.pm
+
+  # Related test
+  - source: perl5/lib/locale.t
+    target: perl5_t/locale.t
+
+  # From core library
+  - source: perl5/lib/vmsish.pm
+    target: src/main/perl/lib/vmsish.pm
+
+  # Related test
+  - source: perl5/lib/vmsish.t
+    target: perl5_t/vmsish.t
+
+  # From CPAN distribution
+  - source: perl5/cpan/Digest/lib/Digest/base.pm
+    target: src/main/perl/lib/Digest/base.pm
+
+  # From CPAN distribution
+  - source: perl5/cpan/Digest/lib/Digest/file.pm
+    target: src/main/perl/lib/Digest/file.pm
+
+  # From CPAN distribution
+  - source: perl5/cpan/Locale-Maketext-Simple/lib/Locale/Maketext/Simple.pm
+    target: src/main/perl/lib/Locale/Maketext/Simple.pm
+
+  # Tests for distribution
+  - source: perl5/cpan/Locale-Maketext-Simple/t
+    target: perl5_t/Locale-Maketext-Simple
+    type: directory
+
+  # From CPAN distribution
+  - source: perl5/cpan/Params-Check/lib/Params/Check.pm
+    target: src/main/perl/lib/Params/Check.pm
+
+  # Tests for distribution
+  - source: perl5/cpan/Params-Check/t
+    target: perl5_t/Params-Check
+    type: directory
+
+  # From CPAN distribution
+  - source: perl5/cpan/Perl-OSType/lib/Perl/OSType.pm
+    target: src/main/perl/lib/Perl/OSType.pm
+
+  # Tests for distribution
+  - source: perl5/cpan/Perl-OSType/t
+    target: perl5_t/Perl-OSType
+    type: directory
+
+  # From CPAN distribution
+  - source: perl5/cpan/Text-ParseWords/lib/Text/ParseWords.pm
+    target: src/main/perl/lib/Text/ParseWords.pm
+
+  # Tests for distribution
+  - source: perl5/cpan/Text-ParseWords/t
+    target: perl5_t/Text-ParseWords
+    type: directory
+
+  # From CPAN distribution
+  - source: perl5/cpan/Text-Tabs/lib/Text/Tabs.pm
+    target: src/main/perl/lib/Text/Tabs.pm
+
+  # Tests for distribution
+  - source: perl5/cpan/Text-Tabs/t
+    target: perl5_t/Text-Tabs
+    type: directory
+
+  # From CPAN distribution
+  - source: perl5/cpan/Text-Tabs/lib/Text/Wrap.pm
+    target: src/main/perl/lib/Text/Wrap.pm
+
+  # From CPAN distribution
+  - source: perl5/cpan/version/lib/version/regex.pm
+    target: src/main/perl/lib/version/regex.pm
+
+  # Tests for distribution
+  - source: perl5/cpan/version/t
+    target: perl5_t/version
+    type: directory
+
+  # From core distribution
+  - source: perl5/dist/Attribute-Handlers/lib/Attribute/Handlers.pm
+    target: src/main/perl/lib/Attribute/Handlers.pm
+
+  # Tests for distribution
+  - source: perl5/dist/Attribute-Handlers/t
+    target: perl5_t/Attribute-Handlers
+    type: directory
+
+  # From core distribution
+  - source: perl5/dist/Env/lib/Env.pm
+    target: src/main/perl/lib/Env.pm
+
+  # Tests for distribution
+  - source: perl5/dist/Env/t
+    target: perl5_t/Env
+    type: directory
+
+  # From core distribution
+  - source: perl5/dist/FindBin/lib/FindBin.pm
+    target: src/main/perl/lib/FindBin.pm
+
+  # Tests for distribution
+  - source: perl5/dist/FindBin/t
+    target: perl5_t/FindBin
+    type: directory
+
+  # From core distribution
+  - source: perl5/dist/Test/lib/Test.pm
+    target: src/main/perl/lib/Test.pm
+
+  # Tests for distribution
+  - source: perl5/dist/Test/t
+    target: perl5_t/Test
+    type: directory
+
+  # From core distribution
+  - source: perl5/dist/Unicode-Normalize/Normalize.pm
+    target: src/main/perl/lib/Unicode/Normalize.pm
+
+  # Tests for distribution
+  - source: perl5/dist/Unicode-Normalize/t
+    target: perl5_t/Unicode-Normalize
+    type: directory
+
+  # From core distribution
+  - source: perl5/dist/if/if.pm
+    target: src/main/perl/lib/if.pm
+
+  # Tests for distribution
+  - source: perl5/dist/if/t
+    target: perl5_t/if
+    type: directory
+
+  # From extension
+  - source: perl5/ext/File-Find/lib/File/Find.pm
+    target: src/main/perl/lib/File/Find.pm
+
+  # Tests for distribution
+  - source: perl5/ext/File-Find/t
+    target: perl5_t/File-Find
+    type: directory
+
   # Add more imports below as needed
   # Example with minimal fields:
   # - source: perl5/lib/SomeModule.pm
