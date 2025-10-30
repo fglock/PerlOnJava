@@ -49,12 +49,6 @@ public class FileTestOperator {
 
     static RuntimeScalar lastFileHandle = new RuntimeScalar();
 
-    // Helper method to check if a string looks like a filehandle name
-    private static boolean looksLikeFilehandle(String name) {
-        // Check if it's a typical filehandle name (all caps, starts with letter, no path separators)
-        return name.matches("^[A-Z_][A-Z0-9_]*$") && !name.contains("/") && !name.contains("\\");
-    }
-
     public static RuntimeScalar fileTestLastHandle(String operator) {
         return fileTest(operator, lastFileHandle);
     }
@@ -144,24 +138,10 @@ public class FileTestOperator {
             return operator.equals("-l") ? scalarFalse : scalarUndef;
         }
 
-        // Check if it looks like a filehandle name but isn't actually a filehandle
-        if (looksLikeFilehandle(filename)) {
-            // Try to get it as a global variable (filehandle)
-            RuntimeScalar globVar = null;
-            try {
-                globVar = getGlobalVariable("main::" + filename);
-                if (globVar != null && (globVar.type == RuntimeScalarType.GLOB || globVar.type == RuntimeScalarType.GLOBREFERENCE)) {
-                    // It's actually a filehandle, recursively call fileTest with it
-                    return fileTest(operator, globVar);
-                }
-            } catch (Exception e) {
-                // Ignore, treat as non-existent filehandle
-            }
-
-            // It looks like a filehandle but isn't one, return EBADF and appropriate result
-            getGlobalVariable("main::!").set(9);
-            return operator.equals("-l") ? scalarFalse : scalarUndef;
-        }
+        // Note: In Perl, the distinction between bareword filehandles and strings
+        // is made at compile time. If we get a string at runtime, treat it as a filename.
+        // The looksLikeFilehandle check was removed because it incorrectly rejected
+        // valid filenames like "TEST" that happen to match typical filehandle naming patterns.
 
         // Handle string filenames
         Path path = resolvePath(filename);
@@ -380,11 +360,19 @@ public class FileTestOperator {
     }
 
     public static RuntimeScalar chainedFileTest(String[] operators, RuntimeScalar fileHandle) {
-        RuntimeScalar currentHandle = fileHandle;
-        for (String operator : operators) {
-            currentHandle = fileTest(operator, currentHandle);
+        // Execute operators from right to left
+        // First operator uses the provided fileHandle, subsequent ones use lastFileHandle (_)
+        RuntimeScalar result = null;
+        for (int i = 0; i < operators.length; i++) {
+            if (i == 0) {
+                // First operator (rightmost in the source) uses the provided fileHandle
+                result = fileTest(operators[i], fileHandle);
+            } else {
+                // Subsequent operators use lastFileHandle (_)
+                result = fileTest(operators[i], lastFileHandle);
+            }
         }
-        return currentHandle;
+        return result;
     }
 
     public static RuntimeScalar chainedFileTestLastHandle(String[] operators) {

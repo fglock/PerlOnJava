@@ -589,7 +589,12 @@ public class EmitOperator {
                     operator + "LastHandle",
                     "()Lorg/perlonjava/runtime/RuntimeList;",
                     false);
-            handleVoidContext(emitterVisitor);
+            // Handle context conversion like emitOperator does
+            if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                handleVoidContext(emitterVisitor);
+            } else if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+                handleScalarContext(emitterVisitor, node);
+            }
         } else {
             handleUnaryDefaultCase(node, operator, emitterVisitor);
         }
