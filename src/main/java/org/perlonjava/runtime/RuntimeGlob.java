@@ -180,10 +180,35 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * @return A RuntimeScalar representing the dereferenced value or reference. If the key
      * is not recognized, an empty RuntimeScalar is returned.
      */
+    @Override
     public RuntimeScalar hashDerefGet(RuntimeScalar index) {
-        // System.out.println("glob hashDerefGet " + index.toString());
+        return getGlobSlot(index);
+    }
+
+    @Override
+    public RuntimeScalar hashDerefGetNonStrict(RuntimeScalar index, String packageName) {
+        // For typeglobs, slot access doesn't need symbolic reference resolution
+        // Just access the slot directly
+        return getGlobSlot(index);
+    }
+
+    /**
+     * Get a typeglob slot (CODE, SCALAR, ARRAY, HASH, IO, FORMAT).
+     * This is the common implementation for both strict and non-strict contexts.
+     */
+    private RuntimeScalar getGlobSlot(RuntimeScalar index) {
+        // System.out.println("glob getGlobSlot " + index.toString());
         return switch (index.toString()) {
-            case "CODE" -> GlobalVariable.getGlobalCodeRef(this.globName);
+            case "CODE" -> {
+                // Only return CODE ref if the subroutine is actually defined
+                RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(this.globName);
+                if (codeRef.type == RuntimeScalarType.CODE && codeRef.value instanceof RuntimeCode code) {
+                    if (code.defined()) {
+                        yield codeRef;
+                    }
+                }
+                yield new RuntimeScalar(); // Return undef if code doesn't exist
+            }
             case "IO" -> IO;
             case "SCALAR" -> GlobalVariable.getGlobalVariable(this.globName);
             case "ARRAY" -> {

@@ -156,6 +156,14 @@ sub new {
     $fh;
 }
 
+sub new_tmpfile {
+    my $class = shift;
+    @_ == 0 or croak "usage: $class->new_tmpfile()";
+    # TODO: Implement actual temporary file creation
+    # For now, return undef to indicate not supported
+    return undef;
+}
+
 ################################################
 ## Open
 ##
