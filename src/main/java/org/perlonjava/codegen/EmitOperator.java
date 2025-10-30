@@ -581,22 +581,46 @@ public class EmitOperator {
     }
 
     static void handleStatOperator(EmitterVisitor emitterVisitor, OperatorNode node, String operator) {
+        // stat/lstat have special scalar context behavior:
+        // - Empty list (failure) -> "" (empty string)
+        // - Non-empty list (success) -> 1 (true)
+        
         if (node.operand instanceof IdentifierNode identNode &&
                 identNode.name.equals("_")) {
+            // stat _ or lstat _ - still use the old methods since they don't take args
             emitterVisitor.ctx.mv.visitMethodInsn(
                     Opcodes.INVOKESTATIC,
                     "org/perlonjava/operators/Stat",
                     operator + "LastHandle",
                     "()Lorg/perlonjava/runtime/RuntimeList;",
                     false);
-            // Handle context conversion like emitOperator does
+            // Handle context - treat as list that needs conversion
             if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
                 handleVoidContext(emitterVisitor);
             } else if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
-                handleScalarContext(emitterVisitor, node);
+                // Convert with stat's special semantics
+                emitterVisitor.ctx.mv.visitMethodInsn(
+                        Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/RuntimeList",
+                        "statScalar",
+                        "()Lorg/perlonjava/runtime/RuntimeScalar;",
+                        false);
             }
         } else {
-            handleUnaryDefaultCase(node, operator, emitterVisitor);
+            // stat EXPR or lstat EXPR - use context-aware methods
+            node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+            emitterVisitor.pushCallContext();  // Push context onto stack
+            emitterVisitor.ctx.mv.visitMethodInsn(
+                    Opcodes.INVOKESTATIC,
+                    "org/perlonjava/operators/Stat",
+                    operator,
+                    "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeBase;",
+                    false);
+            
+            // Handle void context
+            if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                handleVoidContext(emitterVisitor);
+            }
         }
     }
 
