@@ -339,6 +339,25 @@ imports:
     target: perl5_t/File-Find
     type: directory
 
+  # From core distribution
+  - source: perl5/dist/Data-Dumper/Dumper.pm
+    target: src/main/perl/lib/Data/Dumper.pm
+
+  # Tests for distribution
+  - source: perl5/dist/Data-Dumper/t
+    target: perl5_t/Data-Dumper
+    type: directory
+
+  # From CPAN distribution (imports entire Getopt directory including Long.pm and Parser.pm)
+  - source: perl5/cpan/Getopt-Long/lib/Getopt
+    target: src/main/perl/lib/Getopt
+    type: directory
+
+  # Tests for distribution
+  - source: perl5/cpan/Getopt-Long/t
+    target: perl5_t/Getopt-Long
+    type: directory
+
   # Add more imports below as needed
   # Example with minimal fields:
   # - source: perl5/lib/SomeModule.pm
