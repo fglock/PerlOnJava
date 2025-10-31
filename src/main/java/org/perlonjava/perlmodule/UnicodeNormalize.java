@@ -17,9 +17,11 @@ public class UnicodeNormalize extends PerlModuleBase {
     /**
      * Constructor for UnicodeNormalize.
      * Initializes the module with the name "Unicode::Normalize".
+     * Note: We pass false to allow the Perl module to also load, since it contains
+     * utility functions and will create stubs for XS functions that we don't implement.
      */
     public UnicodeNormalize() {
-        super("Unicode::Normalize", true);
+        super("Unicode::Normalize", false);
     }
 
     /**
@@ -46,8 +48,36 @@ public class UnicodeNormalize extends PerlModuleBase {
             "normalize_partial", "NFC_partial", "NFD_partial", "NFKC_partial", "NFKD_partial"
         );
         
+        // Define %EXPORT_TAGS - This matches perl5/dist/Unicode-Normalize/Normalize.pm lines 23-28
+        // :all tag exports everything from @EXPORT and @EXPORT_OK
+        unicodeNormalize.defineExportTag("all",
+            "NFD", "NFC", "NFKD", "NFKC",  // @EXPORT
+            "normalize", "decompose", "reorder", "compose",
+            "checkNFD", "checkNFKD", "checkNFC", "checkNFKC", "check",
+            "getCanon", "getCompat", "getComposite", "getCombinClass",
+            "isExclusion", "isSingleton", "isNonStDecomp", "isComp2nd", "isComp_Ex",
+            "isNFD_NO", "isNFC_NO", "isNFC_MAYBE", "isNFKD_NO", "isNFKC_NO", "isNFKC_MAYBE",
+            "FCD", "checkFCD", "FCC", "checkFCC", "composeContiguous", "splitOnLastStarter",
+            "normalize_partial", "NFC_partial", "NFD_partial", "NFKC_partial", "NFKD_partial"
+        );
+        
+        // :normalize tag
+        unicodeNormalize.defineExportTag("normalize",
+            "NFD", "NFC", "NFKD", "NFKC", "normalize", "decompose", "reorder", "compose"
+        );
+        
+        // :check tag
+        unicodeNormalize.defineExportTag("check",
+            "checkNFD", "checkNFKD", "checkNFC", "checkNFKC", "check"
+        );
+        
+        // :fast tag
+        unicodeNormalize.defineExportTag("fast",
+            "FCD", "checkFCD", "FCC", "checkFCC", "composeContiguous"
+        );
+        
         try {
-            unicodeNormalize.registerMethod("normalize", "$");
+            unicodeNormalize.registerMethod("normalize", "$$");
             unicodeNormalize.registerMethod("NFD", "$");
             unicodeNormalize.registerMethod("NFC", "$");
             unicodeNormalize.registerMethod("NFKD", "$");
