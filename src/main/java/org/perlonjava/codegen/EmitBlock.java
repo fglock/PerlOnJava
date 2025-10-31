@@ -2,6 +2,7 @@ package org.perlonjava.codegen;
 
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
+import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
 import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.runtime.RuntimeContextType;
@@ -56,6 +57,22 @@ public class EmitBlock {
                     redoLabel,
                     nextLabel,
                     emitterVisitor.ctx.contextType);
+        }
+
+        // Special case: detect pattern of `local $_` followed by `For1Node` with needsArrayOfAlias
+        // In this case, we need to evaluate the For1Node's list before emitting the local operator
+        if (list.size() >= 2 && 
+            list.get(0) instanceof OperatorNode localOp && localOp.operator.equals("local") &&
+            list.get(1) instanceof For1Node forNode && forNode.needsArrayOfAlias) {
+            
+            // Pre-evaluate the For1Node's list to array of aliases before localizing $_
+            int tempArrayIndex = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            forNode.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "getArrayOfAlias", "()Lorg/perlonjava/runtime/RuntimeArray;", false);
+            mv.visitVarInsn(Opcodes.ASTORE, tempArrayIndex);
+            
+            // Mark the For1Node to use the pre-evaluated array
+            forNode.preEvaluatedArrayIndex = tempArrayIndex;
         }
 
         for (int i = 0; i < list.size(); i++) {
