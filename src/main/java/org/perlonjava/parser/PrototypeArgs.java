@@ -1,6 +1,7 @@
 package org.perlonjava.parser;
 
 import org.perlonjava.astnode.*;
+import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.GlobalVariable;
 import org.perlonjava.runtime.PerlCompilerException;
@@ -166,7 +167,7 @@ public class PrototypeArgs {
                 consumeCommas(parser);
             }
 
-            if (TokenUtils.peek(parser).text.equals("and") || TokenUtils.peek(parser).text.equals("or")) {
+            if (TokenUtils.peek(parser).text.equals("and") || TokenUtils.peek(parser).text.equals("or") || TokenUtils.peek(parser).text.equals("xor")) {
                 // backtrack to the opening parenthesis
                 parser.tokenIndex = index;
                 Node expr = ParsePrimary.parsePrimary(parser);
@@ -174,7 +175,7 @@ public class PrototypeArgs {
                     // TODO add more checks here
                     return listNode;
                 }
-                parser.throwError("Not implemented: and/or in argument list " + expr);
+                parser.throwError("Not implemented: and/or/xor in argument list " + expr);
             }
 
             if (!TokenUtils.peek(parser).text.equals(")")) {
