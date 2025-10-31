@@ -30,6 +30,9 @@ public class EmitBinaryOperatorNode {
             case "//=" ->
                     EmitLogicalOperator.emitLogicalAssign(emitterVisitor, node, Opcodes.IFNE, "getDefinedBoolean");
 
+            case "xor", "^^" ->
+                    EmitLogicalOperator.emitXorOperator(emitterVisitor, node);
+
             // Assignment operator
             case "=" -> EmitVariable.handleAssignOperator(emitterVisitor, node);
 
@@ -81,7 +84,7 @@ public class EmitBinaryOperatorNode {
                  "==", "!=", "eq", "ne" -> EmitOperatorChained.emitChainedComparison(emitterVisitor, node);
 
             // Binary operators
-            case "%", "&", "&.", "binary&", "*", "**", "+", "-", "/", "^^", "xor",
+            case "%", "&", "&.", "binary&", "*", "**", "+", "-", "/",
                  "<<", "<=>", ">>", "^", "^.", "binary^", "|", "|.", "binary|",
                  "bless", "cmp", "isa" -> EmitBinaryOperator.handleBinaryOperator(emitterVisitor, node,
                     OperatorHandler.get(node.operator));
