@@ -161,10 +161,14 @@ public class StatementParser {
                     String fullName = NameNormalizer.normalizeVariableName(identifier, parser.ctx.symbolTable.getCurrentPackage());
                     identifierNode.name = fullName;
 
+                    // Mark the For1Node so the emitter knows to evaluate list before local
+                    // This ensures list is evaluated while $_ still has its parent scope value
+                    For1Node forNode = new For1Node(label, true, varNode, initialization, body, continueNode, parser.tokenIndex);
+                    forNode.needsArrayOfAlias = true;  // Signal emitter to use array of aliases
                     return new BlockNode(
                             List.of(
                                     new OperatorNode("local", varNode, parser.tokenIndex),
-                                    new For1Node(label, true, varNode, initialization, body, continueNode, parser.tokenIndex)
+                                    forNode
                             ), parser.tokenIndex);
                 }
             }
