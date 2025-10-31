@@ -29,6 +29,10 @@ public class For1Node extends AbstractNode {
      * the label name for this loop
      */
     public String labelName;
+    /**
+     * If true, use array of aliases for list evaluation (for global $_ loops)
+     */
+    public boolean needsArrayOfAlias = false;
 
     /**
      * Constructs a new For1Node with the specified parts of the for loop.
