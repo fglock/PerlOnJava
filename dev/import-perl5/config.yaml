@@ -386,6 +386,11 @@ imports:
     target: src/main/perl/lib/Term/Table
     type: directory
 
+  # Term::Table tests
+  - source: perl5/cpan/Term-Table/t
+    target: perl5_t/Term-Table
+    type: directory
+
   # Add more imports below as needed
   # Example with minimal fields:
   # - source: perl5/lib/SomeModule.pm
