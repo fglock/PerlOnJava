@@ -1841,6 +1841,35 @@ public class IOOperator {
      * Create a duplicate of a RuntimeIO handle.
      * This creates a new RuntimeIO that shares the same underlying IOHandle.
      */
+    /**
+     * Opens a filehandle by duplicating an existing one (for 2-argument open with dup mode).
+     * This handles cases like: open(my $fh, ">&1")
+     *
+     * @param fileName The file descriptor number or handle name
+     * @param mode     The duplication mode (>&, <&, etc.)
+     * @return RuntimeIO handle that duplicates the original, or null on error
+     */
+    public static RuntimeIO openFileHandleDup(String fileName, String mode) {
+        boolean isParsimonious = mode.endsWith("="); // &= modes reuse file descriptor
+
+        // Check if it's a numeric file descriptor
+        if (fileName.matches("^\\d+$")) {
+            int fd = Integer.parseInt(fileName);
+            RuntimeIO sourceHandle = findFileHandleByDescriptor(fd);
+            if (sourceHandle != null && sourceHandle.ioHandle != null) {
+                if (isParsimonious) {
+                    return sourceHandle;
+                } else {
+                    return duplicateFileHandle(sourceHandle);
+                }
+            } else {
+                throw new PerlCompilerException("Bad file descriptor: " + fd);
+            }
+        } else {
+            throw new PerlCompilerException("Unsupported filehandle duplication: " + fileName);
+        }
+    }
+
     private static RuntimeIO duplicateFileHandle(RuntimeIO original) {
         if (original == null || original.ioHandle == null) {
             return null;
