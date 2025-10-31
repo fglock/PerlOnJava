@@ -33,6 +33,11 @@ public class For1Node extends AbstractNode {
      * If true, use array of aliases for list evaluation (for global $_ loops)
      */
     public boolean needsArrayOfAlias = false;
+    /**
+     * If >= 0, use this pre-evaluated array variable instead of evaluating list
+     * This is set by EmitBlock when it pre-evaluates the list before localizing $_
+     */
+    public int preEvaluatedArrayIndex = -1;
 
     /**
      * Constructs a new For1Node with the specified parts of the for loop.

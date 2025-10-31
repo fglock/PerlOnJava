@@ -95,7 +95,25 @@ public class EmitForeach {
         
         Local.localRecord localRecord = Local.localSetup(emitterVisitor.ctx, node, mv);
 
-        if (isGlobalUnderscore) {
+        // Check if the list was pre-evaluated by EmitBlock (for nested for loops with local $_)
+        if (node.preEvaluatedArrayIndex >= 0) {
+            // Use the pre-evaluated array that was stored before local $_ was emitted
+            mv.visitVarInsn(Opcodes.ALOAD, node.preEvaluatedArrayIndex);
+            
+            // For statement modifiers, localize $_ ourselves
+            if (needLocalizeUnderscore) {
+                mv.visitLdcInsn(globalVarName);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/GlobalRuntimeScalar",
+                        "makeLocal",
+                        "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                        false);
+                mv.visitInsn(Opcodes.POP);  // Discard the returned scalar
+            }
+            
+            // Get iterator from the pre-evaluated array
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray", "iterator", "()Ljava/util/Iterator;", false);
+        } else if (isGlobalUnderscore) {
             // Global $_ as loop variable: evaluate list to array of aliases first
             // This preserves aliasing semantics while ensuring list is evaluated before any
             // parent block's local $_ takes effect (e.g., in nested for loops)
