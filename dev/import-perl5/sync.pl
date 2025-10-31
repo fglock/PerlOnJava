@@ -36,6 +36,9 @@ sub parse_yaml {
             elsif ($line =~ /^\s+type:\s*(.+)/) {
                 $current_import->{type} = $1;
             }
+            elsif ($line =~ /^\s+protected:\s*(.+)/) {
+                $current_import->{protected} = ($1 =~ /true|yes|1/i) ? 1 : 0;
+            }
         }
     }
     push @imports, $current_import if $current_import;
@@ -61,10 +64,31 @@ sub apply_patch {
 
 # Copy a directory recursively using rsync
 sub copy_directory {
-    my ($source, $target) = @_;
+    my ($source, $target, $project_root, $protected_files) = @_;
     
-    # Use rsync for efficient directory copying
-    my $cmd = "rsync -a '$source/' '$target/'";
+    # Build rsync command with exclusions for protected files
+    my $cmd = "rsync -a";
+    
+    # Add exclusions for protected files
+    if ($protected_files && @$protected_files) {
+        for my $protected_path (@$protected_files) {
+            # protected_path is relative to project root, need to make it absolute
+            my $abs_protected = File::Spec->catfile($project_root, $protected_path);
+            
+            # Calculate relative path from target directory
+            if (index($abs_protected, $target) == 0) {
+                # Extract relative path by removing target prefix and leading slash
+                my $rel_path = substr($abs_protected, length($target));
+                $rel_path =~ s{^/+}{};  # Remove leading slashes
+                if ($rel_path) {
+                    $cmd .= " --exclude='$rel_path'";
+                    print "  Excluding protected file: $rel_path\n";
+                }
+            }
+        }
+    }
+    
+    $cmd .= " '$source/' '$target/'";
     print "  Running: $cmd\n";
     
     my $result = system($cmd);
@@ -103,6 +127,17 @@ sub main {
     
     print "Found " . scalar(@$imports) . " import(s) to process.\n\n";
     
+    # Build list of protected files for exclusion from directory imports
+    my @protected_files;
+    for my $import (@$imports) {
+        if ($import->{protected} && $import->{target}) {
+            # Store relative path for rsync exclude
+            push @protected_files, $import->{target};
+            print "Protected file: $import->{target}\n";
+        }
+    }
+    print "\n" if @protected_files;
+    
     my $success_count = 0;
     my $error_count = 0;
     
@@ -132,8 +167,8 @@ sub main {
                 };
             }
             
-            # Copy directory using rsync
-            unless (copy_directory($source, $target)) {
+            # Copy directory using rsync (with protected file exclusions)
+            unless (copy_directory($source, $target, $project_root, \@protected_files)) {
                 $error_count++;
                 next;
             }
@@ -143,6 +178,14 @@ sub main {
             unless (-f $source) {
                 warn "  ERROR: Source file not found: $source\n\n";
                 $error_count++;
+                next;
+            }
+            
+            # Check if target is protected (defined in config.yaml)
+            if ($import->{protected} && -f $target) {
+                print "  ⚠ SKIPPED: File is protected from overwrite\n";
+                print "  (File exists and protected flag is set in config)\n\n";
+                $success_count++;
                 next;
             }
             

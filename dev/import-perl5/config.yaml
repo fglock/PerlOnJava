@@ -1,15 +1,20 @@
 # Configuration for importing Perl5 modules and tests into PerlOnJava
 #
 # Each entry specifies:
-#   source: Path relative to project root (typically perl5/...)
-#   target: Path relative to project root where file/dir should be copied
-#   type:   'file' (default) or 'directory' for bulk directory copies
-#   patch:  Optional patch file (relative to dev/import-perl5/patches/)
+#   source:    Path relative to project root (typically perl5/...)
+#   target:    Path relative to project root where file/dir should be copied
+#   type:      'file' (default) or 'directory' for bulk directory copies
+#   patch:     Optional patch file (relative to dev/import-perl5/patches/)
+#   protected: Optional boolean (true/false) - if true, existing file won't be overwritten
 #
 # To add a new import:
 # 1. Add an entry below
 # 2. If a patch is needed, create it with: diff -u original modified > patches/filename.patch
 # 3. Run: perl dev/import-perl5/sync.pl
+#
+# PROTECTED FILES:
+# Files with 'protected: true' will be skipped during sync if they already exist.
+# This is useful for files that have been customized for PerlOnJava.
 
 imports:
   # Perl modules imported to src/main/perl/lib/
@@ -260,7 +265,7 @@ imports:
 
   # Tests for distribution
   - source: perl5/cpan/Text-Tabs/t
-    target: perl5_t/Text-Tabs
+    target: perl5_t/Text-Tabs/t
     type: directory
 
   # From CPAN distribution
@@ -356,6 +361,21 @@ imports:
   # Tests for distribution
   - source: perl5/cpan/Getopt-Long/t
     target: perl5_t/Getopt-Long
+    type: directory
+
+  # From CPAN distribution (Test-Simple includes Test::More, Test::Builder, ok.pm, etc.)
+  - source: perl5/cpan/Test-Simple/lib
+    target: src/main/perl/lib
+    type: directory
+
+  # Test::More.pm is protected - won't be overwritten if it exists (customized for PerlOnJava)
+  - source: perl5/cpan/Test-Simple/lib/Test/More.pm
+    target: src/main/perl/lib/Test/More.pm
+    protected: true
+
+  # Tests for distribution
+  - source: perl5/cpan/Test-Simple/t
+    target: perl5_t/Test-Simple
     type: directory
 
   # Add more imports below as needed
