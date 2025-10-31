@@ -180,6 +180,58 @@ public class EmitLogicalOperator {
     }
 
     /**
+     * Emits bytecode for the xor operator (low-precedence logical XOR).
+     * XOR evaluates both operands (no short-circuit) and returns:
+     * - left if left is true and right is false
+     * - right if left is false and right is true  
+     * - false otherwise
+     *
+     * Note: If the right operand is a control flow statement like 'next',
+     * it will jump away and the xor operation will never complete.
+     *
+     * @param emitterVisitor The visitor used for code emission.
+     * @param node           The binary operator node representing the xor operation.
+     */
+    static void emitXorOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        int operandContext = emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME
+                ? RuntimeContextType.RUNTIME
+                : RuntimeContextType.SCALAR;
+
+        // Evaluate left operand
+        node.left.accept(emitterVisitor.with(operandContext));
+        // Stack: [left]
+
+        // Store left in a local variable to keep stack clean for control flow
+        int leftVar = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        mv.visitVarInsn(Opcodes.ASTORE, leftVar);
+        // Stack: []
+
+        // Evaluate right operand (this may jump away if it's 'next', 'last', 'redo', 'return', etc.)
+        // If it jumps, the stack is now clean at the loop level
+        node.right.accept(emitterVisitor.with(operandContext));
+        // Stack: [right] (only if right didn't jump away)
+
+        // Load left back onto stack
+        mv.visitVarInsn(Opcodes.ALOAD, leftVar);
+        // Stack: [right, left]
+
+        // Swap to get correct order for xor(left, right)
+        mv.visitInsn(Opcodes.SWAP);
+        // Stack: [left, right]
+
+        // Call the xor operator
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/operators/Operator",
+                "xor",
+                "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                false);
+        // Stack: [result]
+
+        EmitOperator.handleVoidContext(emitterVisitor);
+    }
+
+    /**
      * Simple implementation for SCALAR/VOID context (no context conversion needed)
      */
     private static void emitLogicalOperatorSimple(EmitterVisitor emitterVisitor, BinaryOperatorNode node, int compareOpcode, String getBoolean) {

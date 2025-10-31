@@ -378,6 +378,14 @@ imports:
     target: perl5_t/Test-Simple
     type: directory
 
+  # Term::Table - Table formatting for Test2 and general use
+  - source: perl5/cpan/Term-Table/lib/Term/Table.pm
+    target: src/main/perl/lib/Term/Table.pm
+
+  - source: perl5/cpan/Term-Table/lib/Term/Table
+    target: src/main/perl/lib/Term/Table
+    type: directory
+
   # Add more imports below as needed
   # Example with minimal fields:
   # - source: perl5/lib/SomeModule.pm
