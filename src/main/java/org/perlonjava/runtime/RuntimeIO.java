@@ -255,27 +255,40 @@ public class RuntimeIO extends RuntimeScalar {
         int modeEndIndex = 0;
 
         // Check for mode at the beginning of the filename
-        if (fileName.startsWith(">>")) {
-            mode = ">>";
-            modeEndIndex = 2;
-        } else if (fileName.startsWith(">&")) {
-            mode = ">&";
+        // Must check longer patterns first to avoid incorrect matches
+        if (fileName.startsWith("+<&=")) {
+            mode = "+<&=";
+            modeEndIndex = 4;
+        } else if (fileName.startsWith(">&=")) {
+            mode = ">&=";
             modeEndIndex = 3;
-        } else if (fileName.startsWith(">")) {
-            mode = ">";
-            modeEndIndex = 1;
+        } else if (fileName.startsWith("<&=")) {
+            mode = "<&=";
+            modeEndIndex = 3;
         } else if (fileName.startsWith("+>>")) {
             mode = "+>>";
+            modeEndIndex = 3;
+        } else if (fileName.startsWith("+<&")) {
+            mode = "+<&";
             modeEndIndex = 3;
         } else if (fileName.startsWith("+>")) {
             mode = "+>";
             modeEndIndex = 2;
-        } else if (fileName.startsWith("+<&=")) {
-            mode = "+<&=";
-            modeEndIndex = 4;
         } else if (fileName.startsWith("+<")) {
             mode = "+<";
             modeEndIndex = 2;
+        } else if (fileName.startsWith(">>")) {
+            mode = ">>";
+            modeEndIndex = 2;
+        } else if (fileName.startsWith(">&")) {
+            mode = ">&";
+            modeEndIndex = 2;
+        } else if (fileName.startsWith("<&")) {
+            mode = "<&";
+            modeEndIndex = 2;
+        } else if (fileName.startsWith(">")) {
+            mode = ">";
+            modeEndIndex = 1;
         } else if (fileName.startsWith("<")) {
             mode = "<";
             modeEndIndex = 1;
@@ -331,6 +344,14 @@ public class RuntimeIO extends RuntimeScalar {
                 if (mode.isEmpty()) {
                     mode = "<";
                 }
+            }
+
+            // Handle filehandle duplication modes
+            if (mode.equals("<&") || mode.equals(">&") || mode.equals("+<&") ||
+                    mode.equals("<&=") || mode.equals(">&=") || mode.equals("+<&=")) {
+                // For 2-argument open with dup mode, delegate to IOOperator
+                // This handles: open(my $fh, ">&1") where ">&1" is parsed as mode=">&", fileName="1"
+                return org.perlonjava.operators.IOOperator.openFileHandleDup(fileName, mode);
             }
 
             Path filePath = resolvePath(fileName);
@@ -886,7 +907,12 @@ public class RuntimeIO extends RuntimeScalar {
      */
     public RuntimeScalar write(String data) {
         needFlush = true;
-        if (lastAccesseddHandle != this && lastAccesseddHandle.needFlush) {
+        // Only flush lastAccessedHandle if it's a different handle AND doesn't share the same ioHandle
+        // (duplicated handles share the same ioHandle, so flushing would be redundant and could cause deadlocks)
+        if (lastAccesseddHandle != null && 
+            lastAccesseddHandle != this && 
+            lastAccesseddHandle.needFlush && 
+            lastAccesseddHandle.ioHandle != this.ioHandle) {
             // Synchronize terminal output for stdout and stderr
             lastAccesseddHandle.flush();
         }
