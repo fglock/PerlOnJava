@@ -66,11 +66,78 @@ public class EmitForeach {
             loopVariableIsGlobal = false;
         }
 
+        // For global $_ as loop variable, we need to:
+        // 1. Evaluate the list first (before any localization takes effect)
+        // 2. For statement modifiers: localize $_ ourselves
+        // 3. Iterate over the pre-evaluated list
+        //
+        // This handles cases like: for (split(//, $_)) where the outer context
+        // may have already localized $_, making it undef when we evaluate the list.
+        boolean isStatementModifier = !node.useNewScope;
+        boolean isGlobalUnderscore = node.needsArrayOfAlias || 
+                                     (loopVariableIsGlobal && globalVarName != null && 
+                                      (globalVarName.equals("main::_") || globalVarName.endsWith("::_")));
+        boolean needLocalizeUnderscore = isStatementModifier && loopVariableIsGlobal && globalVarName != null && 
+                                         (globalVarName.equals("main::_") || globalVarName.endsWith("::_"));
+        
+        // Allocate variable to track dynamic variable stack level for our localization
+        int dynamicIndex = -1;
+        if (needLocalizeUnderscore) {
+            dynamicIndex = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            // Get the current level of the dynamic variable stack and store it
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/DynamicVariableManager",
+                    "getLocalLevel",
+                    "()I",
+                    false);
+            mv.visitVarInsn(Opcodes.ISTORE, dynamicIndex);
+        }
+        
         Local.localRecord localRecord = Local.localSetup(emitterVisitor.ctx, node, mv);
 
-        // Obtain the iterator for the list
-        node.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
-        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "iterator", "()Ljava/util/Iterator;", false);
+        // Check if the list was pre-evaluated by EmitBlock (for nested for loops with local $_)
+        if (node.preEvaluatedArrayIndex >= 0) {
+            // Use the pre-evaluated array that was stored before local $_ was emitted
+            mv.visitVarInsn(Opcodes.ALOAD, node.preEvaluatedArrayIndex);
+            
+            // For statement modifiers, localize $_ ourselves
+            if (needLocalizeUnderscore) {
+                mv.visitLdcInsn(globalVarName);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/GlobalRuntimeScalar",
+                        "makeLocal",
+                        "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                        false);
+                mv.visitInsn(Opcodes.POP);  // Discard the returned scalar
+            }
+            
+            // Get iterator from the pre-evaluated array
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray", "iterator", "()Ljava/util/Iterator;", false);
+        } else if (isGlobalUnderscore) {
+            // Global $_ as loop variable: evaluate list to array of aliases first
+            // This preserves aliasing semantics while ensuring list is evaluated before any
+            // parent block's local $_ takes effect (e.g., in nested for loops)
+            node.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "getArrayOfAlias", "()Lorg/perlonjava/runtime/RuntimeArray;", false);
+            
+            // For statement modifiers, localize $_ ourselves
+            if (needLocalizeUnderscore) {
+                mv.visitLdcInsn(globalVarName);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/GlobalRuntimeScalar",
+                        "makeLocal",
+                        "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                        false);
+                mv.visitInsn(Opcodes.POP);  // Discard the returned scalar
+            }
+            
+            // Get iterator from the array of aliases
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray", "iterator", "()Ljava/util/Iterator;", false);
+        } else {
+            // Standard path: obtain iterator for the list
+            node.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "iterator", "()Ljava/util/Iterator;", false);
+        }
 
         mv.visitLabel(loopStart);
 
@@ -165,6 +232,17 @@ public class EmitForeach {
         mv.visitJumpInsn(Opcodes.GOTO, loopStart);
 
         mv.visitLabel(loopEnd);
+        
+        // Restore dynamic variable stack for our localization
+        if (needLocalizeUnderscore && dynamicIndex != -1) {
+            mv.visitVarInsn(Opcodes.ILOAD, dynamicIndex);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/DynamicVariableManager",
+                    "popToLocalLevel",
+                    "(I)V",
+                    false);
+        }
+        
         Local.localTeardown(localRecord, mv);
 
         emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
