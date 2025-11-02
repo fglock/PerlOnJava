@@ -93,42 +93,6 @@ our @ISA = qw(Exporter);
 use XSLoader ();
 XSLoader::load( 'Unicode::Normalize', $VERSION );
 
-# Stub implementations for XS functions (for when XS is not available)
-if (!defined &getCombinClass) {
-    *getCombinClass = sub { return 0 };
-    *getCanon = sub { return undef };
-    *getCompat = sub { return undef };
-    *getComposite = sub { return undef };
-    *isExclusion = sub { return 0 };
-    *isSingleton = sub { return 0 };
-    *isNonStDecomp = sub { return 0 };
-    *isComp2nd = sub { return 0 };
-    *isComp_Ex = sub { return 0 };
-    *isNFD_NO = sub { return 0 };
-    *isNFC_NO = sub { return 0 };
-    *isNFC_MAYBE = sub { return undef };
-    *isNFKD_NO = sub { return 0 };
-    *isNFKC_NO = sub { return 0 };
-    *isNFKC_MAYBE = sub { return undef };
-    *decompose = sub { return $_[0] };
-    *reorder = sub { return $_[0] };
-    *compose = sub { return $_[0] };
-    *composeContiguous = sub { return $_[0] };
-    *checkFCD = sub { return 1 };
-    *checkNFD = sub { return 1 };
-    *checkNFC = sub { return 1 };
-    *checkNFKD = sub { return 1 };
-    *checkNFKC = sub { return 1 };
-    *check = sub { return 1 };
-    *FCC = sub { return $_[0] };
-    *splitOnLastStarter = sub { return ($_[0], '') };
-    *NFC_partial = sub { return $_[0] };
-    *NFD_partial = sub { return $_[0] };
-    *NFKC_partial = sub { return $_[0] };
-    *NFKD_partial = sub { return $_[0] };
-    *normalize_partial = sub { return $_[0] };
-}
-
 ##### The below part is common to XS and PP #####
 
 ##

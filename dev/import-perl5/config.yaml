@@ -208,6 +208,16 @@ imports:
     target: perl5_t/locale.t
 
   # From core library
+  - source: perl5/cpan/experimental/lib
+    target: src/main/perl/lib
+    type: directory
+
+  # Related test
+  - source: perl5/cpan/experimental/t
+    target: perl5_t/experimental
+    type: directory
+
+  # From core library
   - source: perl5/lib/vmsish.pm
     target: src/main/perl/lib/vmsish.pm
 
