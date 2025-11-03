@@ -320,10 +320,30 @@ public class SignatureParser {
         return arguments.elements.getFirst();
     }
 
+    /**
+     * Generates AST for extracting a named parameter from @_.
+     * 
+     * <p>Named parameters are passed as key-value pairs in @_. This method generates:
+     * <pre>{@code
+     * my %__named_args__ = @_;  # Only once for all named params
+     * my $paramName = (delete $__named_args__{paramName}) // defaultValue;
+     * }</pre>
+     * 
+     * <p>The generated AST structure:
+     * <ol>
+     *   <li>Hash declaration: {@code my %__named_args__ = @_} (first param only)</li>
+     *   <li>Delete operation: {@code delete $__named_args__{paramName}}</li>
+     *   <li>Default application: {@code deleteExpr // defaultValue}</li>
+     *   <li>Variable assignment: {@code my $paramName = extractionValue}</li>
+     * </ol>
+     *
+     * @param paramVariable The variable node to assign the extracted value to
+     * @param paramName The name of the parameter (for hash key lookup)
+     * @param defaultValue The default value expression, or null if no default
+     * @param defaultOp The default operator ("=", "//=", or "||=")
+     * @return A ListNode containing the hash declaration and extraction statements
+     */
     private Node generateNamedParameterExtraction(Node paramVariable, String paramName, Node defaultValue, String defaultOp) {
-        // Named parameters are passed as key-value pairs in @_
-        // Generate: { my %h = @_; $named = (delete $h{named}) // default }
-        
         List<Node> statements = new ArrayList<>();
         
         // Create the hash only once for all named parameters

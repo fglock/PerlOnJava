@@ -640,6 +640,14 @@ public class StatementParser {
         token = TokenUtils.peek(parser);
         if (token.type == LexerTokenType.OPERATOR && token.text.equals("{")) {
             // package NAME BLOCK
+            // 
+            // Two-scope design:
+            // 1. Outer scope (scopeIndex): Created here for the package/class block
+            // 2. Inner scope (blockScopeIndex): Created by ParseBlock for the block contents
+            //
+            // For packages: Both scopes exit normally during parseBlock
+            // For classes: Inner scope exit is delayed until after ClassTransformer
+            //              so methods can capture class-level lexical variables
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
             int scopeIndex = parser.ctx.symbolTable.enterScope();
             
