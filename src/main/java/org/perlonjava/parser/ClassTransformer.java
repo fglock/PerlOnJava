@@ -134,11 +134,12 @@ public class ClassTransformer {
             }
         }
 
-        // Transform and register user-defined methods FIRST (while scope is ACTIVE)
-        // This allows them to capture class-level lexicals like `my $count` - just like package subs!
+        // Transform and register user-defined methods (while scope is ACTIVE)
+        // The delayed scope exit (in StatementParser) ensures they can capture class-level lexicals
         for (SubroutineNode method : methods) {
             transformMethod(method, fields);
             block.elements.add(method);
+            // Register immediately to generate bytecode
             SubroutineParser.handleNamedSub(parser, method.name, method.prototype,
                     method.attributes, (BlockNode) method.block);
         }
