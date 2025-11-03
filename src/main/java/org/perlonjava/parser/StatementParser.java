@@ -658,8 +658,20 @@ public class StatementParser {
             }
 
             BlockNode block;
+            int blockScopeIndex;
+            
             try {
-                block = ParseBlock.parseBlock(parser);
+                if (isClass) {
+                    // For classes, delay scope exit until after ClassTransformer runs
+                    // This allows methods to capture class-level lexical variables
+                    ParseBlock.BlockWithScope result = ParseBlock.parseBlock(parser, false);
+                    block = result.block;
+                    blockScopeIndex = result.scopeIndex;
+                } else {
+                    // For packages, exit scope normally
+                    block = ParseBlock.parseBlock(parser);
+                    blockScopeIndex = -1; // Already exited
+                }
             } finally {
                 // Always restore the isInClassBlock flag
                 parser.isInClassBlock = wasInClassBlock;
@@ -669,17 +681,24 @@ public class StatementParser {
             block.elements.addFirst(packageNode);
 
             // Transform class blocks
-            // Pass parser for bytecode generation of generated methods
-            // Note: ClassTransformer needs the package context to be set correctly
-            // for method registration, so we restore it AFTER transformation
+            // For classes: scope is still active, methods can capture lexicals
+            // For packages: subroutines were already registered during parseBlock
             if (isClass) {
                 block = ClassTransformer.transformClassBlock(block, nameNode.name, parser);
+                
+                // Restore the package context after class transformation
+                parser.ctx.symbolTable.setCurrentPackage(previousPackage, previousPackageIsClass);
+                
+                // NOW exit the block scope after methods have been registered
+                parser.ctx.symbolTable.exitScope(blockScopeIndex);
+            } else {
+                // For regular packages, just restore context (scope already exited)
+                parser.ctx.symbolTable.setCurrentPackage(previousPackage, previousPackageIsClass);
             }
-
-            // Restore the package context after class transformation
-            parser.ctx.symbolTable.setCurrentPackage(previousPackage, previousPackageIsClass);
-
+            
+            // Exit the outer scope (from line 644)
             parser.ctx.symbolTable.exitScope(scopeIndex);
+
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
             return block;
         }
