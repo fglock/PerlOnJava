@@ -19,6 +19,19 @@ import static org.perlonjava.parser.TokenUtils.peek;
  */
 public class ParseBlock {
     /**
+     * Result of parseBlock when scope exit is delayed.
+     */
+    public static class BlockWithScope {
+        public final BlockNode block;
+        public final int scopeIndex;
+        
+        public BlockWithScope(BlockNode block, int scopeIndex) {
+            this.block = block;
+            this.scopeIndex = scopeIndex;
+        }
+    }
+    
+    /**
      * Parses a block of code and generates an Abstract Syntax Tree (AST) representation.
      * A block consists of zero or more statements and may include labeled statements.
      * <p>
@@ -32,6 +45,23 @@ public class ParseBlock {
      * @return BlockNode representing the parsed block in the AST
      */
     public static BlockNode parseBlock(Parser parser) {
+        return parseBlock(parser, true).block;
+    }
+    
+    /**
+     * Parses a block with optional delayed scope exit.
+     * 
+     * <p>When exitScope=false, the caller is responsible for calling
+     * exitScope(scopeIndex) later. This is needed for class blocks where
+     * methods must be registered while the scope is still active to capture
+     * class-level lexical variables.
+     *
+     * @param parser The parser instance
+     * @param exitScope Whether to exit the scope before returning
+     * @return BlockWithScope containing the block and scope index
+     * @see StatementParser#parseOptionalPackageBlock for usage with class blocks
+     */
+    public static BlockWithScope parseBlock(Parser parser, boolean exitScope) {
         // Store the starting position of the block for backtracking
         int currentIndex = parser.tokenIndex;
 
@@ -96,13 +126,15 @@ public class ParseBlock {
             statements.add(new ListNode(parser.tokenIndex));
         }
 
-        // Exit the current scope before returning
-        parser.ctx.symbolTable.exitScope(scopeIndex);
+        // Exit the current scope before returning (unless delayed)
+        if (exitScope) {
+            parser.ctx.symbolTable.exitScope(scopeIndex);
+        }
 
         // Create and return the block node with all parsed statements
         BlockNode blockNode = new BlockNode(statements, currentIndex);
         blockNode.labels = blockLabels; // Set the collected labels in the BlockNode
-        return blockNode;
+        return new BlockWithScope(blockNode, scopeIndex);
     }
 
     private static String parseLabel(Parser parser, List<Node> statements, List<String> blockLabels) {

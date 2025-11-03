@@ -106,7 +106,8 @@ public class StatementResolver {
                         ListNode signatureAST = null;
                         if (peek(parser).text.equals("(")) {
                             // Parse the signature properly to generate parameter declarations
-                            signatureAST = SignatureParser.parseSignature(parser);
+                            // Pass true for isMethod flag to account for implicit $self in error messages
+                            signatureAST = SignatureParser.parseSignature(parser, methodName, true);
                             // Note: SignatureParser consumes the closing )
                         }
 
@@ -219,7 +220,8 @@ public class StatementResolver {
                             // Parse signature if present
                             ListNode signatureAST = null;
                             if (peek(parser).text.equals("(")) {
-                                signatureAST = SignatureParser.parseSignature(parser);
+                                // Pass true for isMethod flag to account for implicit $self in error messages
+                                signatureAST = SignatureParser.parseSignature(parser, methodName, true);
                             }
 
                             // Parse the method body
@@ -228,7 +230,31 @@ public class StatementResolver {
                                 consume(parser, LexerTokenType.OPERATOR, "{");
                                 boolean wasInMethod = parser.isInMethod;
                                 parser.isInMethod = true; // Set method context for lexical method
-                                block = ParseBlock.parseBlock(parser);
+                                
+                                // Enter scope for the lexical method's body
+                                int scopeIndex = parser.ctx.symbolTable.enterScope();
+                                
+                                // Add temp $self to THIS scope (the method's inner scope)
+                                // so field access works during parsing
+                                // This will be matched by the actual `my $self = shift;` injected during transformation
+                                OperatorNode tempSelf = new OperatorNode("my",
+                                        new OperatorNode("$", new IdentifierNode("self", parser.tokenIndex), parser.tokenIndex),
+                                        parser.tokenIndex);
+                                parser.ctx.symbolTable.addVariable("$self", "my", tempSelf);
+                                
+                                // Parse the block contents (without creating another scope)
+                                List<Node> elements = new ArrayList<>();
+                                while (!peek(parser).text.equals("}")) {
+                                    Node stmt = StatementResolver.parseStatement(parser, null);
+                                    if (stmt != null) {
+                                        elements.add(stmt);
+                                    }
+                                }
+                                block = new BlockNode(elements, parser.tokenIndex);
+                                
+                                // Exit the method's scope (this removes temp $self)
+                                parser.ctx.symbolTable.exitScope(scopeIndex);
+                                
                                 parser.isInMethod = wasInMethod; // Restore previous context
                                 consume(parser, LexerTokenType.OPERATOR, "}");
                             } else if (peek(parser).text.equals(";")) {

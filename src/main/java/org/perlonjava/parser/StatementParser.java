@@ -527,6 +527,35 @@ public class StatementParser {
             // Transform it to generate constructor
             emptyBlock = ClassTransformer.transformClassBlock(emptyBlock, nameNode.name, parser);
 
+            // Register deferred methods (constructor and any accessors)
+            // Same logic as in parseOptionalPackageBlock
+            
+            // Register user-defined methods (none for unit class)
+            @SuppressWarnings("unchecked")
+            List<SubroutineNode> deferredMethods = (List<SubroutineNode>) emptyBlock.getAnnotation("deferredMethods");
+            if (deferredMethods != null) {
+                for (SubroutineNode method : deferredMethods) {
+                    SubroutineParser.handleNamedSubWithFilter(parser, method.name, method.prototype,
+                            method.attributes, (BlockNode) method.block, false);
+                }
+            }
+            
+            // Register generated methods (constructor and accessors)
+            SubroutineNode deferredConstructor = (SubroutineNode) emptyBlock.getAnnotation("deferredConstructor");
+            if (deferredConstructor != null) {
+                SubroutineParser.handleNamedSubWithFilter(parser, deferredConstructor.name, deferredConstructor.prototype,
+                        deferredConstructor.attributes, (BlockNode) deferredConstructor.block, true);
+            }
+            
+            @SuppressWarnings("unchecked")
+            List<SubroutineNode> deferredAccessors = (List<SubroutineNode>) emptyBlock.getAnnotation("deferredAccessors");
+            if (deferredAccessors != null) {
+                for (SubroutineNode accessor : deferredAccessors) {
+                    SubroutineParser.handleNamedSubWithFilter(parser, accessor.name, accessor.prototype,
+                            accessor.attributes, (BlockNode) accessor.block, true);
+                }
+            }
+
             return emptyBlock;
         }
 
@@ -640,21 +669,48 @@ public class StatementParser {
         token = TokenUtils.peek(parser);
         if (token.type == LexerTokenType.OPERATOR && token.text.equals("{")) {
             // package NAME BLOCK
+            // 
+            // Two-scope design:
+            // 1. Outer scope (scopeIndex): Created here for the package/class block
+            // 2. Inner scope (blockScopeIndex): Created by ParseBlock for the block contents
+            //
+            // For packages: Both scopes exit normally during parseBlock
+            // For classes: Inner scope exit is delayed until after ClassTransformer
+            //              so methods can capture class-level lexical variables
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
             int scopeIndex = parser.ctx.symbolTable.enterScope();
-            parser.ctx.symbolTable.setCurrentPackage(nameNode.name, packageNode.getBooleanAnnotation("isClass"));
+            
+            boolean isClass = packageNode.getBooleanAnnotation("isClass");
+            
+            // Save the current package and class state to restore later
+            String previousPackage = parser.ctx.symbolTable.getCurrentPackage();
+            boolean previousPackageIsClass = parser.ctx.symbolTable.currentPackageIsClass();
+            
+            parser.ctx.symbolTable.setCurrentPackage(nameNode.name, isClass);
 
             // Set flag if we're entering a class block
             boolean wasInClassBlock = parser.isInClassBlock;
-            if (packageNode.getBooleanAnnotation("isClass")) {
+            if (isClass) {
                 parser.isInClassBlock = true;
             }
 
             BlockNode block;
+            int blockScopeIndex;
+            
             try {
-                block = ParseBlock.parseBlock(parser);
+                if (isClass) {
+                    // For classes, delay scope exit until after ClassTransformer runs
+                    // This allows methods to capture class-level lexical variables
+                    ParseBlock.BlockWithScope result = ParseBlock.parseBlock(parser, false);
+                    block = result.block;
+                    blockScopeIndex = result.scopeIndex;
+                } else {
+                    // For packages, exit scope normally
+                    block = ParseBlock.parseBlock(parser);
+                    blockScopeIndex = -1; // Already exited
+                }
             } finally {
-                // Always restore the previous state
+                // Always restore the isInClassBlock flag
                 parser.isInClassBlock = wasInClassBlock;
             }
 
@@ -662,12 +718,51 @@ public class StatementParser {
             block.elements.addFirst(packageNode);
 
             // Transform class blocks
-            // Pass parser for bytecode generation of generated methods
-            if (packageNode.getBooleanAnnotation("isClass")) {
+            // For classes: scope is still active, methods can capture lexicals
+            // For packages: subroutines were already registered during parseBlock
+            if (isClass) {
                 block = ClassTransformer.transformClassBlock(block, nameNode.name, parser);
+                
+                // Register user-defined methods BEFORE exiting scope
+                // This allows them to capture class-level lexicals
+                @SuppressWarnings("unchecked")
+                List<SubroutineNode> deferredMethods = (List<SubroutineNode>) block.getAnnotation("deferredMethods");
+                if (deferredMethods != null) {
+                    for (SubroutineNode method : deferredMethods) {
+                        SubroutineParser.handleNamedSubWithFilter(parser, method.name, method.prototype,
+                                method.attributes, (BlockNode) method.block, false);
+                    }
+                }
+                
+                // NOW exit the block scope AFTER user-defined methods are registered
+                parser.ctx.symbolTable.exitScope(blockScopeIndex);
+                
+                // Register generated methods WITH filtering (skip lexical sub/method hidden variables)
+                SubroutineNode deferredConstructor = (SubroutineNode) block.getAnnotation("deferredConstructor");
+                if (deferredConstructor != null) {
+                    SubroutineParser.handleNamedSubWithFilter(parser, deferredConstructor.name, deferredConstructor.prototype,
+                            deferredConstructor.attributes, (BlockNode) deferredConstructor.block, true);
+                }
+                
+                @SuppressWarnings("unchecked")
+                List<SubroutineNode> deferredAccessors = (List<SubroutineNode>) block.getAnnotation("deferredAccessors");
+                if (deferredAccessors != null) {
+                    for (SubroutineNode accessor : deferredAccessors) {
+                        SubroutineParser.handleNamedSubWithFilter(parser, accessor.name, accessor.prototype,
+                                accessor.attributes, (BlockNode) accessor.block, true);
+                    }
+                }
+                
+                // Restore the package context after class transformation
+                parser.ctx.symbolTable.setCurrentPackage(previousPackage, previousPackageIsClass);
+            } else {
+                // For regular packages, just restore context (scope already exited)
+                parser.ctx.symbolTable.setCurrentPackage(previousPackage, previousPackageIsClass);
             }
-
+            
+            // Exit the outer scope (from line 644)
             parser.ctx.symbolTable.exitScope(scopeIndex);
+
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
             return block;
         }
