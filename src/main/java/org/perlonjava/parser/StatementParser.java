@@ -527,6 +527,35 @@ public class StatementParser {
             // Transform it to generate constructor
             emptyBlock = ClassTransformer.transformClassBlock(emptyBlock, nameNode.name, parser);
 
+            // Register deferred methods (constructor and any accessors)
+            // Same logic as in parseOptionalPackageBlock
+            
+            // Register user-defined methods (none for unit class)
+            @SuppressWarnings("unchecked")
+            List<SubroutineNode> deferredMethods = (List<SubroutineNode>) emptyBlock.getAnnotation("deferredMethods");
+            if (deferredMethods != null) {
+                for (SubroutineNode method : deferredMethods) {
+                    SubroutineParser.handleNamedSubWithFilter(parser, method.name, method.prototype,
+                            method.attributes, (BlockNode) method.block, false);
+                }
+            }
+            
+            // Register generated methods (constructor and accessors)
+            SubroutineNode deferredConstructor = (SubroutineNode) emptyBlock.getAnnotation("deferredConstructor");
+            if (deferredConstructor != null) {
+                SubroutineParser.handleNamedSubWithFilter(parser, deferredConstructor.name, deferredConstructor.prototype,
+                        deferredConstructor.attributes, (BlockNode) deferredConstructor.block, true);
+            }
+            
+            @SuppressWarnings("unchecked")
+            List<SubroutineNode> deferredAccessors = (List<SubroutineNode>) emptyBlock.getAnnotation("deferredAccessors");
+            if (deferredAccessors != null) {
+                for (SubroutineNode accessor : deferredAccessors) {
+                    SubroutineParser.handleNamedSubWithFilter(parser, accessor.name, accessor.prototype,
+                            accessor.attributes, (BlockNode) accessor.block, true);
+                }
+            }
+
             return emptyBlock;
         }
 
