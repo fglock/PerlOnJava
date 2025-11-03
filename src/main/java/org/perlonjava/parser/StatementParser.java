@@ -723,12 +723,8 @@ public class StatementParser {
             if (isClass) {
                 block = ClassTransformer.transformClassBlock(block, nameNode.name, parser);
                 
-                // NOW exit the block scope before registering any methods
-                parser.ctx.symbolTable.exitScope(blockScopeIndex);
-                
-                // Register ALL methods AFTER scope exit
-                
-                // Register user-defined methods WITHOUT filtering (they should capture class-level lexicals)
+                // Register user-defined methods BEFORE exiting scope
+                // This allows them to capture class-level lexicals
                 @SuppressWarnings("unchecked")
                 List<SubroutineNode> deferredMethods = (List<SubroutineNode>) block.getAnnotation("deferredMethods");
                 if (deferredMethods != null) {
@@ -737,6 +733,9 @@ public class StatementParser {
                                 method.attributes, (BlockNode) method.block, false);
                     }
                 }
+                
+                // NOW exit the block scope AFTER user-defined methods are registered
+                parser.ctx.symbolTable.exitScope(blockScopeIndex);
                 
                 // Register generated methods WITH filtering (skip lexical sub/method hidden variables)
                 SubroutineNode deferredConstructor = (SubroutineNode) block.getAnnotation("deferredConstructor");

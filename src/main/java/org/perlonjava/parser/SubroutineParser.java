@@ -459,9 +459,24 @@ public class SubroutineParser {
             }
         }
         // Create a new EmitterContext for generating bytecode
+        // Create a filtered snapshot that excludes field declarations
+        // Fields cause bytecode generation issues when present in the symbol table
+        org.perlonjava.symbols.ScopedSymbolTable filteredSnapshot = new org.perlonjava.symbols.ScopedSymbolTable();
+        filteredSnapshot.enterScope();
+        Map<Integer, org.perlonjava.symbols.SymbolTable.SymbolEntry> visibleVars = parser.ctx.symbolTable.getAllVisibleVariables();
+        for (org.perlonjava.symbols.SymbolTable.SymbolEntry entry : visibleVars.values()) {
+            // Skip field declarations when creating snapshot for bytecode generation
+            if (!entry.decl().equals("field")) {
+                filteredSnapshot.addVariable(entry.name(), entry.decl(), entry.ast());
+            }
+        }
+        filteredSnapshot.setCurrentPackage(parser.ctx.symbolTable.getCurrentPackage(), 
+                parser.ctx.symbolTable.currentPackageIsClass());
+        filteredSnapshot.setCurrentSubroutine(parser.ctx.symbolTable.getCurrentSubroutine());
+        
         EmitterContext newCtx = new EmitterContext(
                 new JavaClassInfo(),
-                parser.ctx.symbolTable.snapShot(),
+                filteredSnapshot,
                 null,
                 null,
                 RuntimeContextType.RUNTIME,
