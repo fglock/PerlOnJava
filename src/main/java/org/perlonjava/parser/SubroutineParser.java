@@ -51,6 +51,40 @@ public class SubroutineParser {
             return new IdentifierNode(subName, currentIndex);
         }
 
+        // Check if this is a lexical sub/method (my sub name / my method name)
+        // Lexical subs are stored in the symbol table with "&" prefix
+        String lexicalKey = "&" + subName;
+        SymbolTable.SymbolEntry lexicalEntry = parser.ctx.symbolTable.getSymbolEntry(lexicalKey);
+        if (lexicalEntry != null && lexicalEntry.ast() instanceof OperatorNode varNode) {
+            // This is a lexical sub/method - use the hidden variable instead of package lookup
+            // The varNode is the "my $name__lexsub_123" or "my $name__lexmethod_123" variable
+            
+            // Parse arguments
+            ListNode arguments;
+            if (peek(parser).text.equals("(")) {
+                TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
+                List<Node> argList = ListParser.parseList(parser, ")", 0);
+                arguments = new ListNode(argList, parser.tokenIndex);
+            } else {
+                // No parentheses, no arguments
+                arguments = new ListNode(parser.tokenIndex);
+            }
+            
+            // Return a call to the hidden variable using &$hiddenVar(arguments) syntax
+            // The varNode contains the variable declaration, we need just the variable itself
+            // Extract the variable from "my $var" -> "$var"
+            OperatorNode myDecl = varNode;
+            if (myDecl.operand instanceof OperatorNode dollarOp && "$".equals(dollarOp.operator)) {
+                // Create a call using the dereference syntax: &$hiddenVar(args)
+                // This is similar to &{$hiddenVar}(args) but simpler
+                OperatorNode ampersandDeref = new OperatorNode("&", dollarOp, currentIndex);
+                return new BinaryOperatorNode("(",
+                        ampersandDeref,
+                        arguments,
+                        currentIndex);
+            }
+        }
+
         // Normalize the subroutine name to include the current package
         String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
 
@@ -338,6 +372,10 @@ public class SubroutineParser {
     }
 
     public static ListNode handleNamedSub(Parser parser, String subName, String prototype, List<String> attributes, BlockNode block) {
+        return handleNamedSubWithFilter(parser, subName, prototype, attributes, block, false);
+    }
+    
+    public static ListNode handleNamedSubWithFilter(Parser parser, String subName, String prototype, List<String> attributes, BlockNode block, boolean filterLexicalMethods) {
         // - register the subroutine in the namespace
         String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
         RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName);
@@ -370,6 +408,16 @@ public class SubroutineParser {
                 // Skip code references (subroutines/methods) - they are not captured as closure variables
                 if (sigil.equals("&")) {
                     continue;
+                }
+                
+                // For generated methods (constructor, readers, writers), skip lexical sub/method hidden variables
+                // These variables (like $priv__lexmethod_123) are implementation details
+                // User-defined methods can capture them, but generated methods should not
+                if (filterLexicalMethods) {
+                    String varName = entry.name();
+                    if (varName.contains("__lexmethod_") || varName.contains("__lexsub_")) {
+                        continue;
+                    }
                 }
                 
                 String variableName = null;

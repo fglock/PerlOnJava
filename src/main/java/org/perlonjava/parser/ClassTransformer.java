@@ -99,7 +99,7 @@ public class ClassTransformer {
                 // Check if this is a lexical method assignment (my $name__lexmethod_123 = sub {...})
                 if (binOp.right instanceof SubroutineNode subNode
                         && subNode.getBooleanAnnotation("isMethod")) {
-                    // This is a lexical method - transform it
+                    // This is a lexical method - transform it to inject $self and handle fields
                     transformMethod(subNode, fields);
                     otherStatements.add(element); // Keep the assignment with transformed method
                 } else {
@@ -134,48 +134,65 @@ public class ClassTransformer {
             }
         }
 
-        // Generate constructor if not present
-        // ALL classes need a constructor, even if they have no fields or ADJUST blocks
-        if (existingConstructor == null) {
-            SubroutineNode constructor = generateConstructor(fields, className, adjustNodes);
-            block.elements.add(constructor);
-            // Register the constructor using the same logic as named subroutines
-            // This handles all the bytecode generation automatically
-            SubroutineParser.handleNamedSub(parser, constructor.name, constructor.prototype,
-                    constructor.attributes, (BlockNode) constructor.block);
-        }
-
-        // Generate reader methods for fields with :reader attribute
-        for (OperatorNode field : fields) {
-            if (field.getAnnotation("attr:reader") != null) {
-                SubroutineNode reader = generateReaderMethod(field, className);
-                block.elements.add(reader);
-                // Register the reader using the same logic as named subroutines
-                SubroutineParser.handleNamedSub(parser, reader.name, reader.prototype,
-                        reader.attributes, (BlockNode) reader.block);
-            }
-
-            // Generate writer methods for fields with :writer attribute
-            if (field.getAnnotation("attr:writer") != null) {
-                SubroutineNode writer = generateWriterMethod(field);
-                block.elements.add(writer);
-                // Register the writer using the same logic as named subroutines
-                SubroutineParser.handleNamedSub(parser, writer.name, writer.prototype,
-                        writer.attributes, (BlockNode) writer.block);
-            }
-        }
-
-        // Transform methods to inject $self and field aliases
+        // Transform and register user-defined methods FIRST (while scope is ACTIVE)
+        // This allows them to capture class-level lexicals like `my $count` - just like package subs!
         for (SubroutineNode method : methods) {
             transformMethod(method, fields);
             block.elements.add(method);
-            // Register the method in the runtime, just like constructor and reader methods
             SubroutineParser.handleNamedSub(parser, method.name, method.prototype,
                     method.attributes, (BlockNode) method.block);
         }
 
-        // Add all other statements back
-        block.elements.addAll(otherStatements);
+        // Generate constructor and accessors but DEFER their registration
+        // These are synthetic methods and should NOT capture class-level lexicals
+        // They will be registered AFTER scope exit in StatementParser
+        
+        // Generate constructor if not present
+        if (existingConstructor == null) {
+            SubroutineNode constructor = generateConstructor(fields, className, adjustNodes);
+            block.elements.add(constructor);
+            block.setAnnotation("deferredConstructor", constructor);
+        }
+
+        // Generate reader and writer methods
+        List<SubroutineNode> deferredAccessors = new ArrayList<>();
+        for (OperatorNode field : fields) {
+            if (field.getAnnotation("attr:reader") != null) {
+                SubroutineNode reader = generateReaderMethod(field, className);
+                block.elements.add(reader);
+                deferredAccessors.add(reader);
+            }
+
+            if (field.getAnnotation("attr:writer") != null) {
+                SubroutineNode writer = generateWriterMethod(field);
+                block.elements.add(writer);
+                deferredAccessors.add(writer);
+            }
+        }
+        if (!deferredAccessors.isEmpty()) {
+            block.setAnnotation("deferredAccessors", deferredAccessors);
+        }
+
+        // Add otherStatements back to the block
+        // This includes lexical methods (my method priv { ... }) which are actual code
+        // But NOT simple lexical declarations (my $count;) which were already processed
+        for (Node stmt : otherStatements) {
+            // Skip simple lexical declarations without assignments
+            // These are already in the symbol table and don't need to be in the AST
+            if (stmt instanceof BinaryOperatorNode binOp && "=".equals(binOp.operator)) {
+                // This is an assignment - keep it (includes lexical methods)
+                block.elements.add(stmt);
+            } else if (stmt instanceof OperatorNode opNode && 
+                      ("my".equals(opNode.operator) || "state".equals(opNode.operator) || "our".equals(opNode.operator))) {
+                // This is a bare lexical declaration (my $count;) - skip it
+                // It's already in the symbol table, and adding it to the AST would cause
+                // the constructor to try capturing it as a closure variable
+                continue;
+            } else {
+                // Everything else gets added back
+                block.elements.add(stmt);
+            }
+        }
 
         return block;
     }
