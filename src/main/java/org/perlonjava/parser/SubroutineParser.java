@@ -53,9 +53,11 @@ public class SubroutineParser {
 
         // Check if this is a lexical sub/method (my sub name / my method name)
         // Lexical subs are stored in the symbol table with "&" prefix
-        String lexicalKey = "&" + subName;
-        SymbolTable.SymbolEntry lexicalEntry = parser.ctx.symbolTable.getSymbolEntry(lexicalKey);
-        if (lexicalEntry != null && lexicalEntry.ast() instanceof OperatorNode varNode) {
+        // BUT: quote-like operators (qr, q, qq, qw, etc.) should never be treated as subs
+        if (!ParsePrimary.isIsQuoteLikeOperator(subName)) {
+            String lexicalKey = "&" + subName;
+            SymbolTable.SymbolEntry lexicalEntry = parser.ctx.symbolTable.getSymbolEntry(lexicalKey);
+            if (lexicalEntry != null && lexicalEntry.ast() instanceof OperatorNode varNode) {
             // Check if this is an "our sub" - if so, use normal package sub mechanism
             Boolean isOurSub = (Boolean) varNode.getAnnotation("isOurSub");
             if (isOurSub != null && isOurSub) {
@@ -108,6 +110,7 @@ public class SubroutineParser {
                                 currentIndex);
                     }
                 }
+            }
             }
         }
 
