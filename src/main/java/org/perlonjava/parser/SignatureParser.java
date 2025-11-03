@@ -27,6 +27,7 @@ import static org.perlonjava.parser.PrototypeArgs.consumeArgsWithPrototype;
  *   <li>Slurpy arrays: {@code sub foo($a, @rest) { }}</li>
  *   <li>Slurpy hashes: {@code sub foo(%opts) { }}</li>
  *   <li>Anonymous slurpy: {@code sub foo($a, @) { }}</li>
+ *   <li>Named parameters: {@code sub foo(:$named = 'default') { }}</li>
  * </ul>
  */
 public class SignatureParser {
@@ -34,9 +35,11 @@ public class SignatureParser {
     private final Parser parser;
     private final List<Node> astNodes = new ArrayList<>();
     private final List<Node> parameterVariables = new ArrayList<>();
+    private final List<Node> namedParameterNodes = new ArrayList<>();
     private int minParams = 0;
     private int maxParams = 0;
     private boolean hasSlurpy = false;
+    private String namedArgsHashName = null; // Track the hash name for named parameters
 
     private SignatureParser(Parser parser) {
         this.parser = parser;
@@ -90,6 +93,13 @@ public class SignatureParser {
     }
 
     private void parseParameter() {
+        // Check for named parameter (starts with :)
+        boolean isNamed = false;
+        if (peekToken().text.equals(":")) {
+            consumeToken(); // consume ':'
+            isNamed = true;
+        }
+
         LexerToken sigilToken = consumeToken();
         String sigil = sigilToken.text;
 
@@ -102,20 +112,36 @@ public class SignatureParser {
         // Check if this is a slurpy parameter
         boolean isSlurpy = sigil.equals("@") || sigil.equals("%");
 
+        // Named parameters cannot be slurpy
+        if (isNamed && isSlurpy) {
+            parser.throwError("Named parameters cannot be slurpy");
+        }
+
         // Parse parameter name (if present)
         String paramName = null;
         if (peekToken().type == LexerTokenType.IDENTIFIER) {
             paramName = consumeToken().text;
         }
 
+        // Named parameters must have a name
+        if (isNamed && paramName == null) {
+            parser.throwError("Named parameter must have a name");
+        }
+
         // Create parameter variable or undef placeholder
         Node paramVariable = createParameterVariable(sigil, paramName);
-        parameterVariables.add(paramVariable);
-
-        if (isSlurpy) {
-            handleSlurpyParameter();
+        
+        if (isNamed) {
+            // Named parameters are handled separately, not part of @_ unpacking
+            namedParameterNodes.add(paramVariable);
+            handleNamedParameter(paramVariable, paramName);
         } else {
-            handleScalarParameter(paramVariable);
+            parameterVariables.add(paramVariable);
+            if (isSlurpy) {
+                handleSlurpyParameter();
+            } else {
+                handleScalarParameter(paramVariable);
+            }
         }
     }
 
@@ -185,6 +211,33 @@ public class SignatureParser {
         maxParams++;
     }
 
+    private void handleNamedParameter(Node paramVariable, String paramName) {
+        LexerToken next = peekToken();
+
+        // Named parameters are always optional and extracted from a hash in @_
+        // Generate: my %h = @_; $named = (delete $h{named}) // default_value;
+        
+        Node defaultValue = null;
+        String defaultOp = "//="; // default to defined-or operator for named params
+
+        // Check for default value
+        if (next.text.equals("=") || next.text.equals("||=") || next.text.equals("//=")) {
+            defaultOp = consumeToken().text;
+            defaultValue = parseDefaultValue(paramVariable);
+        }
+
+        // Generate the extraction code for named parameter
+        // This returns a ListNode with the hash declaration and extraction statements
+        Node extractionCode = generateNamedParameterExtraction(paramVariable, paramName, defaultValue, defaultOp);
+        
+        // Add the extraction statements to astNodes
+        if (extractionCode instanceof ListNode) {
+            astNodes.addAll(((ListNode) extractionCode).elements);
+        } else {
+            astNodes.add(extractionCode);
+        }
+    }
+
     private Node generateDefaultAssignment(Node variable, Node defaultValue, String op, int paramIndex) {
         if (variable == null || (variable instanceof OperatorNode && ((OperatorNode) variable).operator.equals("undef"))) {
             // Anonymous parameter with default - no-op
@@ -229,6 +282,74 @@ public class SignatureParser {
         return arguments.elements.getFirst();
     }
 
+    private Node generateNamedParameterExtraction(Node paramVariable, String paramName, Node defaultValue, String defaultOp) {
+        // Named parameters are passed as key-value pairs in @_
+        // Generate: { my %h = @_; $named = (delete $h{named}) // default }
+        
+        List<Node> statements = new ArrayList<>();
+        
+        // Create the hash only once for all named parameters
+        if (namedArgsHashName == null) {
+            namedArgsHashName = "__named_args__";
+            IdentifierNode hashIdent = new IdentifierNode(namedArgsHashName, parser.tokenIndex);
+            Node hashVar = new OperatorNode("%", hashIdent, parser.tokenIndex);
+            
+            // Create: my %__named_args__ = @_
+            Node hashDecl = new BinaryOperatorNode(
+                    "=",
+                    new OperatorNode("my", hashVar, parser.tokenIndex),
+                    atUnderscore(parser),
+                    parser.tokenIndex);
+            statements.add(hashDecl);
+        }
+        
+        // Create: $__named_args__{named}
+        // Note: use $ sigil for single element access, not %
+        IdentifierNode hashIdent = new IdentifierNode(namedArgsHashName, parser.tokenIndex);
+        // Hash subscripts need HashLiteralNode wrapping the key
+        // Use ArrayList because the codegen may modify the list (e.g., auto-quoting identifiers)
+        List<Node> keyList = new ArrayList<>();
+        keyList.add(new IdentifierNode(paramName, parser.tokenIndex));
+        HashLiteralNode hashKey = new HashLiteralNode(keyList, parser.tokenIndex);
+        Node hashAccess = new BinaryOperatorNode(
+                "{",
+                new OperatorNode("$", hashIdent, parser.tokenIndex),
+                hashKey,
+                parser.tokenIndex);
+        
+        // Create: delete $__named_args__{named}
+        // The delete operator expects its operand to be a ListNode
+        Node deleteExpr = new OperatorNode("delete", new ListNode(List.of(hashAccess), parser.tokenIndex), parser.tokenIndex);
+        
+        Node extractionValue;
+        if (defaultValue != null) {
+            // (delete $h{named}) // defaultValue
+            if (defaultOp.equals("=")) {
+                defaultOp = "//";
+            } else if (defaultOp.equals("||=")) {
+                defaultOp = "||";
+            } else if (defaultOp.equals("//=")) {
+                defaultOp = "//";
+            }
+            
+            extractionValue = new BinaryOperatorNode(
+                    defaultOp,
+                    deleteExpr,
+                    defaultValue,
+                    parser.tokenIndex);
+        } else {
+            extractionValue = deleteExpr;
+        }
+        
+        // Add the extraction assignment with 'my' declaration
+        // my $named = (delete $h{named}) // default
+        Node myParam = new OperatorNode("my", paramVariable, parser.tokenIndex);
+        statements.add(new BinaryOperatorNode("=", myParam, extractionValue, parser.tokenIndex));
+        
+        // Return a list node containing the hash declaration (if first time) and the extraction
+        return new ListNode(statements, parser.tokenIndex);
+    }
+
     private ListNode generateSignatureAST() {
         List<Node> allNodes = new ArrayList<>();
 
@@ -236,30 +357,51 @@ public class SignatureParser {
         allNodes.add(generateArgCountValidation());
 
         // Add parameter assignment from @_
-        allNodes.add(generateParameterAssignment());
+        if (!parameterVariables.isEmpty()) {
+            allNodes.add(generateParameterAssignment());
+        }
 
-        // Add default value assignments
+        // Add default value assignments and named parameter extractions
+        // (Named parameters are declared within their extraction code)
         allNodes.addAll(astNodes);
 
         return new ListNode(allNodes, parser.tokenIndex);
     }
 
     private Node generateArgCountValidation() {
-        // (minParams <= @_ <= maxParams) || die "Bad number of arguments"
-        return new BinaryOperatorNode(
-                "||",
-                new ListNode(List.of(
-                        new BinaryOperatorNode("<=",
-                                new BinaryOperatorNode("<=",
-                                        new NumberNode(Integer.toString(minParams), parser.tokenIndex),
-                                        atUnderscore(parser),
-                                        parser.tokenIndex),
-                                new NumberNode(Integer.toString(maxParams), parser.tokenIndex),
-                                parser.tokenIndex)
-                ), parser.tokenIndex),
-                dieWarnNode(parser, "die", new ListNode(List.of(
-                        new StringNode("Bad number of arguments", parser.tokenIndex)), parser.tokenIndex)),
-                parser.tokenIndex);
+        // If we have named parameters, we need different validation
+        // Named parameters are passed as key-value pairs, so we need to allow extra arguments
+        if (!namedParameterNodes.isEmpty()) {
+            // With named parameters: minParams <= @_
+            // (We don't check maxParams because named parameters can take any number of key-value pairs)
+            return new BinaryOperatorNode(
+                    "||",
+                    new ListNode(List.of(
+                            new BinaryOperatorNode("<=",
+                                    new NumberNode(Integer.toString(minParams), parser.tokenIndex),
+                                    atUnderscore(parser),
+                                    parser.tokenIndex)
+                    ), parser.tokenIndex),
+                    dieWarnNode(parser, "die", new ListNode(List.of(
+                            new StringNode("Bad number of arguments", parser.tokenIndex)), parser.tokenIndex)),
+                    parser.tokenIndex);
+        } else {
+            // Without named parameters: minParams <= @_ <= maxParams
+            return new BinaryOperatorNode(
+                    "||",
+                    new ListNode(List.of(
+                            new BinaryOperatorNode("<=",
+                                    new BinaryOperatorNode("<=",
+                                            new NumberNode(Integer.toString(minParams), parser.tokenIndex),
+                                            atUnderscore(parser),
+                                            parser.tokenIndex),
+                                    new NumberNode(Integer.toString(maxParams), parser.tokenIndex),
+                                    parser.tokenIndex)
+                    ), parser.tokenIndex),
+                    dieWarnNode(parser, "die", new ListNode(List.of(
+                            new StringNode("Bad number of arguments", parser.tokenIndex)), parser.tokenIndex)),
+                    parser.tokenIndex);
+        }
     }
 
     private Node generateParameterAssignment() {
