@@ -189,6 +189,7 @@ public class ParsePrimary {
     static boolean isIsQuoteLikeOperator(String operator) {
         return operator.equals("q") || operator.equals("qq") ||
                 operator.equals("qw") || operator.equals("qx") ||
+                operator.equals("qr") ||
                 operator.equals("m") || operator.equals("s") ||
                 operator.equals("tr") || operator.equals("y");
     }
