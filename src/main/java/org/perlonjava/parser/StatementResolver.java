@@ -106,7 +106,8 @@ public class StatementResolver {
                         ListNode signatureAST = null;
                         if (peek(parser).text.equals("(")) {
                             // Parse the signature properly to generate parameter declarations
-                            signatureAST = SignatureParser.parseSignature(parser);
+                            // Pass true for isMethod flag to account for implicit $self in error messages
+                            signatureAST = SignatureParser.parseSignature(parser, methodName, true);
                             // Note: SignatureParser consumes the closing )
                         }
 
@@ -219,7 +220,8 @@ public class StatementResolver {
                             // Parse signature if present
                             ListNode signatureAST = null;
                             if (peek(parser).text.equals("(")) {
-                                signatureAST = SignatureParser.parseSignature(parser);
+                                // Pass true for isMethod flag to account for implicit $self in error messages
+                                signatureAST = SignatureParser.parseSignature(parser, methodName, true);
                             }
 
                             // Parse the method body

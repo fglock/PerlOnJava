@@ -249,7 +249,7 @@ public class SubroutineParser {
             if (parser.ctx.symbolTable.isFeatureCategoryEnabled("signatures")) {
                 parser.ctx.logDebug("Signatures feature enabled");
                 // If the signatures feature is enabled, we parse a signature.
-                signature = parseSignature(parser);
+                signature = parseSignature(parser, subName);
                 parser.ctx.logDebug("Signature AST: " + signature);
                 parser.ctx.logDebug("next token " + peek(parser));
             } else {
