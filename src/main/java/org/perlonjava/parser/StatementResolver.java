@@ -226,17 +226,12 @@ public class StatementResolver {
                                 // Check if this is a forward declaration or a full definition
                                 // Look ahead: after optional prototype (...), is there a body {...}?
                                 boolean hasBody = false;
+                                String prototype = null;
                                 int saveIndex = parser.tokenIndex;
                                 
                                 if (peek(parser).text.equals("(")) {
-                                    // Skip prototype/signature to see what comes after
-                                    consume(parser); // consume '('
-                                    int parenDepth = 1;
-                                    while (parenDepth > 0 && parser.tokenIndex < parser.tokens.size()) {
-                                        String text = consume(parser).text;
-                                        if (text.equals("(")) parenDepth++;
-                                        else if (text.equals(")")) parenDepth--;
-                                    }
+                                    // Parse the prototype
+                                    prototype = ((StringNode) StringParser.parseRawString(parser, "q")).value;
                                 }
                                 
                                 // Now check if there's a body
@@ -250,6 +245,11 @@ public class StatementResolver {
                                     // Parse the rest as an anonymous sub
                                     Node anonSub = SubroutineParser.parseSubroutineDefinition(parser, false, null);
 
+                                    // Store prototype in the sub if present
+                                    if (prototype != null && anonSub instanceof SubroutineNode subNode) {
+                                        varDecl.setAnnotation("prototype", prototype);
+                                    }
+
                                     // Create the list for declaration
                                     ListNode declList = new ListNode(parser.tokenIndex);
                                     declList.elements.add(varDecl);
@@ -260,8 +260,10 @@ public class StatementResolver {
                                     yield assignment;
                                 } else {
                                     // Forward declaration: my sub name; or my sub name ($);
-                                    // Skip the prototype if present
-                                    if (peek(parser).text.equals("(")) {
+                                    if (prototype != null) {
+                                        // Store prototype in varDecl annotation
+                                        varDecl.setAnnotation("prototype", prototype);
+                                        // Skip the prototype tokens
                                         consume(parser); // consume '('
                                         int parenDepth = 1;
                                         while (parenDepth > 0 && parser.tokenIndex < parser.tokens.size()) {
@@ -270,7 +272,7 @@ public class StatementResolver {
                                             else if (text.equals(")")) parenDepth--;
                                         }
                                     }
-                                    // Just declare the variable (prototype is ignored for lexical subs)
+                                    // Just declare the variable
                                     yield varDecl;
                                 }
                             }
