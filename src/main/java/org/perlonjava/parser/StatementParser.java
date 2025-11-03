@@ -694,11 +694,31 @@ public class StatementParser {
             if (isClass) {
                 block = ClassTransformer.transformClassBlock(block, nameNode.name, parser);
                 
+                // NOW exit the block scope after user-defined methods have been registered
+                parser.ctx.symbolTable.exitScope(blockScopeIndex);
+                
+                // Register generated methods AFTER scope exit
+                // Use filtering to skip lexical sub/method hidden variables
+                
+                // Register deferred constructor
+                SubroutineNode deferredConstructor = (SubroutineNode) block.getAnnotation("deferredConstructor");
+                if (deferredConstructor != null) {
+                    SubroutineParser.handleNamedSubWithFilter(parser, deferredConstructor.name, deferredConstructor.prototype,
+                            deferredConstructor.attributes, (BlockNode) deferredConstructor.block, true);
+                }
+                
+                // Register deferred accessors (readers/writers)
+                @SuppressWarnings("unchecked")
+                List<SubroutineNode> deferredAccessors = (List<SubroutineNode>) block.getAnnotation("deferredAccessors");
+                if (deferredAccessors != null) {
+                    for (SubroutineNode accessor : deferredAccessors) {
+                        SubroutineParser.handleNamedSubWithFilter(parser, accessor.name, accessor.prototype,
+                                accessor.attributes, (BlockNode) accessor.block, true);
+                    }
+                }
+                
                 // Restore the package context after class transformation
                 parser.ctx.symbolTable.setCurrentPackage(previousPackage, previousPackageIsClass);
-                
-                // NOW exit the block scope after methods have been registered
-                parser.ctx.symbolTable.exitScope(blockScopeIndex);
             } else {
                 // For regular packages, just restore context (scope already exited)
                 parser.ctx.symbolTable.setCurrentPackage(previousPackage, previousPackageIsClass);
