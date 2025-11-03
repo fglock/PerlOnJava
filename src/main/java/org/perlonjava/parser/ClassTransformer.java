@@ -134,14 +134,17 @@ public class ClassTransformer {
             }
         }
 
-        // Transform and register user-defined methods (while scope is ACTIVE)
-        // The delayed scope exit (in StatementParser) ensures they can capture class-level lexicals
+        // Transform user-defined methods but DEFER their registration
+        // They'll be registered AFTER scope exit in StatementParser
+        // Unlike generated methods, they DON'T use filtering (can capture class-level lexicals)
+        List<SubroutineNode> deferredMethods = new ArrayList<>();
         for (SubroutineNode method : methods) {
             transformMethod(method, fields);
             block.elements.add(method);
-            // Register immediately to generate bytecode
-            SubroutineParser.handleNamedSub(parser, method.name, method.prototype,
-                    method.attributes, (BlockNode) method.block);
+            deferredMethods.add(method);
+        }
+        if (!deferredMethods.isEmpty()) {
+            block.setAnnotation("deferredMethods", deferredMethods);
         }
 
         // Generate constructor and accessors but DEFER their registration

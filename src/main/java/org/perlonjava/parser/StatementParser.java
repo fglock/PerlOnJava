@@ -694,20 +694,28 @@ public class StatementParser {
             if (isClass) {
                 block = ClassTransformer.transformClassBlock(block, nameNode.name, parser);
                 
-                // NOW exit the block scope after user-defined methods have been registered
+                // NOW exit the block scope before registering any methods
                 parser.ctx.symbolTable.exitScope(blockScopeIndex);
                 
-                // Register generated methods AFTER scope exit
-                // Use filtering to skip lexical sub/method hidden variables
+                // Register ALL methods AFTER scope exit
                 
-                // Register deferred constructor
+                // Register user-defined methods WITHOUT filtering (they should capture class-level lexicals)
+                @SuppressWarnings("unchecked")
+                List<SubroutineNode> deferredMethods = (List<SubroutineNode>) block.getAnnotation("deferredMethods");
+                if (deferredMethods != null) {
+                    for (SubroutineNode method : deferredMethods) {
+                        SubroutineParser.handleNamedSubWithFilter(parser, method.name, method.prototype,
+                                method.attributes, (BlockNode) method.block, false);
+                    }
+                }
+                
+                // Register generated methods WITH filtering (skip lexical sub/method hidden variables)
                 SubroutineNode deferredConstructor = (SubroutineNode) block.getAnnotation("deferredConstructor");
                 if (deferredConstructor != null) {
                     SubroutineParser.handleNamedSubWithFilter(parser, deferredConstructor.name, deferredConstructor.prototype,
                             deferredConstructor.attributes, (BlockNode) deferredConstructor.block, true);
                 }
                 
-                // Register deferred accessors (readers/writers)
                 @SuppressWarnings("unchecked")
                 List<SubroutineNode> deferredAccessors = (List<SubroutineNode>) block.getAnnotation("deferredAccessors");
                 if (deferredAccessors != null) {
