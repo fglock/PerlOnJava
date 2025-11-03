@@ -50,10 +50,16 @@ public class ParseBlock {
     
     /**
      * Parses a block with optional delayed scope exit.
+     * 
+     * <p>When exitScope=false, the caller is responsible for calling
+     * exitScope(scopeIndex) later. This is needed for class blocks where
+     * methods must be registered while the scope is still active to capture
+     * class-level lexical variables.
      *
      * @param parser The parser instance
      * @param exitScope Whether to exit the scope before returning
      * @return BlockWithScope containing the block and scope index
+     * @see StatementParser#parseOptionalPackageBlock for usage with class blocks
      */
     public static BlockWithScope parseBlock(Parser parser, boolean exitScope) {
         // Store the starting position of the block for backtracking
