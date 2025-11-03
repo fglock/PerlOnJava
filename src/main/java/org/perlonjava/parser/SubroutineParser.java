@@ -463,6 +463,8 @@ public class SubroutineParser {
         // Fields cause bytecode generation issues when present in the symbol table
         org.perlonjava.symbols.ScopedSymbolTable filteredSnapshot = new org.perlonjava.symbols.ScopedSymbolTable();
         filteredSnapshot.enterScope();
+        
+        // Copy all visible variables except field declarations
         Map<Integer, org.perlonjava.symbols.SymbolTable.SymbolEntry> visibleVars = parser.ctx.symbolTable.getAllVisibleVariables();
         for (org.perlonjava.symbols.SymbolTable.SymbolEntry entry : visibleVars.values()) {
             // Skip field declarations when creating snapshot for bytecode generation
@@ -470,9 +472,25 @@ public class SubroutineParser {
                 filteredSnapshot.addVariable(entry.name(), entry.decl(), entry.ast());
             }
         }
+        
+        // Clone the current package
         filteredSnapshot.setCurrentPackage(parser.ctx.symbolTable.getCurrentPackage(), 
                 parser.ctx.symbolTable.currentPackageIsClass());
+        
+        // Clone the current subroutine
         filteredSnapshot.setCurrentSubroutine(parser.ctx.symbolTable.getCurrentSubroutine());
+        
+        // Clone warning flags (critical for 'no warnings' pragmas)
+        filteredSnapshot.warningFlagsStack.pop(); // Remove the initial value pushed by enterScope
+        filteredSnapshot.warningFlagsStack.push(parser.ctx.symbolTable.warningFlagsStack.peek());
+        
+        // Clone feature flags (critical for 'use feature' pragmas like refaliasing)
+        filteredSnapshot.featureFlagsStack.pop(); // Remove the initial value pushed by enterScope
+        filteredSnapshot.featureFlagsStack.push(parser.ctx.symbolTable.featureFlagsStack.peek());
+        
+        // Clone strict options (critical for 'use strict' pragma)
+        filteredSnapshot.strictOptionsStack.pop(); // Remove the initial value pushed by enterScope
+        filteredSnapshot.strictOptionsStack.push(parser.ctx.symbolTable.strictOptionsStack.peek());
         
         EmitterContext newCtx = new EmitterContext(
                 new JavaClassInfo(),
