@@ -187,12 +187,12 @@ public class StatementResolver {
 
                         if (nameToken.type == LexerTokenType.IDENTIFIER) {
                             String subName = consume(parser).text;
+                            int subNameIndex = parser.tokenIndex - 1; // Save the token index of the sub name
 
                             if (declaration.equals("our")) {
                                 // our sub works like our var - it creates a package sub
                                 // Parse as normal package sub
-                                parser.tokenIndex--; // back to subName
-                                parser.tokenIndex--; // back to "sub"
+                                parser.tokenIndex--; // back up to just after "sub"
                                 
                                 Node packageSub = SubroutineParser.parseSubroutineDefinition(parser, true, "our");
                                 
@@ -201,8 +201,8 @@ public class StatementResolver {
                                 // Just mark it in the symbol table so we know it exists as a lexical sub
                                 // (This might be needed for scoping rules)
                                 OperatorNode marker = new OperatorNode("our",
-                                        new OperatorNode("&", new IdentifierNode(subName, parser.tokenIndex), parser.tokenIndex),
-                                        parser.tokenIndex);
+                                        new OperatorNode("&", new IdentifierNode(subName, subNameIndex), subNameIndex),
+                                        subNameIndex);
                                 marker.setAnnotation("isOurSub", true);
                                 parser.ctx.symbolTable.addVariable("&" + subName, "our", marker);
                                 
