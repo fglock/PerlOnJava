@@ -366,6 +366,12 @@ public class SubroutineParser {
                 }
 
                 String sigil = entry.name().substring(0, 1);
+                
+                // Skip code references (subroutines/methods) - they are not captured as closure variables
+                if (sigil.equals("&")) {
+                    continue;
+                }
+                
                 String variableName = null;
                 if (entry.decl().equals("our")) {
                     // Normalize variable name for 'our' declarations
