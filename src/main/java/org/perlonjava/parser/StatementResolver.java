@@ -189,26 +189,24 @@ public class StatementResolver {
                             String subName = consume(parser).text;
 
                             if (declaration.equals("our")) {
-                                // our sub works like our var - it creates a package sub and aliases it lexically
-                                // Parse as normal package sub, then create lexical alias
+                                // our sub works like our var - it creates a package sub
+                                // Parse as normal package sub
                                 parser.tokenIndex--; // back to subName
                                 parser.tokenIndex--; // back to "sub"
                                 
                                 Node packageSub = SubroutineParser.parseSubroutineDefinition(parser, true, "our");
                                 
-                                // Create a lexical variable that references the package sub
-                                String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
-                                String hiddenVarName = subName + "__lexsub_" + parser.tokenIndex;
-                                
-                                // Create: our $hiddenVarName = \&package::sub
-                                OperatorNode varDecl = new OperatorNode("our",
-                                        new OperatorNode("$", new IdentifierNode(hiddenVarName, parser.tokenIndex), parser.tokenIndex),
+                                // For our sub, we don't need the hidden variable mechanism
+                                // The package sub can be called directly
+                                // Just mark it in the symbol table so we know it exists as a lexical sub
+                                // (This might be needed for scoping rules)
+                                OperatorNode marker = new OperatorNode("our",
+                                        new OperatorNode("&", new IdentifierNode(subName, parser.tokenIndex), parser.tokenIndex),
                                         parser.tokenIndex);
+                                marker.setAnnotation("isOurSub", true);
+                                parser.ctx.symbolTable.addVariable("&" + subName, "our", marker);
                                 
-                                // Store the mapping so calls to this sub can find the lexical alias
-                                parser.ctx.symbolTable.addVariable("&" + subName, "our", varDecl);
-                                
-                                // Return just the package sub - the lexical alias is implicit
+                                // Return the package sub
                                 yield packageSub;
                             } else {
                                 // my sub or state sub - lexical only, not in package
@@ -220,7 +218,14 @@ public class StatementResolver {
                                         new OperatorNode("$", new IdentifierNode(hiddenVarName, parser.tokenIndex), parser.tokenIndex),
                                         parser.tokenIndex);
 
-                                // Store the mapping so we can resolve calls to this lexical sub
+                                // Store the hidden variable name as annotation for lookup
+                                varDecl.setAnnotation("hiddenVarName", hiddenVarName);
+
+                                // IMPORTANT: Manually add the hidden variable to the symbol table
+                                // Since we're returning an assignment node, parseVariableDeclaration won't be called again
+                                // So we need to register both the sub name (&p) and the hidden variable ($p__lexsub_N)
+                                parser.ctx.symbolTable.addVariable("$" + hiddenVarName, declaration, 
+                                    (OperatorNode) varDecl.operand); // The $hidden part
                                 parser.ctx.symbolTable.addVariable("&" + subName, declaration, varDecl);
 
                                 // Check if this is a forward declaration or a full definition
