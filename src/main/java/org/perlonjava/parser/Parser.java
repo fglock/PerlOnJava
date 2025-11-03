@@ -149,8 +149,17 @@ public class Parser {
 
             // Get the precedence of the current token.
             int tokenPrecedence = getPrecedence(token.text);
+            
+            // Special case: if this is an IDENTIFIER that's a quote-like operator with high precedence,
+            // it's not actually an infix operator - stop parsing here
+            if (token.type == LexerTokenType.IDENTIFIER && 
+                tokenPrecedence == 24 && 
+                ParsePrimary.isIsQuoteLikeOperator(token.text)) {
+                // This is a quote-like operator that should be parsed as a new expression, not as infix
+                break;
+            }
 
-            // If the token's precedence is less than the precedence of the current expression, stop parsing.
+            // If the token's precedence is less than or equal to the precedence of the current expression, stop parsing.
             if (tokenPrecedence <= precedence) {
                 break;
             }
