@@ -661,9 +661,8 @@ public class StatementParser {
             try {
                 block = ParseBlock.parseBlock(parser);
             } finally {
-                // Always restore the previous state
+                // Always restore the isInClassBlock flag
                 parser.isInClassBlock = wasInClassBlock;
-                parser.ctx.symbolTable.setCurrentPackage(previousPackage, previousPackageIsClass);
             }
 
             // Insert packageNode as first statement in block
@@ -671,9 +670,14 @@ public class StatementParser {
 
             // Transform class blocks
             // Pass parser for bytecode generation of generated methods
+            // Note: ClassTransformer needs the package context to be set correctly
+            // for method registration, so we restore it AFTER transformation
             if (isClass) {
                 block = ClassTransformer.transformClassBlock(block, nameNode.name, parser);
             }
+
+            // Restore the package context after class transformation
+            parser.ctx.symbolTable.setCurrentPackage(previousPackage, previousPackageIsClass);
 
             parser.ctx.symbolTable.exitScope(scopeIndex);
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
