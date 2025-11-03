@@ -3,6 +3,7 @@ package org.perlonjava.parser;
 import org.perlonjava.astnode.*;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
+import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.PerlCompilerException;
 
 import java.util.ArrayList;
@@ -40,9 +41,18 @@ public class SignatureParser {
     private int maxParams = 0;
     private boolean hasSlurpy = false;
     private String namedArgsHashName = null; // Track the hash name for named parameters
+    private String subroutineName = null; // Optional subroutine name for error messages
+    private boolean isMethod = false; // True if parsing method signature (has implicit $self)
 
     private SignatureParser(Parser parser) {
         this.parser = parser;
+        this.isMethod = parser.isInMethod;
+    }
+
+    private SignatureParser(Parser parser, String subroutineName) {
+        this.parser = parser;
+        this.subroutineName = subroutineName;
+        this.isMethod = parser.isInMethod;
     }
 
     /**
@@ -54,6 +64,34 @@ public class SignatureParser {
      */
     public static ListNode parseSignature(Parser parser) {
         return new SignatureParser(parser).parse();
+    }
+
+    /**
+     * Parses a Perl subroutine signature and generates the corresponding AST.
+     *
+     * @param parser The parser instance
+     * @param subroutineName The name of the subroutine for error messages
+     * @return A ListNode containing the generated AST nodes
+     * @throws PerlCompilerException if the signature syntax is invalid
+     */
+    public static ListNode parseSignature(Parser parser, String subroutineName) {
+        return new SignatureParser(parser, subroutineName).parse();
+    }
+
+    /**
+     * Parses a Perl method signature and generates the corresponding AST.
+     * Methods have an implicit $self parameter that affects argument counts in error messages.
+     *
+     * @param parser The parser instance
+     * @param methodName The name of the method for error messages
+     * @param isMethod True if this is a method (has implicit $self)
+     * @return A ListNode containing the generated AST nodes
+     * @throws PerlCompilerException if the signature syntax is invalid
+     */
+    public static ListNode parseSignature(Parser parser, String methodName, boolean isMethod) {
+        SignatureParser sigParser = new SignatureParser(parser, methodName);
+        sigParser.isMethod = isMethod;
+        return sigParser.parse();
     }
 
     private ListNode parse() {
@@ -383,24 +421,112 @@ public class SignatureParser {
                                     parser.tokenIndex)
                     ), parser.tokenIndex),
                     dieWarnNode(parser, "die", new ListNode(List.of(
-                            new StringNode("Bad number of arguments", parser.tokenIndex)), parser.tokenIndex)),
+                            generateTooFewArgsMessage()), parser.tokenIndex)),
                     parser.tokenIndex);
         } else {
-            // Without named parameters: minParams <= @_ <= maxParams
-            return new BinaryOperatorNode(
+            // Without named parameters: check both min and max
+            // We need to check separately for too few vs too many to generate appropriate error messages
+            
+            // First check: minParams <= @_  (too few arguments check)
+            Node tooFewCheck = new BinaryOperatorNode(
                     "||",
                     new ListNode(List.of(
                             new BinaryOperatorNode("<=",
-                                    new BinaryOperatorNode("<=",
-                                            new NumberNode(Integer.toString(minParams), parser.tokenIndex),
-                                            atUnderscore(parser),
-                                            parser.tokenIndex),
+                                    new NumberNode(Integer.toString(minParams), parser.tokenIndex),
+                                    atUnderscore(parser),
+                                    parser.tokenIndex)
+                    ), parser.tokenIndex),
+                    dieWarnNode(parser, "die", new ListNode(List.of(
+                            generateTooFewArgsMessage()), parser.tokenIndex)),
+                    parser.tokenIndex);
+            
+            // Second check: @_ <= maxParams (too many arguments check)
+            Node tooManyCheck = new BinaryOperatorNode(
+                    "||",
+                    new ListNode(List.of(
+                            new BinaryOperatorNode("<=",
+                                    atUnderscore(parser),
                                     new NumberNode(Integer.toString(maxParams), parser.tokenIndex),
                                     parser.tokenIndex)
                     ), parser.tokenIndex),
                     dieWarnNode(parser, "die", new ListNode(List.of(
-                            new StringNode("Bad number of arguments", parser.tokenIndex)), parser.tokenIndex)),
+                            generateTooManyArgsMessage()), parser.tokenIndex)),
                     parser.tokenIndex);
+            
+            // Return both checks in sequence
+            return new ListNode(List.of(tooFewCheck, tooManyCheck), parser.tokenIndex);
+        }
+    }
+
+    private Node generateTooFewArgsMessage() {
+        if (subroutineName != null) {
+            // Generate: "Too few arguments for subroutine 'Package::name' (got " . (scalar(@_) + adjustment) . "; expected at least " . minParams . ")"
+            String fullName = NameNormalizer.normalizeVariableName(subroutineName, parser.ctx.symbolTable.getCurrentPackage());
+            // For methods, add 1 to account for implicit $self parameter (both in got and expected)
+            int adjustedMin = isMethod ? minParams + 1 : minParams;
+            
+            Node argCount;
+            if (isMethod) {
+                // For methods: scalar(@_) + 1 (to account for $self that was already shifted)
+                argCount = new BinaryOperatorNode("+",
+                        new OperatorNode("scalar", atUnderscore(parser), parser.tokenIndex),
+                        new NumberNode("1", parser.tokenIndex),
+                        parser.tokenIndex);
+            } else {
+                argCount = new OperatorNode("scalar", atUnderscore(parser), parser.tokenIndex);
+            }
+            
+            return new BinaryOperatorNode(".",
+                    new BinaryOperatorNode(".",
+                            new BinaryOperatorNode(".",
+                                    new BinaryOperatorNode(".",
+                                            new StringNode("Too few arguments for subroutine '" + fullName + "' (got ", parser.tokenIndex),
+                                            argCount,
+                                            parser.tokenIndex),
+                                    new StringNode("; expected at least ", parser.tokenIndex),
+                                    parser.tokenIndex),
+                            new NumberNode(Integer.toString(adjustedMin), parser.tokenIndex),
+                            parser.tokenIndex),
+                    new StringNode(")", parser.tokenIndex),
+                    parser.tokenIndex);
+        } else {
+            return new StringNode("Too few arguments", parser.tokenIndex);
+        }
+    }
+
+    private Node generateTooManyArgsMessage() {
+        if (subroutineName != null) {
+            // Generate: "Too many arguments for subroutine 'Package::name' (got " . (scalar(@_) + adjustment) . "; expected at most " . maxParams . ")"
+            String fullName = NameNormalizer.normalizeVariableName(subroutineName, parser.ctx.symbolTable.getCurrentPackage());
+            // For methods, add 1 to account for implicit $self parameter (both in got and expected)
+            int adjustedMax = isMethod ? maxParams + 1 : maxParams;
+            
+            Node argCount;
+            if (isMethod) {
+                // For methods: scalar(@_) + 1 (to account for $self that was already shifted)
+                argCount = new BinaryOperatorNode("+",
+                        new OperatorNode("scalar", atUnderscore(parser), parser.tokenIndex),
+                        new NumberNode("1", parser.tokenIndex),
+                        parser.tokenIndex);
+            } else {
+                argCount = new OperatorNode("scalar", atUnderscore(parser), parser.tokenIndex);
+            }
+            
+            return new BinaryOperatorNode(".",
+                    new BinaryOperatorNode(".",
+                            new BinaryOperatorNode(".",
+                                    new BinaryOperatorNode(".",
+                                            new StringNode("Too many arguments for subroutine '" + fullName + "' (got ", parser.tokenIndex),
+                                            argCount,
+                                            parser.tokenIndex),
+                                    new StringNode("; expected at most ", parser.tokenIndex),
+                                    parser.tokenIndex),
+                            new NumberNode(Integer.toString(adjustedMax), parser.tokenIndex),
+                            parser.tokenIndex),
+                    new StringNode(")", parser.tokenIndex),
+                    parser.tokenIndex);
+        } else {
+            return new StringNode("Too many arguments", parser.tokenIndex);
         }
     }
 
