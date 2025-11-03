@@ -53,35 +53,37 @@ public class SubroutineParser {
 
         // Check if this is a lexical sub/method (my sub name / my method name)
         // Lexical subs are stored in the symbol table with "&" prefix
+        // Only handle the simple case with explicit parentheses for now
         String lexicalKey = "&" + subName;
         SymbolTable.SymbolEntry lexicalEntry = parser.ctx.symbolTable.getSymbolEntry(lexicalKey);
         if (lexicalEntry != null && lexicalEntry.ast() instanceof OperatorNode varNode) {
-            // This is a lexical sub/method - use the hidden variable instead of package lookup
-            // The varNode is the "my $name__lexsub_123" or "my $name__lexmethod_123" variable
+            LexerToken nextToken = peek(parser);
             
-            // Parse arguments
-            ListNode arguments;
-            if (peek(parser).text.equals("(")) {
+            // Only use lexical sub handling when there are explicit parentheses
+            // Without parentheses, fall through to normal sub handling which deals with:
+            // - Prototypes (e.g., sub p (\@); p my @a)
+            // - Indirect method call syntax (e.g., h F means F->h())
+            if (nextToken.text.equals("(")) {
+                // This is a lexical sub/method - use the hidden variable instead of package lookup
+                // The varNode is the "my $name__lexsub_123" or "my $name__lexmethod_123" variable
+                
                 TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
                 List<Node> argList = ListParser.parseList(parser, ")", 0);
-                arguments = new ListNode(argList, parser.tokenIndex);
-            } else {
-                // No parentheses, no arguments
-                arguments = new ListNode(parser.tokenIndex);
-            }
-            
-            // Return a call to the hidden variable using &$hiddenVar(arguments) syntax
-            // The varNode contains the variable declaration, we need just the variable itself
-            // Extract the variable from "my $var" -> "$var"
-            OperatorNode myDecl = varNode;
-            if (myDecl.operand instanceof OperatorNode dollarOp && "$".equals(dollarOp.operator)) {
-                // Create a call using the dereference syntax: &$hiddenVar(args)
-                // This is similar to &{$hiddenVar}(args) but simpler
-                OperatorNode ampersandDeref = new OperatorNode("&", dollarOp, currentIndex);
-                return new BinaryOperatorNode("(",
-                        ampersandDeref,
-                        arguments,
-                        currentIndex);
+                ListNode arguments = new ListNode(argList, parser.tokenIndex);
+                
+                // Return a call to the hidden variable using &$hiddenVar(arguments) syntax
+                // The varNode contains the variable declaration, we need just the variable itself
+                // Extract the variable from "my $var" -> "$var"
+                OperatorNode myDecl = varNode;
+                if (myDecl.operand instanceof OperatorNode dollarOp && "$".equals(dollarOp.operator)) {
+                    // Create a call using the dereference syntax: &$hiddenVar(args)
+                    // This is similar to &{$hiddenVar}(args) but simpler
+                    OperatorNode ampersandDeref = new OperatorNode("&", dollarOp, currentIndex);
+                    return new BinaryOperatorNode("(",
+                            ampersandDeref,
+                            arguments,
+                            currentIndex);
+                }
             }
         }
 
@@ -247,8 +249,9 @@ public class SubroutineParser {
 
     public static Node parseSubroutineDefinition(Parser parser, boolean wantName, String declaration) {
 
+        // my, our, state subs are handled in StatementResolver, not here
         if (declaration != null && (declaration.equals("my") || declaration.equals("state"))) {
-            throw new PerlCompilerException("Not implemented: sub declaration `" + declaration + "`");
+            throw new PerlCompilerException("Internal error: my/state sub should be handled in StatementResolver");
         }
 
         // This method is responsible for parsing an anonymous subroutine (a subroutine without a name)

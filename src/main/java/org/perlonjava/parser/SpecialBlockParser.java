@@ -127,6 +127,12 @@ public class SpecialBlockParser {
         Map<Integer, SymbolTable.SymbolEntry> outerVars = parser.ctx.symbolTable.getAllVisibleVariables();
         for (SymbolTable.SymbolEntry entry : outerVars.values()) {
             if (!entry.name().equals("@_") && !entry.decl().isEmpty()) {
+                // Skip lexical subs (entries starting with &) - they are stored as hidden variables
+                // and don't need to be captured in BEGIN blocks
+                if (entry.name().startsWith("&")) {
+                    continue;
+                }
+                
                 if (entry.decl().equals("our")) {
                     // "our" variable lives in a Perl package
                     // Emit: package PKG

@@ -4,6 +4,7 @@ import org.perlonjava.astnode.*;
 import org.perlonjava.codegen.ByteCodeSourceMapper;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
+import org.perlonjava.runtime.NameNormalizer;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -36,8 +37,17 @@ public class StatementResolver {
 
         if (token.type == LexerTokenType.IDENTIFIER) {
             Node result = switch (token.text) {
-                case "CHECK", "INIT", "UNITCHECK", "BEGIN", "END", "ADJUST" ->
-                        SpecialBlockParser.parseSpecialBlock(parser);
+                case "CHECK", "INIT", "UNITCHECK", "BEGIN", "END", "ADJUST" -> {
+                    // Check if next token is '{' - if not, this might be a lexical sub call
+                    parser.tokenIndex++;
+                    if (peek(parser).text.equals("{")) {
+                        parser.tokenIndex = currentIndex;
+                        yield SpecialBlockParser.parseSpecialBlock(parser);
+                    }
+                    // Not a special block, backtrack
+                    parser.tokenIndex = currentIndex;
+                    yield null;
+                }
 
                 case "AUTOLOAD", "DESTROY" -> {
                     parser.tokenIndex++;
@@ -176,32 +186,94 @@ public class StatementResolver {
                         LexerToken nameToken = peek(parser);
 
                         if (nameToken.type == LexerTokenType.IDENTIFIER) {
-                            // my sub name {...} -> my $name__hidden = sub {...}
                             String subName = consume(parser).text;
 
-                            // Generate unique hidden variable name
-                            String hiddenVarName = subName + "__lexsub_" + parser.tokenIndex;
+                            if (declaration.equals("our")) {
+                                // our sub works like our var - it creates a package sub and aliases it lexically
+                                // Parse as normal package sub, then create lexical alias
+                                parser.tokenIndex--; // back to subName
+                                parser.tokenIndex--; // back to "sub"
+                                
+                                Node packageSub = SubroutineParser.parseSubroutineDefinition(parser, true, "our");
+                                
+                                // Create a lexical variable that references the package sub
+                                String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
+                                String hiddenVarName = subName + "__lexsub_" + parser.tokenIndex;
+                                
+                                // Create: our $hiddenVarName = \&package::sub
+                                OperatorNode varDecl = new OperatorNode("our",
+                                        new OperatorNode("$", new IdentifierNode(hiddenVarName, parser.tokenIndex), parser.tokenIndex),
+                                        parser.tokenIndex);
+                                
+                                // Store the mapping so calls to this sub can find the lexical alias
+                                parser.ctx.symbolTable.addVariable("&" + subName, "our", varDecl);
+                                
+                                // Return just the package sub - the lexical alias is implicit
+                                yield packageSub;
+                            } else {
+                                // my sub or state sub - lexical only, not in package
+                                // Generate unique hidden variable name
+                                String hiddenVarName = subName + "__lexsub_" + parser.tokenIndex;
 
-                            // Parse the rest as an anonymous sub
-                            Node anonSub = SubroutineParser.parseSubroutineDefinition(parser, false, null);
+                                // Create the declaration: my/state $hiddenVarName
+                                OperatorNode varDecl = new OperatorNode(declaration,
+                                        new OperatorNode("$", new IdentifierNode(hiddenVarName, parser.tokenIndex), parser.tokenIndex),
+                                        parser.tokenIndex);
 
-                            // Create AST for: my $hiddenVarName = sub {...}
-                            // Create the declaration: my $hiddenVarName
-                            OperatorNode varDecl = new OperatorNode(declaration,
-                                    new OperatorNode("$", new IdentifierNode(hiddenVarName, parser.tokenIndex), parser.tokenIndex),
-                                    parser.tokenIndex);
+                                // Store the mapping so we can resolve calls to this lexical sub
+                                parser.ctx.symbolTable.addVariable("&" + subName, declaration, varDecl);
 
-                            // Create the list for declaration
-                            ListNode declList = new ListNode(parser.tokenIndex);
-                            declList.elements.add(varDecl);
+                                // Check if this is a forward declaration or a full definition
+                                // Look ahead: after optional prototype (...), is there a body {...}?
+                                boolean hasBody = false;
+                                int saveIndex = parser.tokenIndex;
+                                
+                                if (peek(parser).text.equals("(")) {
+                                    // Skip prototype/signature to see what comes after
+                                    consume(parser); // consume '('
+                                    int parenDepth = 1;
+                                    while (parenDepth > 0 && parser.tokenIndex < parser.tokens.size()) {
+                                        String text = consume(parser).text;
+                                        if (text.equals("(")) parenDepth++;
+                                        else if (text.equals(")")) parenDepth--;
+                                    }
+                                }
+                                
+                                // Now check if there's a body
+                                hasBody = peek(parser).text.equals("{");
+                                
+                                // Restore the position
+                                parser.tokenIndex = saveIndex;
 
-                            // Create assignment: my $hiddenVarName = sub {...}
-                            BinaryOperatorNode assignment = new BinaryOperatorNode("=", declList, anonSub, parser.tokenIndex);
+                                if (hasBody) {
+                                    // Full definition: my sub name {...} or my sub name (...) {...}
+                                    // Parse the rest as an anonymous sub
+                                    Node anonSub = SubroutineParser.parseSubroutineDefinition(parser, false, null);
 
-                            // Store the mapping so we can resolve calls to this lexical sub
-                            parser.ctx.symbolTable.addVariable("&" + subName, declaration, varDecl);
+                                    // Create the list for declaration
+                                    ListNode declList = new ListNode(parser.tokenIndex);
+                                    declList.elements.add(varDecl);
 
-                            yield assignment;
+                                    // Create assignment: my $hiddenVarName = sub {...}
+                                    BinaryOperatorNode assignment = new BinaryOperatorNode("=", declList, anonSub, parser.tokenIndex);
+
+                                    yield assignment;
+                                } else {
+                                    // Forward declaration: my sub name; or my sub name ($);
+                                    // Skip the prototype if present
+                                    if (peek(parser).text.equals("(")) {
+                                        consume(parser); // consume '('
+                                        int parenDepth = 1;
+                                        while (parenDepth > 0 && parser.tokenIndex < parser.tokens.size()) {
+                                            String text = consume(parser).text;
+                                            if (text.equals("(")) parenDepth++;
+                                            else if (text.equals(")")) parenDepth--;
+                                        }
+                                    }
+                                    // Just declare the variable (prototype is ignored for lexical subs)
+                                    yield varDecl;
+                                }
+                            }
                         } else {
                             // anonymous sub
                             yield SubroutineParser.parseSubroutineDefinition(parser, false, declaration);
