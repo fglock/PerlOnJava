@@ -642,11 +642,18 @@ public class StatementParser {
             // package NAME BLOCK
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
             int scopeIndex = parser.ctx.symbolTable.enterScope();
-            parser.ctx.symbolTable.setCurrentPackage(nameNode.name, packageNode.getBooleanAnnotation("isClass"));
+            
+            boolean isClass = packageNode.getBooleanAnnotation("isClass");
+            
+            // Save the current package and class state to restore later
+            String previousPackage = parser.ctx.symbolTable.getCurrentPackage();
+            boolean previousPackageIsClass = parser.ctx.symbolTable.currentPackageIsClass();
+            
+            parser.ctx.symbolTable.setCurrentPackage(nameNode.name, isClass);
 
             // Set flag if we're entering a class block
             boolean wasInClassBlock = parser.isInClassBlock;
-            if (packageNode.getBooleanAnnotation("isClass")) {
+            if (isClass) {
                 parser.isInClassBlock = true;
             }
 
@@ -656,6 +663,7 @@ public class StatementParser {
             } finally {
                 // Always restore the previous state
                 parser.isInClassBlock = wasInClassBlock;
+                parser.ctx.symbolTable.setCurrentPackage(previousPackage, previousPackageIsClass);
             }
 
             // Insert packageNode as first statement in block
@@ -663,7 +671,7 @@ public class StatementParser {
 
             // Transform class blocks
             // Pass parser for bytecode generation of generated methods
-            if (packageNode.getBooleanAnnotation("isClass")) {
+            if (isClass) {
                 block = ClassTransformer.transformClassBlock(block, nameNode.name, parser);
             }
 
