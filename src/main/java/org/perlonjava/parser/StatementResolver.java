@@ -224,21 +224,27 @@ public class StatementResolver {
                                 parser.ctx.symbolTable.addVariable("&" + subName, declaration, varDecl);
 
                                 // Check if this is a forward declaration or a full definition
-                                // Look ahead: after optional prototype (...), is there a body {...}?
+                                // Look ahead: after optional attributes (:attr) and prototype (...), is there a body {...}?
                                 boolean hasBody = false;
                                 String prototype = null;
-                                int saveIndex = parser.tokenIndex;
+                                List<String> attributes = new ArrayList<>();
                                 
-                                if (peek(parser).text.equals("(")) {
+                                // Parse attributes first (e.g., :prototype())
+                                while (peek(parser).text.equals(":")) {
+                                    String attrProto = SubroutineParser.consumeAttributes(parser, attributes);
+                                    if (attrProto != null) {
+                                        prototype = attrProto;
+                                    }
+                                }
+                                
+                                // Then check for prototype if not already set by attribute
+                                if (prototype == null && peek(parser).text.equals("(")) {
                                     // Parse the prototype
                                     prototype = ((StringNode) StringParser.parseRawString(parser, "q")).value;
                                 }
                                 
                                 // Now check if there's a body
                                 hasBody = peek(parser).text.equals("{");
-                                
-                                // Restore the position
-                                parser.tokenIndex = saveIndex;
 
                                 if (hasBody) {
                                     // Full definition: my sub name {...} or my sub name (...) {...}
@@ -263,14 +269,6 @@ public class StatementResolver {
                                     if (prototype != null) {
                                         // Store prototype in varDecl annotation
                                         varDecl.setAnnotation("prototype", prototype);
-                                        // Skip the prototype tokens
-                                        consume(parser); // consume '('
-                                        int parenDepth = 1;
-                                        while (parenDepth > 0 && parser.tokenIndex < parser.tokens.size()) {
-                                            String text = consume(parser).text;
-                                            if (text.equals("(")) parenDepth++;
-                                            else if (text.equals(")")) parenDepth--;
-                                        }
                                     }
                                     // Just declare the variable
                                     yield varDecl;
