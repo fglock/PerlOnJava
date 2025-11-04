@@ -106,13 +106,19 @@ public class SubroutineParser {
                     // The varNode contains the variable declaration with the hidden variable name stored as annotation
                     String hiddenVarName = (String) varNode.getAnnotation("hiddenVarName");
                     if (hiddenVarName != null) {
-                        // Create a fresh variable reference: $hiddenVarName
-                        // IMPORTANT: For state variables, we need to preserve the ID from the declaration!
+                        // Get the hidden variable entry from the symbol table for the ID
+                        String hiddenVarKey = "$" + hiddenVarName;
+                        SymbolTable.SymbolEntry hiddenEntry = parser.ctx.symbolTable.getSymbolEntry(hiddenVarKey);
+                        
+                        // Always create a fresh variable reference to avoid AST reuse issues
                         OperatorNode dollarOp = new OperatorNode("$", 
                             new IdentifierNode(hiddenVarName, currentIndex), currentIndex);
                         
-                        // Copy the ID from the original declaration if it's a state variable
-                        if (varNode.operator.equals("state") && varNode.operand instanceof OperatorNode innerNode) {
+                        // Copy the ID from the symbol table entry for state variables
+                        if (hiddenEntry != null && hiddenEntry.ast() instanceof OperatorNode hiddenVarNode) {
+                            dollarOp.id = hiddenVarNode.id;
+                        } else if (varNode.operator.equals("state") && varNode.operand instanceof OperatorNode innerNode) {
+                            // Fallback: copy ID from the declaration
                             dollarOp.id = innerNode.id;
                         }
                         
