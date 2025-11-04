@@ -68,7 +68,9 @@ public class StateVariable {
      * @param value   The value to initialize the variable with.
      */
     public static void initializeStateVariable(RuntimeScalar codeRef, String var, int id, RuntimeScalar value) {
-        retrieveStateScalar(codeRef, var, id).set(value);
+        String beginVar = PersistentVariable.beginVariable(id, var.substring(1));
+        RuntimeScalar targetVar = retrieveStateScalar(codeRef, var, id);
+        targetVar.set(value);
         markInitializedStateVariable(codeRef, var, id);
     }
 
