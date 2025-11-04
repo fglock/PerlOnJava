@@ -450,4 +450,50 @@ public class CompareOperators {
 
         return getScalarBoolean(runtimeScalar.toString().compareTo(arg2.toString()) >= 0);
     }
+
+    /**
+     * Smartmatch operator (~~).
+     * This is a simplified implementation that performs basic equality checking.
+     * Full Perl smartmatch has complex dispatch rules based on operand types.
+     * For now, we implement basic scalar equality comparison.
+     *
+     * @param arg1 The left operand
+     * @param arg2 The right operand
+     * @return A RuntimeScalar representing true if they match, false otherwise
+     */
+    public static RuntimeScalar smartmatch(RuntimeScalar arg1, RuntimeScalar arg2) {
+        // Simplified smartmatch: try string equality first, then numeric
+        // This handles the basic case in the state.t test
+        
+        // Check if both are defined
+        if (!arg1.getDefinedBoolean() && !arg2.getDefinedBoolean()) {
+            return scalarTrue;  // undef ~~ undef is true
+        }
+        if (!arg1.getDefinedBoolean() || !arg2.getDefinedBoolean()) {
+            return scalarFalse;  // one is undef, one is not
+        }
+        
+        // Try string comparison
+        if (arg1.toString().equals(arg2.toString())) {
+            return scalarTrue;
+        }
+        
+        // Try numeric comparison if both look like numbers
+        try {
+            if (arg1.type == RuntimeScalarType.INTEGER || arg1.type == RuntimeScalarType.DOUBLE ||
+                arg2.type == RuntimeScalarType.INTEGER || arg2.type == RuntimeScalarType.DOUBLE) {
+                RuntimeScalar num1 = arg1.getNumber();
+                RuntimeScalar num2 = arg2.getNumber();
+                if (num1.type == RuntimeScalarType.DOUBLE || num2.type == RuntimeScalarType.DOUBLE) {
+                    return getScalarBoolean(num1.getDouble() == num2.getDouble());
+                } else {
+                    return getScalarBoolean(num1.getInt() == num2.getInt());
+                }
+            }
+        } catch (Exception e) {
+            // Not numeric, fall through
+        }
+        
+        return scalarFalse;
+    }
 }

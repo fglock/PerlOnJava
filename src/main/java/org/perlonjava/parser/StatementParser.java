@@ -286,6 +286,120 @@ public class StatementParser {
     }
 
     /**
+     * Parses a when statement (part of given/when feature from Perl 5.10).
+     * 
+     * when(COND) { BLOCK }  becomes:  if ($_ ~~ COND) { BLOCK }
+     *
+     * @param parser The Parser instance
+     * @return A Node representing the when statement as an if statement with smartmatch
+     */
+    public static Node parseWhenStatement(Parser parser) {
+        int index = parser.tokenIndex;
+        TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "when"
+
+        // Parse the when condition (can be parenthesized or not)
+        Node whenCondition;
+        if (TokenUtils.peek(parser).text.equals("(")) {
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
+            whenCondition = parser.parseExpression(0);
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
+        } else {
+            whenCondition = parser.parseExpression(0);
+        }
+
+        // Parse the when block
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
+        BlockNode whenBlock = ParseBlock.parseBlock(parser);
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+
+        // Create smartmatch condition: $_ ~~ whenCondition
+        Node dollarUnderscore = new OperatorNode("$",
+                new IdentifierNode("_", index),
+                index);
+        Node smartmatchCondition = new BinaryOperatorNode("~~",
+                dollarUnderscore,
+                whenCondition,
+                index);
+
+        // Return as an if statement
+        return new IfNode("if", smartmatchCondition, whenBlock, null, index);
+    }
+
+    /**
+     * Parses a default statement (part of given/when feature from Perl 5.10).
+     * 
+     * default { BLOCK }  just returns the BLOCK (it's like an else clause)
+     *
+     * @param parser The Parser instance
+     * @return A BlockNode representing the default block
+     */
+    public static Node parseDefaultStatement(Parser parser) {
+        TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "default"
+
+        // Parse the default block
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
+        BlockNode defaultBlock = ParseBlock.parseBlock(parser);
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+
+        return defaultBlock;
+    }
+
+    /**
+     * Parses a given-when statement (deprecated feature from Perl 5.10).
+     * 
+     * Transforms:
+     *   given(EXPR) { when(COND1) { BLOCK1 } when(COND2) { BLOCK2 } default { BLOCK3 } }
+     * 
+     * Into AST equivalent of:
+     *   do { $_ = EXPR; when/default statements }
+     * 
+     * Where when/default are parsed as regular statements that check $_.
+     * This is a pure AST transformation - no special emitter code needed.
+     *
+     * @param parser The Parser instance
+     * @return A Node representing the given-when statement as transformed AST
+     */
+    public static Node parseGivenStatement(Parser parser) {
+        int index = parser.tokenIndex;
+        TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "given"
+
+        int scopeIndex = parser.ctx.symbolTable.enterScope();
+
+        // Parse the condition and assign to $_
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
+        Node condition = parser.parseExpression(0);
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
+
+        // Parse the block containing when/default statements
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
+
+        // Parse the entire block content as a normal block
+        // This handles regular statements as well as when/default
+        BlockNode blockContent = ParseBlock.parseBlock(parser);
+        
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+
+        parser.ctx.symbolTable.exitScope(scopeIndex);
+
+        // Create the complete block: { $_ = EXPR; blockContent }
+        List<Node> statements = new ArrayList<>();
+        
+        // $_ = condition  (use proper $_ structure)
+        Node dollarUnderscore = new OperatorNode("$", 
+                new IdentifierNode("_", index), 
+                index);
+        statements.add(new BinaryOperatorNode("=",
+                dollarUnderscore,
+                condition,
+                index));
+        
+        // Add all the statements from the block
+        statements.addAll(blockContent.elements);
+
+        return new BlockNode(statements, index);
+    }
+
+    /**
      * Parses a use or no declaration.
      *
      * @param parser The Parser instance
