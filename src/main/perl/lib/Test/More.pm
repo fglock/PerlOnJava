@@ -5,7 +5,8 @@ use warnings;
 use Symbol 'qualify_to_ref';
 use Data::Dumper;
 
-# Load Test::Builder to make it available for legacy tests
+# Load Test::Builder to make it available, but use our own test functions
+# to avoid Test2 API issues
 use Test::Builder;
 
 # Test::Builder singleton
@@ -306,19 +307,16 @@ sub skip_internal {
 # Legacy comparison functions - simple implementations using is_deeply
 sub eq_array($$) {
     my ($got, $expected) = @_;
-    local $Test::Builder::Level = $Test::Builder::Level + 1;
     return is_deeply($got, $expected);
 }
 
 sub eq_hash($$) {
     my ($got, $expected) = @_;
-    local $Test::Builder::Level = $Test::Builder::Level + 1;
     return is_deeply($got, $expected);
 }
 
 sub eq_set($$) {
     my ($got, $expected) = @_;
-    local $Test::Builder::Level = $Test::Builder::Level + 1;
     # Set comparison: order doesn't matter
     # Simple implementation: sort and compare
     my @got_sorted = sort { (defined $a ? $a : '') cmp (defined $b ? $b : '') } @$got;
