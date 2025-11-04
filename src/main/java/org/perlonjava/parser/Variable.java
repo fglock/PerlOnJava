@@ -522,10 +522,20 @@ public class Variable {
                 if (hiddenVarName != null) {
                     // Consume the identifier token
                     TokenUtils.consume(parser);
+                    
+                    // Get the package where this lexical sub was declared
+                    String declaringPackage = (String) varNode.getAnnotation("declaringPackage");
+                    
+                    // Make the hidden variable name fully qualified with the declaring package
+                    String qualifiedHiddenVarName = hiddenVarName;
+                    if (declaringPackage != null && !hiddenVarName.contains("::")) {
+                        qualifiedHiddenVarName = declaringPackage + "::" + hiddenVarName;
+                    }
+                    
                     // Create reference to hidden variable: &$hiddenVar
                     // IMPORTANT: For state variables, we need to preserve the ID from the declaration!
                     OperatorNode dollarOp = new OperatorNode("$", 
-                        new IdentifierNode(hiddenVarName, index), index);
+                        new IdentifierNode(qualifiedHiddenVarName, index), index);
                     
                     // Copy the ID from the original declaration if it's a state variable
                     if (varNode.operator.equals("state") && varNode.operand instanceof OperatorNode innerNode) {
