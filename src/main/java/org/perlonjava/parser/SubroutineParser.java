@@ -106,13 +106,24 @@ public class SubroutineParser {
                     // The varNode contains the variable declaration with the hidden variable name stored as annotation
                     String hiddenVarName = (String) varNode.getAnnotation("hiddenVarName");
                     if (hiddenVarName != null) {
+                        // Get the package where this lexical sub was declared
+                        // This ensures we access the correct global variable even after package switches
+                        String declaringPackage = (String) varNode.getAnnotation("declaringPackage");
+                        
+                        // Make the hidden variable name fully qualified with the declaring package
+                        // This prevents package-dependent normalization issues
+                        String qualifiedHiddenVarName = hiddenVarName;
+                        if (declaringPackage != null && !hiddenVarName.contains("::")) {
+                            qualifiedHiddenVarName = declaringPackage + "::" + hiddenVarName;
+                        }
+                        
                         // Get the hidden variable entry from the symbol table for the ID
                         String hiddenVarKey = "$" + hiddenVarName;
                         SymbolTable.SymbolEntry hiddenEntry = parser.ctx.symbolTable.getSymbolEntry(hiddenVarKey);
                         
                         // Always create a fresh variable reference to avoid AST reuse issues
                         OperatorNode dollarOp = new OperatorNode("$", 
-                            new IdentifierNode(hiddenVarName, currentIndex), currentIndex);
+                            new IdentifierNode(qualifiedHiddenVarName, currentIndex), currentIndex);
                         
                         // Copy the ID from the symbol table entry for state variables
                         if (hiddenEntry != null && hiddenEntry.ast() instanceof OperatorNode hiddenVarNode) {

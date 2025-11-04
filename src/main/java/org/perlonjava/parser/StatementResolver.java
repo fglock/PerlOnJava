@@ -230,8 +230,9 @@ public class StatementResolver {
                                 // Now create the outer declaration node (state/my $hiddenVarName)
                                 OperatorNode varDecl = new OperatorNode(declaration, innerVarNode, parser.tokenIndex);
 
-                                // Store the hidden variable name as annotation for lookup
+                                // Store the hidden variable name and declaring package as annotations for lookup
                                 varDecl.setAnnotation("hiddenVarName", hiddenVarName);
+                                varDecl.setAnnotation("declaringPackage", parser.ctx.symbolTable.getCurrentPackage());
 
                                 // IMPORTANT: Manually add the hidden variable to the symbol table
                                 // Since we're returning an assignment node, parseVariableDeclaration won't be called again
