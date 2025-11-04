@@ -239,19 +239,21 @@ public class StatementResolver {
                                 // Since we're returning an assignment node, parseVariableDeclaration won't be called again
                                 // So we need to register both the sub name (&p) and the hidden variable ($p__lexsub_N)
                                 
-                                // For my/state subs: If there's already a forward declaration, the new definition
-                                // should CREATE A NEW PAD ENTRY that shadows it (per Perl semantics)
-                                // We check if there's an existing entry and if so, replace it
+                                // IMPORTANT: Add the hidden variable NOW (before parsing body)
+                                // But delay adding &subName until AFTER parsing the body to make the sub "invisible inside itself"
+                                
+                                // For my/state subs: If there's already a forward declaration, we need to handle it
                                 SymbolTable.SymbolEntry existingEntry = parser.ctx.symbolTable.getSymbolEntry("&" + subName);
-                                if (existingEntry != null) {
-                                    // Replace both the sub entry and the hidden variable entry
-                                    parser.ctx.symbolTable.replaceVariable("&" + subName, declaration, varDecl);
+                                boolean hadForwardDecl = existingEntry != null;
+                                
+                                // Add the hidden variable immediately (needed for state variable tracking)
+                                if (hadForwardDecl) {
                                     parser.ctx.symbolTable.replaceVariable("$" + hiddenVarName, declaration, innerVarNode);
                                 } else {
-                                    // No existing entry, just add normally
                                     parser.ctx.symbolTable.addVariable("$" + hiddenVarName, declaration, innerVarNode);
-                                    parser.ctx.symbolTable.addVariable("&" + subName, declaration, varDecl);
                                 }
+                                
+                                // DO NOT add &subName yet - it will be added after parsing the body
 
                                 // Check if this is a forward declaration or a full definition
                                 // Look ahead: after optional attributes (:attr) and prototype (...), is there a body {...}?
@@ -286,6 +288,14 @@ public class StatementResolver {
                                         varDecl.setAnnotation("prototype", prototype);
                                     }
 
+                                    // NOW add &subName to symbol table AFTER parsing the body
+                                    // This makes the sub "invisible inside itself" during compilation
+                                    if (hadForwardDecl) {
+                                        parser.ctx.symbolTable.replaceVariable("&" + subName, declaration, varDecl);
+                                    } else {
+                                        parser.ctx.symbolTable.addVariable("&" + subName, declaration, varDecl);
+                                    }
+
                                     // Create assignment: $hiddenVarName = sub {...}
                                     // We need to create a reference to the already-declared variable
                                     // Use a fully qualified name to ensure it resolves correctly regardless of package context
@@ -302,6 +312,13 @@ public class StatementResolver {
                                     yield assignment;
                                 } else {
                                     // Forward declaration: my sub name; or my sub name ($);
+                                    // For forward declarations, add &subName immediately since there's no body to be invisible in
+                                    if (hadForwardDecl) {
+                                        parser.ctx.symbolTable.replaceVariable("&" + subName, declaration, varDecl);
+                                    } else {
+                                        parser.ctx.symbolTable.addVariable("&" + subName, declaration, varDecl);
+                                    }
+                                    
                                     if (prototype != null) {
                                         // Store prototype in varDecl annotation
                                         varDecl.setAnnotation("prototype", prototype);
