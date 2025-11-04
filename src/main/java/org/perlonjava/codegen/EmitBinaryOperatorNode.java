@@ -86,7 +86,7 @@ public class EmitBinaryOperatorNode {
             // Binary operators
             case "%", "&", "&.", "binary&", "*", "**", "+", "-", "/",
                  "<<", "<=>", ">>", "^", "^.", "binary^", "|", "|.", "binary|",
-                 "bless", "cmp", "isa" -> EmitBinaryOperator.handleBinaryOperator(emitterVisitor, node,
+                 "bless", "cmp", "isa", "~~" -> EmitBinaryOperator.handleBinaryOperator(emitterVisitor, node,
                     OperatorHandler.get(node.operator));
 
             default -> throw new PerlCompilerException(node.tokenIndex,
