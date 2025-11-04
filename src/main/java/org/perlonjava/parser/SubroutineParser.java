@@ -444,9 +444,6 @@ public class SubroutineParser {
         // Check if there's a lexical forward declaration (our/my/state sub name;) that this definition should fulfill
         String lexicalKey = "&" + subName;
         org.perlonjava.symbols.SymbolTable.SymbolEntry lexicalEntry = parser.ctx.symbolTable.getSymbolEntry(lexicalKey);
-        if (lexicalEntry != null && subName.equals("sb4")) {
-            System.err.println("DEBUG handleNamedSub: found lexical entry for sb4: " + lexicalEntry + " hiddenVarName=" + (lexicalEntry.ast() instanceof OperatorNode ? ((OperatorNode)lexicalEntry.ast()).getAnnotation("hiddenVarName") : "N/A"));
-        }
         String packageToUse = parser.ctx.symbolTable.getCurrentPackage();
         
         if (lexicalEntry != null && lexicalEntry.ast() instanceof OperatorNode varNode) {
@@ -464,9 +461,6 @@ public class SubroutineParser {
                 // This is a "my sub" or "state sub" forward declaration
                 // The body should be filled in by creating a runtime code object
                 String hiddenVarName = (String) varNode.getAnnotation("hiddenVarName");
-                if (subName.equals("sb4")) {
-                    System.err.println("DEBUG handleNamedSub: filling lexical sub sb4, hiddenVarName=" + hiddenVarName);
-                }
                 if (hiddenVarName != null) {
                     // Create an anonymous sub that will be used to fill the lexical sub
                     // We need to compile this into a RuntimeCode object that can be executed
