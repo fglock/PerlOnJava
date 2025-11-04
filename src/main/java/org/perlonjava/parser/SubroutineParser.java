@@ -102,7 +102,7 @@ public class SubroutineParser {
                         arguments = new ListNode(parser.tokenIndex);
                     }
                     
-                    // Return a call to the hidden variable using &$hiddenVar(arguments) syntax
+                    // Return a call to the hidden variable using $hiddenVar(arguments) syntax
                     // The varNode contains the variable declaration with the hidden variable name stored as annotation
                     String hiddenVarName = (String) varNode.getAnnotation("hiddenVarName");
                     if (hiddenVarName != null) {
@@ -116,10 +116,10 @@ public class SubroutineParser {
                             dollarOp.id = innerNode.id;
                         }
                         
-                        // Create the dereference: &$hiddenVarName
-                        OperatorNode ampersandDeref = new OperatorNode("&", dollarOp, currentIndex);
+                        // Call the hidden variable directly: $hiddenVar(arguments)
+                        // The () operator will handle dereferencing and calling
                         return new BinaryOperatorNode("(",
-                                ampersandDeref,
+                                dollarOp,
                                 arguments,
                                 currentIndex);
                     }
