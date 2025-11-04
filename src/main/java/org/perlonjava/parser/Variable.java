@@ -489,7 +489,7 @@ public class Variable {
         // IMPORTANT: Check for lexical subs BEFORE parsing as a variable
         // This handles &foo where foo is "our sub foo" or "my sub foo"
         LexerToken peeked = TokenUtils.peek(parser);
-        if (peeked.type == LexerTokenType.IDENTIFIER && !parser.parsingTakeReference) {
+        if (peeked.type == LexerTokenType.IDENTIFIER) {
             String subName = peeked.text;
             String lexicalKey = "&" + subName;
             org.perlonjava.symbols.SymbolTable.SymbolEntry lexicalEntry = parser.ctx.symbolTable.getSymbolEntry(lexicalKey);
@@ -542,8 +542,9 @@ public class Variable {
                         dollarOp.id = innerNode.id;
                     }
                     
-                    // If we're taking a reference (\&foo), we need &$hiddenVar
-                    // This will be handled specially in bytecode emission to return the CODE ref directly
+                    // If we're taking a reference (\&foo), return &$hiddenVar
+                    // This becomes \&$hiddenVar which calls createCodeReference
+                    // createCodeReference will detect the CODE value and return it directly
                     if (parser.parsingTakeReference) {
                         return new OperatorNode("&", dollarOp, index);
                     }
