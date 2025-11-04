@@ -487,10 +487,17 @@ public class SubroutineParser {
                     
                     BinaryOperatorNode assignment = new BinaryOperatorNode("=", varRef, anonSub, parser.tokenIndex);
                     
-                    // Wrap in ListNode to match expected return type
-                    List<Node> nodes = new ArrayList<>();
-                    nodes.add(assignment);
-                    return new ListNode(nodes, parser.tokenIndex);
+                    // Wrap the assignment in a BEGIN block so it executes at compile time
+                    // This ensures that "sub name { }" inside another sub still fills the forward declaration immediately
+                    List<Node> blockElements = new ArrayList<>();
+                    blockElements.add(assignment);
+                    BlockNode beginBlock = new BlockNode(blockElements, parser.tokenIndex);
+                    
+                    // Execute the BEGIN block immediately during parsing
+                    SpecialBlockParser.runSpecialBlock(parser, "BEGIN", beginBlock);
+                    
+                    // Return empty list since the assignment already executed
+                    return new ListNode(parser.tokenIndex);
                 }
             }
         }
