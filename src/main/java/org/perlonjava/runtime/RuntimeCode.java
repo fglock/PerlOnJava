@@ -645,8 +645,29 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         throw new PerlCompilerException("Not a CODE reference");
     }
 
+    // Handle \$var where $var might be a CODE reference (for lexical subs)
+    // If the value is a CODE reference, return it directly
+    // Otherwise, create a scalar reference to it
+    public static RuntimeScalar maybeUnwrapCodeReference(RuntimeBase base) {
+        if (base instanceof RuntimeScalar scalar) {
+            // If it's already a CODE reference, return it directly
+            // This handles \&foo where foo is a lexical sub
+            if (scalar.type == RuntimeScalarType.CODE) {
+                return scalar;
+            }
+        }
+        // For all other cases, create a normal reference
+        return base.createReference();
+    }
+    
     // Return a reference to the subroutine with this name: \&$a
     public static RuntimeScalar createCodeReference(RuntimeScalar runtimeScalar, String packageName) {
+        // Special case: if the scalar already contains a CODE reference (lexical sub hidden variable),
+        // just return it directly
+        if (runtimeScalar.type == RuntimeScalarType.CODE) {
+            return runtimeScalar;
+        }
+        
         String name = NameNormalizer.normalizeVariableName(runtimeScalar.toString(), packageName);
         // System.out.println("Creating code reference: " + name + " got: " + GlobalContext.getGlobalCodeRef(name));
         RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(name);
