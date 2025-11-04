@@ -82,6 +82,7 @@ public record OperatorHandler(String className, String methodName, int methodTyp
         put("gt", "gt", "org/perlonjava/operators/CompareOperators");
         put("ge", "ge", "org/perlonjava/operators/CompareOperators");
         put("cmp", "cmp", "org/perlonjava/operators/CompareOperators");
+        put("~~", "smartmatch", "org/perlonjava/operators/CompareOperators");
 
         // String
         put("chr", "chr", "org/perlonjava/operators/StringOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
