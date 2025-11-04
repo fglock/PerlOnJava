@@ -881,7 +881,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     public RuntimeScalar createReference() {
         RuntimeScalar result = new RuntimeScalar();
-        result.type = RuntimeScalarType.CODE;
+        result.type = RuntimeScalarType.REFERENCE;  // Fixed: should be REFERENCE, not CODE
         result.value = this;
         return result;
     }

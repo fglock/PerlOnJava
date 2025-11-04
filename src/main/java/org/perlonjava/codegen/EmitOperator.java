@@ -936,7 +936,6 @@ public class EmitOperator {
                 // Function calls and scalar expressions should use SCALAR context
                 // Arrays, hashes, and lists should use LIST context
                 int contextType = RuntimeContextType.LIST;
-                boolean isScalarVar = false;
                 
                 if (node.operand instanceof BinaryOperatorNode binOp && binOp.operator.equals("(")) {
                     // Function call - use SCALAR context to get single return value
@@ -944,28 +943,16 @@ public class EmitOperator {
                 } else if (node.operand instanceof OperatorNode op && op.operator.equals("$")) {
                     // Scalar variable - use SCALAR context
                     contextType = RuntimeContextType.SCALAR;
-                    isScalarVar = true;
                 }
                 
                 node.operand.accept(emitterVisitor.with(contextType));
                 
-                // Special case: \$var where $var contains a CODE reference
-                // For lexical subs, we want \&foo to return the CODE reference, not a reference to it
-                // So when the value is already a CODE reference, return it directly
-                if (isScalarVar) {
-                    // Check if the value is a CODE reference at runtime and return it directly if so
-                    emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                            "org/perlonjava/runtime/RuntimeCode",
-                            "maybeUnwrapCodeReference",
-                            "(Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;",
-                            false);
-                } else {
-                    emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                            "org/perlonjava/runtime/RuntimeBase",
-                            "createReference",
-                            "()Lorg/perlonjava/runtime/RuntimeScalar;",
-                            false);
-                }
+                // Always create a proper reference - don't special case CODE references
+                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/RuntimeBase",
+                        "createReference",
+                        "()Lorg/perlonjava/runtime/RuntimeScalar;",
+                        false);
             }
             handleVoidContext(emitterVisitor);
         }
