@@ -638,7 +638,8 @@ public class PrototypeArgs {
     }
 
     public static boolean consumeCommaIfPresent(Parser parser, boolean isOptional) {
-        if (!isComma(TokenUtils.peek(parser))) {
+        LexerToken peeked = TokenUtils.peek(parser);
+        if (!isComma(peeked)) {
             if (isOptional) {
                 return false;
             }

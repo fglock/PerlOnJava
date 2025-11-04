@@ -6,6 +6,7 @@ import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.GlobalVariable;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeGlob;
+import org.perlonjava.symbols.SymbolTable;
 
 import static org.perlonjava.parser.ParserNodeUtils.scalarUnderscore;
 import static org.perlonjava.parser.TokenUtils.peek;
@@ -107,6 +108,16 @@ public class ParsePrimary {
 
         boolean operatorEnabled = false;
         boolean calledWithCore = false;
+
+        // IMPORTANT: Check for lexical subs FIRST, before checking for quote-like operators!
+        // This allows "my sub y" to shadow the "y///" transliteration operator
+        String lexicalKey = "&" + operator;
+        SymbolTable.SymbolEntry lexicalEntry = parser.ctx.symbolTable.getSymbolEntry(lexicalKey);
+        if (lexicalEntry != null && lexicalEntry.ast() instanceof OperatorNode) {
+            // This is a lexical sub - parse it as a subroutine call
+            parser.tokenIndex = startIndex;   // backtrack
+            return SubroutineParser.parseSubroutineCall(parser, false);
+        }
 
         // Check for quote-like operators that should always be parsed as operators
 

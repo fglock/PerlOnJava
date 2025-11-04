@@ -1,7 +1,9 @@
 package org.perlonjava.parser;
 
 import org.perlonjava.astnode.*;
+import java.util.Arrays;
 import org.perlonjava.codegen.ByteCodeSourceMapper;
+import org.perlonjava.codegen.EmitterMethodCreator;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.NameNormalizer;
@@ -190,20 +192,23 @@ public class StatementResolver {
                             int subNameIndex = parser.tokenIndex - 1; // Save the token index of the sub name
 
                             if (declaration.equals("our")) {
-                                // our sub works like our var - it creates a package sub
+                                // our sub works like our var - it creates a package sub AND a lexical alias
+                                // The lexical alias stores the fully qualified name so it always resolves
+                                // to the correct package sub regardless of the current package
+                                
                                 // Parse as normal package sub
                                 parser.tokenIndex--; // back up to just after "sub"
                                 
                                 Node packageSub = SubroutineParser.parseSubroutineDefinition(parser, true, "our");
                                 
-                                // For our sub, we don't need the hidden variable mechanism
-                                // The package sub can be called directly
-                                // Just mark it in the symbol table so we know it exists as a lexical sub
-                                // (This might be needed for scoping rules)
+                                // Store the fully qualified name in the symbol table
+                                // This allows calls to resolve to the correct package sub even after package switch
+                                String fullSubName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
                                 OperatorNode marker = new OperatorNode("our",
                                         new OperatorNode("&", new IdentifierNode(subName, subNameIndex), subNameIndex),
                                         subNameIndex);
                                 marker.setAnnotation("isOurSub", true);
+                                marker.setAnnotation("fullSubName", fullSubName);  // Store the full qualified name!
                                 parser.ctx.symbolTable.addVariable("&" + subName, "our", marker);
                                 
                                 // Return the package sub
@@ -214,9 +219,16 @@ public class StatementResolver {
                                 String hiddenVarName = subName + "__lexsub_" + parser.tokenIndex;
 
                                 // Create the declaration: my/state $hiddenVarName
-                                OperatorNode varDecl = new OperatorNode(declaration,
-                                        new OperatorNode("$", new IdentifierNode(hiddenVarName, parser.tokenIndex), parser.tokenIndex),
-                                        parser.tokenIndex);
+                                // First create the inner operand (the $hiddenVarName part)
+                                OperatorNode innerVarNode = new OperatorNode("$", new IdentifierNode(hiddenVarName, parser.tokenIndex), parser.tokenIndex);
+                                
+                                // For state variables, assign a unique ID for persistent tracking
+                                if (declaration.equals("state")) {
+                                    innerVarNode.id = EmitterMethodCreator.classCounter++;
+                                }
+                                
+                                // Now create the outer declaration node (state/my $hiddenVarName)
+                                OperatorNode varDecl = new OperatorNode(declaration, innerVarNode, parser.tokenIndex);
 
                                 // Store the hidden variable name as annotation for lookup
                                 varDecl.setAnnotation("hiddenVarName", hiddenVarName);
@@ -224,8 +236,7 @@ public class StatementResolver {
                                 // IMPORTANT: Manually add the hidden variable to the symbol table
                                 // Since we're returning an assignment node, parseVariableDeclaration won't be called again
                                 // So we need to register both the sub name (&p) and the hidden variable ($p__lexsub_N)
-                                parser.ctx.symbolTable.addVariable("$" + hiddenVarName, declaration, 
-                                    (OperatorNode) varDecl.operand); // The $hidden part
+                                parser.ctx.symbolTable.addVariable("$" + hiddenVarName, declaration, innerVarNode); // Pass the inner node with ID
                                 parser.ctx.symbolTable.addVariable("&" + subName, declaration, varDecl);
 
                                 // Check if this is a forward declaration or a full definition
@@ -261,12 +272,15 @@ public class StatementResolver {
                                         varDecl.setAnnotation("prototype", prototype);
                                     }
 
-                                    // Create the list for declaration
-                                    ListNode declList = new ListNode(parser.tokenIndex);
-                                    declList.elements.add(varDecl);
-
-                                    // Create assignment: my $hiddenVarName = sub {...}
-                                    BinaryOperatorNode assignment = new BinaryOperatorNode("=", declList, anonSub, parser.tokenIndex);
+                                    // Create assignment: $hiddenVarName = sub {...}
+                                    // We need to create a reference to the already-declared variable
+                                    // Use innerVarNode to reference the variable, not varDecl which would declare it again
+                                    OperatorNode varRef = new OperatorNode("$", new IdentifierNode(hiddenVarName, parser.tokenIndex), parser.tokenIndex);
+                                    // For state variables, copy the ID so runtime can track the state
+                                    if (declaration.equals("state")) {
+                                        varRef.id = innerVarNode.id;
+                                    }
+                                    BinaryOperatorNode assignment = new BinaryOperatorNode("=", varRef, anonSub, parser.tokenIndex);
 
                                     yield assignment;
                                 } else {
