@@ -396,7 +396,7 @@ public class SubroutineParser {
             if (subName == null) {
                 return handleAnonSub(parser, subName, prototype, attributes, block, currentIndex);
             } else {
-                return handleNamedSub(parser, subName, prototype, attributes, block);
+                return handleNamedSub(parser, subName, prototype, attributes, block, declaration);
             }
         } finally {
             // Restore the previous subroutine context
@@ -434,11 +434,11 @@ public class SubroutineParser {
         return prototype;
     }
 
-    public static ListNode handleNamedSub(Parser parser, String subName, String prototype, List<String> attributes, BlockNode block) {
-        return handleNamedSubWithFilter(parser, subName, prototype, attributes, block, false);
+    public static ListNode handleNamedSub(Parser parser, String subName, String prototype, List<String> attributes, BlockNode block, String declaration) {
+        return handleNamedSubWithFilter(parser, subName, prototype, attributes, block, false, declaration);
     }
     
-    public static ListNode handleNamedSubWithFilter(Parser parser, String subName, String prototype, List<String> attributes, BlockNode block, boolean filterLexicalMethods) {
+    public static ListNode handleNamedSubWithFilter(Parser parser, String subName, String prototype, List<String> attributes, BlockNode block, boolean filterLexicalMethods, String declaration) {
         // Check if there's a lexical forward declaration (our/my/state sub name;) that this definition should fulfill
         String lexicalKey = "&" + subName;
         org.perlonjava.symbols.SymbolTable.SymbolEntry lexicalEntry = parser.ctx.symbolTable.getSymbolEntry(lexicalKey);
@@ -472,9 +472,15 @@ public class SubroutineParser {
                     );
                     
                     // Create assignment that will execute at runtime
-                    String hiddenVarKey = "$" + hiddenVarName;
+                    // Use the declaring package to create a fully qualified variable name
+                    String declaringPackage = (String) varNode.getAnnotation("declaringPackage");
+                    String qualifiedHiddenVarName = hiddenVarName;
+                    if (declaringPackage != null && !hiddenVarName.contains("::")) {
+                        qualifiedHiddenVarName = declaringPackage + "::" + hiddenVarName;
+                    }
+                    
                     OperatorNode varRef = new OperatorNode("$", 
-                            new IdentifierNode(hiddenVarName, parser.tokenIndex), 
+                            new IdentifierNode(qualifiedHiddenVarName, parser.tokenIndex), 
                             parser.tokenIndex);
                     
                     BinaryOperatorNode assignment = new BinaryOperatorNode("=", varRef, anonSub, parser.tokenIndex);
