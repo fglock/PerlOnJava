@@ -946,6 +946,8 @@ public class EmitOperator {
                 }
                 
                 node.operand.accept(emitterVisitor.with(contextType));
+                
+                // Always create a proper reference - don't special case CODE references
                 emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                         "org/perlonjava/runtime/RuntimeBase",
                         "createReference",

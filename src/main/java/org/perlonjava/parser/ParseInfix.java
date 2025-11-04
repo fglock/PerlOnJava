@@ -265,6 +265,14 @@ public class ParseInfix {
                 // Handle postfix increment/decrement
                 return new OperatorNode(token.text + "postfix", left, parser.tokenIndex);
             default:
+                // Special check: if this is an IDENTIFIER that's a quote-like operator, it's not an infix operator
+                // This handles cases where qr/q/qq/etc mistakenly reach here due to parser state issues
+                if (token.type == LexerTokenType.IDENTIFIER && ParsePrimary.isIsQuoteLikeOperator(token.text)) {
+                    // This quote-like operator shouldn't be treated as infix - it should have been parsed as primary
+                    // Backtrack so it can be re-parsed correctly
+                    parser.tokenIndex--;
+                    return left;
+                }
                 throw new PerlCompilerException(parser.tokenIndex, "Unexpected infix operator: " + token, parser.ctx.errorUtil);
         }
     }

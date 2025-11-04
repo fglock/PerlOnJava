@@ -6,6 +6,7 @@ import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.GlobalVariable;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeGlob;
+import org.perlonjava.symbols.SymbolTable;
 
 import static org.perlonjava.parser.ParserNodeUtils.scalarUnderscore;
 import static org.perlonjava.parser.TokenUtils.peek;
@@ -108,16 +109,32 @@ public class ParsePrimary {
         boolean operatorEnabled = false;
         boolean calledWithCore = false;
 
-        // Check for quote-like operators that should always be parsed as operators
-
         // Check if this is an explicit CORE:: call (e.g., CORE::print)
+        // IMPORTANT: Check this BEFORE lexical subs, because "state sub CORE" shouldn't break CORE::uc
         if (token.text.equals("CORE") && nextTokenText.equals("::")) {
             calledWithCore = true;
             operatorEnabled = true; // CORE:: functions are always enabled
             TokenUtils.consume(parser);  // consume "::"
             token = TokenUtils.consume(parser); // consume the actual operator
             operator = token.text;
-        } else if (isIsQuoteLikeOperator(operator)) {
+        }
+        
+        // IMPORTANT: Check for lexical subs AFTER CORE::, but before checking for quote-like operators!
+        // This allows "my sub y" to shadow the "y///" transliteration operator
+        // But doesn't interfere with CORE:: prefix handling
+        if (!calledWithCore) {
+            String lexicalKey = "&" + operator;
+            SymbolTable.SymbolEntry lexicalEntry = parser.ctx.symbolTable.getSymbolEntry(lexicalKey);
+            if (lexicalEntry != null && lexicalEntry.ast() instanceof OperatorNode) {
+                // This is a lexical sub - parse it as a subroutine call
+                parser.tokenIndex = startIndex;   // backtrack
+                return SubroutineParser.parseSubroutineCall(parser, false);
+            }
+        }
+
+        // Check for quote-like operators that should always be parsed as operators
+        
+        if (isIsQuoteLikeOperator(operator)) {
             operatorEnabled = true;
         } else if (!nextTokenText.equals("::")) {
             // Check if the operator is enabled in the current scope
@@ -189,6 +206,7 @@ public class ParsePrimary {
     static boolean isIsQuoteLikeOperator(String operator) {
         return operator.equals("q") || operator.equals("qq") ||
                 operator.equals("qw") || operator.equals("qx") ||
+                operator.equals("qr") ||
                 operator.equals("m") || operator.equals("s") ||
                 operator.equals("tr") || operator.equals("y");
     }

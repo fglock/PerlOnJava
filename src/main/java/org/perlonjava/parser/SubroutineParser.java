@@ -53,40 +53,102 @@ public class SubroutineParser {
 
         // Check if this is a lexical sub/method (my sub name / my method name)
         // Lexical subs are stored in the symbol table with "&" prefix
+        // IMPORTANT: Check lexical sub FIRST, even if the name is a quote-like operator!
+        // This allows "my sub y" to shadow the "y///" transliteration operator
         String lexicalKey = "&" + subName;
         SymbolTable.SymbolEntry lexicalEntry = parser.ctx.symbolTable.getSymbolEntry(lexicalKey);
         if (lexicalEntry != null && lexicalEntry.ast() instanceof OperatorNode varNode) {
-            // This is a lexical sub/method - use the hidden variable instead of package lookup
-            // The varNode is the "my $name__lexsub_123" or "my $name__lexmethod_123" variable
-            
-            // Parse arguments
-            ListNode arguments;
-            if (peek(parser).text.equals("(")) {
-                TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
-                List<Node> argList = ListParser.parseList(parser, ")", 0);
-                arguments = new ListNode(argList, parser.tokenIndex);
+            // Check if this is an "our sub" - if so, use the stored fully qualified name
+            Boolean isOurSub = (Boolean) varNode.getAnnotation("isOurSub");
+            if (isOurSub != null && isOurSub) {
+                // Use the stored fully qualified name instead of the current package
+                String storedFullName = (String) varNode.getAnnotation("fullSubName");
+                if (storedFullName != null) {
+                    // Replace subName with the fully qualified name and continue with normal package sub lookup
+                    subName = storedFullName;
+                }
+                // Fall through to normal package sub handling below
             } else {
-                // No parentheses, no arguments
-                arguments = new ListNode(parser.tokenIndex);
-            }
-            
-            // Return a call to the hidden variable using &$hiddenVar(arguments) syntax
-            // The varNode contains the variable declaration, we need just the variable itself
-            // Extract the variable from "my $var" -> "$var"
-            OperatorNode myDecl = varNode;
-            if (myDecl.operand instanceof OperatorNode dollarOp && "$".equals(dollarOp.operator)) {
-                // Create a call using the dereference syntax: &$hiddenVar(args)
-                // This is similar to &{$hiddenVar}(args) but simpler
-                OperatorNode ampersandDeref = new OperatorNode("&", dollarOp, currentIndex);
-                return new BinaryOperatorNode("(",
-                        ampersandDeref,
-                        arguments,
-                        currentIndex);
+                // This is a lexical sub (my/state) - handle it specially
+                LexerToken nextToken = peek(parser);
+                
+                // Check if there's a prototype stored for this lexical sub
+                String lexicalPrototype = varNode.getAnnotation("prototype") != null ? 
+                    (String) varNode.getAnnotation("prototype") : null;
+                
+                // Use lexical sub when:
+                // 1. There are explicit parentheses, OR
+                // 2. There's no prototype (no ambiguity), OR
+                // 3. The next token isn't a bareword identifier (to avoid indirect method call confusion)
+                boolean useExplicitParen = nextToken.text.equals("(");
+                boolean hasPrototype = lexicalPrototype != null;
+                boolean nextIsIdentifier = nextToken.type == LexerTokenType.IDENTIFIER;
+                
+                if (useExplicitParen || hasPrototype || !nextIsIdentifier) {
+                    // This is a lexical sub/method - use the hidden variable instead of package lookup
+                    // The varNode is the "my $name__lexsub_123" or "my $name__lexmethod_123" variable
+                    
+                    // Parse arguments using prototype if available
+                    ListNode arguments;
+                    if (useExplicitParen) {
+                        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
+                        List<Node> argList = ListParser.parseList(parser, ")", 0);
+                        arguments = new ListNode(argList, parser.tokenIndex);
+                    } else if (hasPrototype) {
+                        // Use prototype to parse arguments
+                        arguments = consumeArgsWithPrototype(parser, lexicalPrototype);
+                    } else {
+                        // No parentheses, no prototype, no arguments
+                        arguments = new ListNode(parser.tokenIndex);
+                    }
+                    
+                    // Return a call to the hidden variable using $hiddenVar(arguments) syntax
+                    // The varNode contains the variable declaration with the hidden variable name stored as annotation
+                    String hiddenVarName = (String) varNode.getAnnotation("hiddenVarName");
+                    if (hiddenVarName != null) {
+                        // Get the package where this lexical sub was declared
+                        // This ensures we access the correct global variable even after package switches
+                        String declaringPackage = (String) varNode.getAnnotation("declaringPackage");
+                        
+                        // Make the hidden variable name fully qualified with the declaring package
+                        // This prevents package-dependent normalization issues
+                        String qualifiedHiddenVarName = hiddenVarName;
+                        if (declaringPackage != null && !hiddenVarName.contains("::")) {
+                            qualifiedHiddenVarName = declaringPackage + "::" + hiddenVarName;
+                        }
+                        
+                        // Get the hidden variable entry from the symbol table for the ID
+                        String hiddenVarKey = "$" + hiddenVarName;
+                        SymbolTable.SymbolEntry hiddenEntry = parser.ctx.symbolTable.getSymbolEntry(hiddenVarKey);
+                        
+                        // Always create a fresh variable reference to avoid AST reuse issues
+                        OperatorNode dollarOp = new OperatorNode("$", 
+                            new IdentifierNode(qualifiedHiddenVarName, currentIndex), currentIndex);
+                        
+                        // Copy the ID from the symbol table entry for state variables
+                        if (hiddenEntry != null && hiddenEntry.ast() instanceof OperatorNode hiddenVarNode) {
+                            dollarOp.id = hiddenVarNode.id;
+                        } else if (varNode.operator.equals("state") && varNode.operand instanceof OperatorNode innerNode) {
+                            // Fallback: copy ID from the declaration
+                            dollarOp.id = innerNode.id;
+                        }
+                        
+                        // Call the hidden variable directly: $hiddenVar(arguments)
+                        // The () operator will handle dereferencing and calling
+                        return new BinaryOperatorNode("(",
+                                dollarOp,
+                                arguments,
+                                currentIndex);
+                    }
+                }
             }
         }
 
         // Normalize the subroutine name to include the current package
-        String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
+        // If subName already contains "::", it's already fully qualified (e.g., from "our sub")
+        String fullName = subName.contains("::") 
+            ? subName 
+            : NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
 
         // Check if we are parsing a method;
         // Otherwise, check that the subroutine exists in the global namespace - then fetch prototype and attributes
@@ -118,8 +180,10 @@ public class SubroutineParser {
             // System.out.println("maybe indirect object: " + packageName + "->" + subName);
 
             // Check if the packageName is not a subroutine or operator
+            // IMPORTANT: Also check if it's a lexical sub - lexical subs should NOT be treated as package names
             String fullName1 = NameNormalizer.normalizeVariableName(packageName, parser.ctx.symbolTable.getCurrentPackage());
-            if (!GlobalVariable.existsGlobalCodeRef(fullName1) && isValidIndirectMethod(packageName)) {
+            boolean isLexicalSub = parser.ctx.symbolTable.getSymbolEntry("&" + packageName) != null;
+            if (!GlobalVariable.existsGlobalCodeRef(fullName1) && !isLexicalSub && isValidIndirectMethod(packageName)) {
                 LexerToken token = peek(parser);
                 if (!(token.text.equals("->") || token.text.equals("=>") || INFIX_OP.contains(token.text))) {
                     // System.out.println("  package loaded: " + packageName + "->" + subName);
@@ -247,8 +311,9 @@ public class SubroutineParser {
 
     public static Node parseSubroutineDefinition(Parser parser, boolean wantName, String declaration) {
 
+        // my, our, state subs are handled in StatementResolver, not here
         if (declaration != null && (declaration.equals("my") || declaration.equals("state"))) {
-            throw new PerlCompilerException("Not implemented: sub declaration `" + declaration + "`");
+            throw new PerlCompilerException("Internal error: my/state sub should be handled in StatementResolver");
         }
 
         // This method is responsible for parsing an anonymous subroutine (a subroutine without a name)
@@ -333,7 +398,7 @@ public class SubroutineParser {
             if (subName == null) {
                 return handleAnonSub(parser, subName, prototype, attributes, block, currentIndex);
             } else {
-                return handleNamedSub(parser, subName, prototype, attributes, block);
+                return handleNamedSub(parser, subName, prototype, attributes, block, declaration);
             }
         } finally {
             // Restore the previous subroutine context
@@ -371,13 +436,74 @@ public class SubroutineParser {
         return prototype;
     }
 
-    public static ListNode handleNamedSub(Parser parser, String subName, String prototype, List<String> attributes, BlockNode block) {
-        return handleNamedSubWithFilter(parser, subName, prototype, attributes, block, false);
+    public static ListNode handleNamedSub(Parser parser, String subName, String prototype, List<String> attributes, BlockNode block, String declaration) {
+        return handleNamedSubWithFilter(parser, subName, prototype, attributes, block, false, declaration);
     }
     
-    public static ListNode handleNamedSubWithFilter(Parser parser, String subName, String prototype, List<String> attributes, BlockNode block, boolean filterLexicalMethods) {
+    public static ListNode handleNamedSubWithFilter(Parser parser, String subName, String prototype, List<String> attributes, BlockNode block, boolean filterLexicalMethods, String declaration) {
+        // Check if there's a lexical forward declaration (our/my/state sub name;) that this definition should fulfill
+        String lexicalKey = "&" + subName;
+        org.perlonjava.symbols.SymbolTable.SymbolEntry lexicalEntry = parser.ctx.symbolTable.getSymbolEntry(lexicalKey);
+        String packageToUse = parser.ctx.symbolTable.getCurrentPackage();
+        
+        if (lexicalEntry != null && lexicalEntry.ast() instanceof OperatorNode varNode) {
+            // Check if this is an "our sub" forward declaration
+            Boolean isOurSub = (Boolean) varNode.getAnnotation("isOurSub");
+            if (isOurSub != null && isOurSub) {
+                // Use the package from the forward declaration, not the current package
+                String storedFullName = (String) varNode.getAnnotation("fullSubName");
+                if (storedFullName != null && storedFullName.contains("::")) {
+                    // Extract package from stored full name (e.g., "main::d" -> "main")
+                    int lastColon = storedFullName.lastIndexOf("::");
+                    packageToUse = storedFullName.substring(0, lastColon);
+                }
+            } else if (lexicalEntry.decl().equals("my") || lexicalEntry.decl().equals("state")) {
+                // This is a "my sub" or "state sub" forward declaration
+                // The body should be filled in by creating a runtime code object
+                String hiddenVarName = (String) varNode.getAnnotation("hiddenVarName");
+                if (hiddenVarName != null) {
+                    // Create an anonymous sub that will be used to fill the lexical sub
+                    // We need to compile this into a RuntimeCode object that can be executed
+                    SubroutineNode anonSub = new SubroutineNode(
+                            null,  // anonymous (no name)
+                            prototype,
+                            attributes,
+                            block,
+                            false,  // useTryCatch
+                            parser.tokenIndex
+                    );
+                    
+                    // Create assignment that will execute at runtime
+                    // Use the declaring package to create a fully qualified variable name
+                    String declaringPackage = (String) varNode.getAnnotation("declaringPackage");
+                    String qualifiedHiddenVarName = hiddenVarName;
+                    if (declaringPackage != null && !hiddenVarName.contains("::")) {
+                        qualifiedHiddenVarName = declaringPackage + "::" + hiddenVarName;
+                    }
+                    
+                    OperatorNode varRef = new OperatorNode("$", 
+                            new IdentifierNode(qualifiedHiddenVarName, parser.tokenIndex), 
+                            parser.tokenIndex);
+                    
+                    BinaryOperatorNode assignment = new BinaryOperatorNode("=", varRef, anonSub, parser.tokenIndex);
+                    
+                    // Wrap the assignment in a BEGIN block so it executes at compile time
+                    // This ensures that "sub name { }" inside another sub still fills the forward declaration immediately
+                    List<Node> blockElements = new ArrayList<>();
+                    blockElements.add(assignment);
+                    BlockNode beginBlock = new BlockNode(blockElements, parser.tokenIndex);
+                    
+                    // Execute the BEGIN block immediately during parsing
+                    SpecialBlockParser.runSpecialBlock(parser, "BEGIN", beginBlock);
+                    
+                    // Return empty list since the assignment already executed
+                    return new ListNode(parser.tokenIndex);
+                }
+            }
+        }
+        
         // - register the subroutine in the namespace
-        String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
+        String fullName = NameNormalizer.normalizeVariableName(subName, packageToUse);
         RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName);
         if (codeRef.value == null) {
             codeRef.type = RuntimeScalarType.CODE;
@@ -459,18 +585,25 @@ public class SubroutineParser {
             }
         }
         // Create a new EmitterContext for generating bytecode
-        // Create a filtered snapshot that excludes field declarations
+        // Create a filtered snapshot that excludes field declarations and code references
         // Fields cause bytecode generation issues when present in the symbol table
+        // Code references (&) should not be captured as closure variables
         org.perlonjava.symbols.ScopedSymbolTable filteredSnapshot = new org.perlonjava.symbols.ScopedSymbolTable();
         filteredSnapshot.enterScope();
         
-        // Copy all visible variables except field declarations
+        // Copy all visible variables except field declarations and code references
         Map<Integer, org.perlonjava.symbols.SymbolTable.SymbolEntry> visibleVars = parser.ctx.symbolTable.getAllVisibleVariables();
         for (org.perlonjava.symbols.SymbolTable.SymbolEntry entry : visibleVars.values()) {
             // Skip field declarations when creating snapshot for bytecode generation
-            if (!entry.decl().equals("field")) {
-                filteredSnapshot.addVariable(entry.name(), entry.decl(), entry.ast());
+            if (entry.decl().equals("field")) {
+                continue;
             }
+            // Skip code references (subroutines) - they should not be captured as closure variables
+            String sigil = entry.name().substring(0, 1);
+            if (sigil.equals("&")) {
+                continue;
+            }
+            filteredSnapshot.addVariable(entry.name(), entry.decl(), entry.ast());
         }
         
         // Clone the current package

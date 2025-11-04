@@ -42,10 +42,48 @@ public class EmitSubroutine {
         // Retrieve closure variable list
         // Alternately, scan the AST for variables and capture only the ones that are used
         Map<Integer, SymbolTable.SymbolEntry> visibleVariables = ctx.symbolTable.getAllVisibleVariables();
+        
+        // IMPORTANT: Package-level subs (named subs) should NOT capture closure variables from their 
+        // definition context. Only anonymous subs (my sub, state sub, or true anonymous subs) should
+        // capture variables. This prevents issues like defining 'sub bar::foo' inside a block with
+        // 'our sub foo' from incorrectly capturing the 'our sub' as a closure variable.
+        boolean isPackageSub = node.name != null && !node.name.equals("<anon>");
+        if (isPackageSub) {
+            // Package subs should not capture any closure variables
+            // They can only access global variables and their parameters
+            visibleVariables.clear();
+        } else {
+            // For anonymous/lexical subs, filter out 'our sub' declarations only
+            visibleVariables.entrySet().removeIf(entry -> {
+                SymbolTable.SymbolEntry symbolEntry = entry.getValue();
+                if (symbolEntry.name().startsWith("&") && symbolEntry.ast() instanceof OperatorNode operatorNode) {
+                    Boolean isOurSub = (Boolean) operatorNode.getAnnotation("isOurSub");
+                    return isOurSub != null && isOurSub;
+                }
+                return false;
+            });
+        }
+        
         ctx.logDebug("AnonSub ctx.symbolTable.getAllVisibleVariables");
 
-        // Create a new symbol table for the subroutine
-        ScopedSymbolTable newSymbolTable = ctx.symbolTable.snapShot();
+        // Create a new symbol table for the subroutine, but manually add only the filtered variables
+        ScopedSymbolTable newSymbolTable = new ScopedSymbolTable();
+        newSymbolTable.enterScope();
+        
+        // Add only the filtered visible variables (excluding 'our sub' entries)
+        for (SymbolTable.SymbolEntry entry : visibleVariables.values()) {
+            newSymbolTable.addVariable(entry.name(), entry.decl(), entry.ast());
+        }
+        
+        // Copy package, subroutine, and flags from the current context
+        newSymbolTable.setCurrentPackage(ctx.symbolTable.getCurrentPackage(), ctx.symbolTable.currentPackageIsClass());
+        newSymbolTable.setCurrentSubroutine(ctx.symbolTable.getCurrentSubroutine());
+        newSymbolTable.warningFlagsStack.pop();
+        newSymbolTable.warningFlagsStack.push(ctx.symbolTable.warningFlagsStack.peek());
+        newSymbolTable.featureFlagsStack.pop();
+        newSymbolTable.featureFlagsStack.push(ctx.symbolTable.featureFlagsStack.peek());
+        newSymbolTable.strictOptionsStack.pop();
+        newSymbolTable.strictOptionsStack.push(ctx.symbolTable.strictOptionsStack.peek());
 
         String[] newEnv = newSymbolTable.getVariableNames();
         ctx.logDebug("AnonSub " + newSymbolTable);

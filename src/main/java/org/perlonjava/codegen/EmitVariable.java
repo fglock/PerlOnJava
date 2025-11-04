@@ -758,7 +758,6 @@ public class EmitVariable {
                         }
                     } else if (operator.equals("state")) {
                         // "state":
-
                         // Determine the method to call and its descriptor based on the sigil
                         String methodName;
                         String methodDescriptor;

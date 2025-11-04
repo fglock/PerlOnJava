@@ -486,6 +486,82 @@ public class Variable {
             }
         }
 
+        // IMPORTANT: Check for lexical subs BEFORE parsing as a variable
+        // This handles &foo where foo is "our sub foo" or "my sub foo"
+        LexerToken peeked = TokenUtils.peek(parser);
+        if (peeked.type == LexerTokenType.IDENTIFIER) {
+            String subName = peeked.text;
+            String lexicalKey = "&" + subName;
+            org.perlonjava.symbols.SymbolTable.SymbolEntry lexicalEntry = parser.ctx.symbolTable.getSymbolEntry(lexicalKey);
+            
+            if (lexicalEntry != null && lexicalEntry.ast() instanceof OperatorNode varNode) {
+                // Check if this is an "our sub" - if so, replace with fully qualified name
+                Boolean isOurSub = (Boolean) varNode.getAnnotation("isOurSub");
+                if (isOurSub != null && isOurSub) {
+                    String storedFullName = (String) varNode.getAnnotation("fullSubName");
+                    if (storedFullName != null) {
+                        // Consume the identifier token
+                        TokenUtils.consume(parser);
+                        // Create node with fully qualified name
+                        Node qualifiedNode = new OperatorNode("&", 
+                            new IdentifierNode(storedFullName, index), index);
+                        
+                        // Handle arguments if present
+                        Node list;
+                        if (!TokenUtils.peek(parser).text.equals("(")) {
+                            list = atUnderscore(parser);
+                        } else {
+                            list = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
+                        }
+                        return new BinaryOperatorNode("(", qualifiedNode, list, index);
+                    }
+                }
+                
+                // Check if this is a "my sub" or "state sub" - use hidden variable
+                String hiddenVarName = (String) varNode.getAnnotation("hiddenVarName");
+                if (hiddenVarName != null) {
+                    // Consume the identifier token
+                    TokenUtils.consume(parser);
+                    
+                    // Get the package where this lexical sub was declared
+                    String declaringPackage = (String) varNode.getAnnotation("declaringPackage");
+                    
+                    // Make the hidden variable name fully qualified with the declaring package
+                    String qualifiedHiddenVarName = hiddenVarName;
+                    if (declaringPackage != null && !hiddenVarName.contains("::")) {
+                        qualifiedHiddenVarName = declaringPackage + "::" + hiddenVarName;
+                    }
+                    
+                    // Create reference to hidden variable: &$hiddenVar
+                    // IMPORTANT: For state variables, we need to preserve the ID from the declaration!
+                    OperatorNode dollarOp = new OperatorNode("$", 
+                        new IdentifierNode(qualifiedHiddenVarName, index), index);
+                    
+                    // Copy the ID from the original declaration if it's a state variable
+                    if (varNode.operator.equals("state") && varNode.operand instanceof OperatorNode innerNode) {
+                        dollarOp.id = innerNode.id;
+                    }
+                    
+                    // If we're taking a reference (\&foo), return &$hiddenVar
+                    // This becomes \&$hiddenVar which calls createCodeReference
+                    // createCodeReference will detect the CODE value and return it directly
+                    if (parser.parsingTakeReference) {
+                        return new OperatorNode("&", dollarOp, index);
+                    }
+                    
+                    // Handle arguments for actual calls (&foo or &foo())
+                    // Use $hiddenVar directly - the () operator will handle dereferencing
+                    Node list;
+                    if (!TokenUtils.peek(parser).text.equals("(")) {
+                        list = atUnderscore(parser);
+                    } else {
+                        list = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
+                    }
+                    return new BinaryOperatorNode("(", dollarOp, list, index);
+                }
+            }
+        }
+        
         // Set a flag to allow parentheses after a variable, as in &$sub(...)
         parser.parsingForLoopVariable = true;
         // Parse the variable following the `&` sigil
