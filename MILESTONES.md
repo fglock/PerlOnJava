@@ -350,6 +350,7 @@ The following areas are currently under active development to enhance the functi
   - Add single-quote as package separator.
   - Dereferencing using `$$var{...}` and `$$var[...]` works.
   - Add declared references: `my \$x`, `my(\@arr)`, `my(\%hash)`.
+  - Add subroutines declared `my`, `state`, or `our`.
   - Bugfix in regex `/r`.
   - Bugfix in transliterate with octal values.
   - Bugfix in nested heredocs.
