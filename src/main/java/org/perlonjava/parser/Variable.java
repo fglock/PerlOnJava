@@ -542,8 +542,8 @@ public class Variable {
                         dollarOp.id = innerNode.id;
                     }
                     
-                    // If we're taking a reference (\&foo), return &$hiddenVar
-                    // which will get the code reference from the variable
+                    // If we're taking a reference (\&foo), we need &$hiddenVar
+                    // This will be handled specially in bytecode emission to return the CODE ref directly
                     if (parser.parsingTakeReference) {
                         return new OperatorNode("&", dollarOp, index);
                     }
