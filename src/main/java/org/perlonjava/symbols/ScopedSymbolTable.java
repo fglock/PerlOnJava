@@ -225,6 +225,28 @@ public class ScopedSymbolTable {
     }
 
     /**
+     * Replaces an existing symbol table entry in the current scope.
+     * This is used for lexical subs where a redefinition creates a new pad entry that shadows the forward declaration.
+     */
+    public void replaceVariable(String name, String variableDeclType, OperatorNode ast) {
+        if (!symbolTableStack.isEmpty()) {
+            SymbolTable currentScope = symbolTableStack.peek();
+            // Get the existing entry to preserve the index
+            SymbolTable.SymbolEntry existing = currentScope.getSymbolEntry(name);
+            if (existing != null) {
+                // Replace with new entry using the same index
+                currentScope.variableIndex.put(name,
+                    new SymbolTable.SymbolEntry(existing.index(), name, variableDeclType,
+                        getCurrentPackage(), ast));
+            } else {
+                // If it doesn't exist in current scope, just add it
+                currentScope.addVariable(name, variableDeclType, getCurrentPackage(), ast);
+            }
+            clearVisibleVariablesCache();
+        }
+    }
+
+    /**
      * Clears the cache for the getAllVisibleVariables method.
      * This method should be called whenever the symbol table is modified.
      */
