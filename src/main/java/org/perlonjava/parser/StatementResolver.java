@@ -7,6 +7,7 @@ import org.perlonjava.codegen.EmitterMethodCreator;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.NameNormalizer;
+import org.perlonjava.symbols.SymbolTable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -237,8 +238,20 @@ public class StatementResolver {
                                 // IMPORTANT: Manually add the hidden variable to the symbol table
                                 // Since we're returning an assignment node, parseVariableDeclaration won't be called again
                                 // So we need to register both the sub name (&p) and the hidden variable ($p__lexsub_N)
-                                parser.ctx.symbolTable.addVariable("$" + hiddenVarName, declaration, innerVarNode); // Pass the inner node with ID
-                                parser.ctx.symbolTable.addVariable("&" + subName, declaration, varDecl);
+                                
+                                // For my/state subs: If there's already a forward declaration, the new definition
+                                // should CREATE A NEW PAD ENTRY that shadows it (per Perl semantics)
+                                // We check if there's an existing entry and if so, replace it
+                                SymbolTable.SymbolEntry existingEntry = parser.ctx.symbolTable.getSymbolEntry("&" + subName);
+                                if (existingEntry != null) {
+                                    // Replace both the sub entry and the hidden variable entry
+                                    parser.ctx.symbolTable.replaceVariable("&" + subName, declaration, varDecl);
+                                    parser.ctx.symbolTable.replaceVariable("$" + hiddenVarName, declaration, innerVarNode);
+                                } else {
+                                    // No existing entry, just add normally
+                                    parser.ctx.symbolTable.addVariable("$" + hiddenVarName, declaration, innerVarNode);
+                                    parser.ctx.symbolTable.addVariable("&" + subName, declaration, varDecl);
+                                }
 
                                 // Check if this is a forward declaration or a full definition
                                 // Look ahead: after optional attributes (:attr) and prototype (...), is there a body {...}?
@@ -275,8 +288,11 @@ public class StatementResolver {
 
                                     // Create assignment: $hiddenVarName = sub {...}
                                     // We need to create a reference to the already-declared variable
-                                    // Use innerVarNode to reference the variable, not varDecl which would declare it again
-                                    OperatorNode varRef = new OperatorNode("$", new IdentifierNode(hiddenVarName, parser.tokenIndex), parser.tokenIndex);
+                                    // Use a fully qualified name to ensure it resolves correctly regardless of package context
+                                    String declaringPackage = parser.ctx.symbolTable.getCurrentPackage();
+                                    String qualifiedHiddenVarName = declaringPackage + "::" + hiddenVarName;
+                                    
+                                    OperatorNode varRef = new OperatorNode("$", new IdentifierNode(qualifiedHiddenVarName, parser.tokenIndex), parser.tokenIndex);
                                     // For state variables, copy the ID so runtime can track the state
                                     if (declaration.equals("state")) {
                                         varRef.id = innerVarNode.id;
