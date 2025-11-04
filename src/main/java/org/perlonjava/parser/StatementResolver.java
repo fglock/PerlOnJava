@@ -309,7 +309,13 @@ public class StatementResolver {
                                     }
                                     BinaryOperatorNode assignment = new BinaryOperatorNode("=", varRef, anonSub, parser.tokenIndex);
 
-                                    yield assignment;
+                                    // Execute assignment immediately during parsing (like a BEGIN block)
+                                    // This is crucial for cases like: state sub foo{...}; use overload => \&foo;
+                                    BlockNode beginBlock = new BlockNode(new ArrayList<>(List.of(assignment)), parser.tokenIndex);
+                                    SpecialBlockParser.runSpecialBlock(parser, "BEGIN", beginBlock);
+                                    
+                                    // Return empty list since the assignment already executed
+                                    yield new ListNode(parser.tokenIndex);
                                 } else {
                                     // Forward declaration: my sub name; or my sub name ($);
                                     // For forward declarations, add &subName immediately since there's no body to be invisible in

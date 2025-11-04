@@ -665,6 +665,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Special case: if the scalar already contains a CODE reference (lexical sub hidden variable),
         // just return it directly
         if (runtimeScalar.type == RuntimeScalarType.CODE) {
+            // Ensure the subroutine is fully compiled before returning the reference
+            // This is important for compile-time usage (e.g., use overload qr => \&lexical_sub)
+            RuntimeCode code = (RuntimeCode) runtimeScalar.value;
+            if (code.compilerSupplier != null) {
+                code.compilerSupplier.get(); // Wait for compilation to finish
+            }
             return runtimeScalar;
         }
         
