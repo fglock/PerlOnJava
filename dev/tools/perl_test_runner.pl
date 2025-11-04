@@ -277,7 +277,13 @@ sub run_single_test {
         # e.g., perl5_t/Pod/podlators/t/man/snippets.t -> perl5_t/Pod/podlators
         if ($test_file =~ m{^(.*)/t/[^/]+/[^/]+$}) {
             $local_test_dir = $1;
-        } else {
+        }
+        # For simple module tests like perl5_t/Text-Tabs/t/undef.t -> perl5_t/Text-Tabs
+        # (tests with require './t/lib/ok.pl' expect to run from module directory)
+        elsif ($test_file =~ m{^(perl5_t/[^/]+)/t/[^/]+$}) {
+            $local_test_dir = $1;
+        }
+        else {
             # Otherwise, extract directory from test file path
             $local_test_dir = $test_file;
             $local_test_dir =~ s{/[^/]+$}{};

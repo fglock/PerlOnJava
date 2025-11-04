@@ -5,12 +5,19 @@ use warnings;
 use Symbol 'qualify_to_ref';
 use Data::Dumper;
 
+# Load Test::Builder to make it available for legacy tests
+use Test::Builder;
+
+# Test::Builder singleton
+our $Test_Builder;
+
 our @EXPORT = qw(
     plan ok is isnt like unlike cmp_ok can_ok isa_ok
     pass fail diag note done_testing is_deeply subtest
     use_ok require_ok BAIL_OUT
     skip
     skip_internal
+    eq_array eq_hash eq_set
 );
 
 our $Test_Count = 0;
@@ -294,6 +301,35 @@ sub skip_internal {
         print "$Test_Indent$result $Test_Count # skip $name\n";
     }
     return 1;
+}
+
+# Legacy comparison functions - simple implementations using is_deeply
+sub eq_array($$) {
+    my ($got, $expected) = @_;
+    local $Test::Builder::Level = $Test::Builder::Level + 1;
+    return is_deeply($got, $expected);
+}
+
+sub eq_hash($$) {
+    my ($got, $expected) = @_;
+    local $Test::Builder::Level = $Test::Builder::Level + 1;
+    return is_deeply($got, $expected);
+}
+
+sub eq_set($$) {
+    my ($got, $expected) = @_;
+    local $Test::Builder::Level = $Test::Builder::Level + 1;
+    # Set comparison: order doesn't matter
+    # Simple implementation: sort and compare
+    my @got_sorted = sort { (defined $a ? $a : '') cmp (defined $b ? $b : '') } @$got;
+    my @expected_sorted = sort { (defined $a ? $a : '') cmp (defined $b ? $b : '') } @$expected;
+    return is_deeply(\@got_sorted, \@expected_sorted);
+}
+
+# Provide access to Test::Builder for legacy tests
+sub builder {
+    $Test_Builder ||= Test::Builder->new();
+    return $Test_Builder;
 }
 
 1;
