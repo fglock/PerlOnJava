@@ -1,9 +1,13 @@
 package org.perlonjava.parser;
 
 import org.perlonjava.astnode.*;
+import java.util.Arrays;
 import org.perlonjava.codegen.ByteCodeSourceMapper;
+import org.perlonjava.codegen.EmitterMethodCreator;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
+import org.perlonjava.runtime.NameNormalizer;
+import org.perlonjava.symbols.SymbolTable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -36,8 +40,17 @@ public class StatementResolver {
 
         if (token.type == LexerTokenType.IDENTIFIER) {
             Node result = switch (token.text) {
-                case "CHECK", "INIT", "UNITCHECK", "BEGIN", "END", "ADJUST" ->
-                        SpecialBlockParser.parseSpecialBlock(parser);
+                case "CHECK", "INIT", "UNITCHECK", "BEGIN", "END", "ADJUST" -> {
+                    // Check if next token is '{' - if not, this might be a lexical sub call
+                    parser.tokenIndex++;
+                    if (peek(parser).text.equals("{")) {
+                        parser.tokenIndex = currentIndex;
+                        yield SpecialBlockParser.parseSpecialBlock(parser);
+                    }
+                    // Not a special block, backtrack
+                    parser.tokenIndex = currentIndex;
+                    yield null;
+                }
 
                 case "AUTOLOAD", "DESTROY" -> {
                     parser.tokenIndex++;
@@ -176,32 +189,150 @@ public class StatementResolver {
                         LexerToken nameToken = peek(parser);
 
                         if (nameToken.type == LexerTokenType.IDENTIFIER) {
-                            // my sub name {...} -> my $name__hidden = sub {...}
                             String subName = consume(parser).text;
+                            int subNameIndex = parser.tokenIndex - 1; // Save the token index of the sub name
 
-                            // Generate unique hidden variable name
-                            String hiddenVarName = subName + "__lexsub_" + parser.tokenIndex;
+                            if (declaration.equals("our")) {
+                                // our sub works like our var - it creates a package sub AND a lexical alias
+                                // The lexical alias stores the fully qualified name so it always resolves
+                                // to the correct package sub regardless of the current package
+                                
+                                // Parse as normal package sub
+                                parser.tokenIndex--; // back up to just after "sub"
+                                
+                                Node packageSub = SubroutineParser.parseSubroutineDefinition(parser, true, "our");
+                                
+                                // Store the fully qualified name in the symbol table
+                                // This allows calls to resolve to the correct package sub even after package switch
+                                String fullSubName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
+                                OperatorNode marker = new OperatorNode("our",
+                                        new OperatorNode("&", new IdentifierNode(subName, subNameIndex), subNameIndex),
+                                        subNameIndex);
+                                marker.setAnnotation("isOurSub", true);
+                                marker.setAnnotation("fullSubName", fullSubName);  // Store the full qualified name!
+                                parser.ctx.symbolTable.addVariable("&" + subName, "our", marker);
+                                
+                                // Return the package sub
+                                yield packageSub;
+                            } else {
+                                // my sub or state sub - lexical only, not in package
+                                // Generate unique hidden variable name
+                                String hiddenVarName = subName + "__lexsub_" + parser.tokenIndex;
 
-                            // Parse the rest as an anonymous sub
-                            Node anonSub = SubroutineParser.parseSubroutineDefinition(parser, false, null);
+                                // Create the declaration: my/state $hiddenVarName
+                                // First create the inner operand (the $hiddenVarName part)
+                                OperatorNode innerVarNode = new OperatorNode("$", new IdentifierNode(hiddenVarName, parser.tokenIndex), parser.tokenIndex);
+                                
+                                // For state variables, assign a unique ID for persistent tracking
+                                if (declaration.equals("state")) {
+                                    innerVarNode.id = EmitterMethodCreator.classCounter++;
+                                }
+                                
+                                // Now create the outer declaration node (state/my $hiddenVarName)
+                                OperatorNode varDecl = new OperatorNode(declaration, innerVarNode, parser.tokenIndex);
 
-                            // Create AST for: my $hiddenVarName = sub {...}
-                            // Create the declaration: my $hiddenVarName
-                            OperatorNode varDecl = new OperatorNode(declaration,
-                                    new OperatorNode("$", new IdentifierNode(hiddenVarName, parser.tokenIndex), parser.tokenIndex),
-                                    parser.tokenIndex);
+                                // Store the hidden variable name and declaring package as annotations for lookup
+                                varDecl.setAnnotation("hiddenVarName", hiddenVarName);
+                                varDecl.setAnnotation("declaringPackage", parser.ctx.symbolTable.getCurrentPackage());
 
-                            // Create the list for declaration
-                            ListNode declList = new ListNode(parser.tokenIndex);
-                            declList.elements.add(varDecl);
+                                // IMPORTANT: Manually add the hidden variable to the symbol table
+                                // Since we're returning an assignment node, parseVariableDeclaration won't be called again
+                                // So we need to register both the sub name (&p) and the hidden variable ($p__lexsub_N)
+                                
+                                // IMPORTANT: Add the hidden variable NOW (before parsing body)
+                                // But delay adding &subName until AFTER parsing the body to make the sub "invisible inside itself"
+                                
+                                // For my/state subs: If there's already a forward declaration, we need to handle it
+                                SymbolTable.SymbolEntry existingEntry = parser.ctx.symbolTable.getSymbolEntry("&" + subName);
+                                boolean hadForwardDecl = existingEntry != null;
+                                
+                                // Add the hidden variable immediately (needed for state variable tracking)
+                                if (hadForwardDecl) {
+                                    parser.ctx.symbolTable.replaceVariable("$" + hiddenVarName, declaration, innerVarNode);
+                                } else {
+                                    parser.ctx.symbolTable.addVariable("$" + hiddenVarName, declaration, innerVarNode);
+                                }
+                                
+                                // DO NOT add &subName yet - it will be added after parsing the body
 
-                            // Create assignment: my $hiddenVarName = sub {...}
-                            BinaryOperatorNode assignment = new BinaryOperatorNode("=", declList, anonSub, parser.tokenIndex);
+                                // Check if this is a forward declaration or a full definition
+                                // Look ahead: after optional attributes (:attr) and prototype (...), is there a body {...}?
+                                boolean hasBody = false;
+                                String prototype = null;
+                                List<String> attributes = new ArrayList<>();
+                                
+                                // Parse attributes first (e.g., :prototype())
+                                while (peek(parser).text.equals(":")) {
+                                    String attrProto = SubroutineParser.consumeAttributes(parser, attributes);
+                                    if (attrProto != null) {
+                                        prototype = attrProto;
+                                    }
+                                }
+                                
+                                // Then check for prototype if not already set by attribute
+                                if (prototype == null && peek(parser).text.equals("(")) {
+                                    // Parse the prototype
+                                    prototype = ((StringNode) StringParser.parseRawString(parser, "q")).value;
+                                }
+                                
+                                // Now check if there's a body
+                                hasBody = peek(parser).text.equals("{");
 
-                            // Store the mapping so we can resolve calls to this lexical sub
-                            parser.ctx.symbolTable.addVariable("&" + subName, declaration, varDecl);
+                                if (hasBody) {
+                                    // Full definition: my sub name {...} or my sub name (...) {...}
+                                    // Parse the rest as an anonymous sub
+                                    Node anonSub = SubroutineParser.parseSubroutineDefinition(parser, false, null);
 
-                            yield assignment;
+                                    // Store prototype in the sub if present
+                                    if (prototype != null && anonSub instanceof SubroutineNode subNode) {
+                                        varDecl.setAnnotation("prototype", prototype);
+                                    }
+
+                                    // NOW add &subName to symbol table AFTER parsing the body
+                                    // This makes the sub "invisible inside itself" during compilation
+                                    if (hadForwardDecl) {
+                                        parser.ctx.symbolTable.replaceVariable("&" + subName, declaration, varDecl);
+                                    } else {
+                                        parser.ctx.symbolTable.addVariable("&" + subName, declaration, varDecl);
+                                    }
+
+                                    // Create assignment: $hiddenVarName = sub {...}
+                                    // We need to create a reference to the already-declared variable
+                                    // Use a fully qualified name to ensure it resolves correctly regardless of package context
+                                    String declaringPackage = parser.ctx.symbolTable.getCurrentPackage();
+                                    String qualifiedHiddenVarName = declaringPackage + "::" + hiddenVarName;
+                                    
+                                    OperatorNode varRef = new OperatorNode("$", new IdentifierNode(qualifiedHiddenVarName, parser.tokenIndex), parser.tokenIndex);
+                                    // For state variables, copy the ID so runtime can track the state
+                                    if (declaration.equals("state")) {
+                                        varRef.id = innerVarNode.id;
+                                    }
+                                    BinaryOperatorNode assignment = new BinaryOperatorNode("=", varRef, anonSub, parser.tokenIndex);
+
+                                    // Execute assignment immediately during parsing (like a BEGIN block)
+                                    // This is crucial for cases like: state sub foo{...}; use overload => \&foo;
+                                    BlockNode beginBlock = new BlockNode(new ArrayList<>(List.of(assignment)), parser.tokenIndex);
+                                    SpecialBlockParser.runSpecialBlock(parser, "BEGIN", beginBlock);
+                                    
+                                    // Return empty list since the assignment already executed
+                                    yield new ListNode(parser.tokenIndex);
+                                } else {
+                                    // Forward declaration: my sub name; or my sub name ($);
+                                    // For forward declarations, add &subName immediately since there's no body to be invisible in
+                                    if (hadForwardDecl) {
+                                        parser.ctx.symbolTable.replaceVariable("&" + subName, declaration, varDecl);
+                                    } else {
+                                        parser.ctx.symbolTable.addVariable("&" + subName, declaration, varDecl);
+                                    }
+                                    
+                                    if (prototype != null) {
+                                        // Store prototype in varDecl annotation
+                                        varDecl.setAnnotation("prototype", prototype);
+                                    }
+                                    // Just declare the variable
+                                    yield varDecl;
+                                }
+                            }
                         } else {
                             // anonymous sub
                             yield SubroutineParser.parseSubroutineDefinition(parser, false, declaration);
