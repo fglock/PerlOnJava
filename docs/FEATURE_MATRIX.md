@@ -48,7 +48,7 @@ PerlOnJava implements most core Perl features with some key differences:
 ❌ Not Supported:
 - XS modules and C integration
 - Threading
-- `fork` operator
+- DESTROY blocks
 
 ## Compiler Usability
 - ✅  **Wrapper scripts**: (jperl/jperl.bat) for easier command-line usage.
@@ -248,9 +248,9 @@ my @copy = @{$z};         # ERROR
 - ✅  **Subroutine signatures**: Formal parameters are implemented.
 - ✅  **`lvalue` subroutines**: Subroutines with attribute `:lvalue` are supported.
 - ✅  **`Forcing main package`**: Identifiers starting with `::` are in `main` package.
+- ✅  **Lexical subroutines**: Subroutines declared `my`, `state`, or `our` are supported.
 - 🚧  **Subroutine attributes**: `prototype` is implemented. Other subroutine attributes are not yet supported.
 - ❌  **CORE operator references**: Taking a reference to a `CORE` operator is not implemented: `BEGIN { *shove = \&CORE::push; } shove @array, 1,2,3;`
-- ❌  **Lexical subroutines**: Subroutines declared `my`, `state`, or `our` are not yet supported.
 
 ## Regular Expressions
 - ✅  **Basic Matching**: Operators `qr//`, `m//`, `s///`, `split` are implemented.
