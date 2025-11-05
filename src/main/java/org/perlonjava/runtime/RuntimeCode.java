@@ -781,10 +781,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             //throw new PerlCompilerException("Undefined subroutine called at ");
         } catch (InvocationTargetException e) {
             Throwable targetException = e.getTargetException();
+            // Control flow exceptions must propagate without wrapping
+            if (targetException instanceof PerlControlFlowException) {
+                throw (PerlControlFlowException) targetException;
+            }
             if (!(targetException instanceof RuntimeException)) {
                 throw new RuntimeException(targetException);
             }
             throw (RuntimeException) targetException;
+        } catch (PerlControlFlowException e) {
+            // Control flow exceptions must propagate without wrapping
+            throw e;
         } catch (Throwable e) {
             throw new RuntimeException(e);
         }
@@ -811,10 +818,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             throw new PerlCompilerException("Undefined subroutine &" + subroutineName + " called at ");
         } catch (InvocationTargetException e) {
             Throwable targetException = e.getTargetException();
+            // Control flow exceptions must propagate without wrapping
+            if (targetException instanceof PerlControlFlowException) {
+                throw (PerlControlFlowException) targetException;
+            }
             if (!(targetException instanceof RuntimeException)) {
                 throw new RuntimeException(targetException);
             }
             throw (RuntimeException) targetException;
+        } catch (PerlControlFlowException e) {
+            // Control flow exceptions must propagate without wrapping
+            throw e;
         } catch (Throwable e) {
             throw new RuntimeException(e);
         }

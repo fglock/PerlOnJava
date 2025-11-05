@@ -75,8 +75,19 @@ public class EmitBlock {
             forNode.preEvaluatedArrayIndex = tempArrayIndex;
         }
 
+        // Check if block has any actual runtime code (not just labels)
+        boolean hasRuntimeCode = false;
+        for (Node element : list) {
+            if (element != null && !(element instanceof LabelNode)) {
+                hasRuntimeCode = true;
+                break;
+            }
+        }
+
         // Wrap block body in try-catch if there are goto labels (for non-local jumps)
-        if (!node.labels.isEmpty()) {
+        // But only if this block has actual runtime code and is not just a loop body placeholder
+        // (bare blocks parsed as For3Node have isLoop=true and should not get try-catch here)
+        if (!node.labels.isEmpty() && hasRuntimeCode && !node.isLoop) {
             Label tryStart = new Label();
             Label tryEnd = new Label();
             Label catchGoto = new Label();
@@ -89,9 +100,9 @@ public class EmitBlock {
             mv.visitLabel(tryStart);
             
             // Emit all statements in the block
-            for (int i = 0; i < list.size(); i++) {
-                Node element = list.get(i);
-                
+        for (int i = 0; i < list.size(); i++) {
+            Node element = list.get(i);
+            
                 if (element == null) {
                     emitterVisitor.ctx.logDebug("Skipping null element in block at index " + i);
                     continue;
@@ -122,7 +133,7 @@ public class EmitBlock {
                 mv.visitInsn(Opcodes.DUP);  // [exception, exception]
                 mv.visitLdcInsn(label);     // [exception, exception, label]
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, 
-                    "org/perlonjava/runtime/ControlFlowException", 
+                    "org/perlonjava/runtime/PerlControlFlowException", 
                     "matchesLabel", 
                     "(Ljava/lang/String;)Z", 
                     false);
@@ -156,22 +167,22 @@ public class EmitBlock {
                 Node element = list.get(i);
                 
                 // Skip null elements
-                if (element == null) {
-                    emitterVisitor.ctx.logDebug("Skipping null element in block at index " + i);
-                    continue;
-                }
+            if (element == null) {
+                emitterVisitor.ctx.logDebug("Skipping null element in block at index " + i);
+                continue;
+            }
 
-                ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, element.getIndex());
+            ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, element.getIndex());
 
-                // Emit the statement with current context
-                if (i == list.size() - 1) {
-                    // Special case for the last element
-                    emitterVisitor.ctx.logDebug("Last element: " + element);
-                    element.accept(emitterVisitor);
-                } else {
-                    // General case for all other elements
-                    emitterVisitor.ctx.logDebug("Element: " + element);
-                    element.accept(voidVisitor);
+            // Emit the statement with current context
+            if (i == list.size() - 1) {
+                // Special case for the last element
+                emitterVisitor.ctx.logDebug("Last element: " + element);
+                element.accept(emitterVisitor);
+            } else {
+                // General case for all other elements
+                emitterVisitor.ctx.logDebug("Element: " + element);
+                element.accept(voidVisitor);
                 }
             }
         }

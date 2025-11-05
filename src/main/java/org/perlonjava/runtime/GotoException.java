@@ -5,7 +5,7 @@ package org.perlonjava.runtime;
  * This exception is used when a 'goto' statement targets a label
  * that is not in the current lexical scope but in an outer call frame.
  */
-public class GotoException extends ControlFlowException {
+public class GotoException extends PerlControlFlowException {
     /**
      * Constructs a GotoException with the specified target label.
      * 

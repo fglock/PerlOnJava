@@ -7,7 +7,7 @@ package org.perlonjava.runtime;
  * The exceptions are created without stack traces for performance optimization,
  * as they are not actual errors but control flow mechanisms.
  */
-public abstract class ControlFlowException extends RuntimeException {
+public abstract class PerlControlFlowException extends RuntimeException {
     protected final String targetLabel;  // null for unlabeled next/last/redo
 
     /**
@@ -15,7 +15,7 @@ public abstract class ControlFlowException extends RuntimeException {
      * 
      * @param targetLabel The label to jump to, or null for unlabeled statements
      */
-    public ControlFlowException(String targetLabel) {
+    public PerlControlFlowException(String targetLabel) {
         super(null, null, false, false);  // No stack trace (performance optimization)
         this.targetLabel = targetLabel;
     }

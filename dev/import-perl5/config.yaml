@@ -62,10 +62,6 @@ imports:
     type: directory
 
   # Specific patched files (applied after directory import above)
-  - source: perl5/t/test.pl
-    target: perl5_t/t/test.pl
-    patch: test.pl.patch
-
   - source: perl5/t/re/pat.t
     target: perl5_t/t/re/pat.t
     patch: pat.t.patch

@@ -237,8 +237,7 @@ public class StatementParser {
             elseBranch = parseIfStatement(parser);
         }
 
-        // Use a macro to emulate Test::More SKIP blocks
-        TestMoreHelper.handleSkipTest(parser, thenBranch);
+        // Note: SKIP blocks now work via non-local goto - no special handling needed
 
         return new IfNode(operator.text, condition, thenBranch, elseBranch, parser.tokenIndex);
     }

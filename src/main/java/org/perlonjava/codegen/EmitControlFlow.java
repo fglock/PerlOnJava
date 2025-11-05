@@ -126,6 +126,7 @@ public class EmitControlFlow {
 
     /**
      * Handles goto statements with labels.
+     * Supports both compile-time constant labels (goto LABEL) and runtime-evaluated labels (goto $var).
      * Validates label existence and manages stack cleanup before jumping.
      *
      * @param emitterVisitor The visitor handling the bytecode emission
@@ -135,22 +136,49 @@ public class EmitControlFlow {
     static void handleGotoLabel(EmitterVisitor emitterVisitor, OperatorNode node) {
         EmitterContext ctx = emitterVisitor.ctx;
 
-        // Parse and validate the goto label
+        // Parse the goto label - can be identifier (compile-time) or expression (runtime)
         String labelName = null;
+        Node labelExpr = null;
+        
         if (node.operand instanceof ListNode labelNode && !labelNode.elements.isEmpty()) {
             Node arg = labelNode.elements.getFirst();
             if (arg instanceof IdentifierNode) {
+                // Compile-time constant label: goto LABEL
                 labelName = ((IdentifierNode) arg).name;
             } else {
-                throw new PerlCompilerException(node.tokenIndex, "Invalid goto label: " + node, ctx.errorUtil);
+                // Runtime-evaluated label: goto $var or goto expr()
+                labelExpr = arg;
             }
         }
 
         // Ensure label is provided
-        if (labelName == null) {
+        if (labelName == null && labelExpr == null) {
             throw new PerlCompilerException(node.tokenIndex, "goto must be given label", ctx.errorUtil);
         }
 
+        // Handle runtime-evaluated labels (goto $var)
+        if (labelExpr != null) {
+            // Evaluate the expression to get the label name at runtime
+            labelExpr.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+            
+            // Convert to string: labelName = expr.toString()
+            ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, 
+                "org/perlonjava/runtime/RuntimeScalar", 
+                "toString", 
+                "()Ljava/lang/String;", 
+                false);
+            
+            // Create and throw GotoException with runtime label
+            ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/GotoException");
+            ctx.mv.visitInsn(Opcodes.DUP_X1);
+            ctx.mv.visitInsn(Opcodes.SWAP);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/GotoException", "<init>", 
+                "(Ljava/lang/String;)V", false);
+            ctx.mv.visitInsn(Opcodes.ATHROW);
+            return;  // Always throws exception for runtime labels
+        }
+
+        // Handle compile-time constant labels (goto LABEL)
         // Locate the target label in the current scope
         GotoLabels targetLabel = ctx.javaClassInfo.findGotoLabelsByName(labelName);
         if (targetLabel == null) {

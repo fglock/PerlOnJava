@@ -5,7 +5,7 @@ package org.perlonjava.runtime;
  * This exception is used when a 'redo' statement targets a label
  * that is not in the current lexical scope but in an outer call frame.
  */
-public class RedoException extends ControlFlowException {
+public class RedoException extends PerlControlFlowException {
     /**
      * Constructs a RedoException with the specified target label.
      * 

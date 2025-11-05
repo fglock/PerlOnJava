@@ -500,10 +500,7 @@ public class StatementResolver {
 
                         parser.ctx.symbolTable.exitScope(scopeIndex);
 
-                        if (label != null && label.equals("SKIP")) {
-                            // Use a macro to emulate Test::More SKIP blocks
-                            TestMoreHelper.handleSkipTest(parser, block);
-                        }
+                        // Note: SKIP blocks now work via non-local goto - no special handling needed
 
                         yield new For3Node(label,
                                 true,

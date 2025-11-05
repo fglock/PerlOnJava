@@ -5,7 +5,7 @@ package org.perlonjava.runtime;
  * This exception is used when a 'next' statement targets a label
  * that is not in the current lexical scope but in an outer call frame.
  */
-public class NextException extends ControlFlowException {
+public class NextException extends PerlControlFlowException {
     /**
      * Constructs a NextException with the specified target label.
      * 

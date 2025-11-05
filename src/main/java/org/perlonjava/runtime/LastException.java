@@ -5,7 +5,7 @@ package org.perlonjava.runtime;
  * This exception is used when a 'last' statement targets a label
  * that is not in the current lexical scope but in an outer call frame.
  */
-public class LastException extends ControlFlowException {
+public class LastException extends PerlControlFlowException {
     /**
      * Constructs a LastException with the specified target label.
      * 

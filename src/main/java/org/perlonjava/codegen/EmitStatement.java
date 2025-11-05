@@ -3,8 +3,13 @@ package org.perlonjava.codegen;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
+import org.perlonjava.astnode.BlockNode;
+import org.perlonjava.astnode.CompilerFlagNode;
 import org.perlonjava.astnode.For3Node;
 import org.perlonjava.astnode.IfNode;
+import org.perlonjava.astnode.LabelNode;
+import org.perlonjava.astnode.ListNode;
+import org.perlonjava.astnode.Node;
 import org.perlonjava.astnode.OperatorNode;
 import org.perlonjava.astnode.TryNode;
 import org.perlonjava.astvisitor.EmitterVisitor;
@@ -146,8 +151,44 @@ public class EmitStatement {
                         endLabel,
                         RuntimeContextType.VOID);
 
-                // Wrap loop body in try-catch if there's a label (for non-local jumps)
-                if (node.labelName != null) {
+                // Check if body has any runtime code (not just subroutine definitions or labels)
+                // Bare blocks with only compile-time constructs don't need exception handlers
+                boolean hasRuntimeCode = false;
+                if (node.body instanceof BlockNode blockBody) {
+                    for (Node element : blockBody.elements) {
+                        if (element != null && 
+                            !(element instanceof LabelNode) && 
+                            !(element instanceof CompilerFlagNode)) {
+                            // Check if it's an empty/trivial node or compile-time block
+                            if (element instanceof ListNode listNode) {
+                                if (listNode.elements != null && !listNode.elements.isEmpty()) {
+                                    hasRuntimeCode = true;
+                                    break;
+                                }
+                                // Empty ListNode - continue checking
+                            } else if (element instanceof OperatorNode opNode) {
+                                // Check if it's a special block (BEGIN, INIT, END, CHECK, UNITCHECK)
+                                // These don't emit runtime code in the main method
+                                String op = opNode.operator;
+                                if (!"BEGIN".equals(op) && !"INIT".equals(op) && !"END".equals(op) && 
+                                    !"CHECK".equals(op) && !"UNITCHECK".equals(op) && !"undef".equals(op)) {
+                                    hasRuntimeCode = true;
+                                    break;
+                                }
+                                // Special blocks or undef - continue checking
+                            } else {
+                                hasRuntimeCode = true;
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    hasRuntimeCode = true;  // Non-BlockNode bodies always have runtime code
+                }
+
+                // Only wrap loop body in try-catch if there's actual runtime code
+                // (bare blocks with only subroutine definitions don't need exception handlers)
+                if (hasRuntimeCode) {
                     Label tryStart = new Label();
                     Label tryEnd = new Label();
                     Label catchLast = new Label();
@@ -161,6 +202,9 @@ public class EmitStatement {
 
                     // Try block
                     mv.visitLabel(tryStart);
+                    // Emit NOP to ensure try-catch range is valid even if body emits no bytecode
+                    // (e.g., INIT blocks, BEGIN blocks, or bare blocks with only subroutine definitions)
+                    mv.visitInsn(Opcodes.NOP);
                     node.body.accept(voidVisitor);
                     mv.visitLabel(tryEnd);
                     mv.visitJumpInsn(Opcodes.GOTO, continueLabel);
@@ -177,8 +221,9 @@ public class EmitStatement {
                     mv.visitLabel(catchRedo);
                     emitLoopExceptionHandler(mv, node.labelName, redoLabel);
                 } else {
-                    // No label, just emit the loop body normally
+                    // No runtime code, just emit the body without exception handling
                     node.body.accept(voidVisitor);
+                    mv.visitJumpInsn(Opcodes.GOTO, continueLabel);
                 }
 
             } else {
@@ -362,7 +407,7 @@ public class EmitStatement {
             mv.visitInsn(Opcodes.ACONST_NULL);
         }
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, 
-            "org/perlonjava/runtime/ControlFlowException", 
+            "org/perlonjava/runtime/PerlControlFlowException", 
             "matchesLabel", 
             "(Ljava/lang/String;)Z", 
             false);
@@ -387,7 +432,7 @@ public class EmitStatement {
      * @param labelName   The label name to match against (or null for unlabeled loops)
      * @param targetLabel The ASM label to jump to if the exception matches
      */
-    private static void emitLoopExceptionHandler(MethodVisitor mv, String labelName, Label targetLabel) {
+    public static void emitLoopExceptionHandler(MethodVisitor mv, String labelName, Label targetLabel) {
         // Stack: [exception]
         mv.visitInsn(Opcodes.DUP);  // [exception, exception]
         
@@ -398,7 +443,7 @@ public class EmitStatement {
             mv.visitInsn(Opcodes.ACONST_NULL);
         }
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, 
-            "org/perlonjava/runtime/ControlFlowException", 
+            "org/perlonjava/runtime/PerlControlFlowException", 
             "matchesLabel", 
             "(Ljava/lang/String;)Z", 
             false);
