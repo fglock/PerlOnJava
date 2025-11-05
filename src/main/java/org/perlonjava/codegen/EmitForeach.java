@@ -24,31 +24,11 @@ public class EmitForeach {
         }
 
         MethodVisitor mv = emitterVisitor.ctx.mv;
-        
-        // CRITICAL: Save any parent context values that are on the operand stack
-        // This is necessary when the loop is used in an expression (e.g., `"" . do{for...}`)
-        // because non-local control flow (exceptions) will clear the entire operand stack
-        int parentStackLevel = emitterVisitor.ctx.javaClassInfo.stackLevelManager.getStackLevel();
-        int[] savedStackVars = null;
-        if (parentStackLevel > 0) {
-            savedStackVars = new int[parentStackLevel];
-            // Save stack values in reverse order (top of stack first)
-            for (int i = parentStackLevel - 1; i >= 0; i--) {
-                savedStackVars[i] = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-                mv.visitVarInsn(Opcodes.ASTORE, savedStackVars[i]);
-            }
-            // Update stack level manager to reflect that we've cleared the parent's values
-            emitterVisitor.ctx.javaClassInfo.stackLevelManager.decrement(parentStackLevel);
-        }
-        
         Label loopStart = new Label();
         Label loopEnd = new Label();
         Label continueLabel = new Label();
 
         int scopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
-
-        // Allocate local variable for iterator (will be used throughout the loop)
-        int iteratorVar = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
 
         // Check if the variable is global
         boolean loopVariableIsGlobal = false;
@@ -159,13 +139,7 @@ public class EmitForeach {
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "iterator", "()Ljava/util/Iterator;", false);
         }
 
-        // Store iterator in local variable before entering loop
-        mv.visitVarInsn(Opcodes.ASTORE, iteratorVar);
-
         mv.visitLabel(loopStart);
-
-        // Load iterator from local variable
-        mv.visitVarInsn(Opcodes.ALOAD, iteratorVar);
 
         // Check for pending signals (alarm, etc.) at loop entry
         EmitStatement.emitSignalCheck(mv);
@@ -173,8 +147,7 @@ public class EmitForeach {
         // Check if iterator has more elements
         mv.visitInsn(Opcodes.DUP);
         mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "hasNext", "()Z", true);
-        Label normalExit = new Label();
-        mv.visitJumpInsn(Opcodes.IFEQ, normalExit);
+        mv.visitJumpInsn(Opcodes.IFEQ, loopEnd);
 
         // Handle multiple variables case
         if (node.variable instanceof ListNode varList) {
@@ -234,8 +207,7 @@ public class EmitForeach {
             }
         }
 
-        // Pop the iterator from stack (it was DUPed earlier for next() call)
-        mv.visitInsn(Opcodes.POP);
+        emitterVisitor.ctx.javaClassInfo.incrementStackLevel(1);
 
         Label redoLabel = new Label();
         mv.visitLabel(redoLabel);
@@ -244,85 +216,10 @@ public class EmitForeach {
                 node.labelName,
                 continueLabel,
                 redoLabel,
-                loopEnd,  // Both local and exception-based last jump to loopEnd
+                loopEnd,
                 RuntimeContextType.VOID);
 
-        // Always wrap loop body in try-catch to handle non-local jumps from subroutines
-        // Both labeled and unlabeled loops need this since Perl allows `last;` from a subroutine
-        {
-
-            Label tryStart = new Label();
-            Label tryEnd = new Label();
-            Label catchLast = new Label();
-            Label catchNext = new Label();
-            Label catchRedo = new Label();
-
-            // Try block - execute loop body (stack is empty, iterator is in local variable)
-            mv.visitLabel(tryStart);
-            // Emit NOP to ensure try-catch range is valid even if body emits no bytecode
-            mv.visitInsn(Opcodes.NOP);
         node.body.accept(emitterVisitor.with(RuntimeContextType.VOID));
-            mv.visitLabel(tryEnd);
-            // Jump to continueLabel (no need to load iterator, continueLabel will do it)
-            mv.visitJumpInsn(Opcodes.GOTO, continueLabel);
-
-            // Catch LastException - check if label matches, then pop exception and jump to loopEnd
-            // Stack is already clean because EmitControlFlow clears it before throwing
-            mv.visitLabel(catchLast);
-            mv.visitInsn(Opcodes.DUP);
-            if (node.labelName != null) {
-                mv.visitLdcInsn(node.labelName);
-            } else {
-                mv.visitInsn(Opcodes.ACONST_NULL);
-            }
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/PerlControlFlowException", "matchesLabel", "(Ljava/lang/String;)Z", false);
-            Label rethrowLast = new Label();
-            mv.visitJumpInsn(Opcodes.IFEQ, rethrowLast);
-            mv.visitInsn(Opcodes.POP);  // Pop exception (stack is now empty, matching normalExit)
-            mv.visitJumpInsn(Opcodes.GOTO, loopEnd);
-            mv.visitLabel(rethrowLast);
-            mv.visitInsn(Opcodes.ATHROW);
-
-            // Catch NextException - check if label matches, then pop exception and jump to continueLabel
-            mv.visitLabel(catchNext);
-            mv.visitInsn(Opcodes.DUP);
-            if (node.labelName != null) {
-                mv.visitLdcInsn(node.labelName);
-            } else {
-                mv.visitInsn(Opcodes.ACONST_NULL);
-            }
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/PerlControlFlowException", "matchesLabel", "(Ljava/lang/String;)Z", false);
-            Label rethrowNext = new Label();
-            mv.visitJumpInsn(Opcodes.IFEQ, rethrowNext);
-            mv.visitInsn(Opcodes.POP);  // Pop exception
-            // Iterator stays in local variable - continueLabel will load it
-            mv.visitJumpInsn(Opcodes.GOTO, continueLabel);
-            mv.visitLabel(rethrowNext);
-            mv.visitInsn(Opcodes.ATHROW);
-
-            // Catch RedoException - check if label matches, then pop exception and jump to redoLabel
-            mv.visitLabel(catchRedo);
-            mv.visitInsn(Opcodes.DUP);
-            if (node.labelName != null) {
-                mv.visitLdcInsn(node.labelName);
-            } else {
-                mv.visitInsn(Opcodes.ACONST_NULL);
-            }
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/PerlControlFlowException", "matchesLabel", "(Ljava/lang/String;)Z", false);
-            Label rethrowRedo = new Label();
-            mv.visitJumpInsn(Opcodes.IFEQ, rethrowRedo);
-            mv.visitInsn(Opcodes.POP);  // Pop exception
-            // Iterator stays in local variable - redoLabel will load it
-            mv.visitJumpInsn(Opcodes.GOTO, redoLabel);
-            mv.visitLabel(rethrowRedo);
-            mv.visitInsn(Opcodes.ATHROW);
-
-            // Register exception handlers AFTER body emission so inner loops get priority
-            // (visitTryCatchBlock adds to exception table, which is searched sequentially)
-            mv.visitTryCatchBlock(tryStart, tryEnd, catchLast, "org/perlonjava/runtime/LastException");
-            mv.visitTryCatchBlock(tryStart, tryEnd, catchNext, "org/perlonjava/runtime/NextException");
-            mv.visitTryCatchBlock(tryStart, tryEnd, catchRedo, "org/perlonjava/runtime/RedoException");
-        }
 
         emitterVisitor.ctx.javaClassInfo.popLoopLabels();
 
@@ -334,11 +231,6 @@ public class EmitForeach {
 
         mv.visitJumpInsn(Opcodes.GOTO, loopStart);
 
-        // Normal exit: iterator is on stack (from hasNext check), pop it
-        mv.visitLabel(normalExit);
-        mv.visitInsn(Opcodes.POP);  // Stack is now empty
-        
-        // Fall through to loop end (stack is empty)
         mv.visitLabel(loopEnd);
         
         // Restore dynamic variable stack for our localization
@@ -355,16 +247,8 @@ public class EmitForeach {
 
         emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
 
-        // Iterator is in local variable - no need to pop from stack
-
-        // Restore parent stack values that were saved before entering the loop
-        if (savedStackVars != null) {
-            for (int i = 0; i < parentStackLevel; i++) {
-                mv.visitVarInsn(Opcodes.ALOAD, savedStackVars[i]);
-            }
-            // Update stack level to reflect restored values
-            emitterVisitor.ctx.javaClassInfo.stackLevelManager.increment(parentStackLevel);
-        }
+        emitterVisitor.ctx.javaClassInfo.decrementStackLevel(1);
+        mv.visitInsn(Opcodes.POP);
 
         if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
             // Foreach loop returns empty string when it completes normally
@@ -389,20 +273,11 @@ public class EmitForeach {
         Label loopStart = new Label();
         Label loopEnd = new Label();
 
-        // Allocate local variable for iterator
-        int iteratorVar = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-
         // Obtain the iterator for the list
         node.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "iterator", "()Ljava/util/Iterator;", false);
 
-        // Store iterator in local variable
-        mv.visitVarInsn(Opcodes.ASTORE, iteratorVar);
-
         mv.visitLabel(loopStart);
-
-        // Load iterator from local variable
-        mv.visitVarInsn(Opcodes.ALOAD, iteratorVar);
 
         // Check for pending signals (alarm, etc.) at loop entry
         EmitStatement.emitSignalCheck(mv);
@@ -410,8 +285,7 @@ public class EmitForeach {
         // Check if iterator has more elements
         mv.visitInsn(Opcodes.DUP);
         mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "hasNext", "()Z", true);
-        Label normalExitWhile = new Label();
-        mv.visitJumpInsn(Opcodes.IFEQ, normalExitWhile);
+        mv.visitJumpInsn(Opcodes.IFEQ, loopEnd);
 
         // Get next value
         mv.visitInsn(Opcodes.DUP);
@@ -426,111 +300,28 @@ public class EmitForeach {
                 "set", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
         mv.visitInsn(Opcodes.POP);
 
-        // Pop the iterator from stack (it was DUPed earlier for next() call)
-        mv.visitInsn(Opcodes.POP);
+        emitterVisitor.ctx.javaClassInfo.incrementStackLevel(1);
 
         Label redoLabel = new Label();
         mv.visitLabel(redoLabel);
 
-        Label continueLabel = new Label();
         emitterVisitor.ctx.javaClassInfo.pushLoopLabels(
                 node.labelName,
-                continueLabel,
+                new Label(),
                 redoLabel,
-                loopEnd,  // Both local and exception-based last jump to loopEnd
+                loopEnd,
                 RuntimeContextType.VOID);
 
-        // Always wrap loop body in try-catch to handle non-local jumps from subroutines
-        // Both labeled and unlabeled loops need this since Perl allows `last;` from a subroutine
-        {
-
-            Label tryStart = new Label();
-            Label tryEnd = new Label();
-            Label catchLast = new Label();
-            Label catchNext = new Label();
-            Label catchRedo = new Label();
-
-            // Try block - execute loop body (stack is empty, iterator is in local variable)
-            mv.visitLabel(tryStart);
-            // Emit NOP to ensure try-catch range is valid even if body emits no bytecode
-            mv.visitInsn(Opcodes.NOP);
         node.body.accept(emitterVisitor.with(RuntimeContextType.VOID));
-            mv.visitLabel(tryEnd);
-            // Jump to continueLabel (iterator stays in local variable)
-            mv.visitJumpInsn(Opcodes.GOTO, continueLabel);
-
-            // Catch LastException - check if label matches, then pop exception and jump to loopEnd
-            // Stack is already clean because EmitControlFlow clears it before throwing
-            mv.visitLabel(catchLast);
-            mv.visitInsn(Opcodes.DUP);
-            if (node.labelName != null) {
-                mv.visitLdcInsn(node.labelName);
-            } else {
-                mv.visitInsn(Opcodes.ACONST_NULL);
-            }
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/PerlControlFlowException", "matchesLabel", "(Ljava/lang/String;)Z", false);
-            Label rethrowLast = new Label();
-            mv.visitJumpInsn(Opcodes.IFEQ, rethrowLast);
-            mv.visitInsn(Opcodes.POP);  // Pop exception (stack is now empty, matching normalExitWhile)
-            mv.visitJumpInsn(Opcodes.GOTO, loopEnd);
-            mv.visitLabel(rethrowLast);
-            mv.visitInsn(Opcodes.ATHROW);
-
-            // Catch NextException - check if label matches, then pop exception, load iterator, jump to continueLabel
-            mv.visitLabel(catchNext);
-            mv.visitInsn(Opcodes.DUP);
-            if (node.labelName != null) {
-                mv.visitLdcInsn(node.labelName);
-            } else {
-                mv.visitInsn(Opcodes.ACONST_NULL);
-            }
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/PerlControlFlowException", "matchesLabel", "(Ljava/lang/String;)Z", false);
-            Label rethrowNext = new Label();
-            mv.visitJumpInsn(Opcodes.IFEQ, rethrowNext);
-            mv.visitInsn(Opcodes.POP);  // Pop exception
-            // Iterator stays in local variable - continueLabel will load it
-            mv.visitJumpInsn(Opcodes.GOTO, continueLabel);
-            mv.visitLabel(rethrowNext);
-            mv.visitInsn(Opcodes.ATHROW);
-
-            // Catch RedoException - check if label matches, then pop exception, load iterator, jump to redoLabel
-            mv.visitLabel(catchRedo);
-            mv.visitInsn(Opcodes.DUP);
-            if (node.labelName != null) {
-                mv.visitLdcInsn(node.labelName);
-            } else {
-                mv.visitInsn(Opcodes.ACONST_NULL);
-            }
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/PerlControlFlowException", "matchesLabel", "(Ljava/lang/String;)Z", false);
-            Label rethrowRedo = new Label();
-            mv.visitJumpInsn(Opcodes.IFEQ, rethrowRedo);
-            mv.visitInsn(Opcodes.POP);  // Pop exception
-            // Iterator stays in local variable - redoLabel will load it
-            mv.visitJumpInsn(Opcodes.GOTO, redoLabel);
-            mv.visitLabel(rethrowRedo);
-            mv.visitInsn(Opcodes.ATHROW);
-
-            // Register exception handlers AFTER body emission so inner loops get priority
-            // (visitTryCatchBlock adds to exception table, which is searched sequentially)
-            mv.visitTryCatchBlock(tryStart, tryEnd, catchLast, "org/perlonjava/runtime/LastException");
-            mv.visitTryCatchBlock(tryStart, tryEnd, catchNext, "org/perlonjava/runtime/NextException");
-            mv.visitTryCatchBlock(tryStart, tryEnd, catchRedo, "org/perlonjava/runtime/RedoException");
-        }
 
         emitterVisitor.ctx.javaClassInfo.popLoopLabels();
 
-        mv.visitLabel(continueLabel);
-
         mv.visitJumpInsn(Opcodes.GOTO, loopStart);
 
-        // Normal exit: iterator is on stack, pop it
-        mv.visitLabel(normalExitWhile);
-        mv.visitInsn(Opcodes.POP);  // Stack is now empty
-        
-        // Fall through to loop end (stack is empty)
         mv.visitLabel(loopEnd);
 
-        // Iterator is in local variable - no stack cleanup needed
+        emitterVisitor.ctx.javaClassInfo.decrementStackLevel(1);
+        mv.visitInsn(Opcodes.POP);
 
         if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
             // Foreach loop returns empty string when it completes normally
