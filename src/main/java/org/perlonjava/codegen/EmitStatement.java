@@ -195,11 +195,6 @@ public class EmitStatement {
                     Label catchNext = new Label();
                     Label catchRedo = new Label();
 
-                    // Register exception handlers
-                    mv.visitTryCatchBlock(tryStart, tryEnd, catchLast, "org/perlonjava/runtime/LastException");
-                    mv.visitTryCatchBlock(tryStart, tryEnd, catchNext, "org/perlonjava/runtime/NextException");
-                    mv.visitTryCatchBlock(tryStart, tryEnd, catchRedo, "org/perlonjava/runtime/RedoException");
-
                     // Try block
                     mv.visitLabel(tryStart);
                     // Emit NOP to ensure try-catch range is valid even if body emits no bytecode
@@ -220,6 +215,12 @@ public class EmitStatement {
                     // Catch RedoException - jump to redoLabel
                     mv.visitLabel(catchRedo);
                     emitLoopExceptionHandler(mv, node.labelName, redoLabel);
+
+                    // Register exception handlers AFTER body emission so inner loops get priority
+                    // (visitTryCatchBlock adds to exception table, which is searched sequentially)
+                    mv.visitTryCatchBlock(tryStart, tryEnd, catchLast, "org/perlonjava/runtime/LastException");
+                    mv.visitTryCatchBlock(tryStart, tryEnd, catchNext, "org/perlonjava/runtime/NextException");
+                    mv.visitTryCatchBlock(tryStart, tryEnd, catchRedo, "org/perlonjava/runtime/RedoException");
                 } else {
                     // No runtime code, just emit the body without exception handling
                 node.body.accept(voidVisitor);

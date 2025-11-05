@@ -240,11 +240,6 @@ public class EmitForeach {
             Label catchNext = new Label();
             Label catchRedo = new Label();
 
-            // Register exception handlers
-            mv.visitTryCatchBlock(tryStart, tryEnd, catchLast, "org/perlonjava/runtime/LastException");
-            mv.visitTryCatchBlock(tryStart, tryEnd, catchNext, "org/perlonjava/runtime/NextException");
-            mv.visitTryCatchBlock(tryStart, tryEnd, catchRedo, "org/perlonjava/runtime/RedoException");
-
             // Try block - execute loop body (stack is empty, iterator is in local variable)
             mv.visitLabel(tryStart);
             // Emit NOP to ensure try-catch range is valid even if body emits no bytecode
@@ -304,6 +299,12 @@ public class EmitForeach {
             mv.visitJumpInsn(Opcodes.GOTO, redoLabel);
             mv.visitLabel(rethrowRedo);
             mv.visitInsn(Opcodes.ATHROW);
+
+            // Register exception handlers AFTER body emission so inner loops get priority
+            // (visitTryCatchBlock adds to exception table, which is searched sequentially)
+            mv.visitTryCatchBlock(tryStart, tryEnd, catchLast, "org/perlonjava/runtime/LastException");
+            mv.visitTryCatchBlock(tryStart, tryEnd, catchNext, "org/perlonjava/runtime/NextException");
+            mv.visitTryCatchBlock(tryStart, tryEnd, catchRedo, "org/perlonjava/runtime/RedoException");
         }
 
         emitterVisitor.ctx.javaClassInfo.popLoopLabels();
@@ -422,11 +423,6 @@ public class EmitForeach {
             Label catchNext = new Label();
             Label catchRedo = new Label();
 
-            // Register exception handlers
-            mv.visitTryCatchBlock(tryStart, tryEnd, catchLast, "org/perlonjava/runtime/LastException");
-            mv.visitTryCatchBlock(tryStart, tryEnd, catchNext, "org/perlonjava/runtime/NextException");
-            mv.visitTryCatchBlock(tryStart, tryEnd, catchRedo, "org/perlonjava/runtime/RedoException");
-
             // Try block - execute loop body (stack is empty, iterator is in local variable)
             mv.visitLabel(tryStart);
             // Emit NOP to ensure try-catch range is valid even if body emits no bytecode
@@ -486,6 +482,12 @@ public class EmitForeach {
             mv.visitJumpInsn(Opcodes.GOTO, redoLabel);
             mv.visitLabel(rethrowRedo);
             mv.visitInsn(Opcodes.ATHROW);
+
+            // Register exception handlers AFTER body emission so inner loops get priority
+            // (visitTryCatchBlock adds to exception table, which is searched sequentially)
+            mv.visitTryCatchBlock(tryStart, tryEnd, catchLast, "org/perlonjava/runtime/LastException");
+            mv.visitTryCatchBlock(tryStart, tryEnd, catchNext, "org/perlonjava/runtime/NextException");
+            mv.visitTryCatchBlock(tryStart, tryEnd, catchRedo, "org/perlonjava/runtime/RedoException");
         }
 
         emitterVisitor.ctx.javaClassInfo.popLoopLabels();
