@@ -146,8 +146,40 @@ public class EmitStatement {
                         endLabel,
                         RuntimeContextType.VOID);
 
-                // Visit the loop body
-                node.body.accept(voidVisitor);
+                // Wrap loop body in try-catch if there's a label (for non-local jumps)
+                if (node.labelName != null) {
+                    Label tryStart = new Label();
+                    Label tryEnd = new Label();
+                    Label catchLast = new Label();
+                    Label catchNext = new Label();
+                    Label catchRedo = new Label();
+
+                    // Register exception handlers
+                    mv.visitTryCatchBlock(tryStart, tryEnd, catchLast, "org/perlonjava/runtime/LastException");
+                    mv.visitTryCatchBlock(tryStart, tryEnd, catchNext, "org/perlonjava/runtime/NextException");
+                    mv.visitTryCatchBlock(tryStart, tryEnd, catchRedo, "org/perlonjava/runtime/RedoException");
+
+                    // Try block
+                    mv.visitLabel(tryStart);
+                    node.body.accept(voidVisitor);
+                    mv.visitLabel(tryEnd);
+                    mv.visitJumpInsn(Opcodes.GOTO, continueLabel);
+
+                    // Catch LastException - jump to endLabel
+                    mv.visitLabel(catchLast);
+                    emitLoopExceptionHandler(mv, node.labelName, endLabel);
+
+                    // Catch NextException - jump to continueLabel
+                    mv.visitLabel(catchNext);
+                    emitLoopExceptionHandler(mv, node.labelName, continueLabel);
+
+                    // Catch RedoException - jump to redoLabel
+                    mv.visitLabel(catchRedo);
+                    emitLoopExceptionHandler(mv, node.labelName, redoLabel);
+                } else {
+                    // No label, just emit the loop body normally
+                    node.body.accept(voidVisitor);
+                }
 
             } else {
                 // Within a `while` modifier, next/redo/last labels are not active
@@ -308,5 +340,78 @@ public class EmitStatement {
         EmitOperator.handleVoidContext(emitterVisitor);
 
         emitterVisitor.ctx.logDebug("emitTryCatch end");
+    }
+
+    /**
+     * Emits bytecode for handling control flow exceptions (next/last/redo) in blocks.
+     * This helper method generates code that checks if an exception matches the given label
+     * and either jumps to the target label or re-throws the exception.
+     *
+     * @param mv          The MethodVisitor to emit bytecode to
+     * @param labelName   The label name to match against (or null for unlabeled loops)
+     * @param targetLabel The ASM label to jump to if the exception matches
+     */
+    private static void emitExceptionHandler(MethodVisitor mv, String labelName, Label targetLabel) {
+        // Stack: [exception]
+        mv.visitInsn(Opcodes.DUP);  // [exception, exception]
+        
+        // Call exception.matchesLabel(labelName)
+        if (labelName != null) {
+            mv.visitLdcInsn(labelName);
+        } else {
+            mv.visitInsn(Opcodes.ACONST_NULL);
+        }
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, 
+            "org/perlonjava/runtime/ControlFlowException", 
+            "matchesLabel", 
+            "(Ljava/lang/String;)Z", 
+            false);
+        
+        Label rethrow = new Label();
+        mv.visitJumpInsn(Opcodes.IFEQ, rethrow);  // if false, rethrow
+        
+        // Match! Pop exception and jump to target
+        mv.visitInsn(Opcodes.POP);
+        mv.visitJumpInsn(Opcodes.GOTO, targetLabel);
+        
+        // Re-throw for outer frames
+        mv.visitLabel(rethrow);
+        mv.visitInsn(Opcodes.ATHROW);
+    }
+
+    /**
+     * Emits bytecode for handling control flow exceptions (next/last/redo) in loops.
+     * Similar to emitExceptionHandler, but for loop contexts.
+     *
+     * @param mv          The MethodVisitor to emit bytecode to
+     * @param labelName   The label name to match against (or null for unlabeled loops)
+     * @param targetLabel The ASM label to jump to if the exception matches
+     */
+    private static void emitLoopExceptionHandler(MethodVisitor mv, String labelName, Label targetLabel) {
+        // Stack: [exception]
+        mv.visitInsn(Opcodes.DUP);  // [exception, exception]
+        
+        // Call exception.matchesLabel(labelName)
+        if (labelName != null) {
+            mv.visitLdcInsn(labelName);
+        } else {
+            mv.visitInsn(Opcodes.ACONST_NULL);
+        }
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, 
+            "org/perlonjava/runtime/ControlFlowException", 
+            "matchesLabel", 
+            "(Ljava/lang/String;)Z", 
+            false);
+        
+        Label rethrow = new Label();
+        mv.visitJumpInsn(Opcodes.IFEQ, rethrow);  // if false, rethrow
+        
+        // Match! Pop exception and jump to target
+        mv.visitInsn(Opcodes.POP);
+        mv.visitJumpInsn(Opcodes.GOTO, targetLabel);
+        
+        // Re-throw for outer frames
+        mv.visitLabel(rethrow);
+        mv.visitInsn(Opcodes.ATHROW);
     }
 }

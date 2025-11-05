@@ -75,28 +75,104 @@ public class EmitBlock {
             forNode.preEvaluatedArrayIndex = tempArrayIndex;
         }
 
-        for (int i = 0; i < list.size(); i++) {
-            Node element = list.get(i);
+        // Wrap block body in try-catch if there are goto labels (for non-local jumps)
+        if (!node.labels.isEmpty()) {
+            Label tryStart = new Label();
+            Label tryEnd = new Label();
+            Label catchGoto = new Label();
+            Label afterCatch = new Label();
             
-            // Skip null elements - these occur when parseStatement returns null to signal
-            // "not a statement, continue parsing" (e.g., AUTOLOAD without {}, try without feature enabled)
-            // ParseBlock.parseBlock() adds these null results to the statements list
-            if (element == null) {
-                emitterVisitor.ctx.logDebug("Skipping null element in block at index " + i);
-                continue;
+            // Register exception handler for GotoException
+            mv.visitTryCatchBlock(tryStart, tryEnd, catchGoto, "org/perlonjava/runtime/GotoException");
+            
+            // Try block start
+            mv.visitLabel(tryStart);
+            
+            // Emit all statements in the block
+            for (int i = 0; i < list.size(); i++) {
+                Node element = list.get(i);
+                
+                if (element == null) {
+                    emitterVisitor.ctx.logDebug("Skipping null element in block at index " + i);
+                    continue;
+                }
+
+                ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, element.getIndex());
+
+                if (i == list.size() - 1) {
+                    emitterVisitor.ctx.logDebug("Last element: " + element);
+                    element.accept(emitterVisitor);
+                } else {
+                    emitterVisitor.ctx.logDebug("Element: " + element);
+                    element.accept(voidVisitor);
+                }
             }
+            
+            mv.visitLabel(tryEnd);
+            mv.visitJumpInsn(Opcodes.GOTO, afterCatch);
+            
+            // Catch GotoException
+            mv.visitLabel(catchGoto);
+            // Stack: [exception]
+            
+            // Check if exception matches any of our labels
+            for (int i = 0; i < node.labels.size(); i++) {
+                String label = node.labels.get(i);
+                
+                mv.visitInsn(Opcodes.DUP);  // [exception, exception]
+                mv.visitLdcInsn(label);     // [exception, exception, label]
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, 
+                    "org/perlonjava/runtime/ControlFlowException", 
+                    "matchesLabel", 
+                    "(Ljava/lang/String;)Z", 
+                    false);
+                // Stack now: [exception, boolean]
+                
+                Label noMatch = new Label();
+                mv.visitJumpInsn(Opcodes.IFEQ, noMatch);  // if false, check next label
+                
+                // Match! Pop the exception and continue execution
+                mv.visitInsn(Opcodes.POP);  // Pop the exception
+                
+                // If the block has a non-void context, we need to push a value
+                // since the goto bypassed the normal block execution
+                if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
+                    EmitOperator.emitUndef(mv);
+                }
+                
+                mv.visitJumpInsn(Opcodes.GOTO, afterCatch);
+                
+                mv.visitLabel(noMatch);
+                // Stack: [exception] - ready for next iteration or re-throw
+            }
+            
+            // No match found, exception is still on stack, re-throw for outer frames
+            mv.visitInsn(Opcodes.ATHROW);
+            
+            mv.visitLabel(afterCatch);
+        } else {
+            // No goto labels, emit statements normally
+            for (int i = 0; i < list.size(); i++) {
+                Node element = list.get(i);
+                
+                // Skip null elements
+                if (element == null) {
+                    emitterVisitor.ctx.logDebug("Skipping null element in block at index " + i);
+                    continue;
+                }
 
-            ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, element.getIndex());
+                ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, element.getIndex());
 
-            // Emit the statement with current context
-            if (i == list.size() - 1) {
-                // Special case for the last element
-                emitterVisitor.ctx.logDebug("Last element: " + element);
-                element.accept(emitterVisitor);
-            } else {
-                // General case for all other elements
-                emitterVisitor.ctx.logDebug("Element: " + element);
-                element.accept(voidVisitor);
+                // Emit the statement with current context
+                if (i == list.size() - 1) {
+                    // Special case for the last element
+                    emitterVisitor.ctx.logDebug("Last element: " + element);
+                    element.accept(emitterVisitor);
+                } else {
+                    // General case for all other elements
+                    emitterVisitor.ctx.logDebug("Element: " + element);
+                    element.accept(voidVisitor);
+                }
             }
         }
 

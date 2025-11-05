@@ -46,10 +46,33 @@ public class EmitControlFlow {
         // Find loop labels by name.
         LoopLabels loopLabels = ctx.javaClassInfo.findLoopLabelsByName(labelStr);
         ctx.logDebug("visit(next) operator: " + operator + " label: " + labelStr + " labels: " + loopLabels);
+        
         if (loopLabels == null) {
-            throw new PerlCompilerException(node.tokenIndex, "Can't \"" + operator + "\" outside a loop block", ctx.errorUtil);
+            // TIER 2: NON-LOCAL JUMP - Label not found in current scope
+            // Throw exception for runtime unwinding to outer call frames
+            
+            // Load label name (or null for unlabeled)
+            if (labelStr != null) {
+                ctx.mv.visitLdcInsn(labelStr);
+            } else {
+                ctx.mv.visitInsn(Opcodes.ACONST_NULL);
+            }
+            
+            // Create and throw the appropriate exception
+            String exceptionClass = operator.equals("next") ? "org/perlonjava/runtime/NextException"
+                    : operator.equals("last") ? "org/perlonjava/runtime/LastException"
+                    : "org/perlonjava/runtime/RedoException";
+            
+            ctx.mv.visitTypeInsn(Opcodes.NEW, exceptionClass);
+            ctx.mv.visitInsn(Opcodes.DUP_X1);
+            ctx.mv.visitInsn(Opcodes.SWAP);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL, exceptionClass, "<init>", 
+                "(Ljava/lang/String;)V", false);
+            ctx.mv.visitInsn(Opcodes.ATHROW);
+            return;  // Exception thrown, no further code generation needed
         }
 
+        // TIER 1: LOCAL JUMP - Use existing fast implementation (ZERO OVERHEAD)
         ctx.logDebug("visit(next): asmStackLevel: " + ctx.javaClassInfo.stackLevelManager.getStackLevel());
 
         // Clean up the stack before jumping by popping values up to the loop's stack level
@@ -131,9 +154,23 @@ public class EmitControlFlow {
         // Locate the target label in the current scope
         GotoLabels targetLabel = ctx.javaClassInfo.findGotoLabelsByName(labelName);
         if (targetLabel == null) {
-            throw new PerlCompilerException(node.tokenIndex, "Can't find label " + labelName, ctx.errorUtil);
+            // TIER 2: NON-LOCAL JUMP - Label not found in current scope
+            // Throw exception for runtime unwinding to outer call frames
+            
+            // Load label name
+            ctx.mv.visitLdcInsn(labelName);
+            
+            // Create and throw GotoException
+            ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/GotoException");
+            ctx.mv.visitInsn(Opcodes.DUP_X1);
+            ctx.mv.visitInsn(Opcodes.SWAP);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/GotoException", "<init>", 
+                "(Ljava/lang/String;)V", false);
+            ctx.mv.visitInsn(Opcodes.ATHROW);
+            return;  // Exception thrown, no further code generation needed
         }
 
+        // TIER 1: LOCAL JUMP - Use existing fast implementation
         // Clean up stack before jumping to maintain stack consistency
         ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, targetLabel.asmStackLevel);
 
