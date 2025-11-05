@@ -249,7 +249,7 @@ public class EmitForeach {
             mv.visitLabel(tryStart);
             // Emit NOP to ensure try-catch range is valid even if body emits no bytecode
             mv.visitInsn(Opcodes.NOP);
-            node.body.accept(emitterVisitor.with(RuntimeContextType.VOID));
+        node.body.accept(emitterVisitor.with(RuntimeContextType.VOID));
             mv.visitLabel(tryEnd);
             // Jump to continueLabel (no need to load iterator, continueLabel will do it)
             mv.visitJumpInsn(Opcodes.GOTO, continueLabel);
@@ -431,7 +431,7 @@ public class EmitForeach {
             mv.visitLabel(tryStart);
             // Emit NOP to ensure try-catch range is valid even if body emits no bytecode
             mv.visitInsn(Opcodes.NOP);
-            node.body.accept(emitterVisitor.with(RuntimeContextType.VOID));
+        node.body.accept(emitterVisitor.with(RuntimeContextType.VOID));
             mv.visitLabel(tryEnd);
             // Jump to continueLabel (iterator stays in local variable)
             mv.visitJumpInsn(Opcodes.GOTO, continueLabel);

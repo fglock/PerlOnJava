@@ -222,7 +222,7 @@ public class EmitStatement {
                     emitLoopExceptionHandler(mv, node.labelName, redoLabel);
                 } else {
                     // No runtime code, just emit the body without exception handling
-                    node.body.accept(voidVisitor);
+                node.body.accept(voidVisitor);
                     mv.visitJumpInsn(Opcodes.GOTO, continueLabel);
                 }
 

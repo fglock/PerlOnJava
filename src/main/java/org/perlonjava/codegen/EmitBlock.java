@@ -85,8 +85,8 @@ public class EmitBlock {
         }
 
         // Wrap block body in try-catch if there are goto labels (for non-local jumps)
-        // But only if this block has actual runtime code and is not just a loop body placeholder
-        // (bare blocks parsed as For3Node have isLoop=true and should not get try-catch here)
+        // Only if this block has actual runtime code (not just compile-time constructs)
+        // Don't add try-catch for bare blocks (isLoop=true) as they should let exceptions propagate
         if (!node.labels.isEmpty() && hasRuntimeCode && !node.isLoop) {
             Label tryStart = new Label();
             Label tryEnd = new Label();
@@ -98,6 +98,8 @@ public class EmitBlock {
             
             // Try block start
             mv.visitLabel(tryStart);
+            // Emit NOP to ensure try-catch range is valid even if body emits no bytecode
+            mv.visitInsn(Opcodes.NOP);
             
             // Emit all statements in the block
         for (int i = 0; i < list.size(); i++) {
@@ -128,10 +130,10 @@ public class EmitBlock {
             
             // Check if exception matches any of our labels
             for (int i = 0; i < node.labels.size(); i++) {
-                String label = node.labels.get(i);
+                String labelName = node.labels.get(i);
                 
                 mv.visitInsn(Opcodes.DUP);  // [exception, exception]
-                mv.visitLdcInsn(label);     // [exception, exception, label]
+                mv.visitLdcInsn(labelName);     // [exception, exception, label]
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, 
                     "org/perlonjava/runtime/PerlControlFlowException", 
                     "matchesLabel", 
@@ -142,16 +144,18 @@ public class EmitBlock {
                 Label noMatch = new Label();
                 mv.visitJumpInsn(Opcodes.IFEQ, noMatch);  // if false, check next label
                 
-                // Match! Pop the exception and continue execution
+                // Match! Pop the exception and jump to the label location
                 mv.visitInsn(Opcodes.POP);  // Pop the exception
                 
-                // If the block has a non-void context, we need to push a value
-                // since the goto bypassed the normal block execution
-                if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
-                    EmitOperator.emitUndef(mv);
+                // Get the Label object for this goto label
+                GotoLabels gotoLabels = emitterVisitor.ctx.javaClassInfo.findGotoLabelsByName(labelName);
+                if (gotoLabels != null) {
+                    // Jump to the actual label location within the block
+                    mv.visitJumpInsn(Opcodes.GOTO, gotoLabels.gotoLabel);
+                } else {
+                    // Label not found (shouldn't happen), continue after catch
+                    mv.visitJumpInsn(Opcodes.GOTO, afterCatch);
                 }
-                
-                mv.visitJumpInsn(Opcodes.GOTO, afterCatch);
                 
                 mv.visitLabel(noMatch);
                 // Stack: [exception] - ready for next iteration or re-throw

@@ -30,9 +30,14 @@ print "1..3\n";
     goto ($which == 1 ? "LABEL1" : "LABEL2");
     $reached = 1;
     
-    LABEL1: $reached = 2;
-    LABEL2: $reached = 3;
+    LABEL1: 
+    $reached = 2;
+    goto "END2";
     
+    LABEL2: 
+    $reached = 3;
+    
+    END2:
     if ($reached == 2) {
         print "ok 2 - dynamic goto with expression\n";
     } else {
