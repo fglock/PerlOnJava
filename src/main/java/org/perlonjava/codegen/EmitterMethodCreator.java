@@ -233,7 +233,17 @@ public class EmitterMethodCreator implements Opcodes {
                         "setGlobalVariable",
                         "(Ljava/lang/String;Ljava/lang/String;)V", false);
 
+                // PRE-PASS: Register all loop exception handlers before emitting bytecode
+                // This allows outer loop handlers to delegate to inner loop handlers via GOTO
+                org.perlonjava.astvisitor.LoopHandlerPreRegistrationVisitor preRegVisitor = 
+                    new org.perlonjava.astvisitor.LoopHandlerPreRegistrationVisitor();
+                ast.accept(preRegVisitor);
+
+                // MAIN PASS: Emit bytecode
                 ast.accept(visitor);
+                
+                // Cleanup pre-registered handlers
+                preRegVisitor.unregisterAll();
 
                 // Handle the return value
                 ctx.logDebug("Return the last value");
@@ -266,7 +276,17 @@ public class EmitterMethodCreator implements Opcodes {
             } else {
                 // No try-catch block is used
 
+                // PRE-PASS: Register all loop exception handlers before emitting bytecode
+                // This allows outer loop handlers to delegate to inner loop handlers via GOTO
+                org.perlonjava.astvisitor.LoopHandlerPreRegistrationVisitor preRegVisitor = 
+                    new org.perlonjava.astvisitor.LoopHandlerPreRegistrationVisitor();
+                ast.accept(preRegVisitor);
+
+                // MAIN PASS: Emit bytecode
                 ast.accept(visitor);
+                
+                // Cleanup pre-registered handlers
+                preRegVisitor.unregisterAll();
 
                 // Handle the return value
                 ctx.logDebug("Return the last value");

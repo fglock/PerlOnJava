@@ -5,10 +5,113 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
 import org.perlonjava.astvisitor.EmitterVisitor;
+import org.perlonjava.astvisitor.LoopLabelCollectorVisitor;
 import org.perlonjava.perlmodule.Warnings;
 import org.perlonjava.runtime.RuntimeContextType;
 
 public class EmitForeach {
+    
+    /**
+     * Emit an exception handler that chains to inner loop handlers when needed.
+     * 
+     * <p>This handler:
+     * <ol>
+     *   <li>Checks if the exception matches this loop's label → handle locally</li>
+     *   <li>Checks if exception matches any known inner loop labels → GOTO to that handler</li>
+     *   <li>Otherwise → ATHROW to propagate to caller</li>
+     * </ol>
+     * 
+     * @param mv The MethodVisitor to emit bytecode to
+     * @param exceptionType "Next", "Last", or "Redo"
+     * @param loopLabelName This loop's label name (null for unlabeled)
+     * @param targetLabel Where to jump if this loop handles the exception
+     * @param innerLoopLabels List of inner loop labels (pre-scanned from AST)
+     */
+    public static void emitExceptionHandlerWithChaining(MethodVisitor mv, String exceptionType,
+                                                        String loopLabelName, Label targetLabel,
+                                                        java.util.List<String> innerLoopLabels) {
+        // Stack: [exception]
+        
+        // Step 1: Check if exception matches THIS loop's label
+        mv.visitInsn(Opcodes.DUP);  // [exception, exception]
+        if (loopLabelName != null) {
+            mv.visitLdcInsn(loopLabelName);
+        } else {
+            mv.visitInsn(Opcodes.ACONST_NULL);
+        }
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, 
+            "org/perlonjava/runtime/PerlControlFlowException", 
+            "matchesLabel", 
+            "(Ljava/lang/String;)Z", 
+            false);
+        
+        Label checkRegistry = new Label();
+        mv.visitJumpInsn(Opcodes.IFEQ, checkRegistry);  // if false, check registry
+        
+        // Match! Pop exception and handle locally
+        mv.visitInsn(Opcodes.POP);
+        mv.visitJumpInsn(Opcodes.GOTO, targetLabel);
+        
+        // Step 2: Check if exception matches any inner loop labels (pre-scanned from AST)
+        mv.visitLabel(checkRegistry);
+        // Stack: [exception]
+        
+        if (innerLoopLabels != null && !innerLoopLabels.isEmpty()) {
+            // We have inner loops! Check if exception is for one of them
+            mv.visitInsn(Opcodes.DUP);  // [exception, exception]
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/PerlControlFlowException",
+                "getTargetLabel",
+                "()Ljava/lang/String;",
+                false);
+            // Stack: [exception, labelString]
+            
+            // Check each known inner label
+            for (String innerLabel : innerLoopLabels) {
+                // Look up the handler labels from the registry
+                LoopLabelRegistry.HandlerLabels handlers = LoopLabelRegistry.lookup(innerLabel);
+                if (handlers != null) {
+                    // Compare labelString with innerLabel
+                    mv.visitInsn(Opcodes.DUP);  // [exception, labelString, labelString]
+                    mv.visitLdcInsn(innerLabel);
+                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "java/lang/Object",
+                        "equals",
+                        "(Ljava/lang/Object;)Z",
+                        false);
+                    
+                    Label nextCheck = new Label();
+                    mv.visitJumpInsn(Opcodes.IFEQ, nextCheck);  // if false, check next
+                    
+                    // Match found! Pop labelString, pop exception, reload exception, GOTO inner handler
+                    // Stack: [exception, labelString]
+                    mv.visitInsn(Opcodes.POP);  // Pop labelString → [exception]
+                    // Now we need to preserve exception but the inner handler expects [exception] on stack
+                    // The exception is already there, so we're good!
+                    
+                    // GOTO to the appropriate inner handler based on exception type
+                    Label innerHandler = switch (exceptionType) {
+                        case "Next" -> handlers.catchNext;
+                        case "Last" -> handlers.catchLast;
+                        case "Redo" -> handlers.catchRedo;
+                        default -> throw new IllegalArgumentException("Unknown exception type: " + exceptionType);
+                    };
+                    mv.visitJumpInsn(Opcodes.GOTO, innerHandler);
+                    
+                    mv.visitLabel(nextCheck);
+                    // Stack: [exception, labelString]
+                }
+            }
+            
+            // No match found, pop labelString
+            mv.visitInsn(Opcodes.POP);
+        }
+        
+        // Step 3: Rethrow to caller (no inner handler found)
+        // Stack: [exception]
+        mv.visitInsn(Opcodes.ATHROW);
+    }
+    
     public static void emitFor1(EmitterVisitor emitterVisitor, For1Node node) {
         emitterVisitor.ctx.logDebug("FOR1 start");
 
@@ -232,14 +335,34 @@ public class EmitForeach {
 
         // Always wrap loop body in try-catch to handle non-local jumps from subroutines
         // Both labeled and unlabeled loops need this since Perl allows `last;` from a subroutine
-        {
+        //
+        // Use handler chaining to support nested loops: outer handlers delegate to inner handlers
+        // via GOTO instead of ATHROW. See LoopLabelRegistry for details.
 
-            Label tryStart = new Label();
-            Label tryEnd = new Label();
-            Label catchLast = new Label();
-            Label catchNext = new Label();
-            Label catchRedo = new Label();
+        Label tryStart = new Label();
+        Label tryEnd = new Label();
+        
+        // Use pre-registered labels if available (from LoopHandlerPreRegistrationVisitor),
+        // otherwise create new ones (for unlabeled loops or legacy code paths)
+        Label catchLast = (node.preRegisteredCatchLast != null) ? node.preRegisteredCatchLast : new Label();
+        Label catchNext = (node.preRegisteredCatchNext != null) ? node.preRegisteredCatchNext : new Label();
+        Label catchRedo = (node.preRegisteredCatchRedo != null) ? node.preRegisteredCatchRedo : new Label();
 
+        // Pre-scan the loop body to collect inner loop labels
+        org.perlonjava.astvisitor.LoopLabelCollectorVisitor labelCollector = 
+            new org.perlonjava.astvisitor.LoopLabelCollectorVisitor();
+        if (node.body != null) {
+            node.body.accept(labelCollector);
+        }
+        java.util.List<String> innerLoopLabels = labelCollector.getCollectedLabels();
+        
+        // Register this loop's exception handler labels so outer loops can delegate to us
+        // (Only if not pre-registered; pre-registration visitor already registered labeled loops)
+        if (node.preRegisteredCatchNext == null && node.labelName != null) {
+            LoopLabelRegistry.register(node.labelName, catchNext, catchLast, catchRedo);
+        }
+
+        try {
             // Register exception handlers
             mv.visitTryCatchBlock(tryStart, tryEnd, catchLast, "org/perlonjava/runtime/LastException");
             mv.visitTryCatchBlock(tryStart, tryEnd, catchNext, "org/perlonjava/runtime/NextException");
@@ -249,61 +372,28 @@ public class EmitForeach {
             mv.visitLabel(tryStart);
             // Emit NOP to ensure try-catch range is valid even if body emits no bytecode
             mv.visitInsn(Opcodes.NOP);
-        node.body.accept(emitterVisitor.with(RuntimeContextType.VOID));
+            node.body.accept(emitterVisitor.with(RuntimeContextType.VOID));
             mv.visitLabel(tryEnd);
             // Jump to continueLabel (no need to load iterator, continueLabel will do it)
             mv.visitJumpInsn(Opcodes.GOTO, continueLabel);
 
-            // Catch LastException - check if label matches, then pop exception, load iterator, jump to loopEnd
+            // Catch LastException - with handler chaining for inner loops we discovered
             mv.visitLabel(catchLast);
-            mv.visitInsn(Opcodes.DUP);
-            if (node.labelName != null) {
-                mv.visitLdcInsn(node.labelName);
-            } else {
-                mv.visitInsn(Opcodes.ACONST_NULL);
-            }
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/PerlControlFlowException", "matchesLabel", "(Ljava/lang/String;)Z", false);
-            Label rethrowLast = new Label();
-            mv.visitJumpInsn(Opcodes.IFEQ, rethrowLast);
-            mv.visitInsn(Opcodes.POP);  // Pop exception
-            // Don't load iterator - loopEnd will do it
-            mv.visitJumpInsn(Opcodes.GOTO, loopEnd);
-            mv.visitLabel(rethrowLast);
-            mv.visitInsn(Opcodes.ATHROW);
+            emitExceptionHandlerWithChaining(mv, "Last", node.labelName, loopEnd, innerLoopLabels);
 
-            // Catch NextException - check if label matches, then pop exception, load iterator, jump to continueLabel
+            // Catch NextException - with handler chaining for inner loops we discovered
             mv.visitLabel(catchNext);
-            mv.visitInsn(Opcodes.DUP);
-            if (node.labelName != null) {
-                mv.visitLdcInsn(node.labelName);
-            } else {
-                mv.visitInsn(Opcodes.ACONST_NULL);
-            }
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/PerlControlFlowException", "matchesLabel", "(Ljava/lang/String;)Z", false);
-            Label rethrowNext = new Label();
-            mv.visitJumpInsn(Opcodes.IFEQ, rethrowNext);
-            mv.visitInsn(Opcodes.POP);  // Pop exception
-            // Iterator stays in local variable - continueLabel will load it
-            mv.visitJumpInsn(Opcodes.GOTO, continueLabel);
-            mv.visitLabel(rethrowNext);
-            mv.visitInsn(Opcodes.ATHROW);
+            emitExceptionHandlerWithChaining(mv, "Next", node.labelName, continueLabel, innerLoopLabels);
 
-            // Catch RedoException - check if label matches, then pop exception, load iterator, jump to redoLabel
+            // Catch RedoException - with handler chaining for inner loops we discovered
             mv.visitLabel(catchRedo);
-            mv.visitInsn(Opcodes.DUP);
-            if (node.labelName != null) {
-                mv.visitLdcInsn(node.labelName);
-            } else {
-                mv.visitInsn(Opcodes.ACONST_NULL);
+            emitExceptionHandlerWithChaining(mv, "Redo", node.labelName, redoLabel, innerLoopLabels);
+        } finally {
+            // Unregister this loop's handlers after body emission completes
+            // (Only if we registered it ourselves; pre-registered loops are cleaned up by the visitor)
+            if (node.preRegisteredCatchNext == null && node.labelName != null) {
+                LoopLabelRegistry.unregister(node.labelName);
             }
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/PerlControlFlowException", "matchesLabel", "(Ljava/lang/String;)Z", false);
-            Label rethrowRedo = new Label();
-            mv.visitJumpInsn(Opcodes.IFEQ, rethrowRedo);
-            mv.visitInsn(Opcodes.POP);  // Pop exception
-            // Iterator stays in local variable - redoLabel will load it
-            mv.visitJumpInsn(Opcodes.GOTO, redoLabel);
-            mv.visitLabel(rethrowRedo);
-            mv.visitInsn(Opcodes.ATHROW);
         }
 
         emitterVisitor.ctx.javaClassInfo.popLoopLabels();
@@ -414,13 +504,25 @@ public class EmitForeach {
 
         // Always wrap loop body in try-catch to handle non-local jumps from subroutines
         // Both labeled and unlabeled loops need this since Perl allows `last;` from a subroutine
-        {
+        try {
+            // PRE-SCAN: Collect inner loop labels from AST
+            LoopLabelCollectorVisitor labelCollector = new LoopLabelCollectorVisitor();
+            node.body.accept(labelCollector);
+            java.util.List<String> innerLoopLabels = labelCollector.getCollectedLabels();
 
             Label tryStart = new Label();
             Label tryEnd = new Label();
-            Label catchLast = new Label();
-            Label catchNext = new Label();
-            Label catchRedo = new Label();
+            
+            // Use pre-registered labels if available (from LoopHandlerPreRegistrationVisitor),
+            // otherwise create new ones (for unlabeled loops or legacy code paths)
+            Label catchLast = (node.preRegisteredCatchLast != null) ? node.preRegisteredCatchLast : new Label();
+            Label catchNext = (node.preRegisteredCatchNext != null) ? node.preRegisteredCatchNext : new Label();
+            Label catchRedo = (node.preRegisteredCatchRedo != null) ? node.preRegisteredCatchRedo : new Label();
+
+            // Register in the compile-time registry for handler chaining (if not pre-registered)
+            if (node.preRegisteredCatchNext == null && node.labelName != null) {
+                LoopLabelRegistry.register(node.labelName, catchNext, catchLast, catchRedo);
+            }
 
             // Register exception handlers
             mv.visitTryCatchBlock(tryStart, tryEnd, catchLast, "org/perlonjava/runtime/LastException");
@@ -431,61 +533,28 @@ public class EmitForeach {
             mv.visitLabel(tryStart);
             // Emit NOP to ensure try-catch range is valid even if body emits no bytecode
             mv.visitInsn(Opcodes.NOP);
-        node.body.accept(emitterVisitor.with(RuntimeContextType.VOID));
+            node.body.accept(emitterVisitor.with(RuntimeContextType.VOID));
             mv.visitLabel(tryEnd);
             // Jump to continueLabel (iterator stays in local variable)
             mv.visitJumpInsn(Opcodes.GOTO, continueLabel);
 
-            // Catch LastException - check if label matches, then pop exception and jump to loopEnd
+            // Catch LastException - with handler chaining for inner loops we discovered
             mv.visitLabel(catchLast);
-            mv.visitInsn(Opcodes.DUP);
-            if (node.labelName != null) {
-                mv.visitLdcInsn(node.labelName);
-            } else {
-                mv.visitInsn(Opcodes.ACONST_NULL);
-            }
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/PerlControlFlowException", "matchesLabel", "(Ljava/lang/String;)Z", false);
-            Label rethrowLast = new Label();
-            mv.visitJumpInsn(Opcodes.IFEQ, rethrowLast);
-            mv.visitInsn(Opcodes.POP);  // Pop exception
-            // Iterator stays in local variable
-            mv.visitJumpInsn(Opcodes.GOTO, loopEnd);
-            mv.visitLabel(rethrowLast);
-            mv.visitInsn(Opcodes.ATHROW);
+            emitExceptionHandlerWithChaining(mv, "Last", node.labelName, loopEnd, innerLoopLabels);
 
-            // Catch NextException - check if label matches, then pop exception, load iterator, jump to continueLabel
+            // Catch NextException - with handler chaining for inner loops we discovered
             mv.visitLabel(catchNext);
-            mv.visitInsn(Opcodes.DUP);
-            if (node.labelName != null) {
-                mv.visitLdcInsn(node.labelName);
-            } else {
-                mv.visitInsn(Opcodes.ACONST_NULL);
-            }
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/PerlControlFlowException", "matchesLabel", "(Ljava/lang/String;)Z", false);
-            Label rethrowNext = new Label();
-            mv.visitJumpInsn(Opcodes.IFEQ, rethrowNext);
-            mv.visitInsn(Opcodes.POP);  // Pop exception
-            // Iterator stays in local variable - continueLabel will load it
-            mv.visitJumpInsn(Opcodes.GOTO, continueLabel);
-            mv.visitLabel(rethrowNext);
-            mv.visitInsn(Opcodes.ATHROW);
+            emitExceptionHandlerWithChaining(mv, "Next", node.labelName, continueLabel, innerLoopLabels);
 
-            // Catch RedoException - check if label matches, then pop exception, load iterator, jump to redoLabel
+            // Catch RedoException - with handler chaining for inner loops we discovered
             mv.visitLabel(catchRedo);
-            mv.visitInsn(Opcodes.DUP);
-            if (node.labelName != null) {
-                mv.visitLdcInsn(node.labelName);
-            } else {
-                mv.visitInsn(Opcodes.ACONST_NULL);
+            emitExceptionHandlerWithChaining(mv, "Redo", node.labelName, redoLabel, innerLoopLabels);
+        } finally {
+            // Unregister this loop's handlers after body emission completes
+            // (Only if we registered it ourselves; pre-registered loops are cleaned up by the visitor)
+            if (node.preRegisteredCatchNext == null && node.labelName != null) {
+                LoopLabelRegistry.unregister(node.labelName);
             }
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/PerlControlFlowException", "matchesLabel", "(Ljava/lang/String;)Z", false);
-            Label rethrowRedo = new Label();
-            mv.visitJumpInsn(Opcodes.IFEQ, rethrowRedo);
-            mv.visitInsn(Opcodes.POP);  // Pop exception
-            // Iterator stays in local variable - redoLabel will load it
-            mv.visitJumpInsn(Opcodes.GOTO, redoLabel);
-            mv.visitLabel(rethrowRedo);
-            mv.visitInsn(Opcodes.ATHROW);
         }
 
         emitterVisitor.ctx.javaClassInfo.popLoopLabels();

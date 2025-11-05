@@ -85,6 +85,21 @@ public class ErrorMessageUtil {
             return message != null ? message : "\n";
         }
 
+        // Check if this is an uncaught control flow exception (last/next/redo/goto outside loop)
+        if (t instanceof PerlControlFlowException controlFlowException) {
+            String opName = controlFlowException.getClass().getSimpleName()
+                    .replace("Exception", "")
+                    .toLowerCase();
+            String targetLabel = controlFlowException.getTargetLabel();
+            String message;
+            if (targetLabel != null && !targetLabel.isEmpty()) {
+                message = "Label not found for \"" + opName + " " + targetLabel + "\"\n";
+            } else {
+                message = "Can't \"" + opName + "\" outside a loop block\n";
+            }
+            return message;
+        }
+
         // Use the custom formatter to print the Perl message and stack trace
         StringBuilder sb = new StringBuilder();
 

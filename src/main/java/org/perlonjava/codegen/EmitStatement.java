@@ -189,37 +189,62 @@ public class EmitStatement {
                 // Only wrap loop body in try-catch if there's actual runtime code
                 // (bare blocks with only subroutine definitions don't need exception handlers)
                 if (hasRuntimeCode) {
-                    Label tryStart = new Label();
-                    Label tryEnd = new Label();
-                    Label catchLast = new Label();
-                    Label catchNext = new Label();
-                    Label catchRedo = new Label();
+                    try {
+                        // PRE-SCAN: Collect inner loop labels from AST
+                        org.perlonjava.astvisitor.LoopLabelCollectorVisitor labelCollector = 
+                            new org.perlonjava.astvisitor.LoopLabelCollectorVisitor();
+                        node.body.accept(labelCollector);
+                        java.util.List<String> innerLoopLabels = labelCollector.getCollectedLabels();
 
-                    // Register exception handlers
-                    mv.visitTryCatchBlock(tryStart, tryEnd, catchLast, "org/perlonjava/runtime/LastException");
-                    mv.visitTryCatchBlock(tryStart, tryEnd, catchNext, "org/perlonjava/runtime/NextException");
-                    mv.visitTryCatchBlock(tryStart, tryEnd, catchRedo, "org/perlonjava/runtime/RedoException");
+                        Label tryStart = new Label();
+                        Label tryEnd = new Label();
+                        
+                        // Use pre-registered labels if available (from LoopHandlerPreRegistrationVisitor),
+                        // otherwise create new ones
+                        Label catchLast = (node.preRegisteredCatchLast != null) ? node.preRegisteredCatchLast : new Label();
+                        Label catchNext = (node.preRegisteredCatchNext != null) ? node.preRegisteredCatchNext : new Label();
+                        Label catchRedo = (node.preRegisteredCatchRedo != null) ? node.preRegisteredCatchRedo : new Label();
 
-                    // Try block
-                    mv.visitLabel(tryStart);
-                    // Emit NOP to ensure try-catch range is valid even if body emits no bytecode
-                    // (e.g., INIT blocks, BEGIN blocks, or bare blocks with only subroutine definitions)
-                    mv.visitInsn(Opcodes.NOP);
-                    node.body.accept(voidVisitor);
-                    mv.visitLabel(tryEnd);
-                    mv.visitJumpInsn(Opcodes.GOTO, continueLabel);
+                        // Register in the compile-time registry for handler chaining (if not pre-registered)
+                        if (node.preRegisteredCatchNext == null && node.labelName != null) {
+                            org.perlonjava.codegen.LoopLabelRegistry.register(node.labelName, catchNext, catchLast, catchRedo);
+                        }
 
-                    // Catch LastException - jump to endLabel
-                    mv.visitLabel(catchLast);
-                    emitLoopExceptionHandler(mv, node.labelName, endLabel);
+                        // Register exception handlers
+                        mv.visitTryCatchBlock(tryStart, tryEnd, catchLast, "org/perlonjava/runtime/LastException");
+                        mv.visitTryCatchBlock(tryStart, tryEnd, catchNext, "org/perlonjava/runtime/NextException");
+                        mv.visitTryCatchBlock(tryStart, tryEnd, catchRedo, "org/perlonjava/runtime/RedoException");
 
-                    // Catch NextException - jump to continueLabel
-                    mv.visitLabel(catchNext);
-                    emitLoopExceptionHandler(mv, node.labelName, continueLabel);
+                        // Try block
+                        mv.visitLabel(tryStart);
+                        // Emit NOP to ensure try-catch range is valid even if body emits no bytecode
+                        // (e.g., INIT blocks, BEGIN blocks, or bare blocks with only subroutine definitions)
+                        mv.visitInsn(Opcodes.NOP);
+                        node.body.accept(voidVisitor);
+                        mv.visitLabel(tryEnd);
+                        mv.visitJumpInsn(Opcodes.GOTO, continueLabel);
 
-                    // Catch RedoException - jump to redoLabel
-                    mv.visitLabel(catchRedo);
-                    emitLoopExceptionHandler(mv, node.labelName, redoLabel);
+                        // Catch LastException - with handler chaining for inner loops
+                        mv.visitLabel(catchLast);
+                        org.perlonjava.codegen.EmitForeach.emitExceptionHandlerWithChaining(
+                            mv, "Last", node.labelName, endLabel, innerLoopLabels);
+
+                        // Catch NextException - with handler chaining for inner loops
+                        mv.visitLabel(catchNext);
+                        org.perlonjava.codegen.EmitForeach.emitExceptionHandlerWithChaining(
+                            mv, "Next", node.labelName, continueLabel, innerLoopLabels);
+
+                        // Catch RedoException - with handler chaining for inner loops
+                        mv.visitLabel(catchRedo);
+                        org.perlonjava.codegen.EmitForeach.emitExceptionHandlerWithChaining(
+                            mv, "Redo", node.labelName, redoLabel, innerLoopLabels);
+                    } finally {
+                        // Unregister this loop's handlers after body emission completes
+                        // (Only if we registered it ourselves; pre-registered loops are cleaned up by the visitor)
+                        if (node.preRegisteredCatchNext == null && node.labelName != null) {
+                            org.perlonjava.codegen.LoopLabelRegistry.unregister(node.labelName);
+                        }
+                    }
                 } else {
                     // No runtime code, just emit the body without exception handling
                 node.body.accept(voidVisitor);
