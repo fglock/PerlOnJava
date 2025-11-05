@@ -25,6 +25,18 @@ public class JavaClassInfo {
     public Label returnLabel;
 
     /**
+     * Cleanup labels for non-local control flow.
+     * When a non-local last/next/redo/goto is encountered, we first jump to these
+     * cleanup labels (which are at the end of the subroutine with a clean stack),
+     * and THEN throw the exception to propagate to outer call frames.
+     * This two-phase approach ensures stack consistency.
+     */
+    public Label nonLocalLastCleanup;
+    public Label nonLocalNextCleanup;
+    public Label nonLocalRedoCleanup;
+    public Label nonLocalGotoCleanup;
+
+    /**
      * Manages the stack level for the class.
      */
     public StackLevelManager stackLevelManager;

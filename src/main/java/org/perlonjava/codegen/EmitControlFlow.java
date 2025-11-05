@@ -48,30 +48,28 @@ public class EmitControlFlow {
         ctx.logDebug("visit(next) operator: " + operator + " label: " + labelStr + " labels: " + loopLabels);
         
         if (loopLabels == null) {
-            // TIER 2: NON-LOCAL JUMP - Label not found in current scope
-            // Throw exception for runtime unwinding to outer call frames
+            // TIER 2: NON-LOCAL JUMP - Two-phase control flow
+            // Phase 1: Clean stack and jump to cleanup label (local goto)
+            // Phase 2: Cleanup label throws exception to propagate to outer frames
             
-            // DO NOT clear the stack here - let the exception handler deal with it!
+            // Clean up the stack before jumping (same as local goto)
+            ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, 0);
             
-            // Load label name (or null for unlabeled)
+            // Store label name in slot 200 for cleanup code to use (high slot to avoid conflicts)
             if (labelStr != null) {
                 ctx.mv.visitLdcInsn(labelStr);
             } else {
                 ctx.mv.visitInsn(Opcodes.ACONST_NULL);
             }
+            ctx.mv.visitVarInsn(Opcodes.ASTORE, 200); // Store in reserved high slot
             
-            // Create and throw the appropriate exception
-            String exceptionClass = operator.equals("next") ? "org/perlonjava/runtime/NextException"
-                    : operator.equals("last") ? "org/perlonjava/runtime/LastException"
-                    : "org/perlonjava/runtime/RedoException";
+            // Jump to the appropriate cleanup label based on operator type
+            Label cleanupLabel = operator.equals("next") ? ctx.javaClassInfo.nonLocalNextCleanup
+                    : operator.equals("last") ? ctx.javaClassInfo.nonLocalLastCleanup
+                    : ctx.javaClassInfo.nonLocalRedoCleanup;
             
-            ctx.mv.visitTypeInsn(Opcodes.NEW, exceptionClass);
-            ctx.mv.visitInsn(Opcodes.DUP_X1);
-            ctx.mv.visitInsn(Opcodes.SWAP);
-            ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL, exceptionClass, "<init>", 
-                "(Ljava/lang/String;)V", false);
-            ctx.mv.visitInsn(Opcodes.ATHROW);
-            return;  // Exception thrown, no further code generation needed
+            ctx.mv.visitJumpInsn(Opcodes.GOTO, cleanupLabel);
+            return;  // Jumped to cleanup, no further code generation needed
         }
 
         // TIER 1: LOCAL JUMP - Use existing fast implementation (ZERO OVERHEAD)
@@ -207,22 +205,20 @@ public class EmitControlFlow {
         // Locate the target label in the current scope
         GotoLabels targetLabel = ctx.javaClassInfo.findGotoLabelsByName(labelName);
         if (targetLabel == null) {
-            // TIER 2: NON-LOCAL JUMP - Label not found in current scope
-            // Throw exception for runtime unwinding to outer call frames
+            // TIER 2: NON-LOCAL JUMP - Two-phase control flow
+            // Phase 1: Clean stack and jump to cleanup label (local goto)
+            // Phase 2: Cleanup label throws exception to propagate to outer frames
             
-            // DO NOT clear the stack here - let the exception handler deal with it!
+            // Clean up the stack before jumping (same as local goto)
+            ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, 0);
             
-            // Load label name
+            // Store label name in slot 200 for cleanup code to use (high slot to avoid conflicts)
             ctx.mv.visitLdcInsn(labelName);
+            ctx.mv.visitVarInsn(Opcodes.ASTORE, 200); // Store in reserved high slot
             
-            // Create and throw GotoException
-            ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/GotoException");
-            ctx.mv.visitInsn(Opcodes.DUP_X1);
-            ctx.mv.visitInsn(Opcodes.SWAP);
-            ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/GotoException", "<init>", 
-                "(Ljava/lang/String;)V", false);
-            ctx.mv.visitInsn(Opcodes.ATHROW);
-            return;  // Exception thrown, no further code generation needed
+            // Jump to goto cleanup label
+            ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.nonLocalGotoCleanup);
+            return;  // Jumped to cleanup, no further code generation needed
         }
 
         // TIER 1: LOCAL JUMP - Use existing fast implementation
