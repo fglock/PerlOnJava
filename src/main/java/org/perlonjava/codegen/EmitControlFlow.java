@@ -168,14 +168,37 @@ public class EmitControlFlow {
                 "()Ljava/lang/String;", 
                 false);
             
-            // Create and throw GotoException with runtime label
+            // Store the label name in a local variable for repeated comparisons
+            int labelVarIndex = ctx.symbolTable.allocateLocalVariable();
+            ctx.mv.visitVarInsn(Opcodes.ASTORE, labelVarIndex);
+            
+            // Try to match against all known goto labels in scope
+            for (GotoLabels gotoLabels : ctx.javaClassInfo.gotoLabelStack) {
+                // Load the label name
+                ctx.mv.visitVarInsn(Opcodes.ALOAD, labelVarIndex);
+                ctx.mv.visitLdcInsn(gotoLabels.labelName);
+                ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String", "equals", 
+                    "(Ljava/lang/Object;)Z", false);
+                
+                Label noMatch = new Label();
+                ctx.mv.visitJumpInsn(Opcodes.IFEQ, noMatch);
+                
+                // Match found! Clean up stack and jump to label
+                ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, gotoLabels.asmStackLevel);
+                ctx.mv.visitJumpInsn(Opcodes.GOTO, gotoLabels.gotoLabel);
+                
+                ctx.mv.visitLabel(noMatch);
+            }
+            
+            // No local match found, throw GotoException for non-local handling
+            ctx.mv.visitVarInsn(Opcodes.ALOAD, labelVarIndex);
             ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/GotoException");
             ctx.mv.visitInsn(Opcodes.DUP_X1);
             ctx.mv.visitInsn(Opcodes.SWAP);
             ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/GotoException", "<init>", 
                 "(Ljava/lang/String;)V", false);
             ctx.mv.visitInsn(Opcodes.ATHROW);
-            return;  // Always throws exception for runtime labels
+            return;
         }
 
         // Handle compile-time constant labels (goto LABEL)

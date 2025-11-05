@@ -3,7 +3,9 @@ use warnings;
 use Test::More;
 
 subtest 'nested for loops with global $_' => sub {
-    my @output;
+    # Fixed: Use package variable instead of lexical 'my' so the subroutine can access it
+    our @output;
+    local @output = ();  # Localize to avoid conflicts
     
     # Test nested for loops where both use default $_
     sub test_nested {
