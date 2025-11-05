@@ -48,11 +48,9 @@ public class EmitControlFlow {
         ctx.logDebug("visit(next) operator: " + operator + " label: " + labelStr + " labels: " + loopLabels);
         
         if (loopLabels == null) {
-            // TIER 2: NON-LOCAL JUMP - Clean stack and throw exception
-            // Stack MUST be cleaned before throwing to help ASM compute correct stack map frames
-            
-            // Clean up the stack before throwing
-            ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, 0);
+            // TIER 2: NON-LOCAL JUMP - Throw exception
+            // NOTE: NOT cleaning stack here to avoid VerifyError
+            // The exception handler will deal with stack cleanup
             
             // Load label name (or null)
             if (labelStr != null) {
@@ -207,11 +205,9 @@ public class EmitControlFlow {
         // Locate the target label in the current scope
         GotoLabels targetLabel = ctx.javaClassInfo.findGotoLabelsByName(labelName);
         if (targetLabel == null) {
-            // TIER 2: NON-LOCAL JUMP - Clean stack and throw exception
-            // Stack MUST be cleaned before throwing to help ASM compute correct stack map frames
-            
-            // Clean up the stack before throwing
-            ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, 0);
+            // TIER 2: NON-LOCAL JUMP - Throw exception
+            // NOTE: NOT cleaning stack here to avoid VerifyError
+            // The exception handler will deal with stack cleanup
             
             // Load label name
             ctx.mv.visitLdcInsn(labelName);

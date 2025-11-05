@@ -30,6 +30,10 @@ public class EmitForeach {
 
         int scopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
 
+        // Allocate local variable for iterator (will be used throughout the loop)
+        // This avoids keeping the iterator on the operand stack, which causes VerifyErrors
+        int iteratorVar = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+
         // Check if the variable is global
         boolean loopVariableIsGlobal = false;
         String globalVarName = null;
@@ -139,7 +143,13 @@ public class EmitForeach {
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "iterator", "()Ljava/util/Iterator;", false);
         }
 
+        // Store iterator in local variable before entering loop
+        mv.visitVarInsn(Opcodes.ASTORE, iteratorVar);
+
         mv.visitLabel(loopStart);
+
+        // Load iterator from local variable
+        mv.visitVarInsn(Opcodes.ALOAD, iteratorVar);
 
         // Check for pending signals (alarm, etc.) at loop entry
         EmitStatement.emitSignalCheck(mv);
@@ -207,7 +217,8 @@ public class EmitForeach {
             }
         }
 
-        emitterVisitor.ctx.javaClassInfo.incrementStackLevel(1);
+        // Pop the iterator from stack (it was DUPed earlier for next() call)
+        mv.visitInsn(Opcodes.POP);
 
         Label redoLabel = new Label();
         mv.visitLabel(redoLabel);
