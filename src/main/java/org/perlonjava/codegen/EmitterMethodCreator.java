@@ -204,10 +204,7 @@ public class EmitterMethodCreator implements Opcodes {
             // Create cleanup labels for non-local control flow
             // These are used for two-phase control flow: first jump here locally (cleaning stack),
             // then throw exception to propagate to outer frames
-            ctx.javaClassInfo.nonLocalLastCleanup = new Label();
-            ctx.javaClassInfo.nonLocalNextCleanup = new Label();
-            ctx.javaClassInfo.nonLocalRedoCleanup = new Label();
-            ctx.javaClassInfo.nonLocalGotoCleanup = new Label();
+            // Cleanup labels are no longer needed - exceptions are thrown inline
 
             // Prepare to visit the AST to generate bytecode
             EmitterVisitor visitor = new EmitterVisitor(ctx);
@@ -245,55 +242,6 @@ public class EmitterMethodCreator implements Opcodes {
 
                 ast.accept(visitor);
 
-                // Jump over cleanup labels to avoid falling through
-                Label skipCleanup = new Label();
-                mv.visitJumpInsn(Opcodes.GOTO, skipCleanup);
-
-                // TWO-PHASE NON-LOCAL CONTROL FLOW CLEANUP POINTS
-                // When non-local last/next/redo/goto is detected, we jump here first (with stack cleanup),
-                // then throw the exception. This ensures stack consistency across exception boundaries.
-                
-                // Cleanup for non-local 'last'
-                mv.visitLabel(ctx.javaClassInfo.nonLocalLastCleanup);
-                // At this point, stack is clean (cleared by goto), and we need to throw LastException
-                // The label name is stored in a local variable by EmitControlFlow
-                mv.visitVarInsn(Opcodes.ALOAD, 200); // Load label name from high slot
-                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/LastException");
-                mv.visitInsn(Opcodes.DUP_X1);
-                mv.visitInsn(Opcodes.SWAP);
-                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/LastException", "<init>", "(Ljava/lang/String;)V", false);
-                mv.visitInsn(Opcodes.ATHROW);
-
-                // Cleanup for non-local 'next'
-                mv.visitLabel(ctx.javaClassInfo.nonLocalNextCleanup);
-                mv.visitVarInsn(Opcodes.ALOAD, 200);
-                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/NextException");
-                mv.visitInsn(Opcodes.DUP_X1);
-                mv.visitInsn(Opcodes.SWAP);
-                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/NextException", "<init>", "(Ljava/lang/String;)V", false);
-                mv.visitInsn(Opcodes.ATHROW);
-
-                // Cleanup for non-local 'redo'
-                mv.visitLabel(ctx.javaClassInfo.nonLocalRedoCleanup);
-                mv.visitVarInsn(Opcodes.ALOAD, 200);
-                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RedoException");
-                mv.visitInsn(Opcodes.DUP_X1);
-                mv.visitInsn(Opcodes.SWAP);
-                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RedoException", "<init>", "(Ljava/lang/String;)V", false);
-                mv.visitInsn(Opcodes.ATHROW);
-
-                // Cleanup for non-local 'goto'
-                mv.visitLabel(ctx.javaClassInfo.nonLocalGotoCleanup);
-                mv.visitVarInsn(Opcodes.ALOAD, 200);
-                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/GotoException");
-                mv.visitInsn(Opcodes.DUP_X1);
-                mv.visitInsn(Opcodes.SWAP);
-                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/GotoException", "<init>", "(Ljava/lang/String;)V", false);
-                mv.visitInsn(Opcodes.ATHROW);
-
-                // Skip cleanup labels - normal execution continues here
-                mv.visitLabel(skipCleanup);
-
                 // Handle the return value
                 ctx.logDebug("Return the last value");
                 mv.visitLabel(ctx.javaClassInfo.returnLabel); // "return" from other places arrive here
@@ -326,46 +274,6 @@ public class EmitterMethodCreator implements Opcodes {
                 // No try-catch block is used
 
                 ast.accept(visitor);
-
-                // Jump over cleanup labels to avoid falling through
-                Label skipCleanupNoTry = new Label();
-                mv.visitJumpInsn(Opcodes.GOTO, skipCleanupNoTry);
-
-                // TWO-PHASE NON-LOCAL CONTROL FLOW CLEANUP POINTS (same as try-catch path)
-                mv.visitLabel(ctx.javaClassInfo.nonLocalLastCleanup);
-                mv.visitVarInsn(Opcodes.ALOAD, 200);
-                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/LastException");
-                mv.visitInsn(Opcodes.DUP_X1);
-                mv.visitInsn(Opcodes.SWAP);
-                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/LastException", "<init>", "(Ljava/lang/String;)V", false);
-                mv.visitInsn(Opcodes.ATHROW);
-
-                mv.visitLabel(ctx.javaClassInfo.nonLocalNextCleanup);
-                mv.visitVarInsn(Opcodes.ALOAD, 200);
-                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/NextException");
-                mv.visitInsn(Opcodes.DUP_X1);
-                mv.visitInsn(Opcodes.SWAP);
-                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/NextException", "<init>", "(Ljava/lang/String;)V", false);
-                mv.visitInsn(Opcodes.ATHROW);
-
-                mv.visitLabel(ctx.javaClassInfo.nonLocalRedoCleanup);
-                mv.visitVarInsn(Opcodes.ALOAD, 200);
-                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RedoException");
-                mv.visitInsn(Opcodes.DUP_X1);
-                mv.visitInsn(Opcodes.SWAP);
-                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RedoException", "<init>", "(Ljava/lang/String;)V", false);
-                mv.visitInsn(Opcodes.ATHROW);
-
-                mv.visitLabel(ctx.javaClassInfo.nonLocalGotoCleanup);
-                mv.visitVarInsn(Opcodes.ALOAD, 200);
-                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/GotoException");
-                mv.visitInsn(Opcodes.DUP_X1);
-                mv.visitInsn(Opcodes.SWAP);
-                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/GotoException", "<init>", "(Ljava/lang/String;)V", false);
-                mv.visitInsn(Opcodes.ATHROW);
-
-                // Skip cleanup labels - normal execution continues here
-                mv.visitLabel(skipCleanupNoTry);
 
                 // Handle the return value
                 ctx.logDebug("Return the last value");

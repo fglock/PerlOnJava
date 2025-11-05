@@ -31,10 +31,7 @@ public class JavaClassInfo {
      * and THEN throw the exception to propagate to outer call frames.
      * This two-phase approach ensures stack consistency.
      */
-    public Label nonLocalLastCleanup;
-    public Label nonLocalNextCleanup;
-    public Label nonLocalRedoCleanup;
-    public Label nonLocalGotoCleanup;
+    // Cleanup labels removed - exceptions are now thrown inline
 
     /**
      * Manages the stack level for the class.
