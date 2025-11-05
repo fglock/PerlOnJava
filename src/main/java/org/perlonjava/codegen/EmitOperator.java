@@ -418,7 +418,11 @@ public class EmitOperator {
                 emitterVisitor.with(RuntimeContextType.SCALAR); // execute operands in scalar context
         // Accept both left and right operands in SCALAR context.
         node.left.accept(scalarVisitor); // target - left parameter
+        // Track that we now have 1 value on the stack (for non-local control flow)
+        emitterVisitor.ctx.javaClassInfo.stackLevelManager.increment(1);
         node.right.accept(scalarVisitor); // right parameter
+        // Now we have 2 values, decrement back to account for right operand
+        emitterVisitor.ctx.javaClassInfo.stackLevelManager.decrement(1);
         emitOperator(node, emitterVisitor);
     }
 

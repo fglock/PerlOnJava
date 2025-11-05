@@ -9,6 +9,9 @@ import org.objectweb.asm.Opcodes;
  * the stack is balanced, especially when using control flow instructions like GOTO.
  */
 public class StackLevelManager {
+    // Debug flag - set to true to enable stack level tracking debug output
+    private static final boolean DEBUG = false;
+    
     // The current stack level.
     private int stackLevel;
 
@@ -35,6 +38,9 @@ public class StackLevelManager {
      */
     public void increment(int level) {
         stackLevel += level;
+        if (DEBUG) {
+            System.err.println("StackLevel INCREMENT by " + level + " to " + stackLevel);
+        }
     }
 
     /**
@@ -46,7 +52,12 @@ public class StackLevelManager {
     public void decrement(int level) {
         stackLevel -= level;
         if (stackLevel < 0) {
+            if (DEBUG) {
+                System.err.println("StackLevel DECREMENT by " + level + " went negative, resetting to 0 (was " + (stackLevel + level) + ")");
+            }
             stackLevel = 0;
+        } else if (DEBUG) {
+            System.err.println("StackLevel DECREMENT by " + level + " to " + stackLevel);
         }
     }
 
@@ -54,6 +65,9 @@ public class StackLevelManager {
      * Resets the stack level to zero.
      */
     public void reset() {
+        if (DEBUG) {
+            System.err.println("StackLevel RESET to 0 (was " + stackLevel + ")");
+        }
         stackLevel = 0;
     }
 

@@ -51,6 +51,8 @@ public class EmitControlFlow {
             // TIER 2: NON-LOCAL JUMP - Label not found in current scope
             // Throw exception for runtime unwinding to outer call frames
             
+            // DO NOT clear the stack here - let the exception handler deal with it!
+            
             // Load label name (or null for unlabeled)
             if (labelStr != null) {
                 ctx.mv.visitLdcInsn(labelStr);
@@ -207,6 +209,8 @@ public class EmitControlFlow {
         if (targetLabel == null) {
             // TIER 2: NON-LOCAL JUMP - Label not found in current scope
             // Throw exception for runtime unwinding to outer call frames
+            
+            // DO NOT clear the stack here - let the exception handler deal with it!
             
             // Load label name
             ctx.mv.visitLdcInsn(labelName);

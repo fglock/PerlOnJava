@@ -24,6 +24,23 @@ public class EmitForeach {
         }
 
         MethodVisitor mv = emitterVisitor.ctx.mv;
+        
+        // CRITICAL: Save any parent context values that are on the operand stack
+        // This is necessary when the loop is used in an expression (e.g., `"" . do{for...}`)
+        // because non-local control flow (exceptions) will clear the entire operand stack
+        int parentStackLevel = emitterVisitor.ctx.javaClassInfo.stackLevelManager.getStackLevel();
+        int[] savedStackVars = null;
+        if (parentStackLevel > 0) {
+            savedStackVars = new int[parentStackLevel];
+            // Save stack values in reverse order (top of stack first)
+            for (int i = parentStackLevel - 1; i >= 0; i--) {
+                savedStackVars[i] = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                mv.visitVarInsn(Opcodes.ASTORE, savedStackVars[i]);
+            }
+            // Update stack level manager to reflect that we've cleared the parent's values
+            emitterVisitor.ctx.javaClassInfo.stackLevelManager.decrement(parentStackLevel);
+        }
+        
         Label loopStart = new Label();
         Label loopEnd = new Label();
         Label continueLabel = new Label();
@@ -227,7 +244,7 @@ public class EmitForeach {
                 node.labelName,
                 continueLabel,
                 redoLabel,
-                loopEnd,  // Local last goes directly to loopEnd (stack is empty)
+                loopEnd,  // Both local and exception-based last jump to loopEnd
                 RuntimeContextType.VOID);
 
         // Always wrap loop body in try-catch to handle non-local jumps from subroutines
@@ -249,7 +266,8 @@ public class EmitForeach {
             // Jump to continueLabel (no need to load iterator, continueLabel will do it)
             mv.visitJumpInsn(Opcodes.GOTO, continueLabel);
 
-            // Catch LastException - check if label matches, then pop exception, load iterator, jump to loopEnd
+            // Catch LastException - check if label matches, then pop exception and jump to loopEnd
+            // Stack is already clean because EmitControlFlow clears it before throwing
             mv.visitLabel(catchLast);
             mv.visitInsn(Opcodes.DUP);
             if (node.labelName != null) {
@@ -260,13 +278,12 @@ public class EmitForeach {
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/PerlControlFlowException", "matchesLabel", "(Ljava/lang/String;)Z", false);
             Label rethrowLast = new Label();
             mv.visitJumpInsn(Opcodes.IFEQ, rethrowLast);
-            mv.visitInsn(Opcodes.POP);  // Pop exception
-            // Don't load iterator - loopEnd will do it
+            mv.visitInsn(Opcodes.POP);  // Pop exception (stack is now empty, matching normalExit)
             mv.visitJumpInsn(Opcodes.GOTO, loopEnd);
             mv.visitLabel(rethrowLast);
             mv.visitInsn(Opcodes.ATHROW);
 
-            // Catch NextException - check if label matches, then pop exception, load iterator, jump to continueLabel
+            // Catch NextException - check if label matches, then pop exception and jump to continueLabel
             mv.visitLabel(catchNext);
             mv.visitInsn(Opcodes.DUP);
             if (node.labelName != null) {
@@ -283,7 +300,7 @@ public class EmitForeach {
             mv.visitLabel(rethrowNext);
             mv.visitInsn(Opcodes.ATHROW);
 
-            // Catch RedoException - check if label matches, then pop exception, load iterator, jump to redoLabel
+            // Catch RedoException - check if label matches, then pop exception and jump to redoLabel
             mv.visitLabel(catchRedo);
             mv.visitInsn(Opcodes.DUP);
             if (node.labelName != null) {
@@ -317,10 +334,11 @@ public class EmitForeach {
 
         mv.visitJumpInsn(Opcodes.GOTO, loopStart);
 
-        // Normal exit: iterator is on stack, pop it
+        // Normal exit: iterator is on stack (from hasNext check), pop it
         mv.visitLabel(normalExit);
-        mv.visitInsn(Opcodes.POP);
-
+        mv.visitInsn(Opcodes.POP);  // Stack is now empty
+        
+        // Fall through to loop end (stack is empty)
         mv.visitLabel(loopEnd);
         
         // Restore dynamic variable stack for our localization
@@ -338,6 +356,15 @@ public class EmitForeach {
         emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
 
         // Iterator is in local variable - no need to pop from stack
+
+        // Restore parent stack values that were saved before entering the loop
+        if (savedStackVars != null) {
+            for (int i = 0; i < parentStackLevel; i++) {
+                mv.visitVarInsn(Opcodes.ALOAD, savedStackVars[i]);
+            }
+            // Update stack level to reflect restored values
+            emitterVisitor.ctx.javaClassInfo.stackLevelManager.increment(parentStackLevel);
+        }
 
         if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
             // Foreach loop returns empty string when it completes normally
@@ -410,7 +437,7 @@ public class EmitForeach {
                 node.labelName,
                 continueLabel,
                 redoLabel,
-                loopEnd,
+                loopEnd,  // Both local and exception-based last jump to loopEnd
                 RuntimeContextType.VOID);
 
         // Always wrap loop body in try-catch to handle non-local jumps from subroutines
@@ -433,6 +460,7 @@ public class EmitForeach {
             mv.visitJumpInsn(Opcodes.GOTO, continueLabel);
 
             // Catch LastException - check if label matches, then pop exception and jump to loopEnd
+            // Stack is already clean because EmitControlFlow clears it before throwing
             mv.visitLabel(catchLast);
             mv.visitInsn(Opcodes.DUP);
             if (node.labelName != null) {
@@ -443,8 +471,7 @@ public class EmitForeach {
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/PerlControlFlowException", "matchesLabel", "(Ljava/lang/String;)Z", false);
             Label rethrowLast = new Label();
             mv.visitJumpInsn(Opcodes.IFEQ, rethrowLast);
-            mv.visitInsn(Opcodes.POP);  // Pop exception
-            // Iterator stays in local variable
+            mv.visitInsn(Opcodes.POP);  // Pop exception (stack is now empty, matching normalExitWhile)
             mv.visitJumpInsn(Opcodes.GOTO, loopEnd);
             mv.visitLabel(rethrowLast);
             mv.visitInsn(Opcodes.ATHROW);
@@ -498,8 +525,9 @@ public class EmitForeach {
 
         // Normal exit: iterator is on stack, pop it
         mv.visitLabel(normalExitWhile);
-        mv.visitInsn(Opcodes.POP);
-
+        mv.visitInsn(Opcodes.POP);  // Stack is now empty
+        
+        // Fall through to loop end (stack is empty)
         mv.visitLabel(loopEnd);
 
         // Iterator is in local variable - no stack cleanup needed

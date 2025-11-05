@@ -11,6 +11,8 @@ import java.util.Deque;
  * and a stack of loop labels for managing nested loops.
  */
 public class JavaClassInfo {
+    // Debug flag - set to true to enable loop label tracking debug output
+    private static final boolean DEBUG = false;
 
     /**
      * The name of the Java class.
@@ -55,7 +57,11 @@ public class JavaClassInfo {
      * @param lastLabel the label for exiting the loop
      */
     public void pushLoopLabels(String labelName, Label nextLabel, Label redoLabel, Label lastLabel, int context) {
-        loopLabelStack.push(new LoopLabels(labelName, nextLabel, redoLabel, lastLabel, stackLevelManager.getStackLevel(), context));
+        int currentStackLevel = stackLevelManager.getStackLevel();
+        if (DEBUG) {
+            System.err.println("pushLoopLabels: labelName=" + labelName + ", asmStackLevel=" + currentStackLevel);
+        }
+        loopLabelStack.push(new LoopLabels(labelName, nextLabel, redoLabel, lastLabel, currentStackLevel, context));
     }
 
     /**
@@ -63,6 +69,15 @@ public class JavaClassInfo {
      */
     public void popLoopLabels() {
         loopLabelStack.pop();
+    }
+
+    /**
+     * Gets the innermost (current) loop labels from the stack.
+     * 
+     * @return the innermost LoopLabels, or null if not inside a loop
+     */
+    public LoopLabels getCurrentLoopLabels() {
+        return loopLabelStack.isEmpty() ? null : loopLabelStack.peek();
     }
 
     /**
