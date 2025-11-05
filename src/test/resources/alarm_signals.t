@@ -118,7 +118,7 @@ subtest 'alarm can be cancelled' => sub {
 };
 
 subtest 'alarm with fast-completing loop' => sub {
-    plan tests => 2;  # Fixed: was 1, should be 2
+    plan tests => 1;
     
     my $alarm_fired = 0;
     my $sum = 0;

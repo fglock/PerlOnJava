@@ -1,6 +1,5 @@
 package org.perlonjava.astnode;
 
-import org.objectweb.asm.Label;
 import org.perlonjava.astvisitor.LValueVisitor;
 import org.perlonjava.astvisitor.Visitor;
 import org.perlonjava.runtime.RuntimeContextType;
@@ -47,25 +46,6 @@ public class For3Node extends AbstractNode {
      * the label name for this loop
      */
     public String labelName;
-    
-    /**
-     * Pre-registered handler labels for exception chaining.
-     * These are created during a pre-pass and allow outer loop handlers
-     * to jump to inner loop handlers at compile time.
-     */
-    public transient Label preRegisteredCatchNext;
-    public transient Label preRegisteredCatchLast;
-    public transient Label preRegisteredCatchRedo;
-    
-    /**
-     * Set pre-registered exception handler labels for this loop.
-     * Called by LoopHandlerPreRegistrationVisitor during the pre-pass.
-     */
-    public void setPreRegisteredLabels(Label catchNext, Label catchLast, Label catchRedo) {
-        this.preRegisteredCatchNext = catchNext;
-        this.preRegisteredCatchLast = catchLast;
-        this.preRegisteredCatchRedo = catchRedo;
-    }
 
     /**
      * Constructs a new For3Node with the specified parts of the for loop.
