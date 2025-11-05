@@ -29,6 +29,12 @@ public class BlockNode extends AbstractNode {
      * The list of labels inside this block, as in `{ L1: ..., L2:... }`
      */
     public List<String> labels;
+    
+    /**
+     * The list of labels that are for loops (not goto targets)
+     * These are filtered out when adding GotoException handlers
+     */
+    public List<String> loopLabels;
 
     /**
      * Constructs a new BlockNode with the specified list of child nodes.
@@ -40,6 +46,7 @@ public class BlockNode extends AbstractNode {
         this.elements = elements;
         this.tokenIndex = tokenIndex;
         this.labels = new ArrayList<>();
+        this.loopLabels = new ArrayList<>();
         this.labelName = null;
         this.isLoop = false;
     }

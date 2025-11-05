@@ -1,6 +1,8 @@
 package org.perlonjava.parser;
 
 import org.perlonjava.astnode.BlockNode;
+import org.perlonjava.astnode.For1Node;
+import org.perlonjava.astnode.For3Node;
 import org.perlonjava.astnode.LabelNode;
 import org.perlonjava.astnode.ListNode;
 import org.perlonjava.astnode.Node;
@@ -70,7 +72,8 @@ public class ParseBlock {
 
         // Container for all statements in the block
         List<Node> statements = new ArrayList<>();
-        List<String> blockLabels = new ArrayList<>(); // track labels
+        List<String> blockLabels = new ArrayList<>(); // track all labels
+        List<String> blockLoopLabels = new ArrayList<>(); // track loop labels
 
         // Get the current token without consuming it
         LexerToken token = peek(parser);
@@ -109,6 +112,14 @@ public class ParseBlock {
             // Parse the actual statement, passing any label found
             Node statement = StatementResolver.parseStatement(parser, label);
             
+            // If the statement is a loop (For1Node, For3Node), mark the label as a loop label
+            // so that EmitBlock knows not to add GotoException handlers for it
+            if (label != null && statement != null) {
+                if (statement instanceof For1Node || statement instanceof For3Node) {
+                    blockLoopLabels.add(label);
+                }
+            }
+            
             // parseStatement should never return null, but if it does, it's a parser bug
             // that should be fixed at the source. For now, add defensive check.
             if (statement != null) {
@@ -134,6 +145,7 @@ public class ParseBlock {
         // Create and return the block node with all parsed statements
         BlockNode blockNode = new BlockNode(statements, currentIndex);
         blockNode.labels = blockLabels; // Set the collected labels in the BlockNode
+        blockNode.loopLabels = blockLoopLabels; // Set the loop labels in the BlockNode
         return new BlockWithScope(blockNode, scopeIndex);
     }
 

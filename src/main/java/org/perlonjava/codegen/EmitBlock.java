@@ -7,6 +7,7 @@ import org.perlonjava.astnode.*;
 import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.runtime.RuntimeContextType;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class EmitBlock {
@@ -87,7 +88,22 @@ public class EmitBlock {
         // Wrap block body in try-catch if there are goto labels (for non-local jumps)
         // Only if this block has actual runtime code (not just compile-time constructs)
         // Don't add try-catch for bare blocks (isLoop=true) as they should let exceptions propagate
-        if (!node.labels.isEmpty() && hasRuntimeCode && !node.isLoop) {
+        //
+        // Filter out loop labels: Loop labels (like "OUTER: for ...") get added to the containing block's
+        // labels list, but they should NOT create exception handlers here - they're handled by
+        // Last/Next/RedoException in the loop emission code.
+        // The parser marks loop labels in node.loopLabels during parsing.
+        List<String> gotoTargetLabels = new ArrayList<>();
+        if (!node.labels.isEmpty()) {
+            for (String label : node.labels) {
+                // Check if this label is a loop label
+                if (!node.loopLabels.contains(label)) {
+                    gotoTargetLabels.add(label);
+                }
+            }
+        }
+        
+        if (!gotoTargetLabels.isEmpty() && hasRuntimeCode && !node.isLoop) {
             Label tryStart = new Label();
             Label tryEnd = new Label();
             Label catchGoto = new Label();
@@ -128,9 +144,9 @@ public class EmitBlock {
             mv.visitLabel(catchGoto);
             // Stack: [exception]
             
-            // Check if exception matches any of our labels
-            for (int i = 0; i < node.labels.size(); i++) {
-                String labelName = node.labels.get(i);
+            // Check if exception matches any of our goto-target labels
+            for (int i = 0; i < gotoTargetLabels.size(); i++) {
+                String labelName = gotoTargetLabels.get(i);
                 
                 mv.visitInsn(Opcodes.DUP);  // [exception, exception]
                 mv.visitLdcInsn(labelName);     // [exception, exception, label]
