@@ -790,9 +790,15 @@ OUTER: for (@outer) {
 ### Phase 3: Call Site Checks - Detect and Handle Marked Returns
 **Goal**: Add checks after subroutine calls to detect marked RuntimeList and handle control flow.
 
+**⚠️ CRITICAL**: Tail call trampoline MUST be inlined (can't jump away)
+- Unlike last/next/redo/goto which jump away and never return
+- TAILCALL must return to next statement after trampoline completes
+- This means ~40-50 bytes per call site (trampoline loop is inline)
+- Higher bytecode overhead than other control flow (~15 bytes)
+
 **⚠️ CONTINGENCY PLAN**: If "Method too large" errors occur during this phase:
-1. **Immediate workaround**: Use a static flag `ENABLE_CONTROL_FLOW_CHECKS = false` to disable checks
-2. **Quick fix**: Extract the check logic into a helper method to reduce bytecode size
+1. **Immediate workaround**: Use a static flag `ENABLE_TAIL_CALLS = false` to disable tail call support
+2. **Alternative**: Move trampoline to a helper method, but still need inline check + call (~10 bytes)
 3. **Full fix**: Implement Phase 8 (loop extraction) early if needed
 4. **Rationale**: This lets us continue development and test other phases
 
@@ -847,9 +853,13 @@ handleControlFlow:
     IF_ICMPEQ tailcallLoop  // If still TAILCALL, loop again
     
   tailcallDone:
-    // Final result is on stack (unmarked RuntimeList)
-    // Continue normal execution with this result
-    GOTO afterControlFlowCheck
+    // Final result is on stack (may be unmarked OR marked with last/next/redo/goto)
+    // If unmarked: continue normal execution (can return normally)
+    // If marked with other control flow: handle it
+    DUP
+    INVOKEVIRTUAL isNonLocalGoto()Z
+    IFEQ afterControlFlowCheck  // Not marked, continue normal execution
+    // Fall through to handle other control flow types
   
   not_tailcall:
     // Handle other control flow (last/next/redo/goto)
@@ -860,6 +870,7 @@ handleControlFlow:
 
 afterControlFlowCheck:
   // Normal execution continues here with result on stack
+  // Can proceed to next statement, or return if at end of subroutine
 ```
 
 **Option B: Helper method (if Option A causes "Method too large"):**
