@@ -26,7 +26,7 @@ public class EmitStatement {
     //
     // DEPENDENCY:
     // Must remain false until EmitSubroutine.ENABLE_CONTROL_FLOW_CHECKS is fixed.
-    private static final boolean ENABLE_LOOP_HANDLERS = false;
+    private static final boolean ENABLE_LOOP_HANDLERS = true;
     
     // Set to true to enable debug output for loop control flow
     private static final boolean DEBUG_LOOP_CONTROL_FLOW = false;

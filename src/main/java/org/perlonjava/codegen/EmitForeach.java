@@ -394,14 +394,17 @@ public class EmitForeach {
         // Handle LAST
         mv.visitLabel(handleLast);
         emitLabelCheck(mv, loopLabels.labelName, loopLabels.lastLabel, propagateToParent);
+        // emitLabelCheck never returns (either matches and jumps to target, or jumps to noMatch)
         
         // Handle NEXT
         mv.visitLabel(handleNext);
         emitLabelCheck(mv, loopLabels.labelName, loopLabels.nextLabel, propagateToParent);
+        // emitLabelCheck never returns
         
         // Handle REDO
         mv.visitLabel(handleRedo);
         emitLabelCheck(mv, loopLabels.labelName, loopLabels.redoLabel, propagateToParent);
+        // emitLabelCheck never returns
         
         // Handle GOTO
         mv.visitLabel(handleGoto);
@@ -482,49 +485,35 @@ public class EmitForeach {
             Label targetLabel,
             Label noMatch) {
         
+        // SIMPLIFIED PATTERN to avoid ASM frame computation issues:
+        // Use a helper method that returns boolean instead of complex branching
+        
         // Stack: [RuntimeControlFlowList]
-        mv.visitInsn(Opcodes.DUP);
-        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                "org/perlonjava/runtime/RuntimeControlFlowList",
-                "getControlFlowLabel",
-                "()Ljava/lang/String;",
-                false);
         
-        // Stack: [RuntimeControlFlowList] [String label]
-        
-        Label doJump = new Label();
-        
-        // Check if unlabeled (null)
-        mv.visitInsn(Opcodes.DUP);
-        Label notNull = new Label();
-        mv.visitJumpInsn(Opcodes.IFNONNULL, notNull);
-        
-        // Unlabeled - matches if loop is also unlabeled or always matches (Perl semantics)
-        mv.visitInsn(Opcodes.POP);  // Pop null
-        mv.visitJumpInsn(Opcodes.GOTO, doJump);
-        
-        // Not null - check if it matches this loop's label
-        mv.visitLabel(notNull);
+        // Call helper method: RuntimeControlFlowList.matchesLabel(String loopLabel)
+        // This returns true if the control flow label matches the loop label
+        mv.visitInsn(Opcodes.DUP);  // Duplicate for use after check
         if (loopLabelName != null) {
             mv.visitLdcInsn(loopLabelName);
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                    "java/lang/String",
-                    "equals",
-                    "(Ljava/lang/Object;)Z",
-                    false);
-            mv.visitJumpInsn(Opcodes.IFNE, doJump);
         } else {
-            // This loop has no label, but the control flow is labeled - doesn't match
-            mv.visitInsn(Opcodes.POP);  // Pop label string
+            mv.visitInsn(Opcodes.ACONST_NULL);
         }
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/RuntimeControlFlowList",
+                "matchesLabel",
+                "(Ljava/lang/String;)Z",
+                false);
         
-        // No match - fall through to next handler
-        mv.visitJumpInsn(Opcodes.GOTO, noMatch);
+        // Stack: [RuntimeControlFlowList] [boolean]
         
-        // Match!
-        mv.visitLabel(doJump);
-        mv.visitInsn(Opcodes.POP);  // Pop RuntimeControlFlowList
+        // If match, pop and jump to target
+        mv.visitJumpInsn(Opcodes.IFEQ, noMatch);
+        
+        // Match! Pop RuntimeControlFlowList and jump to target
+        mv.visitInsn(Opcodes.POP);
         mv.visitJumpInsn(Opcodes.GOTO, targetLabel);
+        
+        // No match label is handled by caller (falls through)
     }
 
     private static void emitFor1AsWhileLoop(EmitterVisitor emitterVisitor, For1Node node) {

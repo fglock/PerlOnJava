@@ -70,6 +70,28 @@ public class RuntimeControlFlowList extends RuntimeList {
     }
     
     /**
+     * Check if this control flow matches the given loop label.
+     * Perl semantics:
+     * - If control flow is unlabeled (null), it matches any loop
+     * - If control flow is labeled and loop is unlabeled (null), no match
+     * - If both are labeled, they must match exactly
+     * 
+     * @param loopLabel The loop label to check against (null for unlabeled loop)
+     * @return true if this control flow targets the given loop
+     */
+    public boolean matchesLabel(String loopLabel) {
+        String controlFlowLabel = marker.label;
+        
+        // Unlabeled control flow (null) matches any loop
+        if (controlFlowLabel == null) {
+            return true;
+        }
+        
+        // Labeled control flow - check if it matches the loop label
+        return controlFlowLabel.equals(loopLabel);
+    }
+    
+    /**
      * Get the tail call code reference.
      * 
      * @return The code reference, or null if not a tail call
