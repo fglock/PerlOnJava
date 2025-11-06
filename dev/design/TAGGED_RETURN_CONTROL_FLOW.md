@@ -792,19 +792,31 @@ OUTER: for (@outer) {
 
 ---
 
-### Phase 3: Call Site Checks - Detect and Handle Marked Returns
-**Goal**: Add checks after subroutine calls to detect marked RuntimeList and handle control flow.
+### Phase 3: SKIPPED - Not Needed Yet!
+
+**Original Goal**: Add call-site checks after subroutine calls to detect marked RuntimeList early.
+
+**Why Skipped**: 
+- Control flow already propagates naturally through return values (Phase 2 works!)
+- Call-site checks are an optimization, not a requirement
+- Loop handlers (Phase 4) will catch the marked RuntimeList when it matters
+- Adding call-site checks now creates complex stack management issues
+- Better to implement loop handlers first, then optimize with call-site checks later
+
+**Decision**: Move directly to Phase 4 (Loop Handlers) which is what we actually need.
+
+---
+
+### OLD Phase 3 (for future reference - may implement as Phase 7 optimization)
+
+**Goal**: Add checks after subroutine calls to detect marked RuntimeList and handle control flow early.
+
+**⚠️ TECHNICAL CHALLENGE**: Requires pre-allocated temp variable slots
+- Dynamic `allocateLocalVariable()` during bytecode emission breaks ASM frame computation
+- Need to pre-allocate slots at method creation time in `EmitterMethodCreator`
+- Or use a static helper method to avoid inline frame issues
 
 **⚠️ KEY OPTIMIZATION**: One trampoline per subroutine, not per call site!
-- Call sites only check for control flow (~15 bytes each)
-- TAILCALL jumps to `returnLabel` like other control flow
-- Single trampoline loop at `returnLabel` handles all tail calls
-- Much more efficient than inlining trampoline at every call site
-
-**⚠️ CONTINGENCY PLAN**: If "Method too large" errors occur during this phase:
-1. **Immediate workaround**: Use a static flag `ENABLE_TAIL_CALLS = false` to disable tail call support
-2. **Full fix**: Implement Phase 8 (loop extraction) early if needed
-3. **Rationale**: This lets us continue development and test other phases
 
 **Files to modify**:
 1. `src/main/java/org/perlonjava/codegen/EmitSubroutine.java`
@@ -905,8 +917,10 @@ returnLabel:
 
 ---
 
-### Phase 4: Loop Handlers - Handle Control Flow in Loops
+### Phase 3: Loop Handlers - Handle Control Flow in Loops  
 **Goal**: Generate control flow handlers for labeled loops to process marked RuntimeList.
+
+**Why This Is Next**: This is what we actually need! Phase 2 returns marked RuntimeList, now we need loops to catch and handle them.
 
 **Files to modify**:
 1. `src/main/java/org/perlonjava/codegen/EmitForeach.java`
@@ -983,7 +997,7 @@ propagate:
 
 ---
 
-### Phase 5: Top-Level Safety - Catch Unhandled Control Flow
+### Phase 4: Top-Level Safety - Catch Unhandled Control Flow
 **Goal**: Add error handler to catch control flow that escapes to top level.
 
 **File to modify**: `src/main/java/org/perlonjava/runtime/RuntimeCode.java`
@@ -1009,7 +1023,7 @@ propagate:
 
 ---
 
-### Phase 6: Cleanup - Remove Old Exception-Based Code
+### Phase 5: Cleanup - Remove Old Exception-Based Code
 **Goal**: Remove exception classes and exception handlers that are no longer needed.
 
 **Files to delete**:
@@ -1042,7 +1056,7 @@ propagate:
 
 ---
 
-### Phase 7: Testing & Validation
+### Phase 6: Testing & Validation
 **Goal**: Comprehensive testing to ensure correctness and performance.
 
 **Critical Regression Tests** (run before commit):
@@ -1079,7 +1093,20 @@ make test
 
 ---
 
-### Phase 8: Optional Performance Optimization (if needed)
+### Phase 7: Optional - Call-Site Checks (Future Optimization)
+
+**Goal**: Add early detection of control flow at subroutine call sites (optional optimization).
+
+**Status**: Deferred - not critical for correctness, only for early detection.
+
+**Challenges**:
+- Requires pre-allocated temp variable slots or helper methods
+- ASM frame computation issues with dynamic allocation
+- Better to validate correctness first, optimize later
+
+---
+
+### Phase 8: Optional - Loop Extraction (if "Method too large" errors occur)
 **Goal**: Only if "Method too large" errors occur, add bytecode size management.
 
 **When to do this**: Only if tests in Phase 7 reveal "Method too large" errors.
