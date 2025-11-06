@@ -270,6 +270,13 @@ class ControlFlowMarker {
 4. **Cleaner bytecode** - emit integer constants instead of string constants
 5. **Better debugging** - enum values are easier to see in stack traces
 
+**Label Storage Strategy:**
+- **Labels are stored as Strings** (not symbolic references)
+- No need to optimize for symbolic labels - control flow is rare
+- String comparison at runtime is fast enough (control flow is the slow path anyway)
+- Simplifies implementation - no need to track label symbols or resolve them
+- Works naturally with computed labels (`last EXPR`)
+
 **Bytecode generation example:**
 ```java
 // In EmitControlFlow.java, for `last OUTER`:
@@ -701,14 +708,20 @@ OUTER: for (@outer) {
 - [ ] Implement label checking for each loop
 - [ ] Implement propagation (GOTO returnLabel)
 
-### Phase 5: Cleanup
+### Phase 5: Top-Level Error Handler
+- [ ] Add error handler in `RuntimeCode.apply()` to catch unhandled control flow
+- [ ] Check if returned `RuntimeList` has control flow marker after method execution
+- [ ] If marker found, throw error: "Can't find label LABEL_NAME"
+- [ ] This catches cases like signal handlers doing control flow to non-existent labels
+
+### Phase 6: Cleanup
 - [ ] Remove exception classes (LastException, NextException, RedoException, GotoException)
 - [ ] Remove try-catch blocks from loops (EmitForeach, EmitStatement)
 - [ ] Remove LoopExtractor.java (no longer needed)
 - [ ] Revert local variable changes in EmitBinaryOperator, EmitOperator, Dereference, etc.
 - [ ] Update NON_LOCAL_GOTO.md or retire it
 
-### Phase 6: Bytecode Size Estimation and Loop Extraction
+### Phase 7: Bytecode Size Estimation and Loop Extraction
 - [ ] Add `LoopSizeEstimator` utility class
 - [ ] Update `LargeBlockRefactorer.estimateMethodSize()` to account for control flow overhead
 - [ ] Add `countCallSitesInNode()` helper to count subroutine calls in a node
@@ -718,7 +731,7 @@ OUTER: for (@outer) {
 - [ ] Test size estimation accuracy on real code
 - [ ] Test loop extraction preserves semantics (control flow across extracted boundaries)
 
-### Phase 7: Testing
+### Phase 8: Testing
 
 **Critical Regression Tests (run BEFORE every commit):**
 
