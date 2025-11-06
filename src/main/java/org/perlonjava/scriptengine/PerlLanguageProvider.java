@@ -74,6 +74,9 @@ public class PerlLanguageProvider {
                                               boolean isTopLevelScript,
                                               int callerContext) throws Exception {
 
+        // Store the isMainProgram flag in CompilerOptions for use during code generation
+        compilerOptions.isMainProgram = isTopLevelScript;
+
         ScopedSymbolTable globalSymbolTable = new ScopedSymbolTable();
         // Enter a new scope in the symbol table and add special Perl variables
         globalSymbolTable.enterScope();
