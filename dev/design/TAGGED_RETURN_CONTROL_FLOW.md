@@ -105,10 +105,13 @@ The current exception-based approach has fundamental incompatibilities with JVM 
 
 ### Core Concept
 
-Instead of throwing exceptions, mark the `RuntimeList` return value with control flow information:
+Instead of throwing exceptions, mark the `RuntimeList` return value with control flow information.
 
+**Design Options:**
+
+#### Option 1: Direct Fields in RuntimeList (Simple)
 ```java
-class RuntimeList {
+class RuntimeList extends RuntimeBaseEntity {
     // Existing fields
     private List<RuntimeScalar> elements;
     
@@ -137,6 +140,185 @@ class RuntimeList {
     }
 }
 ```
+
+**Pros:**
+- Simple, direct access
+- No extra object allocation in common case (just null references)
+- Fast check (single boolean field)
+
+**Cons:**
+- Every RuntimeList has 3 extra fields (16 bytes overhead)
+- Fields unused 99.99% of the time (control flow is rare)
+
+---
+
+#### Option 2: Separate Marker Object (Memory Optimized)
+```java
+class RuntimeList extends RuntimeBaseEntity {
+    // Existing fields
+    private List<RuntimeScalar> elements;
+    
+    // Control flow marker (usually null)
+    private ControlFlowMarker controlFlowMarker = null;
+    
+    public boolean isNonLocalGoto() {
+        return controlFlowMarker != null;
+    }
+    
+    public void markAsControlFlow(String type, String label) {
+        controlFlowMarker = new ControlFlowMarker(type, label);
+    }
+    
+    public String getControlFlowType() {
+        return controlFlowMarker != null ? controlFlowMarker.type : null;
+    }
+    
+    public String getControlFlowLabel() {
+        return controlFlowMarker != null ? controlFlowMarker.label : null;
+    }
+    
+    public void clearControlFlow() {
+        controlFlowMarker = null;
+    }
+}
+
+class ControlFlowMarker {
+    final String type;   // "last", "next", "redo", "goto"
+    final String label;  // null for unlabeled
+    
+    ControlFlowMarker(String type, String label) {
+        this.type = type;
+        this.label = label;
+    }
+}
+```
+
+**Pros:**
+- Normal RuntimeList: only 8 bytes overhead (one null reference)
+- Marked RuntimeList: 8 bytes reference + 24 bytes marker object = 32 bytes total
+- Memory efficient (control flow is rare, so most lists don't allocate marker)
+
+**Cons:**
+- Extra object allocation when control flow happens (negligible - control flow is rare)
+- Slightly more complex code
+
+---
+
+#### Option 3: Type Enum (Type-Safe)
+```java
+class RuntimeList extends RuntimeBaseEntity {
+    // Existing fields
+    private List<RuntimeScalar> elements;
+    
+    // Control flow marker (usually null)
+    private ControlFlowMarker controlFlowMarker = null;
+    
+    public boolean isNonLocalGoto() {
+        return controlFlowMarker != null;
+    }
+    
+    public void markAsControlFlow(ControlFlowType type, String label) {
+        controlFlowMarker = new ControlFlowMarker(type, label);
+    }
+    
+    public ControlFlowType getControlFlowType() {
+        return controlFlowMarker != null ? controlFlowMarker.type : null;
+    }
+    
+    public String getControlFlowLabel() {
+        return controlFlowMarker != null ? controlFlowMarker.label : null;
+    }
+    
+    public void clearControlFlow() {
+        controlFlowMarker = null;
+    }
+}
+
+enum ControlFlowType {
+    LAST, NEXT, REDO, GOTO
+}
+
+class ControlFlowMarker {
+    final ControlFlowType type;
+    final String label;  // null for unlabeled
+    
+    ControlFlowMarker(ControlFlowType type, String label) {
+        this.type = type;
+        this.label = label;
+    }
+}
+```
+
+**Pros:**
+- Type-safe (no typo bugs with "last" vs "LAST")
+- Enables switch statements in Java (cleaner than string comparisons)
+- JVM can optimize enum switches better than string switches
+- Same memory efficiency as Option 2
+
+**Cons:**
+- Bytecode generation needs to map strings to enum values
+- Slightly more complex
+
+---
+
+### Recommended: Option 3 (Type Enum)
+
+**Rationale:**
+1. **Type safety** prevents bugs (can't accidentally use "lst" instead of "last")
+2. **Performance** - JVM optimizes enum switches (tableswitch instead of lookupswitch with string hashing)
+3. **Memory efficient** - only allocates marker object when control flow happens (rare)
+4. **Cleaner bytecode** - emit integer constants instead of string constants
+5. **Better debugging** - enum values are easier to see in stack traces
+
+**Bytecode generation example:**
+```java
+// In EmitControlFlow.java, for `last OUTER`:
+
+// Create marker object
+mv.visitTypeInsn(NEW, "org/perlonjava/runtime/ControlFlowMarker");
+mv.visitInsn(DUP);
+
+// Load enum value (LAST)
+mv.visitFieldInsn(GETSTATIC, 
+    "org/perlonjava/runtime/ControlFlowType", 
+    "LAST", 
+    "Lorg/perlonjava/runtime/ControlFlowType;");
+
+// Load label
+mv.visitLdcInsn("OUTER");
+
+// Call constructor
+mv.visitMethodInsn(INVOKESPECIAL, 
+    "org/perlonjava/runtime/ControlFlowMarker", 
+    "<init>", 
+    "(Lorg/perlonjava/runtime/ControlFlowType;Ljava/lang/String;)V", 
+    false);
+
+// Mark the RuntimeList
+mv.visitMethodInsn(INVOKEVIRTUAL,
+    "org/perlonjava/runtime/RuntimeList",
+    "markAsControlFlow",
+    "(Lorg/perlonjava/runtime/ControlFlowMarker;)V",
+    false);
+```
+
+**Handler bytecode (using enum for switch):**
+```java
+// Get control flow type
+ALOAD marked_list
+INVOKEVIRTUAL getControlFlowType()Lorg/perlonjava/runtime/ControlFlowType;
+INVOKEVIRTUAL ordinal()I  // Convert enum to int
+
+// Tableswitch (very fast)
+TABLESWITCH
+    0: handle_last    // LAST.ordinal() = 0
+    1: handle_next    // NEXT.ordinal() = 1
+    2: handle_redo    // REDO.ordinal() = 2
+    3: handle_goto    // GOTO.ordinal() = 3
+    default: error
+```
+
+This is faster than `LOOKUPSWITCH` with strings because it's a direct jump table without hash lookups!
 
 ### Bytecode Generation
 
@@ -489,10 +671,16 @@ OUTER: for (@outer) {
 
 ## Implementation Checklist
 
-### Phase 1: RuntimeList Modifications
-- [ ] Add `isControlFlow`, `controlFlowType`, `controlFlowLabel` fields
-- [ ] Add `isNonLocalGoto()`, `markAsControlFlow()`, `getControlFlowType()`, `getControlFlowLabel()`, `clearControlFlow()` methods
-- [ ] Update `RuntimeList` constructors to initialize new fields
+### Phase 1: Runtime Classes (ControlFlowMarker, ControlFlowType, RuntimeList)
+- [ ] Create `ControlFlowType` enum with values: `LAST`, `NEXT`, `REDO`, `GOTO`
+- [ ] Create `ControlFlowMarker` class with fields: `ControlFlowType type`, `String label`
+- [ ] Add `controlFlowMarker` field to `RuntimeList` (initialized to null)
+- [ ] Add `isNonLocalGoto()` method to `RuntimeList` (returns `controlFlowMarker != null`)
+- [ ] Add `markAsControlFlow(ControlFlowMarker marker)` method to `RuntimeList`
+- [ ] Add `getControlFlowType()` method returning `ControlFlowType` (or null)
+- [ ] Add `getControlFlowLabel()` method returning `String` (or null)
+- [ ] Add `clearControlFlow()` method (sets `controlFlowMarker = null`)
+- [ ] Add convenience method: `markAsControlFlow(ControlFlowType type, String label)`
 
 ### Phase 2: Control Flow Emission (EmitControlFlow.java)
 - [ ] Modify `handleNextLastRedo()` to create and return marked RuntimeList for non-local cases
