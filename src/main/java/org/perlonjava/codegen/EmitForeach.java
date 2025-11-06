@@ -230,7 +230,43 @@ public class EmitForeach {
                 loopEnd,
                 RuntimeContextType.VOID);
 
-        node.body.accept(emitterVisitor.with(RuntimeContextType.VOID));
+        // Add try-catch for non-local control flow if this is a labeled loop
+        if (node.labelName != null) {
+            Label tryStart = new Label();
+            Label tryEnd = new Label();
+            Label catchLast = new Label();
+            Label catchNext = new Label();
+            Label catchRedo = new Label();
+            
+            // Start try block
+            mv.visitLabel(tryStart);
+            mv.visitInsn(Opcodes.NOP); // Ensure valid range
+            
+            node.body.accept(emitterVisitor.with(RuntimeContextType.VOID));
+            
+            mv.visitLabel(tryEnd);
+            mv.visitJumpInsn(Opcodes.GOTO, continueLabel);
+            
+            // Catch LastException - jump to loopEnd
+            mv.visitLabel(catchLast);
+            EmitStatement.emitLoopExceptionHandler(mv, node.labelName, loopEnd);
+            
+            // Catch NextException - jump to continueLabel
+            mv.visitLabel(catchNext);
+            EmitStatement.emitLoopExceptionHandler(mv, node.labelName, continueLabel);
+            
+            // Catch RedoException - jump to redoLabel
+            mv.visitLabel(catchRedo);
+            EmitStatement.emitLoopExceptionHandler(mv, node.labelName, redoLabel);
+            
+            // Register exception handlers AFTER body emission (for correct nesting)
+            mv.visitTryCatchBlock(tryStart, tryEnd, catchLast, "org/perlonjava/runtime/LastException");
+            mv.visitTryCatchBlock(tryStart, tryEnd, catchNext, "org/perlonjava/runtime/NextException");
+            mv.visitTryCatchBlock(tryStart, tryEnd, catchRedo, "org/perlonjava/runtime/RedoException");
+        } else {
+            // Unlabeled loop - no exception handling needed (or let exceptions propagate)
+            node.body.accept(emitterVisitor.with(RuntimeContextType.VOID));
+        }
 
         emitterVisitor.ctx.javaClassInfo.popLoopLabels();
 
