@@ -679,62 +679,318 @@ OUTER: for (@outer) {
 **Problem**: `redo OUTER` needs to jump to OUTER's body start, not INNER's.
 **Solution**: Handler checks label, propagates if no match.
 
-## Implementation Checklist
+## Implementation Plan
 
-### Phase 1: Runtime Classes (ControlFlowMarker, ControlFlowType, RuntimeList)
-- [ ] Create `ControlFlowType` enum with values: `LAST`, `NEXT`, `REDO`, `GOTO`
-- [ ] Create `ControlFlowMarker` class with fields: `ControlFlowType type`, `String label`
-- [ ] Add `controlFlowMarker` field to `RuntimeList` (initialized to null)
-- [ ] Add `isNonLocalGoto()` method to `RuntimeList` (returns `controlFlowMarker != null`)
-- [ ] Add `markAsControlFlow(ControlFlowMarker marker)` method to `RuntimeList`
-- [ ] Add `getControlFlowType()` method returning `ControlFlowType` (or null)
-- [ ] Add `getControlFlowLabel()` method returning `String` (or null)
-- [ ] Add `clearControlFlow()` method (sets `controlFlowMarker = null`)
-- [ ] Add convenience method: `markAsControlFlow(ControlFlowType type, String label)`
+**Goal**: Implement non-local control flow using tagged return values, ensuring no VerifyErrors and no "Method too large" errors.
 
-### Phase 2: Control Flow Emission (EmitControlFlow.java)
-- [ ] Modify `handleNextLastRedo()` to create and return marked RuntimeList for non-local cases
-- [ ] Modify `handleGotoLabel()` to create and return marked RuntimeList for non-local cases
-- [ ] Handle `EXPR` forms (computed labels)
-- [ ] Keep local (compile-time known) cases unchanged (fast GOTO)
+**Strategy**: Implement in order, test after each phase, commit frequently.
 
-### Phase 3: Call Site Checks
-- [ ] Add checks after `apply()` in `EmitSubroutine.handleApplyOperator()`
-- [ ] Add checks after `apply()` in `EmitVariable` (method calls)
-- [ ] Add checks after `eval` in `EmitEval`
-- [ ] Use `stackLevelManager.emitPopInstructions(mv, 0)` for cleanup
+---
 
-### Phase 4: Loop Handlers
-- [ ] Generate control flow handler in `EmitForeach.emitFor1()` for labeled loops
-- [ ] Generate control flow handler in `EmitStatement.handleFor3()` for labeled loops
-- [ ] Implement LOOKUPSWITCH for type dispatch
-- [ ] Implement label checking for each loop
-- [ ] Implement propagation (GOTO returnLabel)
+### Phase 1: Foundation - Runtime Classes
+**Goal**: Create the data structures to mark RuntimeList with control flow information.
 
-### Phase 5: Top-Level Error Handler
-- [ ] Add error handler in `RuntimeCode.apply()` to catch unhandled control flow
-- [ ] Check if returned `RuntimeList` has control flow marker after method execution
-- [ ] If marker found, throw error: "Can't find label LABEL_NAME"
-- [ ] This catches cases like signal handlers doing control flow to non-existent labels
+**Files to create/modify**:
+1. `src/main/java/org/perlonjava/runtime/ControlFlowType.java` (NEW)
+2. `src/main/java/org/perlonjava/runtime/ControlFlowMarker.java` (NEW)  
+3. `src/main/java/org/perlonjava/runtime/RuntimeList.java` (MODIFY)
 
-### Phase 6: Cleanup
-- [ ] Remove exception classes (LastException, NextException, RedoException, GotoException)
-- [ ] Remove try-catch blocks from loops (EmitForeach, EmitStatement)
-- [ ] Remove LoopExtractor.java (no longer needed)
-- [ ] Revert local variable changes in EmitBinaryOperator, EmitOperator, Dereference, etc.
-- [ ] Update NON_LOCAL_GOTO.md or retire it
+**Tasks**:
+- [ ] 1.1. Create `ControlFlowType` enum:
+  ```java
+  public enum ControlFlowType {
+      LAST, NEXT, REDO, GOTO
+  }
+  ```
+- [ ] 1.2. Create `ControlFlowMarker` class:
+  ```java
+  public class ControlFlowMarker {
+      public final ControlFlowType type;
+      public final String label;  // null for unlabeled
+      
+      public ControlFlowMarker(ControlFlowType type, String label) {
+          this.type = type;
+          this.label = label;
+      }
+  }
+  ```
+- [ ] 1.3. Modify `RuntimeList` to add:
+  - Field: `private ControlFlowMarker controlFlowMarker = null;`
+  - Method: `public boolean isNonLocalGoto() { return controlFlowMarker != null; }`
+  - Method: `public void markAsControlFlow(ControlFlowType type, String label)`
+  - Method: `public ControlFlowType getControlFlowType()`
+  - Method: `public String getControlFlowLabel()`
+  - Method: `public void clearControlFlow()`
 
-### Phase 7: Bytecode Size Estimation and Loop Extraction
-- [ ] Add `LoopSizeEstimator` utility class
-- [ ] Update `LargeBlockRefactorer.estimateMethodSize()` to account for control flow overhead
-- [ ] Add `countCallSitesInNode()` helper to count subroutine calls in a node
-- [ ] Add `extractLoopToAnonSub()` to extract large inner loops into anonymous subroutines
-- [ ] Add `findInnerLoops()` to identify extractable inner loops
-- [ ] Implement recursive extraction (deepest loops first)
-- [ ] Test size estimation accuracy on real code
-- [ ] Test loop extraction preserves semantics (control flow across extracted boundaries)
+**Test**: 
+- Compile: `./gradlew build -x test`
+- Unit tests: `make` - **MUST pass all tests** (no behavior change yet)
 
-### Phase 8: Testing
+**Commit**: "Add ControlFlowType enum, ControlFlowMarker class, and control flow support to RuntimeList"
+
+---
+
+### Phase 2: Control Flow Emission - Make it Return Instead of Throw
+**Goal**: Modify control flow operators to create marked RuntimeList and return instead of throwing exceptions.
+
+**File to modify**: `src/main/java/org/perlonjava/codegen/EmitControlFlow.java`
+
+**Tasks**:
+- [ ] 2.1. In `handleNextLastRedo()`, for **non-local** cases (when `loopLabels == null`):
+  - Create new `RuntimeList`
+  - Create `ControlFlowMarker` with appropriate type (LAST/NEXT/REDO) and label
+  - Mark the RuntimeList
+  - Clean stack: `stackLevelManager.emitPopInstructions(mv, 0)`
+  - Jump to `returnLabel`: `mv.visitJumpInsn(GOTO, ctx.javaClassInfo.returnLabel)`
+  
+- [ ] 2.2. In `handleGotoLabel()`, for **non-local** goto (when `targetLabel == null`):
+  - Create new `RuntimeList`
+  - Create `ControlFlowMarker` with type GOTO and label name
+  - Mark the RuntimeList
+  - Clean stack: `stackLevelManager.emitPopInstructions(mv, 0)`
+  - Jump to `returnLabel`
+
+- [ ] 2.3. Keep **local** control flow unchanged (compile-time known labels use fast GOTO)
+
+**Test**: 
+- Compile: `./gradlew build -x test`
+- Unit tests: `make` - control flow tests will fail (no handlers yet), but **no VerifyErrors**
+
+**Commit**: "Modify EmitControlFlow to return marked RuntimeList for non-local control flow"
+
+---
+
+### Phase 3: Call Site Checks - Detect and Handle Marked Returns
+**Goal**: Add checks after subroutine calls to detect marked RuntimeList and handle control flow.
+
+**Files to modify**:
+1. `src/main/java/org/perlonjava/codegen/EmitSubroutine.java`
+2. `src/main/java/org/perlonjava/codegen/EmitVariable.java` (for method calls)
+3. `src/main/java/org/perlonjava/codegen/EmitEval.java`
+
+**Bytecode pattern to emit** (after each `apply()` call):
+```java
+// Result is on stack
+DUP                                   // Duplicate for test
+INVOKEVIRTUAL isNonLocalGoto()Z       // Check if marked
+IFNE handleControlFlow                // If true, jump to handler
+POP                                   // Discard duplicate
+// Continue normal execution
+
+handleControlFlow:
+  ASTORE temp                         // Save marked list
+  stackLevelManager.emitPopInstructions(mv, 0)  // Clean stack
+  ALOAD temp                          // Load marked list
+  GOTO loopControlFlowHandler         // Jump to loop's handler (or returnLabel if no loop)
+```
+
+**Tasks**:
+- [ ] 3.1. In `EmitSubroutine.handleApplyOperator()`, after `apply()` call, add check
+- [ ] 3.2. In `EmitVariable` (method calls), after method invocation, add check
+- [ ] 3.3. In `EmitEval`, after eval execution, add check
+- [ ] 3.4. For calls **outside loops**: jump to `returnLabel` (propagate to caller)
+- [ ] 3.5. For calls **inside loops**: jump to loop's control flow handler (will add in Phase 4)
+
+**Test**: 
+- Compile: `./gradlew build -x test`
+- Unit tests: `make` - control flow tests still fail (no loop handlers), but **no VerifyErrors**
+
+**Commit**: "Add control flow detection checks at subroutine call sites"
+
+---
+
+### Phase 4: Loop Handlers - Handle Control Flow in Loops
+**Goal**: Generate control flow handlers for labeled loops to process marked RuntimeList.
+
+**Files to modify**:
+1. `src/main/java/org/perlonjava/codegen/EmitForeach.java`
+2. `src/main/java/org/perlonjava/codegen/EmitStatement.java`
+
+**Handler structure** (generated once per labeled loop):
+```java
+loopControlFlowHandler:
+  // RuntimeList on stack
+  DUP
+  INVOKEVIRTUAL getControlFlowType()Lorg/perlonjava/runtime/ControlFlowType;
+  INVOKEVIRTUAL ordinal()I             // Convert enum to int
+  
+  TABLESWITCH
+    0: handle_last
+    1: handle_next
+    2: handle_redo  
+    3: handle_goto
+    default: propagate
+
+handle_last:
+  DUP
+  INVOKEVIRTUAL getControlFlowLabel()Ljava/lang/String;
+  ASTORE temp_label
+  ALOAD temp_label
+  IFNULL do_last                       // Unlabeled
+  ALOAD temp_label
+  LDC "THIS_LOOP_LABEL"
+  INVOKEVIRTUAL equals()Z
+  IFNE do_last                         // Labeled, matches
+  GOTO propagate                       // Labeled, doesn't match
+do_last:
+  POP                                  // Remove marked list
+  GOTO loop_end
+
+handle_next: /* similar */
+handle_redo: /* similar */
+handle_goto: /* similar, check goto labels */
+
+propagate:
+  // Check if parent loop exists
+  GOTO outerLoopHandler               // If nested, chain to parent
+  // OR
+  GOTO returnLabel                    // If outermost, return to caller
+```
+
+**Tasks**:
+- [ ] 4.1. In `EmitForeach.emitFor1()`, for **labeled** loops only:
+  - Create handler label
+  - Generate TABLESWITCH with 4 cases (LAST, NEXT, REDO, GOTO)
+  - For each case: check label, handle or propagate
+  - Propagate to parent loop handler or returnLabel
+  
+- [ ] 4.2. In `EmitStatement.handleFor3()`, for **labeled** C-style loops:
+  - Same as 4.1
+
+- [ ] 4.3. Track parent handler in loop label stack (for handler chaining)
+
+- [ ] 4.4. Handle `while`, `until`, `do-while` labeled loops
+
+**Test**: 
+- Compile: `./gradlew build -x test`
+- Critical regression tests - **MUST pass** (control flow now works!)
+- Unit tests: `make` - **MUST pass all tests**
+
+**Commit**: "Add control flow handlers to labeled loops"
+
+---
+
+### Phase 5: Top-Level Safety - Catch Unhandled Control Flow
+**Goal**: Add error handler to catch control flow that escapes to top level.
+
+**File to modify**: `src/main/java/org/perlonjava/runtime/RuntimeCode.java`
+
+**Tasks**:
+- [ ] 5.1. In `apply()` method, after method execution:
+  ```java
+  RuntimeList result = method.apply(args, context);
+  if (result.isNonLocalGoto()) {
+      String label = result.getControlFlowLabel();
+      throw new PerlCompilerException("Can't find label " + 
+          (label != null ? label : "(unlabeled)"));
+  }
+  return result;
+  ```
+
+**Test**: 
+- Compile: `./gradlew build -x test`
+- Unit tests: `make` - **MUST pass all tests**
+- Verify signal handler with non-local control flow throws proper error
+
+**Commit**: "Add top-level error handler for unhandled control flow"
+
+---
+
+### Phase 6: Cleanup - Remove Old Exception-Based Code
+**Goal**: Remove exception classes and exception handlers that are no longer needed.
+
+**Files to delete**:
+1. `src/main/java/org/perlonjava/runtime/LastException.java`
+2. `src/main/java/org/perlonjava/runtime/NextException.java`
+3. `src/main/java/org/perlonjava/runtime/RedoException.java`
+4. `src/main/java/org/perlonjava/runtime/GotoException.java`
+
+**Files to modify**:
+1. `src/main/java/org/perlonjava/codegen/EmitForeach.java` - remove try-catch blocks
+2. `src/main/java/org/perlonjava/codegen/EmitStatement.java` - remove try-catch blocks
+
+**Files to check/revert** (if they have exception-related changes):
+1. `src/main/java/org/perlonjava/codegen/EmitBinaryOperator.java`
+2. `src/main/java/org/perlonjava/codegen/EmitOperator.java`
+3. `src/main/java/org/perlonjava/codegen/Dereference.java`
+
+**Tasks**:
+- [ ] 6.1. Delete exception class files
+- [ ] 6.2. Remove try-catch generation from loop emission
+- [ ] 6.3. Remove any temporary workarounds (local variables in operators, etc.)
+- [ ] 6.4. Update or retire `dev/design/NON_LOCAL_GOTO.md`
+
+**Test**: 
+- Compile: `./gradlew build -x test`
+- Unit tests: `make` - **MUST pass all tests** (cleaner code, same functionality)
+- Critical regression tests - **MUST pass**
+
+**Commit**: "Remove exception-based control flow implementation"
+
+---
+
+### Phase 7: Testing & Validation
+**Goal**: Comprehensive testing to ensure correctness and performance.
+
+**Critical Regression Tests** (run before commit):
+```bash
+timeout 900 dev/tools/perl_test_runner.pl \
+    perl5_t/t/uni/variables.t \
+    perl5_t/t/op/hash.t \
+    perl5_t/t/op/for.t \
+    perl5_t/t/cmd/mod.t \
+    perl5_t/t/op/list.t \
+    perl5_t/t/perf/benchmarks.t \
+    src/test/resources/unit/nonlocal_goto.t
+```
+
+**Full Test Suite**:
+```bash
+make test
+```
+
+**Expected Results**:
+- ≥99.8% pass rate (match baseline: logs/test_20251104_152600)
+- No VerifyErrors
+- No "Method too large" errors
+- No new timeouts
+
+**Tasks**:
+- [ ] 7.1. Run critical regression tests
+- [ ] 7.2. Run full test suite
+- [ ] 7.3. Compare results to baseline
+- [ ] 7.4. Fix any regressions
+- [ ] 7.5. Performance check (compare execution times)
+
+**Commit**: "Validated tagged return control flow implementation - all tests pass"
+
+---
+
+### Phase 8: Optional Performance Optimization (if needed)
+**Goal**: Only if "Method too large" errors occur, add bytecode size management.
+
+**When to do this**: Only if tests in Phase 7 reveal "Method too large" errors.
+
+**Why deferred**: The tagged return approach generates ~65% less bytecode than exceptions. The old exception-based approach needed loop extraction to avoid size limits. The new approach likely won't need it.
+
+**If needed**:
+- [ ] 8.1. Add bytecode size estimation to `LargeBlockRefactorer`
+- [ ] 8.2. Implement loop extraction (wrap inner loops in anonymous subs)
+- [ ] 8.3. Test that extraction preserves control flow semantics
+
+**Expected**: Not needed. But if it is, this is when to do it.
+
+---
+
+## Testing Checkpoints
+
+**After Phase 1**: Compile succeeds, tests pass (no behavior change)
+**After Phase 2**: Compile succeeds, control flow fails (expected), no VerifyErrors
+**After Phase 3**: Compile succeeds, control flow still fails (expected), no VerifyErrors  
+**After Phase 4**: Compile succeeds, **control flow works**, regression tests pass ✅
+**After Phase 5**: Top-level error handling works
+**After Phase 6**: Cleaner code, tests still pass
+**After Phase 7**: Full validation complete, ready for PR
 
 **Critical Regression Tests (run BEFORE every commit):**
 
