@@ -63,7 +63,7 @@ public class EmitControlFlow {
                     : operator.equals("last") ? ControlFlowType.LAST
                     : ControlFlowType.REDO;
             
-            // Create new RuntimeControlFlowList with type and label
+            // Create new RuntimeControlFlowList with type, label, fileName, lineNumber
             ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeControlFlowList");
             ctx.mv.visitInsn(Opcodes.DUP);
             ctx.mv.visitFieldInsn(Opcodes.GETSTATIC, 
@@ -75,10 +75,15 @@ public class EmitControlFlow {
             } else {
                 ctx.mv.visitInsn(Opcodes.ACONST_NULL);
             }
+            // Push fileName (from CompilerOptions)
+            ctx.mv.visitLdcInsn(ctx.compilerOptions.fileName != null ? ctx.compilerOptions.fileName : "(eval)");
+            // Push lineNumber (from errorUtil if available)
+            int lineNumber = ctx.errorUtil != null ? ctx.errorUtil.getLineNumber(node.tokenIndex) : 0;
+            ctx.mv.visitLdcInsn(lineNumber);
             ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
                     "org/perlonjava/runtime/RuntimeControlFlowList",
                     "<init>",
-                    "(Lorg/perlonjava/runtime/ControlFlowType;Ljava/lang/String;)V",
+                    "(Lorg/perlonjava/runtime/ControlFlowType;Ljava/lang/String;Ljava/lang/String;I)V",
                     false);
             
             // Clean stack and jump to returnLabel
@@ -172,7 +177,7 @@ public class EmitControlFlow {
             // Non-local goto: create RuntimeControlFlowList and return
             ctx.logDebug("visit(goto): Non-local goto to " + labelName);
             
-            // Create new RuntimeControlFlowList with GOTO type and label
+            // Create new RuntimeControlFlowList with GOTO type, label, fileName, lineNumber
             ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeControlFlowList");
             ctx.mv.visitInsn(Opcodes.DUP);
             ctx.mv.visitFieldInsn(Opcodes.GETSTATIC, 
@@ -180,10 +185,15 @@ public class EmitControlFlow {
                     "GOTO", 
                     "Lorg/perlonjava/runtime/ControlFlowType;");
             ctx.mv.visitLdcInsn(labelName);
+            // Push fileName
+            ctx.mv.visitLdcInsn(ctx.compilerOptions.fileName != null ? ctx.compilerOptions.fileName : "(eval)");
+            // Push lineNumber
+            int lineNumber = ctx.errorUtil != null ? ctx.errorUtil.getLineNumber(node.tokenIndex) : 0;
+            ctx.mv.visitLdcInsn(lineNumber);
             ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
                     "org/perlonjava/runtime/RuntimeControlFlowList",
                     "<init>",
-                    "(Lorg/perlonjava/runtime/ControlFlowType;Ljava/lang/String;)V",
+                    "(Lorg/perlonjava/runtime/ControlFlowType;Ljava/lang/String;Ljava/lang/String;I)V",
                     false);
             
             // Clean stack and jump to returnLabel
