@@ -1,5 +1,6 @@
 package org.perlonjava.codegen;
 
+import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.BinaryOperatorNode;
@@ -21,6 +22,8 @@ import java.util.Map;
  * and generating the corresponding bytecode using ASM.
  */
 public class EmitSubroutine {
+    // Flag to enable/disable control flow checks (for gradual rollout)
+    private static final boolean ENABLE_CONTROL_FLOW_CHECKS = false;
 
     /**
      * Emits bytecode for a subroutine, including handling of closure variables.
@@ -204,6 +207,12 @@ public class EmitSubroutine {
                 "apply",
                 "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;Lorg/perlonjava/runtime/RuntimeBase;I)Lorg/perlonjava/runtime/RuntimeList;",
                 false); // Generate an .apply() call
+        
+        // Check for control flow (last/next/redo/goto/tail calls)
+        if (ENABLE_CONTROL_FLOW_CHECKS) {
+            emitControlFlowCheck(emitterVisitor.ctx);
+        }
+        
         if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
             // Transform the value in the stack to RuntimeScalar
             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
@@ -245,5 +254,52 @@ public class EmitSubroutine {
 
         // Now we have a RuntimeScalar representing the current subroutine (__SUB__)
         EmitOperator.handleVoidContext(emitterVisitor);
+    }
+    
+    /**
+     * Emits bytecode to check if a RuntimeList returned from a subroutine call
+     * is marked with control flow information (last/next/redo/goto/tail call).
+     * If marked, cleans the stack and jumps to returnLabel.
+     * 
+     * Pattern:
+     *   DUP                          // Duplicate result for test
+     *   INVOKEVIRTUAL isNonLocalGoto // Check if marked
+     *   IFNE handleControlFlow       // Jump if marked
+     *   POP                          // Discard duplicate
+     *   // Continue with result on stack
+     *   
+     *   handleControlFlow:
+     *     ASTORE temp                // Save marked result
+     *     emitPopInstructions(0)     // Clean stack
+     *     ALOAD temp                 // Load marked result
+     *     GOTO returnLabel           // Jump to return point
+     * 
+     * @param ctx The emitter context
+     */
+    private static void emitControlFlowCheck(EmitterContext ctx) {
+        Label notMarked = new Label();
+        
+        // DUP the result to test it
+        ctx.mv.visitInsn(Opcodes.DUP);
+        
+        // Check if it's marked with control flow
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/RuntimeList",
+                "isNonLocalGoto",
+                "()Z",
+                false);
+        
+        // If NOT marked, jump to notMarked label
+        ctx.mv.visitJumpInsn(Opcodes.IFEQ, notMarked);
+        
+        // Marked: RuntimeList is on stack (duplicated)
+        // We don't clean the stack here - just jump to returnLabel
+        // The returnLabel will handle stack cleanup via localTeardown
+        ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
+        
+        // Not marked: discard duplicate and continue
+        ctx.mv.visitLabel(notMarked);
+        ctx.mv.visitInsn(Opcodes.POP);
+        // Continue with original result on stack
     }
 }
