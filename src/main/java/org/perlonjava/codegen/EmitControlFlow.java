@@ -7,6 +7,7 @@ import org.perlonjava.astnode.ListNode;
 import org.perlonjava.astnode.Node;
 import org.perlonjava.astnode.OperatorNode;
 import org.perlonjava.astvisitor.EmitterVisitor;
+import org.perlonjava.runtime.ControlFlowType;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
 
@@ -46,10 +47,41 @@ public class EmitControlFlow {
         // Find loop labels by name.
         LoopLabels loopLabels = ctx.javaClassInfo.findLoopLabelsByName(labelStr);
         ctx.logDebug("visit(next) operator: " + operator + " label: " + labelStr + " labels: " + loopLabels);
+        
         if (loopLabels == null) {
-            throw new PerlCompilerException(node.tokenIndex, "Can't \"" + operator + "\" outside a loop block", ctx.errorUtil);
+            // Non-local control flow: create RuntimeControlFlowList and return
+            ctx.logDebug("visit(next): Non-local control flow for " + operator + " " + labelStr);
+            
+            // Determine control flow type
+            ControlFlowType type = operator.equals("next") ? ControlFlowType.NEXT
+                    : operator.equals("last") ? ControlFlowType.LAST
+                    : ControlFlowType.REDO;
+            
+            // Create new RuntimeControlFlowList with type and label
+            ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeControlFlowList");
+            ctx.mv.visitInsn(Opcodes.DUP);
+            ctx.mv.visitFieldInsn(Opcodes.GETSTATIC, 
+                    "org/perlonjava/runtime/ControlFlowType", 
+                    type.name(), 
+                    "Lorg/perlonjava/runtime/ControlFlowType;");
+            if (labelStr != null) {
+                ctx.mv.visitLdcInsn(labelStr);
+            } else {
+                ctx.mv.visitInsn(Opcodes.ACONST_NULL);
+            }
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                    "org/perlonjava/runtime/RuntimeControlFlowList",
+                    "<init>",
+                    "(Lorg/perlonjava/runtime/ControlFlowType;Ljava/lang/String;)V",
+                    false);
+            
+            // Clean stack and jump to returnLabel
+            ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, 0);
+            ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
+            return;
         }
 
+        // Local control flow: use fast GOTO (existing code)
         ctx.logDebug("visit(next): asmStackLevel: " + ctx.javaClassInfo.stackLevelManager.getStackLevel());
 
         // Clean up the stack before jumping by popping values up to the loop's stack level
@@ -131,9 +163,30 @@ public class EmitControlFlow {
         // Locate the target label in the current scope
         GotoLabels targetLabel = ctx.javaClassInfo.findGotoLabelsByName(labelName);
         if (targetLabel == null) {
-            throw new PerlCompilerException(node.tokenIndex, "Can't find label " + labelName, ctx.errorUtil);
+            // Non-local goto: create RuntimeControlFlowList and return
+            ctx.logDebug("visit(goto): Non-local goto to " + labelName);
+            
+            // Create new RuntimeControlFlowList with GOTO type and label
+            ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeControlFlowList");
+            ctx.mv.visitInsn(Opcodes.DUP);
+            ctx.mv.visitFieldInsn(Opcodes.GETSTATIC, 
+                    "org/perlonjava/runtime/ControlFlowType", 
+                    "GOTO", 
+                    "Lorg/perlonjava/runtime/ControlFlowType;");
+            ctx.mv.visitLdcInsn(labelName);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                    "org/perlonjava/runtime/RuntimeControlFlowList",
+                    "<init>",
+                    "(Lorg/perlonjava/runtime/ControlFlowType;Ljava/lang/String;)V",
+                    false);
+            
+            // Clean stack and jump to returnLabel
+            ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, 0);
+            ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
+            return;
         }
 
+        // Local goto: use fast GOTO (existing code)
         // Clean up stack before jumping to maintain stack consistency
         ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, targetLabel.asmStackLevel);
 
