@@ -370,44 +370,17 @@ public class EmitOperator {
 
     // Handles the 'substr' operator, which extracts a substring from a string.
     static void handleSubstr(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
-        // CRITICAL FIX: Store left operand in local variable before evaluating right operand
-        // to prevent stackmap frame issues. This is used by join(), sprintf(), etc.
-        // Without this, the left operand stays on stack during right operand evaluation,
-        // causing inconsistent stack states if right operand contains loops or complex expressions.
-        MethodVisitor mv = emitterVisitor.ctx.mv;
-        
-        // Evaluate left operand and store in local variable
+        // Accept the left operand in SCALAR context and the right operand in LIST context.
         node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        int leftVar = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-        mv.visitVarInsn(Opcodes.ASTORE, leftVar);
-        
-        // Evaluate right operand with clean stack
         node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
-        
-        // Load left operand back and swap to get correct order on stack
-        mv.visitVarInsn(Opcodes.ALOAD, leftVar);
-        mv.visitInsn(Opcodes.SWAP);
-        
         emitOperator(node, emitterVisitor);
     }
 
     // Handles the 'split' operator
     static void handleSplit(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
-        // CRITICAL FIX: Store left operand in local variable before evaluating right operand
-        MethodVisitor mv = emitterVisitor.ctx.mv;
-        
-        // Evaluate left operand (pattern) and store in local variable
+        // Accept the left operand in SCALAR context and the right operand in LIST context.
         node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        int leftVar = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-        mv.visitVarInsn(Opcodes.ASTORE, leftVar);
-        
-        // Evaluate right operand (string) with clean stack
         node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
-        
-        // Load left operand back and swap to get correct order on stack
-        mv.visitVarInsn(Opcodes.ALOAD, leftVar);
-        mv.visitInsn(Opcodes.SWAP);
-        
         emitterVisitor.pushCallContext();
         emitOperator(node, emitterVisitor);
     }
@@ -441,30 +414,11 @@ public class EmitOperator {
 
     // Handles the 'concat' operator, which concatenates two strings.
     static void handleConcatOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
-        MethodVisitor mv = emitterVisitor.ctx.mv;
         EmitterVisitor scalarVisitor =
                 emitterVisitor.with(RuntimeContextType.SCALAR); // execute operands in scalar context
-        
-        // CRITICAL FIX: Store left operand in local variable to prevent stackmap frame issues
-        // If we leave left operand on stack while evaluating right operand, and right operand
-        // contains a loop with control flow (e.g., `for ... last`), the loop's GOTO will
-        // create inconsistent stack states at the loop start label.
-        // Solution: Evaluate left, store in local variable, evaluate right, load left, concat.
-        
-        // Evaluate left operand and store in local variable
-        node.left.accept(scalarVisitor);
-        int leftVar = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-        mv.visitVarInsn(Opcodes.ASTORE, leftVar);
-        
-        // Evaluate right operand (stack is now clean - no left value on stack)
-        node.right.accept(scalarVisitor);
-        
-        // Load left operand from local variable
-        mv.visitVarInsn(Opcodes.ALOAD, leftVar);
-        
-        // Swap so left is first parameter (stack: right, left -> left, right)
-        mv.visitInsn(Opcodes.SWAP);
-        
+        // Accept both left and right operands in SCALAR context.
+        node.left.accept(scalarVisitor); // target - left parameter
+        node.right.accept(scalarVisitor); // right parameter
         emitOperator(node, emitterVisitor);
     }
 

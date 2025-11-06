@@ -233,10 +233,6 @@ public class EmitLogicalOperator {
 
     /**
      * Simple implementation for SCALAR/VOID context (no context conversion needed)
-     * 
-     * CRITICAL: Use local variable to store left operand to ensure consistent stack
-     * states across jump targets. This prevents VerifyErrors when exception handlers
-     * are present (e.g., in foreach loops with last/next/redo).
      */
     private static void emitLogicalOperatorSimple(EmitterVisitor emitterVisitor, BinaryOperatorNode node, int compareOpcode, String getBoolean) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
@@ -257,29 +253,13 @@ public class EmitLogicalOperator {
                 ? RuntimeContextType.RUNTIME
                 : RuntimeContextType.SCALAR;
 
-        // Evaluate left operand and store in local variable
         node.left.accept(emitterVisitor.with(operandContext));
-        int leftVar = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-        mv.visitVarInsn(Opcodes.ASTORE, leftVar);
-        
-        // Load left for boolean test
-        mv.visitVarInsn(Opcodes.ALOAD, leftVar);
+        mv.visitInsn(Opcodes.DUP);
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", getBoolean, "()Z", false);
-        
-        // Create a label for the path that uses left value
-        Label useLeftLabel = new Label();
-        mv.visitJumpInsn(compareOpcode, useLeftLabel);
-        
-        // Left was false/undefined: evaluate right
+        mv.visitJumpInsn(compareOpcode, endLabel);
+        mv.visitInsn(Opcodes.POP);
         node.right.accept(emitterVisitor.with(operandContext));
-        mv.visitJumpInsn(Opcodes.GOTO, endLabel);
-        
-        // Left was true/defined: use left
-        mv.visitLabel(useLeftLabel);
-        mv.visitVarInsn(Opcodes.ALOAD, leftVar);
-        
         mv.visitLabel(endLabel);
-        
         EmitOperator.handleVoidContext(emitterVisitor);
     }
 

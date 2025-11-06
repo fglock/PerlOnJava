@@ -350,44 +350,26 @@ public class EmitLiteral {
         mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
         mv.visitInsn(Opcodes.DUP);
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "()V", false);
-        
-        // CRITICAL FIX: Store RuntimeList in local variable to prevent stackmap frame issues
-        // If we keep the list on stack while evaluating elements, and an element contains
-        // a loop with control flow (e.g., `is(do {foreach...}, "", "test")`), the loop's GOTO
-        // will create inconsistent stack states at the loop start label.
-        // Solution: Store list in local variable, evaluate element with clean stack, load list, add element.
-        int listVar = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-        mv.visitVarInsn(Opcodes.ASTORE, listVar);
-        // Stack: []
+        // Stack: [RuntimeList]
 
         // Populate the list with elements
         for (Node element : node.elements) {
-            // CRITICAL: Evaluate element with CLEAN stack (no list on stack)
-            // If element contains a loop, having the list on stack causes stackmap frame issues
-            element.accept(emitterVisitor);
-            // Stack: [element]
-            
-            // Store element in temporary variable
-            int elementVar = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-            mv.visitVarInsn(Opcodes.ASTORE, elementVar);
-            // Stack: []
-            
-            // Load RuntimeList from local variable
-            mv.visitVarInsn(Opcodes.ALOAD, listVar);
-            // Stack: [RuntimeList]
-            
-            // Load element from temporary variable
-            mv.visitVarInsn(Opcodes.ALOAD, elementVar);
-            // Stack: [RuntimeList] [element]
+            // Duplicate the RuntimeList reference for the add operation
+            mv.visitInsn(Opcodes.DUP);
+            // Stack: [RuntimeList] [RuntimeList]
 
-            // Add the element to the list (add() returns void)
+            emitterVisitor.ctx.javaClassInfo.incrementStackLevel(2);
+
+            // Generate code for the element, preserving the list's context
+            element.accept(emitterVisitor);
+            // Stack: [RuntimeList] [RuntimeList] [element]
+
+            emitterVisitor.ctx.javaClassInfo.decrementStackLevel(2);
+
+            // Add the element to the list
             addElementToList(mv, element, contextType);
-            // Stack: []
+            // Stack: [RuntimeList]
         }
-        
-        // Load final list onto stack for return
-        mv.visitVarInsn(Opcodes.ALOAD, listVar);
-        // Stack: [RuntimeList]
         emitterVisitor.ctx.logDebug("visit(ListNode) end");
     }
 

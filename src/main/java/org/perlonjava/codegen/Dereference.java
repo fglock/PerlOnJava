@@ -509,21 +509,13 @@ public class Dereference {
         EmitterVisitor scalarVisitor =
                 emitterVisitor.with(RuntimeContextType.SCALAR); // execute operands in scalar context
 
+        node.left.accept(scalarVisitor); // target - left parameter
+
         ArrayLiteralNode right = (ArrayLiteralNode) node.right;
         if (right.elements.size() == 1) {
             // Single index: use get/delete/exists methods
-            // Store left operand in local variable to ensure stack is clean when evaluating right
-            node.left.accept(scalarVisitor); // target - left parameter
-            int leftVar = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, leftVar);
-            
             Node elem = right.elements.getFirst();
             elem.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-            
-            // Load left operand back
-            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, leftVar);
-            // Swap so target is on top and index is below (needed for the invoke)
-            emitterVisitor.ctx.mv.visitInsn(Opcodes.SWAP);
 
             // Check if strict refs is enabled at compile time
             if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_REFS)) {
