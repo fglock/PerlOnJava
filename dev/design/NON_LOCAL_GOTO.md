@@ -105,7 +105,7 @@ if (hasRuntimeCode && needsExceptionHandling) {
 ```java
 // In BlockNode.java - track loop labels separately
 private Set<String> loopLabels = new HashSet<>();
-
+    
 // In ParseBlock.java - mark loop labels
 if (peekNode instanceof For1Node || peekNode instanceof For3Node) {
     if (blockNode.labels != null) {
@@ -285,31 +285,31 @@ public static void emitFor1(EmitterVisitor emitterVisitor, For1Node node) {
 ```java
 // For labeled For3 loops
 if (node.labelName != null) {
-    Label tryStart = new Label();
-    Label tryEnd = new Label();
-    Label catchLast = new Label();
-    Label catchNext = new Label();
-    Label catchRedo = new Label();
+Label tryStart = new Label();
+Label tryEnd = new Label();
+Label catchLast = new Label();
+Label catchNext = new Label();
+Label catchRedo = new Label();
     
     // Emit try block
     mv.visitLabel(tryStart);
     mv.visitInsn(Opcodes.NOP); // Ensure valid range
-    
+
     // ... emit loop body ...
-    
-    mv.visitLabel(tryEnd);
+
+mv.visitLabel(tryEnd);
     mv.visitJumpInsn(Opcodes.GOTO, continueLabel);
-    
-    // Catch LastException
-    mv.visitLabel(catchLast);
+
+// Catch LastException
+mv.visitLabel(catchLast);
     emitLoopExceptionHandler(mv, node.labelName, endLabel);
-    
-    // Catch NextException
-    mv.visitLabel(catchNext);
+
+// Catch NextException
+mv.visitLabel(catchNext);
     emitLoopExceptionHandler(mv, node.labelName, continueLabel);
-    
-    // Catch RedoException
-    mv.visitLabel(catchRedo);
+
+// Catch RedoException
+mv.visitLabel(catchRedo);
     emitLoopExceptionHandler(mv, node.labelName, redoLabel);
     
     // Register handlers AFTER body (so inner loops registered first)

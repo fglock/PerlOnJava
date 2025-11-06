@@ -29,7 +29,7 @@ public class BlockNode extends AbstractNode {
      * The list of labels inside this block, as in `{ L1: ..., L2:... }`
      */
     public List<String> labels;
-    
+
     /**
      * The list of labels that are for loops (not goto targets)
      * These are filtered out when adding GotoException handlers
