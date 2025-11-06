@@ -878,6 +878,7 @@ loopControlFlowHandler:
     1: handle_next
     2: handle_redo  
     3: handle_goto
+    4: handle_tailcall
     default: propagate
 
 handle_last:
@@ -899,18 +900,24 @@ handle_next: /* similar */
 handle_redo: /* similar */
 handle_goto: /* similar, check goto labels */
 
+handle_tailcall:
+  // Tail calls don't target loops - always propagate
+  // The trampoline at the call site will handle re-invocation
+  GOTO propagate
+
 propagate:
   // Check if parent loop exists
   GOTO outerLoopHandler               // If nested, chain to parent
   // OR
-  GOTO returnLabel                    // If outermost, return to caller
+  GOTO returnLabel                    // If outermost, return to caller (trampoline handles TAILCALL)
 ```
 
 **Tasks**:
 - [ ] 4.1. In `EmitForeach.emitFor1()`, for **labeled** loops only:
   - Create handler label
-  - Generate TABLESWITCH with 4 cases (LAST, NEXT, REDO, GOTO)
-  - For each case: check label, handle or propagate
+  - Generate TABLESWITCH with 5 cases (LAST, NEXT, REDO, GOTO, TAILCALL)
+  - For LAST/NEXT/REDO/GOTO: check label, handle or propagate
+  - For TAILCALL: always propagate (trampoline handles it)
   - Propagate to parent loop handler or returnLabel
   
 - [ ] 4.2. In `EmitStatement.handleFor3()`, for **labeled** C-style loops:
