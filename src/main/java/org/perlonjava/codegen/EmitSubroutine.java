@@ -23,6 +23,7 @@ import java.util.Map;
  */
 public class EmitSubroutine {
     // Flag to enable/disable control flow checks (for gradual rollout)
+    // Currently disabled - Phase 2 works (99.8%), Phase 3 needs more work
     private static final boolean ENABLE_CONTROL_FLOW_CHECKS = false;
 
     /**
@@ -277,29 +278,15 @@ public class EmitSubroutine {
      * @param ctx The emitter context
      */
     private static void emitControlFlowCheck(EmitterContext ctx) {
-        Label notMarked = new Label();
+        // For now, we disable call-site checks because they require careful
+        // stack management that interacts with ASM's frame computation.
+        // This will be revisited in a future phase once the loop handlers are in place.
+        // The control flow still works via Phase 2 (EmitControlFlow returns marked RuntimeList).
         
-        // DUP the result to test it
-        ctx.mv.visitInsn(Opcodes.DUP);
-        
-        // Check if it's marked with control flow
-        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                "org/perlonjava/runtime/RuntimeList",
-                "isNonLocalGoto",
-                "()Z",
-                false);
-        
-        // If NOT marked, jump to notMarked label
-        ctx.mv.visitJumpInsn(Opcodes.IFEQ, notMarked);
-        
-        // Marked: RuntimeList is on stack (duplicated)
-        // We don't clean the stack here - just jump to returnLabel
-        // The returnLabel will handle stack cleanup via localTeardown
-        ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
-        
-        // Not marked: discard duplicate and continue
-        ctx.mv.visitLabel(notMarked);
-        ctx.mv.visitInsn(Opcodes.POP);
-        // Continue with original result on stack
+        // TODO Phase 3: Implement call-site checks properly
+        // Need to either:
+        // 1. Pre-allocate temp variable slots at method start
+        // 2. Use a helper method to avoid inline frame computation issues
+        // 3. Redesign returnLabel to handle control flow jumps with stack cleanup
     }
 }
