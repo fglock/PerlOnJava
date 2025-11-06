@@ -543,4 +543,16 @@ public class RuntimeList extends RuntimeBase {
             return currentIterator.next();
         }
     }
+    
+    // ========== Control Flow Support ==========
+    
+    /**
+     * Check if this RuntimeList represents non-local control flow.
+     * Uses instanceof check which is optimized by JIT compiler.
+     * 
+     * @return true if this is a RuntimeControlFlowList, false otherwise
+     */
+    public boolean isNonLocalGoto() {
+        return this instanceof RuntimeControlFlowList;
+    }
 }
