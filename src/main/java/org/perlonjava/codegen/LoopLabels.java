@@ -27,6 +27,13 @@ public class LoopLabels {
      * The ASM Label for the 'last' statement (exits the loop)
      */
     public Label lastLabel;
+    
+    /**
+     * The ASM Label for the control flow handler (processes marked RuntimeList)
+     * This handler checks the control flow type and label, then either handles
+     * it or propagates to parent loop handler
+     */
+    public Label controlFlowHandler;
 
     /**
      * The context type in which this loop operates

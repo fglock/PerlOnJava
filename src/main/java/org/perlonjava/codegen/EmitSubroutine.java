@@ -23,7 +23,8 @@ import java.util.Map;
  */
 public class EmitSubroutine {
     // Flag to enable/disable control flow checks (for gradual rollout)
-    // Disabled - ASM frame computation issues, deferred to Phase 7
+    // Disabled - ASM frame computation issues with branching control flow
+    // This is Phase 7 (optional optimization) - deferred
     private static final boolean ENABLE_CONTROL_FLOW_CHECKS = false;
     
     // Reserved slot for temporary storage of marked RuntimeList during control flow checks
@@ -285,12 +286,43 @@ public class EmitSubroutine {
      * @param ctx The emitter context
      */
     private static void emitControlFlowCheck(EmitterContext ctx) {
-        // Call-site checks are deferred to Phase 7 (optional optimization)
-        // For now, control flow propagates naturally through return values
-        // This will be revisited after Phase 3 (loop handlers) is complete
+        // Check if RuntimeList is marked, and if so, jump to returnLabel
+        // Use pre-allocated CONTROL_FLOW_TEMP_SLOT to avoid ASM frame issues
         
-        // The issue is ASM's frame computation with branching control flow
-        // that modifies local variables. We need a different approach:
-        // either a static helper method or pre-computed frame states.
+        Label notMarked = new Label();
+        
+        // DUP the result to test it
+        ctx.mv.visitInsn(Opcodes.DUP);
+        
+        // Check if it's marked with control flow
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/RuntimeList",
+                "isNonLocalGoto",
+                "()Z",
+                false);
+        
+        // If NOT marked, jump to notMarked label
+        ctx.mv.visitJumpInsn(Opcodes.IFEQ, notMarked);
+        
+        // Marked: handle control flow
+        // Store in pre-allocated slot
+        ctx.mv.visitVarInsn(Opcodes.ASTORE, CONTROL_FLOW_TEMP_SLOT);
+        
+        // Clean the stack
+        int currentStackLevel = ctx.javaClassInfo.stackLevelManager.getStackLevel();
+        for (int i = 0; i < currentStackLevel; i++) {
+            ctx.mv.visitInsn(Opcodes.POP);
+        }
+        
+        // Load the marked RuntimeList
+        ctx.mv.visitVarInsn(Opcodes.ALOAD, CONTROL_FLOW_TEMP_SLOT);
+        
+        // Jump to returnLabel
+        ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
+        
+        // Not marked: discard duplicate and continue
+        ctx.mv.visitLabel(notMarked);
+        ctx.mv.visitInsn(Opcodes.POP);
+        // Continue with original result on stack
     }
 }
