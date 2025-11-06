@@ -313,15 +313,8 @@ The following areas are currently under active development to enhance the functi
 
 - **v5.42.2**: Next minor version
 
-  - **Non-local control flow** ✓ COMPLETE (Phase 1-7)
-    - All control flow operators: `last`/`next`/`redo`/`goto LABEL`/`goto &NAME`/`goto __SUB__`
-    - Local jumps use plain JVM GOTO (zero overhead)
-    - Non-local jumps use tagged return values (propagate through return paths)
-    - Tail call optimization with trampoline for `goto &NAME` and `goto __SUB__`
-    - Compile-time error checking for invalid control flow (e.g., `next` in `do-while`)
-    - Source location tracking in error messages
-    - Pass rate: 99.9% (1778/1779 tests)
-    - Note: Call-site checks and loop handlers remain disabled (optional performance optimizations)
+  - Non-local control flow: `last`/`next`/`redo`/`goto LABEL`
+  - Tail call with trampoline for `goto &NAME` and `goto __SUB__`
   - Add Perl 5.38+ Class Features
     - Class keyword with block syntax fully working
     - Method declarations with automatic $self injection
