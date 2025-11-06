@@ -314,41 +314,58 @@ public class EmitSubroutine {
      * @param ctx The emitter context
      */
     private static void emitControlFlowCheck(EmitterContext ctx) {
-        // Simplified pattern to avoid ASM frame computation issues:
-        // Store result immediately, check it, branch, reload if needed
+        // ULTRA-SIMPLIFIED pattern to avoid ALL ASM frame computation issues:
+        // Work entirely on the stack, never touch local variables
         
         Label notMarked = new Label();
+        Label isMarked = new Label();
         
-        // Store the result in the temp slot FIRST
-        ctx.mv.visitInsn(Opcodes.DUP);  // Keep a copy on stack for normal path
-        ctx.mv.visitVarInsn(Opcodes.ASTORE, ctx.javaClassInfo.controlFlowTempSlot);
+        // Stack: [RuntimeList result]
         
-        // Check if stored result is marked with control flow
-        ctx.mv.visitVarInsn(Opcodes.ALOAD, ctx.javaClassInfo.controlFlowTempSlot);
+        // Duplicate for checking
+        ctx.mv.visitInsn(Opcodes.DUP);
+        // Stack: [RuntimeList] [RuntimeList]
+        
+        // Check if marked
         ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                 "org/perlonjava/runtime/RuntimeList",
                 "isNonLocalGoto",
                 "()Z",
                 false);
+        // Stack: [RuntimeList] [boolean]
         
-        // If NOT marked, jump to notMarked label
-        ctx.mv.visitJumpInsn(Opcodes.IFEQ, notMarked);
+        // If marked (true), jump to handler
+        ctx.mv.visitJumpInsn(Opcodes.IFNE, isMarked);
+        
+        // Not marked: result is already on stack, continue normally
+        ctx.mv.visitJumpInsn(Opcodes.GOTO, notMarked);
         
         // Marked: handle control flow
-        // Pop the duplicate we left on stack
-        ctx.mv.visitInsn(Opcodes.POP);
+        ctx.mv.visitLabel(isMarked);
+        // Stack: [RuntimeList marked]
         
-        // Clean the stack to level 0 (same as return does)
-        ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, 0);
+        // Clean the stack to level 0 (this pops everything including our marked list)
+        // So we need to save it first - but we can't use local variables!
+        // Solution: Don't clean stack here - jump to a handler that expects [RuntimeList] on stack
         
-        // Load the marked RuntimeList from temp slot
-        ctx.mv.visitVarInsn(Opcodes.ALOAD, ctx.javaClassInfo.controlFlowTempSlot);
+        // CRITICAL FIX: Jump to innermost loop handler (if inside a loop), otherwise returnLabel
+        LoopLabels innermostLoop = ctx.javaClassInfo.getInnermostLoopLabels();
+        if (innermostLoop != null && innermostLoop.controlFlowHandler != null) {
+            // Inside a loop - jump to its handler
+            // Handler expects: stack cleaned to level 0, then [RuntimeControlFlowList]
+            // But we have: arbitrary stack depth, then [RuntimeControlFlowList]
+            // We MUST clean the stack first, but this requires knowing what's on it
+            // This is the fundamental problem!
+            
+            // For now, propagate to returnLabel instead
+            ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
+        } else {
+            // Not inside a loop - jump to returnLabel
+            ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
+        }
         
-        // Jump to returnLabel
-        ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
-        
-        // Not marked: continue with result already on stack (the DUP we made)
+        // Not marked: continue with result on stack
         ctx.mv.visitLabel(notMarked);
-        // Result is already on stack from the initial DUP
+        // Stack: [RuntimeList result]
     }
 }

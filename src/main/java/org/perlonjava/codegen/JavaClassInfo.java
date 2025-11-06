@@ -108,6 +108,16 @@ public class JavaClassInfo {
     }
     
     /**
+     * Gets the innermost (current) loop labels.
+     * Returns null if not currently inside a loop.
+     *
+     * @return the innermost LoopLabels object, or null if none
+     */
+    public LoopLabels getInnermostLoopLabels() {
+        return loopLabelStack.peek();
+    }
+
+    /**
      * Gets the parent loop labels (the loop containing the current loop).
      * Returns null if there's no parent loop.
      *
