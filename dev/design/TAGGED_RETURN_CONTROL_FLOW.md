@@ -2,9 +2,12 @@
 
 ## Quick Reference
 
+**Development Branch:** `nonlocal-goto-wip`
+
 **Before committing, ALWAYS run regression tests:**
 ```bash
 cd /Users/fglock/projects/PerlOnJava
+git checkout nonlocal-goto-wip  # Make sure you're on the right branch
 ./gradlew build -x test  # Rebuild jar
 timeout 900 dev/tools/perl_test_runner.pl \
     perl5_t/t/uni/variables.t \
