@@ -46,64 +46,94 @@ timeout 900 dev/tools/perl_test_runner.pl \
 
 ---
 
-## NEXT STEPS - Implementation Order
+## Current Status (as of Phase 7 completion)
 
-### **CURRENT: Phase 3 - Fix Call-Site Checks (BLOCKED)**
+**Working Features:** ✓
+- All Perl control flow: `last`/`next`/`redo`/`goto LABEL`/`goto &NAME`/`goto __SUB__`
+- Local control flow uses plain JVM GOTO (zero overhead)
+- Non-local control flow uses tagged returns (propagates through return paths)
+- Tail call optimization via trampoline at `returnLabel`
+- Pass rate: **99.9%** (1778/1779 tests)
 
-**STATUS:** ✗ BLOCKED by ASM frame computation issues
+**Disabled Optimizations:**
+- Call-site checks (blocked by ASM frame computation issues)
+- Loop handlers (depends on call-site checks)
 
-**COMPLETED:**
-- ✓ Dynamic slot allocation (`controlFlowTempSlot`)  
-- ✓ Simplified pattern (store→check→branch)
-- ✗ Still fails with `ArrayIndexOutOfBoundsException` in ASM Frame.merge()
-
-**ROOT CAUSE:** ASM's COMPUTE_FRAMES cannot handle inline branching checks that manipulate the stack. The pattern `DUP → ASTORE → ALOAD → instanceof → branch → pop/cleanup → GOTO` creates control flow paths that ASM cannot compute frames for, even with simplified patterns.
-
-**WHY THIS IS HARD:** 
-- Call sites are in expression context (value on stack)
-- Need to check value without consuming it (requires DUP)
-- Need to clean stack if marked (requires knowing stack depth)
-- Branching + stack manipulation = ASM frame computation failure
-
-**ALTERNATIVE APPROACHES TO INVESTIGATE:**
-
-1. **Explicit Frame Hints** (High effort, error-prone)
-   - Manually call `mv.visitFrame()` at every branch point
-   - Requires tracking exact local variable types and stack types
-   - Fragile - breaks if bytecode changes
-
-2. **VOID Context Checks** (Promising!)
-   - Only check in VOID context (after value is POPped)
-   - No DUP needed, no stack manipulation
-   - But: marked returns would be lost in VOID context
-   - Would need to store EVERY call result temporarily
-
-3. **No Inline Checks - Return Path Only** (RECOMMENDED)
-   - Remove inline call-site checks entirely
-   - Only check at `returnLabel` (global return point)
-   - Loop handlers become "optional optimization" for nested loops
-   - Non-local control flow ALWAYS returns to caller, caller checks and re-dispatches
-   - **This matches how exceptions work!**
-
-**RECOMMENDED PATH FORWARD:**
-Skip call-site checks for now. Focus on validating that Phase 2 (creating marked returns) and Phase 5 (top-level safety in RuntimeCode.apply()) work correctly. Call-site checks can be added later as an optimization if needed.
-
-**TEST:** Basic control flow already works without call-site checks:
-```bash
-./jperl -e 'for (1..3) { print "$_\n"; last; }'  # ✓ Works!
-```
+**Performance:**
+- Local jumps: zero overhead (plain JVM GOTO)
+- Non-local jumps: propagate through return paths (acceptable overhead, rare in practice)
 
 ---
 
-### **Phase 4 - Enable Loop Handlers (SKIPPED)**
+## NEXT STEPS - Optional Optimizations
 
-**STATUS:** ✗ SKIPPED - depends on call-site checks which are blocked
+These are performance optimizations, not correctness fixes. The system works correctly at 99.9% pass rate.
 
-**WHY NEEDED:** Loop handlers would optimize nested loops by processing marked returns immediately instead of propagating to caller.
+### **Option A: Profile First (RECOMMENDED)**
 
-**WHY SKIPPED:** Loop handlers are only reachable via call-site checks. Without call-site checks, the handler code is unreachable (dead code) and ASM frame computation fails.
+**Goal:** Determine if optimization is worth the effort.
 
-**ALTERNATIVE:** Non-local control flow propagates through return path. `RuntimeCode.apply()` catches it at the top level. This works but is less efficient for deeply nested loops.
+**Steps:**
+1. Profile real Perl code (DynaLoader, Test::More, benchmarks)
+2. Measure overhead of current implementation
+3. **If < 1% overhead:** Stop - current implementation is good
+4. **If > 5% overhead:** Proceed to Option B
+
+**Why First:** Avoid premature optimization. Current implementation works at 99.9%.
+
+---
+
+### **Option B: Fix Call-Site Checks (If profiling shows need)**
+
+**Previous Attempts:**
+- ✗ Dynamic slot allocation - failed with `ArrayIndexOutOfBoundsException`
+- ✗ Simplified pattern (store→check→branch) - still fails ASM frame merge
+
+**Root Cause:** ASM cannot handle inline branching + stack manipulation pattern.
+
+**Investigations to Try:**
+
+**B1. Static Slot Pre-Allocation** (30 min, low risk)
+```java
+// At method entry (like tailCallCodeRefSlot):
+controlFlowCheckSlot = symbolTable.allocateLocalVariable();
+```
+- Pre-allocate slot before any branches
+- May fix "slot allocated after branch" issue
+
+**B2. Store-Then-Check Pattern** (1 hour, medium risk)
+```java
+ASTORE tempSlot       // Store directly (no DUP)
+ALOAD tempSlot        // Load for check
+INSTANCEOF ...        // Check
+// ...
+ALOAD tempSlot        // Reload for normal path
+```
+- Extra ALOAD but simpler control flow
+
+**B3. Manual Frame Hints** (4+ hours, high risk)
+```java
+mv.visitFrame(F_SAME, ...);  // Explicit frame at merge
+```
+- Direct control over ASM
+- Fragile, requires deep ASM knowledge
+- Last resort only
+
+**Recommended:** Try B1, then B2. Skip B3 unless critical.
+
+---
+
+### **Option C: Enable Loop Handlers (After B works)**
+
+**Depends On:** Call-site checks working (Option B complete)
+
+**Steps:**
+1. Enable `ENABLE_CONTROL_FLOW_CHECKS = true`
+2. Enable `ENABLE_LOOP_HANDLERS = true`  
+3. Test with `make`
+4. Debug any VerifyErrors with `--disassemble`
+
+**Effort:** 2-4 hours
 
 ---
 

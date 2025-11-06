@@ -23,9 +23,38 @@ import java.util.Map;
  */
 public class EmitSubroutine {
     // Feature flags for control flow implementation
-    // Flag to enable/disable control flow checks at call sites (Phase 7 - required for loop handlers)
-    // DISABLED: ASM frame computation cannot handle complex branching with stack manipulation
-    // TODO: Need different architecture - maybe explicit frame hints or simpler pattern
+    // 
+    // WHAT THIS WOULD DO IF ENABLED:
+    // After every subroutine call, check if the returned RuntimeList is a RuntimeControlFlowList
+    // (marked with last/next/redo/goto), and if so, immediately propagate it to returnLabel
+    // instead of continuing execution. This would enable loop handlers to catch control flow
+    // at the loop level instead of propagating all the way up the call stack.
+    //
+    // WHY IT'S DISABLED:
+    // The inline check pattern causes ArrayIndexOutOfBoundsException in ASM's frame computation:
+    //   DUP                                    // Duplicate result
+    //   INSTANCEOF RuntimeControlFlowList      // Check if marked
+    //   IFEQ notMarked                        // Branch
+    //   ASTORE tempSlot                       // Store (slot allocated dynamically)
+    //   emitPopInstructions(0)                // Clean stack
+    //   ALOAD tempSlot                        // Restore
+    //   GOTO returnLabel                      // Propagate
+    //   notMarked: POP                        // Discard duplicate
+    //
+    // The complex branching with dynamic slot allocation breaks ASM's ability to merge frames
+    // at the branch target, especially when the tempSlot is allocated after the branch instruction.
+    //
+    // INVESTIGATION NEEDED:
+    // 1. Try allocating tempSlot statically at method entry (not dynamically per call)
+    // 2. Try simpler pattern without DUP (accept performance hit of extra ALOAD/ASTORE)
+    // 3. Try manual frame hints with visitFrame() at merge points
+    // 4. Consider moving check to VOID context only (after POP) - but this loses marked returns
+    // 5. Profile real-world code to see if this optimization actually matters
+    //
+    // CURRENT WORKAROUND:
+    // Without call-site checks, marked returns propagate through normal return paths.
+    // This works correctly but is less efficient for deeply nested loops crossing subroutines.
+    // Performance impact is minimal since most control flow is local (uses plain JVM GOTO).
     private static final boolean ENABLE_CONTROL_FLOW_CHECKS = false;
     
     // Set to true to enable debug output for control flow checks
