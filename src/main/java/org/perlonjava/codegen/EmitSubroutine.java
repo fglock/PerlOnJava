@@ -23,17 +23,13 @@ import java.util.Map;
  */
 public class EmitSubroutine {
     // Feature flags for control flow implementation
-    // Flag to enable/disable control flow checks at call sites (Phase 7 - optional optimization)
-    // Disabled - ASM frame computation issues with branching control flow
+    // Flag to enable/disable control flow checks at call sites (Phase 7 - required for loop handlers)
+    // DISABLED: ASM frame computation cannot handle complex branching with stack manipulation
+    // TODO: Need different architecture - maybe explicit frame hints or simpler pattern
     private static final boolean ENABLE_CONTROL_FLOW_CHECKS = false;
     
     // Set to true to enable debug output for control flow checks
     private static final boolean DEBUG_CONTROL_FLOW = false;
-    
-    // Reserved slot for temporary storage of marked RuntimeList during control flow checks
-    // This slot is pre-initialized in EmitterMethodCreator, so it's safe to use
-    // We use slot 200 which is well within the pre-initialized range (env.length + 50)
-    private static final int CONTROL_FLOW_TEMP_SLOT = 200;
 
     /**
      * Emits bytecode for a subroutine, including handling of closure variables.
@@ -289,15 +285,17 @@ public class EmitSubroutine {
      * @param ctx The emitter context
      */
     private static void emitControlFlowCheck(EmitterContext ctx) {
-        // Check if RuntimeList is marked, and if so, jump to returnLabel
-        // Use pre-allocated CONTROL_FLOW_TEMP_SLOT to avoid ASM frame issues
+        // Simplified pattern to avoid ASM frame computation issues:
+        // Store result immediately, check it, branch, reload if needed
         
         Label notMarked = new Label();
         
-        // DUP the result to test it
-        ctx.mv.visitInsn(Opcodes.DUP);
+        // Store the result in the temp slot FIRST
+        ctx.mv.visitInsn(Opcodes.DUP);  // Keep a copy on stack for normal path
+        ctx.mv.visitVarInsn(Opcodes.ASTORE, ctx.javaClassInfo.controlFlowTempSlot);
         
-        // Check if it's marked with control flow
+        // Check if stored result is marked with control flow
+        ctx.mv.visitVarInsn(Opcodes.ALOAD, ctx.javaClassInfo.controlFlowTempSlot);
         ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                 "org/perlonjava/runtime/RuntimeList",
                 "isNonLocalGoto",
@@ -308,24 +306,20 @@ public class EmitSubroutine {
         ctx.mv.visitJumpInsn(Opcodes.IFEQ, notMarked);
         
         // Marked: handle control flow
-        // Store in pre-allocated slot
-        ctx.mv.visitVarInsn(Opcodes.ASTORE, CONTROL_FLOW_TEMP_SLOT);
+        // Pop the duplicate we left on stack
+        ctx.mv.visitInsn(Opcodes.POP);
         
-        // Clean the stack
-        int currentStackLevel = ctx.javaClassInfo.stackLevelManager.getStackLevel();
-        for (int i = 0; i < currentStackLevel; i++) {
-            ctx.mv.visitInsn(Opcodes.POP);
-        }
+        // Clean the stack to level 0 (same as return does)
+        ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, 0);
         
-        // Load the marked RuntimeList
-        ctx.mv.visitVarInsn(Opcodes.ALOAD, CONTROL_FLOW_TEMP_SLOT);
+        // Load the marked RuntimeList from temp slot
+        ctx.mv.visitVarInsn(Opcodes.ALOAD, ctx.javaClassInfo.controlFlowTempSlot);
         
         // Jump to returnLabel
         ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
         
-        // Not marked: discard duplicate and continue
+        // Not marked: continue with result already on stack (the DUP we made)
         ctx.mv.visitLabel(notMarked);
-        ctx.mv.visitInsn(Opcodes.POP);
-        // Continue with original result on stack
+        // Result is already on stack from the initial DUP
     }
 }

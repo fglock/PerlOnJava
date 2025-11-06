@@ -11,6 +11,8 @@ import org.perlonjava.runtime.RuntimeContextType;
 public class EmitForeach {
     // Feature flags for control flow implementation
     // Set to true to enable control flow handlers for foreach loops (Phase 3)
+    // DISABLED: Requires call-site checks which are currently broken (ASM frame computation issues)
+    // TODO: Fix call-site checks first, then re-enable loop handlers
     private static final boolean ENABLE_LOOP_HANDLERS = false;
     
     // Set to true to enable debug output for loop control flow

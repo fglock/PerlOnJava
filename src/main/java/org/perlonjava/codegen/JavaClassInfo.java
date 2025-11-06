@@ -31,6 +31,11 @@ public class JavaClassInfo {
      * Local variable slot for tail call trampoline - stores args.
      */
     public int tailCallArgsSlot;
+    
+    /**
+     * Local variable slot for temporarily storing marked RuntimeControlFlowList during call-site checks.
+     */
+    public int controlFlowTempSlot;
 
     /**
      * Manages the stack level for the class.
