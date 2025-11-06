@@ -803,20 +803,63 @@ OUTER: for (@outer) {
 
 **Bytecode pattern to emit** (after each `apply()` call):
 
-**Option A: Inline (default, ~15 bytes per call):**
+**Option A: Inline (default, ~20-30 bytes per call):**
 ```java
 // Result is on stack
 DUP                                   // Duplicate for test
 INVOKEVIRTUAL isNonLocalGoto()Z       // Check if marked
 IFNE handleControlFlow                // If true, jump to handler
 POP                                   // Discard duplicate
-// Continue normal execution
+// Continue normal execution with result on stack
 
 handleControlFlow:
-  ASTORE temp                         // Save marked list
-  stackLevelManager.emitPopInstructions(mv, 0)  // Clean stack
-  ALOAD temp                          // Load marked list
-  GOTO loopControlFlowHandler         // Jump to loop's handler (or returnLabel if no loop)
+  DUP
+  INVOKEVIRTUAL getControlFlowType()Lorg/perlonjava/runtime/ControlFlowType;
+  INVOKEVIRTUAL ordinal()I
+  SIPUSH 4  // TAILCALL.ordinal()
+  IF_ICMPNE not_tailcall
+  
+  // Handle TAILCALL - trampoline loop
+  tailcallLoop:
+    // RuntimeList with TAILCALL marker on stack
+    INVOKEVIRTUAL getTailCallCodeRef()Lorg/perlonjava/runtime/RuntimeScalar;
+    ASTORE code
+    DUP
+    INVOKEVIRTUAL getTailCallArgs()Lorg/perlonjava/runtime/RuntimeArray;
+    ASTORE args
+    POP  // Remove the marked list
+    
+    // Re-invoke: code.apply(args, context)
+    ALOAD code
+    LDC "tailcall"  // Sub name
+    ALOAD args
+    pushContext()
+    INVOKESTATIC RuntimeCode.apply(...)Lorg/perlonjava/runtime/RuntimeList;
+    
+    // Check if result is another TAILCALL
+    DUP
+    INVOKEVIRTUAL isNonLocalGoto()Z
+    IFEQ tailcallDone  // If not marked, we're done
+    DUP
+    INVOKEVIRTUAL getControlFlowType()Lorg/perlonjava/runtime/ControlFlowType;
+    INVOKEVIRTUAL ordinal()I
+    SIPUSH 4
+    IF_ICMPEQ tailcallLoop  // If still TAILCALL, loop again
+    
+  tailcallDone:
+    // Final result is on stack (unmarked RuntimeList)
+    // Continue normal execution with this result
+    GOTO afterControlFlowCheck
+  
+  not_tailcall:
+    // Handle other control flow (last/next/redo/goto)
+    ASTORE temp
+    stackLevelManager.emitPopInstructions(mv, 0)
+    ALOAD temp
+    GOTO loopControlFlowHandler  // Or returnLabel if no loop
+
+afterControlFlowCheck:
+  // Normal execution continues here with result on stack
 ```
 
 **Option B: Helper method (if Option A causes "Method too large"):**
@@ -840,8 +883,11 @@ ASTORE temp
 **Tasks**:
 - [ ] 3.1. **Start with Option A** (inline) - simpler and faster
 - [ ] 3.2. In `EmitSubroutine.handleApplyOperator()`, after `apply()` call, add check
-  - For TAILCALL: Implement **trampoline loop** - keep re-invoking until non-TAILCALL result
-  - For other control flow: Handle as described above
+  - For TAILCALL: Implement **trampoline loop**:
+    - Keep re-invoking until non-TAILCALL result
+    - Final result continues to next statement (normal flow)
+    - **Key difference**: TAILCALL returns, others don't
+  - For last/next/redo/goto: Clean stack, jump to handler, **never return**
 - [ ] 3.3. In `EmitVariable` (method calls), after method invocation, add check
   - Same trampoline handling for TAILCALL
 - [ ] 3.4. In `EmitEval`, after eval execution, add check
