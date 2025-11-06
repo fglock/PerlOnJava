@@ -762,25 +762,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 this.compilerSupplier.get(); // Wait for the task to finish
             }
 
-            RuntimeList result;
             if (isStatic) {
-                result = (RuntimeList) this.methodHandle.invoke(a, callContext);
+                return (RuntimeList) this.methodHandle.invoke(a, callContext);
             } else {
-                result = (RuntimeList) this.methodHandle.invoke(this.codeObject, a, callContext);
+                return (RuntimeList) this.methodHandle.invoke(this.codeObject, a, callContext);
             }
-            
-            // Phase 4: Top-Level Safety
-            // Check if the result is a marked RuntimeControlFlowList that escaped to top level
-            if (result.isNonLocalGoto()) {
-                RuntimeControlFlowList cfList = (RuntimeControlFlowList) result;
-                ControlFlowType cfType = cfList.getControlFlowType();
-                String label = cfList.getControlFlowLabel();
-                
-                // Let the marker throw the error with proper source location
-                cfList.marker.throwError();
-            }
-            
-            return result;
         } catch (NullPointerException e) {
 
             if (this.methodHandle == null) {
@@ -816,25 +802,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 this.compilerSupplier.get(); // Wait for the task to finish
             }
 
-            RuntimeList result;
             if (isStatic) {
-                result = (RuntimeList) this.methodHandle.invoke(a, callContext);
+                return (RuntimeList) this.methodHandle.invoke(a, callContext);
             } else {
-                result = (RuntimeList) this.methodHandle.invoke(this.codeObject, a, callContext);
+                return (RuntimeList) this.methodHandle.invoke(this.codeObject, a, callContext);
             }
-            
-            // Phase 4: Top-Level Safety
-            // Check if the result is a marked RuntimeControlFlowList that escaped to top level
-            if (result.isNonLocalGoto()) {
-                RuntimeControlFlowList cfList = (RuntimeControlFlowList) result;
-                ControlFlowType cfType = cfList.getControlFlowType();
-                String label = cfList.getControlFlowLabel();
-                
-                // Let the marker throw the error with proper source location
-                cfList.marker.throwError();
-            }
-            
-            return result;
         } catch (NullPointerException e) {
             throw new PerlCompilerException("Undefined subroutine &" + subroutineName + " called at ");
         } catch (InvocationTargetException e) {
