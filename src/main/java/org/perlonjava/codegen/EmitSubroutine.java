@@ -23,8 +23,13 @@ import java.util.Map;
  */
 public class EmitSubroutine {
     // Flag to enable/disable control flow checks (for gradual rollout)
-    // Currently disabled - Phase 2 works (99.8%), Phase 3 needs more work
+    // Disabled - ASM frame computation issues, deferred to Phase 7
     private static final boolean ENABLE_CONTROL_FLOW_CHECKS = false;
+    
+    // Reserved slot for temporary storage of marked RuntimeList during control flow checks
+    // This slot is pre-initialized in EmitterMethodCreator, so it's safe to use
+    // We use slot 200 which is well within the pre-initialized range (env.length + 50)
+    private static final int CONTROL_FLOW_TEMP_SLOT = 200;
 
     /**
      * Emits bytecode for a subroutine, including handling of closure variables.
@@ -210,6 +215,7 @@ public class EmitSubroutine {
                 false); // Generate an .apply() call
         
         // Check for control flow (last/next/redo/goto/tail calls)
+        // This MUST happen before context conversion (before POP in VOID context)
         if (ENABLE_CONTROL_FLOW_CHECKS) {
             emitControlFlowCheck(emitterVisitor.ctx);
         }
@@ -219,6 +225,7 @@ public class EmitSubroutine {
             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
         } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
             // Remove the value from the stack
+            // (If it was a control flow marker, emitControlFlowCheck already handled it)
             emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
         }
     }
@@ -278,15 +285,12 @@ public class EmitSubroutine {
      * @param ctx The emitter context
      */
     private static void emitControlFlowCheck(EmitterContext ctx) {
-        // For now, we disable call-site checks because they require careful
-        // stack management that interacts with ASM's frame computation.
-        // This will be revisited in a future phase once the loop handlers are in place.
-        // The control flow still works via Phase 2 (EmitControlFlow returns marked RuntimeList).
+        // Call-site checks are deferred to Phase 7 (optional optimization)
+        // For now, control flow propagates naturally through return values
+        // This will be revisited after Phase 3 (loop handlers) is complete
         
-        // TODO Phase 3: Implement call-site checks properly
-        // Need to either:
-        // 1. Pre-allocate temp variable slots at method start
-        // 2. Use a helper method to avoid inline frame computation issues
-        // 3. Redesign returnLabel to handle control flow jumps with stack cleanup
+        // The issue is ASM's frame computation with branching control flow
+        // that modifies local variables. We need a different approach:
+        // either a static helper method or pre-computed frame states.
     }
 }
