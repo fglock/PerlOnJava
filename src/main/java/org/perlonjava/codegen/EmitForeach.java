@@ -254,13 +254,18 @@ public class EmitForeach {
             // Get goto labels from current scope (TODO: implement getGotoLabels in EmitterContext)
             java.util.Map<String, org.objectweb.asm.Label> gotoLabels = null;  // For now
             
+            // Check if this is the outermost loop in the main program
+            boolean isMainProgramOutermostLoop = emitterVisitor.ctx.compilerOptions.isMainProgram 
+                    && parentLoopLabels == null;
+            
             // Emit the handler
             emitControlFlowHandler(
                     mv,
                     currentLoopLabels,
                     parentLoopLabels,
                     emitterVisitor.ctx.javaClassInfo.returnLabel,
-                    gotoLabels);
+                    gotoLabels,
+                    isMainProgramOutermostLoop);
         }
         
         // Restore dynamic variable stack for our localization
@@ -307,13 +312,15 @@ public class EmitForeach {
      * @param parentLoopLabels The parent loop's labels (null if this is the outermost loop)
      * @param returnLabel The subroutine's return label
      * @param gotoLabels Map of goto label names to ASM Labels in current scope
+     * @param isMainProgramOutermostLoop True if this is the outermost loop in main program (should throw error instead of returning)
      */
     private static void emitControlFlowHandler(
             MethodVisitor mv,
             LoopLabels loopLabels,
             LoopLabels parentLoopLabels,
             org.objectweb.asm.Label returnLabel,
-            java.util.Map<String, org.objectweb.asm.Label> gotoLabels) {
+            java.util.Map<String, org.objectweb.asm.Label> gotoLabels,
+            boolean isMainProgramOutermostLoop) {
         
         if (!ENABLE_LOOP_HANDLERS) {
             return;  // Feature not enabled yet
@@ -409,8 +416,43 @@ public class EmitForeach {
         if (parentLoopLabels != null && parentLoopLabels.controlFlowHandler != null) {
             // Chain to parent loop's handler
             mv.visitJumpInsn(Opcodes.GOTO, parentLoopLabels.controlFlowHandler);
+        } else if (isMainProgramOutermostLoop) {
+            // Outermost loop in main program - throw error immediately
+            // Stack: [RuntimeControlFlowList]
+            
+            // Cast to RuntimeControlFlowList
+            mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeControlFlowList");
+            mv.visitInsn(Opcodes.DUP);
+            
+            // Get control flow type
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/RuntimeControlFlowList",
+                    "getControlFlowType",
+                    "()Lorg/perlonjava/runtime/ControlFlowType;",
+                    false);
+            mv.visitInsn(Opcodes.DUP);
+            
+            // Get label
+            mv.visitInsn(Opcodes.SWAP);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/RuntimeControlFlowList",
+                    "getControlFlowLabel",
+                    "()Ljava/lang/String;",
+                    false);
+            
+            // Call helper method to throw appropriate error
+            // Stack: [ControlFlowType, String label]
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/RuntimeCode",
+                    "throwControlFlowError",
+                    "(Lorg/perlonjava/runtime/ControlFlowType;Ljava/lang/String;)V",
+                    false);
+            
+            // Should never reach here (method throws), but add RETURN for verifier
+            mv.visitInsn(Opcodes.ACONST_NULL);
+            mv.visitInsn(Opcodes.ARETURN);
         } else {
-            // Outermost loop - return to caller
+            // Outermost loop in subroutine - return to caller (will be caught by Phase 4 or parent)
             mv.visitJumpInsn(Opcodes.GOTO, returnLabel);
         }
     }
