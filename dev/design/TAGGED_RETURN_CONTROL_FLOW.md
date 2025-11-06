@@ -71,6 +71,8 @@ This document describes the design for implementing Perl's non-local control flo
   - **Can be implemented using control flow mechanism!**
   - Return a special control flow marker with the sub reference and `@_`
   - Caller checks return value and re-invokes if it's a tail call
+  - **Technical name**: Trampoline-based tail call optimization
+  - The caller acts as a "trampoline" that bounces between tail calls until a non-tail-call result is returned
 
 ### Key Precedence Rule
 All these operators have **assignment precedence** and are exempt from "looks-like-a-function" rule:
@@ -702,18 +704,31 @@ OUTER: for (@outer) {
 - [ ] 1.1. Create `ControlFlowType` enum:
   ```java
   public enum ControlFlowType {
-      LAST, NEXT, REDO, GOTO
+      LAST, NEXT, REDO, GOTO, TAILCALL
   }
   ```
 - [ ] 1.2. Create `ControlFlowMarker` class:
   ```java
   public class ControlFlowMarker {
       public final ControlFlowType type;
-      public final String label;  // null for unlabeled
+      public final String label;        // For LAST/NEXT/REDO/GOTO (null for unlabeled)
+      public final RuntimeScalar codeRef;  // For TAILCALL
+      public final RuntimeArray args;      // For TAILCALL
       
+      // Constructor for control flow (last/next/redo/goto)
       public ControlFlowMarker(ControlFlowType type, String label) {
           this.type = type;
           this.label = label;
+          this.codeRef = null;
+          this.args = null;
+      }
+      
+      // Constructor for tail call (goto &NAME)
+      public ControlFlowMarker(RuntimeScalar codeRef, RuntimeArray args) {
+          this.type = ControlFlowType.TAILCALL;
+          this.label = null;
+          this.codeRef = codeRef;
+          this.args = args;
       }
   }
   ```
@@ -753,7 +768,16 @@ OUTER: for (@outer) {
   - Clean stack: `stackLevelManager.emitPopInstructions(mv, 0)`
   - Jump to `returnLabel`
 
-- [ ] 2.3. Keep **local** control flow unchanged (compile-time known labels use fast GOTO)
+- [ ] 2.3. In `handleGotoAmpersand()` (NEW), for tail calls (`goto &NAME`):
+  - Evaluate the NAME expression to get code reference
+  - Load current `@_` (from local variable slot 1)
+  - Create new `RuntimeList`
+  - Create `ControlFlowMarker` with TAILCALL, codeRef, and args
+  - Mark the RuntimeList
+  - Clean stack: `stackLevelManager.emitPopInstructions(mv, 0)`
+  - Jump to `returnLabel`
+
+- [ ] 2.4. Keep **local** control flow unchanged (compile-time known labels use fast GOTO)
 
 **Test**: 
 - Compile: `./gradlew build -x test`
@@ -766,12 +790,20 @@ OUTER: for (@outer) {
 ### Phase 3: Call Site Checks - Detect and Handle Marked Returns
 **Goal**: Add checks after subroutine calls to detect marked RuntimeList and handle control flow.
 
+**⚠️ CONTINGENCY PLAN**: If "Method too large" errors occur during this phase:
+1. **Immediate workaround**: Use a static flag `ENABLE_CONTROL_FLOW_CHECKS = false` to disable checks
+2. **Quick fix**: Extract the check logic into a helper method to reduce bytecode size
+3. **Full fix**: Implement Phase 8 (loop extraction) early if needed
+4. **Rationale**: This lets us continue development and test other phases
+
 **Files to modify**:
 1. `src/main/java/org/perlonjava/codegen/EmitSubroutine.java`
 2. `src/main/java/org/perlonjava/codegen/EmitVariable.java` (for method calls)
 3. `src/main/java/org/perlonjava/codegen/EmitEval.java`
 
 **Bytecode pattern to emit** (after each `apply()` call):
+
+**Option A: Inline (default, ~15 bytes per call):**
 ```java
 // Result is on stack
 DUP                                   // Duplicate for test
@@ -787,16 +819,40 @@ handleControlFlow:
   GOTO loopControlFlowHandler         // Jump to loop's handler (or returnLabel if no loop)
 ```
 
+**Option B: Helper method (if Option A causes "Method too large"):**
+```java
+// Create static helper method in generated class:
+public static RuntimeList checkControlFlow(RuntimeList result, int stackLevel) {
+    if (!result.isNonLocalGoto()) {
+        return result;
+    }
+    // Pop stack if needed (stackLevel > 0)
+    // Return marked result
+    return result;
+}
+
+// At call site (~5 bytes):
+INVOKESTATIC checkControlFlow(RuntimeList, int)Lorg/perlonjava/runtime/RuntimeList;
+ASTORE temp
+// Check if marked and handle
+```
+
 **Tasks**:
-- [ ] 3.1. In `EmitSubroutine.handleApplyOperator()`, after `apply()` call, add check
-- [ ] 3.2. In `EmitVariable` (method calls), after method invocation, add check
-- [ ] 3.3. In `EmitEval`, after eval execution, add check
-- [ ] 3.4. For calls **outside loops**: jump to `returnLabel` (propagate to caller)
-- [ ] 3.5. For calls **inside loops**: jump to loop's control flow handler (will add in Phase 4)
+- [ ] 3.1. **Start with Option A** (inline) - simpler and faster
+- [ ] 3.2. In `EmitSubroutine.handleApplyOperator()`, after `apply()` call, add check
+  - For TAILCALL: Implement **trampoline loop** - keep re-invoking until non-TAILCALL result
+  - For other control flow: Handle as described above
+- [ ] 3.3. In `EmitVariable` (method calls), after method invocation, add check
+  - Same trampoline handling for TAILCALL
+- [ ] 3.4. In `EmitEval`, after eval execution, add check
+- [ ] 3.5. For calls **outside loops**: jump to `returnLabel` (propagate to caller)
+- [ ] 3.6. For calls **inside loops**: jump to loop's control flow handler (will add in Phase 4)
+- [ ] 3.7. **If "Method too large" occurs**: Switch to Option B (helper method) or add `ENABLE_CONTROL_FLOW_CHECKS` flag
 
 **Test**: 
 - Compile: `./gradlew build -x test`
 - Unit tests: `make` - control flow tests still fail (no loop handlers), but **no VerifyErrors**
+- **Watch for "Method too large" errors** - if they occur, implement contingency
 
 **Commit**: "Add control flow detection checks at subroutine call sites"
 
