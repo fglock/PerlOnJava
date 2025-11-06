@@ -103,7 +103,12 @@ public class EmitBlock {
             }
         }
         
-        if (!gotoTargetLabels.isEmpty() && hasRuntimeCode && !node.isLoop) {
+        // CRITICAL: Don't add exception handlers if block is in non-VOID context
+        // Exception-based control flow clears the operand stack, but non-VOID blocks
+        // are expected to leave a value on the stack for the caller
+        boolean isVoidContext = (emitterVisitor.ctx.contextType == RuntimeContextType.VOID);
+        
+        if (!gotoTargetLabels.isEmpty() && hasRuntimeCode && !node.isLoop && isVoidContext) {
             Label tryStart = new Label();
             Label tryEnd = new Label();
             Label catchGoto = new Label();

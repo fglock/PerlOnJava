@@ -1,12 +1,13 @@
-# Non-Local Goto Implementation - ACTUAL Working Design
+# Non-Local Goto Implementation - Working Design
 
 ## Executive Summary
 
-After extensive implementation and debugging, this document presents the **ACTUAL working approach** for implementing non-local control flow in PerlOnJava. The design achieves:
+This document presents the working approach for implementing non-local control flow in PerlOnJava:
 
-- **~90% of cases:** Zero runtime overhead (local labels resolved at compile-time)
-- **~10% of cases:** Exception-based unwinding (non-local labels)
-- **100% correctness:** All tests pass including Unicode variable tests (uni/variables.t)
+- **~90% of cases:** Zero runtime overhead (local labels resolved at compile-time using GOTO)
+- **~10% of cases:** Exception-based unwinding (non-local labels across call frames)
+- **Critical fix:** Store foreach iterator in local variable, NOT on operand stack
+- **Critical fix:** Don't add exception handlers to blocks in non-VOID context
 
 **Key insight:** The challenge is NOT just throwing exceptions - it's ensuring **bytecode verification** passes while maintaining **stack consistency** across exception boundaries.
 
@@ -123,6 +124,55 @@ for (String label : node.labels) {
 // Only add GotoException handlers for goto-target labels
 ```
 
+### Problem 6: Labeled Blocks in Expression Context
+**Issue:** Blocks like `${label:code}` were getting GotoException handlers even though they're evaluated in SCALAR context (not VOID). Exception-based control flow clears the operand stack, but SCALAR/LIST contexts expect a value on the stack for the caller.
+
+**Example that triggers VerifyError:**
+```perl
+eval "\${\x{30cd}single:\x{30cd}colon} = 'label, not var'";
+# This creates a labeled block inside a scalar dereference
+# The block is in SCALAR context, but exception handlers clear the stack
+```
+
+**Solution:** Only add GotoException handlers to blocks in VOID context:
+```java
+// In EmitBlock.java
+boolean isVoidContext = (emitterVisitor.ctx.contextType == RuntimeContextType.VOID);
+
+if (!gotoTargetLabels.isEmpty() && hasRuntimeCode && !node.isLoop && isVoidContext) {
+    // Add exception handlers
+}
+```
+
+### Problem 7: **CRITICAL** - Loops in Expression Context
+**Issue:** When loops appear in expressions like `$x . do { for (...) { ... } }`, parent expressions leave values on the operand stack BEFORE the loop starts. Exception handlers require a clean stack at `tryStart`, but the parent values are still there.
+
+**Why You Can't "Save and Restore" Stack Values:**
+- Exception handlers in Java ALWAYS start with a clean stack (just the exception object)
+- ASM's COMPUTE_FRAMES expects the stack at `tryStart` to match what exception handlers see
+- If `tryStart` has values on stack, ASM creates inconsistent stackmap frames → VerifyError
+
+**Example that triggers VerifyError:**
+```perl
+# op/hash.t line 259 (inside expression context):
+::is(join(':', %inner), "x:y", "magic keys");
+# The join() evaluates its separator, THEN the list argument
+# If the list contains a loop, the separator is on the stack!
+```
+
+**Solution:** Only add exception handlers to LABELED loops (skip detection pattern uses labeled SKIP blocks):
+```java
+// In EmitForeach.java
+// Only labeled loops get exception handlers - unlabeled loops in expressions
+// would have parent stack values that cause VerifyErrors
+boolean needsExceptionHandlers = ENABLE_LOOP_EXCEPTION_HANDLERS && (node.labelName != null);
+```
+
+**Trade-off:**
+- ✅ Labeled loops like `SKIP: { last SKIP if condition }` work perfectly
+- ✅ Unlabeled loops work via local GOTO (no cross-subroutine jumps)
+- ⚠️ Can't do `last` from inside a subroutine call within an unlabeled loop (acceptable limitation)
+
 ## The ACTUAL Working Implementation
 
 ### 1. Control Flow Exceptions (UNCHANGED - These are correct)
@@ -232,24 +282,19 @@ public static void emitFor1(EmitterVisitor emitterVisitor, For1Node node) {
     
     mv.visitLabel(loopStart);
     
-    // Load iterator from local variable at start of each iteration
-    mv.visitVarInsn(Opcodes.ALOAD, iteratorVar);
-    
     // Check for signals
     EmitStatement.emitSignalCheck(mv);
     
-    // Check hasNext()
-    mv.visitInsn(Opcodes.DUP);
+    // Check hasNext() - load fresh from local variable
+    mv.visitVarInsn(Opcodes.ALOAD, iteratorVar);
     mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "hasNext", "()Z", true);
     mv.visitJumpInsn(Opcodes.IFEQ, loopEnd);
     
-    // Get next value
+    // Get next value - load fresh from local variable
+    mv.visitVarInsn(Opcodes.ALOAD, iteratorVar);
     mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "next", "()Ljava/lang/Object;", true);
-    // ... assign to loop variable ...
-    
-    // CRITICAL: Pop the DUPed iterator before loop body
-    // Now operand stack is clean for loop body execution
-    mv.visitInsn(Opcodes.POP);
+    // ... assign to loop variable (consumes value) ...
+    // Stack is now clean - no iterator copies on stack
     
     Label redoLabel = new Label();
     mv.visitLabel(redoLabel);
@@ -258,9 +303,38 @@ public static void emitFor1(EmitterVisitor emitterVisitor, For1Node node) {
     emitterVisitor.ctx.javaClassInfo.pushLoopLabels(
         node.labelName, continueLabel, redoLabel, loopEnd, RuntimeContextType.VOID);
     
-    // OPTION: Add try-catch here if needed for non-local jumps
-    // But simpler to let exceptions propagate to method-level handler
-    node.body.accept(emitterVisitor.with(RuntimeContextType.VOID));
+    // CRITICAL: Only add exception handlers for LABELED loops
+    // Unlabeled loops in expressions would have parent stack values → VerifyError
+    boolean needsExceptionHandlers = ENABLE_LOOP_EXCEPTION_HANDLERS && (node.labelName != null);
+    
+    if (needsExceptionHandlers) {
+        Label tryStart = new Label();
+        Label tryEnd = new Label();
+        Label catchLast = new Label();
+        Label catchNext = new Label();
+        Label catchRedo = new Label();
+        
+        mv.visitLabel(tryStart);
+        mv.visitInsn(Opcodes.NOP);
+        node.body.accept(emitterVisitor.with(RuntimeContextType.VOID));
+        mv.visitLabel(tryEnd);
+        mv.visitJumpInsn(Opcodes.GOTO, continueLabel);
+        
+        // Exception handlers (registered AFTER body for correct nesting)
+        mv.visitLabel(catchLast);
+        emitLoopExceptionHandler(mv, node.labelName, loopEnd);
+        mv.visitLabel(catchNext);
+        emitLoopExceptionHandler(mv, node.labelName, continueLabel);
+        mv.visitLabel(catchRedo);
+        emitLoopExceptionHandler(mv, node.labelName, redoLabel);
+        
+        mv.visitTryCatchBlock(tryStart, tryEnd, catchLast, "LastException");
+        mv.visitTryCatchBlock(tryStart, tryEnd, catchNext, "NextException");
+        mv.visitTryCatchBlock(tryStart, tryEnd, catchRedo, "RedoException");
+    } else {
+        // No exception handlers - local GOTO only
+        node.body.accept(emitterVisitor.with(RuntimeContextType.VOID));
+    }
     
     emitterVisitor.ctx.javaClassInfo.popLoopLabels();
     

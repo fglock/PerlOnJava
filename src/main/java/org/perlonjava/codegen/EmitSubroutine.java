@@ -194,11 +194,31 @@ public class EmitSubroutine {
             }
         }
 
-        node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR)); // Target - left parameter: Code ref
-        emitterVisitor.ctx.mv.visitLdcInsn(subroutineName);
-        node.right.accept(emitterVisitor.with(RuntimeContextType.LIST)); // Right parameter: parameter list
-        emitterVisitor.pushCallContext();   // Push call context to stack
-        emitterVisitor.ctx.mv.visitMethodInsn(
+        // CRITICAL FIX: Store left operand (code ref) and subroutine name in local variables
+        // to prevent stackmap frame issues when right operand contains loops with control flow.
+        // If we leave values on stack while evaluating right operand, and right operand contains
+        // a loop (e.g., `is(do {foreach...}, "", "test")`), the loop's GOTO will create
+        // inconsistent stack states at the loop start label.
+        
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        
+        // Evaluate code ref and store in local variable
+        node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        int codeRefVar = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        mv.visitVarInsn(Opcodes.ASTORE, codeRefVar);
+        
+        // Evaluate arguments (stack is now clean - no left value on stack)
+        node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
+        int argsVar = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        mv.visitVarInsn(Opcodes.ASTORE, argsVar);
+        
+        // Now load all parameters in correct order for the apply() call
+        mv.visitVarInsn(Opcodes.ALOAD, codeRefVar);      // Code ref
+        mv.visitLdcInsn(subroutineName);                  // Subroutine name
+        mv.visitVarInsn(Opcodes.ALOAD, argsVar);          // Arguments
+        emitterVisitor.pushCallContext();                  // Call context
+        
+        mv.visitMethodInsn(
                 Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/RuntimeCode",
                 "apply",

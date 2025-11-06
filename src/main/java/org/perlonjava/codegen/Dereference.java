@@ -124,13 +124,28 @@ public class Dereference {
                  *      NumberNode: 20
                  */
                 emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) @var[] ");
+                
+                // CRITICAL FIX: Store array in local variable before evaluating index list
+                // to prevent stackmap frame issues when index list evaluation is complex.
+                MethodVisitor mv = emitterVisitor.ctx.mv;
                 sigilNode.accept(emitterVisitor.with(RuntimeContextType.LIST)); // target - left parameter
+                int arrayVar = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                mv.visitVarInsn(Opcodes.ASTORE, arrayVar);
+                // Stack: []
 
                 // emit the [10, 20] as a RuntimeList
                 ListNode nodeRight = ((ArrayLiteralNode) node.right).asListNode();
                 nodeRight.accept(emitterVisitor.with(RuntimeContextType.LIST));
+                // Stack: [indexList]
+                
+                // Load array from local variable
+                int indexListVar = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                mv.visitVarInsn(Opcodes.ASTORE, indexListVar);
+                mv.visitVarInsn(Opcodes.ALOAD, arrayVar);
+                mv.visitVarInsn(Opcodes.ALOAD, indexListVar);
+                // Stack: [array] [indexList]
 
-                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray",
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray",
                         arrayOperation + "Slice", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
 
                 // Handle context conversion for array slices
@@ -304,7 +319,16 @@ public class Dereference {
                 OperatorNode varNode = new OperatorNode("%", sigilNode.operand, sigilNode.tokenIndex);
 
                 emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) @var{} " + varNode);
+                
+                // CRITICAL FIX: Store hash in local variable before evaluating key list
+                // to prevent stackmap frame issues when key list evaluation is complex.
+                // Without this, the hash remains on stack during key list evaluation, causing
+                // inconsistent stack states if the key list contains loops or complex expressions.
+                MethodVisitor mv = emitterVisitor.ctx.mv;
                 varNode.accept(emitterVisitor.with(RuntimeContextType.LIST)); // target - left parameter
+                int hashVar = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                mv.visitVarInsn(Opcodes.ASTORE, hashVar);
+                // Stack: []
 
                 // emit the {x} as a RuntimeList
                 ListNode nodeRight = ((HashLiteralNode) node.right).asListNode();
@@ -320,8 +344,16 @@ public class Dereference {
 
                 emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) $var{}  autoquote " + node.right);
                 nodeRight.accept(emitterVisitor.with(RuntimeContextType.LIST));
+                // Stack: [keyList]
+                
+                // Load hash from local variable
+                int keyListVar = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                mv.visitVarInsn(Opcodes.ASTORE, keyListVar);
+                mv.visitVarInsn(Opcodes.ALOAD, hashVar);
+                mv.visitVarInsn(Opcodes.ALOAD, keyListVar);
+                // Stack: [hash] [keyList]
 
-                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeHash",
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeHash",
                         hashOperation + "Slice", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
 
                 // Handle context conversion for hash slices
@@ -347,7 +379,14 @@ public class Dereference {
                 OperatorNode varNode = new OperatorNode("%", sigilNode.operand, sigilNode.tokenIndex);
 
                 emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) @var{} " + varNode);
+                
+                // CRITICAL FIX: Store hash in local variable before evaluating key list
+                // to prevent stackmap frame issues when key list evaluation is complex.
+                MethodVisitor mv = emitterVisitor.ctx.mv;
                 varNode.accept(emitterVisitor.with(RuntimeContextType.LIST)); // target - left parameter
+                int hashVar = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                mv.visitVarInsn(Opcodes.ASTORE, hashVar);
+                // Stack: []
 
                 // emit the {x} as a RuntimeList
                 ListNode nodeRight = ((HashLiteralNode) node.right).asListNode();
@@ -363,8 +402,16 @@ public class Dereference {
 
                 emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) $var{}  autoquote " + node.right);
                 nodeRight.accept(emitterVisitor.with(RuntimeContextType.LIST));
+                // Stack: [keyList]
+                
+                // Load hash from local variable
+                int keyListVar = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                mv.visitVarInsn(Opcodes.ASTORE, keyListVar);
+                mv.visitVarInsn(Opcodes.ALOAD, hashVar);
+                mv.visitVarInsn(Opcodes.ALOAD, keyListVar);
+                // Stack: [hash] [keyList]
 
-                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeHash",
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeHash",
                         "getKeyValueSlice", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
 
                 // Handle context conversion for key/value slice
@@ -462,13 +509,21 @@ public class Dereference {
         EmitterVisitor scalarVisitor =
                 emitterVisitor.with(RuntimeContextType.SCALAR); // execute operands in scalar context
 
-        node.left.accept(scalarVisitor); // target - left parameter
-
         ArrayLiteralNode right = (ArrayLiteralNode) node.right;
         if (right.elements.size() == 1) {
             // Single index: use get/delete/exists methods
+            // Store left operand in local variable to ensure stack is clean when evaluating right
+            node.left.accept(scalarVisitor); // target - left parameter
+            int leftVar = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, leftVar);
+            
             Node elem = right.elements.getFirst();
             elem.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+            
+            // Load left operand back
+            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, leftVar);
+            // Swap so target is on top and index is below (needed for the invoke)
+            emitterVisitor.ctx.mv.visitInsn(Opcodes.SWAP);
 
             // Check if strict refs is enabled at compile time
             if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_REFS)) {
@@ -502,9 +557,19 @@ public class Dereference {
                 throw new PerlCompilerException(node.tokenIndex, "Array slice not supported for " + arrayOperation, emitterVisitor.ctx.errorUtil);
             }
 
+            // Store left operand in local variable to ensure stack is clean when evaluating right
+            node.left.accept(scalarVisitor); // target - left parameter
+            int leftVar = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, leftVar);
+
             // Emit the indices as a RuntimeList
             ListNode nodeRight = right.asListNode();
             nodeRight.accept(emitterVisitor.with(RuntimeContextType.LIST));
+            
+            // Load left operand back
+            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, leftVar);
+            // Swap so target is on top and list is below (needed for the invoke)
+            emitterVisitor.ctx.mv.visitInsn(Opcodes.SWAP);
 
             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
                     "arrayDerefGetSlice", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
@@ -527,8 +592,6 @@ public class Dereference {
         EmitterVisitor scalarVisitor =
                 emitterVisitor.with(RuntimeContextType.SCALAR); // execute operands in scalar context
 
-        node.left.accept(scalarVisitor); // target - left parameter
-
         // emit the {0} as a RuntimeList
         ListNode nodeRight = ((HashLiteralNode) node.right).asListNode();
 
@@ -540,8 +603,18 @@ public class Dereference {
             }
         }
 
+        // Store left operand in local variable to ensure stack is clean when evaluating right
+        node.left.accept(scalarVisitor); // target - left parameter
+        int leftVar = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, leftVar);
+
         emitterVisitor.ctx.logDebug("visit -> (HashLiteralNode) autoquote " + node.right);
         nodeRight.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        
+        // Load left operand back
+        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, leftVar);
+        // Swap so target is on top and key is below (needed for the invoke)
+        emitterVisitor.ctx.mv.visitInsn(Opcodes.SWAP);
 
         // Check if strict refs is enabled at compile time
         if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_REFS)) {

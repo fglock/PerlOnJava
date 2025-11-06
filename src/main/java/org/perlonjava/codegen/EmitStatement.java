@@ -20,6 +20,9 @@ import org.perlonjava.runtime.RuntimeContextType;
  * and generating the corresponding bytecode using ASM.
  */
 public class EmitStatement {
+    // Feature flag to enable/disable exception handlers for non-local control flow in loops
+    // Must be true for skip/last/next/redo to work across subroutine boundaries
+    private static final boolean ENABLE_LOOP_EXCEPTION_HANDLERS = true;
 
     /**
      * Emits bytecode to check for pending signals (like SIGALRM from alarm()).
@@ -186,9 +189,10 @@ public class EmitStatement {
                     hasRuntimeCode = true;  // Non-BlockNode bodies always have runtime code
                 }
 
-                // Only wrap loop body in try-catch if there's actual runtime code
+                // Only wrap loop body in try-catch if feature flag is enabled, there's runtime code,
+                // and the loop is labeled (unlabeled loops in expression contexts cause VerifyErrors)
                 // (bare blocks with only subroutine definitions don't need exception handlers)
-                if (hasRuntimeCode) {
+                if (ENABLE_LOOP_EXCEPTION_HANDLERS && hasRuntimeCode && node.labelName != null) {
                     Label tryStart = new Label();
                     Label tryEnd = new Label();
                     Label catchLast = new Label();

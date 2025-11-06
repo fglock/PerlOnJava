@@ -9,6 +9,10 @@ import org.perlonjava.perlmodule.Warnings;
 import org.perlonjava.runtime.RuntimeContextType;
 
 public class EmitForeach {
+    // Feature flag to enable/disable exception handlers for non-local control flow in loops
+    // Must be true for skip/last/next/redo to work across subroutine boundaries
+    private static final boolean ENABLE_LOOP_EXCEPTION_HANDLERS = true;
+    
     public static void emitFor1(EmitterVisitor emitterVisitor, For1Node node) {
         emitterVisitor.ctx.logDebug("FOR1 start");
 
@@ -158,8 +162,7 @@ public class EmitForeach {
         // Check for pending signals (alarm, etc.) at loop entry
         EmitStatement.emitSignalCheck(mv);
 
-        // Load iterator from local variable and check if iterator has more elements
-        // Load fresh each time to avoid stack state issues with exception handlers
+        // Check hasNext() - load fresh from local variable
         mv.visitVarInsn(Opcodes.ALOAD, iteratorVar);
         mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "hasNext", "()Z", true);
         mv.visitJumpInsn(Opcodes.IFEQ, loopEnd);
@@ -167,9 +170,9 @@ public class EmitForeach {
         // Handle multiple variables case
         if (node.variable instanceof ListNode varList) {
             for (int i = 0; i < varList.elements.size(); i++) {
-                // Load iterator fresh for each variable
+                // Load iterator fresh from local variable for each variable
                 mv.visitVarInsn(Opcodes.ALOAD, iteratorVar);
-
+                
                 // Check if iterator has more elements
                 mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "hasNext", "()Z", true);
                 Label hasValueLabel = new Label();
@@ -188,7 +191,7 @@ public class EmitForeach {
 
                 mv.visitLabel(endValueLabel);
 
-                // Assign to variable
+                // Assign to variable (consumes value from stack)
                 Node varNode = varList.elements.get(i);
                 if (varNode instanceof OperatorNode operatorNode) {
                     String varName = operatorNode.operator + ((IdentifierNode) operatorNode.operand).name;
@@ -198,7 +201,7 @@ public class EmitForeach {
                 }
             }
         } else {
-            // Original single variable case
+            // Single variable case - load iterator and get next value
             mv.visitVarInsn(Opcodes.ALOAD, iteratorVar);
             mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "next", "()Ljava/lang/Object;", true);
             mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeScalar");
@@ -221,6 +224,9 @@ public class EmitForeach {
             }
         }
 
+        // Stack is now clean - all values consumed by ASTORE
+        // No POP needed because we never kept iterator on stack
+
         Label redoLabel = new Label();
         mv.visitLabel(redoLabel);
 
@@ -231,39 +237,60 @@ public class EmitForeach {
                 loopEnd,
                 RuntimeContextType.VOID);
 
-        // UNIFIED exception handling for ALL loops (labeled and unlabeled)
-        // Using synthetic labels for unlabeled loops ensures consistent behavior
-        Label tryStart = new Label();
-        Label tryEnd = new Label();
-        Label catchLast = new Label();
-        Label catchNext = new Label();
-        Label catchRedo = new Label();
+        // CRITICAL: Exception handlers require absolutely clean stack at tryStart
+        // Only add exception handlers if:
+        // 1. Feature flag is enabled
+        // 2. Loop is labeled (so 'last LABEL' can work across sub boundaries)
+        // Unlabeled loops in expression contexts (e.g., $x . do { for ... }) can't have
+        // exception handlers because parent expressions leave values on the operand stack
+        // This is a fundamental limitation of combining JVM exception handlers with expression evaluation
+        boolean needsExceptionHandlers = ENABLE_LOOP_EXCEPTION_HANDLERS && (node.labelName != null);
         
-        // Start try block
-        mv.visitLabel(tryStart);
-        mv.visitInsn(Opcodes.NOP); // Ensure valid range
+        Label tryStart = null;
+        Label tryEnd = null;
+        Label catchLast = null;
+        Label catchNext = null;
+        Label catchRedo = null;
+        
+        if (needsExceptionHandlers) {
+            // UNIFIED exception handling for labeled loops only
+            tryStart = new Label();
+            tryEnd = new Label();
+            catchLast = new Label();
+            catchNext = new Label();
+            catchRedo = new Label();
+            
+            // Start try block - stack should be clean for labeled loops
+            mv.visitLabel(tryStart);
+            mv.visitInsn(Opcodes.NOP); // Ensure valid range
+        }
         
         node.body.accept(emitterVisitor.with(RuntimeContextType.VOID));
         
-        mv.visitLabel(tryEnd);
-        mv.visitJumpInsn(Opcodes.GOTO, continueLabel);
-        
-        // Catch LastException - jump to loopEnd
-        mv.visitLabel(catchLast);
-        EmitStatement.emitLoopExceptionHandler(mv, effectiveLabelName, loopEnd);
-        
-        // Catch NextException - jump to continueLabel
-        mv.visitLabel(catchNext);
-        EmitStatement.emitLoopExceptionHandler(mv, effectiveLabelName, continueLabel);
-        
-        // Catch RedoException - jump to redoLabel
-        mv.visitLabel(catchRedo);
-        EmitStatement.emitLoopExceptionHandler(mv, effectiveLabelName, redoLabel);
-        
-        // Register exception handlers AFTER body emission (for correct nesting)
-        mv.visitTryCatchBlock(tryStart, tryEnd, catchLast, "org/perlonjava/runtime/LastException");
-        mv.visitTryCatchBlock(tryStart, tryEnd, catchNext, "org/perlonjava/runtime/NextException");
-        mv.visitTryCatchBlock(tryStart, tryEnd, catchRedo, "org/perlonjava/runtime/RedoException");
+        if (needsExceptionHandlers) {
+            mv.visitLabel(tryEnd);
+            mv.visitJumpInsn(Opcodes.GOTO, continueLabel);
+            
+            // Catch LastException - jump to loopEnd
+            mv.visitLabel(catchLast);
+            EmitStatement.emitLoopExceptionHandler(mv, effectiveLabelName, loopEnd);
+            
+            // Catch NextException - jump to continueLabel
+            mv.visitLabel(catchNext);
+            EmitStatement.emitLoopExceptionHandler(mv, effectiveLabelName, continueLabel);
+            
+            // Catch RedoException - jump to redoLabel
+            mv.visitLabel(catchRedo);
+            EmitStatement.emitLoopExceptionHandler(mv, effectiveLabelName, redoLabel);
+            
+            // Register exception handlers AFTER body emission (for correct nesting)
+            mv.visitTryCatchBlock(tryStart, tryEnd, catchLast, "org/perlonjava/runtime/LastException");
+            mv.visitTryCatchBlock(tryStart, tryEnd, catchNext, "org/perlonjava/runtime/NextException");
+            mv.visitTryCatchBlock(tryStart, tryEnd, catchRedo, "org/perlonjava/runtime/RedoException");
+        } else {
+            // No exception handlers - just jump to continue
+            mv.visitJumpInsn(Opcodes.GOTO, continueLabel);
+        }
 
         emitterVisitor.ctx.javaClassInfo.popLoopLabels();
 
