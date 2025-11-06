@@ -762,11 +762,42 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 this.compilerSupplier.get(); // Wait for the task to finish
             }
 
+            RuntimeList result;
             if (isStatic) {
-                return (RuntimeList) this.methodHandle.invoke(a, callContext);
+                result = (RuntimeList) this.methodHandle.invoke(a, callContext);
             } else {
-                return (RuntimeList) this.methodHandle.invoke(this.codeObject, a, callContext);
+                result = (RuntimeList) this.methodHandle.invoke(this.codeObject, a, callContext);
             }
+            
+            // Phase 4: Top-Level Safety
+            // Check if the result is a marked RuntimeControlFlowList that escaped to top level
+            if (result.isNonLocalGoto()) {
+                RuntimeControlFlowList cfList = (RuntimeControlFlowList) result;
+                ControlFlowType cfType = cfList.getControlFlowType();
+                String label = cfList.getControlFlowLabel();
+                
+                // This is a control flow statement that escaped to top level - error!
+                if (cfType == ControlFlowType.TAILCALL) {
+                    // Tail call should have been handled by trampoline at returnLabel
+                    throw new PerlCompilerException("Tail call escaped to top level (internal error) at ");
+                } else if (cfType == ControlFlowType.GOTO) {
+                    if (label != null) {
+                        throw new PerlCompilerException("Can't find label " + label + " at ");
+                    } else {
+                        throw new PerlCompilerException("goto must have a label at ");
+                    }
+                } else {
+                    // last/next/redo
+                    String operation = cfType.name().toLowerCase();
+                    if (label != null) {
+                        throw new PerlCompilerException("Label not found for \"" + operation + " " + label + "\" at ");
+                    } else {
+                        throw new PerlCompilerException("Can't \"" + operation + "\" outside a loop block at ");
+                    }
+                }
+            }
+            
+            return result;
         } catch (NullPointerException e) {
 
             if (this.methodHandle == null) {
@@ -802,11 +833,42 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 this.compilerSupplier.get(); // Wait for the task to finish
             }
 
+            RuntimeList result;
             if (isStatic) {
-                return (RuntimeList) this.methodHandle.invoke(a, callContext);
+                result = (RuntimeList) this.methodHandle.invoke(a, callContext);
             } else {
-                return (RuntimeList) this.methodHandle.invoke(this.codeObject, a, callContext);
+                result = (RuntimeList) this.methodHandle.invoke(this.codeObject, a, callContext);
             }
+            
+            // Phase 4: Top-Level Safety
+            // Check if the result is a marked RuntimeControlFlowList that escaped to top level
+            if (result.isNonLocalGoto()) {
+                RuntimeControlFlowList cfList = (RuntimeControlFlowList) result;
+                ControlFlowType cfType = cfList.getControlFlowType();
+                String label = cfList.getControlFlowLabel();
+                
+                // This is a control flow statement that escaped to top level - error!
+                if (cfType == ControlFlowType.TAILCALL) {
+                    // Tail call should have been handled by trampoline at returnLabel
+                    throw new PerlCompilerException("Tail call escaped to top level (internal error) at ");
+                } else if (cfType == ControlFlowType.GOTO) {
+                    if (label != null) {
+                        throw new PerlCompilerException("Can't find label " + label + " at ");
+                    } else {
+                        throw new PerlCompilerException("goto must have a label at ");
+                    }
+                } else {
+                    // last/next/redo
+                    String operation = cfType.name().toLowerCase();
+                    if (label != null) {
+                        throw new PerlCompilerException("Label not found for \"" + operation + " " + label + "\" at ");
+                    } else {
+                        throw new PerlCompilerException("Can't \"" + operation + "\" outside a loop block at ");
+                    }
+                }
+            }
+            
+            return result;
         } catch (NullPointerException e) {
             throw new PerlCompilerException("Undefined subroutine &" + subroutineName + " called at ");
         } catch (InvocationTargetException e) {
