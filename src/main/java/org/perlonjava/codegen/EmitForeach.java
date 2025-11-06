@@ -10,9 +10,28 @@ import org.perlonjava.runtime.RuntimeContextType;
 
 public class EmitForeach {
     // Feature flags for control flow implementation
-    // Set to true to enable control flow handlers for foreach loops (Phase 3)
-    // DISABLED: Requires call-site checks which are currently broken (ASM frame computation issues)
-    // TODO: Fix call-site checks first, then re-enable loop handlers
+    //
+    // WHAT THIS WOULD DO IF ENABLED:
+    // After a foreach loop body executes, if a subroutine call returned a RuntimeControlFlowList
+    // (marked with last/next/redo/goto), execution jumps to a controlFlowHandler that:
+    // 1. Checks the control flow type (LAST/NEXT/REDO/GOTO/TAILCALL)
+    // 2. Checks if the label matches this loop
+    // 3. If match: jumps to the appropriate loop label (lastLabel/nextLabel/redoLabel/gotoLabel)
+    // 4. If no match: propagates to parent loop's handler (for nested loops)
+    // 5. If no parent: returns to caller with the marked list
+    //
+    // WHY IT'S DISABLED:
+    // Loop handlers are only reachable via call-site checks (ENABLE_CONTROL_FLOW_CHECKS).
+    // Without call-site checks jumping to the handler, this code is unreachable (dead code).
+    // Dead code can confuse ASM's frame computation and cause verification errors.
+    //
+    // DEPENDENCY:
+    // This flag MUST remain false until ENABLE_CONTROL_FLOW_CHECKS in EmitSubroutine.java
+    // is fixed and enabled. See comments there for investigation steps.
+    //
+    // CURRENT WORKAROUND:
+    // Marked returns propagate through normal return paths all the way to the top level.
+    // Local control flow (within the same loop) still uses fast JVM GOTO instructions.
     private static final boolean ENABLE_LOOP_HANDLERS = false;
     
     // Set to true to enable debug output for loop control flow
