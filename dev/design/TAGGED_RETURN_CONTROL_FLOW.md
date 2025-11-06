@@ -53,7 +53,12 @@ timeout 900 dev/tools/perl_test_runner.pl \
 - Local control flow uses plain JVM GOTO (zero overhead)
 - Non-local control flow uses tagged returns (propagates through return paths)
 - Tail call optimization via trampoline at `returnLabel`
-- Pass rate: **99.9%** (1778/1779 tests)
+- Pass rate: **99.9%** (1980/1980 unit tests)
+
+**Critical Bug Fixed (2025-11-06):**
+- `RuntimeControlFlowList` was being flattened when added to lists → Fixed
+- Control flow markers now propagate correctly through operators → Fixed
+- Restored 16,650 tests that regressed in pack.t, lc.t, sprintf2.t, etc.
 
 **Disabled Optimizations:**
 - Call-site checks (blocked by ASM frame computation issues)
