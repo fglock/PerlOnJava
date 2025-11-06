@@ -23,6 +23,13 @@ public class EmitForeach {
             return;
         }
 
+        // Create synthetic label for unlabeled loops to unify exception handling
+        // This allows us to use a single implementation path for all loops
+        String effectiveLabelName = node.labelName;
+        if (effectiveLabelName == null) {
+            effectiveLabelName = "__ANON_LOOP_" + System.identityHashCode(node);
+        }
+
         MethodVisitor mv = emitterVisitor.ctx.mv;
         Label loopStart = new Label();
         Label loopEnd = new Label();
@@ -148,37 +155,34 @@ public class EmitForeach {
 
         mv.visitLabel(loopStart);
 
-        // Load iterator from local variable
-        mv.visitVarInsn(Opcodes.ALOAD, iteratorVar);
-
         // Check for pending signals (alarm, etc.) at loop entry
         EmitStatement.emitSignalCheck(mv);
 
-        // Check if iterator has more elements
-        mv.visitInsn(Opcodes.DUP);
+        // Load iterator from local variable and check if iterator has more elements
+        // Load fresh each time to avoid stack state issues with exception handlers
+        mv.visitVarInsn(Opcodes.ALOAD, iteratorVar);
         mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "hasNext", "()Z", true);
         mv.visitJumpInsn(Opcodes.IFEQ, loopEnd);
 
         // Handle multiple variables case
         if (node.variable instanceof ListNode varList) {
             for (int i = 0; i < varList.elements.size(); i++) {
-                // Duplicate iterator
-                mv.visitInsn(Opcodes.DUP);
+                // Load iterator fresh for each variable
+                mv.visitVarInsn(Opcodes.ALOAD, iteratorVar);
 
                 // Check if iterator has more elements
-                mv.visitInsn(Opcodes.DUP);
                 mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "hasNext", "()Z", true);
                 Label hasValueLabel = new Label();
                 Label endValueLabel = new Label();
                 mv.visitJumpInsn(Opcodes.IFNE, hasValueLabel);
 
                 // No more elements - assign undef
-                mv.visitInsn(Opcodes.POP); // Pop the iterator copy
                 EmitOperator.emitUndef(mv);
                 mv.visitJumpInsn(Opcodes.GOTO, endValueLabel);
 
                 // Has more elements - get next value
                 mv.visitLabel(hasValueLabel);
+                mv.visitVarInsn(Opcodes.ALOAD, iteratorVar);
                 mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "next", "()Ljava/lang/Object;", true);
                 mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeScalar");
 
@@ -195,7 +199,7 @@ public class EmitForeach {
             }
         } else {
             // Original single variable case
-            mv.visitInsn(Opcodes.DUP);
+            mv.visitVarInsn(Opcodes.ALOAD, iteratorVar);
             mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "next", "()Ljava/lang/Object;", true);
             mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeScalar");
 
@@ -217,56 +221,49 @@ public class EmitForeach {
             }
         }
 
-        // Pop the iterator from stack (it was DUPed earlier for next() call)
-        mv.visitInsn(Opcodes.POP);
-
         Label redoLabel = new Label();
         mv.visitLabel(redoLabel);
 
         emitterVisitor.ctx.javaClassInfo.pushLoopLabels(
-                node.labelName,
+                effectiveLabelName,  // Use synthetic label for unlabeled loops
                 continueLabel,
                 redoLabel,
                 loopEnd,
                 RuntimeContextType.VOID);
 
-        // Add try-catch for non-local control flow if this is a labeled loop
-        if (node.labelName != null) {
-            Label tryStart = new Label();
-            Label tryEnd = new Label();
-            Label catchLast = new Label();
-            Label catchNext = new Label();
-            Label catchRedo = new Label();
-            
-            // Start try block
-            mv.visitLabel(tryStart);
-            mv.visitInsn(Opcodes.NOP); // Ensure valid range
-            
-            node.body.accept(emitterVisitor.with(RuntimeContextType.VOID));
-            
-            mv.visitLabel(tryEnd);
-            mv.visitJumpInsn(Opcodes.GOTO, continueLabel);
-            
-            // Catch LastException - jump to loopEnd
-            mv.visitLabel(catchLast);
-            EmitStatement.emitLoopExceptionHandler(mv, node.labelName, loopEnd);
-            
-            // Catch NextException - jump to continueLabel
-            mv.visitLabel(catchNext);
-            EmitStatement.emitLoopExceptionHandler(mv, node.labelName, continueLabel);
-            
-            // Catch RedoException - jump to redoLabel
-            mv.visitLabel(catchRedo);
-            EmitStatement.emitLoopExceptionHandler(mv, node.labelName, redoLabel);
-            
-            // Register exception handlers AFTER body emission (for correct nesting)
-            mv.visitTryCatchBlock(tryStart, tryEnd, catchLast, "org/perlonjava/runtime/LastException");
-            mv.visitTryCatchBlock(tryStart, tryEnd, catchNext, "org/perlonjava/runtime/NextException");
-            mv.visitTryCatchBlock(tryStart, tryEnd, catchRedo, "org/perlonjava/runtime/RedoException");
-        } else {
-            // Unlabeled loop - no exception handling needed (or let exceptions propagate)
-            node.body.accept(emitterVisitor.with(RuntimeContextType.VOID));
-        }
+        // UNIFIED exception handling for ALL loops (labeled and unlabeled)
+        // Using synthetic labels for unlabeled loops ensures consistent behavior
+        Label tryStart = new Label();
+        Label tryEnd = new Label();
+        Label catchLast = new Label();
+        Label catchNext = new Label();
+        Label catchRedo = new Label();
+        
+        // Start try block
+        mv.visitLabel(tryStart);
+        mv.visitInsn(Opcodes.NOP); // Ensure valid range
+        
+        node.body.accept(emitterVisitor.with(RuntimeContextType.VOID));
+        
+        mv.visitLabel(tryEnd);
+        mv.visitJumpInsn(Opcodes.GOTO, continueLabel);
+        
+        // Catch LastException - jump to loopEnd
+        mv.visitLabel(catchLast);
+        EmitStatement.emitLoopExceptionHandler(mv, effectiveLabelName, loopEnd);
+        
+        // Catch NextException - jump to continueLabel
+        mv.visitLabel(catchNext);
+        EmitStatement.emitLoopExceptionHandler(mv, effectiveLabelName, continueLabel);
+        
+        // Catch RedoException - jump to redoLabel
+        mv.visitLabel(catchRedo);
+        EmitStatement.emitLoopExceptionHandler(mv, effectiveLabelName, redoLabel);
+        
+        // Register exception handlers AFTER body emission (for correct nesting)
+        mv.visitTryCatchBlock(tryStart, tryEnd, catchLast, "org/perlonjava/runtime/LastException");
+        mv.visitTryCatchBlock(tryStart, tryEnd, catchNext, "org/perlonjava/runtime/NextException");
+        mv.visitTryCatchBlock(tryStart, tryEnd, catchRedo, "org/perlonjava/runtime/RedoException");
 
         emitterVisitor.ctx.javaClassInfo.popLoopLabels();
 
@@ -294,8 +291,8 @@ public class EmitForeach {
 
         emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
 
-        emitterVisitor.ctx.javaClassInfo.decrementStackLevel(1);
-        mv.visitInsn(Opcodes.POP);
+        // Note: No need to POP iterator from stack since we're using local variables
+        // The iterator is stored in iteratorVar and loaded only when needed
 
         if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
             // Foreach loop returns empty string when it completes normally
@@ -319,23 +316,27 @@ public class EmitForeach {
         MethodVisitor mv = emitterVisitor.ctx.mv;
         Label loopStart = new Label();
         Label loopEnd = new Label();
+        
+        // Store iterator in a local variable (same approach as main emitFor1)
+        int iteratorVar = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
 
         // Obtain the iterator for the list
         node.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "iterator", "()Ljava/util/Iterator;", false);
+        mv.visitVarInsn(Opcodes.ASTORE, iteratorVar);
 
         mv.visitLabel(loopStart);
 
         // Check for pending signals (alarm, etc.) at loop entry
         EmitStatement.emitSignalCheck(mv);
 
-        // Check if iterator has more elements
-        mv.visitInsn(Opcodes.DUP);
+        // Load iterator and check if iterator has more elements
+        mv.visitVarInsn(Opcodes.ALOAD, iteratorVar);
         mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "hasNext", "()Z", true);
         mv.visitJumpInsn(Opcodes.IFEQ, loopEnd);
 
         // Get next value
-        mv.visitInsn(Opcodes.DUP);
+        mv.visitVarInsn(Opcodes.ALOAD, iteratorVar);
         mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "next", "()Ljava/lang/Object;", true);
         mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeScalar");
 
@@ -346,8 +347,6 @@ public class EmitForeach {
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
                 "set", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
         mv.visitInsn(Opcodes.POP);
-
-        emitterVisitor.ctx.javaClassInfo.incrementStackLevel(1);
 
         Label redoLabel = new Label();
         mv.visitLabel(redoLabel);
@@ -366,9 +365,6 @@ public class EmitForeach {
         mv.visitJumpInsn(Opcodes.GOTO, loopStart);
 
         mv.visitLabel(loopEnd);
-
-        emitterVisitor.ctx.javaClassInfo.decrementStackLevel(1);
-        mv.visitInsn(Opcodes.POP);
 
         if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
             // Foreach loop returns empty string when it completes normally
