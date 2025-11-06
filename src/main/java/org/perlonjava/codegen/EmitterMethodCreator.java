@@ -210,6 +210,11 @@ public class EmitterMethodCreator implements Opcodes {
             ctx.javaClassInfo.tailCallCodeRefSlot = tailCallCodeRefSlot;
             ctx.javaClassInfo.tailCallArgsSlot = tailCallArgsSlot;
             
+            // Allocate slot for control flow check temp storage
+            // This is used at call sites to temporarily store marked RuntimeControlFlowList
+            int controlFlowTempSlot = ctx.symbolTable.allocateLocalVariable();
+            ctx.javaClassInfo.controlFlowTempSlot = controlFlowTempSlot;
+            
             // Create a label for the return point
             ctx.javaClassInfo.returnLabel = new Label();
 
