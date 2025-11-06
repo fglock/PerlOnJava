@@ -14,10 +14,12 @@ public class RuntimeControlFlowList extends RuntimeList {
      * 
      * @param type The control flow type
      * @param label The label to jump to (null for unlabeled)
+     * @param fileName Source file name (for error messages)
+     * @param lineNumber Line number (for error messages)
      */
-    public RuntimeControlFlowList(ControlFlowType type, String label) {
+    public RuntimeControlFlowList(ControlFlowType type, String label, String fileName, int lineNumber) {
         super();
-        this.marker = new ControlFlowMarker(type, label);
+        this.marker = new ControlFlowMarker(type, label, fileName, lineNumber);
     }
     
     /**
@@ -25,10 +27,12 @@ public class RuntimeControlFlowList extends RuntimeList {
      * 
      * @param codeRef The code reference to call
      * @param args The arguments to pass
+     * @param fileName Source file name (for error messages)
+     * @param lineNumber Line number (for error messages)
      */
-    public RuntimeControlFlowList(RuntimeScalar codeRef, RuntimeArray args) {
+    public RuntimeControlFlowList(RuntimeScalar codeRef, RuntimeArray args, String fileName, int lineNumber) {
         super();
-        this.marker = new ControlFlowMarker(codeRef, args);
+        this.marker = new ControlFlowMarker(codeRef, args, fileName, lineNumber);
     }
     
     /**
