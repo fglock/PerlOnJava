@@ -254,6 +254,9 @@ public class EmitForeach {
         emitterVisitor.ctx.javaClassInfo.pushLoopLabels(currentLoopLabels);
 
         node.body.accept(emitterVisitor.with(RuntimeContextType.VOID));
+        
+        // Check RuntimeControlFlowRegistry for non-local control flow
+        emitRegistryCheck(mv, currentLoopLabels, redoLabel, continueLabel, loopEnd);
 
         LoopLabels poppedLabels = emitterVisitor.ctx.javaClassInfo.popLoopLabels();
 
@@ -261,6 +264,8 @@ public class EmitForeach {
 
         if (node.continueBlock != null) {
             node.continueBlock.accept(emitterVisitor.with(RuntimeContextType.VOID));
+            // Check registry again after continue block
+            emitRegistryCheck(mv, currentLoopLabels, redoLabel, continueLabel, loopEnd);
         }
 
         mv.visitJumpInsn(Opcodes.GOTO, loopStart);
@@ -585,5 +590,48 @@ public class EmitForeach {
                 mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "()V", false);
             }
         }
+    }
+    
+    /**
+     * Emit bytecode to check RuntimeControlFlowRegistry and handle any registered control flow.
+     * This is called after loop body execution to catch non-local control flow markers.
+     * 
+     * @param mv The MethodVisitor
+     * @param loopLabels The current loop's labels
+     * @param redoLabel The redo target
+     * @param nextLabel The next/continue target  
+     * @param lastLabel The last/exit target
+     */
+    private static void emitRegistryCheck(MethodVisitor mv, LoopLabels loopLabels, 
+                                         Label redoLabel, Label nextLabel, Label lastLabel) {
+        // ULTRA-SIMPLE pattern to avoid ASM issues:
+        // Call a single helper method that does ALL the checking and returns an action code
+        
+        String labelName = loopLabels.labelName;
+        if (labelName != null) {
+            mv.visitLdcInsn(labelName);
+        } else {
+            mv.visitInsn(Opcodes.ACONST_NULL);
+        }
+        
+        // Call: int action = RuntimeControlFlowRegistry.checkLoopAndGetAction(String labelName)
+        // Returns: 0=none, 1=last, 2=next, 3=redo
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/RuntimeControlFlowRegistry",
+                "checkLoopAndGetAction",
+                "(Ljava/lang/String;)I",
+                false);
+        
+        // Use TABLESWITCH for clean bytecode
+        mv.visitTableSwitchInsn(
+                1,  // min (LAST)
+                3,  // max (REDO)
+                nextLabel,  // default (0=none or out of range)
+                lastLabel,  // 1: LAST
+                nextLabel,  // 2: NEXT  
+                redoLabel   // 3: REDO
+        );
+        
+        // No label needed - all paths are handled by switch
     }
 }
