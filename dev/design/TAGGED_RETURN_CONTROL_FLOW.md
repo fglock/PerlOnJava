@@ -1017,6 +1017,183 @@ for (@list) {
 - [ ] Deeply nested expression contexts
 - [ ] Control flow in overloaded operators
 
+### 17. What We Almost Forgot
+
+#### A. `wantarray` and Call Context
+**Problem**: `wantarray` checks the calling context. If control flow returns a marked `RuntimeList`, does `wantarray` still work?
+
+```perl
+sub foo {
+    my @result = (1, 2, 3);
+    if (wantarray) {
+        return @result;  # List context
+    } else {
+        return scalar(@result);  # Scalar context
+    }
+}
+```
+
+**Solution**: `wantarray` is checked at compile time and encoded in the call. Control flow doesn't affect it.
+
+However, if `return` happens inside a loop called from another sub:
+```perl
+sub outer {
+    my @x = inner();  # List context
+}
+
+sub inner {
+    for (@list) {
+        return (1, 2, 3);  # Should return to outer in list context
+    }
+}
+```
+
+**Answer**: `return` already uses `returnLabel`, which converts to `RuntimeList` via `getList()`. This is **independent** of control flow markers. No conflict!
+
+#### B. Return Value from Loops
+**Perl semantics**: Loops can return values, but control flow operators change this:
+
+```perl
+# Normal loop completion
+my $x = do { for (1..3) { $_ } };  # Returns 3
+
+# With last
+my $y = do { for (1..3) { last } };  # Returns undef
+
+# With next (exits early on last iteration)
+my $z = do { for (1..3) { next } };  # Returns empty list
+```
+
+**Our implementation**: When control flow handler clears the marker and jumps locally, what value is on the stack?
+
+**Solution**: 
+- `last`: Jump to loop end with nothing on stack (loop returns undef/empty)
+- `next`: Jump to continue/condition check
+- `redo`: Jump to loop body start
+
+The loop's **natural return value** (if any) is only produced on **normal completion**, not on control flow exits. This is correct!
+
+#### C. Implicit Return from Subroutines
+**Perl semantics**: Subroutines return the last evaluated expression:
+
+```perl
+sub foo {
+    for (@list) {
+        last if $condition;
+        do_something();
+    }
+    # Implicitly returns result of for loop (which may have done `last`)
+}
+```
+
+If the loop did `last` and returns undef, the sub returns undef. **This just works** because the loop statement's value is what's on the stack at the end.
+
+#### D. Control Flow in String Eval
+```perl
+eval 'OUTER: for (@list) { last OUTER; }';
+```
+
+**Concern**: String eval compiles to a separate class. Can control flow cross eval boundaries?
+
+**Answer**: 
+- If `OUTER` is defined in the eval, it's local - works fine
+- If `OUTER` is defined outside eval, the label is not in scope during compilation of the eval string
+- This is **correct Perl behavior** - string eval has separate compilation scope
+
+**For block eval:**
+```perl
+OUTER: for (@list) {
+    eval { last OUTER; };  # Should work!
+}
+```
+
+This works because block eval is compiled inline and sees `OUTER` in scope. The marked `RuntimeList` propagates through eval's return. ✅
+
+#### E. `caller()` and Control Flow
+**Perl's `caller()`** returns information about the call stack.
+
+```perl
+sub inner {
+    my @info = caller(0);  # Gets info about who called us
+    last OUTER;
+}
+```
+
+**Concern**: Does control flow affect `caller()`?
+
+**Answer**: No! `caller()` inspects the Java call stack at runtime. Control flow returns are normal Java returns (just with a marked `RuntimeList`). The call stack is unchanged. ✅
+
+#### F. Destructors (DESTROY) During Unwind
+```perl
+{
+    my $obj = MyClass->new();  # Will call DESTROY when $obj goes out of scope
+    for (@list) {
+        last OUTER;  # Jumps out of block - does $obj get destroyed?
+    }
+}
+```
+
+**Concern**: When control flow jumps out of a block, do local variables get cleaned up?
+
+**Answer**: Yes! Our implementation uses `stackLevelManager.emitPopInstructions(mv, 0)` which cleans the stack, and then returns via `returnLabel`, which calls `Local.localTeardown()`. Local variables (including blessed objects) are properly cleaned up. ✅
+
+**However**: For local GOTOs (compile-time known labels in same scope), we use direct `GOTO` which **bypasses teardown**. This is a **potential bug**!
+
+```perl
+LABEL: {
+    my $obj = MyClass->new();
+    for (@list) {
+        goto LABEL;  # Direct GOTO - $obj might not be destroyed!
+    }
+}
+```
+
+**Fix**: Even local `goto` should go through cleanup. Either:
+1. Emit teardown code before local `GOTO`
+2. Or use the tagged return approach for `goto` too (even local ones)
+
+**Decision needed**: Check standard Perl behavior for local goto with destructors.
+
+#### G. Signal Handlers and Control Flow
+```perl
+$SIG{INT} = sub {
+    last OUTER;  # Can a signal handler do non-local control flow?
+};
+
+OUTER: for (@list) {
+    sleep 10;  # User presses Ctrl-C
+}
+```
+
+**Concern**: Can signal handlers use control flow to jump into user code?
+
+**Answer**: In standard Perl, signal handlers run in arbitrary context and **cannot** safely use non-local control flow. The labeled loop might not even be on the call stack when the signal fires!
+
+**Our implementation**: Signal handlers would create a marked `RuntimeList` and return it. If no loop is on the call stack to handle it, it would propagate to the top level and... what happens?
+
+**Solution**: Need an error handler at the top level (in `RuntimeCode.apply()`) to catch unhandled control flow markers and throw an error: "Can't find label OUTER".
+
+#### H. Threads and Control Flow (Future)
+**Concern**: If two threads share a `RuntimeList` object, and one marks it for control flow, the other thread might incorrectly handle it.
+
+**Answer**: Not a concern yet (no threading support), but document as limitation for future.
+
+#### I. Performance: Marked RuntimeList Reuse
+**Concern**: If a `RuntimeList` gets marked, then cleared, then reused, does the marker object get GC'd?
+
+**Answer**: Yes. Setting `controlFlowMarker = null` makes it eligible for GC. This is fine.
+
+**Optimization idea**: Could pool marker objects to avoid allocation, but probably not worth the complexity (control flow is rare).
+
+#### J. Debugger Integration
+**Concern**: How do debuggers see control flow? Stack traces?
+
+**Answer**: Tagged return approach is "invisible" to debuggers - it looks like normal returns. Exception-based approach had visible stack traces. This is a **tradeoff**:
+- **Pro**: Cleaner (no exception noise in debugger)
+- **Con**: Less visible (harder to debug control flow issues)
+
+**Solution**: Add optional debug logging (controlled by flag) to trace control flow propagation.
+
 ### 16. Bytecode Size Estimation and Loop Extraction
 
 The **LargeBlockRefactorer** uses bytecode size estimation to determine when to split methods. We need to update the size estimator to account for new control flow checking code.
