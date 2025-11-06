@@ -69,10 +69,37 @@ public class JavaClassInfo {
     }
 
     /**
-     * Pops the top set of loop labels from the loop label stack.
+     * Pushes a LoopLabels object onto the loop label stack.
+     * This is useful when you've already constructed a LoopLabels object with a control flow handler.
+     *
+     * @param loopLabels the LoopLabels object to push
      */
-    public void popLoopLabels() {
-        loopLabelStack.pop();
+    public void pushLoopLabels(LoopLabels loopLabels) {
+        loopLabelStack.push(loopLabels);
+    }
+
+    /**
+     * Pops the top set of loop labels from the loop label stack and returns it.
+     *
+     * @return the popped LoopLabels object
+     */
+    public LoopLabels popLoopLabels() {
+        return loopLabelStack.pop();
+    }
+    
+    /**
+     * Gets the parent loop labels (the loop containing the current loop).
+     * Returns null if there's no parent loop.
+     *
+     * @return the parent LoopLabels object, or null if none
+     */
+    public LoopLabels getParentLoopLabels() {
+        if (loopLabelStack.size() < 2) {
+            return null;
+        }
+        // Convert deque to array to access second-to-top element
+        LoopLabels[] array = loopLabelStack.toArray(new LoopLabels[0]);
+        return array[array.length - 2];
     }
 
     /**

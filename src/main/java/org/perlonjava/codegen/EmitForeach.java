@@ -9,6 +9,12 @@ import org.perlonjava.perlmodule.Warnings;
 import org.perlonjava.runtime.RuntimeContextType;
 
 public class EmitForeach {
+    // Feature flags for control flow implementation
+    // Set to true to enable control flow handlers for foreach loops (Phase 3)
+    private static final boolean ENABLE_LOOP_HANDLERS = false;
+    
+    // Set to true to enable debug output for loop control flow
+    private static final boolean DEBUG_LOOP_CONTROL_FLOW = false;
     public static void emitFor1(EmitterVisitor emitterVisitor, For1Node node) {
         emitterVisitor.ctx.logDebug("FOR1 start");
 
@@ -212,16 +218,23 @@ public class EmitForeach {
         Label redoLabel = new Label();
         mv.visitLabel(redoLabel);
 
-        emitterVisitor.ctx.javaClassInfo.pushLoopLabels(
+        // Create control flow handler label
+        Label controlFlowHandler = new Label();
+
+        LoopLabels currentLoopLabels = new LoopLabels(
                 node.labelName,
                 continueLabel,
                 redoLabel,
                 loopEnd,
+                emitterVisitor.ctx.javaClassInfo.stackLevelManager.getStackLevel(),
                 RuntimeContextType.VOID);
+        currentLoopLabels.controlFlowHandler = controlFlowHandler;
+
+        emitterVisitor.ctx.javaClassInfo.pushLoopLabels(currentLoopLabels);
 
         node.body.accept(emitterVisitor.with(RuntimeContextType.VOID));
 
-        emitterVisitor.ctx.javaClassInfo.popLoopLabels();
+        LoopLabels poppedLabels = emitterVisitor.ctx.javaClassInfo.popLoopLabels();
 
         mv.visitLabel(continueLabel);
 
@@ -232,6 +245,23 @@ public class EmitForeach {
         mv.visitJumpInsn(Opcodes.GOTO, loopStart);
 
         mv.visitLabel(loopEnd);
+        
+        // Emit control flow handler (if enabled)
+        if (ENABLE_LOOP_HANDLERS) {
+            // Get parent loop labels (if any)
+            LoopLabels parentLoopLabels = emitterVisitor.ctx.javaClassInfo.getParentLoopLabels();
+            
+            // Get goto labels from current scope (TODO: implement getGotoLabels in EmitterContext)
+            java.util.Map<String, org.objectweb.asm.Label> gotoLabels = null;  // For now
+            
+            // Emit the handler
+            emitControlFlowHandler(
+                    mv,
+                    currentLoopLabels,
+                    parentLoopLabels,
+                    emitterVisitor.ctx.javaClassInfo.returnLabel,
+                    gotoLabels);
+        }
         
         // Restore dynamic variable stack for our localization
         if (needLocalizeUnderscore && dynamicIndex != -1) {
@@ -266,6 +296,184 @@ public class EmitForeach {
         }
 
         emitterVisitor.ctx.logDebug("FOR1 end");
+    }
+
+    /**
+     * Emits control flow handler for a foreach loop.
+     * Handles marked RuntimeList objects (last/next/redo/goto) that propagate from nested calls.
+     * 
+     * @param mv The MethodVisitor to emit bytecode to
+     * @param loopLabels The loop labels (controlFlowHandler, next, redo, last)
+     * @param parentLoopLabels The parent loop's labels (null if this is the outermost loop)
+     * @param returnLabel The subroutine's return label
+     * @param gotoLabels Map of goto label names to ASM Labels in current scope
+     */
+    private static void emitControlFlowHandler(
+            MethodVisitor mv,
+            LoopLabels loopLabels,
+            LoopLabels parentLoopLabels,
+            org.objectweb.asm.Label returnLabel,
+            java.util.Map<String, org.objectweb.asm.Label> gotoLabels) {
+        
+        if (!ENABLE_LOOP_HANDLERS) {
+            return;  // Feature not enabled yet
+        }
+        
+        if (DEBUG_LOOP_CONTROL_FLOW) {
+            System.out.println("[DEBUG] Emitting control flow handler for loop: " + loopLabels.labelName);
+        }
+        
+        // Handler label
+        mv.visitLabel(loopLabels.controlFlowHandler);
+        
+        // Stack: [RuntimeControlFlowList] - guaranteed clean by call site or parent handler
+        
+        // Cast to RuntimeControlFlowList (we know it's marked)
+        mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeControlFlowList");
+        
+        // Get control flow type (enum)
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/RuntimeControlFlowList",
+                "getControlFlowType",
+                "()Lorg/perlonjava/runtime/ControlFlowType;",
+                false);
+        
+        // Convert enum to ordinal for switch
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/ControlFlowType",
+                "ordinal",
+                "()I",
+                false);
+        
+        // Tableswitch on control flow type
+        Label handleLast = new Label();
+        Label handleNext = new Label();
+        Label handleRedo = new Label();
+        Label handleGoto = new Label();
+        Label propagateToParent = new Label();
+        
+        mv.visitTableSwitchInsn(
+                0,  // min (LAST.ordinal())
+                3,  // max (GOTO.ordinal())
+                propagateToParent,  // default (TAILCALL or unknown)
+                handleLast,   // 0: LAST
+                handleNext,   // 1: NEXT
+                handleRedo,   // 2: REDO
+                handleGoto    // 3: GOTO
+        );
+        
+        // Handle LAST
+        mv.visitLabel(handleLast);
+        emitLabelCheck(mv, loopLabels.labelName, loopLabels.lastLabel, propagateToParent);
+        
+        // Handle NEXT
+        mv.visitLabel(handleNext);
+        emitLabelCheck(mv, loopLabels.labelName, loopLabels.nextLabel, propagateToParent);
+        
+        // Handle REDO
+        mv.visitLabel(handleRedo);
+        emitLabelCheck(mv, loopLabels.labelName, loopLabels.redoLabel, propagateToParent);
+        
+        // Handle GOTO
+        mv.visitLabel(handleGoto);
+        if (gotoLabels != null && !gotoLabels.isEmpty()) {
+            // Check each goto label in current scope
+            for (java.util.Map.Entry<String, org.objectweb.asm.Label> entry : gotoLabels.entrySet()) {
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/RuntimeControlFlowList",
+                        "getControlFlowLabel",
+                        "()Ljava/lang/String;",
+                        false);
+                mv.visitLdcInsn(entry.getKey());
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "java/lang/String",
+                        "equals",
+                        "(Ljava/lang/Object;)Z",
+                        false);
+                Label notThisGoto = new Label();
+                mv.visitJumpInsn(Opcodes.IFEQ, notThisGoto);
+                
+                // Match! Pop marked RuntimeList and jump to goto label
+                mv.visitInsn(Opcodes.POP);
+                mv.visitJumpInsn(Opcodes.GOTO, entry.getValue());
+                
+                mv.visitLabel(notThisGoto);
+            }
+        }
+        // Fall through to propagateToParent if no goto label matched
+        
+        // Propagate to parent handler or return
+        mv.visitLabel(propagateToParent);
+        if (parentLoopLabels != null && parentLoopLabels.controlFlowHandler != null) {
+            // Chain to parent loop's handler
+            mv.visitJumpInsn(Opcodes.GOTO, parentLoopLabels.controlFlowHandler);
+        } else {
+            // Outermost loop - return to caller
+            mv.visitJumpInsn(Opcodes.GOTO, returnLabel);
+        }
+    }
+    
+    /**
+     * Emits bytecode to check if a label matches the current loop, and jump if it does.
+     * If the label is null (unlabeled) or matches, POPs the marked RuntimeList and jumps to target.
+     * Otherwise, falls through to next handler.
+     * 
+     * @param mv The MethodVisitor
+     * @param loopLabelName The name of the current loop (null if unlabeled)
+     * @param targetLabel The ASM Label to jump to if this label matches
+     * @param noMatch The label to jump to if the label doesn't match
+     */
+    private static void emitLabelCheck(
+            MethodVisitor mv,
+            String loopLabelName,
+            Label targetLabel,
+            Label noMatch) {
+        
+        // Stack: [RuntimeControlFlowList]
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/RuntimeControlFlowList",
+                "getControlFlowLabel",
+                "()Ljava/lang/String;",
+                false);
+        
+        // Stack: [RuntimeControlFlowList] [String label]
+        
+        Label doJump = new Label();
+        
+        // Check if unlabeled (null)
+        mv.visitInsn(Opcodes.DUP);
+        Label notNull = new Label();
+        mv.visitJumpInsn(Opcodes.IFNONNULL, notNull);
+        
+        // Unlabeled - matches if loop is also unlabeled or always matches (Perl semantics)
+        mv.visitInsn(Opcodes.POP);  // Pop null
+        mv.visitJumpInsn(Opcodes.GOTO, doJump);
+        
+        // Not null - check if it matches this loop's label
+        mv.visitLabel(notNull);
+        if (loopLabelName != null) {
+            mv.visitLdcInsn(loopLabelName);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "java/lang/String",
+                    "equals",
+                    "(Ljava/lang/Object;)Z",
+                    false);
+            mv.visitJumpInsn(Opcodes.IFNE, doJump);
+        } else {
+            // This loop has no label, but the control flow is labeled - doesn't match
+            mv.visitInsn(Opcodes.POP);  // Pop label string
+        }
+        
+        // No match - fall through to next handler
+        mv.visitJumpInsn(Opcodes.GOTO, noMatch);
+        
+        // Match!
+        mv.visitLabel(doJump);
+        mv.visitInsn(Opcodes.POP);  // Pop RuntimeControlFlowList
+        mv.visitJumpInsn(Opcodes.GOTO, targetLabel);
     }
 
     private static void emitFor1AsWhileLoop(EmitterVisitor emitterVisitor, For1Node node) {

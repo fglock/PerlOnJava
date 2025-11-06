@@ -16,6 +16,12 @@ import org.perlonjava.runtime.RuntimeContextType;
  * This class manages loop control operators (next, last, redo), subroutine returns, and goto statements.
  */
 public class EmitControlFlow {
+    // Feature flags for control flow implementation
+    // Set to true to enable tagged return values for non-local control flow (Phase 2 - ACTIVE)
+    private static final boolean ENABLE_TAGGED_RETURNS = true;
+    
+    // Set to true to enable debug output for control flow operations
+    private static final boolean DEBUG_CONTROL_FLOW = false;
     /**
      * Handles the 'next', 'last', and 'redo' operators for loop control.
      * - 'next' is equivalent to 'continue' in Java

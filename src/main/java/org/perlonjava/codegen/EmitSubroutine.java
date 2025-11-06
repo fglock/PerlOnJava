@@ -22,10 +22,13 @@ import java.util.Map;
  * and generating the corresponding bytecode using ASM.
  */
 public class EmitSubroutine {
-    // Flag to enable/disable control flow checks (for gradual rollout)
+    // Feature flags for control flow implementation
+    // Flag to enable/disable control flow checks at call sites (Phase 7 - optional optimization)
     // Disabled - ASM frame computation issues with branching control flow
-    // This is Phase 7 (optional optimization) - deferred
     private static final boolean ENABLE_CONTROL_FLOW_CHECKS = false;
+    
+    // Set to true to enable debug output for control flow checks
+    private static final boolean DEBUG_CONTROL_FLOW = false;
     
     // Reserved slot for temporary storage of marked RuntimeList during control flow checks
     // This slot is pre-initialized in EmitterMethodCreator, so it's safe to use
