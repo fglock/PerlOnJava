@@ -108,10 +108,31 @@ OUTER: for (1..3) {
 }
 ```
 
+## Existing SKIP Workarounds (TO BE REMOVED)
+
+There are currently THREE workarounds for SKIP blocks that should be removed once proper control flow is working:
+
+1. **AST Transformation** (`src/main/java/org/perlonjava/parser/TestMoreHelper.java`)
+   - Transforms `skip()` calls into `skip_internal() && last SKIP`
+   - Called from `StatementParser.parseIfStatement()` line 241
+
+2. **Test::More Patch** (`src/main/perl/lib/Test/More.pm`)
+   - Protected file (won't be overwritten by sync)
+   - Has `skip_internal()` subroutine (lines 296-304)
+   - Prints SKIP messages directly instead of using `last SKIP`
+
+3. **Import Configuration** (`dev/import-perl5/config.yaml`)
+   - Line 382-384: Test::More.pm marked as `protected: true`
+   - Prevents sync from overwriting the patched version
+
+**Once proper control flow works**, these should be removed and we should use the standard Perl5 Test::More.pm.
+
 ## Question for User
 
 Which option should we pursue?
 1. Option 1 (Fix ASM) - High risk, high effort
 2. Option 2 (Hybrid) - **Recommended**
 3. Option 3 (Pure exceptions) - Safe fallback
+
+**Note:** User mentioned these SKIP workarounds exist and should be removed once control flow is fixed.
 
