@@ -422,30 +422,18 @@ public class EmitForeach {
             
             // Cast to RuntimeControlFlowList
             mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeControlFlowList");
-            mv.visitInsn(Opcodes.DUP);
             
-            // Get control flow type
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+            // Get the marker field
+            mv.visitFieldInsn(Opcodes.GETFIELD,
                     "org/perlonjava/runtime/RuntimeControlFlowList",
-                    "getControlFlowType",
-                    "()Lorg/perlonjava/runtime/ControlFlowType;",
-                    false);
-            mv.visitInsn(Opcodes.DUP);
+                    "marker",
+                    "Lorg/perlonjava/runtime/ControlFlowMarker;");
             
-            // Get label
-            mv.visitInsn(Opcodes.SWAP);
+            // Call marker.throwError() - this method never returns
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                    "org/perlonjava/runtime/RuntimeControlFlowList",
-                    "getControlFlowLabel",
-                    "()Ljava/lang/String;",
-                    false);
-            
-            // Call helper method to throw appropriate error
-            // Stack: [ControlFlowType, String label]
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/RuntimeCode",
-                    "throwControlFlowError",
-                    "(Lorg/perlonjava/runtime/ControlFlowType;Ljava/lang/String;)V",
+                    "org/perlonjava/runtime/ControlFlowMarker",
+                    "throwError",
+                    "()V",
                     false);
             
             // Should never reach here (method throws), but add RETURN for verifier

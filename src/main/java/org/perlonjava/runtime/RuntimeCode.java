@@ -776,25 +776,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 ControlFlowType cfType = cfList.getControlFlowType();
                 String label = cfList.getControlFlowLabel();
                 
-                // This is a control flow statement that escaped to top level - error!
-                if (cfType == ControlFlowType.TAILCALL) {
-                    // Tail call should have been handled by trampoline at returnLabel
-                    throw new PerlCompilerException("Tail call escaped to top level (internal error) at ");
-                } else if (cfType == ControlFlowType.GOTO) {
-                    if (label != null) {
-                        throw new PerlCompilerException("Can't find label " + label + " at ");
-                    } else {
-                        throw new PerlCompilerException("goto must have a label at ");
-                    }
-                } else {
-                    // last/next/redo
-                    String operation = cfType.name().toLowerCase();
-                    if (label != null) {
-                        throw new PerlCompilerException("Label not found for \"" + operation + " " + label + "\" at ");
-                    } else {
-                        throw new PerlCompilerException("Can't \"" + operation + "\" outside a loop block at ");
-                    }
-                }
+                // Let the marker throw the error with proper source location
+                cfList.marker.throwError();
             }
             
             return result;
@@ -847,25 +830,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 ControlFlowType cfType = cfList.getControlFlowType();
                 String label = cfList.getControlFlowLabel();
                 
-                // This is a control flow statement that escaped to top level - error!
-                if (cfType == ControlFlowType.TAILCALL) {
-                    // Tail call should have been handled by trampoline at returnLabel
-                    throw new PerlCompilerException("Tail call escaped to top level (internal error) at ");
-                } else if (cfType == ControlFlowType.GOTO) {
-                    if (label != null) {
-                        throw new PerlCompilerException("Can't find label " + label + " at ");
-                    } else {
-                        throw new PerlCompilerException("goto must have a label at ");
-                    }
-                } else {
-                    // last/next/redo
-                    String operation = cfType.name().toLowerCase();
-                    if (label != null) {
-                        throw new PerlCompilerException("Label not found for \"" + operation + " " + label + "\" at ");
-                    } else {
-                        throw new PerlCompilerException("Can't \"" + operation + "\" outside a loop block at ");
-                    }
-                }
+                // Let the marker throw the error with proper source location
+                cfList.marker.throwError();
             }
             
             return result;
@@ -1001,35 +967,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     public void dynamicRestoreState() {
         throw new PerlCompilerException("Can't modify anonymous subroutine");
-    }
-
-    /**
-     * Helper method to throw appropriate control flow error.
-     * Called from loop handlers in main program when control flow escapes.
-     * 
-     * @param cfType The control flow type
-     * @param label The label (may be null)
-     * @throws PerlCompilerException Always throws with appropriate message
-     */
-    public static void throwControlFlowError(ControlFlowType cfType, String label) {
-        if (cfType == ControlFlowType.TAILCALL) {
-            // Tail call should have been handled by trampoline at returnLabel
-            throw new PerlCompilerException("Tail call escaped to top level (internal error) at ");
-        } else if (cfType == ControlFlowType.GOTO) {
-            if (label != null) {
-                throw new PerlCompilerException("Can't find label " + label + " at ");
-            } else {
-                throw new PerlCompilerException("goto must have a label at ");
-            }
-        } else {
-            // last/next/redo
-            String operation = cfType.name().toLowerCase();
-            if (label != null) {
-                throw new PerlCompilerException("Label not found for \"" + operation + " " + label + "\" at ");
-            } else {
-                throw new PerlCompilerException("Can't \"" + operation + "\" outside a loop block at ");
-            }
-        }
     }
 
 }

@@ -719,19 +719,25 @@ OUTER: for (@outer) {
       public final String label;        // For LAST/NEXT/REDO/GOTO (null for unlabeled)
       public final RuntimeScalar codeRef;  // For TAILCALL
       public final RuntimeArray args;      // For TAILCALL
+      public final String fileName;        // Source file where control flow originated
+      public final int lineNumber;         // Line number where control flow originated
       
       // Constructor for control flow (last/next/redo/goto)
-      public ControlFlowMarker(ControlFlowType type, String label) {
+      public ControlFlowMarker(ControlFlowType type, String label, String fileName, int lineNumber) {
           this.type = type;
           this.label = label;
+          this.fileName = fileName;
+          this.lineNumber = lineNumber;
           this.codeRef = null;
           this.args = null;
       }
       
       // Constructor for tail call (goto &NAME)
-      public ControlFlowMarker(RuntimeScalar codeRef, RuntimeArray args) {
+      public ControlFlowMarker(RuntimeScalar codeRef, RuntimeArray args, String fileName, int lineNumber) {
           this.type = ControlFlowType.TAILCALL;
           this.label = null;
+          this.fileName = fileName;
+          this.lineNumber = lineNumber;
           this.codeRef = codeRef;
           this.args = args;
       }
