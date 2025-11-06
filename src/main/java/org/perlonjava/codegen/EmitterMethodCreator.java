@@ -335,6 +335,21 @@ public class EmitterMethodCreator implements Opcodes {
             // Cast to RuntimeControlFlowList to access getTailCallCodeRef/getTailCallArgs
             mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeControlFlowList");
             
+            if (DEBUG_CONTROL_FLOW) {
+                // Debug: print what we're about to process
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitFieldInsn(Opcodes.GETFIELD,
+                        "org/perlonjava/runtime/RuntimeControlFlowList",
+                        "marker",
+                        "Lorg/perlonjava/runtime/ControlFlowMarker;");
+                mv.visitLdcInsn("TRAMPOLINE_LOOP");
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/ControlFlowMarker",
+                        "debugPrint",
+                        "(Ljava/lang/String;)V",
+                        false);
+            }
+            
             // Extract codeRef and args
             // Use allocated slots from symbol table
             mv.visitInsn(Opcodes.DUP);
@@ -365,16 +380,71 @@ public class EmitterMethodCreator implements Opcodes {
             
             // Check if result is another TAILCALL
             mv.visitInsn(Opcodes.DUP);
+            
+            if (DEBUG_CONTROL_FLOW) {
+                // Debug: print the result before checking
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitFieldInsn(Opcodes.GETSTATIC,
+                        "java/lang/System",
+                        "err",
+                        "Ljava/io/PrintStream;");
+                mv.visitInsn(Opcodes.SWAP);
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "java/io/PrintStream",
+                        "println",
+                        "(Ljava/lang/Object;)V",
+                        false);
+            }
+            
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                     "org/perlonjava/runtime/RuntimeList",
                     "isNonLocalGoto",
                     "()Z",
                     false);
+            
+            if (DEBUG_CONTROL_FLOW) {
+                // Debug: print the isNonLocalGoto result
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitFieldInsn(Opcodes.GETSTATIC,
+                        "java/lang/System",
+                        "err",
+                        "Ljava/io/PrintStream;");
+                mv.visitInsn(Opcodes.SWAP);
+                mv.visitLdcInsn("isNonLocalGoto: ");
+                mv.visitInsn(Opcodes.SWAP);
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "java/io/PrintStream",
+                        "print",
+                        "(Ljava/lang/String;)V",
+                        false);
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "java/io/PrintStream",
+                        "println",
+                        "(Z)V",
+                        false);
+            }
+            
             mv.visitJumpInsn(Opcodes.IFEQ, normalReturn);  // Not marked, done
             
             // Cast to RuntimeControlFlowList to access getControlFlowType()
             mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeControlFlowList");
             mv.visitInsn(Opcodes.DUP);
+            
+            if (DEBUG_CONTROL_FLOW) {
+                // Debug: print the control flow type
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitFieldInsn(Opcodes.GETFIELD,
+                        "org/perlonjava/runtime/RuntimeControlFlowList",
+                        "marker",
+                        "Lorg/perlonjava/runtime/ControlFlowMarker;");
+                mv.visitLdcInsn("TRAMPOLINE_CHECK");
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/ControlFlowMarker",
+                        "debugPrint",
+                        "(Ljava/lang/String;)V",
+                        false);
+            }
+            
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                     "org/perlonjava/runtime/RuntimeControlFlowList",
                     "getControlFlowType",

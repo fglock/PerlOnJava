@@ -249,5 +249,32 @@ subtest 'next in conditional' => sub {
     is_deeply(\@output, [1, 2, 4, 5], 'next in && expression');
 };
 
+subtest 'goto EXPR - computed label (TODO)' => sub {
+    plan skip_all => 'goto/last/next/redo EXPR requires call-site checks or runtime label registry';
+    
+    # Limitation: Dynamic labels (goto EXPR) create tagged returns that propagate
+    # silently without call-site checks. Would need either:
+    # 1. Call-site checks (blocked by ASM frame computation)
+    # 2. Runtime label registry to check before creating marked return
+    #
+    # Test case for reference:
+    # my @output;
+    # my $label = "SKIP";
+    # push @output, 'before';
+    # goto $label;
+    # push @output, 'skipped';
+    # SKIP:
+    # push @output, 'after';
+    # is_deeply(\@output, ['before', 'after'], 'goto with computed label');
+};
+
+subtest 'goto EXPR - label from array (TODO)' => sub {
+    plan skip_all => 'goto/last/next/redo EXPR requires call-site checks or runtime label registry';
+};
+
+subtest 'last EXPR - computed label (TODO)' => sub {
+    plan skip_all => 'goto/last/next/redo EXPR requires call-site checks or runtime label registry';
+};
+
 done_testing();
 
