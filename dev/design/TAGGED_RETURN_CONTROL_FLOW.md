@@ -4,6 +4,11 @@
 
 **Development Branch:** `nonlocal-goto-wip`
 
+**⚠️ CRITICAL WORKFLOW:**
+1. **Before EACH implementation step**: Re-read the relevant phase in this document
+2. **After EACH implementation step**: Run regression tests (see below)
+3. **After tests pass**: Commit with the exact message specified in the phase
+
 **Before committing, ALWAYS run regression tests:**
 ```bash
 cd /Users/fglock/projects/PerlOnJava
