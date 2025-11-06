@@ -46,107 +46,96 @@ timeout 900 dev/tools/perl_test_runner.pl \
 
 ## NEXT STEPS - Implementation Order
 
-### **CURRENT: Phase 3 - Debug Call-Site Checks**
+### **CURRENT: Phase 3 - Fix Call-Site Checks (BLOCKED)**
 
-**STATUS:** Call-site checks are enabled but causing `ArrayIndexOutOfBoundsException: Index -1` in ASM frame computation.
+**STATUS:** ✗ BLOCKED by ASM frame computation issues
 
-**WHY:** Call-site checks make loop handlers reachable (without them, handlers are dead code and ASM fails). But complex branching control flow with `DUP`/`instanceof`/`ASTORE`/stack cleanup breaks ASM's frame computation.
+**COMPLETED:**
+- ✓ Dynamic slot allocation (`controlFlowTempSlot`)  
+- ✓ Simplified pattern (store→check→branch)
+- ✗ Still fails with `ArrayIndexOutOfBoundsException` in ASM Frame.merge()
 
-**ISSUE:** Using fixed slot 200 (`CONTROL_FLOW_TEMP_SLOT`) may conflict with actual local variables.
+**ROOT CAUSE:** ASM's COMPUTE_FRAMES cannot handle inline branching checks that manipulate the stack. The pattern `DUP → ASTORE → ALOAD → instanceof → branch → pop/cleanup → GOTO` creates control flow paths that ASM cannot compute frames for, even with simplified patterns.
+
+**WHY THIS IS HARD:** 
+- Call sites are in expression context (value on stack)
+- Need to check value without consuming it (requires DUP)
+- Need to clean stack if marked (requires knowing stack depth)
+- Branching + stack manipulation = ASM frame computation failure
+
+**ALTERNATIVE APPROACHES TO INVESTIGATE:**
+
+1. **Explicit Frame Hints** (High effort, error-prone)
+   - Manually call `mv.visitFrame()` at every branch point
+   - Requires tracking exact local variable types and stack types
+   - Fragile - breaks if bytecode changes
+
+2. **VOID Context Checks** (Promising!)
+   - Only check in VOID context (after value is POPped)
+   - No DUP needed, no stack manipulation
+   - But: marked returns would be lost in VOID context
+   - Would need to store EVERY call result temporarily
+
+3. **No Inline Checks - Return Path Only** (RECOMMENDED)
+   - Remove inline call-site checks entirely
+   - Only check at `returnLabel` (global return point)
+   - Loop handlers become "optional optimization" for nested loops
+   - Non-local control flow ALWAYS returns to caller, caller checks and re-dispatches
+   - **This matches how exceptions work!**
+
+**RECOMMENDED PATH FORWARD:**
+Skip call-site checks for now. Focus on validating that Phase 2 (creating marked returns) and Phase 5 (top-level safety in RuntimeCode.apply()) work correctly. Call-site checks can be added later as an optimization if needed.
+
+**TEST:** Basic control flow already works without call-site checks:
+```bash
+./jperl -e 'for (1..3) { print "$_\n"; last; }'  # ✓ Works!
+```
+
+---
+
+### **Phase 4 - Enable Loop Handlers (SKIPPED)**
+
+**STATUS:** ✗ SKIPPED - depends on call-site checks which are blocked
+
+**WHY NEEDED:** Loop handlers would optimize nested loops by processing marked returns immediately instead of propagating to caller.
+
+**WHY SKIPPED:** Loop handlers are only reachable via call-site checks. Without call-site checks, the handler code is unreachable (dead code) and ASM frame computation fails.
+
+**ALTERNATIVE:** Non-local control flow propagates through return path. `RuntimeCode.apply()` catches it at the top level. This works but is less efficient for deeply nested loops.
+
+---
+
+### **NEXT: Phase 5 - Validate Current Implementation**
+
+**WHY:** With call-site checks and loop handlers skipped, we need to validate that the current "exception-like" propagation model works correctly.
+
+**CURRENT BEHAVIOR:**
+- `last`/`next`/`redo`/`goto` create `RuntimeControlFlowList` and return
+- Control flow propagates up the call stack via normal returns  
+- `RuntimeCode.apply()` catches marked returns and throws error with source location
+- Local `last`/`next`/`redo` in loops work via fast GOTO (no marked returns)
 
 **TODO:**
-1. [ ] **Investigate slot allocation**
-   - Check if `CONTROL_FLOW_TEMP_SLOT = 200` conflicts with method's actual slots
-   - Consider using `ctx.symbolTable.allocateLocalVariable()` dynamically (like tail call trampoline)
-   
-2. [ ] **Simplify control flow check pattern**
-   - Current: `DUP → instanceof → branch → ASTORE → cleanup → ALOAD → GOTO`
-   - ASM struggles with this complex branching + stack manipulation
-   - Try: Allocate local var at method start, store result immediately, check, branch
-   
-3. [ ] **Add frame hints if needed**
-   - May need explicit `mv.visitFrame()` calls around complex branches
-   
-4. [ ] **Test with minimal example**
-   ```bash
-   ./jperl -e 'for (1..3) { print "$_ "; last; }'
+1. [x] Test local control flow (unlabeled last/next/redo in immediate loop) - **DONE ✓**
+2. [ ] Test non-local control flow from subroutine
+   ```perl
+   OUTER: for (1..3) {
+       sub { last OUTER }->(); # Should error at RuntimeCode.apply()
+   }
    ```
-
-**COMMIT MESSAGE:** (after fix)
-```
-fix: Resolve ASM frame computation in call-site checks
-
-- Fixed slot allocation for control flow temp storage
-- Simplified branching pattern for ASM compatibility
-- Call-site checks now work without VerifyErrors
-
-Phase 3 (call-site checks) complete!
-```
-
----
-
-### **Phase 4 - Enable Loop Handlers**
-
-**WHY:** Loop handlers process marked returns (dispatch LAST/NEXT/REDO/GOTO to correct actions). They're currently disabled because they depend on call-site checks.
-
-**STATUS:** Code is written in `EmitForeach.emitControlFlowHandler()` but disabled (`ENABLE_LOOP_HANDLERS = false`).
-
-**TODO:**
-1. [ ] Set `ENABLE_LOOP_HANDLERS = true` in `EmitForeach.java`
-2. [ ] Test foreach loops with labeled control flow
-3. [ ] Add handlers to `EmitStatement.java` for:
-   - `For3Node` (C-style for loops)
-   - `while`/`until` loops
-   - Bare blocks (labeled `{ }`)
-
-**FILES:**
-- `src/main/java/org/perlonjava/codegen/EmitForeach.java` - already has handler
-- `src/main/java/org/perlonjava/codegen/EmitStatement.java` - needs handlers added
+3. [ ] Test that error messages include source location
+4. [ ] Run critical regression tests
 
 **COMMIT MESSAGE:**
 ```
-feat: Enable loop control flow handlers
+test: Validate tagged return propagation without call-site checks
 
-- Enabled ENABLE_LOOP_HANDLERS in EmitForeach
-- Added handlers to EmitStatement for for/while/until/bareblock
-- Handlers use TABLESWITCH to dispatch control flow
-- Handler chaining for nested loops
+- Local control flow works via fast GOTO
+- Non-local control flow propagates via return path
+- RuntimeCode.apply() catches and errors with source location
+- Pass rate: maintained at ≥99.8%
 
-Phase 4 (loop handlers) complete!
-```
-
----
-
-### **Phase 5 - Top-Level Safety**
-
-**WHY:** Control flow that escapes all loops must throw a descriptive error (e.g., "Label not found for 'last SKIP'").
-
-**STATUS:** Partially implemented in `RuntimeCode.apply()` and loop handlers.
-
-**TODO:**
-1. [ ] Verify main program detection works (`isMainProgram` flag set correctly)
-2. [ ] Test that outermost loop in main program calls `marker.throwError()` for unmatched labels
-3. [ ] Test that subroutine-level unhandled control flow also errors properly
-
-**TEST CASES:**
-```perl
-# Should error: "Label not found for 'last OUTER'"
-sub foo { last OUTER; }
-foo();
-
-# Should work: SKIP is a loop label in test files
-SKIP: { last SKIP; }
-```
-
-**COMMIT MESSAGE:**
-```
-feat: Add top-level control flow error handling
-
-- Main program outermost loops throw descriptive errors
-- Source location included in error messages
-- Subroutine-level unhandled flow also errors
-
-Phase 5 (top-level safety) complete!
+Phase 5 (validation) complete!
 ```
 
 ---
