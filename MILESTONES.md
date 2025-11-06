@@ -314,7 +314,7 @@ The following areas are currently under active development to enhance the functi
 - **v5.42.2**: Next minor version
 
   - Non-local control flow (`last`/`next`/`redo`/`goto` LABEL) using tagged return values.
-  - Tail call optimization for `goto &NAME` (trampolined tail calls). Note: `goto __SUB__` not yet working.
+  - Tail call optimization for `goto &NAME` and `goto __SUB__` (trampolined tail calls).
   - Add Perl 5.38+ Class Features
     - Class keyword with block syntax fully working
     - Method declarations with automatic $self injection
