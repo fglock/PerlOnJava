@@ -21,6 +21,16 @@ public class JavaClassInfo {
      * The label to return to after method execution.
      */
     public Label returnLabel;
+    
+    /**
+     * Local variable slot for tail call trampoline - stores codeRef.
+     */
+    public int tailCallCodeRefSlot;
+    
+    /**
+     * Local variable slot for tail call trampoline - stores args.
+     */
+    public int tailCallArgsSlot;
 
     /**
      * Manages the stack level for the class.

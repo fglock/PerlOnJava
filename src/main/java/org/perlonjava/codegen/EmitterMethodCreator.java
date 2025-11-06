@@ -186,9 +186,9 @@ public class EmitterMethodCreator implements Opcodes {
             // We initialize slots from env.length up to the current variable index + buffer
             // The symbol table tracks how many slots were allocated during parsing
             int currentVarIndex = ctx.symbolTable.getCurrentLocalVariableIndex();
-            // Add a buffer of 50 slots for runtime allocations (local variables, temporaries, etc.)
+            // Add a buffer of 201 slots to include slot 200 reserved for control flow handling
             // This is especially important for complex subroutines like those in Pod::Simple
-            int maxPreInitSlots = Math.max(currentVarIndex, env.length) + 50;
+            int maxPreInitSlots = Math.max(Math.max(currentVarIndex, env.length) + 50, 201);
             ctx.logDebug("Pre-initializing slots from " + env.length + " to " + maxPreInitSlots + 
                         " (currentVarIndex=" + currentVarIndex + ")");
             for (int i = env.length; i < maxPreInitSlots; i++) {
@@ -196,6 +196,13 @@ public class EmitterMethodCreator implements Opcodes {
                 mv.visitVarInsn(Opcodes.ASTORE, i);
             }
 
+            // Allocate slots for tail call trampoline (codeRef and args)
+            // These are used at returnLabel for TAILCALL handling
+            int tailCallCodeRefSlot = ctx.symbolTable.allocateLocalVariable();
+            int tailCallArgsSlot = ctx.symbolTable.allocateLocalVariable();
+            ctx.javaClassInfo.tailCallCodeRefSlot = tailCallCodeRefSlot;
+            ctx.javaClassInfo.tailCallArgsSlot = tailCallArgsSlot;
+            
             // Create a label for the return point
             ctx.javaClassInfo.returnLabel = new Label();
 
@@ -277,6 +284,105 @@ public class EmitterMethodCreator implements Opcodes {
             // This ensures that array/hash elements are expanded before local variables are restored
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "getList", "()Lorg/perlonjava/runtime/RuntimeList;", false);
 
+            // Phase 3: Check for control flow markers
+            // RuntimeList is on stack after getList()
+            
+            // First, check if it's a TAILCALL (global trampoline)
+            Label tailcallLoop = new Label();
+            Label notTailcall = new Label();
+            Label normalReturn = new Label();
+            
+            mv.visitInsn(Opcodes.DUP);  // Duplicate for checking
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, 
+                    "org/perlonjava/runtime/RuntimeList", 
+                    "isNonLocalGoto", 
+                    "()Z", 
+                    false);
+            mv.visitJumpInsn(Opcodes.IFEQ, normalReturn);  // Not marked, return normally
+            
+            // Marked: check if TAILCALL
+            // Cast to RuntimeControlFlowList to access getControlFlowType()
+            mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeControlFlowList");
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/RuntimeControlFlowList",
+                    "getControlFlowType",
+                    "()Lorg/perlonjava/runtime/ControlFlowType;",
+                    false);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/ControlFlowType",
+                    "ordinal",
+                    "()I",
+                    false);
+            mv.visitInsn(Opcodes.ICONST_4);  // TAILCALL.ordinal() = 4
+            mv.visitJumpInsn(Opcodes.IF_ICMPNE, notTailcall);
+            
+            // TAILCALL trampoline loop
+            mv.visitLabel(tailcallLoop);
+            // Cast to RuntimeControlFlowList to access getTailCallCodeRef/getTailCallArgs
+            mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeControlFlowList");
+            
+            // Extract codeRef and args
+            // Use allocated slots from symbol table
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/RuntimeControlFlowList",
+                    "getTailCallCodeRef",
+                    "()Lorg/perlonjava/runtime/RuntimeScalar;",
+                    false);
+            mv.visitVarInsn(Opcodes.ASTORE, ctx.javaClassInfo.tailCallCodeRefSlot);
+            
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/RuntimeControlFlowList",
+                    "getTailCallArgs",
+                    "()Lorg/perlonjava/runtime/RuntimeArray;",
+                    false);
+            mv.visitVarInsn(Opcodes.ASTORE, ctx.javaClassInfo.tailCallArgsSlot);
+            
+            // Re-invoke: RuntimeCode.apply(codeRef, "tailcall", args, context)
+            mv.visitVarInsn(Opcodes.ALOAD, ctx.javaClassInfo.tailCallCodeRefSlot);
+            mv.visitLdcInsn("tailcall");
+            mv.visitVarInsn(Opcodes.ALOAD, ctx.javaClassInfo.tailCallArgsSlot);
+            mv.visitVarInsn(Opcodes.ILOAD, 2);  // context (from parameter)
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/RuntimeCode",
+                    "apply",
+                    "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;Lorg/perlonjava/runtime/RuntimeBase;I)Lorg/perlonjava/runtime/RuntimeList;",
+                    false);
+            
+            // Check if result is another TAILCALL
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/RuntimeList",
+                    "isNonLocalGoto",
+                    "()Z",
+                    false);
+            mv.visitJumpInsn(Opcodes.IFEQ, normalReturn);  // Not marked, done
+            
+            // Cast to RuntimeControlFlowList to access getControlFlowType()
+            mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeControlFlowList");
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/RuntimeControlFlowList",
+                    "getControlFlowType",
+                    "()Lorg/perlonjava/runtime/ControlFlowType;",
+                    false);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/ControlFlowType",
+                    "ordinal",
+                    "()I",
+                    false);
+            mv.visitInsn(Opcodes.ICONST_4);
+            mv.visitJumpInsn(Opcodes.IF_ICMPEQ, tailcallLoop);  // Loop if still TAILCALL
+            // Otherwise fall through to normalReturn (propagate other control flow)
+            
+            // Not TAILCALL: check if we're inside a loop and should jump to loop handler
+            mv.visitLabel(notTailcall);
+            // TODO: Check ctx.javaClassInfo loop stack, if non-empty, jump to innermost loop handler
+            // For now, just propagate (return to caller)
+            
+            // Normal return
+            mv.visitLabel(normalReturn);
             // Teardown local variables and environment after the return value is materialized
             Local.localTeardown(localRecord, mv);
 
