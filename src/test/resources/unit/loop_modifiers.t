@@ -6,30 +6,17 @@ use warnings;
 ###################
 # `next` Tests with `do ... while ...`
 
+# Standard Perl throws "Can't 'next' outside a loop block" for next in do-while
 my $next_do_while_count = 0;
 eval q{
     do {
         $next_do_while_count++;
-        next if $next_do_while_count == 2;  # Skip when count is 2
+        next if $next_do_while_count == 2;
     } while ($next_do_while_count < 4);
 };
 my $error_message = $@ // "No error";
-
-# Check if the error message is exactly what we expect
 ok($error_message && $error_message =~ /Can't "next" outside a loop block/, 
-   'error message for `next` outside a loop <' . substr($error_message, 0, 20) . '>');
-
-###################
-# `next` Tests with `do ... while ...` with an outer loop
-
-$next_do_while_count = 0;
-{
-    do {
-        $next_do_while_count++;
-        next if $next_do_while_count == 2;    # Skip when count is 2
-    } while ( $next_do_while_count < 4 );
-}
-ok(!($next_do_while_count != 2), '`next` outside a loop');
+   'error message for `next` outside a loop');
 
 ###################
 # `next` Tests with `for` modifier

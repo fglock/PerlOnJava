@@ -74,6 +74,21 @@ public class JavaClassInfo {
     }
 
     /**
+     * Pushes a new set of loop labels with isTrueLoop flag.
+     *
+     * @param labelName     the name of the loop label
+     * @param nextLabel     the label for the next iteration
+     * @param redoLabel     the label for redoing the current iteration
+     * @param lastLabel     the label for exiting the loop
+     * @param stackLevel    the current stack level
+     * @param context       the context type
+     * @param isTrueLoop    whether this is a true loop (for/while/until) or pseudo-loop (do-while/bare)
+     */
+    public void pushLoopLabels(String labelName, Label nextLabel, Label redoLabel, Label lastLabel, int stackLevel, int context, boolean isTrueLoop) {
+        loopLabelStack.push(new LoopLabels(labelName, nextLabel, redoLabel, lastLabel, stackLevel, context, isTrueLoop));
+    }
+    
+    /**
      * Pushes a LoopLabels object onto the loop label stack.
      * This is useful when you've already constructed a LoopLabels object with a control flow handler.
      *

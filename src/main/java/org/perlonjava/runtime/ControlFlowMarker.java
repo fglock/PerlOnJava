@@ -58,6 +58,17 @@ public class ControlFlowMarker {
     }
     
     /**
+     * Debug method to print control flow information.
+     */
+    public void debugPrint(String context) {
+        System.err.println("[DEBUG] " + context + ": type=" + type + 
+                          ", label=" + label + 
+                          ", codeRef=" + (codeRef != null ? codeRef : "null") +
+                          ", args=" + (args != null ? args.size() : "null") +
+                          " @ " + fileName + ":" + lineNumber);
+    }
+    
+    /**
      * Throws an appropriate PerlCompilerException for this control flow that couldn't be handled.
      * Includes source file and line number in the error message.
      * 

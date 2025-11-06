@@ -2,6 +2,7 @@ package org.perlonjava.codegen;
 
 import org.objectweb.asm.Label;
 import org.objectweb.asm.Opcodes;
+import org.perlonjava.astnode.BinaryOperatorNode;
 import org.perlonjava.astnode.IdentifierNode;
 import org.perlonjava.astnode.ListNode;
 import org.perlonjava.astnode.Node;
@@ -53,6 +54,13 @@ public class EmitControlFlow {
         // Find loop labels by name.
         LoopLabels loopLabels = ctx.javaClassInfo.findLoopLabelsByName(labelStr);
         ctx.logDebug("visit(next) operator: " + operator + " label: " + labelStr + " labels: " + loopLabels);
+        
+        // Check if we're trying to use next/last/redo in a pseudo-loop (do-while/bare block)
+        if (loopLabels != null && !loopLabels.isTrueLoop) {
+            throw new PerlCompilerException(node.tokenIndex, 
+                "Can't \"" + operator + "\" outside a loop block", 
+                ctx.errorUtil);
+        }
         
         if (loopLabels == null) {
             // Non-local control flow: create RuntimeControlFlowList and return
@@ -116,6 +124,7 @@ public class EmitControlFlow {
     /**
      * Handles the 'return' operator for subroutine exits.
      * Processes both single and multiple return values, ensuring proper stack management.
+     * Also detects and handles 'goto &NAME' tail calls.
      *
      * @param emitterVisitor The visitor handling the bytecode emission
      * @param node           The operator node representing the return statement
@@ -125,6 +134,31 @@ public class EmitControlFlow {
 
         ctx.logDebug("visit(return) in context " + emitterVisitor.ctx.contextType);
         ctx.logDebug("visit(return) will visit " + node.operand + " in context " + emitterVisitor.ctx.with(RuntimeContextType.RUNTIME).contextType);
+
+        // Check if this is a 'goto &NAME' or 'goto EXPR' tail call (parsed as 'return (coderef(@_))')
+        // This handles: goto &foo, goto __SUB__, goto $coderef, etc.
+        if (node.operand instanceof ListNode list && list.elements.size() == 1) {
+            Node firstElement = list.elements.getFirst();
+            if (firstElement instanceof BinaryOperatorNode callNode && callNode.operator.equals("(")) {
+                // This is a function call - check if it's a coderef form
+                Node callTarget = callNode.left;
+                
+                // Handle &sub syntax
+                if (callTarget instanceof OperatorNode opNode && opNode.operator.equals("&")) {
+                    ctx.logDebug("visit(return): Detected goto &NAME tail call");
+                    handleGotoSubroutine(emitterVisitor, opNode, callNode.right);
+                    return;
+                }
+                
+                // Handle __SUB__ and other code reference expressions
+                // In Perl, goto EXPR where EXPR evaluates to a coderef is a tail call
+                if (callTarget instanceof OperatorNode opNode && opNode.operator.equals("__SUB__")) {
+                    ctx.logDebug("visit(return): Detected goto __SUB__ tail call");
+                    handleGotoSubroutine(emitterVisitor, opNode, callNode.right);
+                    return;
+                }
+            }
+        }
 
         // Clean up stack before return
         ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, 0);
@@ -143,10 +177,70 @@ public class EmitControlFlow {
         node.operand.accept(emitterVisitor.with(RuntimeContextType.RUNTIME));
         emitterVisitor.ctx.mv.visitJumpInsn(Opcodes.GOTO, emitterVisitor.ctx.javaClassInfo.returnLabel);
     }
+    
+    /**
+     * Handles 'goto &NAME' tail call optimization.
+     * Creates a TAILCALL marker with the coderef and arguments.
+     *
+     * @param emitterVisitor The visitor handling the bytecode emission
+     * @param subNode        The operator node for the subroutine reference (&NAME)
+     * @param argsNode       The node representing the arguments
+     */
+    static void handleGotoSubroutine(EmitterVisitor emitterVisitor, OperatorNode subNode, Node argsNode) {
+        EmitterContext ctx = emitterVisitor.ctx;
+        
+        ctx.logDebug("visit(goto &sub): Emitting TAILCALL marker");
+        
+        // Clean up stack before creating the marker
+        ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, 0);
+        
+        // Create new RuntimeControlFlowList for tail call
+        ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeControlFlowList");
+        ctx.mv.visitInsn(Opcodes.DUP);
+        
+        // Evaluate the coderef (&NAME) in scalar context
+        subNode.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        
+        // Evaluate the arguments and convert to RuntimeArray
+        // The arguments are typically @_ which needs to be evaluated and converted
+        argsNode.accept(emitterVisitor.with(RuntimeContextType.LIST));
+        
+        // getList() returns RuntimeList, then call getArrayOfAlias()
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/RuntimeBase",
+                "getList",
+                "()Lorg/perlonjava/runtime/RuntimeList;",
+                false);
+        
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/RuntimeList",
+                "getArrayOfAlias",
+                "()Lorg/perlonjava/runtime/RuntimeArray;",
+                false);
+        
+        // Push fileName
+        ctx.mv.visitLdcInsn(ctx.compilerOptions.fileName != null ? ctx.compilerOptions.fileName : "(eval)");
+        
+        // Push lineNumber
+        int lineNumber = ctx.errorUtil != null ? ctx.errorUtil.getLineNumber(subNode.tokenIndex) : 0;
+        ctx.mv.visitLdcInsn(lineNumber);
+        
+        // Call RuntimeControlFlowList constructor for tail call
+        // Signature: (RuntimeScalar codeRef, RuntimeArray args, String fileName, int lineNumber)
+        ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                "org/perlonjava/runtime/RuntimeControlFlowList",
+                "<init>",
+                "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeArray;Ljava/lang/String;I)V",
+                false);
+        
+        // Jump to returnLabel (trampoline will handle it)
+        ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
+    }
 
     /**
-     * Handles goto statements with labels.
+     * Handles goto statements with labels (both static and computed).
      * Validates label existence and manages stack cleanup before jumping.
+     * Supports: goto LABEL, goto EXPR (computed labels)
      *
      * @param emitterVisitor The visitor handling the bytecode emission
      * @param node           The operator node representing the goto statement
@@ -155,23 +249,81 @@ public class EmitControlFlow {
     static void handleGotoLabel(EmitterVisitor emitterVisitor, OperatorNode node) {
         EmitterContext ctx = emitterVisitor.ctx;
 
-        // Parse and validate the goto label
+        // Parse the goto argument
         String labelName = null;
+        boolean isDynamic = false;
+        
         if (node.operand instanceof ListNode labelNode && !labelNode.elements.isEmpty()) {
             Node arg = labelNode.elements.getFirst();
+            
+            // Check if it's a static label (IdentifierNode)
             if (arg instanceof IdentifierNode) {
                 labelName = ((IdentifierNode) arg).name;
             } else {
-                throw new PerlCompilerException(node.tokenIndex, "Invalid goto label: " + node, ctx.errorUtil);
+                // Check if this is a tail call (goto EXPR where EXPR is a coderef)
+                // This handles: goto __SUB__, goto $coderef, etc.
+                if (arg instanceof OperatorNode opNode && opNode.operator.equals("__SUB__")) {
+                    ctx.logDebug("visit(goto): Detected goto __SUB__ tail call");
+                    // Create a ListNode with @_ as the argument
+                    ListNode argsNode = new ListNode(opNode.tokenIndex);
+                    OperatorNode atUnderscore = new OperatorNode("@", 
+                            new IdentifierNode("_", opNode.tokenIndex), opNode.tokenIndex);
+                    argsNode.elements.add(atUnderscore);
+                    handleGotoSubroutine(emitterVisitor, opNode, argsNode);
+                    return;
+                }
+                
+                // Dynamic label (goto EXPR) - expression evaluated at runtime
+                isDynamic = true;
+                ctx.logDebug("visit(goto): Dynamic goto with expression");
+                
+                // Evaluate the expression to get the label name at runtime
+                arg.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                
+                // Convert to string (label name)
+                ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/RuntimeScalar",
+                        "toString",
+                        "()Ljava/lang/String;",
+                        false);
+                
+                // For dynamic goto, we always create a RuntimeControlFlowList
+                // because we can't know at compile-time if the label is local or not
+                ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeControlFlowList");
+                ctx.mv.visitInsn(Opcodes.DUP_X1); // Stack: label, RuntimeControlFlowList, RuntimeControlFlowList
+                ctx.mv.visitInsn(Opcodes.SWAP);    // Stack: label, RuntimeControlFlowList, label, RuntimeControlFlowList
+                
+                ctx.mv.visitFieldInsn(Opcodes.GETSTATIC,
+                        "org/perlonjava/runtime/ControlFlowType",
+                        "GOTO",
+                        "Lorg/perlonjava/runtime/ControlFlowType;");
+                ctx.mv.visitInsn(Opcodes.SWAP);    // Stack: ..., ControlFlowType, label
+                
+                // Push fileName
+                ctx.mv.visitLdcInsn(ctx.compilerOptions.fileName != null ? ctx.compilerOptions.fileName : "(eval)");
+                // Push lineNumber
+                int lineNumber = ctx.errorUtil != null ? ctx.errorUtil.getLineNumber(node.tokenIndex) : 0;
+                ctx.mv.visitLdcInsn(lineNumber);
+                
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                        "org/perlonjava/runtime/RuntimeControlFlowList",
+                        "<init>",
+                        "(Lorg/perlonjava/runtime/ControlFlowType;Ljava/lang/String;Ljava/lang/String;I)V",
+                        false);
+                
+                // Clean stack and jump to returnLabel
+                ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, 0);
+                ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
+                return;
             }
         }
 
-        // Ensure label is provided
-        if (labelName == null) {
+        // Ensure label is provided for static goto
+        if (labelName == null && !isDynamic) {
             throw new PerlCompilerException(node.tokenIndex, "goto must be given label", ctx.errorUtil);
         }
 
-        // Locate the target label in the current scope
+        // For static label, check if it's local
         GotoLabels targetLabel = ctx.javaClassInfo.findGotoLabelsByName(labelName);
         if (targetLabel == null) {
             // Non-local goto: create RuntimeControlFlowList and return

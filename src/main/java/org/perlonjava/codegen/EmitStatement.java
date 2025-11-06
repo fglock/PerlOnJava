@@ -219,8 +219,21 @@ public class EmitStatement {
         Label startLabel = new Label();
         Label continueLabel = new Label();
         Label endLabel = new Label();
+        Label redoLabel = new Label();
+
+        // Register loop labels as pseudo-loop (isTrueLoop = false)
+        // This allows us to throw proper compile errors for last/next/redo in do-while
+        emitterVisitor.ctx.javaClassInfo.pushLoopLabels(
+                node.labelName,
+                continueLabel,
+                redoLabel,
+                endLabel,
+                emitterVisitor.ctx.javaClassInfo.stackLevelManager.getStackLevel(),
+                RuntimeContextType.VOID,
+                false); // isTrueLoop = false (do-while is not a true loop)
 
         // Start of the loop body
+        mv.visitLabel(redoLabel);
         mv.visitLabel(startLabel);
 
         // Check for pending signals (alarm, etc.) at loop entry
@@ -243,6 +256,9 @@ public class EmitStatement {
 
         // End of loop
         mv.visitLabel(endLabel);
+
+        // Pop loop labels
+        emitterVisitor.ctx.javaClassInfo.popLoopLabels();
 
         // Exit the scope in the symbol table
         emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
