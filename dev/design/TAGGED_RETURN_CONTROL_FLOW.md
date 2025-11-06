@@ -67,7 +67,10 @@ This document describes the design for implementing Perl's non-local control flo
   - Allows: `goto ("FOO", "BAR", "GLARCH")[$i];`
 - **`goto &NAME`**: Tail call optimization (NOT a goto)
   - Exits current subroutine and immediately calls named subroutine
-  - Uses current @_ (not relevant to our label-based goto implementation)
+  - Uses current @_ 
+  - **Can be implemented using control flow mechanism!**
+  - Return a special control flow marker with the sub reference and `@_`
+  - Caller checks return value and re-invokes if it's a tail call
 
 ### Key Precedence Rule
 All these operators have **assignment precedence** and are exempt from "looks-like-a-function" rule:
@@ -979,6 +982,94 @@ make test
 - [ ] 8.3. Test that extraction preserves control flow semantics
 
 **Expected**: Not needed. But if it is, this is when to do it.
+
+---
+
+### Phase 9: Future Enhancement - Tail Call Optimization (`goto &NAME`)
+**Goal**: Implement proper tail call optimization using the control flow mechanism.
+
+**Why deferred**: This is a separate feature from label-based control flow. Can be added after the main implementation is stable.
+
+**Design**:
+
+`goto &NAME` in Perl replaces the current subroutine call with a call to `NAME`, using the current `@_`. The caller doesn't see the intermediate call.
+
+```perl
+sub foo {
+    # ... do some work ...
+    goto &bar;  # Tail call to bar
+}
+
+sub bar {
+    # @_ has the arguments from foo's caller
+}
+```
+
+**Implementation using control flow mechanism**:
+
+1. Add `TAILCALL` to `ControlFlowType` enum
+2. Create `ControlFlowMarker` with:
+   - `type = TAILCALL`
+   - `codeRef` - the subroutine to call
+   - `args` - the current `@_`
+3. In `EmitControlFlow.handleGotoAmpersand()`:
+   - Create marked `RuntimeList` with TAILCALL
+   - Clean stack and return via `returnLabel`
+4. In call sites (after `apply()`):
+   - Check if result is TAILCALL
+   - If yes: re-invoke with new code ref and args, loop until non-TAILCALL result
+   
+**Bytecode at call site**:
+```java
+tailCallLoop:
+  code.apply(args, context)
+  DUP
+  INVOKEVIRTUAL isNonLocalGoto()Z
+  IFEQ done
+  DUP
+  INVOKEVIRTUAL getControlFlowType()Lorg/perlonjava/runtime/ControlFlowType;
+  INVOKEVIRTUAL ordinal()I
+  SIPUSH 4  // TAILCALL.ordinal()
+  IF_ICMPNE not_tailcall
+  
+  // Handle tail call
+  DUP
+  INVOKEVIRTUAL getTailCallCodeRef()Lorg/perlonjava/runtime/RuntimeScalar;
+  ASTORE new_code
+  INVOKEVIRTUAL getTailCallArgs()Lorg/perlonjava/runtime/RuntimeArray;
+  ASTORE new_args
+  
+  ALOAD new_code
+  LDC "goto"
+  ALOAD new_args
+  pushContext()
+  INVOKESTATIC RuntimeCode.apply(...)
+  GOTO tailCallLoop  // Loop until non-tail-call
+  
+not_tailcall:
+  // Handle other control flow (last/next/redo/goto)
+  ...
+
+done:
+  // Normal return
+```
+
+**Benefits**:
+- ✅ True tail call optimization (no stack buildup)
+- ✅ Matches Perl semantics exactly
+- ✅ Reuses control flow mechanism (consistent design)
+- ✅ Works across subroutine boundaries
+
+**Tasks** (when implemented):
+- [ ] 9.1. Add `TAILCALL` to `ControlFlowType` enum
+- [ ] 9.2. Add `codeRef` and `args` fields to `ControlFlowMarker`
+- [ ] 9.3. Implement `EmitControlFlow.handleGotoAmpersand()`
+- [ ] 9.4. Add tail call loop in call sites
+- [ ] 9.5. Add `caller()` handling (should skip intermediate tail calls)
+- [ ] 9.6. Test with recursive tail calls
+- [ ] 9.7. Test that `caller()` sees correct call stack
+
+**Priority**: Low - can wait until after main control flow implementation is stable.
 
 ---
 
