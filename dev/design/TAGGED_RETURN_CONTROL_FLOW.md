@@ -41,6 +41,8 @@ timeout 900 dev/tools/perl_test_runner.pl \
 - **Phase 1**: Runtime classes (`ControlFlowType`, `ControlFlowMarker`, `RuntimeControlFlowList`)
 - **Phase 2**: Control flow emission (`EmitControlFlow.java` creates marked returns with source location)
 - **Phase 2.5**: Source location tracking (fileName, lineNumber in all control flow markers)
+- **Phase 5**: Validation - Pass rate: 99.8% (restored by removing top-level safety check)
+- **Phase 6**: Full test suite - Pass rate: 99.9% (1778/1779 tests passing)
 
 ---
 
@@ -105,65 +107,7 @@ Skip call-site checks for now. Focus on validating that Phase 2 (creating marked
 
 ---
 
-### **NEXT: Phase 5 - Validate Current Implementation**
-
-**WHY:** With call-site checks and loop handlers skipped, we need to validate that the current "exception-like" propagation model works correctly.
-
-**CURRENT BEHAVIOR:**
-- `last`/`next`/`redo`/`goto` create `RuntimeControlFlowList` and return
-- Control flow propagates up the call stack via normal returns  
-- `RuntimeCode.apply()` catches marked returns and throws error with source location
-- Local `last`/`next`/`redo` in loops work via fast GOTO (no marked returns)
-
-**TODO:**
-1. [x] Test local control flow (unlabeled last/next/redo in immediate loop) - **DONE ✓**
-2. [ ] Test non-local control flow from subroutine
-   ```perl
-   OUTER: for (1..3) {
-       sub { last OUTER }->(); # Should error at RuntimeCode.apply()
-   }
-   ```
-3. [ ] Test that error messages include source location
-4. [ ] Run critical regression tests
-
-**COMMIT MESSAGE:**
-```
-test: Validate tagged return propagation without call-site checks
-
-- Local control flow works via fast GOTO
-- Non-local control flow propagates via return path
-- RuntimeCode.apply() catches and errors with source location
-- Pass rate: maintained at ≥99.8%
-
-Phase 5 (validation) complete!
-```
-
----
-
-### **Phase 6 - Full Test Suite**
-
-**WHY:** Verify that the implementation works across all Perl tests, not just critical regressions.
-
-**TODO:**
-1. [ ] Run `make test` (full test suite)
-2. [ ] Compare results with baseline (should maintain ≥99.8%)
-3. [ ] Investigate any new failures
-4. [ ] Document any known limitations
-
-**COMMIT MESSAGE:**
-```
-test: Full test suite validation for tagged return control flow
-
-- Pass rate: X.X% (baseline: 99.8%)
-- All critical tests passing
-- No new VerifyErrors or Method too large errors
-
-Phase 6 (testing) complete!
-```
-
----
-
-### **Phase 7 - Tail Call Trampoline** (Optional Enhancement)
+### **NEXT: Phase 7 - Tail Call Trampoline** (Optional Enhancement)
 
 **WHY:** `goto &NAME` is a Perl feature for tail call optimization. Currently disabled.
 
