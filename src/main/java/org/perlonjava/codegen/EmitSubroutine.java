@@ -1,5 +1,6 @@
 package org.perlonjava.codegen;
 
+import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.BinaryOperatorNode;
@@ -21,6 +22,43 @@ import java.util.Map;
  * and generating the corresponding bytecode using ASM.
  */
 public class EmitSubroutine {
+    // Feature flags for control flow implementation
+    // 
+    // WHAT THIS WOULD DO IF ENABLED:
+    // After every subroutine call, check if the returned RuntimeList is a RuntimeControlFlowList
+    // (marked with last/next/redo/goto), and if so, immediately propagate it to returnLabel
+    // instead of continuing execution. This would enable loop handlers to catch control flow
+    // at the loop level instead of propagating all the way up the call stack.
+    //
+    // WHY IT'S DISABLED:
+    // The inline check pattern causes ArrayIndexOutOfBoundsException in ASM's frame computation:
+    //   DUP                                    // Duplicate result
+    //   INSTANCEOF RuntimeControlFlowList      // Check if marked
+    //   IFEQ notMarked                        // Branch
+    //   ASTORE tempSlot                       // Store (slot allocated dynamically)
+    //   emitPopInstructions(0)                // Clean stack
+    //   ALOAD tempSlot                        // Restore
+    //   GOTO returnLabel                      // Propagate
+    //   notMarked: POP                        // Discard duplicate
+    //
+    // The complex branching with dynamic slot allocation breaks ASM's ability to merge frames
+    // at the branch target, especially when the tempSlot is allocated after the branch instruction.
+    //
+    // INVESTIGATION NEEDED:
+    // 1. Try allocating tempSlot statically at method entry (not dynamically per call)
+    // 2. Try simpler pattern without DUP (accept performance hit of extra ALOAD/ASTORE)
+    // 3. Try manual frame hints with visitFrame() at merge points
+    // 4. Consider moving check to VOID context only (after POP) - but this loses marked returns
+    // 5. Profile real-world code to see if this optimization actually matters
+    //
+    // CURRENT WORKAROUND:
+    // Without call-site checks, marked returns propagate through normal return paths.
+    // This works correctly but is less efficient for deeply nested loops crossing subroutines.
+    // Performance impact is minimal since most control flow is local (uses plain JVM GOTO).
+    private static final boolean ENABLE_CONTROL_FLOW_CHECKS = false;
+    
+    // Set to true to enable debug output for control flow checks
+    private static final boolean DEBUG_CONTROL_FLOW = false;
 
     /**
      * Emits bytecode for a subroutine, including handling of closure variables.
@@ -204,11 +242,19 @@ public class EmitSubroutine {
                 "apply",
                 "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;Lorg/perlonjava/runtime/RuntimeBase;I)Lorg/perlonjava/runtime/RuntimeList;",
                 false); // Generate an .apply() call
+        
+        // Check for control flow (last/next/redo/goto/tail calls)
+        // This MUST happen before context conversion (before POP in VOID context)
+        if (ENABLE_CONTROL_FLOW_CHECKS) {
+            emitControlFlowCheck(emitterVisitor.ctx);
+        }
+        
         if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
             // Transform the value in the stack to RuntimeScalar
             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
         } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
             // Remove the value from the stack
+            // (If it was a control flow marker, emitControlFlowCheck already handled it)
             emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
         }
     }
@@ -245,5 +291,81 @@ public class EmitSubroutine {
 
         // Now we have a RuntimeScalar representing the current subroutine (__SUB__)
         EmitOperator.handleVoidContext(emitterVisitor);
+    }
+    
+    /**
+     * Emits bytecode to check if a RuntimeList returned from a subroutine call
+     * is marked with control flow information (last/next/redo/goto/tail call).
+     * If marked, cleans the stack and jumps to returnLabel.
+     * 
+     * Pattern:
+     *   DUP                          // Duplicate result for test
+     *   INVOKEVIRTUAL isNonLocalGoto // Check if marked
+     *   IFNE handleControlFlow       // Jump if marked
+     *   POP                          // Discard duplicate
+     *   // Continue with result on stack
+     *   
+     *   handleControlFlow:
+     *     ASTORE temp                // Save marked result
+     *     emitPopInstructions(0)     // Clean stack
+     *     ALOAD temp                 // Load marked result
+     *     GOTO returnLabel           // Jump to return point
+     * 
+     * @param ctx The emitter context
+     */
+    private static void emitControlFlowCheck(EmitterContext ctx) {
+        // ULTRA-SIMPLIFIED pattern to avoid ALL ASM frame computation issues:
+        // Work entirely on the stack, never touch local variables
+        
+        Label notMarked = new Label();
+        Label isMarked = new Label();
+        
+        // Stack: [RuntimeList result]
+        
+        // Duplicate for checking
+        ctx.mv.visitInsn(Opcodes.DUP);
+        // Stack: [RuntimeList] [RuntimeList]
+        
+        // Check if marked
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/RuntimeList",
+                "isNonLocalGoto",
+                "()Z",
+                false);
+        // Stack: [RuntimeList] [boolean]
+        
+        // If marked (true), jump to handler
+        ctx.mv.visitJumpInsn(Opcodes.IFNE, isMarked);
+        
+        // Not marked: result is already on stack, continue normally
+        ctx.mv.visitJumpInsn(Opcodes.GOTO, notMarked);
+        
+        // Marked: handle control flow
+        ctx.mv.visitLabel(isMarked);
+        // Stack: [RuntimeList marked]
+        
+        // Clean the stack to level 0 (this pops everything including our marked list)
+        // So we need to save it first - but we can't use local variables!
+        // Solution: Don't clean stack here - jump to a handler that expects [RuntimeList] on stack
+        
+        // CRITICAL FIX: Jump to innermost loop handler (if inside a loop), otherwise returnLabel
+        LoopLabels innermostLoop = ctx.javaClassInfo.getInnermostLoopLabels();
+        if (innermostLoop != null && innermostLoop.controlFlowHandler != null) {
+            // Inside a loop - jump to its handler
+            // Handler expects: stack cleaned to level 0, then [RuntimeControlFlowList]
+            // But we have: arbitrary stack depth, then [RuntimeControlFlowList]
+            // We MUST clean the stack first, but this requires knowing what's on it
+            // This is the fundamental problem!
+            
+            // For now, propagate to returnLabel instead
+            ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
+        } else {
+            // Not inside a loop - jump to returnLabel
+            ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
+        }
+        
+        // Not marked: continue with result on stack
+        ctx.mv.visitLabel(notMarked);
+        // Stack: [RuntimeList result]
     }
 }

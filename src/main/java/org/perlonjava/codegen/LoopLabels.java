@@ -27,6 +27,13 @@ public class LoopLabels {
      * The ASM Label for the 'last' statement (exits the loop)
      */
     public Label lastLabel;
+    
+    /**
+     * The ASM Label for the control flow handler (processes marked RuntimeList)
+     * This handler checks the control flow type and label, then either handles
+     * it or propagates to parent loop handler
+     */
+    public Label controlFlowHandler;
 
     /**
      * The context type in which this loop operates
@@ -37,6 +44,12 @@ public class LoopLabels {
      * The stack level at the point where these loop labels are defined
      */
     public int asmStackLevel;
+    
+    /**
+     * Whether this is a "true" loop (for/while/until) vs a pseudo-loop (do-while/bare block).
+     * True loops allow last/next/redo. Pseudo-loops cause compile errors.
+     */
+    public boolean isTrueLoop;
 
     /**
      * Creates a new LoopLabels instance with all necessary label information.
@@ -49,12 +62,28 @@ public class LoopLabels {
      * @param context       The context type for this loop
      */
     public LoopLabels(String labelName, Label nextLabel, Label redoLabel, Label lastLabel, int asmStackLevel, int context) {
+        this(labelName, nextLabel, redoLabel, lastLabel, asmStackLevel, context, true);
+    }
+    
+    /**
+     * Creates a new LoopLabels instance with all necessary label information.
+     *
+     * @param labelName     The name of the loop label in source code
+     * @param nextLabel     The ASM Label for 'next' operations
+     * @param redoLabel     The ASM Label for 'redo' operations
+     * @param lastLabel     The ASM Label for 'last' operations
+     * @param asmStackLevel The stack level at label definition
+     * @param context       The context type for this loop
+     * @param isTrueLoop    Whether this is a true loop (for/while/until) or pseudo-loop (do-while/bare)
+     */
+    public LoopLabels(String labelName, Label nextLabel, Label redoLabel, Label lastLabel, int asmStackLevel, int context, boolean isTrueLoop) {
         this.labelName = labelName;
         this.nextLabel = nextLabel;
         this.redoLabel = redoLabel;
         this.lastLabel = lastLabel;
         this.asmStackLevel = asmStackLevel;
         this.context = context;
+        this.isTrueLoop = isTrueLoop;
     }
 
     /**

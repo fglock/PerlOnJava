@@ -371,6 +371,13 @@ public class Operator {
     }
 
     public static RuntimeBase reverse(int ctx, RuntimeBase... args) {
+        // CRITICAL: Check for control flow markers FIRST before any processing
+        // If any argument is a RuntimeControlFlowList, it's a non-local control flow that should propagate
+        for (RuntimeBase arg : args) {
+            if (arg instanceof RuntimeControlFlowList) {
+                return arg;  // Propagate control flow marker immediately
+            }
+        }
 
         if (ctx == SCALAR) {
             StringBuilder sb = new StringBuilder();
