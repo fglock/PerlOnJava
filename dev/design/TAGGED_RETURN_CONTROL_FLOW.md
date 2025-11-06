@@ -790,28 +790,27 @@ OUTER: for (@outer) {
 ### Phase 3: Call Site Checks - Detect and Handle Marked Returns
 **Goal**: Add checks after subroutine calls to detect marked RuntimeList and handle control flow.
 
-**⚠️ CRITICAL**: Tail call trampoline MUST be inlined (can't jump away)
-- Unlike last/next/redo/goto which jump away and never return
-- TAILCALL must return to next statement after trampoline completes
-- This means ~40-50 bytes per call site (trampoline loop is inline)
-- Higher bytecode overhead than other control flow (~15 bytes)
+**⚠️ KEY OPTIMIZATION**: One trampoline per subroutine, not per call site!
+- Call sites only check for control flow (~15 bytes each)
+- TAILCALL jumps to `returnLabel` like other control flow
+- Single trampoline loop at `returnLabel` handles all tail calls
+- Much more efficient than inlining trampoline at every call site
 
 **⚠️ CONTINGENCY PLAN**: If "Method too large" errors occur during this phase:
 1. **Immediate workaround**: Use a static flag `ENABLE_TAIL_CALLS = false` to disable tail call support
-2. **Alternative**: Move trampoline to a helper method, but still need inline check + call (~10 bytes)
-3. **Full fix**: Implement Phase 8 (loop extraction) early if needed
-4. **Rationale**: This lets us continue development and test other phases
+2. **Full fix**: Implement Phase 8 (loop extraction) early if needed
+3. **Rationale**: This lets us continue development and test other phases
 
 **Files to modify**:
 1. `src/main/java/org/perlonjava/codegen/EmitSubroutine.java`
 2. `src/main/java/org/perlonjava/codegen/EmitVariable.java` (for method calls)
 3. `src/main/java/org/perlonjava/codegen/EmitEval.java`
 
-**Bytecode pattern to emit** (after each `apply()` call):
+**Bytecode pattern to emit**:
 
-**Option A: Inline (default, ~20-30 bytes per call):**
+**At each call site** (~15 bytes per call):
 ```java
-// Result is on stack
+// Result is on stack after apply() call
 DUP                                   // Duplicate for test
 INVOKEVIRTUAL isNonLocalGoto()Z       // Check if marked
 IFNE handleControlFlow                // If true, jump to handler
@@ -819,13 +818,32 @@ POP                                   // Discard duplicate
 // Continue normal execution with result on stack
 
 handleControlFlow:
+  // All control flow types (last/next/redo/goto/TAILCALL) handled the same:
+  ASTORE temp                         // Save marked list
+  stackLevelManager.emitPopInstructions(mv, 0)  // Clean stack
+  ALOAD temp                          // Load marked list
+  GOTO returnLabel                    // Jump to subroutine's return point
+```
+
+**At subroutine's returnLabel** (once per subroutine):
+```java
+returnLabel:
+  // RuntimeList result is on stack (may be marked or unmarked)
+  // Perform local teardown first
+  localTeardown()
+  
+  // Check if TAILCALL and handle trampoline
+  DUP
+  INVOKEVIRTUAL isNonLocalGoto()Z
+  IFEQ normalReturn  // Not marked, return normally
+  
   DUP
   INVOKEVIRTUAL getControlFlowType()Lorg/perlonjava/runtime/ControlFlowType;
   INVOKEVIRTUAL ordinal()I
   SIPUSH 4  // TAILCALL.ordinal()
-  IF_ICMPNE not_tailcall
+  IF_ICMPNE normalReturn  // Not TAILCALL, return to caller (propagate control flow)
   
-  // Handle TAILCALL - trampoline loop
+  // TAILCALL trampoline loop (only reached for tail calls)
   tailcallLoop:
     // RuntimeList with TAILCALL marker on stack
     INVOKEVIRTUAL getTailCallCodeRef()Lorg/perlonjava/runtime/RuntimeScalar;
@@ -837,7 +855,7 @@ handleControlFlow:
     
     // Re-invoke: code.apply(args, context)
     ALOAD code
-    LDC "tailcall"  // Sub name
+    LDC "tailcall"
     ALOAD args
     pushContext()
     INVOKESTATIC RuntimeCode.apply(...)Lorg/perlonjava/runtime/RuntimeList;
@@ -845,66 +863,33 @@ handleControlFlow:
     // Check if result is another TAILCALL
     DUP
     INVOKEVIRTUAL isNonLocalGoto()Z
-    IFEQ tailcallDone  // If not marked, we're done
+    IFEQ normalReturn  // Not marked, return normally
     DUP
     INVOKEVIRTUAL getControlFlowType()Lorg/perlonjava/runtime/ControlFlowType;
     INVOKEVIRTUAL ordinal()I
     SIPUSH 4
-    IF_ICMPEQ tailcallLoop  // If still TAILCALL, loop again
-    
-  tailcallDone:
-    // Final result is on stack (may be unmarked OR marked with last/next/redo/goto)
-    // If unmarked: continue normal execution (can return normally)
-    // If marked with other control flow: handle it
-    DUP
-    INVOKEVIRTUAL isNonLocalGoto()Z
-    IFEQ afterControlFlowCheck  // Not marked, continue normal execution
-    // Fall through to handle other control flow types
+    IF_ICMPEQ tailcallLoop  // Still TAILCALL, loop again
+    // Otherwise fall through to normalReturn (propagate other control flow)
   
-  not_tailcall:
-    // Handle other control flow (last/next/redo/goto)
-    ASTORE temp
-    stackLevelManager.emitPopInstructions(mv, 0)
-    ALOAD temp
-    GOTO loopControlFlowHandler  // Or returnLabel if no loop
-
-afterControlFlowCheck:
-  // Normal execution continues here with result on stack
-  // Can proceed to next statement, or return if at end of subroutine
-```
-
-**Option B: Helper method (if Option A causes "Method too large"):**
-```java
-// Create static helper method in generated class:
-public static RuntimeList checkControlFlow(RuntimeList result, int stackLevel) {
-    if (!result.isNonLocalGoto()) {
-        return result;
-    }
-    // Pop stack if needed (stackLevel > 0)
-    // Return marked result
-    return result;
-}
-
-// At call site (~5 bytes):
-INVOKESTATIC checkControlFlow(RuntimeList, int)Lorg/perlonjava/runtime/RuntimeList;
-ASTORE temp
-// Check if marked and handle
+  normalReturn:
+    // Return RuntimeList to caller (may be marked with last/next/redo/goto, or unmarked)
+    ARETURN
 ```
 
 **Tasks**:
-- [ ] 3.1. **Start with Option A** (inline) - simpler and faster
-- [ ] 3.2. In `EmitSubroutine.handleApplyOperator()`, after `apply()` call, add check
-  - For TAILCALL: Implement **trampoline loop**:
-    - Keep re-invoking until non-TAILCALL result
-    - Final result continues to next statement (normal flow)
-    - **Key difference**: TAILCALL returns, others don't
-  - For last/next/redo/goto: Clean stack, jump to handler, **never return**
-- [ ] 3.3. In `EmitVariable` (method calls), after method invocation, add check
-  - Same trampoline handling for TAILCALL
-- [ ] 3.4. In `EmitEval`, after eval execution, add check
-- [ ] 3.5. For calls **outside loops**: jump to `returnLabel` (propagate to caller)
-- [ ] 3.6. For calls **inside loops**: jump to loop's control flow handler (will add in Phase 4)
-- [ ] 3.7. **If "Method too large" occurs**: Switch to Option B (helper method) or add `ENABLE_CONTROL_FLOW_CHECKS` flag
+- [ ] 3.1. In `EmitSubroutine.handleApplyOperator()`, after `apply()` call, add call-site check
+  - DUP, isNonLocalGoto(), jump to handler if true
+  - Handler: save result, clean stack, jump to `returnLabel`
+- [ ] 3.2. In `EmitVariable` (method calls), after method invocation, add same call-site check
+- [ ] 3.3. In `EmitEval`, after eval execution, add same call-site check
+- [ ] 3.4. In `EmitterMethodCreator`, modify `returnLabel` to add trampoline logic:
+  - Check if result is TAILCALL
+  - If yes, loop: extract codeRef/args, re-invoke, check result again
+  - If no, return normally (may be marked with other control flow, or unmarked)
+- [ ] 3.5. **Key insight**: All control flow (including TAILCALL) goes to `returnLabel`
+  - Trampoline at `returnLabel` handles TAILCALL specifically
+  - Other control flow (last/next/redo/goto) propagates to caller
+  - Much more efficient than per-call-site trampolines
 
 **Test**: 
 - Compile: `./gradlew build -x test`
