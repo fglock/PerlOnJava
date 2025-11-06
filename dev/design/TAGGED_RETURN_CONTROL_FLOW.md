@@ -1,5 +1,25 @@
 # Tagged Return Value Control Flow Design
 
+## Quick Reference
+
+**Before committing, ALWAYS run regression tests:**
+```bash
+cd /Users/fglock/projects/PerlOnJava
+./gradlew build -x test  # Rebuild jar
+timeout 900 dev/tools/perl_test_runner.pl \
+    perl5_t/t/uni/variables.t \
+    perl5_t/t/op/hash.t \
+    perl5_t/t/op/for.t \
+    perl5_t/t/cmd/mod.t \
+    perl5_t/t/op/list.t \
+    perl5_t/t/perf/benchmarks.t \
+    src/test/resources/unit/nonlocal_goto.t
+```
+
+**Expected baseline:** ≥99.8% pass rate, no VerifyErrors, no "Method too large" errors.
+
+---
+
 ## Overview
 
 This document describes the design for implementing Perl's non-local control flow (`last`, `next`, `redo`, `goto`) using **tagged return values** instead of exceptions. This approach avoids JVM bytecode verification errors while maintaining correct Perl semantics.
@@ -511,6 +531,50 @@ OUTER: for (@outer) {
 - [ ] Test loop extraction preserves semantics (control flow across extracted boundaries)
 
 ### Phase 7: Testing
+
+**Critical Regression Tests (run BEFORE every commit):**
+
+These are the tests that failed during development with various VerifyErrors and stack issues. They MUST pass before committing:
+
+```bash
+# Quick regression check (5-10 minutes)
+timeout 900 dev/tools/perl_test_runner.pl \
+    perl5_t/t/uni/variables.t \
+    perl5_t/t/op/hash.t \
+    perl5_t/t/op/for.t \
+    perl5_t/t/cmd/mod.t \
+    perl5_t/t/op/list.t \
+    perl5_t/t/io/through.t \
+    perl5_t/t/io/fs.t \
+    perl5_t/t/op/avhv.t \
+    perl5_t/t/op/aassign.t \
+    perl5_t/t/perf/benchmarks.t \
+    perl5_t/t/re/pat_advanced.t \
+    src/test/resources/unit/nonlocal_goto.t \
+    src/test/resources/unit/loop_label.t
+```
+
+**Baseline expectations (from logs/test_20251104_152600):**
+- `uni/variables.t`: 66683/66880 ok (99.7%)
+- `op/hash.t`: 26937/26942 ok (99.98%)
+- `op/for.t`: 119/119 ok (100%)
+- `cmd/mod.t`: 15/15 ok (100%)
+- `op/list.t`: 69/75 ok (incomplete - acceptable)
+- `io/through.t`: 942/942 ok (but very slow - 227s)
+- `perf/benchmarks.t`: 1960/1960 ok (100%)
+- `re/pat_advanced.t`: 48/83 ok (baseline)
+
+**Why these tests are critical:**
+1. **uni/variables.t**: Caught stack inconsistency in nested loops with expressions
+2. **op/hash.t**: Exposed loop-in-expression-context VerifyError
+3. **op/for.t**: Multiple loop contexts and control flow edge cases
+4. **cmd/mod.t**: Loop modifiers and control flow
+5. **op/list.t**: List operations with loops (VerifyError prone)
+6. **io/through.t**: Timeout-prone, catches infinite loops
+7. **perf/benchmarks.t**: Catches "Method too large" errors
+8. **re/pat_advanced.t**: Complex regex with loops
+
+**Unit Tests:**
 - [ ] Test unlabeled last/next/redo
 - [ ] Test labeled last/next/redo (local and non-local)
 - [ ] Test goto LABEL (local and non-local)
@@ -523,8 +587,14 @@ OUTER: for (@outer) {
 - [ ] Test continue blocks with next/last
 - [ ] Test control flow across eval boundaries
 - [ ] Test control flow in closures
+
+**Full Test Suite:**
 - [ ] Run full test suite (make test)
-- [ ] Compare against baseline (logs/test_YYYYMMDD_HHMMSS)
+- [ ] Compare against baseline (logs/test_20251104_152600)
+- [ ] Ensure pass rate >= 99.8%
+- [ ] No new VerifyErrors
+- [ ] No new "Method too large" errors
+- [ ] No new timeouts (except known slow tests)
 
 ## Performance Characteristics
 
