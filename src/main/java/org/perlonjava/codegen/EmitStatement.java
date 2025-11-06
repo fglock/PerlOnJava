@@ -15,6 +15,12 @@ import org.perlonjava.runtime.RuntimeContextType;
  * and generating the corresponding bytecode using ASM.
  */
 public class EmitStatement {
+    // Feature flags for control flow implementation
+    // Set to true to enable control flow handlers for loops (Phase 3)
+    private static final boolean ENABLE_LOOP_HANDLERS = false;
+    
+    // Set to true to enable debug output for loop control flow
+    private static final boolean DEBUG_LOOP_CONTROL_FLOW = false;
 
     /**
      * Emits bytecode to check for pending signals (like SIGALRM from alarm()).

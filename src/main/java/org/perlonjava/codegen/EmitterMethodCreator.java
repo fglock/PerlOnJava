@@ -20,6 +20,13 @@ import java.lang.reflect.*;
  */
 public class EmitterMethodCreator implements Opcodes {
 
+    // Feature flags for control flow implementation
+    // Set to true to enable tail call trampoline (Phase 3)
+    private static final boolean ENABLE_TAILCALL_TRAMPOLINE = true;
+    
+    // Set to true to enable debug output for control flow
+    private static final boolean DEBUG_CONTROL_FLOW = false;
+
     // Number of local variables to skip when processing a closure (this, @_, wantarray)
     public static int skipVariables = 3;
 
@@ -287,6 +294,7 @@ public class EmitterMethodCreator implements Opcodes {
             // Phase 3: Check for control flow markers
             // RuntimeList is on stack after getList()
             
+            if (ENABLE_TAILCALL_TRAMPOLINE) {
             // First, check if it's a TAILCALL (global trampoline)
             Label tailcallLoop = new Label();
             Label notTailcall = new Label();
@@ -383,6 +391,8 @@ public class EmitterMethodCreator implements Opcodes {
             
             // Normal return
             mv.visitLabel(normalReturn);
+            }  // End of if (ENABLE_TAILCALL_TRAMPOLINE)
+            
             // Teardown local variables and environment after the return value is materialized
             Local.localTeardown(localRecord, mv);
 
