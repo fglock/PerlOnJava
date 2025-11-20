@@ -70,4 +70,241 @@ private RuntimeScalar clone(Map<Object, Object> clones) {
 - **Recursive Cloning:** The `clone(Map<Object, Object> clones)` method is recursive and uses the map to manage and resolve circular references.
 - **Handling Different Types:** Ensure that all classes involved in potential circular references implement a similar cloning strategy.
 
+---
+
+## Cloning Closures (RuntimeCode)
+
+### How Closures Store Captured Variables
+
+In PerlOnJava, closures are implemented as instances of dynamically generated classes. When a closure captures variables from its outer scope:
+
+1. **Instance Fields:** Each captured variable becomes a public instance field on the generated class
+   - Field names match the Perl variable names (e.g., `$x`, `@arr`, `%hash`)
+   - Field types: `RuntimeScalar`, `RuntimeArray`, or `RuntimeHash` based on the sigil
+   - Special `__SUB__` field holds a self-reference for recursive closures
+
+2. **Constructor:** The generated class constructor accepts all captured variables as parameters and stores them in the instance fields
+
+3. **Execution:** When the closure's `apply()` method runs, it loads captured variable values from the instance fields into local variables
+
+**Example generated class structure:**
+
+```java
+public class org_perlonjava_anon123 extends Object {
+    // Captured variables as instance fields
+    public RuntimeScalar $x;
+    public RuntimeArray @arr;
+    public RuntimeHash %hash;
+    public RuntimeScalar __SUB__;
+    
+    // Constructor stores captured variables
+    public org_perlonjava_anon123(RuntimeScalar $x, RuntimeArray @arr, RuntimeHash %hash) {
+        this.$x = $x;
+        this.@arr = @arr;
+        this.%hash = %hash;
+    }
+    
+    // apply() method accesses instance fields
+    public RuntimeList apply(RuntimeArray @_, int wantarray) {
+        // Closure body has access to $x, @arr, %hash via instance fields
+        // ...
+    }
+}
+```
+
+### Why Closure Cloning is Critical
+
+When cloning a `RuntimeCode` that represents a closure:
+
+- **Shallow clone problem:** If we only clone the `RuntimeCode` object but not the `codeObject` instance, both the original and cloned closures would share the same captured variable instances
+- **Shared mutable state:** Changes to captured variables in one closure would affect the other
+- **Fork/threads requirement:** For proper fork() and threads emulation, each clone must have independent copies of captured variables
+
+### Strategy for Cloning RuntimeCode with Closures
+
+```java
+@Override
+public RuntimeCode clone(Map<Object, Object> clones) {
+    if (clones.containsKey(this)) {
+        return (RuntimeCode) clones.get(this);
+    }
+    
+    try {
+        RuntimeCode cloned = (RuntimeCode) super.clone();
+        clones.put(this, cloned);
+        
+        // Clone the code object instance (the closure instance)
+        if (this.codeObject != null) {
+            cloned.codeObject = cloneCodeObject(this.codeObject, clones);
+        }
+        
+        // Clone prototype if present
+        if (this.prototype != null && this.prototype instanceof Cloneable) {
+            cloned.prototype = ((RuntimeScalar) this.prototype).clone(clones);
+        }
+        
+        // MethodHandle and other immutable fields are shared (correct behavior)
+        // - methodHandle: references the same generated method (shared code)
+        // - subroutineName, packageName: immutable strings
+        
+        return cloned;
+    } catch (CloneNotSupportedException e) {
+        throw new AssertionError("Cloning not supported", e);
+    }
+}
+
+/**
+ * Deep clone a closure's code object (the instance of the generated class).
+ * Uses reflection to clone all captured variable fields.
+ */
+private Object cloneCodeObject(Object codeObject, Map<Object, Object> clones) {
+    if (codeObject == null) {
+        return null;
+    }
+    
+    // Check if already cloned
+    if (clones.containsKey(codeObject)) {
+        return clones.get(codeObject);
+    }
+    
+    try {
+        Class<?> codeObjectClass = codeObject.getClass();
+        
+        // Create a new instance using the default constructor
+        // Note: Generated classes don't have a no-arg constructor, so we need
+        // to use the constructor with captured variables
+        Constructor<?> constructor = findAppropriateConstructor(codeObjectClass);
+        
+        // Get all instance fields (captured variables)
+        Field[] fields = codeObjectClass.getDeclaredFields();
+        Object[] constructorArgs = new Object[constructor.getParameterCount()];
+        
+        // Clone each captured variable field
+        int argIndex = 0;
+        for (Field field : fields) {
+            field.setAccessible(true);
+            Object fieldValue = field.get(codeObject);
+            
+            if (fieldValue == null) {
+                constructorArgs[argIndex++] = null;
+                continue;
+            }
+            
+            // Deep clone based on field type
+            Object clonedValue;
+            if (fieldValue instanceof RuntimeScalar) {
+                clonedValue = ((RuntimeScalar) fieldValue).clone(clones);
+            } else if (fieldValue instanceof RuntimeArray) {
+                clonedValue = ((RuntimeArray) fieldValue).clone(clones);
+            } else if (fieldValue instanceof RuntimeHash) {
+                clonedValue = ((RuntimeHash) fieldValue).clone(clones);
+            } else if (fieldValue instanceof RuntimeCode) {
+                clonedValue = ((RuntimeCode) fieldValue).clone(clones);
+            } else {
+                // For other types, shallow copy (or skip if immutable)
+                clonedValue = fieldValue;
+            }
+            
+            constructorArgs[argIndex++] = clonedValue;
+        }
+        
+        // Create new instance with cloned captured variables
+        Object clonedCodeObject = constructor.newInstance(constructorArgs);
+        clones.put(codeObject, clonedCodeObject);
+        
+        // Handle __SUB__ self-reference after instance is created
+        for (Field field : fields) {
+            if (field.getName().equals("__SUB__")) {
+                field.setAccessible(true);
+                RuntimeScalar subRef = (RuntimeScalar) field.get(clonedCodeObject);
+                if (subRef != null && subRef.value instanceof RuntimeCode) {
+                    // Update __SUB__ to point to the cloned RuntimeCode
+                    subRef.value = clones.get(this);  // 'this' is the cloned RuntimeCode
+                }
+            }
+        }
+        
+        return clonedCodeObject;
+    } catch (Exception e) {
+        throw new RuntimeException("Failed to clone code object", e);
+    }
+}
+
+private Constructor<?> findAppropriateConstructor(Class<?> codeObjectClass) {
+    // Generated classes have exactly one constructor
+    Constructor<?>[] constructors = codeObjectClass.getDeclaredConstructors();
+    if (constructors.length > 0) {
+        constructors[0].setAccessible(true);
+        return constructors[0];
+    }
+    throw new RuntimeException("No constructor found for code object class");
+}
+```
+
+### Special Considerations for Closure Cloning
+
+1. **Shared vs Independent:**
+   - **Shared:** The generated method code (`MethodHandle`) is correctly shared between clones
+   - **Independent:** The instance fields (captured variables) must be deep-cloned
+   
+2. **Circular References via `__SUB__`:**
+   - Recursive closures have a `__SUB__` field that references the closure itself
+   - Must handle this circular reference carefully in the clones map
+   - Update `__SUB__` after cloning to point to the cloned `RuntimeCode`
+
+3. **Performance:**
+   - Closure cloning is expensive due to reflection and deep copying
+   - Consider lazy cloning strategies for fork/threads where possible
+   - Cache constructor lookups if cloning many closures of the same type
+
+4. **Clone Modes for Multiplicity:**
+   - **INDEPENDENT (fork):** Deep clone all captured variables
+   - **THREAD (ithreads):** Selectively clone based on `:shared` attribute
+   - **COPY_ON_WRITE:** Clone on first modification (optimization)
+
+### Example: Cloning a Closure
+
+```perl
+# Perl code
+my $counter = 0;
+my $increment = sub {
+    $counter++;
+    return $counter;
+};
+
+# After fork or threads->create, need to clone $increment
+# The cloned closure must have its own independent $counter
+```
+
+**Implementation:**
+
+```java
+// Original closure
+RuntimeCode originalClosure = ...;  // $increment
+
+// Clone for fork/threads
+Map<Object, Object> clones = new HashMap<>();
+RuntimeCode clonedClosure = originalClosure.clone(clones);
+
+// Now originalClosure and clonedClosure have independent $counter variables
+// Changes to $counter in one closure don't affect the other
+```
+
+### Integration with Fork/Threads
+
+When implementing fork() or threads via multiplicity (see `multiplicity.md`):
+
+```java
+// Fork emulation
+PerlRuntime childRuntime = parentRuntime.clone(CloneMode.INDEPENDENT);
+// All closures in childRuntime have independent captured variables
+
+// Threads emulation
+Set<String> sharedVars = getSharedVariables();  // Variables marked :shared
+PerlRuntime threadRuntime = parentRuntime.clone(CloneMode.THREAD, sharedVars);
+// Closures have independent copies except for :shared variables
+```
+
+This ensures that each fork/thread gets proper closure semantics without shared mutable state causing bugs.
+
 
