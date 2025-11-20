@@ -99,7 +99,11 @@ When adding new design documents:
 - **Link related docs:** Reference other relevant design documents
 - **Keep it current:** Update as implementation reveals new insights
 
-Formats: Markdown (`.md`) for structured documents, text (`.txt`) for quick notes.
+**Formats and naming in this directory:**
+
+- Use **Markdown** (`.md`) for all design documents in `dev/design/`.
+- File names (except `README.md`) should be **all lowercase**, using underscores or hyphens between words, e.g. `multiplicity.md`, `jsr223-perlonjava-web.md`, `variables_and_values.md`.
+- Avoid adding new `.txt` files here; if a note becomes useful as design documentation, convert it to `.md` and follow the naming rules above.
 
 ---
 
@@ -109,7 +113,7 @@ For the most important architectural decisions and current work, check:
 
 - **multiplicity.md** - Multiple independent Perl runtimes (enables fork/threads/web concurrency)
 - **jsr223-perlonjava-web.md** - JSR-223 compliance and web server integration
-- **FORK.md** / **Threads.md** - Concurrency model and limitations
+- **fork.md** / **threads.md** - Concurrency model and limitations
 
 These represent major architectural directions for the project.
 
