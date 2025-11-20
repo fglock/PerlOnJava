@@ -14,8 +14,7 @@ Step-by-Step Implementation
 Example Implementation
 1. Wrapper Class for Local Variable Management
 
-java
-
+```java
 public class Local<T> {
     private T value;
     private final Stack<T> previousValues = new Stack<>();
@@ -39,11 +38,11 @@ public class Local<T> {
         }
     }
 }
+```
 
 2. Usage of Local in a Method
 
-java
-
+```java
 public class Main {
     private static Local<String> globalVar = new Local<>("Original Value");
 
@@ -61,4 +60,5 @@ public class Main {
         System.out.println("After local scope: " + globalVar.get());
     }
 }
+```
 
