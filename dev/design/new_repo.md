@@ -8,31 +8,41 @@ Step-by-Step Guide 1. Clone the Original Repository
 
 First, clone the original repository to your local machine.
 
+```bash
 git clone https://github.com/username/original-repo.git
 cd original-repo
+```
 
 2. Install git filter-repo
 
 If you don't have git filter-repo installed, you can install it using pip:
 
+```bash
 pip install git-filter-repo
+```
 
 3. Filter the Directory
 
 Use git filter-repo to filter the directory you want to extract. Replace path/to/directory with the actual path to the directory within the repository.
 
+```bash
 git filter-repo --subdirectory-filter path/to/directory
+```
 
 This command rewrites the history to only include the specified directory and its history.
+
 4. Create a New Repository on GitHub
 
 Go to GitHub and create a new repository. Do not initialize it with a README, .gitignore, or license.
+
 5. Push to the New Repository
 
 Add the new GitHub repository as a remote and push the filtered content to it.
 
+```bash
 # Add the new repository as a remote
 git remote add new-origin https://github.com/username/new-repo.git
 
 # Push the filtered content to the new repository
 git push new-origin main
+```

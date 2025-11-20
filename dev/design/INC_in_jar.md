@@ -69,4 +69,3 @@ In the main Java code, when initializing @INC, include a path that represents th
     GlobalContext.getGlobalArray("main::INC").push(new RuntimeScalar("/"));
 
 
-
