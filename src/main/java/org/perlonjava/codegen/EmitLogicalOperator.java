@@ -194,12 +194,10 @@ public class EmitLogicalOperator {
      */
     static void emitXorOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
-        int operandContext = emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME
-                ? RuntimeContextType.RUNTIME
-                : RuntimeContextType.SCALAR;
 
+        // xor always needs RuntimeScalar operands, so evaluate in SCALAR context
         // Evaluate left operand
-        node.left.accept(emitterVisitor.with(operandContext));
+        node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         // Stack: [left]
 
         // Store left in a local variable to keep stack clean for control flow
@@ -209,7 +207,7 @@ public class EmitLogicalOperator {
 
         // Evaluate right operand (this may jump away if it's 'next', 'last', 'redo', 'return', etc.)
         // If it jumps, the stack is now clean at the loop level
-        node.right.accept(emitterVisitor.with(operandContext));
+        node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         // Stack: [right] (only if right didn't jump away)
 
         // Load left back onto stack

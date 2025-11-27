@@ -50,9 +50,9 @@ public class Time {
      * In scalar context, returns only the user CPU time in seconds.
      *
      * @param ctx the context (RuntimeContextType.SCALAR or RuntimeContextType.LIST)
-     * @return a RuntimeScalar (scalar context) or RuntimeList (list context) containing CPU time
+     * @return a RuntimeList containing CPU time values
      */
-    public static RuntimeBase times(int ctx) {
+    public static RuntimeList times(int ctx) {
         ThreadMXBean bean = ManagementFactory.getThreadMXBean();
         long cpu = bean.isCurrentThreadCpuTimeSupported() ?
                 bean.getCurrentThreadCpuTime() : 0L;
@@ -63,18 +63,18 @@ public class Time {
         double userTime = user / 1.0E9;  // user CPU time in seconds
         double systemTime = system / 1.0E9;  // system CPU time in seconds
 
+        RuntimeList res = new RuntimeList();
         if (ctx == RuntimeContextType.SCALAR) {
             // In scalar context, return just the user CPU time
-            return new RuntimeScalar(userTime);
+            res.add(userTime);
         } else {
             // In list context, return all four values
-            RuntimeList res = new RuntimeList();
             res.add(userTime);  // user CPU time
             res.add(systemTime);  // system CPU time
             res.add(0);  // child user CPU time (not available in Java)
             res.add(0);  // child system CPU time (not available in Java)
-            return res;
         }
+        return res;
     }
 
     /**
