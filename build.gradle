@@ -72,15 +72,15 @@ dependencies {
     implementation 'org.ow2.asm:asm-util:9.9'                     // ASM utilities
     implementation 'com.ibm.icu:icu4j:78.1'                       // Unicode support
     implementation 'com.alibaba.fastjson2:fastjson2:2.0.60'       // JSON processing
-    implementation 'org.snakeyaml:snakeyaml-engine:2.10'           // YAML processing
+    implementation 'org.snakeyaml:snakeyaml-engine:3.0.1'           // YAML processing
     implementation 'org.apache.commons:commons-csv:1.14.1'          // CSV processing
     implementation 'net.java.dev.jna:jna:5.18.1'                   // Native access
     implementation 'net.java.dev.jna:jna-platform:5.18.1'          // Native access
 
     // Testing dependencies
-    testImplementation 'org.junit.jupiter:junit-jupiter-api:6.0.1'
-    testImplementation 'org.junit.jupiter:junit-jupiter-engine:6.0.1'
-    testImplementation 'org.junit.jupiter:junit-jupiter-params:6.0.1'
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:6.1.0-M1'
+    testImplementation 'org.junit.jupiter:junit-jupiter-engine:6.1.0-M1'
+    testImplementation 'org.junit.jupiter:junit-jupiter-params:6.1.0-M1'
 }
 
 // JUnit configuration
