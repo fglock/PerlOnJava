@@ -202,6 +202,12 @@ public class EmitLogicalOperator {
         node.left.accept(emitterVisitor.with(operandContext));
         // Stack: [left]
 
+        // Convert to scalar if in RUNTIME context (xor requires RuntimeScalar)
+        if (operandContext == RuntimeContextType.RUNTIME) {
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase",
+                    "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        }
+
         // Store left in a local variable to keep stack clean for control flow
         int leftVar = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
         mv.visitVarInsn(Opcodes.ASTORE, leftVar);
@@ -211,6 +217,12 @@ public class EmitLogicalOperator {
         // If it jumps, the stack is now clean at the loop level
         node.right.accept(emitterVisitor.with(operandContext));
         // Stack: [right] (only if right didn't jump away)
+
+        // Convert to scalar if in RUNTIME context (xor requires RuntimeScalar)
+        if (operandContext == RuntimeContextType.RUNTIME) {
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase",
+                    "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        }
 
         // Load left back onto stack
         mv.visitVarInsn(Opcodes.ALOAD, leftVar);
