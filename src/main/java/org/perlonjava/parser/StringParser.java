@@ -207,6 +207,8 @@ public class StringParser {
 
     public static ParsedString parseRawStrings(Parser parser, EmitterContext ctx, List<LexerToken> tokens, int tokenIndex, int stringCount) {
         int pos = tokenIndex;
+        // Skip whitespace before the delimiter (e.g., `s /a/b/` or `s  xaaxbbx`)
+        pos = Whitespace.skipWhitespace(parser, pos, tokens);
         boolean redo = (stringCount == 3);
         ParsedString ast = parseRawStringWithDelimiter(ctx, tokens, pos, redo, parser); // use redo flag to extract 2 strings
         if (stringCount == 1) {

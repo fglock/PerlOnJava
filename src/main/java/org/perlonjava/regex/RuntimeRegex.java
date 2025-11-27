@@ -597,7 +597,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         RuntimeScalar replacement = regex.replacement;
         RegexFlags originalFlags = regex.regexFlags;
 
-        // Handle empty pattern - reuse last successful pattern
+        // Handle empty pattern - reuse last successful pattern or use empty pattern
         if (regex.patternString == null || regex.patternString.isEmpty()) {
             if (lastSuccessfulPattern != null) {
                 // Use the pattern from last successful match
@@ -617,7 +617,15 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 tempRegex.replacement = replacement;
                 regex = tempRegex;
             } else {
-                throw new PerlCompilerException("No previous regular expression");
+                // No previous regex - use empty pattern (matches empty string at start)
+                // This matches Perl's behavior: s//x/ inserts 'x' at the beginning
+                RuntimeRegex tempRegex = new RuntimeRegex();
+                int flags = originalFlags != null ? originalFlags.toPatternFlags() : 0;
+                tempRegex.pattern = Pattern.compile("", flags);
+                tempRegex.patternString = "";
+                tempRegex.regexFlags = originalFlags;
+                tempRegex.replacement = replacement;
+                regex = tempRegex;
             }
         }
 
