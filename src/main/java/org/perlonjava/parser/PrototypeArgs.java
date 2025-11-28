@@ -551,6 +551,61 @@ public class PrototypeArgs {
         }
     }
 
+    /**
+     * Unwraps unary plus from expressions like +(%hash) or +(@array) for backslash prototypes.
+     * In Perl, +() is used for disambiguation but should be transparent for \% and \@ prototypes.
+     *
+     * @param arg The argument node to potentially unwrap
+     * @param refType The reference type from the prototype ('%', '@', etc.)
+     * @return The unwrapped node if applicable, or the original node
+     */
+    private static Node unwrapUnaryPlus(Node arg, char refType) {
+        // Only unwrap for \% and \@ prototypes
+        if (refType != '%' && refType != '@') {
+            return arg;
+        }
+        
+        // Check if arg is unary plus: OperatorNode with operator "+"
+        if (!(arg instanceof OperatorNode plusOp) || !plusOp.operator.equals("+")) {
+            return arg;
+        }
+        
+        // Get the operand of the unary plus
+        Node operand = plusOp.operand;
+        
+        // If the operand is a ListNode with a single element, extract it
+        if (operand instanceof ListNode listNode && listNode.elements.size() == 1) {
+            operand = listNode.elements.get(0);
+        }
+        
+        // Check if the operand is the expected type (hash or array variable)
+        if (operand instanceof OperatorNode varOp) {
+            String expectedSigil = (refType == '%') ? "%" : "@";
+            if (varOp.operator.equals(expectedSigil)) {
+                return operand;
+            }
+        }
+        
+        // Also check if operand is directly a ListNode containing a hash/array expression
+        // This handles cases like +(%hash) where the parentheses create a list context
+        if (operand instanceof ListNode listNode) {
+            // In Perl +(%hash) should pass the hash itself, not a list
+            // Look for a single hash or array variable inside the list
+            if (listNode.elements.size() == 1) {
+                Node element = listNode.elements.get(0);
+                if (element instanceof OperatorNode varOp) {
+                    String expectedSigil = (refType == '%') ? "%" : "@";
+                    if (varOp.operator.equals(expectedSigil)) {
+                        return element;
+                    }
+                }
+            }
+        }
+        
+        // Return original if no match
+        return arg;
+    }
+
     private static int handleBackslashArgument(Parser parser, ListNode args, String prototype, int prototypeIndex,
                                                boolean isOptional, boolean needComma) {
         if (prototypeIndex >= prototype.length()) {
@@ -572,6 +627,9 @@ public class PrototypeArgs {
         // Restore flag
         parser.parsingTakeReference = oldParsingTakeReference;
         if (referenceArg != null) {
+            // Handle +(%hash) and +(@array) constructs for \% and \@ prototypes
+            // The unary + is used for disambiguation but should be transparent for prototypes
+            referenceArg = unwrapUnaryPlus(referenceArg, refType);
             // For \& prototype, check for invalid forms like &foo(), foo(), or bareword foo
             if (refType == '&') {
                 String subName = parser.ctx.symbolTable.getCurrentSubroutine();
