@@ -58,7 +58,13 @@ public class EmitOperatorLocal {
                 if (child instanceof OperatorNode opNode && opNode.operator.equals("undef")) {
                     continue;
                 }
-                handleLocal(emitterVisitor.with(RuntimeContextType.VOID), new OperatorNode("local", child, node.tokenIndex));
+                // For declared references like local (\$f, $g), extract the variable from \$f
+                Node varToLocalize = child;
+                if (child instanceof OperatorNode opNode && opNode.operator.equals("\\")) {
+                    // This is \$var - extract the inner variable
+                    varToLocalize = opNode.operand;
+                }
+                handleLocal(emitterVisitor.with(RuntimeContextType.VOID), new OperatorNode("local", varToLocalize, node.tokenIndex));
             }
             
             // Return the list with references if isDeclaredReference is set
@@ -70,9 +76,18 @@ public class EmitOperatorLocal {
                     mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "()V", false);
                     
                     for (Node child : listNode.elements) {
-                        if (child instanceof OperatorNode elemOpNode && "$@%".contains(elemOpNode.operator)) {
+                        // Handle both direct variables ($f) and declared refs (\$f)
+                        Node varNode = child;
+                        if (child instanceof OperatorNode elemOpNode) {
+                            if (elemOpNode.operator.equals("\\") && elemOpNode.operand instanceof OperatorNode innerOp) {
+                                // This is \$var - use the inner variable
+                                varNode = innerOp;
+                            }
+                        }
+                        
+                        if (varNode instanceof OperatorNode varOpNode && "$@%".contains(varOpNode.operator)) {
                             mv.visitInsn(Opcodes.DUP);
-                            child.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                            varNode.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
                             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                                     "org/perlonjava/runtime/RuntimeBase",
                                     "createReference",
@@ -85,16 +100,25 @@ public class EmitOperatorLocal {
                                     false);
                         }
                     }
+                    // List is on stack, don't call handleVoidContext
                 } else {
                     node.operand.accept(emitterVisitor.with(lvalueContext));
+                    EmitOperator.handleVoidContext(emitterVisitor);
                 }
             }
-            EmitOperator.handleVoidContext(emitterVisitor);
+            // In VOID context, nothing to return
             return;
         }
 
-        node.operand.accept(emitterVisitor.with(lvalueContext));
-        boolean isTypeglob = node.operand instanceof OperatorNode operatorNode && operatorNode.operator.equals("*");
+        // For declared references like local \%h, extract the actual variable
+        Node varToLocal = node.operand;
+        if (node.operand instanceof OperatorNode opNode && opNode.operator.equals("\\")) {
+            varToLocal = opNode.operand;
+            lvalueContext = LValueVisitor.getContext(varToLocal);
+        }
+        
+        varToLocal.accept(emitterVisitor.with(lvalueContext));
+        boolean isTypeglob = varToLocal instanceof OperatorNode operatorNode && operatorNode.operator.equals("*");
         // save the old value
         if (isTypeglob) {
             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
@@ -113,6 +137,15 @@ public class EmitOperatorLocal {
                     "org/perlonjava/runtime/DynamicVariableManager",
                     "pushLocalVariable",
                     "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                    false);
+        }
+        
+        // If this is a declared reference and not void context, create and return a reference
+        if (isDeclaredReference && emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/RuntimeBase",
+                    "createReference",
+                    "()Lorg/perlonjava/runtime/RuntimeScalar;",
                     false);
         }
         EmitOperator.handleVoidContext(emitterVisitor);
