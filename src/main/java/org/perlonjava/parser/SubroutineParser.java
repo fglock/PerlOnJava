@@ -78,40 +78,24 @@ public class SubroutineParser {
                 
                 // Use lexical sub when:
                 // 1. There are explicit parentheses, OR
-                // 2. There's no prototype (no ambiguity), OR
-                // 3. The next token isn't a bareword identifier (to avoid indirect method call confusion)
+                // 2. There's a prototype, OR
+                // 3. The next token isn't a bareword identifier (to avoid indirect method call confusion), OR
+                // 4. We're parsing a code reference for sort/map/grep (parsingForLoopVariable is true)
                 boolean useExplicitParen = nextToken.text.equals("(");
                 boolean hasPrototype = lexicalPrototype != null;
                 boolean nextIsIdentifier = nextToken.type == LexerTokenType.IDENTIFIER;
                 
-                if (useExplicitParen || hasPrototype || !nextIsIdentifier) {
+                if (useExplicitParen || hasPrototype || !nextIsIdentifier || parser.parsingForLoopVariable) {
                     // This is a lexical sub/method - use the hidden variable instead of package lookup
                     // The varNode is the "my $name__lexsub_123" or "my $name__lexmethod_123" variable
                     
-                    // Parse arguments using prototype if available
-                    ListNode arguments;
-                    if (useExplicitParen) {
-                        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
-                        List<Node> argList = ListParser.parseList(parser, ")", 0);
-                        arguments = new ListNode(argList, parser.tokenIndex);
-                    } else if (hasPrototype) {
-                        // Use prototype to parse arguments
-                        arguments = consumeArgsWithPrototype(parser, lexicalPrototype);
-                    } else {
-                        // No parentheses, no prototype, no arguments
-                        arguments = new ListNode(parser.tokenIndex);
-                    }
-                    
-                    // Return a call to the hidden variable using $hiddenVar(arguments) syntax
-                    // The varNode contains the variable declaration with the hidden variable name stored as annotation
+                    // Get the hidden variable name for the lexical sub
                     String hiddenVarName = (String) varNode.getAnnotation("hiddenVarName");
                     if (hiddenVarName != null) {
                         // Get the package where this lexical sub was declared
-                        // This ensures we access the correct global variable even after package switches
                         String declaringPackage = (String) varNode.getAnnotation("declaringPackage");
                         
                         // Make the hidden variable name fully qualified with the declaring package
-                        // This prevents package-dependent normalization issues
                         String qualifiedHiddenVarName = hiddenVarName;
                         if (declaringPackage != null && !hiddenVarName.contains("::")) {
                             qualifiedHiddenVarName = declaringPackage + "::" + hiddenVarName;
@@ -131,6 +115,30 @@ public class SubroutineParser {
                         } else if (varNode.operator.equals("state") && varNode.operand instanceof OperatorNode innerNode) {
                             // Fallback: copy ID from the declaration
                             dollarOp.id = innerNode.id;
+                        }
+                        
+                        // If parsingForLoopVariable is set, we just need the code reference, not a call
+                        // This is used by sort/map/grep when parsing the comparison sub
+                        if (parser.parsingForLoopVariable) {
+                            return dollarOp;
+                        }
+                        
+                        // Parse arguments using prototype if available
+                        ListNode arguments;
+                        if (useExplicitParen) {
+                            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
+                            if (hasPrototype) {
+                                // Use prototype to parse arguments (already consumed opening paren)
+                                arguments = consumeArgsWithPrototype(parser, lexicalPrototype, false);
+                                TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
+                            } else {
+                                List<Node> argList = ListParser.parseList(parser, ")", 0);
+                                arguments = new ListNode(argList, parser.tokenIndex);
+                            }
+                        } else {
+                            // No explicit parentheses - parse arguments with prototype (or null for no prototype)
+                            // This matches behavior of regular package subs which call consumeArgsWithPrototype
+                            arguments = consumeArgsWithPrototype(parser, lexicalPrototype);
                         }
                         
                         // Call the hidden variable directly: $hiddenVar(arguments)
