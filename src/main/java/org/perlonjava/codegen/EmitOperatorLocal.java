@@ -15,6 +15,10 @@ public class EmitOperatorLocal {
     // Handles the 'local' operator.
     static void handleLocal(EmitterVisitor emitterVisitor, OperatorNode node) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
+        
+        // Check if this is a declared reference (local \$x)
+        boolean isDeclaredReference = node.annotations != null &&
+                Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"));
 
         if (node.operand instanceof OperatorNode opNode && opNode.operator.equals("$")) {
             // Check if the variable is global
@@ -30,6 +34,15 @@ public class EmitOperatorLocal {
                             "makeLocal",
                             "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
                             false);
+                    
+                    // If this is a declared reference and not void context, create and return a reference
+                    if (isDeclaredReference && emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
+                        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                                "org/perlonjava/runtime/RuntimeBase",
+                                "createReference",
+                                "()Lorg/perlonjava/runtime/RuntimeScalar;",
+                                false);
+                    }
                     EmitOperator.handleVoidContext(emitterVisitor);
                     return;
                 }
@@ -47,7 +60,35 @@ public class EmitOperatorLocal {
                 }
                 handleLocal(emitterVisitor.with(RuntimeContextType.VOID), new OperatorNode("local", child, node.tokenIndex));
             }
-            node.operand.accept(emitterVisitor.with(lvalueContext));
+            
+            // Return the list with references if isDeclaredReference is set
+            if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
+                if (isDeclaredReference) {
+                    // For declared references, return a list of references to the variables
+                    mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
+                    mv.visitInsn(Opcodes.DUP);
+                    mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "()V", false);
+                    
+                    for (Node child : listNode.elements) {
+                        if (child instanceof OperatorNode elemOpNode && "$@%".contains(elemOpNode.operator)) {
+                            mv.visitInsn(Opcodes.DUP);
+                            child.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                                    "org/perlonjava/runtime/RuntimeBase",
+                                    "createReference",
+                                    "()Lorg/perlonjava/runtime/RuntimeScalar;",
+                                    false);
+                            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                                    "org/perlonjava/runtime/RuntimeList",
+                                    "add",
+                                    "(Lorg/perlonjava/runtime/RuntimeBase;)V",
+                                    false);
+                        }
+                    }
+                } else {
+                    node.operand.accept(emitterVisitor.with(lvalueContext));
+                }
+            }
             EmitOperator.handleVoidContext(emitterVisitor);
             return;
         }

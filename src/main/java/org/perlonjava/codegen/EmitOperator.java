@@ -963,6 +963,16 @@ public class EmitOperator {
             return true;
         }
 
+        // Check for my/our/state/local with a list operand: \my ($a, $b), \my \($a, $b)
+        if (node.operand instanceof OperatorNode opNode) {
+            String op = opNode.operator;
+            if ("my".equals(op) || "our".equals(op) || "state".equals(op) || "local".equals(op)) {
+                if (opNode.operand instanceof ListNode) {
+                    return true;
+                }
+            }
+        }
+
         // Check for slice operations: %x{...}, @x{...}, @x[...]
         if (node.operand instanceof BinaryOperatorNode binOp) {
             // Check if it's a hash slice "{" or array slice "["
