@@ -92,8 +92,14 @@ public class SubroutineParser {
                     ListNode arguments;
                     if (useExplicitParen) {
                         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
-                        List<Node> argList = ListParser.parseList(parser, ")", 0);
-                        arguments = new ListNode(argList, parser.tokenIndex);
+                        if (hasPrototype) {
+                            // Use prototype to parse arguments (already consumed opening paren)
+                            arguments = consumeArgsWithPrototype(parser, lexicalPrototype, false);
+                            TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
+                        } else {
+                            List<Node> argList = ListParser.parseList(parser, ")", 0);
+                            arguments = new ListNode(argList, parser.tokenIndex);
+                        }
                     } else if (hasPrototype) {
                         // Use prototype to parse arguments
                         arguments = consumeArgsWithPrototype(parser, lexicalPrototype);
