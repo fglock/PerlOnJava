@@ -275,13 +275,27 @@ public class StatementResolver {
                                     }
                                 }
                                 
-                                // Then check for prototype if not already set by attribute
-                                // IMPORTANT: Only parse as prototype if signatures feature is NOT enabled
-                                // When signatures are enabled, let parseSubroutineDefinition handle (...) as a signature
-                                if (prototype == null && peek(parser).text.equals("(") 
-                                        && !parser.ctx.symbolTable.isFeatureCategoryEnabled("signatures")) {
-                                    // Parse the prototype
-                                    prototype = ((StringNode) StringParser.parseRawString(parser, "q")).value;
+                                // Then check for prototype/signature
+                                // When signatures are enabled, we need to look ahead:
+                                // - (...) { ... } means signature + body
+                                // - (...) ; means prototype (forward declaration)
+                                if (prototype == null && peek(parser).text.equals("(")) {
+                                    if (parser.ctx.symbolTable.isFeatureCategoryEnabled("signatures")) {
+                                        // Look ahead to see if there's a body after the parens
+                                        int savedIndex = parser.tokenIndex;
+                                        StringParser.parseRawString(parser, "q"); // consume the parens
+                                        boolean hasBodyAfterParens = peek(parser).text.equals("{");
+                                        parser.tokenIndex = savedIndex; // restore position
+                                        
+                                        if (!hasBodyAfterParens) {
+                                            // Forward declaration: (...) ; - parse as prototype
+                                            prototype = ((StringNode) StringParser.parseRawString(parser, "q")).value;
+                                        }
+                                        // else: leave (...) for parseSubroutineDefinition to handle as signature
+                                    } else {
+                                        // Signatures not enabled - always parse as prototype
+                                        prototype = ((StringNode) StringParser.parseRawString(parser, "q")).value;
+                                    }
                                 }
                                 
                                 // Now check if there's a body
@@ -355,8 +369,39 @@ public class StatementResolver {
                                     if (prototype != null) {
                                         // Store prototype in varDecl annotation
                                         varDecl.setAnnotation("prototype", prototype);
+                                        
+                                        // Create a stub RuntimeCode with the prototype set
+                                        // This is needed so that prototype(\&sub) works for forward declarations
+                                        String declaringPackage = parser.ctx.symbolTable.getCurrentPackage();
+                                        String qualifiedHiddenVarName = declaringPackage + "::" + hiddenVarName;
+                                        
+                                        // Create a subroutine stub with the prototype that returns undef
+                                        // The body needs at least a return statement to avoid bytecode issues
+                                        List<Node> stubBody = new ArrayList<>();
+                                        stubBody.add(new OperatorNode("undef", null, parser.tokenIndex));
+                                        SubroutineNode stubSub = new SubroutineNode(
+                                                null,  // anonymous
+                                                prototype,
+                                                attributes.isEmpty() ? null : attributes,
+                                                new BlockNode(stubBody, parser.tokenIndex),
+                                                false,  // useTryCatch
+                                                parser.tokenIndex
+                                        );
+                                        
+                                        // Create assignment: $hiddenVarName = sub { }
+                                        OperatorNode varRef = new OperatorNode("$", 
+                                                new IdentifierNode(qualifiedHiddenVarName, parser.tokenIndex), 
+                                                parser.tokenIndex);
+                                        BinaryOperatorNode stubAssignment = new BinaryOperatorNode("=", varRef, stubSub, parser.tokenIndex);
+                                        
+                                        // Execute the stub assignment in a BEGIN block
+                                        BlockNode beginBlock = new BlockNode(new ArrayList<>(List.of(stubAssignment)), parser.tokenIndex);
+                                        SpecialBlockParser.runSpecialBlock(parser, "BEGIN", beginBlock);
+                                        
+                                        // Return empty list since stub was created
+                                        yield new ListNode(parser.tokenIndex);
                                     }
-                                    // Just declare the variable
+                                    // Just declare the variable (no prototype case)
                                     yield varDecl;
                                 }
                             }
