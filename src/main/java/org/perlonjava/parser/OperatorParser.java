@@ -390,8 +390,15 @@ public class OperatorParser {
             consumeAttributes(parser, attributes);
         }
         if (!attributes.isEmpty()) {
-            // Add the attributes to the operand
-            decl.annotations = Map.of("attributes", attributes);
+            // Add the attributes to the operand, preserving any existing annotations
+            if (decl.annotations != null && decl.annotations.containsKey("isDeclaredReference")) {
+                // Create a new map with both the existing isDeclaredReference and new attributes
+                java.util.Map<String, Object> newAnnotations = new java.util.HashMap<>(decl.annotations);
+                newAnnotations.put("attributes", attributes);
+                decl.annotations = newAnnotations;
+            } else {
+                decl.annotations = Map.of("attributes", attributes);
+            }
         }
 
         return decl;
