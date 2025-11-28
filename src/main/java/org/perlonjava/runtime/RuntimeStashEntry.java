@@ -119,6 +119,19 @@ public class RuntimeStashEntry extends RuntimeGlob {
                 return value;
             case UNDEF:
                 return value;
+            case STRING:
+            case BYTE_STRING:
+                // Assigning a string to a stash entry sets the prototype for that symbol
+                // e.g., $::{foo} = '$$' sets the prototype of &foo to '$$'
+                RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(this.globName);
+                if (codeRef.type == CODE) {
+                    ((RuntimeCode) codeRef.value).prototype = value.toString();
+                } else {
+                    // Create a new RuntimeCode with the prototype
+                    RuntimeCode code = new RuntimeCode(value.toString(), null);
+                    codeRef.set(new RuntimeScalar(code));
+                }
+                return value;
         }
         throw new IllegalStateException("typeglob assignment not implemented for " + value.type);
     }
