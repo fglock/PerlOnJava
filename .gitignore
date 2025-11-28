@@ -63,3 +63,5 @@ logs/
 test_*.log
 test_*.json
 
+t.pl
+test_yaml_0yml

@@ -276,13 +276,19 @@ public class StatementResolver {
                                 }
                                 
                                 // Then check for prototype if not already set by attribute
-                                if (prototype == null && peek(parser).text.equals("(")) {
+                                // IMPORTANT: Only parse as prototype if signatures feature is NOT enabled
+                                // When signatures are enabled, let parseSubroutineDefinition handle (...) as a signature
+                                if (prototype == null && peek(parser).text.equals("(") 
+                                        && !parser.ctx.symbolTable.isFeatureCategoryEnabled("signatures")) {
                                     // Parse the prototype
                                     prototype = ((StringNode) StringParser.parseRawString(parser, "q")).value;
                                 }
                                 
                                 // Now check if there's a body
-                                hasBody = peek(parser).text.equals("{");
+                                // When signatures are enabled, (...) followed by { also indicates a body
+                                String peekText = peek(parser).text;
+                                hasBody = peekText.equals("{") || 
+                                         (peekText.equals("(") && parser.ctx.symbolTable.isFeatureCategoryEnabled("signatures"));
 
                                 if (hasBody) {
                                     // Full definition: my sub name {...} or my sub name (...) {...}
@@ -315,13 +321,28 @@ public class StatementResolver {
                                     }
                                     BinaryOperatorNode assignment = new BinaryOperatorNode("=", varRef, anonSub, parser.tokenIndex);
 
-                                    // Execute assignment immediately during parsing (like a BEGIN block)
-                                    // This is crucial for cases like: state sub foo{...}; use overload => \&foo;
-                                    BlockNode beginBlock = new BlockNode(new ArrayList<>(List.of(assignment)), parser.tokenIndex);
-                                    SpecialBlockParser.runSpecialBlock(parser, "BEGIN", beginBlock);
+                                    // Check if we're inside a subroutine
+                                    String currentSub = parser.ctx.symbolTable.getCurrentSubroutine();
+                                    boolean insideSubroutine = currentSub != null && !currentSub.isEmpty();
                                     
-                                    // Return empty list since the assignment already executed
-                                    yield new ListNode(parser.tokenIndex);
+                                    if (declaration.equals("state") || !insideSubroutine) {
+                                        // For state sub: Execute assignment immediately during parsing (like a BEGIN block)
+                                        // This is crucial for cases like: state sub foo{...}; use overload => \&foo;
+                                        // The closure is created once and reused across all calls
+                                        //
+                                        // For my sub at FILE SCOPE: Also execute at compile time so that
+                                        // use statements (like use overload) can access the sub reference
+                                        BlockNode beginBlock = new BlockNode(new ArrayList<>(List.of(assignment)), parser.tokenIndex);
+                                        SpecialBlockParser.runSpecialBlock(parser, "BEGIN", beginBlock);
+                                        
+                                        // Return empty list since the assignment already executed
+                                        yield new ListNode(parser.tokenIndex);
+                                    } else {
+                                        // For my sub INSIDE ANOTHER SUB: Return the assignment to be executed at runtime
+                                        // This creates a fresh closure each time the enclosing scope is entered,
+                                        // correctly capturing the current values of closure variables
+                                        yield assignment;
+                                    }
                                 } else {
                                     // Forward declaration: my sub name; or my sub name ($);
                                     // For forward declarations, add &subName immediately since there's no body to be invisible in
