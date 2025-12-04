@@ -9,6 +9,51 @@
 
 ## Completed Milestones
 
+- **v5.42.2**: 250k Tests, Class Features, System V IPC, Sockets, and More
+
+  - Add Perl 5.38+ Class Features
+    - Class keyword with block syntax fully working
+    - Method declarations with automatic $self injection
+    - Field declarations supporting all sigils ($, @, %)
+    - Constructor parameter fields with :param attribute
+    - Reader method generation with :reader attribute  
+    - Automatic constructor generation with named parameters
+    - Default values for fields fully functional
+    - ADJUST blocks with field transformation working
+    - Field transformation to $self->{field} in methods
+    - Lexical method calls using $self->&priv syntax
+    - Class inheritance with :isa attribute working
+    - Version checking in :isa(Parent version) implemented
+    - Parent class field inheritance fully functional
+    - Object stringification shows OBJECT not HASH
+    - ClassRegistry tracks Perl 5.38+ class instances
+    - Context-aware reader methods for arrays/hashes
+    - Field transformation in string interpolation works
+    - __CLASS__ keyword with compile-time evaluation
+  - Add System V IPC operators: `msgctl`, `msgget`, `msgrcv`, `msgsnd`, `semctl`, `semget`, `semop`, `shmctl`, `shmget`, `shmread`, `shmwrite`.
+  - Add network enumeration operators: `endhostent`, `endnetent`, `endprotoent`, `endservent`, `gethostent`, `getnetbyaddr`, `getnetbyname`, `getnetent`, `getprotoent`, `getservent`, `sethostent`, `setnetent`, `setprotoent`, `setservent`.
+  - Add socket operators: `socket`, `bind`, `listen`, `accept`, `connect`, `send`, `recv`, `shutdown`, `setsockopt`, `getsockopt`, `getsockname`, `getpeername`, `socketpair`.
+  - Add Socket.pm module with socket constants and functions.
+  - Add `alarm` operator with `$SIG{ALRM}` signal handling.
+  - Fix `truncate` operator.
+  - Add `pipe` operator.
+  - Add `do \&subroutine`.
+  - Add `formline` operator and `$^A` accumulator variable
+  - Add file descriptor duplication support in `open` (`<&`, `>&`, `<&=`, `>&=`).
+  - Add statement: `format`, and `write` operator
+  - Add special variables: `@{^CAPTURE}`, `${^LAST_SUCCESSFUL_PATTERN}`.
+  - Add pack format `x`.
+  - Add `do filehandle`.
+  - Add module `Storable`, `experimental`, `Unicode::UCD`.
+  - Add single-quote as package separator.
+  - Dereferencing using `$$var{...}` and `$$var[...]` works.
+  - Add declared references: `my \$x`, `my(\@arr)`, `my(\%hash)`.
+  - Add subroutines declared `my`, `state`, or `our`.
+  - Bugfix in regex `/r`.
+  - Bugfix in transliterate with octal values.
+  - Bugfix in nested heredocs.
+ 
+
 - **v5.42.1**: 150k Tests, Extended Operators, and More Perl 5 Features
 
   - Add operators: `getlogin`, `getpwnam`, `getpwuid`, `getgrnam`, `getgrgid`, `getpwent`, `getgrent`, `setpwent`, `setgrent`, `endpwent`, `endgrent`, `gethostbyname`, `gethostbyaddr`, `getservbyname`, `getservbyport`, `getprotobyname`, `getprotobynumber`, `reset`.
@@ -311,50 +356,9 @@ The following areas are currently under active development to enhance the functi
 
 ## Upcoming Milestones
 
-- **v5.42.2**: Next minor version
+- **v5.42.3**: Next minor version
 
-  - Add Perl 5.38+ Class Features
-    - Class keyword with block syntax fully working
-    - Method declarations with automatic $self injection
-    - Field declarations supporting all sigils ($, @, %)
-    - Constructor parameter fields with :param attribute
-    - Reader method generation with :reader attribute  
-    - Automatic constructor generation with named parameters
-    - Default values for fields fully functional
-    - ADJUST blocks with field transformation working
-    - Field transformation to $self->{field} in methods
-    - Lexical method calls using $self->&priv syntax
-    - Class inheritance with :isa attribute working
-    - Version checking in :isa(Parent version) implemented
-    - Parent class field inheritance fully functional
-    - Object stringification shows OBJECT not HASH
-    - ClassRegistry tracks Perl 5.38+ class instances
-    - Context-aware reader methods for arrays/hashes
-    - Field transformation in string interpolation works
-    - __CLASS__ keyword with compile-time evaluation
-  - Add System V IPC operators: `msgctl`, `msgget`, `msgrcv`, `msgsnd`, `semctl`, `semget`, `semop`, `shmctl`, `shmget`, `shmread`, `shmwrite`.
-  - Add network enumeration operators: `endhostent`, `endnetent`, `endprotoent`, `endservent`, `gethostent`, `getnetbyaddr`, `getnetbyname`, `getnetent`, `getprotoent`, `getservent`, `sethostent`, `setnetent`, `setprotoent`, `setservent`.
-  - Add socket operators: `socket`, `bind`, `listen`, `accept`, `connect`, `send`, `recv`, `shutdown`, `setsockopt`, `getsockopt`, `getsockname`, `getpeername`, `socketpair`.
-  - Add Socket.pm module with socket constants and functions.
-  - Add `alarm` operator with `$SIG{ALRM}` signal handling.
-  - Fix `truncate` operator.
-  - Add `pipe` operator.
-  - Add `do \&subroutine`.
-  - Add `formline` operator and `$^A` accumulator variable
-  - Add file descriptor duplication support in `open` (`<&`, `>&`, `<&=`, `>&=`).
-  - Add statement: `format`, and `write` operator
-  - Add special variables: `@{^CAPTURE}`, `${^LAST_SUCCESSFUL_PATTERN}`.
-  - Add pack format `x`.
-  - Add `do filehandle`.
-  - Add module `Storable`, `experimental`, `Unicode::UCD`.
-  - Add single-quote as package separator.
-  - Dereferencing using `$$var{...}` and `$$var[...]` works.
-  - Add declared references: `my \$x`, `my(\@arr)`, `my(\%hash)`.
-  - Add subroutines declared `my`, `state`, or `our`.
-  - Bugfix in regex `/r`.
-  - Bugfix in transliterate with octal values.
-  - Bugfix in nested heredocs.
-  - Planned release date: 2025-12-10.
+ - Planned release date: 2026-02-10.
 
 - Work in Progress
   - PerlIO
