@@ -1,5 +1,6 @@
 package org.perlonjava.perlmodule;
 
+import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.*;
 import org.tomlj.TomlArray;
 import org.tomlj.TomlParseResult;
@@ -54,7 +55,7 @@ public class Toml extends PerlModuleBase {
      */
     public static RuntimeList from_toml(RuntimeArray args, int ctx) {
         if (args.size() < 1) {
-            throw new IllegalStateException("from_toml requires a TOML string argument");
+            throw new PerlCompilerException("from_toml requires a TOML string argument");
         }
         
         String tomlString = args.get(0).toString();
@@ -115,7 +116,7 @@ public class Toml extends PerlModuleBase {
      */
     public static RuntimeList to_toml(RuntimeArray args, int ctx) {
         if (args.size() < 1) {
-            throw new IllegalStateException("to_toml requires a data structure argument");
+            throw new PerlCompilerException("to_toml requires a data structure argument");
         }
         
         RuntimeScalar data = args.get(0);
@@ -125,7 +126,7 @@ public class Toml extends PerlModuleBase {
             convertRuntimeScalarToToml(data, sb, "", false);
             return new RuntimeScalar(sb.toString()).getList();
         } catch (Exception e) {
-            throw new IllegalStateException("Error generating TOML: " + e.getMessage());
+            throw new PerlCompilerException("Error generating TOML: " + e.getMessage());
         }
     }
 

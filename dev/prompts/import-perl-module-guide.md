@@ -159,7 +159,7 @@ Description of function2.
 =cut
 ```
 
-### Step 4: Create Example File
+### Step 4: Create Example File (if asked)
 
 Create `examples/modulename.pl`:
 
@@ -224,9 +224,8 @@ make
 ### Step 7: Update Documentation
 
 Update these files:
-- `README.md` - Add to supported modules list
-- `docs/FEATURE_MATRIX.md` - Add module entry
-- `MILESTONES.md` - Note the addition (if significant)
+- `docs/FEATURE_MATRIX.md` - Add module entry in `Non-core modules` section
+- `MILESTONES.md` - Note the addition in the `Upcoming Milestones` section
 
 ### Step 8: Commit
 
@@ -324,7 +323,11 @@ public static RuntimeList parse(RuntimeArray args, int ctx) {
     }
 }
 
-// Throw Perl exception
+// Throw Perl exception (preferred)
+// Import: import org.perlonjava.runtime.PerlCompilerException;
+throw new PerlCompilerException("Error message");
+
+// Alternative (less preferred)
 throw new IllegalStateException("Error message");
 ```
 
