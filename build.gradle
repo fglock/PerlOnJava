@@ -73,6 +73,7 @@ dependencies {
     implementation 'com.ibm.icu:icu4j:78.1'                       // Unicode support
     implementation 'com.alibaba.fastjson2:fastjson2:2.0.60'       // JSON processing
     implementation 'org.snakeyaml:snakeyaml-engine:3.0.1'           // YAML processing
+    implementation 'org.tomlj:tomlj:1.1.1'                           // TOML processing
     implementation 'org.apache.commons:commons-csv:1.14.1'          // CSV processing
     implementation 'net.java.dev.jna:jna:5.18.1'                   // Native access
     implementation 'net.java.dev.jna:jna-platform:5.18.1'          // Native access

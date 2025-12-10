@@ -626,6 +626,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **HTTP::CookieJar** module.
 - ✅  **JSON** module.
 - ✅  **Text::CSV** module.
+- ✅  **TOML** module.
 - ✅  **YAML::PP** module.
 - ✅  **YAML** module.
 
