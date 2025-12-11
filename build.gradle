@@ -21,7 +21,7 @@ plugins {
     // Plugin for creating OS packages (deb)
     id 'com.netflix.nebula.ospackage' version '12.1.1'
     // Plugin for creating fat/uber JARs
-    id 'com.github.johnrengelman.shadow' version '8.1.1'
+    id 'com.gradleup.shadow' version '9.3.0'
 }
 
 // Main application class configuration
@@ -43,7 +43,7 @@ ospackage {
     packageName = 'perlonjava'
     version = project.version
     maintainer = 'Flavio Soibelmann Glock <fglock@gmail.com>'
-    requires('java-21-openjdk-headless')
+    // Java 21+ is required at runtime (any distribution: Oracle, Azul, Temurin, OpenJDK, etc.)
 
     into '/opt/perlonjava'
     from('build/install/perlonjava') {
