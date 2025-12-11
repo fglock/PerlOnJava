@@ -181,20 +181,9 @@ public class EmitterMethodCreator implements Opcodes {
                 mv.visitVarInsn(Opcodes.ASTORE, i);
             }
 
-            // Pre-initialize additional slots that might be allocated by localSetup or other mechanisms
-            // This prevents VerifyErrors when slots are accessed before explicit initialization
-            // We initialize slots from env.length up to the current variable index + buffer
-            // The symbol table tracks how many slots were allocated during parsing
-            int currentVarIndex = ctx.symbolTable.getCurrentLocalVariableIndex();
-            // Add a buffer of 50 slots for runtime allocations (local variables, temporaries, etc.)
-            // This is especially important for complex subroutines like those in Pod::Simple
-            int maxPreInitSlots = Math.max(currentVarIndex, env.length) + 50;
-            ctx.logDebug("Pre-initializing slots from " + env.length + " to " + maxPreInitSlots + 
-                        " (currentVarIndex=" + currentVarIndex + ")");
-            for (int i = env.length; i < maxPreInitSlots; i++) {
-                mv.visitInsn(Opcodes.ACONST_NULL);
-                mv.visitVarInsn(Opcodes.ASTORE, i);
-            }
+            // Note: We no longer pre-initialize slots with NULL values.
+            // Each allocateLocalVariable() call is immediately followed by a store instruction,
+            // so slots are properly initialized when allocated during bytecode emission.
 
             // Create a label for the return point
             ctx.javaClassInfo.returnLabel = new Label();
