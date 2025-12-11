@@ -436,16 +436,44 @@ public class Dereference {
             // Push __SUB__
             handleSelfCallOperator(emitterVisitor.with(RuntimeContextType.SCALAR), null);
 
-            arguments.accept(emitterVisitor.with(RuntimeContextType.LIST)); // right parameter: parameter list
+            // Generate native RuntimeBase[] array for parameters instead of RuntimeList
+            ListNode paramList = ListNode.makeList(arguments);
+            int argCount = paramList.elements.size();
 
-            // Transform the value in the stack to RuntimeArray
-            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "getArrayOfAlias", "()Lorg/perlonjava/runtime/RuntimeArray;", false);
-            emitterVisitor.ctx.mv.visitLdcInsn(emitterVisitor.ctx.contextType);   // push call context to stack
-            emitterVisitor.ctx.mv.visitMethodInsn(
+            // Create array of RuntimeBase with size equal to number of arguments
+            if (argCount <= 5) {
+                mv.visitInsn(Opcodes.ICONST_0 + argCount);
+            } else if (argCount <= 127) {
+                mv.visitIntInsn(Opcodes.BIPUSH, argCount);
+            } else {
+                mv.visitIntInsn(Opcodes.SIPUSH, argCount);
+            }
+            mv.visitTypeInsn(Opcodes.ANEWARRAY, "org/perlonjava/runtime/RuntimeBase");
+
+            // Populate the array with arguments
+            EmitterVisitor listVisitor = emitterVisitor.with(RuntimeContextType.LIST);
+            for (int index = 0; index < argCount; index++) {
+                mv.visitInsn(Opcodes.DUP); // Duplicate array reference
+                if (index <= 5) {
+                    mv.visitInsn(Opcodes.ICONST_0 + index);
+                } else if (index <= 127) {
+                    mv.visitIntInsn(Opcodes.BIPUSH, index);
+                } else {
+                    mv.visitIntInsn(Opcodes.SIPUSH, index);
+                }
+
+                // Generate code for argument in LIST context
+                paramList.elements.get(index).accept(listVisitor);
+
+                mv.visitInsn(Opcodes.AASTORE); // Store in array
+            }
+
+            mv.visitLdcInsn(emitterVisitor.ctx.contextType);   // push call context to stack
+            mv.visitMethodInsn(
                     Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/RuntimeCode",
                     "call",
-                    "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeArray;I)Lorg/perlonjava/runtime/RuntimeList;",
+                    "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;[Lorg/perlonjava/runtime/RuntimeBase;I)Lorg/perlonjava/runtime/RuntimeList;",
                     false); // generate an .call()
             if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
                 // Transform the value in the stack to RuntimeScalar
