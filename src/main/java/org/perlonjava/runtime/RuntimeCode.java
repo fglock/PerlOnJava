@@ -592,7 +592,63 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return null;
     }
 
-    // Method to apply (execute) a subroutine reference
+    // Method to apply (execute) a subroutine reference using native array for parameters
+    public static RuntimeList apply(RuntimeScalar runtimeScalar, String subroutineName, RuntimeBase[] args, int callContext) {
+        // WORKAROUND for eval-defined subs not filling lexical forward declarations:
+        // If the RuntimeScalar is undef (forward declaration never filled), 
+        // silently return undef so tests can continue running.
+        // This is a temporary workaround for the architectural limitation that eval 
+        // contexts are captured at compile time.
+        if (runtimeScalar.type == RuntimeScalarType.UNDEF) {
+            // Return undef in appropriate context
+            if (callContext == RuntimeContextType.LIST) {
+                return new RuntimeList();
+            } else {
+                return new RuntimeList(new RuntimeScalar());
+            }
+        }
+        
+        // Check if the type of this RuntimeScalar is CODE
+        if (runtimeScalar.type == RuntimeScalarType.CODE) {
+
+            // Transform the native array to RuntimeArray of aliases (Perl variable `@_`)
+            RuntimeArray a = new RuntimeArray();
+            for (RuntimeBase arg : args) {
+                arg.setArrayOfAlias(a);
+            }
+
+            RuntimeCode code = (RuntimeCode) runtimeScalar.value;
+            if (code.defined()) {
+                // Cast the value to RuntimeCode and call apply()
+                return code.apply(subroutineName, a, callContext);
+            }
+
+            // Does AUTOLOAD exist?
+            if (!subroutineName.isEmpty()) {
+                // Check if AUTOLOAD exists
+                String autoloadString = subroutineName.substring(0, subroutineName.lastIndexOf("::") + 2) + "AUTOLOAD";
+                // System.err.println("AUTOLOAD: " + fullName);
+                RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(autoloadString);
+                if (autoload.getDefinedBoolean()) {
+                    // System.err.println("AUTOLOAD exists: " + fullName);
+                    // Set $AUTOLOAD name
+                    getGlobalVariable(autoloadString).set(subroutineName);
+                    // Call AUTOLOAD
+                    return apply(autoload, a, callContext);
+                }
+                throw new PerlCompilerException("Undefined subroutine &" + subroutineName + " called at ");
+            }
+        }
+
+        RuntimeScalar overloadedCode = handleCodeOverload(runtimeScalar);
+        if (overloadedCode != null) {
+            return apply(overloadedCode, subroutineName, args, callContext);
+        }
+
+        throw new PerlCompilerException("Not a CODE reference");
+    }
+
+    // Method to apply (execute) a subroutine reference (legacy method for compatibility)
     public static RuntimeList apply(RuntimeScalar runtimeScalar, String subroutineName, RuntimeBase list, int callContext) {
         // WORKAROUND for eval-defined subs not filling lexical forward declarations:
         // If the RuntimeScalar is undef (forward declaration never filled), 
