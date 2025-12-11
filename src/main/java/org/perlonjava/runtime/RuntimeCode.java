@@ -356,6 +356,31 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     /**
      * Call a method in a Perl-like class hierarchy using the C3 linearization algorithm.
+     * This version accepts a native RuntimeBase[] array for parameters.
+     *
+     * @param runtimeScalar The object to call the method on.
+     * @param method        The method to resolve.
+     * @param currentSub    The subroutine to resolve SUPER::method in.
+     * @param args          The arguments to pass to the method as native array.
+     * @param callContext   The call context.
+     * @return The result of the method call.
+     */
+    public static RuntimeList call(RuntimeScalar runtimeScalar,
+                                   RuntimeScalar method,
+                                   RuntimeScalar currentSub,
+                                   RuntimeBase[] args,
+                                   int callContext) {
+        // Transform the native array to RuntimeArray of aliases (Perl variable `@_`)
+        // Note: `this` (runtimeScalar) will be inserted by the RuntimeArray version
+        RuntimeArray a = new RuntimeArray();
+        for (RuntimeBase arg : args) {
+            arg.setArrayOfAlias(a);
+        }
+        return call(runtimeScalar, method, currentSub, a, callContext);
+    }
+
+    /**
+     * Call a method in a Perl-like class hierarchy using the C3 linearization algorithm.
      *
      * @param runtimeScalar The object to call the method on.
      * @param method        The method to resolve.
