@@ -3,7 +3,11 @@
 all: build
 
 wrapper:
-	gradle wrapper
+ifeq ($(OS),Windows_NT)
+	@if not exist gradlew.bat gradle wrapper
+else
+	@test -f ./gradlew || gradle wrapper
+endif
 
 # Standard build - incremental compilation (fast)
 build: wrapper
