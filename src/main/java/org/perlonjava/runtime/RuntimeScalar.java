@@ -100,13 +100,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     public RuntimeScalar(RuntimeScalar scalar) {
         if (scalar.type == TIED_SCALAR) {
-            RuntimeScalar temp = scalar.tiedFetch();
-            this.type = temp.type;
-            this.value = temp.value;
-        } else {
-            this.type = scalar.type;
-            this.value = scalar.value;
+            scalar = scalar.tiedFetch();
         }
+        this.type = scalar.type;
+        this.value = scalar.value;
     }
 
     public RuntimeScalar(RuntimeCode value) {
