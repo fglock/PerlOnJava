@@ -1155,13 +1155,22 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public boolean getDefinedBoolean() {
+        // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         return switch (type) {
-            // case BOOLEAN -> (boolean) value;
-            case CODE -> ((RuntimeCode) value).defined();
-            case FORMAT -> ((RuntimeFormat) value).getDefinedBoolean();
-            case TIED_SCALAR -> this.tiedFetch().getDefinedBoolean();
-            case DUALVAR -> ((DualVar) this.value).stringValue().getDefinedBoolean();
-            default -> type != UNDEF;
+            case INTEGER -> true;       // 0
+            case DOUBLE -> true;        // 1
+            case STRING -> true;        // 2
+            case BYTE_STRING -> true;   // 3
+            case UNDEF -> false;        // 4
+            case VSTRING -> true;       // 5
+            case BOOLEAN -> true;       // 6
+            case GLOB -> true;          // 7
+            case JAVAOBJECT -> true;    // 8
+            case TIED_SCALAR -> this.tiedFetch().getDefinedBoolean(); // 9
+            case DUALVAR -> ((DualVar) this.value).stringValue().getDefinedBoolean(); // 10
+            case FORMAT -> ((RuntimeFormat) value).getDefinedBoolean(); // 11
+            // Reference types (with REFERENCE_BIT) fall through to default
+            default -> type == CODE ? ((RuntimeCode) value).defined() : true;
         };
     }
 
