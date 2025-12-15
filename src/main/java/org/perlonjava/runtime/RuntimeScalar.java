@@ -835,8 +835,25 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
         }
 
+        // ARRAYREFERENCE is first as the most common case
+        if (type == ARRAYREFERENCE) {
+            return (RuntimeArray) value;
+        }
+
+        // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         return switch (type) {
-            case UNDEF -> {
+            case INTEGER -> // 0
+                // For numeric constants (like 1->[0]), return an empty array
+                // This matches Perl's behavior where 1->[0] returns undef without error
+                    new RuntimeArray();
+            case DOUBLE -> // 1
+                // For numeric constants (like 1->[0]), return an empty array
+                    new RuntimeArray();
+            case STRING -> // 2
+                    throw new PerlCompilerException("Can't use string (\"" + this + "\") as an ARRAY ref while \"strict refs\" in use");
+            case BYTE_STRING -> // 3
+                    throw new PerlCompilerException("Can't use string (\"" + this + "\") as an ARRAY ref while \"strict refs\" in use");
+            case UNDEF -> { // 4
                 // Don't autovivify read-only scalars (like constants)
                 // This matches Perl's behavior where 1->[0] returns undef without error
                 if (this instanceof RuntimeScalarReadOnly) {
@@ -844,24 +861,23 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 }
                 yield AutovivificationArray.createAutovivifiedArray(this);
             }
-            case ARRAYREFERENCE -> (RuntimeArray) value;
-            case GLOB -> {
+            case VSTRING -> // 5
+                    throw new PerlCompilerException("Not an ARRAY reference");
+            case BOOLEAN -> // 6
+                    throw new PerlCompilerException("Not an ARRAY reference");
+            case GLOB -> { // 7
                 // When dereferencing a typeglob as an array, return the array slot
                 RuntimeGlob glob = (RuntimeGlob) value;
                 yield GlobalVariable.getGlobalArray(glob.globName);
             }
-            case GLOBREFERENCE -> {
-                // GLOBREFERENCE (like *STDOUT{IO}) is not an array reference
-                throw new PerlCompilerException("Not an ARRAY reference");
-            }
-            case STRING, BYTE_STRING ->
-                    throw new PerlCompilerException("Can't use string (\"" + this + "\") as an ARRAY ref while \"strict refs\" in use");
-            case TIED_SCALAR -> tiedFetch().arrayDeref();
-            case INTEGER, DOUBLE -> {
-                // For numeric constants (like 1->[0]), return an empty array
-                // This matches Perl's behavior where 1->[0] returns undef without error
-                yield new RuntimeArray();
-            }
+            case JAVAOBJECT -> // 8
+                    throw new PerlCompilerException("Not an ARRAY reference");
+            case TIED_SCALAR -> // 9
+                    tiedFetch().arrayDeref();
+            case DUALVAR -> // 10
+                    throw new PerlCompilerException("Not an ARRAY reference");
+            case FORMAT -> // 11
+                    throw new PerlCompilerException("Not an ARRAY reference");
             default -> throw new PerlCompilerException("Not an ARRAY reference");
         };
     }
@@ -904,32 +920,43 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
         }
 
+        // HASHREFERENCE is first as the most common case
+        if (type == HASHREFERENCE) {
+            return (RuntimeHash) value;
+        }
+
+        // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         return switch (type) {
-            case UNDEF ->
-                //                var hash = new RuntimeHash();
-                //                this.type = RuntimeScalarType.HASHREFERENCE;
-                //                this.value = hash;
-                //                yield hash;
+            case INTEGER -> // 0
+                    throw new PerlCompilerException("Not a HASH reference");
+            case DOUBLE -> // 1
+                    throw new PerlCompilerException("Not a HASH reference");
+            case STRING -> // 2
+                // Strict refs violation: attempting to use a string as a hash ref
+                    throw new PerlCompilerException("Can't use string (\"" + this + "\") as a HASH ref while \"strict refs\" in use");
+            case BYTE_STRING -> // 3
+                // Strict refs violation: attempting to use a string as a hash ref
+                    throw new PerlCompilerException("Can't use string (\"" + this + "\") as a HASH ref while \"strict refs\" in use");
+            case UNDEF -> // 4
                     AutovivificationHash.createAutovivifiedHash(this);
-            case HASHREFERENCE ->
-                // Simple case: already a hash reference, just return the hash
-                    (RuntimeHash) value;
-            case GLOB -> {
+            case VSTRING -> // 5
+                    throw new PerlCompilerException("Not a HASH reference");
+            case BOOLEAN -> // 6
+                    throw new PerlCompilerException("Not a HASH reference");
+            case GLOB -> { // 7
                 // When dereferencing a typeglob as a hash, return the hash slot
                 RuntimeGlob glob = (RuntimeGlob) value;
                 yield GlobalVariable.getGlobalHash(glob.globName);
             }
-            case GLOBREFERENCE -> {
-                // GLOBREFERENCE (like *STDOUT{IO}) is not a hash reference
-                throw new PerlCompilerException("Not a HASH reference");
-            }
-            case STRING, BYTE_STRING ->
-                // Strict refs violation: attempting to use a string as a hash ref
-                    throw new PerlCompilerException("Can't use string (\"" + this + "\") as a HASH ref while \"strict refs\" in use");
-            case TIED_SCALAR -> tiedFetch().hashDeref();
-            default ->
-                // All other types (INTEGER, DOUBLE, etc.) cannot be dereferenced as hashes
+            case JAVAOBJECT -> // 8
                     throw new PerlCompilerException("Not a HASH reference");
+            case TIED_SCALAR -> // 9
+                    tiedFetch().hashDeref();
+            case DUALVAR -> // 10
+                    throw new PerlCompilerException("Not a HASH reference");
+            case FORMAT -> // 11
+                    throw new PerlCompilerException("Not a HASH reference");
+            default -> throw new PerlCompilerException("Not a HASH reference");
         };
     }
 
@@ -1008,26 +1035,51 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
         }
 
+        // HASHREFERENCE is first as the most common case
+        if (type == HASHREFERENCE) {
+            return (RuntimeHash) value;
+        }
+
+        // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         return switch (type) {
-            case UNDEF -> {
+            case INTEGER -> // 0
+                    throw new PerlCompilerException("Not a HASH reference");
+            case DOUBLE -> // 1
+                    throw new PerlCompilerException("Not a HASH reference");
+            case STRING -> { // 2
+                // Symbolic reference: treat the scalar's string value as a variable name
+                String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
+                yield GlobalVariable.getGlobalHash(varName);
+            }
+            case BYTE_STRING -> { // 3
+                // Symbolic reference: treat the scalar's string value as a variable name
+                String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
+                yield GlobalVariable.getGlobalHash(varName);
+            }
+            case UNDEF -> { // 4
                 // Don't autovivify read-only scalars (like constants)
                 if (this instanceof RuntimeScalarReadOnly) {
                     yield new RuntimeHash();
                 }
                 yield AutovivificationHash.createAutovivifiedHash(this);
             }
-            case HASHREFERENCE -> (RuntimeHash) value;
-            case GLOB -> {
+            case VSTRING -> // 5
+                    throw new PerlCompilerException("Not a HASH reference");
+            case BOOLEAN -> // 6
+                    throw new PerlCompilerException("Not a HASH reference");
+            case GLOB -> { // 7
                 // When dereferencing a typeglob as a hash, return the hash slot
                 RuntimeGlob glob = (RuntimeGlob) value;
                 yield GlobalVariable.getGlobalHash(glob.globName);
             }
-            case STRING, BYTE_STRING -> {
-                // Symbolic reference: treat the scalar's string value as a variable name
-                String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
-                yield GlobalVariable.getGlobalHash(varName);
-            }
-            case TIED_SCALAR -> tiedFetch().hashDerefNonStrict(packageName);
+            case JAVAOBJECT -> // 8
+                    throw new PerlCompilerException("Not a HASH reference");
+            case TIED_SCALAR -> // 9
+                    tiedFetch().hashDerefNonStrict(packageName);
+            case DUALVAR -> // 10
+                    throw new PerlCompilerException("Not a HASH reference");
+            case FORMAT -> // 11
+                    throw new PerlCompilerException("Not a HASH reference");
             default -> throw new PerlCompilerException("Not a HASH reference");
         };
     }
@@ -1049,8 +1101,30 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
         }
 
+        // ARRAYREFERENCE is first as the most common case
+        if (type == ARRAYREFERENCE) {
+            return (RuntimeArray) value;
+        }
+
+        // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         return switch (type) {
-            case UNDEF -> {
+            case INTEGER -> // 0
+                // For numeric constants (like 1->[0]), return an empty array
+                    new RuntimeArray();
+            case DOUBLE -> // 1
+                // For numeric constants (like 1->[0]), return an empty array
+                    new RuntimeArray();
+            case STRING -> { // 2
+                // Symbolic reference: treat the scalar's string value as a variable name
+                String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
+                yield GlobalVariable.getGlobalArray(varName);
+            }
+            case BYTE_STRING -> { // 3
+                // Symbolic reference: treat the scalar's string value as a variable name
+                String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
+                yield GlobalVariable.getGlobalArray(varName);
+            }
+            case UNDEF -> { // 4
                 // Don't autovivify read-only scalars (like constants)
                 // This matches Perl's behavior where 1->[0] returns undef without error
                 if (this instanceof RuntimeScalarReadOnly) {
@@ -1058,18 +1132,23 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 }
                 yield AutovivificationArray.createAutovivifiedArray(this);
             }
-            case ARRAYREFERENCE -> (RuntimeArray) value;
-            case GLOB -> {
+            case VSTRING -> // 5
+                    throw new PerlCompilerException("Not an ARRAY reference");
+            case BOOLEAN -> // 6
+                    throw new PerlCompilerException("Not an ARRAY reference");
+            case GLOB -> { // 7
                 // When dereferencing a typeglob as an array, return the array slot
                 RuntimeGlob glob = (RuntimeGlob) value;
                 yield GlobalVariable.getGlobalArray(glob.globName);
             }
-            case STRING, BYTE_STRING -> {
-                // Symbolic reference: treat the scalar's string value as a variable name
-                String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
-                yield GlobalVariable.getGlobalArray(varName);
-            }
-            case TIED_SCALAR -> tiedFetch().arrayDerefNonStrict(packageName);
+            case JAVAOBJECT -> // 8
+                    throw new PerlCompilerException("Not an ARRAY reference");
+            case TIED_SCALAR -> // 9
+                    tiedFetch().arrayDerefNonStrict(packageName);
+            case DUALVAR -> // 10
+                    throw new PerlCompilerException("Not an ARRAY reference");
+            case FORMAT -> // 11
+                    throw new PerlCompilerException("Not an ARRAY reference");
             default -> throw new PerlCompilerException("Not an ARRAY reference");
         };
     }
