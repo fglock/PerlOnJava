@@ -359,6 +359,10 @@ The following areas are currently under active development to enhance the functi
 - **v5.42.3**: Next minor version
 
  - Add modules: `TOML`.
+ - Bugfix: operator override in Time::Hires now works.
+ - Optimization: faster list assignment.
+ - Optimization: faster type resolution in Perl scalars.
+ - Optimization: `make` now runs tests in parallel.
  - Planned release date: 2026-02-10.
 
 - Work in Progress
@@ -445,7 +449,7 @@ The following areas are currently under active development to enhance the functi
   - **Time-bound:** Complete by Q1 2027.
 
 3. **Advanced Data Manipulation**
-  - **Specific:** Add JSON/XML parsing and data transformation features.
+  - **Specific:** Add XML parsing and data transformation features.
   - **Measurable:** Provide at least three example scripts demonstrating these capabilities.
   - **Achievable:** Use existing Java libraries for data manipulation.
   - **Relevant:** Increases PerlOnJava's applicability in data-driven applications.
@@ -512,3 +516,4 @@ The following areas are currently under active development to enhance the functi
     - Unix: ptrace, signals, IPC
     - Windows: Registry, COM objects
     - MacOS: FSEvents, CoreFoundation, Security framework
+
