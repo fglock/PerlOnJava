@@ -1,6 +1,7 @@
 package org.perlonjava.perlmodule;
 
 import org.perlonjava.operators.MathOperators;
+import org.perlonjava.parser.ParserTables;
 import org.perlonjava.runtime.*;
 
 import static org.perlonjava.runtime.RuntimeContextType.SCALAR;
@@ -275,7 +276,13 @@ public class Exporter extends PerlModuleBase {
     private static void importFunction(String packageName, String caller, String functionName) {
         RuntimeScalar exportSymbol = GlobalVariable.getGlobalCodeRef(packageName + "::" + functionName);
         if (exportSymbol.type == RuntimeScalarType.CODE) {
-            GlobalVariable.getGlobalCodeRef(caller + "::" + functionName).set(exportSymbol);
+            String fullName = caller + "::" + functionName;
+            GlobalVariable.getGlobalCodeRef(fullName).set(exportSymbol);
+            // If this function name is an overridable operator (like 'time'), mark it in isSubs
+            // so the parser knows to treat it as a subroutine call instead of the builtin
+            if (ParserTables.OVERRIDABLE_OP.contains(functionName)) {
+                GlobalVariable.isSubs.put(fullName, true);
+            }
         } else {
             throw new PerlCompilerException("Function " + functionName + " not found in package " + packageName);
         }
