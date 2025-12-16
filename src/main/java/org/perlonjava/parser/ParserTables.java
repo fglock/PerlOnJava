@@ -31,7 +31,7 @@ public class ParserTables {
     static final Map<String, Integer> precedenceMap = new HashMap<>();
     // The list below was obtained by running this in the perl git:
     // ack  'CORE::GLOBAL::\w+' | perl -n -e ' /CORE::GLOBAL::(\w+)/ && print $1, "\n" ' | sort -u
-    static final Set<String> OVERRIDABLE_OP = Set.of(
+    public static final Set<String> OVERRIDABLE_OP = Set.of(
             "caller", "chdir", "close", "connect",
             "die", "do",
             "exit",
