@@ -668,7 +668,8 @@ public class OperatorParser {
             if (TokenUtils.peek(parser).text.equals(")")) {
                 operand = new OperatorNode("undef", null, currentIndex);
             } else {
-                operand = parser.parseExpression(parser.getPrecedence(token.text) + 1);
+                // Parentheses group a full expression; allow low-precedence operators like `and`/`or`.
+                operand = parser.parseExpression(0);
             }
             TokenUtils.consume(parser, OPERATOR, ")");
             return new OperatorNode(token.text, operand, currentIndex);
