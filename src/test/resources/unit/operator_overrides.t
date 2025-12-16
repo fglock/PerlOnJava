@@ -84,17 +84,18 @@ subtest 'warn operator override' => sub {
     is($warnings[0], "test warning\n", 'warn override captured correct message');
 };
 
-subtest 'time operator override' => sub {
+subtest 'rename operator override' => sub {
     plan tests => 2;
 
-    # Override time with use subs
-    use subs 'time';
-    sub time {
-        return 1234567890;
+    # Override rename with use subs
+    use subs 'rename';
+    sub rename {
+        return "fake_rename";
     }
 
-    is(time(), 1234567890, 'time overridden with use subs');
-    ok(CORE::time() > 1000000000, 'CORE::time returns reasonable value');
+    is(rename(), "fake_rename", 'rename overridden with use subs');
+    # CORE::rename would actually rename files, so just check it's callable
+    ok(defined &CORE::rename, 'CORE::rename exists');
 };
 
 subtest 'uc operator override' => sub {

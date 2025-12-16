@@ -98,6 +98,7 @@ public class GlobalContext {
         GlobalVariable.getGlobalVariable(encodeSpecialVar("P")).set(0);    // initialize $^P to 0 - debugger flags
         GlobalVariable.globalVariables.put(encodeSpecialVar("LAST_SUCCESSFUL_PATTERN"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_SUCCESSFUL_PATTERN));
         GlobalVariable.globalVariables.put(encodeSpecialVar("LAST_FH"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_FH)); // $^LAST_FH
+        GlobalVariable.getGlobalVariable(encodeSpecialVar("UNICODE")).set(0);    // initialize $^UNICODE to 0 - `-C` unicode flags
 
         // Aliases
         GlobalVariable.aliasGlobalVariable(encodeSpecialVar("PREMATCH"), "main::`");
