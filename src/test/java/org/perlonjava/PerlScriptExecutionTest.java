@@ -22,7 +22,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
 import java.util.Locale;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -98,9 +101,40 @@ public class PerlScriptExecutionTest {
             });
         }
         
-        return pathStream
+        List<String> sortedScripts = pathStream
                 .map(resourcePath::relativize) // Get the relative path
-                .map(Path::toString); // Convert to string path
+                .map(Path::toString) // Convert to string path
+                .sorted() // Ensure deterministic order
+                .collect(Collectors.toList());
+
+        // Sharding logic
+        String shardIndexProp = System.getProperty("test.shard.index");
+        String shardTotalProp = System.getProperty("test.shard.total");
+        
+        if (shardIndexProp != null && !shardIndexProp.isEmpty() && 
+            shardTotalProp != null && !shardTotalProp.isEmpty()) {
+            try {
+                int shardIndex = Integer.parseInt(shardIndexProp);
+                int shardTotal = Integer.parseInt(shardTotalProp);
+                
+                // Maven surefire.forkNumber is 1-indexed, convert to 0-indexed
+                if (shardIndex >= 1 && shardIndex <= shardTotal) {
+                    shardIndex = shardIndex - 1;
+                }
+                
+                if (shardTotal > 1 && shardIndex >= 0 && shardIndex < shardTotal) {
+                    System.out.println("Running shard " + (shardIndex + 1) + " of " + shardTotal);
+                    final int finalShardIndex = shardIndex;
+                    return IntStream.range(0, sortedScripts.size())
+                        .filter(i -> i % shardTotal == finalShardIndex)
+                        .mapToObj(sortedScripts::get);
+                }
+            } catch (NumberFormatException e) {
+                // Silently fall through to run all tests
+            }
+        }
+
+        return sortedScripts.stream();
     }
 
     /**

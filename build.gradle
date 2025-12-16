@@ -192,3 +192,31 @@ tasks.named('processResources', Copy) {
 tasks.named('processTestResources', Copy) {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
+
+// Parallel test execution tasks
+// Run with: ./gradlew testUnitParallel --parallel
+def parallelShards = 4
+
+(0..<parallelShards).each { index ->
+    tasks.register("testUnitShard${index}", Test) {
+        group = 'verification'
+        description = "Runs shard ${index} of ${parallelShards} of unit tests"
+        
+        useJUnitPlatform {
+            includeTags 'unit'
+            excludeTags 'full'
+        }
+        
+        systemProperty 'test.shard.index', index
+        systemProperty 'test.shard.total', parallelShards
+        
+        testClassesDirs = sourceSets.test.output.classesDirs
+        classpath = sourceSets.test.runtimeClasspath
+    }
+}
+
+tasks.register('testUnitParallel') {
+    group = 'verification'
+    description = 'Runs unit tests in parallel across multiple JVMs. Usage: gradle testUnitParallel --parallel'
+    dependsOn 'testUnitShard0', 'testUnitShard1', 'testUnitShard2', 'testUnitShard3'
+}

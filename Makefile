@@ -1,4 +1,4 @@
-.PHONY: all clean test test-unit test-all test-gradle test-gradle-unit test-gradle-all build run wrapper dev
+.PHONY: all clean test test-unit test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper dev
 
 all: build
 
@@ -9,12 +9,12 @@ else
 	@test -f ./gradlew || gradle wrapper
 endif
 
-# Standard build - incremental compilation (fast)
+# Standard build - incremental compilation with parallel tests (4 JVMs)
 build: wrapper
 ifeq ($(OS),Windows_NT)
-	gradlew.bat build
+	gradlew.bat classes testUnitParallel --parallel shadowJar
 else
-	./gradlew build
+	./gradlew classes testUnitParallel --parallel shadowJar
 endif
 
 # Development build - forces recompilation (use during active development)
@@ -66,7 +66,8 @@ test-modules:
 test-all: test-perl5 test-modules
 
 # Alternative: Run tests using JUnit/Gradle (for CI/CD integration)
-test-gradle: test-gradle-unit
+# Uses parallel execution by default (4 JVMs)
+test-gradle: test-gradle-parallel
 
 # Fast unit tests via Gradle/JUnit
 test-gradle-unit: wrapper
@@ -82,6 +83,22 @@ ifeq ($(OS),Windows_NT)
 	gradlew.bat testAll --rerun-tasks
 else
 	./gradlew testAll --rerun-tasks
+endif
+
+# Parallel unit tests via Gradle/JUnit (4 JVMs)
+test-gradle-parallel: wrapper
+ifeq ($(OS),Windows_NT)
+	gradlew.bat testUnitParallel --parallel --rerun-tasks
+else
+	./gradlew testUnitParallel --parallel --rerun-tasks
+endif
+
+# Parallel unit tests via Maven (4 JVMs)
+test-maven-parallel:
+ifeq ($(OS),Windows_NT)
+	start /B mvn test -Pshard1 & start /B mvn test -Pshard2 & start /B mvn test -Pshard3 & start /B mvn test -Pshard4
+else
+	mvn test -Pshard1 & mvn test -Pshard2 & mvn test -Pshard3 & mvn test -Pshard4 & wait
 endif
 
 clean: wrapper
