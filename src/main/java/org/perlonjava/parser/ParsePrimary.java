@@ -122,7 +122,8 @@ public class ParsePrimary {
         // IMPORTANT: Check for lexical subs AFTER CORE::, but before checking for quote-like operators!
         // This allows "my sub y" to shadow the "y///" transliteration operator
         // But doesn't interfere with CORE:: prefix handling
-        if (!calledWithCore) {
+        // ALSO: Don't treat as lexical sub if :: follows - that's a qualified name like Encode::is_utf8
+        if (!calledWithCore && !nextTokenText.equals("::")) {
             String lexicalKey = "&" + operator;
             SymbolTable.SymbolEntry lexicalEntry = parser.ctx.symbolTable.getSymbolEntry(lexicalKey);
             if (lexicalEntry != null && lexicalEntry.ast() instanceof OperatorNode) {
