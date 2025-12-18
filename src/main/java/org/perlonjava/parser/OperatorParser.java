@@ -951,6 +951,24 @@ public class OperatorParser {
         } else if (token.text.matches("^v\\d+$")) {
             consume(parser);
             operand = StringParser.parseVstring(parser, token.text, parser.tokenIndex);
+        } else if (token.type == IDENTIFIER && !ParsePrimary.isIsQuoteLikeOperator(token.text)) {
+            // `require` bareword module name - parse directly without going through expression parser
+            // This avoids treating module names like "Encode" as subroutine calls when a sub
+            // with the same name exists in the current package (e.g., sub Encode in Image::ExifTool)
+            // But don't intercept quote-like operators like q(), qq(), etc.
+            String moduleName = IdentifierParser.parseSubroutineIdentifier(parser);
+            parser.ctx.logDebug("require module name `" + moduleName + "`");
+            if (moduleName == null) {
+                throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
+            }
+
+            // Check if module name starts with ::
+            if (moduleName.startsWith("::")) {
+                throw new PerlCompilerException(parser.tokenIndex, "Bareword in require must not start with a double-colon: \"" + moduleName + "\"", parser.ctx.errorUtil);
+            }
+
+            String fileName = NameNormalizer.moduleToFilename(moduleName);
+            operand = ListNode.makeList(new StringNode(fileName, parser.tokenIndex));
         } else {
             // Check for the specific pattern: :: followed by identifier (which is invalid for require)
             if (token.type == LexerTokenType.OPERATOR && token.text.equals("::")) {
