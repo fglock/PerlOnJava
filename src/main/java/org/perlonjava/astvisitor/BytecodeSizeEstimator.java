@@ -15,6 +15,21 @@ import org.perlonjava.astnode.*;
  * <p>
  * Based on comprehensive analysis of EmitLiteral, EmitBinaryOperator, EmitBlock and other emitter classes.
  * Uses official JVM bytecode instruction sizes with empirically derived calibration.
+ * <p>
+ * <b>Usage:</b>
+ * <ul>
+ *   <li>{@link #estimateSize(Node)} - For complete methods (includes BASE_OVERHEAD of 1950 bytes)</li>
+ *   <li>{@link #estimateSnippetSize(Node)} - For code snippets/chunks (no BASE_OVERHEAD, used by LargeNodeRefactorer)</li>
+ * </ul>
+ * <p>
+ * The distinction between these methods is important:
+ * <ul>
+ *   <li>Complete methods have fixed overhead (class structure, method entry/exit, etc.)</li>
+ *   <li>Code snippets are partial AST fragments where method overhead doesn't apply</li>
+ * </ul>
+ *
+ * @see org.perlonjava.codegen.LargeNodeRefactorer
+ * @see org.perlonjava.codegen.LargeBlockRefactorer
  */
 public class BytecodeSizeEstimator implements Visitor {
 
@@ -49,6 +64,7 @@ public class BytecodeSizeEstimator implements Visitor {
 
     /**
      * Static method to estimate bytecode size of an AST.
+     * Includes BASE_OVERHEAD - use for complete methods.
      *
      * @param ast The AST node to analyze
      * @return Estimated bytecode size in bytes (with scientific calibration applied)
@@ -57,6 +73,19 @@ public class BytecodeSizeEstimator implements Visitor {
         BytecodeSizeEstimator estimator = new BytecodeSizeEstimator();
         ast.accept(estimator);
         return estimator.getEstimatedSize();
+    }
+
+    /**
+     * Static method to estimate bytecode size of an AST snippet.
+     * Does NOT include BASE_OVERHEAD - use for code snippets, chunks, or partial AST.
+     *
+     * @param ast The AST node to analyze
+     * @return Estimated bytecode size in bytes (calibration factor only, no base overhead)
+     */
+    public static int estimateSnippetSize(Node ast) {
+        BytecodeSizeEstimator estimator = new BytecodeSizeEstimator();
+        ast.accept(estimator);
+        return estimator.getRawEstimatedSize();
     }
 
     @Override
@@ -71,6 +100,7 @@ public class BytecodeSizeEstimator implements Visitor {
 
     /**
      * Get the estimated bytecode size with scientifically derived calibration.
+     * Includes BASE_OVERHEAD - use for complete methods.
      * <p>
      * Formula: actual = 1.035 × estimated + 1950 (R² = 1.0000)
      * <p>
@@ -83,6 +113,18 @@ public class BytecodeSizeEstimator implements Visitor {
      */
     public int getEstimatedSize() {
         return (int) Math.round(CALIBRATION_FACTOR * estimatedSize + BASE_OVERHEAD);
+    }
+
+    /**
+     * Get the estimated bytecode size without BASE_OVERHEAD.
+     * Use for code snippets, chunks, or partial AST where method overhead is not applicable.
+     * <p>
+     * Formula: actual = 1.035 × estimated (no base overhead)
+     *
+     * @return Calibrated bytecode size estimate in bytes (without method overhead)
+     */
+    public int getRawEstimatedSize() {
+        return (int) Math.round(CALIBRATION_FACTOR * estimatedSize);
     }
 
     // Implement all required Visitor interface methods - mirroring EmitterVisitor pattern
