@@ -1852,21 +1852,44 @@ public class IOOperator {
     public static RuntimeIO openFileHandleDup(String fileName, String mode) {
         boolean isParsimonious = mode.endsWith("="); // &= modes reuse file descriptor
 
+        RuntimeIO sourceHandle = null;
+
         // Check if it's a numeric file descriptor
         if (fileName.matches("^\\d+$")) {
             int fd = Integer.parseInt(fileName);
-            RuntimeIO sourceHandle = findFileHandleByDescriptor(fd);
-            if (sourceHandle != null && sourceHandle.ioHandle != null) {
-                if (isParsimonious) {
-                    return sourceHandle;
-                } else {
-                    return duplicateFileHandle(sourceHandle);
-                }
-            } else {
+            sourceHandle = findFileHandleByDescriptor(fd);
+            if (sourceHandle == null || sourceHandle.ioHandle == null) {
                 throw new PerlCompilerException("Bad file descriptor: " + fd);
             }
         } else {
-            throw new PerlCompilerException("Unsupported filehandle duplication: " + fileName);
+            // Handle named filehandles like STDERR, STDOUT, STDIN
+            switch (fileName.toUpperCase()) {
+                case "STDIN":
+                    sourceHandle = RuntimeIO.stdin;
+                    break;
+                case "STDOUT":
+                    sourceHandle = RuntimeIO.stdout;
+                    break;
+                case "STDERR":
+                    sourceHandle = RuntimeIO.stderr;
+                    break;
+                default:
+                    // Try to look up as a global filehandle
+                    String normalizedName = fileName.contains("::") ? fileName : "main::" + fileName;
+                    RuntimeGlob glob = GlobalVariable.getGlobalIO(normalizedName);
+                    if (glob != null) {
+                        sourceHandle = glob.getRuntimeIO();
+                    }
+                    if (sourceHandle == null || sourceHandle.ioHandle == null) {
+                        throw new PerlCompilerException("Unsupported filehandle duplication: " + fileName);
+                    }
+            }
+        }
+
+        if (isParsimonious) {
+            return sourceHandle;
+        } else {
+            return duplicateFileHandle(sourceHandle);
         }
     }
 
