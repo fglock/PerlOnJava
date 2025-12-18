@@ -45,9 +45,10 @@ public class LargeNodeRefactorer {
 
     /**
      * Minimum number of elements before considering refactoring.
-     * Lists smaller than this are never refactored, regardless of bytecode size.
+     * Lists smaller than this are never refactored.
+     * Set conservatively low since bytecode estimation is unreliable.
      */
-    private static final int LARGE_ELEMENT_COUNT = 500;
+    private static final int LARGE_ELEMENT_COUNT = 200;
 
     /**
      * Target maximum bytecode size per chunk (in bytes).
@@ -173,14 +174,16 @@ public class LargeNodeRefactorer {
                 list.setAnnotation("chunkAlreadyRefactored", true);
                 innerLiteral = list;
                 // For lists, we just call the sub and let it return the list
-                SubroutineNode subList = new SubroutineNode(null, null, null,
-                        new BlockNode(List.of(innerLiteral), tokenIndex), false, tokenIndex);
+                BlockNode blockList = new BlockNode(List.of(innerLiteral), tokenIndex);
+                blockList.setAnnotation("blockAlreadyRefactored", true);  // Prevent LargeBlockRefactorer from processing
+                SubroutineNode subList = new SubroutineNode(null, null, null, blockList, false, tokenIndex);
                 return new BinaryOperatorNode("->", subList, new ListNode(tokenIndex), tokenIndex);
         }
 
         // For array/hash: @{ sub { [...] }->() } or %{ sub { {...} }->() }
-        SubroutineNode sub = new SubroutineNode(null, null, null,
-                new BlockNode(List.of(innerLiteral), tokenIndex), false, tokenIndex);
+        BlockNode block = new BlockNode(List.of(innerLiteral), tokenIndex);
+        block.setAnnotation("blockAlreadyRefactored", true);  // Prevent LargeBlockRefactorer from processing
+        SubroutineNode sub = new SubroutineNode(null, null, null, block, false, tokenIndex);
         BinaryOperatorNode call = new BinaryOperatorNode("->", sub, new ListNode(tokenIndex), tokenIndex);
         return new OperatorNode(derefOp, call, tokenIndex);
     }
@@ -200,17 +203,16 @@ public class LargeNodeRefactorer {
             return false;
         }
 
-        // Estimate bytecode size
-        int totalSize = 0;
-        for (Node element : elements) {
-            totalSize += BytecodeSizeEstimator.estimateSnippetSize(element);
-            // Early exit if we're clearly over the threshold
-            if (totalSize > LARGE_BYTECODE_SIZE) {
-                return true;
-            }
+        // Use sampling to estimate bytecode size - avoid O(n) traversal
+        int n = elements.size();
+        int sampleSize = Math.min(10, n);
+        long totalSampleSize = 0;
+        for (int i = 0; i < sampleSize; i++) {
+            int index = (int) (((long) i * (n - 1)) / (sampleSize - 1));
+            totalSampleSize += BytecodeSizeEstimator.estimateSnippetSize(elements.get(index));
         }
-
-        return totalSize > LARGE_BYTECODE_SIZE;
+        long estimatedTotalSize = (totalSampleSize * n) / sampleSize;
+        return estimatedTotalSize > LARGE_BYTECODE_SIZE;
     }
 
     /**

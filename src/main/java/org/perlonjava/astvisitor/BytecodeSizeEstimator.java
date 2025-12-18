@@ -78,14 +78,30 @@ public class BytecodeSizeEstimator implements Visitor {
     /**
      * Static method to estimate bytecode size of an AST snippet.
      * Does NOT include BASE_OVERHEAD - use for code snippets, chunks, or partial AST.
+     * Results are cached in the AST node's annotations to avoid repeated traversal.
      *
      * @param ast The AST node to analyze
      * @return Estimated bytecode size in bytes (calibration factor only, no base overhead)
      */
     public static int estimateSnippetSize(Node ast) {
+        // Check cache first
+        if (ast instanceof AbstractNode abstractNode) {
+            Object cached = abstractNode.getAnnotation("cachedBytecodeSize");
+            if (cached instanceof Integer) {
+                return (Integer) cached;
+            }
+        }
+        
         BytecodeSizeEstimator estimator = new BytecodeSizeEstimator();
         ast.accept(estimator);
-        return estimator.getRawEstimatedSize();
+        int size = estimator.getRawEstimatedSize();
+        
+        // Cache the result
+        if (ast instanceof AbstractNode abstractNode) {
+            abstractNode.setAnnotation("cachedBytecodeSize", size);
+        }
+        
+        return size;
     }
 
     @Override
