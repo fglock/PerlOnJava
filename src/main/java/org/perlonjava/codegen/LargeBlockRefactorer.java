@@ -151,17 +151,10 @@ public class LargeBlockRefactorer {
     private static boolean trySmartChunking(BlockNode node) {
         List<Node> processedElements = new ArrayList<>();
         List<Node> currentChunk = new ArrayList<>();
-        int lastIndex = node.elements.size() - 1;
 
-        for (int i = 0; i < node.elements.size(); i++) {
-            Node element = node.elements.get(i);
-            boolean isLast = (i == lastIndex);
-            
-            // CRITICAL: Never wrap the last element - it determines the block's return value
-            // Closures are called in void context, so wrapping the last statement would
-            // cause the block to return void instead of the actual value (e.g., "1;" in modules)
-            if (isLast || shouldBreakChunk(element)) {
-                // This element cannot be in a chunk
+        for (Node element : node.elements) {
+            if (shouldBreakChunk(element)) {
+                // This element cannot be in a chunk (has unsafe control flow or is a label)
                 processChunk(currentChunk, processedElements, node.tokenIndex);
                 currentChunk.clear();
 
