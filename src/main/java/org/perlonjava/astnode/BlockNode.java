@@ -1,6 +1,7 @@
 package org.perlonjava.astnode;
 
 import org.perlonjava.astvisitor.Visitor;
+import org.perlonjava.codegen.LargeBlockRefactorer;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -13,8 +14,10 @@ import java.util.List;
 public class BlockNode extends AbstractNode {
     /**
      * The list of child nodes contained in this BlockNode.
+     * Note: This field is non-final because {@link LargeBlockRefactorer} may modify
+     * the list during parse-time refactoring.
      */
-    public final List<Node> elements;
+    public List<Node> elements;
 
     /**
      * This flag indicates if this BlockNode represents a loop.
@@ -32,6 +35,10 @@ public class BlockNode extends AbstractNode {
 
     /**
      * Constructs a new BlockNode with the specified list of child nodes.
+     * <p>
+     * <b>Large Block Refactoring:</b> When {@code JPERL_LARGECODE=refactor} environment
+     * variable is set and the block is large enough, the constructor automatically
+     * applies smart chunking to split safe statement sequences into closures.
      *
      * @param elements   the list of child nodes to be stored in this BlockNode
      * @param tokenIndex the index of the token in the source code
@@ -42,6 +49,8 @@ public class BlockNode extends AbstractNode {
         this.labels = new ArrayList<>();
         this.labelName = null;
         this.isLoop = false;
+        // Apply parse-time refactoring if enabled
+        LargeBlockRefactorer.maybeRefactorBlock(this);
     }
 
     /**

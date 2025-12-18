@@ -16,15 +16,63 @@ import java.util.List;
 public class LargeBlockRefactorer {
 
     // Configuration thresholds
-    private static final int LARGE_BLOCK_ELEMENT_COUNT = 8;  // Lowered from 16 for more aggressive refactoring
+    private static final int LARGE_BLOCK_ELEMENT_COUNT = 50;  // Minimum elements before considering refactoring
     private static final int LARGE_BYTECODE_SIZE = 30000;
     private static final int MIN_CHUNK_SIZE = 4;  // Minimum statements to extract as a chunk
 
     // Reusable visitor for control flow detection
     private static final ControlFlowDetectorVisitor controlFlowDetector = new ControlFlowDetectorVisitor();
+    
+    // Thread-local flag to prevent recursion when creating chunk blocks
+    private static final ThreadLocal<Boolean> skipRefactoring = ThreadLocal.withInitial(() -> false);
+
+    /**
+     * Check if refactoring is enabled via environment variable.
+     */
+    private static boolean isRefactoringEnabled() {
+        String largeCodeMode = System.getenv("JPERL_LARGECODE");
+        return "refactor".equals(largeCodeMode);
+    }
+
+    /**
+     * Parse-time entry point: called from BlockNode constructor to refactor large blocks.
+     * This applies smart chunking to split safe statement sequences into closures.
+     *
+     * @param node The block to potentially refactor (modified in place)
+     */
+    public static void maybeRefactorBlock(BlockNode node) {
+        // Skip if refactoring is not enabled
+        if (!isRefactoringEnabled()) {
+            return;
+        }
+        
+        // Skip if we're inside createMarkedBlock (prevents recursion)
+        if (skipRefactoring.get()) {
+            return;
+        }
+
+        // Skip if already refactored (prevents infinite recursion)
+        if (node.getBooleanAnnotation("blockAlreadyRefactored")) {
+            return;
+        }
+
+        // Skip small blocks
+        if (node.elements.size() <= LARGE_BLOCK_ELEMENT_COUNT) {
+            return;
+        }
+
+        // Skip special blocks (BEGIN, END, etc.)
+        if (isSpecialContext(node)) {
+            return;
+        }
+
+        // Apply smart chunking
+        trySmartChunking(node);
+    }
 
     /**
      * Process a block and refactor it if necessary to avoid method size limits.
+     * This is the code-generation time entry point (legacy, kept for compatibility).
      *
      * @param emitterVisitor The emitter visitor context
      * @param node           The block to process
@@ -103,14 +151,21 @@ public class LargeBlockRefactorer {
     private static boolean trySmartChunking(BlockNode node) {
         List<Node> processedElements = new ArrayList<>();
         List<Node> currentChunk = new ArrayList<>();
+        int lastIndex = node.elements.size() - 1;
 
-        for (Node element : node.elements) {
-            if (shouldBreakChunk(element)) {
+        for (int i = 0; i < node.elements.size(); i++) {
+            Node element = node.elements.get(i);
+            boolean isLast = (i == lastIndex);
+            
+            // CRITICAL: Never wrap the last element - it determines the block's return value
+            // Closures are called in void context, so wrapping the last statement would
+            // cause the block to return void instead of the actual value (e.g., "1;" in modules)
+            if (isLast || shouldBreakChunk(element)) {
                 // This element cannot be in a chunk
                 processChunk(currentChunk, processedElements, node.tokenIndex);
                 currentChunk.clear();
 
-                // Add the unsafe element directly
+                // Add the element directly
                 processedElements.add(element);
             } else if (isCompleteBlock(element)) {
                 // Complete blocks are already scoped
@@ -123,13 +178,14 @@ public class LargeBlockRefactorer {
             }
         }
 
-        // Process any remaining chunk
+        // Process any remaining chunk (shouldn't happen since last element is always direct)
         processChunk(currentChunk, processedElements, node.tokenIndex);
 
         // Apply chunking if we reduced the element count
         if (processedElements.size() < node.elements.size()) {
             node.elements.clear();
             node.elements.addAll(processedElements);
+            node.setAnnotation("blockAlreadyRefactored", true);
             return true;
         }
 
@@ -140,20 +196,20 @@ public class LargeBlockRefactorer {
      * Determine if an element should break the current chunk.
      */
     private static boolean shouldBreakChunk(Node element) {
-        // Labels break chunks
+        // Labels break chunks - they're targets for goto/next/last
         if (element instanceof LabelNode) {
             return true;
         }
 
-        // Control flow statements break chunks
+        // Control flow statements that jump outside the block break chunks
         controlFlowDetector.reset();
         element.accept(controlFlowDetector);
         if (controlFlowDetector.hasUnsafeControlFlow()) {
             return true;
         }
 
-        // Top-level variable declarations break chunks (unless in a block)
-        return !isCompleteBlock(element) && hasVariableDeclaration(element);
+        // Variable declarations are OK - closures capture lexical variables from outer scope
+        return false;
     }
 
     /**
@@ -166,7 +222,9 @@ public class LargeBlockRefactorer {
 
         if (chunk.size() >= MIN_CHUNK_SIZE) {
             // Create a closure for this chunk: sub { ... }->()
-            BlockNode chunkBlock = new BlockNode(new ArrayList<>(chunk), tokenIndex);
+            // Mark the block as already refactored BEFORE construction to prevent recursion
+            // (BlockNode constructor calls maybeRefactorBlock)
+            BlockNode chunkBlock = createMarkedBlock(new ArrayList<>(chunk), tokenIndex);
             BinaryOperatorNode closure = new BinaryOperatorNode(
                     "->",
                     new SubroutineNode(null, null, null, chunkBlock, false, tokenIndex),
@@ -177,6 +235,23 @@ public class LargeBlockRefactorer {
         } else {
             // Chunk too small, add elements directly
             processedElements.addAll(chunk);
+        }
+    }
+    
+    /**
+     * Create a BlockNode that is pre-marked as already refactored.
+     * This prevents infinite recursion since BlockNode constructor calls maybeRefactorBlock.
+     */
+    private static BlockNode createMarkedBlock(List<Node> elements, int tokenIndex) {
+        // We need to create the block without triggering maybeRefactorBlock
+        // Set a thread-local flag to skip refactoring during this construction
+        skipRefactoring.set(true);
+        try {
+            BlockNode block = new BlockNode(elements, tokenIndex);
+            block.setAnnotation("blockAlreadyRefactored", true);
+            return block;
+        } finally {
+            skipRefactoring.set(false);
         }
     }
 

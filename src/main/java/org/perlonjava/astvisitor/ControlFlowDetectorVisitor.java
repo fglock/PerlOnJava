@@ -2,13 +2,17 @@ package org.perlonjava.astvisitor;
 
 import org.perlonjava.astnode.*;
 
+import java.util.Set;
+
 /**
  * Visitor that detects control flow statements (next, last, redo, goto)
  * that could potentially jump outside of a refactored block.
  */
 public class ControlFlowDetectorVisitor implements Visitor {
     private boolean hasUnsafeControlFlow = false;
-    private static final boolean DEBUG = false; // Set to true for debugging
+    private int loopDepth = 0;
+    private Set<String> allowedGotoLabels = null;
+    private static final boolean DEBUG = "1".equals(System.getenv("JPERL_TRACE_CONTROLFLOW"));
 
     /**
      * Check if unsafe control flow was detected during traversal.
@@ -24,14 +28,46 @@ public class ControlFlowDetectorVisitor implements Visitor {
      */
     public void reset() {
         hasUnsafeControlFlow = false;
+        loopDepth = 0;
+        allowedGotoLabels = null;
+    }
+
+    public void setAllowedGotoLabels(Set<String> allowedGotoLabels) {
+        this.allowedGotoLabels = allowedGotoLabels;
     }
 
     @Override
     public void visit(OperatorNode node) {
         // Check for control flow operators
-        if ("next".equals(node.operator) || "last".equals(node.operator) ||
-                "redo".equals(node.operator) || "goto".equals(node.operator)) {
+        if ("goto".equals(node.operator)) {
+            if (allowedGotoLabels != null && node.operand instanceof ListNode labelNode && !labelNode.elements.isEmpty()) {
+                Node arg = labelNode.elements.getFirst();
+                if (arg instanceof IdentifierNode identifierNode && allowedGotoLabels.contains(identifierNode.name)) {
+                    if (DEBUG) System.err.println("ControlFlowDetector: goto " + identifierNode.name + " allowed (in allowedGotoLabels)");
+                    return;
+                }
+            }
+            if (DEBUG) System.err.println("ControlFlowDetector: UNSAFE goto at tokenIndex=" + node.tokenIndex);
             hasUnsafeControlFlow = true;
+            return;
+        }
+        if ("next".equals(node.operator) || "last".equals(node.operator) || "redo".equals(node.operator)) {
+            boolean isLabeled = false;
+            String label = null;
+            if (node.operand instanceof ListNode labelNode && !labelNode.elements.isEmpty()) {
+                isLabeled = true;
+                if (labelNode.elements.getFirst() instanceof IdentifierNode id) {
+                    label = id.name;
+                }
+            }
+            if (loopDepth == 0 || isLabeled) {
+                if (DEBUG) System.err.println("ControlFlowDetector: UNSAFE " + node.operator + " at tokenIndex=" + node.tokenIndex + " loopDepth=" + loopDepth + " isLabeled=" + isLabeled + " label=" + label);
+                hasUnsafeControlFlow = true;
+                return;
+            }
+            if (DEBUG) System.err.println("ControlFlowDetector: safe " + node.operator + " at tokenIndex=" + node.tokenIndex + " loopDepth=" + loopDepth);
+        }
+        if (hasUnsafeControlFlow) {
             return;
         }
         // Continue traversing
@@ -42,12 +78,22 @@ public class ControlFlowDetectorVisitor implements Visitor {
 
     @Override
     public void visit(BlockNode node) {
-        for (Node element : node.elements) {
-            if (element != null) {
-                element.accept(this);
-                if (hasUnsafeControlFlow) {
-                    return; // Early exit once found
+        boolean isLoop = node.isLoop;
+        if (isLoop) {
+            loopDepth++;
+        }
+        try {
+            for (Node element : node.elements) {
+                if (element != null) {
+                    element.accept(this);
+                    if (hasUnsafeControlFlow) {
+                        return; // Early exit once found
+                    }
                 }
+            }
+        } finally {
+            if (isLoop) {
+                loopDepth--;
             }
         }
     }
@@ -110,7 +156,12 @@ public class ControlFlowDetectorVisitor implements Visitor {
             node.list.accept(this);
         }
         if (!hasUnsafeControlFlow && node.body != null) {
-            node.body.accept(this);
+            loopDepth++;
+            try {
+                node.body.accept(this);
+            } finally {
+                loopDepth--;
+            }
         }
     }
 
@@ -126,7 +177,12 @@ public class ControlFlowDetectorVisitor implements Visitor {
             node.increment.accept(this);
         }
         if (!hasUnsafeControlFlow && node.body != null) {
-            node.body.accept(this);
+            loopDepth++;
+            try {
+                node.body.accept(this);
+            } finally {
+                loopDepth--;
+            }
         }
     }
 
