@@ -329,9 +329,13 @@ public class ListParser {
             } else if (token.text.equals("&")) {
                 // Looks like a subroutine call, not an infix `&`
                 parser.ctx.logDebug("parseZeroOrMoreList looks like subroutine call");
-            } else if (token.text.equals("%") && (nextToken.text.equals("$") || nextToken.type == LexerTokenType.IDENTIFIER)) {
+            } else if (token.text.equals("%") && (nextToken.text.equals("$") || nextToken.text.equals("{") || nextToken.type == LexerTokenType.IDENTIFIER)) {
                 // Looks like a hash deref, not an infix `%`
-                parser.ctx.logDebug("parseZeroOrMoreList looks like Hash");
+                // %$ref, %{expr}, %hash
+                parser.ctx.logDebug("parseZeroOrMoreList looks like Hash: token=" + token.text + " nextToken=" + nextToken.text);
+            } else if (token.text.equals("@") && nextToken.text.equals("{")) {
+                // Looks like an array deref @{expr}, not an infix `@`
+                parser.ctx.logDebug("parseZeroOrMoreList looks like Array deref");
             } else if (token.text.equals(".") && token1.type == LexerTokenType.NUMBER) {
                 // Looks like a fractional number, not an infix `.`
                 parser.ctx.logDebug("parseZeroOrMoreList looks like Number");
