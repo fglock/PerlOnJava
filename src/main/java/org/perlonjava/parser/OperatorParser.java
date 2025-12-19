@@ -18,8 +18,7 @@ import java.util.Map;
 
 import static org.perlonjava.lexer.LexerTokenType.*;
 import static org.perlonjava.parser.NumberParser.parseNumber;
-import static org.perlonjava.parser.ParserNodeUtils.atUnderscore;
-import static org.perlonjava.parser.ParserNodeUtils.scalarUnderscore;
+import static org.perlonjava.parser.ParserNodeUtils.*;
 import static org.perlonjava.parser.SubroutineParser.consumeAttributes;
 import static org.perlonjava.parser.TokenUtils.consume;
 import static org.perlonjava.parser.TokenUtils.peek;
@@ -417,8 +416,9 @@ public class OperatorParser {
                 case "pop":
                 case "shift":
                     // create `@_` variable
-                    // XXX in main program, use `@ARGV`
-                    operand = atUnderscore(parser);
+                    // in main program, use `@ARGV`
+                    boolean isSub = parser.ctx.symbolTable.getCurrentSubroutine() != null;
+                    operand = parser.isTopLevelScript && !isSub ? atArgv(parser) : atUnderscore(parser);
                     break;
                 case "localtime":
                 case "gmtime":
