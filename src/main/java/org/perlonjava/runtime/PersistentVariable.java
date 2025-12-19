@@ -34,7 +34,8 @@ public class PersistentVariable {
 
     /**
      * Retrieves a compile-time scalar variable associated with a BEGIN block.
-     * If the variable does not exist, a new RuntimeScalar is returned.
+     * If the variable does not exist, fetch the global variable with the original variable name.
+     * This ensures 'our' variables correctly alias the global variable.
      *
      * @param var The name of the variable (prefixed with a character indicating type).
      * @param id  The ID of the BEGIN block.
@@ -43,12 +44,15 @@ public class PersistentVariable {
     public static RuntimeScalar retrieveBeginScalar(String var, int id) {
         String beginVar = beginVariable(id, var.substring(1));
         RuntimeScalar temp = GlobalVariable.removeGlobalVariable(beginVar);
-        return temp == null ? new RuntimeScalar() : temp;
+        // If BEGIN variable doesn't exist, fetch the global variable with the original name
+        // This is crucial for 'our' variables which should alias the global
+        return temp == null ? GlobalVariable.getGlobalVariable(var) : temp;
     }
 
     /**
      * Retrieves a compile-time array variable associated with a BEGIN block.
-     * If the variable does not exist, a new RuntimeArray is returned.
+     * If the variable does not exist, fetch the global array with the original variable name.
+     * This ensures 'our' variables correctly alias the global array.
      *
      * @param var The name of the variable (prefixed with a character indicating type).
      * @param id  The ID of the BEGIN block.
@@ -57,12 +61,15 @@ public class PersistentVariable {
     public static RuntimeArray retrieveBeginArray(String var, int id) {
         String beginVar = beginVariable(id, var.substring(1));
         RuntimeArray temp = GlobalVariable.removeGlobalArray(beginVar);
-        return temp == null ? new RuntimeArray() : temp;
+        // If BEGIN variable doesn't exist, fetch the global array with the original name
+        // This is crucial for 'our' variables which should alias the global
+        return temp == null ? GlobalVariable.getGlobalArray(var) : temp;
     }
 
     /**
      * Retrieves a compile-time hash variable associated with a BEGIN block.
-     * If the variable does not exist, a new RuntimeHash is returned.
+     * If the variable does not exist, fetch the global hash with the original variable name.
+     * This ensures 'our' variables correctly alias the global hash.
      *
      * @param var The name of the variable (prefixed with a character indicating type).
      * @param id  The ID of the BEGIN block.
@@ -71,6 +78,8 @@ public class PersistentVariable {
     public static RuntimeHash retrieveBeginHash(String var, int id) {
         String beginVar = beginVariable(id, var.substring(1));
         RuntimeHash temp = GlobalVariable.removeGlobalHash(beginVar);
-        return temp == null ? new RuntimeHash() : temp;
+        // If BEGIN variable doesn't exist, fetch the global hash with the original name
+        // This is crucial for 'our' variables which should alias the global
+        return temp == null ? GlobalVariable.getGlobalHash(var) : temp;
     }
 }

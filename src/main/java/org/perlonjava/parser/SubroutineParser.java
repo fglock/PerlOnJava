@@ -154,9 +154,14 @@ public class SubroutineParser {
 
         // Normalize the subroutine name to include the current package
         // If subName already contains "::", it's already fully qualified (e.g., from "our sub")
+        String currentPackage = parser.ctx.symbolTable.getCurrentPackage();
         String fullName = subName.contains("::") 
             ? subName 
-            : NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
+            : NameNormalizer.normalizeVariableName(subName, currentPackage);
+            
+        if (subName.equals("clone_io")) {
+            System.out.println("DEBUG: SubroutineParser parsing clone_io. Current Package: " + currentPackage + ", Resolved FullName: " + fullName);
+        }
 
         // Check if we are parsing a method;
         // Otherwise, check that the subroutine exists in the global namespace - then fetch prototype and attributes
@@ -219,7 +224,10 @@ public class SubroutineParser {
         }
 
         // Create an identifier node for the subroutine name
-        IdentifierNode nameNode = new IdentifierNode(subName, parser.tokenIndex);
+        // For regular subroutine calls, use the fully qualified name to bake in the package
+        // For method calls, keep the short name as it's resolved dynamically against the invocant
+        String nameToUse = isMethod ? subName : fullName;
+        IdentifierNode nameNode = new IdentifierNode(nameToUse, parser.tokenIndex);
 
         if (subName.startsWith("v") && subName.matches("^v\\d+$")) {
             if (parser.tokens.get(parser.tokenIndex).text.equals(".") || !subExists) {
@@ -389,7 +397,7 @@ public class SubroutineParser {
         String previousSubroutine = parser.ctx.symbolTable.getCurrentSubroutine();
 
         // Set the current subroutine name (use empty string for anonymous subs)
-        parser.ctx.symbolTable.setCurrentSubroutine(subName != null ? subName : "");
+        parser.ctx.symbolTable.setCurrentSubroutine(subName != null ? subName : "ANON");
 
         try {
             // Parse the block of the subroutine, which contains the actual code.

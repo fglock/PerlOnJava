@@ -201,7 +201,14 @@ public class LargeBlockRefactorer {
             return true;
         }
 
-        // Variable declarations are OK - closures capture lexical variables from outer scope
+        // Variable declarations MUST break chunks.
+        // If we put a declaration "my $x" inside a chunk closure, it becomes local to that closure
+        // and is not visible to subsequent chunks. By breaking the chunk, we ensure the declaration
+        // remains in the parent block (outer scope), so subsequent closures can capture it.
+        if (hasVariableDeclaration(element)) {
+            return true;
+        }
+
         return false;
     }
 
@@ -257,6 +264,14 @@ public class LargeBlockRefactorer {
         node.accept(controlFlowDetector);
         if (controlFlowDetector.hasUnsafeControlFlow()) {
             return false;
+        }
+
+        // Check for variable declarations - cannot refactor whole block if it contains 'my' declarations
+        // because they would become local to the subroutine
+        for (Node element : node.elements) {
+            if (hasVariableDeclaration(element)) {
+                return false;
+            }
         }
 
         // Create sub {...}->(@_) for whole block

@@ -1,0 +1,107 @@
+DEBUG: exportToLevel Exporter -> DynaLoader
+DEBUG: Exporter::EXPORT_OK has 1 elements
+DEBUG: exportToLevel Symbol -> DynaLoader
+DEBUG: Symbol::EXPORT_OK has 2 elements
+DEBUG: exportToLevel DynaLoader -> main
+DEBUG: DynaLoader::EXPORT_OK has 0 elements
+DEBUG: exportToLevel Exporter -> Time::HiRes
+DEBUG: Exporter::EXPORT_OK has 1 elements
+DEBUG: exportToLevel Time::HiRes -> Test2::API
+DEBUG: Time::HiRes::EXPORT_OK has 8 elements
+DEBUG: exportToLevel Java::System -> Config
+DEBUG: Java::System::EXPORT_OK has 4 elements
+DEBUG: exportToLevel Carp -> Test2::Util
+DEBUG: Carp::EXPORT_OK has 3 elements
+DEBUG: exportToLevel Test2::Util -> Test2::API
+DEBUG: Test2::Util::EXPORT_OK has 15 elements
+DEBUG: exportToLevel Carp -> Test2::API::Instance
+DEBUG: Carp::EXPORT_OK has 3 elements
+DEBUG: exportToLevel Scalar::Util -> Test2::API::Instance
+DEBUG: Scalar::Util::EXPORT_OK has 14 elements
+DEBUG: exportToLevel Test2::Util -> Test2::API::Instance
+DEBUG: Test2::Util::EXPORT_OK has 15 elements
+DEBUG: exportToLevel Carp -> Test2::EventFacet
+DEBUG: Carp::EXPORT_OK has 3 elements
+DEBUG: exportToLevel Test2::Util -> Test2::EventFacet::Trace
+DEBUG: Test2::Util::EXPORT_OK has 15 elements
+DEBUG: exportToLevel Time::HiRes -> Test2::EventFacet::Trace
+DEBUG: Time::HiRes::EXPORT_OK has 8 elements
+DEBUG: exportToLevel Carp -> Test2::EventFacet::Trace
+DEBUG: Carp::EXPORT_OK has 3 elements
+DEBUG: exportToLevel Carp -> Test2::Hub
+DEBUG: Carp::EXPORT_OK has 3 elements
+DEBUG: exportToLevel Test2::Util -> Test2::Hub
+DEBUG: Test2::Util::EXPORT_OK has 15 elements
+DEBUG: exportToLevel Scalar::Util -> Test2::Hub
+DEBUG: Scalar::Util::EXPORT_OK has 14 elements
+DEBUG: exportToLevel List::Util -> Test2::Hub
+DEBUG: List::Util::EXPORT_OK has 35 elements
+DEBUG: exportToLevel Carp -> Test2::Util::ExternalMeta
+DEBUG: Carp::EXPORT_OK has 3 elements
+DEBUG: exportToLevel Test2::Util::ExternalMeta -> Test2::Hub
+DEBUG: Test2::Util::ExternalMeta::EXPORT_OK has 0 elements
+DEBUG: exportToLevel Carp -> Test2::API::Stack
+DEBUG: Carp::EXPORT_OK has 3 elements
+DEBUG: exportToLevel Test2::Util -> Test2::Hub::Subtest
+DEBUG: Test2::Util::EXPORT_OK has 15 elements
+DEBUG: exportToLevel Scalar::Util -> Test2::Event
+DEBUG: Scalar::Util::EXPORT_OK has 14 elements
+DEBUG: exportToLevel Carp -> Test2::Event
+DEBUG: Carp::EXPORT_OK has 3 elements
+DEBUG: exportToLevel Test2::Util::ExternalMeta -> Test2::Event
+DEBUG: Test2::Util::ExternalMeta::EXPORT_OK has 0 elements
+DEBUG: exportToLevel Test2::Util -> Test2::Event
+DEBUG: Test2::Util::EXPORT_OK has 15 elements
+DEBUG: exportToLevel Carp -> Test2::EventFacet::Parent
+DEBUG: Carp::EXPORT_OK has 3 elements
+DEBUG: exportToLevel Carp -> Test2::Event::Plan
+DEBUG: Carp::EXPORT_OK has 3 elements
+DEBUG: exportToLevel Carp -> Test2::API
+DEBUG: Carp::EXPORT_OK has 3 elements
+DEBUG: exportToLevel Scalar::Util -> Test2::API
+DEBUG: Scalar::Util::EXPORT_OK has 14 elements
+DEBUG: exportToLevel Test2::Util -> Test2::API
+DEBUG: Test2::Util::EXPORT_OK has 15 elements
+DEBUG: SubroutineParser parsing clone_io. Current Package: Test2::API, Resolved FullName: Test2::API::clone_io
+Warning: "my" variable $STDOUT masks earlier declaration in same ctx.symbolTable at /Users/fglock/projects/PerlOnJava/src/main/perl/lib/Test2/API.pm line 210, near " $STDOUT = clone_io"
+
+DEBUG: SubroutineParser parsing clone_io. Current Package: Test2::API, Resolved FullName: Test2::API::clone_io
+DEBUG: SubroutineParser parsing clone_io. Current Package: Test2::API, Resolved FullName: Test2::API::clone_io
+DEBUG: SubroutineParser parsing clone_io. Current Package: Test2::API, Resolved FullName: Test2::API::clone_io
+DEBUG: SubroutineParser parsing clone_io. Current Package: Test2::API, Resolved FullName: Test2::API::clone_io
+DEBUG: SubroutineParser parsing clone_io. Current Package: Test2::API, Resolved FullName: Test2::API::clone_io
+DEBUG: SubroutineParser parsing clone_io. Current Package: Test2::API, Resolved FullName: Test2::API::clone_io
+DEBUG: Inside Test2::API. Package: Test2::API
+DEBUG: clone_io defined? NO
+DEBUG: Test2::API::clone_io defined? YES
+DEBUG: Test2::API Package: Test2::API
+DEBUG: Test2::API clone_io defined: NO
+DEBUG: About to assign EXPORT_OK
+DEBUG: After EXPORT_OK assignment, size=66
+DEBUG: exportToLevel Carp -> Test2::API::Context
+DEBUG: Carp::EXPORT_OK has 3 elements
+DEBUG: exportToLevel Scalar::Util -> Test2::API::Context
+DEBUG: Scalar::Util::EXPORT_OK has 14 elements
+DEBUG: exportToLevel Test2::Util -> Test2::API::Context
+DEBUG: Test2::Util::EXPORT_OK has 15 elements
+DEBUG: exportToLevel Test2::Util::ExternalMeta -> Test2::API::Context
+DEBUG: Test2::Util::ExternalMeta::EXPORT_OK has 0 elements
+DEBUG: exportToLevel Scalar::Util -> Test2::Event::V2
+DEBUG: Scalar::Util::EXPORT_OK has 14 elements
+DEBUG: exportToLevel Carp -> Test2::Event::V2
+DEBUG: Carp::EXPORT_OK has 3 elements
+DEBUG: exportToLevel Carp -> Test2::Util::Facets2Legacy
+DEBUG: Carp::EXPORT_OK has 3 elements
+DEBUG: exportToLevel Scalar::Util -> Test2::Util::Facets2Legacy
+DEBUG: Scalar::Util::EXPORT_OK has 14 elements
+DEBUG: exportToLevel Test2::Util::Facets2Legacy -> Test2::Event::V2
+DEBUG: Test2::Util::Facets2Legacy::EXPORT_OK has 10 elements
+DEBUG: exportToLevel Test2::API -> main
+DEBUG: Test2::API::EXPORT_OK has 0 elements
+Test logging variable: 1
+Loaded Test2::API
+Perl check: @Test2::API::EXPORT_OK has 0 elements
+Perl check: @Test2::API::EXPORT_OK ref: ARRAY(0x1ab3a8c8)
+Content: 
+DEBUG: exportToLevel Test2::API -> main
+DEBUG: Test2::API::EXPORT_OK has 0 elements

@@ -58,7 +58,18 @@ public class SpecialBlockParser {
         }
 
         // Parse the block content
-        BlockNode block = ParseBlock.parseBlock(parser);
+        // Save previous subroutine
+        String previousSubroutine = parser.ctx.symbolTable.getCurrentSubroutine();
+        // Clear current subroutine for the special block context (it behaves like top-level/new scope for arguments)
+        parser.ctx.symbolTable.setCurrentSubroutine("");
+
+        BlockNode block;
+        try {
+            block = ParseBlock.parseBlock(parser);
+        } finally {
+            // Restore
+            parser.ctx.symbolTable.setCurrentSubroutine(previousSubroutine);
+        }
 
         // Restore the isInMethod flag
         parser.isInMethod = wasInMethod;

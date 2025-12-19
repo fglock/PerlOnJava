@@ -20,6 +20,7 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
  * the existence of these global entities, initializing them as necessary.
  */
 public class GlobalVariable {
+    public static boolean traceExportOK = false;
     // Global variables and subroutines
     public static final Map<String, RuntimeScalar> globalVariables = new HashMap<>();
     public static final Map<String, RuntimeArray> globalArrays = new HashMap<>();

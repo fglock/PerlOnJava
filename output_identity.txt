@@ -1,0 +1,316 @@
+DEBUG: GlobalVariable.getGlobalArray(builtin::EXPORT_OK) - creating new array identity=1598924227
+DEBUG: GlobalVariable.getGlobalArray(Exporter::EXPORT_OK) - creating new array identity=1768305536
+DEBUG: GlobalVariable.getGlobalArray(Symbol::EXPORT_OK) - creating new array identity=1174361318
+DEBUG: GlobalVariable.getGlobalArray(Scalar::Util::EXPORT_OK) - creating new array identity=1160264930
+DEBUG: GlobalVariable.getGlobalArray(utf8::EXPORT_OK) - creating new array identity=1299641336
+DEBUG: GlobalVariable.getGlobalArray(lib::EXPORT_OK) - creating new array identity=580024961
+DEBUG: GlobalVariable.getGlobalArray(Cwd::EXPORT_OK) - creating new array identity=1364335809
+DEBUG: GlobalVariable.getGlobalArray(File::Spec::EXPORT_OK) - creating new array identity=1766822961
+DEBUG: GlobalVariable.getGlobalArray(Unicode::Normalize::EXPORT_OK) - creating new array identity=897697267
+DEBUG: GlobalVariable.getGlobalArray(Unicode::UCD::EXPORT_OK) - creating new array identity=1213415012
+DEBUG: GlobalVariable.getGlobalArray(Term::ReadKey::EXPORT_OK) - creating new array identity=1285044316
+DEBUG: GlobalVariable.getGlobalArray(Java::System::EXPORT_OK) - creating new array identity=99747242
+DEBUG: GlobalVariable.getGlobalArray(Exporter::EXPORT_OK) - found existing array size=1 identity=1768305536
+DEBUG: exportToLevel Exporter -> DynaLoader
+DEBUG: Exporter::EXPORT_OK has 1 elements
+DEBUG: GlobalVariable.getGlobalArray(Symbol::EXPORT_OK) - found existing array size=2 identity=1174361318
+DEBUG: exportToLevel Symbol -> DynaLoader
+DEBUG: Symbol::EXPORT_OK has 2 elements
+DEBUG: GlobalVariable.getGlobalArray(DynaLoader::EXPORT_OK) - creating new array identity=1754638213
+DEBUG: exportToLevel DynaLoader -> main
+DEBUG: DynaLoader::EXPORT_OK has 0 elements
+DEBUG: fetchGlobalVariable @Test2::API::EXPORT_OK -> Test2::API::EXPORT_OK pkg=main create=true
+DEBUG: fetchGlobalVariable @Test2::API::EXPORT_OK -> Test2::API::EXPORT_OK pkg=main create=true
+DEBUG: fetchGlobalVariable @Test2::API::EXPORT_OK -> Test2::API::EXPORT_OK pkg=main create=true
+Loading Test2::API...
+DEBUG: GlobalVariable.getGlobalArray(Exporter::EXPORT_OK) - found existing array size=1 identity=1768305536
+DEBUG: exportToLevel Exporter -> Time::HiRes
+DEBUG: Exporter::EXPORT_OK has 1 elements
+DEBUG: GlobalVariable.getGlobalArray(Time::HiRes::EXPORT_OK) - creating new array identity=813656972
+DEBUG: fetchGlobalVariable @EXPORT_OK -> Time::HiRes::EXPORT_OK pkg=Time::HiRes create=true
+DEBUG: GlobalVariable.getGlobalArray(Time::HiRes::EXPORT_OK) - found existing array size=0 identity=813656972
+DEBUG: GlobalVariable.getGlobalArray(Time::HiRes::EXPORT_OK) - found existing array size=8 identity=813656972
+DEBUG: exportToLevel Time::HiRes -> Test2::API
+DEBUG: Time::HiRes::EXPORT_OK has 8 elements
+DEBUG: GlobalVariable.getGlobalArray(Java::System::EXPORT_OK) - found existing array size=4 identity=99747242
+DEBUG: exportToLevel Java::System -> Config
+DEBUG: Java::System::EXPORT_OK has 4 elements
+DEBUG: fetchGlobalVariable @Config::EXPORT_OK -> Config::EXPORT_OK pkg=Config create=true
+DEBUG: GlobalVariable.getGlobalArray(Config::EXPORT_OK) - creating new array identity=632249781
+DEBUG: GlobalVariable.getGlobalArray(Carp::EXPORT_OK) - creating new array identity=2040352617
+DEBUG: GlobalVariable.getGlobalArray(Carp::EXPORT_OK) - found existing array size=3 identity=2040352617
+DEBUG: exportToLevel Carp -> Test2::Util
+DEBUG: Carp::EXPORT_OK has 3 elements
+DEBUG: fetchGlobalVariable @EXPORT_OK -> Test2::Util::EXPORT_OK pkg=Test2::Util create=true
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::EXPORT_OK) - creating new array identity=293002476
+DEBUG: fetchGlobalVariable @EXPORT_OK -> Test2::Util::EXPORT_OK pkg=Test2::Util create=true
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::EXPORT_OK) - found existing array size=0 identity=293002476
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::EXPORT_OK) - found existing array size=0 identity=293002476
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::EXPORT_OK) - found existing array size=0 identity=293002476
+DEBUG: fetchGlobalVariable @EXPORT_OK -> Test2::Util::EXPORT_OK pkg=Test2::Util create=true
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::EXPORT_OK) - found existing array size=0 identity=293002476
+DEBUG: fetchGlobalVariable @EXPORT_OK -> Test2::Util::EXPORT_OK pkg=Test2::Util create=true
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::EXPORT_OK) - found existing array size=0 identity=293002476
+DEBUG: fetchGlobalVariable @EXPORT_OK -> Test2::Util::EXPORT_OK pkg=Test2::Util create=true
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::EXPORT_OK) - found existing array size=0 identity=293002476
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::EXPORT_OK) - found existing array size=0 identity=293002476
+DEBUG: fetchGlobalVariable @EXPORT_OK -> Test2::Util::EXPORT_OK pkg=Test2::Util create=true
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::EXPORT_OK) - found existing array size=0 identity=293002476
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::EXPORT_OK) - found existing array size=0 identity=293002476
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::EXPORT_OK) - found existing array size=0 identity=293002476
+DEBUG: fetchGlobalVariable @EXPORT_OK -> Test2::Util::EXPORT_OK pkg=Test2::Util create=true
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::EXPORT_OK) - found existing array size=0 identity=293002476
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::EXPORT_OK) - found existing array size=0 identity=293002476
+DEBUG: fetchGlobalVariable @EXPORT_OK -> Test2::Util::EXPORT_OK pkg=Test2::Util create=true
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::EXPORT_OK) - found existing array size=0 identity=293002476
+DEBUG: fetchGlobalVariable @EXPORT_OK -> Test2::Util::EXPORT_OK pkg=Test2::Util create=true
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::EXPORT_OK) - found existing array size=0 identity=293002476
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::EXPORT_OK) - found existing array size=0 identity=293002476
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::EXPORT_OK) - found existing array size=0 identity=293002476
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::EXPORT_OK) - found existing array size=0 identity=293002476
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::EXPORT_OK) - found existing array size=0 identity=293002476
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::EXPORT_OK) - found existing array size=0 identity=293002476
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::EXPORT_OK) - found existing array size=0 identity=293002476
+DEBUG: fetchGlobalVariable @EXPORT_OK -> Test2::Util::EXPORT_OK pkg=Test2::Util create=true
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::EXPORT_OK) - found existing array size=0 identity=293002476
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::EXPORT_OK) - found existing array size=0 identity=293002476
+DEBUG: fetchGlobalVariable @EXPORT_OK -> Test2::Util::EXPORT_OK pkg=Test2::Util create=true
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::EXPORT_OK) - found existing array size=0 identity=293002476
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::EXPORT_OK) - found existing array size=15 identity=293002476
+DEBUG: exportToLevel Test2::Util -> Test2::API
+DEBUG: Test2::Util::EXPORT_OK has 15 elements
+DEBUG: GlobalVariable.getGlobalArray(Carp::EXPORT_OK) - found existing array size=3 identity=2040352617
+DEBUG: exportToLevel Carp -> Test2::API::Instance
+DEBUG: Carp::EXPORT_OK has 3 elements
+DEBUG: GlobalVariable.getGlobalArray(Scalar::Util::EXPORT_OK) - found existing array size=14 identity=1160264930
+DEBUG: exportToLevel Scalar::Util -> Test2::API::Instance
+DEBUG: Scalar::Util::EXPORT_OK has 14 elements
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::EXPORT_OK) - found existing array size=15 identity=293002476
+DEBUG: exportToLevel Test2::Util -> Test2::API::Instance
+DEBUG: Test2::Util::EXPORT_OK has 15 elements
+DEBUG: GlobalVariable.getGlobalArray(Carp::EXPORT_OK) - found existing array size=3 identity=2040352617
+DEBUG: exportToLevel Carp -> Test2::EventFacet
+DEBUG: Carp::EXPORT_OK has 3 elements
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::EXPORT_OK) - found existing array size=15 identity=293002476
+DEBUG: exportToLevel Test2::Util -> Test2::EventFacet::Trace
+DEBUG: Test2::Util::EXPORT_OK has 15 elements
+DEBUG: GlobalVariable.getGlobalArray(Time::HiRes::EXPORT_OK) - found existing array size=8 identity=813656972
+DEBUG: exportToLevel Time::HiRes -> Test2::EventFacet::Trace
+DEBUG: Time::HiRes::EXPORT_OK has 8 elements
+DEBUG: GlobalVariable.getGlobalArray(Carp::EXPORT_OK) - found existing array size=3 identity=2040352617
+DEBUG: exportToLevel Carp -> Test2::EventFacet::Trace
+DEBUG: Carp::EXPORT_OK has 3 elements
+DEBUG: GlobalVariable.getGlobalArray(Carp::EXPORT_OK) - found existing array size=3 identity=2040352617
+DEBUG: exportToLevel Carp -> Test2::Hub
+DEBUG: Carp::EXPORT_OK has 3 elements
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::EXPORT_OK) - found existing array size=15 identity=293002476
+DEBUG: exportToLevel Test2::Util -> Test2::Hub
+DEBUG: Test2::Util::EXPORT_OK has 15 elements
+DEBUG: GlobalVariable.getGlobalArray(Scalar::Util::EXPORT_OK) - found existing array size=14 identity=1160264930
+DEBUG: exportToLevel Scalar::Util -> Test2::Hub
+DEBUG: Scalar::Util::EXPORT_OK has 14 elements
+DEBUG: GlobalVariable.getGlobalArray(List::Util::EXPORT_OK) - creating new array identity=1527430292
+DEBUG: GlobalVariable.getGlobalArray(List::Util::EXPORT_OK) - found existing array size=0 identity=1527430292
+DEBUG: GlobalVariable.getGlobalArray(List::Util::EXPORT_OK) - found existing array size=0 identity=1527430292
+DEBUG: GlobalVariable.getGlobalArray(List::Util::EXPORT_OK) - found existing array size=0 identity=1527430292
+DEBUG: GlobalVariable.getGlobalArray(List::Util::EXPORT_OK) - found existing array size=0 identity=1527430292
+DEBUG: GlobalVariable.getGlobalArray(List::Util::EXPORT_OK) - found existing array size=0 identity=1527430292
+DEBUG: GlobalVariable.getGlobalArray(List::Util::EXPORT_OK) - found existing array size=0 identity=1527430292
+DEBUG: GlobalVariable.getGlobalArray(List::Util::EXPORT_OK) - found existing array size=0 identity=1527430292
+DEBUG: GlobalVariable.getGlobalArray(List::Util::EXPORT_OK) - found existing array size=0 identity=1527430292
+DEBUG: fetchGlobalVariable @EXPORT_OK -> List::Util::EXPORT_OK pkg=List::Util create=true
+DEBUG: GlobalVariable.getGlobalArray(List::Util::EXPORT_OK) - found existing array size=0 identity=1527430292
+DEBUG: GlobalVariable.getGlobalArray(List::Util::EXPORT_OK) - found existing array size=35 identity=1527430292
+DEBUG: exportToLevel List::Util -> Test2::Hub
+DEBUG: List::Util::EXPORT_OK has 35 elements
+DEBUG: GlobalVariable.getGlobalArray(Carp::EXPORT_OK) - found existing array size=3 identity=2040352617
+DEBUG: exportToLevel Carp -> Test2::Util::ExternalMeta
+DEBUG: Carp::EXPORT_OK has 3 elements
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::ExternalMeta::EXPORT_OK) - creating new array identity=1593180232
+DEBUG: exportToLevel Test2::Util::ExternalMeta -> Test2::Hub
+DEBUG: Test2::Util::ExternalMeta::EXPORT_OK has 0 elements
+DEBUG: GlobalVariable.getGlobalArray(Carp::EXPORT_OK) - found existing array size=3 identity=2040352617
+DEBUG: exportToLevel Carp -> Test2::API::Stack
+DEBUG: Carp::EXPORT_OK has 3 elements
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::EXPORT_OK) - found existing array size=15 identity=293002476
+DEBUG: exportToLevel Test2::Util -> Test2::Hub::Subtest
+DEBUG: Test2::Util::EXPORT_OK has 15 elements
+DEBUG: GlobalVariable.getGlobalArray(Scalar::Util::EXPORT_OK) - found existing array size=14 identity=1160264930
+DEBUG: exportToLevel Scalar::Util -> Test2::Event
+DEBUG: Scalar::Util::EXPORT_OK has 14 elements
+DEBUG: GlobalVariable.getGlobalArray(Carp::EXPORT_OK) - found existing array size=3 identity=2040352617
+DEBUG: exportToLevel Carp -> Test2::Event
+DEBUG: Carp::EXPORT_OK has 3 elements
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::ExternalMeta::EXPORT_OK) - found existing array size=0 identity=1593180232
+DEBUG: exportToLevel Test2::Util::ExternalMeta -> Test2::Event
+DEBUG: Test2::Util::ExternalMeta::EXPORT_OK has 0 elements
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::EXPORT_OK) - found existing array size=15 identity=293002476
+DEBUG: exportToLevel Test2::Util -> Test2::Event
+DEBUG: Test2::Util::EXPORT_OK has 15 elements
+DEBUG: GlobalVariable.getGlobalArray(Carp::EXPORT_OK) - found existing array size=3 identity=2040352617
+DEBUG: exportToLevel Carp -> Test2::EventFacet::Parent
+DEBUG: Carp::EXPORT_OK has 3 elements
+DEBUG: GlobalVariable.getGlobalArray(Carp::EXPORT_OK) - found existing array size=3 identity=2040352617
+DEBUG: exportToLevel Carp -> Test2::Event::Plan
+DEBUG: Carp::EXPORT_OK has 3 elements
+DEBUG: GlobalVariable.getGlobalArray(Carp::EXPORT_OK) - found existing array size=3 identity=2040352617
+DEBUG: exportToLevel Carp -> Test2::API
+DEBUG: Carp::EXPORT_OK has 3 elements
+DEBUG: GlobalVariable.getGlobalArray(Scalar::Util::EXPORT_OK) - found existing array size=14 identity=1160264930
+DEBUG: exportToLevel Scalar::Util -> Test2::API
+DEBUG: Scalar::Util::EXPORT_OK has 14 elements
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::EXPORT_OK) - found existing array size=15 identity=293002476
+DEBUG: exportToLevel Test2::Util -> Test2::API
+DEBUG: Test2::Util::EXPORT_OK has 15 elements
+DEBUG: SubroutineParser parsing clone_io. Current Package: Test2::API, Resolved FullName: Test2::API::clone_io
+DEBUG: fetchGlobalVariable @EXPORT_OK -> Test2::API::EXPORT_OK pkg=Test2::API create=true
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - creating new array identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+Warning: "my" variable $STDOUT masks earlier declaration in same ctx.symbolTable at file:/Users/fglock/projects/PerlOnJava/target/perlonjava-3.0.0.jar!/lib/Test2/API.pm line 208, near " $STDOUT = clone_io"
+
+DEBUG: SubroutineParser parsing clone_io. Current Package: Test2::API, Resolved FullName: Test2::API::clone_io
+DEBUG: SubroutineParser parsing clone_io. Current Package: Test2::API, Resolved FullName: Test2::API::clone_io
+DEBUG: SubroutineParser parsing clone_io. Current Package: Test2::API, Resolved FullName: Test2::API::clone_io
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: SubroutineParser parsing clone_io. Current Package: Test2::API, Resolved FullName: Test2::API::clone_io
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: SubroutineParser parsing clone_io. Current Package: Test2::API, Resolved FullName: Test2::API::clone_io
+DEBUG: SubroutineParser parsing clone_io. Current Package: Test2::API, Resolved FullName: Test2::API::clone_io
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: fetchGlobalVariable @EXPORT_OK -> main::EXPORT_OK pkg=main create=true
+DEBUG: Inside Test2::API. Package: Test2::API
+DEBUG: clone_io defined? NO
+DEBUG: Test2::API::clone_io defined? YES
+DEBUG: Test2::API Package: Test2::API
+DEBUG: Test2::API clone_io defined: NO
+DEBUG: GlobalVariable.getGlobalArray(main::EXPORT_OK) - creating new array identity=2141817446
+DEBUG: EXPORT_OK ref: ARRAY(0x7fa98a66)
+DEBUG: EXPORT_OK content: context, release, context_do, no_context, intercept, intercept_deep, run_subtest, test2_init_done, test2_load_done, test2_load, test2_start_preload, test2_stop_preload, test2_in_preload, test2_is_testing_done, test2_set_is_end, test2_unset_is_end, test2_get_is_end, test2_pid, test2_tid, test2_stack, test2_no_wait, test2_ipc_wait_enable, test2_ipc_wait_disable, test2_ipc_wait_enabled, test2_add_uuid_via, test2_add_callback_testing_done, test2_add_callback_context_aquire, test2_add_callback_context_acquire, test2_add_callback_context_init, test2_add_callback_context_release, test2_add_callback_exit, test2_add_callback_post_load, test2_add_callback_pre_subtest, test2_list_context_aquire_callbacks, test2_list_context_acquire_callbacks, test2_list_context_init_callbacks, test2_list_context_release_callbacks, test2_list_exit_callbacks, test2_list_post_load_callbacks, test2_list_pre_subtest_callbacks, test2_ipc, test2_has_ipc, test2_ipc_disable, test2_ipc_disabled, test2_ipc_drivers, test2_ipc_add_driver, test2_ipc_polling, test2_ipc_disable_polling, test2_ipc_enable_polling, test2_ipc_get_pending, test2_ipc_set_pending, test2_ipc_get_timeout, test2_ipc_set_timeout, test2_formatter, test2_formatters, test2_formatter_add, test2_formatter_set, test2_stdout, test2_stderr, test2_reset_io, test2_enable_trace_stamps, test2_disable_trace_stamps, test2_trace_stamps_enabled, test2_add_pending_diag, test2_get_pending_diags, test2_clear_pending_diags
+DEBUG: GlobalVariable.getGlobalArray(Carp::EXPORT_OK) - found existing array size=3 identity=2040352617
+DEBUG: exportToLevel Carp -> Test2::API::Context
+DEBUG: Carp::EXPORT_OK has 3 elements
+DEBUG: GlobalVariable.getGlobalArray(Scalar::Util::EXPORT_OK) - found existing array size=14 identity=1160264930
+DEBUG: exportToLevel Scalar::Util -> Test2::API::Context
+DEBUG: Scalar::Util::EXPORT_OK has 14 elements
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::EXPORT_OK) - found existing array size=15 identity=293002476
+DEBUG: exportToLevel Test2::Util -> Test2::API::Context
+DEBUG: Test2::Util::EXPORT_OK has 15 elements
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::ExternalMeta::EXPORT_OK) - found existing array size=0 identity=1593180232
+DEBUG: exportToLevel Test2::Util::ExternalMeta -> Test2::API::Context
+DEBUG: Test2::Util::ExternalMeta::EXPORT_OK has 0 elements
+DEBUG: GlobalVariable.getGlobalArray(Scalar::Util::EXPORT_OK) - found existing array size=14 identity=1160264930
+DEBUG: exportToLevel Scalar::Util -> Test2::Event::V2
+DEBUG: Scalar::Util::EXPORT_OK has 14 elements
+DEBUG: GlobalVariable.getGlobalArray(Carp::EXPORT_OK) - found existing array size=3 identity=2040352617
+DEBUG: exportToLevel Carp -> Test2::Event::V2
+DEBUG: Carp::EXPORT_OK has 3 elements
+DEBUG: GlobalVariable.getGlobalArray(Carp::EXPORT_OK) - found existing array size=3 identity=2040352617
+DEBUG: exportToLevel Carp -> Test2::Util::Facets2Legacy
+DEBUG: Carp::EXPORT_OK has 3 elements
+DEBUG: GlobalVariable.getGlobalArray(Scalar::Util::EXPORT_OK) - found existing array size=14 identity=1160264930
+DEBUG: exportToLevel Scalar::Util -> Test2::Util::Facets2Legacy
+DEBUG: Scalar::Util::EXPORT_OK has 14 elements
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::Facets2Legacy::EXPORT_OK) - creating new array identity=320304382
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::Facets2Legacy::EXPORT_OK) - found existing array size=0 identity=320304382
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::Facets2Legacy::EXPORT_OK) - found existing array size=0 identity=320304382
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::Facets2Legacy::EXPORT_OK) - found existing array size=0 identity=320304382
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::Facets2Legacy::EXPORT_OK) - found existing array size=0 identity=320304382
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::Facets2Legacy::EXPORT_OK) - found existing array size=0 identity=320304382
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::Facets2Legacy::EXPORT_OK) - found existing array size=0 identity=320304382
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::Facets2Legacy::EXPORT_OK) - found existing array size=0 identity=320304382
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::Facets2Legacy::EXPORT_OK) - found existing array size=0 identity=320304382
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::Facets2Legacy::EXPORT_OK) - found existing array size=0 identity=320304382
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::Facets2Legacy::EXPORT_OK) - found existing array size=0 identity=320304382
+DEBUG: fetchGlobalVariable @EXPORT_OK -> Test2::Util::Facets2Legacy::EXPORT_OK pkg=Test2::Util::Facets2Legacy create=true
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::Facets2Legacy::EXPORT_OK) - found existing array size=0 identity=320304382
+DEBUG: GlobalVariable.getGlobalArray(Test2::Util::Facets2Legacy::EXPORT_OK) - found existing array size=10 identity=320304382
+DEBUG: exportToLevel Test2::Util::Facets2Legacy -> Test2::Event::V2
+DEBUG: Test2::Util::Facets2Legacy::EXPORT_OK has 10 elements
+Loaded.
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+Perl check: @Test2::API::EXPORT_OK has 0 elements
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+Perl check: @Test2::API::EXPORT_OK ref: ARRAY(0x43195e57)
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+Content: 
+Calling import...
+DEBUG: GlobalVariable.getGlobalArray(Test2::API::EXPORT_OK) - found existing array size=0 identity=1125736023
+DEBUG: exportToLevel Test2::API -> main
+DEBUG: Test2::API::EXPORT_OK has 0 elements
+Import failed: Symbol context not allowed for export in package Test2::API at Exporter.java line 60
+         at Exporter.java line 251
+         at Exporter.java line 60
+        main at repro_export.pl line 19
+        main at repro_export.pl line 18
+

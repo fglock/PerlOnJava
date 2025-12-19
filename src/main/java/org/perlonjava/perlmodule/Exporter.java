@@ -98,6 +98,12 @@ public class Exporter extends PerlModuleBase {
                     .anyMatch(e -> e.toString().equals(symbolString));
             boolean isExportOk = exportOk.elements.stream()
                     .anyMatch(e -> e.toString().equals(symbolString));
+
+            if (!isExported && !isExportOk) {
+                System.err.println("DEBUG: Exporter failed for '" + symbolString + "' in package " + packageName);
+                System.err.println("DEBUG: EXPORT contains: " + export.elements);
+                System.err.println("DEBUG: EXPORT_OK contains: " + exportOk.elements);
+            }
             
             if (!isExported && !isExportOk && !symbolString.matches("^[$@%*]")) {
                 // try with/without "&"
@@ -158,6 +164,14 @@ public class Exporter extends PerlModuleBase {
         RuntimeArray export = GlobalVariable.getGlobalArray(packageScalar + "::EXPORT");
         RuntimeArray exportOk = GlobalVariable.getGlobalArray(packageScalar + "::EXPORT_OK");
         RuntimeHash exportTags = GlobalVariable.getGlobalHash(packageScalar + "::EXPORT_TAGS");
+
+        System.err.println("DEBUG: exportToLevel " + packageScalar + " -> " + caller);
+        if (exportOk != null) {
+            System.err.println("DEBUG: " + packageScalar + "::EXPORT_OK has " + exportOk.size() + " elements");
+            // System.err.println("DEBUG: Content: " + exportOk.elements);
+        } else {
+            System.err.println("DEBUG: " + packageScalar + "::EXPORT_OK is null");
+        }
 
         // If no specific symbols are requested, default to exporting all symbols in @EXPORT
         if (args.size() == 0) {

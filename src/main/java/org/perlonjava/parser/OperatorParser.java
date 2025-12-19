@@ -417,8 +417,15 @@ public class OperatorParser {
                 case "pop":
                 case "shift":
                     // create `@_` variable
-                    // XXX in main program, use `@ARGV`
-                    operand = atUnderscore(parser);
+                    // In main program, use `@ARGV`
+                    String currentSub = parser.ctx.symbolTable.getCurrentSubroutine();
+                    if (currentSub == null || currentSub.isEmpty()) {
+                         // We are in main script (or BEGIN block outside sub?)
+                         // Default to @ARGV
+                         operand = new OperatorNode("@", new IdentifierNode("ARGV", parser.tokenIndex), parser.tokenIndex);
+                    } else {
+                        operand = atUnderscore(parser);
+                    }
                     break;
                 case "localtime":
                 case "gmtime":

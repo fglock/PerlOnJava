@@ -103,6 +103,16 @@ use Carp qw/carp croak confess/;
 use Scalar::Util qw/blessed weaken/;
 use Test2::Util qw/get_tid clone_io pkg_to_file gen_uid/;
 
+warn "DEBUG: Inside Test2::API. Package: " . __PACKAGE__ . "\n";
+warn "DEBUG: clone_io defined? " . (defined &clone_io ? "YES" : "NO") . "\n";
+warn "DEBUG: Test2::API::clone_io defined? " . (defined &Test2::API::clone_io ? "YES" : "NO") . "\n";
+
+my $STDOUT = clone_io(\*STDOUT);
+
+print "DEBUG: Test2::API Package: " . __PACKAGE__ . "\n";
+print "DEBUG: Test2::API clone_io defined: " . (defined &clone_io ? "YES" : "NO") . "\n";
+print "DEBUG: About to assign EXPORT_OK\n";
+
 our @EXPORT_OK = qw{
     context release
     context_do
@@ -180,7 +190,11 @@ our @EXPORT_OK = qw{
     test2_get_pending_diags
     test2_clear_pending_diags
 };
+print "DEBUG: After EXPORT_OK assignment, size=" . scalar(@EXPORT_OK) . "\n";
 BEGIN { require Exporter; our @ISA = qw(Exporter) }
+
+# warn "DEBUG: EXPORT_OK ref: " . \@EXPORT_OK . "\n";
+# warn "DEBUG: EXPORT_OK content: " . join(", ", @EXPORT_OK) . "\n";
 
 my @PENDING_DIAGS;
 
