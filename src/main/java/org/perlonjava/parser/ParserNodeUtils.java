@@ -108,6 +108,11 @@ public class ParserNodeUtils {
                 new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex);
     }
 
+    static OperatorNode atArgv(Parser parser) {
+        return new OperatorNode("@",
+                new IdentifierNode("main::ARGV", parser.tokenIndex), parser.tokenIndex);
+    }
+
     /**
      * Creates a ListNode containing @_ for passing as arguments to subroutine calls.
      * <p>
