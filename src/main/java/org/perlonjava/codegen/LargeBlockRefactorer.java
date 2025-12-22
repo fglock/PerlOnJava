@@ -7,6 +7,8 @@ import org.perlonjava.astvisitor.EmitterVisitor;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.perlonjava.parser.ParserNodeUtils.variableAst;
+
 /**
  * Helper class for refactoring large blocks to avoid JVM's "Method too large" error.
  * <p>
@@ -22,7 +24,7 @@ public class LargeBlockRefactorer {
 
     // Reusable visitor for control flow detection
     private static final ControlFlowDetectorVisitor controlFlowDetector = new ControlFlowDetectorVisitor();
-    
+
     // Thread-local flag to prevent recursion when creating chunk blocks
     private static final ThreadLocal<Boolean> skipRefactoring = ThreadLocal.withInitial(() -> false);
 
@@ -45,7 +47,7 @@ public class LargeBlockRefactorer {
         if (!isRefactoringEnabled()) {
             return;
         }
-        
+
         // Skip if we're inside createMarkedBlock (prevents recursion)
         if (skipRefactoring.get()) {
             return;
@@ -221,7 +223,8 @@ public class LargeBlockRefactorer {
             BinaryOperatorNode closure = new BinaryOperatorNode(
                     "->",
                     new SubroutineNode(null, null, null, chunkBlock, false, tokenIndex),
-                    new ListNode(tokenIndex),  // Empty args - closures capture outer scope
+                    new ListNode(
+                            new ArrayList<>(List.of(variableAst("@", "_", tokenIndex))), tokenIndex),
                     tokenIndex
             );
             processedElements.add(closure);
@@ -230,7 +233,7 @@ public class LargeBlockRefactorer {
             processedElements.addAll(chunk);
         }
     }
-    
+
     /**
      * Create a BlockNode that is pre-marked as already refactored.
      * This prevents infinite recursion since BlockNode constructor calls maybeRefactorBlock.
@@ -260,15 +263,13 @@ public class LargeBlockRefactorer {
         }
 
         // Create sub {...}->(@_) for whole block
-        int index = node.tokenIndex;
-        ListNode args = new ListNode(index);
-        args.elements.add(new OperatorNode("@", new IdentifierNode("_", index), index));
+        int tokenIndex = node.tokenIndex;
 
         // IMPORTANT: Mark the original block as already refactored to prevent recursion
         node.setAnnotation("blockAlreadyRefactored", true);
 
         // Create a wrapper block containing the original block
-        BlockNode innerBlock = new BlockNode(List.of(node), index);
+        BlockNode innerBlock = new BlockNode(List.of(node), tokenIndex);
 
         BinaryOperatorNode subr = new BinaryOperatorNode(
                 "->",
@@ -276,10 +277,11 @@ public class LargeBlockRefactorer {
                         null, null, null,
                         innerBlock,
                         false,
-                        index
+                        tokenIndex
                 ),
-                args,
-                index
+                new ListNode(
+                        new ArrayList<>(List.of(variableAst("@", "_", tokenIndex))), tokenIndex),
+                tokenIndex
         );
 
         // Emit the refactored block
