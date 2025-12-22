@@ -157,6 +157,33 @@ public class LargeBlockRefactorer {
      * @return true if chunking was successful, false otherwise
      */
     private static boolean trySmartChunking(BlockNode node, Parser parser) {
+        // First check if the block contains any control flow that would be unsafe to refactor
+        // This catches cases where we're inside a loop body but don't know it yet (loop node not created)
+        controlFlowDetector.reset();
+        for (Node element : node.elements) {
+            element.accept(controlFlowDetector);
+            if (controlFlowDetector.hasUnsafeControlFlow()) {
+                // Block contains last/next/redo/goto that would break if we wrap in closures
+                // Check if block is too large and throw appropriate error
+                if (node.elements.size() > LARGE_BLOCK_ELEMENT_COUNT) {
+                    long estimatedSize = estimateTotalBytecodeSize(node.elements);
+                    if (estimatedSize > LARGE_BYTECODE_SIZE) {
+                        String message = "Block is too large (" + node.elements.size() + " elements, estimated " + estimatedSize + " bytes) " +
+                            "and refactoring failed to reduce it below " + LARGE_BYTECODE_SIZE + " bytes. " +
+                            "The block contains control flow statements that prevent safe refactoring. " +
+                            "Consider breaking the code into smaller subroutines manually.";
+                        if (parser != null) {
+                            throw new PerlCompilerException(node.tokenIndex, message, parser.ctx.errorUtil);
+                        } else {
+                            throw new PerlCompilerException(message);
+                        }
+                    }
+                }
+                // Block is small enough or doesn't need refactoring
+                return false;
+            }
+        }
+
         List<Object> segments = new ArrayList<>();  // Either Node (direct) or List<Node> (chunk)
         List<Node> currentChunk = new ArrayList<>();
 
@@ -259,8 +286,17 @@ public class LargeBlockRefactorer {
             Object segment = segments.get(i);
 
             if (segment instanceof Node directNode) {
-                // Direct element - if we have a nested closure, we need to wrap everything
-                if (nestedClosure != null) {
+                // Labels must NEVER be wrapped in closures - they must stay at block level
+                if (directNode instanceof LabelNode) {
+                    // Flush any pending nested closure first
+                    if (nestedClosure != null) {
+                        result.add(nestedClosure);
+                        nestedClosure = null;
+                    }
+                    // Add label directly to result
+                    result.add(directNode);
+                } else if (nestedClosure != null) {
+                    // Direct element - if we have a nested closure, we need to wrap everything
                     // Create closure containing this direct element and the nested closure
                     List<Node> blockElements = new ArrayList<>();
                     blockElements.add(directNode);
