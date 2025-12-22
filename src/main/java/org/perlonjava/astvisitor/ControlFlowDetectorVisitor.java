@@ -156,6 +156,8 @@ public class ControlFlowDetectorVisitor implements Visitor {
             node.list.accept(this);
         }
         if (!hasUnsafeControlFlow && node.body != null) {
+            // Always increment loopDepth for for loops, even if labeled
+            // This allows unlabeled last/next/redo inside labeled loops to be safe
             loopDepth++;
             try {
                 node.body.accept(this);
@@ -177,6 +179,8 @@ public class ControlFlowDetectorVisitor implements Visitor {
             node.increment.accept(this);
         }
         if (!hasUnsafeControlFlow && node.body != null) {
+            // Always increment loopDepth for for loops, even if labeled
+            // This allows unlabeled last/next/redo inside labeled loops to be safe
             loopDepth++;
             try {
                 node.body.accept(this);

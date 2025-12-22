@@ -13,11 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class EmitBlock {
-    // Blocks with too many statements are emitted as a separate subroutine
-    // in order to avoid "Method too large" error test: in t/re/pat.t
-    final static int LARGE_BLOCK = 16;
-    final static int LARGE_BYTECODE = 30000;
-    
+
     // Reusable visitor for control flow detection
     private static final ControlFlowDetectorVisitor controlFlowDetector = new ControlFlowDetectorVisitor();
 
