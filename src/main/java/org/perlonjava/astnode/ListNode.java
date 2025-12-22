@@ -2,6 +2,7 @@ package org.perlonjava.astnode;
 
 import org.perlonjava.astvisitor.Visitor;
 import org.perlonjava.codegen.LargeNodeRefactorer;
+import org.perlonjava.parser.Parser;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -56,7 +57,7 @@ public class ListNode extends AbstractNode {
     public Node handle;
 
     /**
-     * Constructs a new ListNode with the specified list of child nodes.
+     * Constructs a ListNode with the specified elements.
      * <p>
      * <b>Large Literal Refactoring:</b> When {@code JPERL_LARGECODE=refactor} environment
      * variable is set and the elements list is large enough to potentially exceed JVM's
@@ -68,8 +69,22 @@ public class ListNode extends AbstractNode {
      * @see LargeNodeRefactorer#maybeRefactorElements
      */
     public ListNode(List<Node> elements, int tokenIndex) {
+        this(elements, tokenIndex, null);
+    }
+
+    /**
+     * Constructs a ListNode with the specified elements and parser context.
+     * <p>
+     * This constructor provides better error messages with source code context when refactoring fails.
+     *
+     * @param elements   the list of child nodes to be stored in this ListNode
+     * @param tokenIndex the token index in the source for error reporting
+     * @param parser     the parser instance for access to error utilities
+     * @see LargeNodeRefactorer#maybeRefactorElements
+     */
+    public ListNode(List<Node> elements, int tokenIndex, Parser parser) {
         this.tokenIndex = tokenIndex;
-        this.elements = LargeNodeRefactorer.maybeRefactorElements(elements, tokenIndex, LargeNodeRefactorer.NodeType.LIST);
+        this.elements = LargeNodeRefactorer.maybeRefactorElements(elements, tokenIndex, LargeNodeRefactorer.NodeType.LIST, parser);
         this.handle = null;
     }
 
