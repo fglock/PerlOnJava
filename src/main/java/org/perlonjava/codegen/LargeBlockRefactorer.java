@@ -1,8 +1,11 @@
 package org.perlonjava.codegen;
 
 import org.perlonjava.astnode.*;
+import org.perlonjava.astvisitor.BytecodeSizeEstimator;
 import org.perlonjava.astvisitor.ControlFlowDetectorVisitor;
 import org.perlonjava.astvisitor.EmitterVisitor;
+import org.perlonjava.parser.Parser;
+import org.perlonjava.runtime.PerlCompilerException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -40,9 +43,10 @@ public class LargeBlockRefactorer {
      * Parse-time entry point: called from BlockNode constructor to refactor large blocks.
      * This applies smart chunking to split safe statement sequences into closures.
      *
-     * @param node The block to potentially refactor (modified in place)
+     * @param node   The block to potentially refactor (modified in place)
+     * @param parser The parser instance for access to error utilities (can be null if not available)
      */
-    public static void maybeRefactorBlock(BlockNode node) {
+    public static void maybeRefactorBlock(BlockNode node, Parser parser) {
         // Skip if refactoring is not enabled
         if (!isRefactoringEnabled()) {
             return;
@@ -69,7 +73,7 @@ public class LargeBlockRefactorer {
         }
 
         // Apply smart chunking
-        trySmartChunking(node);
+        trySmartChunking(node, parser);
     }
 
     /**
@@ -148,10 +152,11 @@ public class LargeBlockRefactorer {
      * Try to apply smart chunking to reduce the number of top-level elements.
      * Creates nested closures for proper lexical scoping.
      *
-     * @param node The block to chunk
+     * @param node   The block to chunk
+     * @param parser The parser instance for access to error utilities (can be null)
      * @return true if chunking was successful, false otherwise
      */
-    private static boolean trySmartChunking(BlockNode node) {
+    private static boolean trySmartChunking(BlockNode node, Parser parser) {
         List<Object> segments = new ArrayList<>();  // Either Node (direct) or List<Node> (chunk)
         List<Node> currentChunk = new ArrayList<>();
 
@@ -191,6 +196,22 @@ public class LargeBlockRefactorer {
             node.elements.addAll(processedElements);
             node.setAnnotation("blockAlreadyRefactored", true);
             return true;
+        }
+
+        // If refactoring didn't help and block is still too large, throw an error
+        if (node.elements.size() > LARGE_BLOCK_ELEMENT_COUNT) {
+            long estimatedSize = estimateTotalBytecodeSize(node.elements);
+            if (estimatedSize > LARGE_BYTECODE_SIZE) {
+                String message = "Block is too large (" + node.elements.size() + " elements, estimated " + estimatedSize + " bytes) " +
+                    "and refactoring failed to reduce it below " + LARGE_BYTECODE_SIZE + " bytes. " +
+                    "The block contains control flow statements that prevent safe refactoring. " +
+                    "Consider breaking the code into smaller subroutines manually.";
+                if (parser != null) {
+                    throw new PerlCompilerException(node.tokenIndex, message, parser.ctx.errorUtil);
+                } else {
+                    throw new PerlCompilerException(message);
+                }
+            }
         }
 
         return false;
@@ -393,5 +414,36 @@ public class LargeBlockRefactorer {
                 node instanceof For3Node ||
                 node instanceof IfNode ||
                 node instanceof TryNode;
+    }
+
+    /**
+     * Estimates the total bytecode size for a list of nodes.
+     * Uses sampling for efficiency on large lists.
+     *
+     * @param nodes the list of nodes to estimate
+     * @return estimated total bytecode size in bytes
+     */
+    private static long estimateTotalBytecodeSize(List<Node> nodes) {
+        if (nodes.isEmpty()) {
+            return 0;
+        }
+
+        // For small lists, calculate exact size
+        if (nodes.size() <= 10) {
+            long total = 0;
+            for (Node node : nodes) {
+                total += BytecodeSizeEstimator.estimateSnippetSize(node);
+            }
+            return total;
+        }
+
+        // For large lists, use sampling
+        int sampleSize = Math.min(10, nodes.size());
+        long totalSampleSize = 0;
+        for (int i = 0; i < sampleSize; i++) {
+            int index = (int) (((long) i * (nodes.size() - 1)) / (sampleSize - 1));
+            totalSampleSize += BytecodeSizeEstimator.estimateSnippetSize(nodes.get(index));
+        }
+        return (totalSampleSize * nodes.size()) / sampleSize;
     }
 }

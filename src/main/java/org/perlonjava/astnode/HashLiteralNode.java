@@ -2,6 +2,7 @@ package org.perlonjava.astnode;
 
 import org.perlonjava.astvisitor.Visitor;
 import org.perlonjava.codegen.LargeNodeRefactorer;
+import org.perlonjava.parser.Parser;
 
 import java.util.List;
 
@@ -52,8 +53,22 @@ public class HashLiteralNode extends AbstractNode {
      * @see LargeNodeRefactorer#maybeRefactorElements
      */
     public HashLiteralNode(List<Node> elements, int tokenIndex) {
+        this(elements, tokenIndex, null);
+    }
+
+    /**
+     * Constructs a new HashLiteralNode with the specified list of child nodes and parser context.
+     * <p>
+     * This constructor provides better error messages with source code context when refactoring fails.
+     *
+     * @param elements   the list of key-value pairs (alternating keys and values)
+     * @param tokenIndex the token index in the source for error reporting
+     * @param parser     the parser instance for access to error utilities
+     * @see LargeNodeRefactorer#maybeRefactorElements
+     */
+    public HashLiteralNode(List<Node> elements, int tokenIndex, Parser parser) {
         this.tokenIndex = tokenIndex;
-        this.elements = LargeNodeRefactorer.maybeRefactorElements(elements, tokenIndex, LargeNodeRefactorer.NodeType.HASH);
+        this.elements = LargeNodeRefactorer.maybeRefactorElements(elements, tokenIndex, LargeNodeRefactorer.NodeType.HASH, parser);
     }
 
     /**

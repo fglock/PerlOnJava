@@ -132,7 +132,7 @@ public class ParseBlock {
         }
 
         // Create and return the block node with all parsed statements
-        BlockNode blockNode = new BlockNode(statements, currentIndex);
+        BlockNode blockNode = new BlockNode(statements, currentIndex, parser);
         blockNode.labels = blockLabels; // Set the collected labels in the BlockNode
         return new BlockWithScope(blockNode, scopeIndex);
     }

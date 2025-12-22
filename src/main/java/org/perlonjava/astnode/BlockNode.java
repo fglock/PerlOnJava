@@ -2,6 +2,7 @@ package org.perlonjava.astnode;
 
 import org.perlonjava.astvisitor.Visitor;
 import org.perlonjava.codegen.LargeBlockRefactorer;
+import org.perlonjava.parser.Parser;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -44,13 +45,26 @@ public class BlockNode extends AbstractNode {
      * @param tokenIndex the index of the token in the source code
      */
     public BlockNode(List<Node> elements, int tokenIndex) {
+        this(elements, tokenIndex, null);
+    }
+
+    /**
+     * Constructs a new BlockNode with the specified list of child nodes and parser context.
+     * <p>
+     * This constructor provides better error messages with source code context when refactoring fails.
+     *
+     * @param elements   the list of child nodes to be stored in this BlockNode
+     * @param tokenIndex the index of the token in the source code
+     * @param parser     the parser instance for access to error utilities
+     */
+    public BlockNode(List<Node> elements, int tokenIndex, Parser parser) {
         this.elements = elements;
         this.tokenIndex = tokenIndex;
         this.labels = new ArrayList<>();
         this.labelName = null;
         this.isLoop = false;
         // Apply parse-time refactoring if enabled
-        LargeBlockRefactorer.maybeRefactorBlock(this);
+        LargeBlockRefactorer.maybeRefactorBlock(this, parser);
     }
 
     /**
