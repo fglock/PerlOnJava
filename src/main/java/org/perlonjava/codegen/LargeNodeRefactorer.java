@@ -6,6 +6,8 @@ import org.perlonjava.astvisitor.BytecodeSizeEstimator;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.perlonjava.parser.ParserNodeUtils.variableAst;
+
 /**
  * Generic helper class for refactoring large AST node lists to avoid JVM's "Method too large" error.
  * <p>
@@ -25,9 +27,9 @@ import java.util.List;
  * <p>
  * <b>Chunk Wrapping Strategy:</b>
  * <ul>
- *   <li>Arrays: {@code [@{sub{[chunk1]}->()}, @{sub{[chunk2]}->()}, ...]}</li>
- *   <li>Hashes: {@code {%{sub{{chunk1}}->()}, %{sub{{chunk2}}->()}, ...}}</li>
- *   <li>Lists: {@code (sub{(chunk1)}->(), sub{(chunk2)}->(), ...)}</li>
+ *   <li>Arrays: {@code [@{sub{[chunk1]}->(@_)}, @{sub{[chunk2]}->(@_)}, ...]}</li>
+ *   <li>Hashes: {@code {%{sub{{chunk1}}->(@_)}, %{sub{{chunk2}}->(@_)}, ...}}</li>
+ *   <li>Lists: {@code (sub{(chunk1)}->(@_), sub{(chunk2)}->(@_), ...)}</li>
  * </ul>
  * <p>
  * <b>Integration:</b> Called automatically from AST node constructors when enabled.
@@ -73,11 +75,17 @@ public class LargeNodeRefactorer {
      * Used to determine the appropriate chunk wrapping and dereference strategy.
      */
     public enum NodeType {
-        /** Array literal: [...] - chunks wrapped with @{sub{[...]}->()}  */
+        /**
+         * Array literal: [...] - chunks wrapped with @{sub{[...]}->()}
+         */
         ARRAY,
-        /** Hash literal: {...} - chunks wrapped with %{sub{{...}}->()}, chunk size forced even */
+        /**
+         * Hash literal: {...} - chunks wrapped with %{sub{{...}}->()}, chunk size forced even
+         */
         HASH,
-        /** List: (...) - chunks wrapped with sub{(...)}->() */
+        /**
+         * List: (...) - chunks wrapped with sub{(...)}->()
+         */
         LIST
     }
 
@@ -177,14 +185,16 @@ public class LargeNodeRefactorer {
                 BlockNode blockList = new BlockNode(List.of(innerLiteral), tokenIndex);
                 blockList.setAnnotation("blockAlreadyRefactored", true);  // Prevent LargeBlockRefactorer from processing
                 SubroutineNode subList = new SubroutineNode(null, null, null, blockList, false, tokenIndex);
-                return new BinaryOperatorNode("->", subList, new ListNode(tokenIndex), tokenIndex);
+                return new BinaryOperatorNode("->", subList, new ListNode(
+                        new ArrayList<>(List.of(variableAst("@", "_", tokenIndex))), tokenIndex), tokenIndex);
         }
 
         // For array/hash: @{ sub { [...] }->() } or %{ sub { {...} }->() }
         BlockNode block = new BlockNode(List.of(innerLiteral), tokenIndex);
         block.setAnnotation("blockAlreadyRefactored", true);  // Prevent LargeBlockRefactorer from processing
         SubroutineNode sub = new SubroutineNode(null, null, null, block, false, tokenIndex);
-        BinaryOperatorNode call = new BinaryOperatorNode("->", sub, new ListNode(tokenIndex), tokenIndex);
+        BinaryOperatorNode call = new BinaryOperatorNode("->", sub, new ListNode(
+                new ArrayList<>(List.of(variableAst("@", "_", tokenIndex))), tokenIndex), tokenIndex);
         return new OperatorNode(derefOp, call, tokenIndex);
     }
 
