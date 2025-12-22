@@ -29,7 +29,7 @@ import static org.perlonjava.parser.ParserNodeUtils.variableAst;
  * <ul>
  *   <li>Arrays: {@code [@{sub{[chunk1]}->(@_)}, @{sub{[chunk2]}->(@_)}, ...]}</li>
  *   <li>Hashes: {@code {%{sub{{chunk1}}->(@_)}, %{sub{{chunk2}}->(@_)}, ...}}</li>
- *   <li>Lists: {@code (sub{(chunk1)}->(@_), sub{(chunk2)}->(@_), ...)}</li>
+ *   <li>Lists: {@code sub{ chunk1, sub{ chunk2 }->(@_) }->(@_)} - nested for proper closure scope</li>
  * </ul>
  * <p>
  * <b>Integration:</b> Called automatically from AST node constructors when enabled.
@@ -127,8 +127,14 @@ public class LargeNodeRefactorer {
         }
 
         List<Node> chunks = splitIntoChunks(elements, chunkSize);
+        
+        // For LIST nodes, create nested closures for proper lexical scoping
+        if (nodeType == NodeType.LIST) {
+            return createNestedListClosures(chunks, tokenIndex);
+        }
+        
+        // For ARRAY and HASH, use flat structure (they don't need nested scoping)
         List<Node> refactoredElements = new ArrayList<>();
-
         for (Node chunk : chunks) {
             if (chunk instanceof ListNode listChunk && listChunk.elements.size() < MIN_CHUNK_SIZE) {
                 // Small chunk - add elements directly
@@ -145,13 +151,62 @@ public class LargeNodeRefactorer {
     }
 
     /**
+     * Creates nested closures for LIST chunks to ensure proper lexical scoping.
+     * Structure: sub{ chunk1, sub{ chunk2, sub{ chunk3 }->(@_) }->(@_) }->(@_)
+     *
+     * @param chunks     the list of chunks to nest
+     * @param tokenIndex token index for new nodes
+     * @return a single Node representing the nested closure structure, or a ListNode if only one small chunk
+     */
+    private static List<Node> createNestedListClosures(List<Node> chunks, int tokenIndex) {
+        if (chunks.isEmpty()) {
+            return new ArrayList<>();
+        }
+        
+        // If only one chunk and it's small, just return its elements
+        if (chunks.size() == 1 && chunks.get(0) instanceof ListNode listChunk && 
+            listChunk.elements.size() < MIN_CHUNK_SIZE) {
+            return listChunk.elements;
+        }
+        
+        // Build nested structure from innermost to outermost
+        Node result = null;
+        
+        for (int i = chunks.size() - 1; i >= 0; i--) {
+            Node chunk = chunks.get(i);
+            List<Node> chunkElements = chunk instanceof ListNode ? ((ListNode) chunk).elements : List.of(chunk);
+            
+            if (chunkElements.size() < MIN_CHUNK_SIZE && result == null) {
+                // Last chunk is small and there's no nested closure yet - skip wrapping
+                result = new ListNode(new ArrayList<>(chunkElements), tokenIndex);
+            } else {
+                // Create the block content: either just the chunk elements, or chunk elements + nested closure call
+                List<Node> blockElements = new ArrayList<>(chunkElements);
+                if (result != null) {
+                    blockElements.add(result);
+                }
+                
+                ListNode listNode = new ListNode(blockElements, tokenIndex);
+                listNode.setAnnotation("chunkAlreadyRefactored", true);
+                BlockNode block = new BlockNode(List.of(listNode), tokenIndex);
+                block.setAnnotation("blockAlreadyRefactored", true);
+                SubroutineNode sub = new SubroutineNode(null, null, null, block, false, tokenIndex);
+                result = new BinaryOperatorNode("->", sub, new ListNode(
+                        new ArrayList<>(List.of(variableAst("@", "_", tokenIndex))), tokenIndex), tokenIndex);
+            }
+        }
+        
+        return List.of(result);
+    }
+
+    /**
      * Creates a wrapper AST node for a chunk of elements.
      * <p>
      * The wrapper structure depends on the node type:
      * <ul>
      *   <li>ARRAY: {@code @{ sub { [elements] }->() }} - array ref created in sub, then dereferenced</li>
      *   <li>HASH: {@code %{ sub { {elements} }->() }} - hash ref created in sub, then dereferenced</li>
-     *   <li>LIST: {@code sub { (elements) }->() } - list returned directly from sub call</li>
+     *   <li>LIST: Not used - see {@link #createNestedListClosures(List, int)}</li>
      * </ul>
      *
      * @param chunkElements the elements to wrap in this chunk
@@ -178,15 +233,8 @@ public class LargeNodeRefactorer {
                 break;
             case LIST:
             default:
-                ListNode list = new ListNode(chunkElements, tokenIndex);
-                list.setAnnotation("chunkAlreadyRefactored", true);
-                innerLiteral = list;
-                // For lists, we just call the sub and let it return the list
-                BlockNode blockList = new BlockNode(List.of(innerLiteral), tokenIndex);
-                blockList.setAnnotation("blockAlreadyRefactored", true);  // Prevent LargeBlockRefactorer from processing
-                SubroutineNode subList = new SubroutineNode(null, null, null, blockList, false, tokenIndex);
-                return new BinaryOperatorNode("->", subList, new ListNode(
-                        new ArrayList<>(List.of(variableAst("@", "_", tokenIndex))), tokenIndex), tokenIndex);
+                // LIST case should not reach here - handled by createNestedListClosures
+                throw new IllegalStateException("LIST nodes should be handled by createNestedListClosures");
         }
 
         // For array/hash: @{ sub { [...] }->() } or %{ sub { {...} }->() }

@@ -146,35 +146,44 @@ public class LargeBlockRefactorer {
 
     /**
      * Try to apply smart chunking to reduce the number of top-level elements.
+     * Creates nested closures for proper lexical scoping.
      *
      * @param node The block to chunk
      * @return true if chunking was successful, false otherwise
      */
     private static boolean trySmartChunking(BlockNode node) {
-        List<Node> processedElements = new ArrayList<>();
+        List<Object> segments = new ArrayList<>();  // Either Node (direct) or List<Node> (chunk)
         List<Node> currentChunk = new ArrayList<>();
 
         for (Node element : node.elements) {
             if (shouldBreakChunk(element)) {
                 // This element cannot be in a chunk (has unsafe control flow or is a label)
-                processChunk(currentChunk, processedElements, node.tokenIndex);
-                currentChunk.clear();
-
+                if (!currentChunk.isEmpty()) {
+                    segments.add(new ArrayList<>(currentChunk));
+                    currentChunk.clear();
+                }
                 // Add the element directly
-                processedElements.add(element);
+                segments.add(element);
             } else if (isCompleteBlock(element)) {
                 // Complete blocks are already scoped
-                processChunk(currentChunk, processedElements, node.tokenIndex);
-                currentChunk.clear();
-                processedElements.add(element);
+                if (!currentChunk.isEmpty()) {
+                    segments.add(new ArrayList<>(currentChunk));
+                    currentChunk.clear();
+                }
+                segments.add(element);
             } else {
                 // Safe element, add to current chunk
                 currentChunk.add(element);
             }
         }
 
-        // Process any remaining chunk (shouldn't happen since last element is always direct)
-        processChunk(currentChunk, processedElements, node.tokenIndex);
+        // Process any remaining chunk
+        if (!currentChunk.isEmpty()) {
+            segments.add(new ArrayList<>(currentChunk));
+        }
+
+        // Build nested structure if we have any chunks
+        List<Node> processedElements = buildNestedStructure(segments, node.tokenIndex);
 
         // Apply chunking if we reduced the element count
         if (processedElements.size() < node.elements.size()) {
@@ -208,30 +217,97 @@ public class LargeBlockRefactorer {
     }
 
     /**
-     * Process accumulated chunk statements.
+     * Build nested closure structure from segments.
+     * Structure: direct1, sub{ chunk1, direct2, sub{ chunk2, direct3 }->(@_) }->(@_)
+     *
+     * @param segments   List of segments (either Node for direct elements or List<Node> for chunks)
+     * @param tokenIndex token index for new nodes
+     * @return List of processed elements with nested structure
      */
-    private static void processChunk(List<Node> chunk, List<Node> processedElements, int tokenIndex) {
-        if (chunk.isEmpty()) {
-            return;
+    @SuppressWarnings("unchecked")
+    private static List<Node> buildNestedStructure(List<Object> segments, int tokenIndex) {
+        if (segments.isEmpty()) {
+            return new ArrayList<>();
         }
 
-        if (chunk.size() >= MIN_CHUNK_SIZE) {
-            // Create a closure for this chunk: sub { ... }->()
-            // Mark the block as already refactored BEFORE construction to prevent recursion
-            // (BlockNode constructor calls maybeRefactorBlock)
-            BlockNode chunkBlock = createMarkedBlock(new ArrayList<>(chunk), tokenIndex);
-            BinaryOperatorNode closure = new BinaryOperatorNode(
-                    "->",
-                    new SubroutineNode(null, null, null, chunkBlock, false, tokenIndex),
-                    new ListNode(
-                            new ArrayList<>(List.of(variableAst("@", "_", tokenIndex))), tokenIndex),
-                    tokenIndex
-            );
-            processedElements.add(closure);
-        } else {
-            // Chunk too small, add elements directly
-            processedElements.addAll(chunk);
+        // Build from the end backwards to create nested structure
+        Node nestedClosure = null;
+        List<Node> result = new ArrayList<>();
+
+        for (int i = segments.size() - 1; i >= 0; i--) {
+            Object segment = segments.get(i);
+
+            if (segment instanceof Node directNode) {
+                // Direct element - if we have a nested closure, we need to wrap everything
+                if (nestedClosure != null) {
+                    // Create closure containing this direct element and the nested closure
+                    List<Node> blockElements = new ArrayList<>();
+                    blockElements.add(directNode);
+                    blockElements.add(nestedClosure);
+                    BlockNode block = createMarkedBlock(blockElements, tokenIndex);
+                    nestedClosure = new BinaryOperatorNode(
+                            "->",
+                            new SubroutineNode(null, null, null, block, false, tokenIndex),
+                            new ListNode(new ArrayList<>(List.of(variableAst("@", "_", tokenIndex))), tokenIndex),
+                            tokenIndex
+                    );
+                } else {
+                    // No nested closure yet, add to result (will be reversed later)
+                    result.add(directNode);
+                }
+            } else if (segment instanceof List) {
+                List<Node> chunk = (List<Node>) segment;
+                if (chunk.size() >= MIN_CHUNK_SIZE) {
+                    // Create closure for this chunk
+                    List<Node> blockElements = new ArrayList<>(chunk);
+                    if (nestedClosure != null) {
+                        blockElements.add(nestedClosure);
+                    }
+                    BlockNode block = createMarkedBlock(blockElements, tokenIndex);
+                    nestedClosure = new BinaryOperatorNode(
+                            "->",
+                            new SubroutineNode(null, null, null, block, false, tokenIndex),
+                            new ListNode(new ArrayList<>(List.of(variableAst("@", "_", tokenIndex))), tokenIndex),
+                            tokenIndex
+                    );
+                } else {
+                    // Chunk too small - treat elements as direct
+                    if (nestedClosure != null) {
+                        // Wrap with nested closure
+                        List<Node> blockElements = new ArrayList<>(chunk);
+                        blockElements.add(nestedClosure);
+                        BlockNode block = createMarkedBlock(blockElements, tokenIndex);
+                        nestedClosure = new BinaryOperatorNode(
+                                "->",
+                                new SubroutineNode(null, null, null, block, false, tokenIndex),
+                                new ListNode(new ArrayList<>(List.of(variableAst("@", "_", tokenIndex))), tokenIndex),
+                                tokenIndex
+                        );
+                    } else {
+                        // Add directly to result
+                        result.addAll(chunk);
+                    }
+                }
+            }
         }
+
+        // If we built a nested closure, add it at the beginning
+        if (nestedClosure != null) {
+            List<Node> finalResult = new ArrayList<>();
+            finalResult.add(nestedClosure);
+            // Add any direct elements that were at the end (in reverse order)
+            for (int i = result.size() - 1; i >= 0; i--) {
+                finalResult.add(result.get(i));
+            }
+            return finalResult;
+        }
+
+        // No nesting needed, reverse the result list
+        List<Node> finalResult = new ArrayList<>();
+        for (int i = result.size() - 1; i >= 0; i--) {
+            finalResult.add(result.get(i));
+        }
+        return finalResult;
     }
 
     /**
