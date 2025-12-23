@@ -184,10 +184,16 @@ public class LargeBlockRefactorer {
 
     /**
      * Determine if an element should break the current chunk.
+     * Elements that break chunks are kept outside closures.
      */
     private static boolean shouldBreakChunk(Node element) {
         // Labels break chunks - they're targets for goto/next/last
         if (element instanceof LabelNode) {
+            return true;
+        }
+
+        // Variable declarations break chunks because they need to be visible to subsequent code
+        if (hasVariableDeclaration(element)) {
             return true;
         }
 
@@ -198,13 +204,13 @@ public class LargeBlockRefactorer {
             return true;
         }
 
-        // Variable declarations are OK - closures capture lexical variables from outer scope
         return false;
     }
 
     /**
      * Build nested closure structure from segments.
-     * Structure: direct1, sub{ chunk1, direct2, sub{ chunk2, direct3 }->(@_) }->(@_)
+     * Structure: direct1, direct2, sub{ chunk1, sub{ chunk2, chunk3 }->(@_) }->(@_)
+     * Closures are always placed at tail position to preserve variable scoping.
      *
      * @param segments   List of segments (either Node for direct elements or List<Node> for chunks)
      * @param tokenIndex token index for new nodes
@@ -216,93 +222,74 @@ public class LargeBlockRefactorer {
             return new ArrayList<>();
         }
 
-        // Build from the end backwards to create nested structure
-        Node nestedClosure = null;
         List<Node> result = new ArrayList<>();
-
-        for (int i = segments.size() - 1; i >= 0; i--) {
+        
+        // Process segments forward, accumulating direct elements and building nested closures at the end
+        for (int i = 0; i < segments.size(); i++) {
             Object segment = segments.get(i);
 
             if (segment instanceof Node directNode) {
-                // Labels must NEVER be wrapped in closures - they must stay at block level
-                if (directNode instanceof LabelNode) {
-                    // Flush any pending nested closure first
-                    if (nestedClosure != null) {
-                        result.add(nestedClosure);
-                        nestedClosure = null;
-                    }
-                    // Add label directly to result
-                    result.add(directNode);
-                } else if (nestedClosure != null) {
-                    // Direct element - if we have a nested closure, we need to wrap everything
-                    // Create closure containing this direct element and the nested closure
-                    List<Node> blockElements = new ArrayList<>();
-                    blockElements.add(directNode);
-                    blockElements.add(nestedClosure);
-                    BlockNode block = createMarkedBlock(blockElements, tokenIndex);
-                    nestedClosure = new BinaryOperatorNode(
-                            "->",
-                            new SubroutineNode(null, null, null, block, false, tokenIndex),
-                            new ListNode(new ArrayList<>(List.of(variableAst("@", "_", tokenIndex))), tokenIndex),
-                            tokenIndex
-                    );
-                } else {
-                    // No nested closure yet, add to result (will be reversed later)
-                    result.add(directNode);
-                }
+                // Direct elements (labels, variable declarations, control flow) stay at block level
+                result.add(directNode);
             } else if (segment instanceof List) {
                 List<Node> chunk = (List<Node>) segment;
                 if (chunk.size() >= MIN_CHUNK_SIZE) {
-                    // Create closure for this chunk
+                    // Create closure for this chunk at tail position
+                    // Collect remaining chunks to nest inside this closure
                     List<Node> blockElements = new ArrayList<>(chunk);
-                    if (nestedClosure != null) {
-                        blockElements.add(nestedClosure);
+                    
+                    // Build nested closures for remaining chunks
+                    for (int j = i + 1; j < segments.size(); j++) {
+                        Object nextSegment = segments.get(j);
+                        if (nextSegment instanceof Node) {
+                            blockElements.add((Node) nextSegment);
+                        } else if (nextSegment instanceof List) {
+                            List<Node> nextChunk = (List<Node>) nextSegment;
+                            if (nextChunk.size() >= MIN_CHUNK_SIZE) {
+                                // Create nested closure for next chunk
+                                List<Node> nestedElements = new ArrayList<>(nextChunk);
+                                // Add all remaining segments to the nested closure
+                                for (int k = j + 1; k < segments.size(); k++) {
+                                    Object remainingSegment = segments.get(k);
+                                    if (remainingSegment instanceof Node) {
+                                        nestedElements.add((Node) remainingSegment);
+                                    } else {
+                                        nestedElements.addAll((List<Node>) remainingSegment);
+                                    }
+                                }
+                                BlockNode nestedBlock = createMarkedBlock(nestedElements, tokenIndex);
+                                Node nestedClosure = new BinaryOperatorNode(
+                                        "->",
+                                        new SubroutineNode(null, null, null, nestedBlock, false, tokenIndex),
+                                        new ListNode(new ArrayList<>(List.of(variableAst("@", "_", tokenIndex))), tokenIndex),
+                                        tokenIndex
+                                );
+                                blockElements.add(nestedClosure);
+                                j = segments.size(); // Break outer loop
+                                break;
+                            } else {
+                                blockElements.addAll(nextChunk);
+                            }
+                        }
                     }
+                    
                     BlockNode block = createMarkedBlock(blockElements, tokenIndex);
-                    nestedClosure = new BinaryOperatorNode(
+                    Node closure = new BinaryOperatorNode(
                             "->",
                             new SubroutineNode(null, null, null, block, false, tokenIndex),
                             new ListNode(new ArrayList<>(List.of(variableAst("@", "_", tokenIndex))), tokenIndex),
                             tokenIndex
                     );
+                    result.add(closure);
+                    break; // All remaining segments are now inside the closure
                 } else {
-                    // Chunk too small - treat elements as direct
-                    if (nestedClosure != null) {
-                        // Wrap with nested closure
-                        List<Node> blockElements = new ArrayList<>(chunk);
-                        blockElements.add(nestedClosure);
-                        BlockNode block = createMarkedBlock(blockElements, tokenIndex);
-                        nestedClosure = new BinaryOperatorNode(
-                                "->",
-                                new SubroutineNode(null, null, null, block, false, tokenIndex),
-                                new ListNode(new ArrayList<>(List.of(variableAst("@", "_", tokenIndex))), tokenIndex),
-                                tokenIndex
-                        );
-                    } else {
-                        // Add directly to result
-                        result.addAll(chunk);
-                    }
+                    // Chunk too small - add elements directly
+                    result.addAll(chunk);
                 }
             }
         }
 
-        // If we built a nested closure, add it at the beginning
-        if (nestedClosure != null) {
-            List<Node> finalResult = new ArrayList<>();
-            finalResult.add(nestedClosure);
-            // Add any direct elements that were at the end (in reverse order)
-            for (int i = result.size() - 1; i >= 0; i--) {
-                finalResult.add(result.get(i));
-            }
-            return finalResult;
-        }
-
-        // No nesting needed, reverse the result list
-        List<Node> finalResult = new ArrayList<>();
-        for (int i = result.size() - 1; i >= 0; i--) {
-            finalResult.add(result.get(i));
-        }
-        return finalResult;
+        return result;
     }
 
     /**
