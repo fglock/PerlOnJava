@@ -3,7 +3,6 @@ package org.perlonjava.codegen;
 import org.perlonjava.astnode.*;
 import org.perlonjava.astvisitor.BytecodeSizeEstimator;
 import org.perlonjava.astvisitor.ControlFlowDetectorVisitor;
-import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.parser.Parser;
 import org.perlonjava.runtime.PerlCompilerException;
 
@@ -76,67 +75,6 @@ public class LargeBlockRefactorer {
         trySmartChunking(node, parser);
     }
 
-    /**
-     * Process a block and refactor it if necessary to avoid method size limits.
-     * This is the code-generation time entry point (legacy, kept for compatibility).
-     *
-     * @param emitterVisitor The emitter visitor context
-     * @param node           The block to process
-     * @return true if the block was refactored and emitted, false if no refactoring was needed
-     */
-    public static boolean processBlock(EmitterVisitor emitterVisitor, BlockNode node) {
-        // CRITICAL: Skip if this block was already refactored to prevent infinite recursion
-        if (node.getBooleanAnnotation("blockAlreadyRefactored")) {
-            return false;
-        }
-
-        // Check if refactoring is enabled via environment variable
-        String largeCodeMode = System.getenv("JPERL_LARGECODE");
-        boolean refactorEnabled = "refactor".equals(largeCodeMode);
-
-        // Skip if block is already a subroutine or is a special block
-        if (node.getBooleanAnnotation("blockIsSubroutine")) {
-            return false;
-        }
-
-        // Determine if we need to refactor
-        boolean needsRefactoring = shouldRefactorBlock(node, emitterVisitor, refactorEnabled);
-
-        if (!needsRefactoring) {
-            return false;
-        }
-
-        // Skip refactoring for special blocks (BEGIN, END, INIT, CHECK, UNITCHECK)
-        // These blocks have special compilation semantics and cannot be refactored
-        if (isSpecialContext(node)) {
-            return false;
-        }
-
-        // TEMPORARILY DISABLED: Smart chunking has timing issues with special blocks (BEGIN/require)
-        // Causes NPE in SpecialBlockParser when functions aren't defined yet during compilation
-        // if (trySmartChunking(node)) {
-        //     // Block was successfully chunked, continue with normal emission
-        //     return false;
-        // }
-
-        // Fallback: Try whole-block refactoring
-        return tryWholeBlockRefactoring(emitterVisitor, node);  // Block was refactored and emitted
-
-        // No refactoring was possible
-    }
-
-    /**
-     * Determine if a block should be refactored based on size and context.
-     */
-    private static boolean shouldRefactorBlock(BlockNode node, EmitterVisitor emitterVisitor, boolean refactorEnabled) {
-        // Check element count threshold
-        if (node.elements.size() <= LARGE_BLOCK_ELEMENT_COUNT) {
-            return false;
-        }
-
-        // Check if we're in a context that allows refactoring
-        return refactorEnabled || !emitterVisitor.ctx.javaClassInfo.gotoLabelStack.isEmpty();
-    }
 
     /**
      * Check if the block is in a special context where smart chunking should be avoided.
@@ -384,43 +322,6 @@ public class LargeBlockRefactorer {
         }
     }
 
-    /**
-     * Try to refactor the entire block as a subroutine.
-     */
-    private static boolean tryWholeBlockRefactoring(EmitterVisitor emitterVisitor, BlockNode node) {
-        // Check for unsafe control flow
-        controlFlowDetector.reset();
-        node.accept(controlFlowDetector);
-        if (controlFlowDetector.hasUnsafeControlFlow()) {
-            return false;
-        }
-
-        // Create sub {...}->(@_) for whole block
-        int tokenIndex = node.tokenIndex;
-
-        // IMPORTANT: Mark the original block as already refactored to prevent recursion
-        node.setAnnotation("blockAlreadyRefactored", true);
-
-        // Create a wrapper block containing the original block
-        BlockNode innerBlock = new BlockNode(List.of(node), tokenIndex);
-
-        BinaryOperatorNode subr = new BinaryOperatorNode(
-                "->",
-                new SubroutineNode(
-                        null, null, null,
-                        innerBlock,
-                        false,
-                        tokenIndex
-                ),
-                new ListNode(
-                        new ArrayList<>(List.of(variableAst("@", "_", tokenIndex))), tokenIndex),
-                tokenIndex
-        );
-
-        // Emit the refactored block
-        subr.accept(emitterVisitor);
-        return true;
-    }
 
     /**
      * Check if a node contains variable declarations (my, our, local).
