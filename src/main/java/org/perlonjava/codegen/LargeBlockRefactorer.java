@@ -102,22 +102,7 @@ public class LargeBlockRefactorer {
             element.accept(controlFlowDetector);
             if (controlFlowDetector.hasUnsafeControlFlow()) {
                 // Block contains last/next/redo/goto that would break if we wrap in closures
-                // Check if block is too large and throw appropriate error
-                if (node.elements.size() > LARGE_BLOCK_ELEMENT_COUNT) {
-                    long estimatedSize = estimateTotalBytecodeSize(node.elements);
-                    if (estimatedSize > LARGE_BYTECODE_SIZE) {
-                        String message = "Block is too large (" + node.elements.size() + " elements, estimated " + estimatedSize + " bytes) " +
-                            "and refactoring failed to reduce it below " + LARGE_BYTECODE_SIZE + " bytes. " +
-                            "The block contains control flow statements that prevent safe refactoring. " +
-                            "Consider breaking the code into smaller subroutines manually.";
-                        if (parser != null) {
-                            throw new PerlCompilerException(node.tokenIndex, message, parser.ctx.errorUtil);
-                        } else {
-                            throw new PerlCompilerException(message);
-                        }
-                    }
-                }
-                // Block is small enough or doesn't need refactoring
+                // Skip refactoring - we cannot safely refactor blocks with control flow
                 return false;
             }
         }
