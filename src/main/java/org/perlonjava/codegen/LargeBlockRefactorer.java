@@ -3,7 +3,6 @@ package org.perlonjava.codegen;
 import org.perlonjava.astnode.*;
 import org.perlonjava.astvisitor.BytecodeSizeEstimator;
 import org.perlonjava.astvisitor.ControlFlowDetectorVisitor;
-import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.parser.Parser;
 import org.perlonjava.runtime.PerlCompilerException;
 
@@ -33,21 +32,24 @@ public class LargeBlockRefactorer {
 
     /**
      * Check if refactoring is enabled via environment variable.
+     * Refactoring is now enabled by default to handle large blocks.
+     * Set JPERL_LARGECODE=disable to turn it off.
      */
     private static boolean isRefactoringEnabled() {
         String largeCodeMode = System.getenv("JPERL_LARGECODE");
-        return "refactor".equals(largeCodeMode);
+        return !"disable".equals(largeCodeMode);
     }
 
     /**
      * Parse-time entry point: called from BlockNode constructor to refactor large blocks.
      * This applies smart chunking to split safe statement sequences into closures.
+     * Refactoring is enabled by default to prevent "Method too large" errors.
      *
      * @param node   The block to potentially refactor (modified in place)
      * @param parser The parser instance for access to error utilities (can be null if not available)
      */
     public static void maybeRefactorBlock(BlockNode node, Parser parser) {
-        // Skip if refactoring is not enabled
+        // Skip if refactoring is explicitly disabled
         if (!isRefactoringEnabled()) {
             return;
         }
@@ -76,67 +78,6 @@ public class LargeBlockRefactorer {
         trySmartChunking(node, parser);
     }
 
-    /**
-     * Process a block and refactor it if necessary to avoid method size limits.
-     * This is the code-generation time entry point (legacy, kept for compatibility).
-     *
-     * @param emitterVisitor The emitter visitor context
-     * @param node           The block to process
-     * @return true if the block was refactored and emitted, false if no refactoring was needed
-     */
-    public static boolean processBlock(EmitterVisitor emitterVisitor, BlockNode node) {
-        // CRITICAL: Skip if this block was already refactored to prevent infinite recursion
-        if (node.getBooleanAnnotation("blockAlreadyRefactored")) {
-            return false;
-        }
-
-        // Check if refactoring is enabled via environment variable
-        String largeCodeMode = System.getenv("JPERL_LARGECODE");
-        boolean refactorEnabled = "refactor".equals(largeCodeMode);
-
-        // Skip if block is already a subroutine or is a special block
-        if (node.getBooleanAnnotation("blockIsSubroutine")) {
-            return false;
-        }
-
-        // Determine if we need to refactor
-        boolean needsRefactoring = shouldRefactorBlock(node, emitterVisitor, refactorEnabled);
-
-        if (!needsRefactoring) {
-            return false;
-        }
-
-        // Skip refactoring for special blocks (BEGIN, END, INIT, CHECK, UNITCHECK)
-        // These blocks have special compilation semantics and cannot be refactored
-        if (isSpecialContext(node)) {
-            return false;
-        }
-
-        // TEMPORARILY DISABLED: Smart chunking has timing issues with special blocks (BEGIN/require)
-        // Causes NPE in SpecialBlockParser when functions aren't defined yet during compilation
-        // if (trySmartChunking(node)) {
-        //     // Block was successfully chunked, continue with normal emission
-        //     return false;
-        // }
-
-        // Fallback: Try whole-block refactoring
-        return tryWholeBlockRefactoring(emitterVisitor, node);  // Block was refactored and emitted
-
-        // No refactoring was possible
-    }
-
-    /**
-     * Determine if a block should be refactored based on size and context.
-     */
-    private static boolean shouldRefactorBlock(BlockNode node, EmitterVisitor emitterVisitor, boolean refactorEnabled) {
-        // Check element count threshold
-        if (node.elements.size() <= LARGE_BLOCK_ELEMENT_COUNT) {
-            return false;
-        }
-
-        // Check if we're in a context that allows refactoring
-        return refactorEnabled || !emitterVisitor.ctx.javaClassInfo.gotoLabelStack.isEmpty();
-    }
 
     /**
      * Check if the block is in a special context where smart chunking should be avoided.
@@ -164,22 +105,7 @@ public class LargeBlockRefactorer {
             element.accept(controlFlowDetector);
             if (controlFlowDetector.hasUnsafeControlFlow()) {
                 // Block contains last/next/redo/goto that would break if we wrap in closures
-                // Check if block is too large and throw appropriate error
-                if (node.elements.size() > LARGE_BLOCK_ELEMENT_COUNT) {
-                    long estimatedSize = estimateTotalBytecodeSize(node.elements);
-                    if (estimatedSize > LARGE_BYTECODE_SIZE) {
-                        String message = "Block is too large (" + node.elements.size() + " elements, estimated " + estimatedSize + " bytes) " +
-                            "and refactoring failed to reduce it below " + LARGE_BYTECODE_SIZE + " bytes. " +
-                            "The block contains control flow statements that prevent safe refactoring. " +
-                            "Consider breaking the code into smaller subroutines manually.";
-                        if (parser != null) {
-                            throw new PerlCompilerException(node.tokenIndex, message, parser.ctx.errorUtil);
-                        } else {
-                            throw new PerlCompilerException(message);
-                        }
-                    }
-                }
-                // Block is small enough or doesn't need refactoring
+                // Skip refactoring - we cannot safely refactor blocks with control flow
                 return false;
             }
         }
@@ -246,10 +172,16 @@ public class LargeBlockRefactorer {
 
     /**
      * Determine if an element should break the current chunk.
+     * Elements that break chunks are kept outside closures.
      */
     private static boolean shouldBreakChunk(Node element) {
         // Labels break chunks - they're targets for goto/next/last
         if (element instanceof LabelNode) {
+            return true;
+        }
+
+        // Variable declarations break chunks because they need to be visible to subsequent code
+        if (hasVariableDeclaration(element)) {
             return true;
         }
 
@@ -260,13 +192,13 @@ public class LargeBlockRefactorer {
             return true;
         }
 
-        // Variable declarations are OK - closures capture lexical variables from outer scope
         return false;
     }
 
     /**
      * Build nested closure structure from segments.
-     * Structure: direct1, sub{ chunk1, direct2, sub{ chunk2, direct3 }->(@_) }->(@_)
+     * Structure: direct1, direct2, sub{ chunk1, sub{ chunk2, chunk3 }->(@_) }->(@_)
+     * Closures are always placed at tail position to preserve variable scoping.
      *
      * @param segments   List of segments (either Node for direct elements or List<Node> for chunks)
      * @param tokenIndex token index for new nodes
@@ -278,93 +210,74 @@ public class LargeBlockRefactorer {
             return new ArrayList<>();
         }
 
-        // Build from the end backwards to create nested structure
-        Node nestedClosure = null;
         List<Node> result = new ArrayList<>();
-
-        for (int i = segments.size() - 1; i >= 0; i--) {
+        
+        // Process segments forward, accumulating direct elements and building nested closures at the end
+        for (int i = 0; i < segments.size(); i++) {
             Object segment = segments.get(i);
 
             if (segment instanceof Node directNode) {
-                // Labels must NEVER be wrapped in closures - they must stay at block level
-                if (directNode instanceof LabelNode) {
-                    // Flush any pending nested closure first
-                    if (nestedClosure != null) {
-                        result.add(nestedClosure);
-                        nestedClosure = null;
-                    }
-                    // Add label directly to result
-                    result.add(directNode);
-                } else if (nestedClosure != null) {
-                    // Direct element - if we have a nested closure, we need to wrap everything
-                    // Create closure containing this direct element and the nested closure
-                    List<Node> blockElements = new ArrayList<>();
-                    blockElements.add(directNode);
-                    blockElements.add(nestedClosure);
-                    BlockNode block = createMarkedBlock(blockElements, tokenIndex);
-                    nestedClosure = new BinaryOperatorNode(
-                            "->",
-                            new SubroutineNode(null, null, null, block, false, tokenIndex),
-                            new ListNode(new ArrayList<>(List.of(variableAst("@", "_", tokenIndex))), tokenIndex),
-                            tokenIndex
-                    );
-                } else {
-                    // No nested closure yet, add to result (will be reversed later)
-                    result.add(directNode);
-                }
+                // Direct elements (labels, variable declarations, control flow) stay at block level
+                result.add(directNode);
             } else if (segment instanceof List) {
                 List<Node> chunk = (List<Node>) segment;
                 if (chunk.size() >= MIN_CHUNK_SIZE) {
-                    // Create closure for this chunk
+                    // Create closure for this chunk at tail position
+                    // Collect remaining chunks to nest inside this closure
                     List<Node> blockElements = new ArrayList<>(chunk);
-                    if (nestedClosure != null) {
-                        blockElements.add(nestedClosure);
+                    
+                    // Build nested closures for remaining chunks
+                    for (int j = i + 1; j < segments.size(); j++) {
+                        Object nextSegment = segments.get(j);
+                        if (nextSegment instanceof Node) {
+                            blockElements.add((Node) nextSegment);
+                        } else if (nextSegment instanceof List) {
+                            List<Node> nextChunk = (List<Node>) nextSegment;
+                            if (nextChunk.size() >= MIN_CHUNK_SIZE) {
+                                // Create nested closure for next chunk
+                                List<Node> nestedElements = new ArrayList<>(nextChunk);
+                                // Add all remaining segments to the nested closure
+                                for (int k = j + 1; k < segments.size(); k++) {
+                                    Object remainingSegment = segments.get(k);
+                                    if (remainingSegment instanceof Node) {
+                                        nestedElements.add((Node) remainingSegment);
+                                    } else {
+                                        nestedElements.addAll((List<Node>) remainingSegment);
+                                    }
+                                }
+                                BlockNode nestedBlock = createMarkedBlock(nestedElements, tokenIndex);
+                                Node nestedClosure = new BinaryOperatorNode(
+                                        "->",
+                                        new SubroutineNode(null, null, null, nestedBlock, false, tokenIndex),
+                                        new ListNode(new ArrayList<>(List.of(variableAst("@", "_", tokenIndex))), tokenIndex),
+                                        tokenIndex
+                                );
+                                blockElements.add(nestedClosure);
+                                j = segments.size(); // Break outer loop
+                                break;
+                            } else {
+                                blockElements.addAll(nextChunk);
+                            }
+                        }
                     }
+                    
                     BlockNode block = createMarkedBlock(blockElements, tokenIndex);
-                    nestedClosure = new BinaryOperatorNode(
+                    Node closure = new BinaryOperatorNode(
                             "->",
                             new SubroutineNode(null, null, null, block, false, tokenIndex),
                             new ListNode(new ArrayList<>(List.of(variableAst("@", "_", tokenIndex))), tokenIndex),
                             tokenIndex
                     );
+                    result.add(closure);
+                    break; // All remaining segments are now inside the closure
                 } else {
-                    // Chunk too small - treat elements as direct
-                    if (nestedClosure != null) {
-                        // Wrap with nested closure
-                        List<Node> blockElements = new ArrayList<>(chunk);
-                        blockElements.add(nestedClosure);
-                        BlockNode block = createMarkedBlock(blockElements, tokenIndex);
-                        nestedClosure = new BinaryOperatorNode(
-                                "->",
-                                new SubroutineNode(null, null, null, block, false, tokenIndex),
-                                new ListNode(new ArrayList<>(List.of(variableAst("@", "_", tokenIndex))), tokenIndex),
-                                tokenIndex
-                        );
-                    } else {
-                        // Add directly to result
-                        result.addAll(chunk);
-                    }
+                    // Chunk too small - add elements directly
+                    result.addAll(chunk);
                 }
             }
         }
 
-        // If we built a nested closure, add it at the beginning
-        if (nestedClosure != null) {
-            List<Node> finalResult = new ArrayList<>();
-            finalResult.add(nestedClosure);
-            // Add any direct elements that were at the end (in reverse order)
-            for (int i = result.size() - 1; i >= 0; i--) {
-                finalResult.add(result.get(i));
-            }
-            return finalResult;
-        }
-
-        // No nesting needed, reverse the result list
-        List<Node> finalResult = new ArrayList<>();
-        for (int i = result.size() - 1; i >= 0; i--) {
-            finalResult.add(result.get(i));
-        }
-        return finalResult;
+        return result;
     }
 
     /**
@@ -384,43 +297,6 @@ public class LargeBlockRefactorer {
         }
     }
 
-    /**
-     * Try to refactor the entire block as a subroutine.
-     */
-    private static boolean tryWholeBlockRefactoring(EmitterVisitor emitterVisitor, BlockNode node) {
-        // Check for unsafe control flow
-        controlFlowDetector.reset();
-        node.accept(controlFlowDetector);
-        if (controlFlowDetector.hasUnsafeControlFlow()) {
-            return false;
-        }
-
-        // Create sub {...}->(@_) for whole block
-        int tokenIndex = node.tokenIndex;
-
-        // IMPORTANT: Mark the original block as already refactored to prevent recursion
-        node.setAnnotation("blockAlreadyRefactored", true);
-
-        // Create a wrapper block containing the original block
-        BlockNode innerBlock = new BlockNode(List.of(node), tokenIndex);
-
-        BinaryOperatorNode subr = new BinaryOperatorNode(
-                "->",
-                new SubroutineNode(
-                        null, null, null,
-                        innerBlock,
-                        false,
-                        tokenIndex
-                ),
-                new ListNode(
-                        new ArrayList<>(List.of(variableAst("@", "_", tokenIndex))), tokenIndex),
-                tokenIndex
-        );
-
-        // Emit the refactored block
-        subr.accept(emitterVisitor);
-        return true;
-    }
 
     /**
      * Check if a node contains variable declarations (my, our, local).
