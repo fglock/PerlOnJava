@@ -20,8 +20,9 @@ public class EmitBlock {
     public static void emitBlock(EmitterVisitor emitterVisitor, BlockNode node) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
-        // Try to refactor large blocks using the helper class
-        if (LargeBlockRefactorer.processBlock(emitterVisitor, node)) {
+        // Check if block needs refactoring at code-generation time
+        // This is a fallback for blocks that weren't caught at parse-time
+        if (org.perlonjava.codegen.LargeBlockRefactorer.processBlock(emitterVisitor, node)) {
             // Block was refactored and emitted by the helper
             return;
         }

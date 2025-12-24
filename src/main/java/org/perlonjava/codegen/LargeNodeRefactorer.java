@@ -41,10 +41,29 @@ import static org.perlonjava.parser.ParserNodeUtils.variableAst;
  * <p>
  * <b>Recursion Safety:</b> The circular dependency (constructor calls refactorer which
  * creates new nodes) breaks naturally when chunks become small enough (below MIN_CHUNK_SIZE).
+ * <p>
+ * <b>DEPRECATED:</b> This class has been replaced by the unified refactoring package
+ * at {@link org.perlonjava.codegen.refactor}. Use {@link org.perlonjava.codegen.refactor.ListRefactoringAdapter}
+ * instead for new code.
+ * <p>
+ * <b>Migration:</b>
+ * <pre>
+ * // Old:
+ * List&lt;Node&gt; elements = LargeNodeRefactorer.maybeRefactorElements(
+ *     elements, tokenIndex, NodeType.ARRAY, parser);
+ * 
+ * // New:
+ * List&lt;Node&gt; elements = ListRefactoringAdapter.maybeRefactorElements(
+ *     elements, tokenIndex, NodeType.ARRAY, parser);
+ * </pre>
  *
+ * @deprecated Use {@link org.perlonjava.codegen.refactor.ListRefactoringAdapter} instead
+ * @see org.perlonjava.codegen.refactor.ListRefactoringAdapter
+ * @see org.perlonjava.codegen.refactor.NodeListRefactorer
  * @see BytecodeSizeEstimator#estimateSnippetSize(Node)
  * @see LargeBlockRefactorer
  */
+@Deprecated
 public class LargeNodeRefactorer {
 
     /**

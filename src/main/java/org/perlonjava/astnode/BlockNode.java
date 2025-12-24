@@ -1,7 +1,7 @@
 package org.perlonjava.astnode;
 
 import org.perlonjava.astvisitor.Visitor;
-import org.perlonjava.codegen.LargeBlockRefactorer;
+import org.perlonjava.codegen.refactor.BlockRefactoringAdapter;
 import org.perlonjava.parser.Parser;
 
 import java.util.ArrayList;
@@ -15,7 +15,7 @@ import java.util.List;
 public class BlockNode extends AbstractNode {
     /**
      * The list of child nodes contained in this BlockNode.
-     * Note: This field is non-final because {@link LargeBlockRefactorer} may modify
+     * Note: This field is non-final because {@link BlockRefactoringAdapter} may modify
      * the list during parse-time refactoring.
      */
     public List<Node> elements;
@@ -64,7 +64,7 @@ public class BlockNode extends AbstractNode {
         this.labelName = null;
         this.isLoop = false;
         // Apply parse-time refactoring if enabled
-        LargeBlockRefactorer.maybeRefactorBlock(this, parser);
+        BlockRefactoringAdapter.maybeRefactorBlock(this, parser);
     }
 
     /**
