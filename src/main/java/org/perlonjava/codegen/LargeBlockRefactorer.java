@@ -344,6 +344,14 @@ public class LargeBlockRefactorer {
         skipRefactoring.set(true);
         try {
             BlockNode block = new BlockNode(elements, tokenIndex);
+            
+            // Extract labels from LabelNode elements and add to block's labels list
+            for (Node element : elements) {
+                if (element instanceof LabelNode labelNode) {
+                    block.labels.add(labelNode.label);
+                }
+            }
+            
             block.setAnnotation("blockAlreadyRefactored", true);
             return block;
         } finally {
