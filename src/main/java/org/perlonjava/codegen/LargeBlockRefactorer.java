@@ -22,6 +22,7 @@ public class LargeBlockRefactorer {
 
     // Configuration thresholds
     private static final int LARGE_BLOCK_ELEMENT_COUNT = 50;  // Minimum elements before considering refactoring
+    private static final int PARSE_TIME_ELEMENT_THRESHOLD = 200;  // Higher threshold for parse-time to avoid over-refactoring
     private static final int LARGE_BYTECODE_SIZE = 40000;
     private static final int MIN_CHUNK_SIZE = 4;  // Minimum statements to extract as a chunk
 
@@ -32,26 +33,14 @@ public class LargeBlockRefactorer {
     private static final ThreadLocal<Boolean> skipRefactoring = ThreadLocal.withInitial(() -> false);
 
     /**
-     * Check if refactoring is enabled via environment variable.
-     */
-    private static boolean isRefactoringEnabled() {
-        String largeCodeMode = System.getenv("JPERL_LARGECODE");
-        return "refactor".equals(largeCodeMode);
-    }
-
-    /**
      * Parse-time entry point: called from BlockNode constructor to refactor large blocks.
      * This applies smart chunking to split safe statement sequences into closures.
+     * Runs automatically for large blocks to prevent "Method too large" errors.
      *
      * @param node   The block to potentially refactor (modified in place)
      * @param parser The parser instance for access to error utilities (can be null if not available)
      */
     public static void maybeRefactorBlock(BlockNode node, Parser parser) {
-        // Skip if refactoring is not enabled
-        if (!isRefactoringEnabled()) {
-            return;
-        }
-
         // Skip if we're inside createMarkedBlock (prevents recursion)
         if (skipRefactoring.get()) {
             return;
@@ -62,8 +51,9 @@ public class LargeBlockRefactorer {
             return;
         }
 
-        // Skip small blocks
-        if (node.elements.size() <= LARGE_BLOCK_ELEMENT_COUNT) {
+        // Skip small blocks - use higher threshold for parse-time to avoid over-refactoring
+        // Code-generation time refactoring will catch blocks that slip through
+        if (node.elements.size() <= PARSE_TIME_ELEMENT_THRESHOLD) {
             return;
         }
 
@@ -72,7 +62,8 @@ public class LargeBlockRefactorer {
             return;
         }
 
-        // Apply smart chunking
+        // Apply smart chunking for very large blocks
+        // Code-generation time refactoring serves as fallback for blocks between thresholds
         trySmartChunking(node, parser);
     }
 
@@ -337,6 +328,7 @@ public class LargeBlockRefactorer {
     /**
      * Create a BlockNode that is pre-marked as already refactored.
      * This prevents infinite recursion since BlockNode constructor calls maybeRefactorBlock.
+     * Also extracts labels from LabelNode elements and adds them to the block's labels list.
      */
     private static BlockNode createMarkedBlock(List<Node> elements, int tokenIndex) {
         // We need to create the block without triggering maybeRefactorBlock
@@ -344,6 +336,14 @@ public class LargeBlockRefactorer {
         skipRefactoring.set(true);
         try {
             BlockNode block = new BlockNode(elements, tokenIndex);
+            
+            // Extract labels from LabelNode elements and add to block's labels list
+            for (Node element : elements) {
+                if (element instanceof LabelNode labelNode) {
+                    block.labels.add(labelNode.label);
+                }
+            }
+            
             block.setAnnotation("blockAlreadyRefactored", true);
             return block;
         } finally {
