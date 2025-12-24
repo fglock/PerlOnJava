@@ -22,6 +22,7 @@ public class LargeBlockRefactorer {
 
     // Configuration thresholds
     private static final int LARGE_BLOCK_ELEMENT_COUNT = 50;  // Minimum elements before considering refactoring
+    private static final int PARSE_TIME_ELEMENT_THRESHOLD = 200;  // Higher threshold for parse-time to avoid over-refactoring
     private static final int LARGE_BYTECODE_SIZE = 40000;
     private static final int MIN_CHUNK_SIZE = 4;  // Minimum statements to extract as a chunk
 
@@ -50,8 +51,9 @@ public class LargeBlockRefactorer {
             return;
         }
 
-        // Skip small blocks
-        if (node.elements.size() <= LARGE_BLOCK_ELEMENT_COUNT) {
+        // Skip small blocks - use higher threshold for parse-time to avoid over-refactoring
+        // Code-generation time refactoring will catch blocks that slip through
+        if (node.elements.size() <= PARSE_TIME_ELEMENT_THRESHOLD) {
             return;
         }
 
@@ -60,7 +62,8 @@ public class LargeBlockRefactorer {
             return;
         }
 
-        // Apply smart chunking automatically for large blocks
+        // Apply smart chunking for very large blocks
+        // Code-generation time refactoring serves as fallback for blocks between thresholds
         trySmartChunking(node, parser);
     }
 
