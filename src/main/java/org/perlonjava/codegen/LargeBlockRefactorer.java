@@ -32,26 +32,14 @@ public class LargeBlockRefactorer {
     private static final ThreadLocal<Boolean> skipRefactoring = ThreadLocal.withInitial(() -> false);
 
     /**
-     * Check if refactoring is enabled via environment variable.
-     */
-    private static boolean isRefactoringEnabled() {
-        String largeCodeMode = System.getenv("JPERL_LARGECODE");
-        return "refactor".equals(largeCodeMode);
-    }
-
-    /**
      * Parse-time entry point: called from BlockNode constructor to refactor large blocks.
      * This applies smart chunking to split safe statement sequences into closures.
+     * Runs automatically for large blocks to prevent "Method too large" errors.
      *
      * @param node   The block to potentially refactor (modified in place)
      * @param parser The parser instance for access to error utilities (can be null if not available)
      */
     public static void maybeRefactorBlock(BlockNode node, Parser parser) {
-        // Skip if refactoring is not enabled
-        if (!isRefactoringEnabled()) {
-            return;
-        }
-
         // Skip if we're inside createMarkedBlock (prevents recursion)
         if (skipRefactoring.get()) {
             return;
@@ -72,7 +60,7 @@ public class LargeBlockRefactorer {
             return;
         }
 
-        // Apply smart chunking
+        // Apply smart chunking automatically for large blocks
         trySmartChunking(node, parser);
     }
 
