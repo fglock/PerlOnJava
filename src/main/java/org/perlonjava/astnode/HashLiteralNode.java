@@ -1,7 +1,7 @@
 package org.perlonjava.astnode;
 
 import org.perlonjava.astvisitor.Visitor;
-import org.perlonjava.codegen.LargeNodeRefactorer;
+import org.perlonjava.codegen.refactor.ListRefactoringAdapter;
 import org.perlonjava.parser.Parser;
 
 import java.util.List;
@@ -19,11 +19,11 @@ import java.util.List;
  * The elements list contains key-value pairs in sequence: key1, value1, key2, value2, etc.
  * <p>
  * <b>Large Literal Handling:</b> The constructor automatically invokes
- * {@link LargeNodeRefactorer#maybeRefactorElements} to split very large hashes
+ * {@link ListRefactoringAdapter#maybeRefactorElements} to split very large hashes
  * into chunks when {@code JPERL_LARGECODE=refactor} is set. For hashes, chunk
  * sizes are forced to be even to preserve key-value pairing.
  *
- * @see LargeNodeRefactorer
+ * @see ListRefactoringAdapter
  * @see ArrayLiteralNode
  * @see ListNode
  */
@@ -34,7 +34,7 @@ public class HashLiteralNode extends AbstractNode {
      * Elements are stored as alternating key-value pairs: [key1, value1, key2, value2, ...].
      * Each element is evaluated in LIST context when the hash is constructed.
      * <p>
-     * Note: This field is non-final because {@link LargeNodeRefactorer} may replace
+     * Note: This field is non-final because {@link ListRefactoringAdapter} may replace
      * the original list with a refactored version containing chunk wrappers.
      */
     public List<Node> elements;
@@ -50,7 +50,7 @@ public class HashLiteralNode extends AbstractNode {
      *
      * @param elements   the list of key-value pairs (alternating keys and values)
      * @param tokenIndex the token index in the source for error reporting
-     * @see LargeNodeRefactorer#maybeRefactorElements
+     * @see ListRefactoringAdapter#maybeRefactorElements
      */
     public HashLiteralNode(List<Node> elements, int tokenIndex) {
         this(elements, tokenIndex, null);
@@ -64,11 +64,11 @@ public class HashLiteralNode extends AbstractNode {
      * @param elements   the list of key-value pairs (alternating keys and values)
      * @param tokenIndex the token index in the source for error reporting
      * @param parser     the parser instance for access to error utilities
-     * @see LargeNodeRefactorer#maybeRefactorElements
+     * @see ListRefactoringAdapter#maybeRefactorElements
      */
     public HashLiteralNode(List<Node> elements, int tokenIndex, Parser parser) {
         this.tokenIndex = tokenIndex;
-        this.elements = LargeNodeRefactorer.maybeRefactorElements(elements, tokenIndex, LargeNodeRefactorer.NodeType.HASH, parser);
+        this.elements = ListRefactoringAdapter.maybeRefactorElements(elements, tokenIndex, ListRefactoringAdapter.NodeType.HASH, parser);
     }
 
     /**

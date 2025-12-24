@@ -1,7 +1,7 @@
 package org.perlonjava.astnode;
 
 import org.perlonjava.astvisitor.Visitor;
-import org.perlonjava.codegen.LargeNodeRefactorer;
+import org.perlonjava.codegen.refactor.ListRefactoringAdapter;
 import org.perlonjava.parser.Parser;
 
 import java.util.ArrayList;
@@ -22,10 +22,10 @@ import java.util.List;
  * a flat list that can be assigned to arrays or used in list context.
  * <p>
  * <b>Large Literal Handling:</b> The constructor automatically invokes
- * {@link LargeNodeRefactorer#maybeRefactorElements} to split very large lists
+ * {@link ListRefactoringAdapter#maybeRefactorElements} to split very large lists
  * into chunks when {@code JPERL_LARGECODE=refactor} is set.
  *
- * @see LargeNodeRefactorer
+ * @see ListRefactoringAdapter
  * @see ArrayLiteralNode
  * @see HashLiteralNode
  */
@@ -37,7 +37,7 @@ public class ListNode extends AbstractNode {
      * in the context determined by how the list is used (list context for assignments,
      * scalar context for the last element in scalar context, etc.).
      * <p>
-     * Note: This field is non-final because {@link LargeNodeRefactorer} may replace
+     * Note: This field is non-final because {@link ListRefactoringAdapter} may replace
      * the original list with a refactored version containing chunk wrappers.
      */
     public List<Node> elements;
@@ -66,7 +66,7 @@ public class ListNode extends AbstractNode {
      *
      * @param elements   the list of child nodes to be stored in this ListNode
      * @param tokenIndex the token index in the source for error reporting
-     * @see LargeNodeRefactorer#maybeRefactorElements
+     * @see ListRefactoringAdapter#maybeRefactorElements
      */
     public ListNode(List<Node> elements, int tokenIndex) {
         this(elements, tokenIndex, null);
@@ -80,11 +80,11 @@ public class ListNode extends AbstractNode {
      * @param elements   the list of child nodes to be stored in this ListNode
      * @param tokenIndex the token index in the source for error reporting
      * @param parser     the parser instance for access to error utilities
-     * @see LargeNodeRefactorer#maybeRefactorElements
+     * @see ListRefactoringAdapter#maybeRefactorElements
      */
     public ListNode(List<Node> elements, int tokenIndex, Parser parser) {
         this.tokenIndex = tokenIndex;
-        this.elements = LargeNodeRefactorer.maybeRefactorElements(elements, tokenIndex, LargeNodeRefactorer.NodeType.LIST, parser);
+        this.elements = ListRefactoringAdapter.maybeRefactorElements(elements, tokenIndex, ListRefactoringAdapter.NodeType.LIST, parser);
         this.handle = null;
     }
 

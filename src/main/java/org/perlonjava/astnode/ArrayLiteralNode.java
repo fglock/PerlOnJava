@@ -1,7 +1,7 @@
 package org.perlonjava.astnode;
 
 import org.perlonjava.astvisitor.Visitor;
-import org.perlonjava.codegen.LargeNodeRefactorer;
+import org.perlonjava.codegen.refactor.ListRefactoringAdapter;
 import org.perlonjava.parser.Parser;
 
 import java.util.List;
@@ -17,11 +17,11 @@ import java.util.List;
  * </ul>
  * <p>
  * <b>Large Literal Handling:</b> The constructor automatically invokes
- * {@link LargeNodeRefactorer#maybeRefactorElements} to split very large arrays
+ * {@link ListRefactoringAdapter#maybeRefactorElements} to split very large arrays
  * into chunks when {@code JPERL_LARGECODE=refactor} is set. This prevents
  * JVM "method too large" errors for arrays with thousands of elements.
  *
- * @see LargeNodeRefactorer
+ * @see ListRefactoringAdapter
  * @see HashLiteralNode
  * @see ListNode
  */
@@ -33,7 +33,7 @@ public class ArrayLiteralNode extends AbstractNode {
      * Elements may be scalars, arrays (which flatten), hashes (which flatten to key-value pairs),
      * or any expression.
      * <p>
-     * Note: This field is non-final because {@link LargeNodeRefactorer} may replace
+     * Note: This field is non-final because {@link ListRefactoringAdapter} may replace
      * the original list with a refactored version containing chunk wrappers.
      */
     public List<Node> elements;
@@ -48,7 +48,7 @@ public class ArrayLiteralNode extends AbstractNode {
      *
      * @param elements   the list of child nodes to be stored in this ArrayLiteralNode
      * @param tokenIndex the token index in the source for error reporting
-     * @see LargeNodeRefactorer#maybeRefactorElements
+     * @see ListRefactoringAdapter#maybeRefactorElements
      */
     public ArrayLiteralNode(List<Node> elements, int tokenIndex) {
         this(elements, tokenIndex, null);
@@ -62,11 +62,11 @@ public class ArrayLiteralNode extends AbstractNode {
      * @param elements   the list of child nodes to be stored in this ArrayLiteralNode
      * @param tokenIndex the token index in the source for error reporting
      * @param parser     the parser instance for access to error utilities
-     * @see LargeNodeRefactorer#maybeRefactorElements
+     * @see ListRefactoringAdapter#maybeRefactorElements
      */
     public ArrayLiteralNode(List<Node> elements, int tokenIndex, Parser parser) {
         this.tokenIndex = tokenIndex;
-        this.elements = LargeNodeRefactorer.maybeRefactorElements(elements, tokenIndex, LargeNodeRefactorer.NodeType.ARRAY, parser);
+        this.elements = ListRefactoringAdapter.maybeRefactorElements(elements, tokenIndex, ListRefactoringAdapter.NodeType.ARRAY, parser);
     }
 
     /**
