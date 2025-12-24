@@ -337,6 +337,7 @@ public class LargeBlockRefactorer {
     /**
      * Create a BlockNode that is pre-marked as already refactored.
      * This prevents infinite recursion since BlockNode constructor calls maybeRefactorBlock.
+     * Also extracts labels from LabelNode elements and adds them to the block's labels list.
      */
     private static BlockNode createMarkedBlock(List<Node> elements, int tokenIndex) {
         // We need to create the block without triggering maybeRefactorBlock
@@ -344,6 +345,14 @@ public class LargeBlockRefactorer {
         skipRefactoring.set(true);
         try {
             BlockNode block = new BlockNode(elements, tokenIndex);
+            
+            // Extract labels from LabelNode elements and add to block's labels list
+            for (Node element : elements) {
+                if (element instanceof LabelNode labelNode) {
+                    block.labels.add(labelNode.label);
+                }
+            }
+            
             block.setAnnotation("blockAlreadyRefactored", true);
             return block;
         } finally {
