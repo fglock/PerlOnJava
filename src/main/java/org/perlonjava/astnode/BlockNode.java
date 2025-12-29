@@ -1,7 +1,7 @@
 package org.perlonjava.astnode;
 
 import org.perlonjava.astvisitor.Visitor;
-import org.perlonjava.codegen.LargeBlockRefactorer;
+import org.perlonjava.astrefactor.LargeBlockRefactorer;
 import org.perlonjava.parser.Parser;
 
 import java.util.ArrayList;

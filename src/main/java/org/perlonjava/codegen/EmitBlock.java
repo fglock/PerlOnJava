@@ -4,7 +4,7 @@ import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
-import org.perlonjava.astvisitor.EmitterVisitor;
+import org.perlonjava.astrefactor.LargeBlockRefactorer;import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.runtime.RuntimeContextType;
 
 import java.util.List;

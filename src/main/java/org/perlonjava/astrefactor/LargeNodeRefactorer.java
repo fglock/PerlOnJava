@@ -1,4 +1,4 @@
-package org.perlonjava.codegen;
+package org.perlonjava.astrefactor;
 
 import org.perlonjava.astnode.*;
 import org.perlonjava.astvisitor.BytecodeSizeEstimator;
