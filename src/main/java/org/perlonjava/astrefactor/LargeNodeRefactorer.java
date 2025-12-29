@@ -82,8 +82,7 @@ public class LargeNodeRefactorer {
             return elements;
         }
 
-        int chunkSize = calculateChunkSize(elements);
-        List<Node> chunks = splitIntoChunks(elements, chunkSize);
+        List<Node> chunks = splitIntoDynamicChunks(elements);
 
         // For LIST nodes, create nested closures for proper lexical scoping
         List<Node> result = createNestedListClosures(chunks, tokenIndex);
@@ -172,54 +171,43 @@ public class LargeNodeRefactorer {
     }
 
     /**
-     * Calculates the optimal chunk size based on sampled element sizes.
+     * Splits a list of elements into dynamic chunks based on estimated bytecode sizes.
      * <p>
-     * Samples the first 10 elements to estimate average bytecode size per element,
-     * then calculates how many elements would fit in ~20KB of bytecode.
-     * Result is clamped between MIN_CHUNK_SIZE and MAX_CHUNK_SIZE.
-     *
-     * @param elements the list of elements to chunk
-     * @return optimal number of elements per chunk
-     */
-    private static int calculateChunkSize(List<Node> elements) {
-        if (elements.isEmpty()) {
-            return MAX_CHUNK_SIZE;
-        }
-
-        // Sample a few elements to estimate average size
-        int sampleSize = Math.min(10, elements.size());
-        int totalSampleSize = 0;
-        for (int i = 0; i < sampleSize; i++) {
-            totalSampleSize += BytecodeSizeEstimator.estimateSnippetSize(elements.get(i));
-        }
-        int avgElementSize = totalSampleSize / sampleSize;
-
-        // Calculate chunk size to stay under bytecode limit
-        // Target ~20KB per chunk to leave room for overhead
-        int targetChunkBytes = 20000;
-        int calculatedSize = avgElementSize > 0 ? targetChunkBytes / avgElementSize : MAX_CHUNK_SIZE;
-
-        // Clamp to reasonable bounds
-        return Math.max(MIN_CHUNK_SIZE, Math.min(MAX_CHUNK_SIZE, calculatedSize));
-    }
-
-    /**
-     * Splits a list of elements into chunks of the specified size.
+     * Each chunk is created by accumulating elements until the estimated bytecode size
+     * reaches LARGE_BYTECODE_SIZE. This ensures chunks stay under the size limit while
+     * maximizing elements per chunk.
      * <p>
-     * Each chunk is wrapped in a ListNode for uniform handling.
-     * The last chunk may be smaller than chunkSize.
+     * Respects MIN_CHUNK_SIZE and MAX_CHUNK_SIZE constraints.
      *
-     * @param elements  the list to split
-     * @param chunkSize number of elements per chunk
+     * @param elements the list to split
      * @return list of ListNode chunks
      */
-    private static List<Node> splitIntoChunks(List<Node> elements, int chunkSize) {
+    private static List<Node> splitIntoDynamicChunks(List<Node> elements) {
         List<Node> chunks = new ArrayList<>();
+        List<Node> currentChunk = new ArrayList<>();
+        long currentChunkSize = 0;
 
-        for (int i = 0; i < elements.size(); i += chunkSize) {
-            int end = Math.min(i + chunkSize, elements.size());
-            List<Node> chunkElements = new ArrayList<>(elements.subList(i, end));
-            chunks.add(new ListNode(chunkElements, elements.get(i).getIndex()));
+        for (Node element : elements) {
+            long elementSize = BytecodeSizeEstimator.estimateSnippetSize(element);
+
+            // Check if adding this element would exceed the size limit or max chunk size
+            if (!currentChunk.isEmpty() &&
+                    (currentChunkSize + elementSize > LARGE_BYTECODE_SIZE ||
+                            currentChunk.size() >= MAX_CHUNK_SIZE)) {
+                // Finalize current chunk
+                chunks.add(new ListNode(new ArrayList<>(currentChunk), currentChunk.get(0).getIndex()));
+                currentChunk.clear();
+                currentChunkSize = 0;
+            }
+
+            // Add element to current chunk
+            currentChunk.add(element);
+            currentChunkSize += elementSize;
+        }
+
+        // Add the last chunk if it has elements
+        if (!currentChunk.isEmpty()) {
+            chunks.add(new ListNode(new ArrayList<>(currentChunk), currentChunk.get(0).getIndex()));
         }
 
         return chunks;
