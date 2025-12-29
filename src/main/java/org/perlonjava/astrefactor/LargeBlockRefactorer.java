@@ -103,11 +103,17 @@ public class LargeBlockRefactorer {
     }
 
     /**
-     * Determine if a block should be refactored based on size and context.
+     * Determine if a block should be refactored based on size criteria.
+     * Uses minimal element count check to avoid overhead on trivial blocks.
+     *
+     * @param node             The block to check
+     * @param emitterVisitor   The emitter visitor for context
+     * @param refactorEnabled  Whether refactoring is enabled
+     * @return true if the block should be refactored
      */
     private static boolean shouldRefactorBlock(BlockNode node, EmitterVisitor emitterVisitor, boolean refactorEnabled) {
-        // Check element count threshold (quick check before expensive bytecode estimation)
-        if (node.elements.size() <= 50) {
+        // Minimal check: skip very small blocks to avoid estimation overhead
+        if (node.elements.size() <= MIN_CHUNK_SIZE) {
             return false;
         }
 
@@ -133,10 +139,9 @@ public class LargeBlockRefactorer {
      * @param parser The parser instance for access to error utilities (can be null)
      */
     private static void trySmartChunking(BlockNode node, Parser parser) {
-        // Quick check: skip small blocks to avoid expensive bytecode estimation
-        // This is an optimization - small blocks are unlikely to exceed bytecode size limit
-        if (node.elements.size() <= 50) {
-            node.setAnnotation("refactorSkipReason", String.format("Element count %d <= 50", node.elements.size()));
+        // Minimal check: skip very small blocks to avoid estimation overhead
+        if (node.elements.size() <= MIN_CHUNK_SIZE) {
+            node.setAnnotation("refactorSkipReason", String.format("Element count %d <= %d (minimal threshold)", node.elements.size(), MIN_CHUNK_SIZE));
             return;
         }
         

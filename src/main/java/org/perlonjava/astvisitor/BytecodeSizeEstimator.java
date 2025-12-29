@@ -241,14 +241,20 @@ public class BytecodeSizeEstimator implements Visitor {
     @Override
     public void visit(HashLiteralNode node) {
         // Mirror EmitLiteral.emitHashLiteral() patterns
-        estimatedSize += OBJECT_CREATION; // Create RuntimeHash
-
+        // HashLiteralNode creates a ListNode first, then converts to hash
+        // See EmitLiteral.emitHashLiteral() lines 131-140
+        
+        // Create RuntimeList: NEW + DUP + INVOKESPECIAL
+        estimatedSize += OBJECT_CREATION; // 7 bytes
+        
+        // Add each element to the list
         for (Node element : node.elements) {
             element.accept(this);
-            estimatedSize += METHOD_CALL_OVERHEAD; // Add to hash
+            estimatedSize += DUP_INSTRUCTION + METHOD_CALL_OVERHEAD; // DUP + add() = 5 bytes per element
         }
-
-        estimatedSize += INVOKE_VIRTUAL; // createReference()
+        
+        // Convert list to hash reference: INVOKESTATIC createHashRef
+        estimatedSize += INVOKE_STATIC; // 3 bytes
     }
 
     @Override

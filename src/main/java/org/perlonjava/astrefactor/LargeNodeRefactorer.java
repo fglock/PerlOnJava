@@ -54,8 +54,7 @@ public class LargeNodeRefactorer {
      * This method checks if refactoring is needed based on:
      * <ol>
      *   <li>Environment variable JPERL_LARGECODE=refactor must be set</li>
-     *   <li>Element count must exceed LARGE_ELEMENT_COUNT (500)</li>
-     *   <li>Estimated bytecode size must exceed LARGE_BYTECODE_SIZE (30000 bytes)</li>
+     *   <li>Estimated bytecode size must exceed LARGE_BYTECODE_SIZE (40000 bytes)</li>
      * </ol>
      * <p>
      * If refactoring is needed, elements are split into chunks and wrapped in anonymous
