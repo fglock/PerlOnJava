@@ -2,6 +2,7 @@ package org.perlonjava.astrefactor;
 
 import org.perlonjava.astnode.*;
 import org.perlonjava.astvisitor.BytecodeSizeEstimator;
+import org.perlonjava.astvisitor.ControlFlowDetectorVisitor;
 import org.perlonjava.parser.Parser;
 
 import java.util.ArrayList;
@@ -31,6 +32,9 @@ import static org.perlonjava.parser.ParserNodeUtils.variableAst;
  * @see LargeBlockRefactorer
  */
 public class LargeNodeRefactorer {
+
+    // Reusable visitor for control flow detection
+    private static final ControlFlowDetectorVisitor controlFlowDetector = new ControlFlowDetectorVisitor();
 
     /**
      * Check if refactoring is enabled via environment variable.
@@ -87,7 +91,24 @@ public class LargeNodeRefactorer {
             return elements;
         }
 
+        // Check if elements contain any top-level labels
+        // Labels in lists/arrays/hashes would break if wrapped in closures
+        for (Node element : elements) {
+            if (element instanceof LabelNode) {
+                // Contains a label - skip refactoring to preserve label scope
+                return elements;
+            }
+        }
+
         List<Node> chunks = splitIntoDynamicChunks(elements);
+
+        // Check if any chunk that will be wrapped contains unsafe control flow
+        // Control flow in lists/arrays/hashes can break if wrapped in closures
+        if (hasUnsafeControlFlowInChunks(chunks)) {
+            // Chunks contain control flow that would break if wrapped
+            // Skip refactoring - cannot safely refactor this list
+            return elements;
+        }
 
         // For LIST nodes, create nested closures for proper lexical scoping
         List<Node> result = createNestedListClosures(chunks, tokenIndex);
@@ -239,5 +260,31 @@ public class LargeNodeRefactorer {
             totalSampleSize += BytecodeSizeEstimator.estimateSnippetSize(nodes.get(index));
         }
         return (totalSampleSize * nodes.size()) / sampleSize;
+    }
+
+    /**
+     * Check if any chunk that will be wrapped in a closure contains unsafe control flow.
+     * Only checks chunks (ListNode) that are large enough to be wrapped (>= MIN_CHUNK_SIZE).
+     * This implements the same safety logic as LargeBlockRefactorer.
+     *
+     * @param chunks List of ListNode chunks
+     * @return true if unsafe control flow found in chunks that will be wrapped
+     */
+    private static boolean hasUnsafeControlFlowInChunks(List<Node> chunks) {
+        for (Node chunk : chunks) {
+            if (chunk instanceof ListNode listChunk) {
+                // Only check chunks that will be wrapped (size >= MIN_CHUNK_SIZE)
+                if (listChunk.elements.size() >= MIN_CHUNK_SIZE) {
+                    controlFlowDetector.reset();
+                    for (Node element : listChunk.elements) {
+                        element.accept(controlFlowDetector);
+                        if (controlFlowDetector.hasUnsafeControlFlow()) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        return false;
     }
 }
