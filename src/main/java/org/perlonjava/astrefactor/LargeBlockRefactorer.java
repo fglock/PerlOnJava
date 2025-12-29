@@ -179,7 +179,13 @@ public class LargeBlockRefactorer {
         }
 
         // Build nested structure if we have any chunks
-        List<Node> processedElements = buildNestedStructure(segments, node.tokenIndex);
+        List<Node> processedElements = BlockRefactor.buildNestedStructure(
+                segments,
+                node.tokenIndex,
+                MIN_CHUNK_SIZE,
+                false, // returnTypeIsList = false: execute statements, don't return list
+                skipRefactoring
+        );
 
         // Apply chunking if we reduced the element count
         if (processedElements.size() < node.elements.size()) {
@@ -224,44 +230,6 @@ public class LargeBlockRefactorer {
         controlFlowDetector.reset();
         element.accept(controlFlowDetector);
         return controlFlowDetector.hasUnsafeControlFlow();
-    }
-
-    /**
-     * Build nested closure structure from segments.
-     * Structure: direct1, direct2, sub{ chunk1, sub{ chunk2, chunk3 }->(@_) }->(@_)
-     * Closures are always placed at tail position to preserve variable scoping.
-     *
-     * @param segments   List of segments (either Node for direct elements or List<Node> for chunks)
-     * @param tokenIndex token index for new nodes
-     * @return List of processed elements with nested structure
-     */
-    @SuppressWarnings("unchecked")
-    private static List<Node> buildNestedStructure(List<Object> segments, int tokenIndex) {
-        // No wrapping needed - blocks execute statements sequentially
-        return BlockRefactor.buildNestedStructure(
-                segments,
-                tokenIndex,
-                MIN_CHUNK_SIZE,
-                false, // returnTypeIsList = false: execute statements, don't return list
-                skipRefactoring
-        );
-    }
-
-    /**
-     * Create a BlockNode that is pre-marked as already refactored.
-     * This prevents infinite recursion since BlockNode constructor calls maybeRefactorBlock.
-     */
-    private static BlockNode createMarkedBlock(List<Node> elements, int tokenIndex) {
-        // We need to create the block without triggering maybeRefactorBlock
-        // Set a thread-local flag to skip refactoring during this construction
-        skipRefactoring.set(true);
-        try {
-            BlockNode block = new BlockNode(elements, tokenIndex);
-            block.setAnnotation("blockAlreadyRefactored", true);
-            return block;
-        } finally {
-            skipRefactoring.set(false);
-        }
     }
 
     /**
