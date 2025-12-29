@@ -30,12 +30,11 @@ public class BlockRefactor {
      * Structure: direct1, direct2, sub{ chunk1, sub{ chunk2, chunk3 }->(@_) }->(@_)
      * Closures are always placed at tail position to preserve variable scoping.
      *
-     * @param segments      List of segments (either Node for direct elements or List<Node> for chunks)
-     * @param tokenIndex    token index for new nodes
-     * @param minChunkSize  minimum size for a chunk to be wrapped in a closure
-     * @param wrapperFunc   function to wrap chunk elements before creating BlockNode (e.g., ListNode wrapper or identity)
-     * @param markBlock     function to mark blocks as already refactored
-     * @param createBlock   function to create BlockNode (may use thread-local flags to prevent recursion)
+     * @param segments         List of segments (either Node for direct elements or List<Node> for chunks)
+     * @param tokenIndex       token index for new nodes
+     * @param minChunkSize     minimum size for a chunk to be wrapped in a closure
+     * @param returnTypeIsList if true, wrap elements in ListNode to return list; if false, execute statements
+     * @param skipRefactoring  thread-local flag to prevent recursion during BlockNode construction
      * @return List of processed elements with nested structure
      */
     @SuppressWarnings("unchecked")
@@ -43,9 +42,8 @@ public class BlockRefactor {
             List<Object> segments,
             int tokenIndex,
             int minChunkSize,
-            Function<List<Node>, List<Node>> wrapperFunc,
-            Function<BlockNode, BlockNode> markBlock,
-            Function<List<Node>, BlockNode> createBlock) {
+            boolean returnTypeIsList,
+            ThreadLocal<Boolean> skipRefactoring) {
         if (segments.isEmpty()) {
             return new ArrayList<>();
         }
@@ -85,8 +83,9 @@ public class BlockRefactor {
                                         nestedElements.addAll((List<Node>) remainingSegment);
                                     }
                                 }
-                                List<Node> wrappedNested = wrapperFunc.apply(nestedElements);
-                                BlockNode nestedBlock = markBlock.apply(createBlock.apply(wrappedNested));
+                                List<Node> wrappedNested = returnTypeIsList ? wrapInListNode(nestedElements, tokenIndex) : nestedElements;
+                                BlockNode nestedBlock = createBlockNode(wrappedNested, tokenIndex, skipRefactoring);
+                                nestedBlock.setAnnotation("blockAlreadyRefactored", true);
                                 Node nestedClosure = createAnonSubCall(tokenIndex, nestedBlock);
                                 blockElements.add(nestedClosure);
                                 j = segments.size(); // Break outer loop
@@ -97,8 +96,9 @@ public class BlockRefactor {
                         }
                     }
 
-                    List<Node> wrapped = wrapperFunc.apply(blockElements);
-                    BlockNode block = markBlock.apply(createBlock.apply(wrapped));
+                    List<Node> wrapped = returnTypeIsList ? wrapInListNode(blockElements, tokenIndex) : blockElements;
+                    BlockNode block = createBlockNode(wrapped, tokenIndex, skipRefactoring);
+                    block.setAnnotation("blockAlreadyRefactored", true);
                     Node closure = createAnonSubCall(tokenIndex, block);
                     result.add(closure);
                     break; // All remaining segments are now inside the closure
@@ -110,5 +110,28 @@ public class BlockRefactor {
         }
 
         return result;
+    }
+
+    /**
+     * Wraps elements in a ListNode to ensure the closure returns a list of elements.
+     */
+    private static List<Node> wrapInListNode(List<Node> elements, int tokenIndex) {
+        ListNode listNode = new ListNode(elements, tokenIndex);
+        listNode.setAnnotation("chunkAlreadyRefactored", true);
+        return List.of(listNode);
+    }
+
+    /**
+     * Creates a BlockNode using thread-local flag to prevent recursion.
+     */
+    private static BlockNode createBlockNode(List<Node> elements, int tokenIndex, ThreadLocal<Boolean> skipRefactoring) {
+        skipRefactoring.set(true);
+        try {
+            BlockNode block = new BlockNode(elements, tokenIndex);
+            block.setAnnotation("blockAlreadyRefactored", true);
+            return block;
+        } finally {
+            skipRefactoring.set(false);
+        }
     }
 }
