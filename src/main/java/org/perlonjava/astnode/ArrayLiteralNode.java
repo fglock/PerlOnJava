@@ -66,7 +66,7 @@ public class ArrayLiteralNode extends AbstractNode {
      */
     public ArrayLiteralNode(List<Node> elements, int tokenIndex, Parser parser) {
         this.tokenIndex = tokenIndex;
-        this.elements = LargeNodeRefactorer.maybeRefactorElements(elements, tokenIndex, LargeNodeRefactorer.NodeType.ARRAY, parser);
+        this.elements = LargeNodeRefactorer.maybeRefactorElements(elements, tokenIndex, parser);
     }
 
     /**
