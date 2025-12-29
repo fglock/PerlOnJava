@@ -1,6 +1,8 @@
 package org.perlonjava.astrefactor;
 
-import org.perlonjava.astnode.*;
+import org.perlonjava.astnode.LabelNode;
+import org.perlonjava.astnode.ListNode;
+import org.perlonjava.astnode.Node;
 import org.perlonjava.astvisitor.BytecodeSizeEstimator;
 import org.perlonjava.parser.Parser;
 
@@ -36,7 +38,7 @@ public class LargeNodeRefactorer {
      * When JPERL_LARGECODE=refactor, large literals will be automatically split.
      */
     static final boolean IS_REFACTORING_ENABLED = "refactor".equals(System.getenv("JPERL_LARGECODE"));
-    
+
     /**
      * Maximum elements per chunk. Limits chunk size even if bytecode estimates
      * suggest larger chunks would fit.
@@ -159,7 +161,7 @@ public class LargeNodeRefactorer {
             long size = BytecodeSizeEstimator.estimateSnippetSize(elements.get(0));
             return size > LARGE_BYTECODE_SIZE;
         }
-        
+
         int sampleSize = Math.min(10, n);
         long totalSampleSize = 0;
         for (int i = 0; i < sampleSize; i++) {

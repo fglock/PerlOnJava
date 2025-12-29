@@ -8,18 +8,16 @@ import org.perlonjava.runtime.PerlCompilerException;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Function;
 
 import static org.perlonjava.parser.ParserNodeUtils.variableAst;
 
 public class BlockRefactor {
-    // Shared configuration thresholds for both LargeBlockRefactorer and LargeNodeRefactorer
-    public static final int LARGE_ELEMENT_COUNT = 200;     // Deprecated: kept for MIN_CHUNK_SIZE compatibility
     public static final int LARGE_BYTECODE_SIZE = 40000;   // Maximum bytecode size before refactoring
     public static final int MIN_CHUNK_SIZE = 4;            // Minimum statements to extract as a chunk
 
     // Reusable visitor for control flow detection
     private static final ControlFlowDetectorVisitor controlFlowDetector = new ControlFlowDetectorVisitor();
+
     /**
      * Creates an anonymous subroutine call node that invokes a subroutine with the @_ array as arguments.
      *
@@ -181,7 +179,7 @@ public class BlockRefactor {
      * Check if any chunk that will be wrapped in a closure contains unsafe control flow.
      * Only checks chunks that are large enough to be wrapped (>= minChunkSize).
      *
-     * @param chunks List of chunks (either ListNode or List<Node>)
+     * @param chunks       List of chunks (either ListNode or List<Node>)
      * @param minChunkSize Minimum size for a chunk to be wrapped
      * @return true if unsafe control flow found in chunks that will be wrapped
      */
