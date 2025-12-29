@@ -3,11 +3,11 @@ package org.perlonjava.astrefactor;
 import org.perlonjava.astnode.*;
 import org.perlonjava.astvisitor.BytecodeSizeEstimator;
 import org.perlonjava.parser.Parser;
-import org.perlonjava.runtime.PerlCompilerException;
 
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.perlonjava.astrefactor.LargeBlockRefactorer.errorCantRefactorLargeBlock;
 import static org.perlonjava.parser.ParserNodeUtils.variableAst;
 
 /**
@@ -18,14 +18,6 @@ import static org.perlonjava.parser.ParserNodeUtils.variableAst;
  * <p>
  * <b>Solution:</b> This class splits large element lists into chunks, each wrapped in an
  * anonymous subroutine. The chunks are then dereferenced and merged back together.
- * <p>
- * <b>Supported Node Types:</b>
- * <ul>
- *   <li>{@link ArrayLiteralNode} - e.g., [1, 2, 3, ... thousands of elements]</li>
- *   <li>{@link HashLiteralNode} - e.g., {a =&gt; 1, b =&gt; 2, ... thousands of pairs}</li>
- *   <li>{@link ListNode} - e.g., (1, 2, 3, ... thousands of elements)</li>
- *   <li>{@link org.perlonjava.astnode.BlockNode} - handled by {@link LargeBlockRefactorer} for control flow safety</li>
- * </ul>
  * <p>
  * <b>Integration:</b> Called automatically from AST node constructors when enabled.
  * This ensures the AST is always the right size from creation time.
@@ -41,35 +33,31 @@ import static org.perlonjava.parser.ParserNodeUtils.variableAst;
 public class LargeNodeRefactorer {
 
     /**
+     * Check if refactoring is enabled via environment variable.
+     * When JPERL_LARGECODE=refactor, large literals will be automatically split.
+     */
+    static final boolean IS_REFACTORING_ENABLED = "refactor".equals(System.getenv("JPERL_LARGECODE"));
+    /**
      * Minimum number of elements before considering refactoring.
      * Lists smaller than this are never refactored.
      * Set conservatively low since bytecode estimation is unreliable.
      */
     private static final int LARGE_ELEMENT_COUNT = 200;
-
     /**
      * Target maximum bytecode size per chunk (in bytes).
      * When total estimated bytecode exceeds this, refactoring is triggered.
      */
     private static final int LARGE_BYTECODE_SIZE = 30000;
-
     /**
      * Minimum elements per chunk. Chunks smaller than this are inlined directly
      * rather than wrapped in a subroutine. This also breaks the recursion.
      */
     private static final int MIN_CHUNK_SIZE = 50;
-
     /**
      * Maximum elements per chunk. Limits chunk size even if bytecode estimates
      * suggest larger chunks would fit.
      */
     private static final int MAX_CHUNK_SIZE = 200;
-
-    /**
-     * Check if refactoring is enabled via environment variable.
-     * When JPERL_LARGECODE=refactor, large literals will be automatically split.
-     */
-    static final boolean IS_REFACTORING_ENABLED = "refactor".equals(System.getenv("JPERL_LARGECODE"));
 
     /**
      * Main entry point: called from AST node constructors to potentially refactor large element lists.
@@ -102,14 +90,7 @@ public class LargeNodeRefactorer {
         // Check if refactoring was successful by estimating bytecode size
         long estimatedSize = estimateTotalBytecodeSize(result);
         if (estimatedSize > LARGE_BYTECODE_SIZE) {
-            String message = "List is too large (" + elements.size() + " elements, estimated " + estimatedSize + " bytes) " +
-                    "and refactoring failed to reduce it below " + LARGE_BYTECODE_SIZE + " bytes. " +
-                    "Consider breaking the list into smaller parts or using a different data structure.";
-            if (parser != null) {
-                throw new PerlCompilerException(tokenIndex, message, parser.ctx.errorUtil);
-            } else {
-                throw new PerlCompilerException(message);
-            }
+            errorCantRefactorLargeBlock(tokenIndex, parser, estimatedSize);
         }
         return result;
     }
