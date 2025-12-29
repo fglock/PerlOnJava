@@ -367,25 +367,6 @@ public class LargeBlockRefactorer {
     }
 
     /**
-     * Check if a node contains variable declarations (my, our, local).
-     */
-    private static boolean hasVariableDeclaration(Node node) {
-        // Pattern 1: Direct declaration without assignment
-        if (node instanceof OperatorNode op) {
-            return "my".equals(op.operator) || "our".equals(op.operator) || "local".equals(op.operator);
-        }
-
-        // Pattern 2: Declaration with assignment
-        if (node instanceof BinaryOperatorNode bin) {
-            if ("=".equals(bin.operator) && bin.left instanceof OperatorNode left) {
-                return "my".equals(left.operator) || "our".equals(left.operator) || "local".equals(left.operator);
-            }
-        }
-
-        return false;
-    }
-
-    /**
      * Check if a node is a complete block/loop with its own scope.
      */
     private static boolean isCompleteBlock(Node node) {

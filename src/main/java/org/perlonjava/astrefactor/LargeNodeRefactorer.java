@@ -149,18 +149,10 @@ public class LargeNodeRefactorer {
             return result;
         }
         
-        // For ARRAY and HASH, use flat structure (they don't need nested scoping)
         List<Node> refactoredElements = new ArrayList<>();
         for (Node chunk : chunks) {
-            if (chunk instanceof ListNode listChunk && listChunk.elements.size() < MIN_CHUNK_SIZE) {
-                // Small chunk - add elements directly
-                refactoredElements.addAll(listChunk.elements);
-            } else {
-                // Wrap chunk in anonymous sub, then dereference appropriately
-                List<Node> chunkElements = chunk instanceof ListNode ? ((ListNode) chunk).elements : List.of(chunk);
-                Node wrappedChunk = createChunkWrapper(chunkElements, tokenIndex, nodeType);
-                refactoredElements.add(wrappedChunk);
-            }
+            List<Node> chunkElements = chunk instanceof ListNode ? ((ListNode) chunk).elements : List.of(chunk);
+            refactoredElements.addAll(chunkElements);
         }
 
         // Check if refactoring was successful for arrays and hashes by estimating bytecode size
