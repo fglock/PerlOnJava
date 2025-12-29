@@ -5,11 +5,11 @@ import org.perlonjava.astvisitor.ControlFlowDetectorVisitor;
 import org.perlonjava.astvisitor.ControlFlowFinder;
 import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.parser.Parser;
-import org.perlonjava.runtime.PerlCompilerException;
 
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.perlonjava.astrefactor.BlockRefactor.*;
 import static org.perlonjava.astrefactor.LargeNodeRefactorer.IS_REFACTORING_ENABLED;
 
 /**
@@ -20,11 +20,6 @@ import static org.perlonjava.astrefactor.LargeNodeRefactorer.IS_REFACTORING_ENAB
  */
 public class LargeBlockRefactorer {
 
-    // Configuration thresholds
-    private static final int LARGE_BLOCK_ELEMENT_COUNT = 50;  // Minimum elements before considering refactoring
-    private static final int LARGE_BYTECODE_SIZE = 40000;
-    private static final int MIN_CHUNK_SIZE = 4;  // Minimum statements to extract as a chunk
-
     // Reusable visitor for control flow detection
     private static final ControlFlowDetectorVisitor controlFlowDetector = new ControlFlowDetectorVisitor();
 
@@ -34,33 +29,34 @@ public class LargeBlockRefactorer {
     /**
      * Parse-time entry point: called from BlockNode constructor to refactor large blocks.
      * This applies smart chunking to split safe statement sequences into closures.
+     * Only runs when JPERL_LARGECODE=refactor is set.
      *
      * @param node   The block to potentially refactor (modified in place)
      * @param parser The parser instance for access to error utilities (can be null if not available)
      */
     public static void maybeRefactorBlock(BlockNode node, Parser parser) {
         // Skip if refactoring is not enabled
+        // This is critical - we only do bytecode size estimation when refactoring is enabled
+        // to avoid parse-time overhead and potential issues with partially constructed AST
         if (!IS_REFACTORING_ENABLED) {
             return;
         }
 
         // Skip if we're inside createMarkedBlock (prevents recursion)
         if (skipRefactoring.get()) {
+            node.setAnnotation("refactorSkipReason", "Inside createMarkedBlock (recursion prevention)");
             return;
         }
 
         // Skip if already refactored (prevents infinite recursion)
         if (node.getBooleanAnnotation("blockAlreadyRefactored")) {
-            return;
-        }
-
-        // Skip small blocks
-        if (node.elements.size() <= LARGE_BLOCK_ELEMENT_COUNT) {
+            node.setAnnotation("refactorSkipReason", "Already refactored");
             return;
         }
 
         // Skip special blocks (BEGIN, END, etc.)
         if (isSpecialContext(node)) {
+            node.setAnnotation("refactorSkipReason", "Special block (BEGIN/END/etc)");
             return;
         }
 
@@ -110,8 +106,8 @@ public class LargeBlockRefactorer {
      * Determine if a block should be refactored based on size and context.
      */
     private static boolean shouldRefactorBlock(BlockNode node, EmitterVisitor emitterVisitor, boolean refactorEnabled) {
-        // Check element count threshold
-        if (node.elements.size() <= LARGE_BLOCK_ELEMENT_COUNT) {
+        // Check element count threshold (quick check before expensive bytecode estimation)
+        if (node.elements.size() <= 50) {
             return false;
         }
 
@@ -137,10 +133,26 @@ public class LargeBlockRefactorer {
      * @param parser The parser instance for access to error utilities (can be null)
      */
     private static void trySmartChunking(BlockNode node, Parser parser) {
+        // Quick check: skip small blocks to avoid expensive bytecode estimation
+        // This is an optimization - small blocks are unlikely to exceed bytecode size limit
+        if (node.elements.size() <= 50) {
+            node.setAnnotation("refactorSkipReason", String.format("Element count %d <= 50", node.elements.size()));
+            return;
+        }
+        
+        // Check bytecode size - skip if under threshold
+        long estimatedSize = estimateTotalBytecodeSize(node.elements);
+        node.setAnnotation("estimatedBytecodeSize", estimatedSize);
+        if (estimatedSize <= LARGE_BYTECODE_SIZE) {
+            node.setAnnotation("refactorSkipReason", String.format("Bytecode size %d <= threshold %d", estimatedSize, LARGE_BYTECODE_SIZE));
+            return;
+        }
+        
         // Check if the block has any labels (stored in BlockNode.labels field)
         // Labels define goto/next/last targets and must remain at block level
         if (node.labels != null && !node.labels.isEmpty()) {
             // Block has labels - skip refactoring to preserve label scope
+            node.setAnnotation("refactorSkipReason", "Block has labels");
             return;
         }
 
@@ -184,6 +196,7 @@ public class LargeBlockRefactorer {
                 directNode.accept(controlFlowDetector);
                 if (controlFlowDetector.hasUnsafeControlFlow()) {
                     // Segment has unsafe control flow - skip refactoring
+                    node.setAnnotation("refactorSkipReason", "Unsafe control flow in direct segment");
                     return;
                 }
             } else if (segment instanceof List) {
@@ -194,6 +207,7 @@ public class LargeBlockRefactorer {
                     element.accept(controlFlowDetector);
                     if (controlFlowDetector.hasUnsafeControlFlow()) {
                         // Chunk has unsafe control flow - skip refactoring
+                        node.setAnnotation("refactorSkipReason", "Unsafe control flow in chunk");
                         return;
                     }
                 }
@@ -201,7 +215,7 @@ public class LargeBlockRefactorer {
         }
         
         // Build nested structure if we have any chunks
-        List<Node> processedElements = BlockRefactor.buildNestedStructure(
+        List<Node> processedElements = buildNestedStructure(
                 segments,
                 node.tokenIndex,
                 MIN_CHUNK_SIZE,
@@ -214,30 +228,29 @@ public class LargeBlockRefactorer {
             node.elements.clear();
             node.elements.addAll(processedElements);
             node.setAnnotation("blockAlreadyRefactored", true);
+            
+            // Verify refactoring was successful
+            long newEstimatedSize = estimateTotalBytecodeSize(node.elements);
+            node.setAnnotation("refactoredBytecodeSize", newEstimatedSize);
+            long originalSize = (Long) node.getAnnotation("estimatedBytecodeSize");
+            if (newEstimatedSize > LARGE_BYTECODE_SIZE) {
+                node.setAnnotation("refactorSkipReason", String.format("Refactoring failed: size %d still > threshold %d", newEstimatedSize, LARGE_BYTECODE_SIZE));
+                errorCantRefactorLargeBlock(node.tokenIndex, parser, newEstimatedSize);
+            }
+            node.setAnnotation("refactorSkipReason", String.format("Successfully refactored: %d -> %d bytes", originalSize, newEstimatedSize));
             return;
         }
 
         // If refactoring didn't help and block is still too large, throw an error
-        if (node.elements.size() > LARGE_BLOCK_ELEMENT_COUNT) {
-            long estimatedSize = LargeNodeRefactorer.estimateTotalBytecodeSize(node.elements);
-            if (estimatedSize > LARGE_BYTECODE_SIZE) {
-                errorCantRefactorLargeBlock(node.tokenIndex, parser, estimatedSize);
-            }
+        long finalEstimatedSize = estimateTotalBytecodeSize(node.elements);
+        if (finalEstimatedSize > LARGE_BYTECODE_SIZE) {
+            node.setAnnotation("refactorSkipReason", String.format("Refactoring didn't reduce element count, size %d > threshold %d", finalEstimatedSize, LARGE_BYTECODE_SIZE));
+            errorCantRefactorLargeBlock(node.tokenIndex, parser, finalEstimatedSize);
         }
+        node.setAnnotation("refactorSkipReason", String.format("Refactoring didn't reduce element count, but size %d <= threshold %d", finalEstimatedSize, LARGE_BYTECODE_SIZE));
 
     }
 
-    static void errorCantRefactorLargeBlock(int tokenIndex, Parser parser, long estimatedSize) {
-        String message = "Code is too large (estimated " + estimatedSize + " bytes) " +
-                "and refactoring failed to reduce it below " + LARGE_BYTECODE_SIZE + " bytes. " +
-                "The block may contain control flow statements that prevent safe refactoring. " +
-                "Consider breaking the code into smaller subroutines manually.";
-        if (parser != null) {
-            throw new PerlCompilerException(tokenIndex, message, parser.ctx.errorUtil);
-        } else {
-            throw new PerlCompilerException(message);
-        }
-    }
 
     /**
      * Determine if an element should break the current chunk.
@@ -279,7 +292,7 @@ public class LargeBlockRefactorer {
         // Create a wrapper block containing the original block
         BlockNode innerBlock = new BlockNode(List.of(node), tokenIndex);
 
-        BinaryOperatorNode subr = BlockRefactor.createAnonSubCall(tokenIndex, innerBlock);
+        BinaryOperatorNode subr = createAnonSubCall(tokenIndex, innerBlock);
 
         // Emit the refactored block
         subr.accept(emitterVisitor);

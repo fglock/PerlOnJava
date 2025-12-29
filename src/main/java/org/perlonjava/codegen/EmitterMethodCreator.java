@@ -94,6 +94,10 @@ public class EmitterMethodCreator implements Opcodes {
     }
 
     public static byte[] getBytecode(EmitterContext ctx, Node ast, boolean useTryCatch) {
+        String className = ctx.javaClassInfo.javaClassName;
+        String methodName = "apply";
+        byte[] classData = null;
+        
         try {
             String[] env = ctx.symbolTable.getVariableNames();
 
@@ -108,8 +112,8 @@ public class EmitterMethodCreator implements Opcodes {
             ByteCodeSourceMapper.setDebugInfoFileName(ctx);
 
             // Define the class with version, access flags, name, signature, superclass, and interfaces
-            cw.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC, ctx.javaClassInfo.javaClassName, null, "java/lang/Object", null);
-            ctx.logDebug("Create class: " + ctx.javaClassInfo.javaClassName);
+            cw.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC, className, null, "java/lang/Object", null);
+            ctx.logDebug("Create class: " + className);
 
             // Add instance fields to the class for closure variables
             for (String fieldName : env) {
@@ -275,7 +279,7 @@ public class EmitterMethodCreator implements Opcodes {
 
             // Complete the class
             cw.visitEnd();
-            byte[] classData = cw.toByteArray(); // Generate the bytecode
+            classData = cw.toByteArray(); // Generate the bytecode
 
             if (ctx.compilerOptions.disassembleEnabled) {
                 // Disassemble the bytecode for debugging purposes
@@ -317,9 +321,41 @@ public class EmitterMethodCreator implements Opcodes {
         } catch (PerlCompilerException e) {
             throw e;
         } catch (RuntimeException e) {
+            // Enhanced error message with debugging information
+            StringBuilder errorMsg = new StringBuilder();
+            errorMsg.append(String.format(
+                    "Unexpected runtime error during bytecode generation\n" +
+                    "Class: %s\n" +
+                    "Method: %s\n" +
+                    "AST Node: %s\n" +
+                    "Actual bytecode size: %d bytes (limit: 65535)\n" +
+                    "Error: %s\n",
+                    className,
+                    methodName,
+                    ast.getClass().getSimpleName(),
+                    classData != null ? classData.length : 0,
+                    e.getMessage()
+            ));
+            
+            // Add refactoring information if available
+            if (ast instanceof org.perlonjava.astnode.BlockNode) {
+                org.perlonjava.astnode.BlockNode blockNode = (org.perlonjava.astnode.BlockNode) ast;
+                Object estimatedSize = blockNode.getAnnotation("estimatedBytecodeSize");
+                Object skipReason = blockNode.getAnnotation("refactorSkipReason");
+                
+                if (estimatedSize != null) {
+                    errorMsg.append(String.format("Estimated bytecode size: %s bytes\n", estimatedSize));
+                }
+                if (skipReason != null) {
+                    errorMsg.append(String.format("Refactoring status: %s\n", skipReason));
+                }
+            }
+            
+            errorMsg.append("Hint: If this is a 'Method too large' error, try enabling JPERL_LARGECODE=refactor");
+            
             throw new PerlCompilerException(
                     ast.getIndex(),
-                    "Unexpected runtime error during bytecode generation",
+                    errorMsg.toString(),
                     ctx.errorUtil,
                     e);
         }
