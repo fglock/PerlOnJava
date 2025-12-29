@@ -1,6 +1,7 @@
 package org.perlonjava.codegen;
 
 import org.perlonjava.astnode.*;
+import org.perlonjava.astrefactor.BlockRefactor;
 import org.perlonjava.astvisitor.BytecodeSizeEstimator;
 import org.perlonjava.astvisitor.ControlFlowDetectorVisitor;
 import org.perlonjava.astvisitor.EmitterVisitor;
@@ -9,8 +10,6 @@ import org.perlonjava.runtime.PerlCompilerException;
 
 import java.util.ArrayList;
 import java.util.List;
-
-import static org.perlonjava.parser.ParserNodeUtils.variableAst;
 
 /**
  * Helper class for refactoring large blocks to avoid JVM's "Method too large" error.
@@ -300,12 +299,7 @@ public class LargeBlockRefactorer {
                                     }
                                 }
                                 BlockNode nestedBlock = createMarkedBlock(nestedElements, tokenIndex);
-                                Node nestedClosure = new BinaryOperatorNode(
-                                        "->",
-                                        new SubroutineNode(null, null, null, nestedBlock, false, tokenIndex),
-                                        new ListNode(new ArrayList<>(List.of(variableAst("@", "_", tokenIndex))), tokenIndex),
-                                        tokenIndex
-                                );
+                                Node nestedClosure = BlockRefactor.createAnonSubCall(tokenIndex, nestedBlock);
                                 blockElements.add(nestedClosure);
                                 j = segments.size(); // Break outer loop
                                 break;
@@ -316,12 +310,7 @@ public class LargeBlockRefactorer {
                     }
                     
                     BlockNode block = createMarkedBlock(blockElements, tokenIndex);
-                    Node closure = new BinaryOperatorNode(
-                            "->",
-                            new SubroutineNode(null, null, null, block, false, tokenIndex),
-                            new ListNode(new ArrayList<>(List.of(variableAst("@", "_", tokenIndex))), tokenIndex),
-                            tokenIndex
-                    );
+                    Node closure = BlockRefactor.createAnonSubCall(tokenIndex, block);
                     result.add(closure);
                     break; // All remaining segments are now inside the closure
                 } else {
@@ -371,18 +360,7 @@ public class LargeBlockRefactorer {
         // Create a wrapper block containing the original block
         BlockNode innerBlock = new BlockNode(List.of(node), tokenIndex);
 
-        BinaryOperatorNode subr = new BinaryOperatorNode(
-                "->",
-                new SubroutineNode(
-                        null, null, null,
-                        innerBlock,
-                        false,
-                        tokenIndex
-                ),
-                new ListNode(
-                        new ArrayList<>(List.of(variableAst("@", "_", tokenIndex))), tokenIndex),
-                tokenIndex
-        );
+        BinaryOperatorNode subr = BlockRefactor.createAnonSubCall(tokenIndex, innerBlock);
 
         // Emit the refactored block
         subr.accept(emitterVisitor);

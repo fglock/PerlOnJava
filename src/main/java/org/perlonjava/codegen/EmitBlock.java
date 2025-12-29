@@ -118,22 +118,4 @@ public class EmitBlock {
         emitterVisitor.ctx.logDebug("generateCodeBlock end");
     }
 
-    private static BinaryOperatorNode refactorBlockToSub(BlockNode node) {
-        // Create sub {...}->(@_)
-        int index = node.tokenIndex;
-        ListNode args = new ListNode(index);
-        args.elements.add(new OperatorNode("@", new IdentifierNode("_", index), index));
-        BinaryOperatorNode subr = new BinaryOperatorNode(
-                "->",
-                new SubroutineNode(
-                        null, null, null,
-                        new BlockNode(List.of(node), index),
-                        false,
-                        index
-                ),
-                args,
-                index
-        );
-        return subr;
-    }
 }
