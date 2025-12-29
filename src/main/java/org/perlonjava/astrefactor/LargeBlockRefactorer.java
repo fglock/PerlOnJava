@@ -82,17 +82,13 @@ public class LargeBlockRefactorer {
             return false;
         }
 
-        // Check if refactoring is enabled via environment variable
-        String largeCodeMode = System.getenv("JPERL_LARGECODE");
-        boolean refactorEnabled = "refactor".equals(largeCodeMode);
-
         // Skip if block is already a subroutine or is a special block
         if (node.getBooleanAnnotation("blockIsSubroutine")) {
             return false;
         }
 
         // Determine if we need to refactor
-        boolean needsRefactoring = shouldRefactorBlock(node, emitterVisitor, refactorEnabled);
+        boolean needsRefactoring = shouldRefactorBlock(node, emitterVisitor, IS_REFACTORING_ENABLED);
 
         if (!needsRefactoring) {
             return false;
@@ -199,19 +195,23 @@ public class LargeBlockRefactorer {
         if (node.elements.size() > LARGE_BLOCK_ELEMENT_COUNT) {
             long estimatedSize = estimateTotalBytecodeSize(node.elements);
             if (estimatedSize > LARGE_BYTECODE_SIZE) {
-                String message = "Block is too large (" + node.elements.size() + " elements, estimated " + estimatedSize + " bytes) " +
-                    "and refactoring failed to reduce it below " + LARGE_BYTECODE_SIZE + " bytes. " +
-                    "The block contains control flow statements that prevent safe refactoring. " +
-                    "Consider breaking the code into smaller subroutines manually.";
-                if (parser != null) {
-                    throw new PerlCompilerException(node.tokenIndex, message, parser.ctx.errorUtil);
-                } else {
-                    throw new PerlCompilerException(message);
-                }
+                errorCantRefactorLargeBlock(node.tokenIndex, parser, estimatedSize);
             }
         }
 
         return false;
+    }
+
+    static void errorCantRefactorLargeBlock(int tokenIndex, Parser parser, long estimatedSize) {
+        String message = "Code is too large (estimated " + estimatedSize + " bytes) " +
+                "and refactoring failed to reduce it below " + LARGE_BYTECODE_SIZE + " bytes. " +
+                "The block may contain control flow statements that prevent safe refactoring. " +
+                "Consider breaking the code into smaller subroutines manually.";
+        if (parser != null) {
+            throw new PerlCompilerException(tokenIndex, message, parser.ctx.errorUtil);
+        } else {
+            throw new PerlCompilerException(message);
+        }
     }
 
     /**
@@ -226,12 +226,9 @@ public class LargeBlockRefactorer {
         // Control flow statements that jump outside the block break chunks
         controlFlowDetector.reset();
         element.accept(controlFlowDetector);
-        if (controlFlowDetector.hasUnsafeControlFlow()) {
-            return true;
-        }
+        return controlFlowDetector.hasUnsafeControlFlow();
 
         // Variable declarations are OK - closures capture lexical variables from outer scope
-        return false;
     }
 
     /**
@@ -250,7 +247,7 @@ public class LargeBlockRefactorer {
         }
 
         List<Node> result = new ArrayList<>();
-        
+
         // Process segments forward, accumulating direct elements and building nested closures at the end
         for (int i = 0; i < segments.size(); i++) {
             Object segment = segments.get(i);
@@ -264,7 +261,7 @@ public class LargeBlockRefactorer {
                     // Create closure for this chunk at tail position
                     // Collect remaining chunks to nest inside this closure
                     List<Node> blockElements = new ArrayList<>(chunk);
-                    
+
                     // Build nested closures for remaining chunks
                     for (int j = i + 1; j < segments.size(); j++) {
                         Object nextSegment = segments.get(j);
@@ -294,7 +291,7 @@ public class LargeBlockRefactorer {
                             }
                         }
                     }
-                    
+
                     BlockNode block = createMarkedBlock(blockElements, tokenIndex);
                     Node closure = BlockRefactor.createAnonSubCall(tokenIndex, block);
                     result.add(closure);
