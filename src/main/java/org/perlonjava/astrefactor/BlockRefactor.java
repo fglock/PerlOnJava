@@ -14,7 +14,7 @@ import static org.perlonjava.parser.ParserNodeUtils.variableAst;
 
 public class BlockRefactor {
     // Shared configuration thresholds for both LargeBlockRefactorer and LargeNodeRefactorer
-    public static final int LARGE_ELEMENT_COUNT = 200;     // Minimum elements before considering refactoring
+    public static final int LARGE_ELEMENT_COUNT = 200;     // Deprecated: kept for MIN_CHUNK_SIZE compatibility
     public static final int LARGE_BYTECODE_SIZE = 40000;   // Maximum bytecode size before refactoring
     public static final int MIN_CHUNK_SIZE = 4;            // Minimum statements to extract as a chunk
 
