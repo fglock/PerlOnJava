@@ -113,34 +113,33 @@ public class LargeNodeRefactorer {
             return listChunk.elements;
         }
 
-        // Build nested structure from innermost to outermost
-        Node result = null;
-
-        for (int i = chunks.size() - 1; i >= 0; i--) {
-            Node chunk = chunks.get(i);
-            List<Node> chunkElements = chunk instanceof ListNode ? ((ListNode) chunk).elements : List.of(chunk);
-
-            if (chunkElements.size() < MIN_CHUNK_SIZE && result == null) {
-                // Last chunk is small and there's no nested closure yet - skip wrapping
-                result = new ListNode(new ArrayList<>(chunkElements), tokenIndex);
+        // Convert chunks (ListNode objects) to segments (List<Node> objects)
+        List<Object> segments = new ArrayList<>();
+        for (Node chunk : chunks) {
+            if (chunk instanceof ListNode listChunk) {
+                segments.add(listChunk.elements);
             } else {
-                // Create the block content: either just the chunk elements, or chunk elements + nested closure call
-                List<Node> blockElements = new ArrayList<>(chunkElements);
-                if (result != null) {
-                    blockElements.add(result);
-                }
-
-                ListNode listNode = new ListNode(blockElements, tokenIndex);
-                listNode.setAnnotation("chunkAlreadyRefactored", true);
-                BlockNode block = new BlockNode(List.of(listNode), tokenIndex);
-                block.setAnnotation("blockAlreadyRefactored", true);
-                SubroutineNode sub = new SubroutineNode(null, null, null, block, false, tokenIndex);
-                result = new BinaryOperatorNode("->", sub, new ListNode(
-                        new ArrayList<>(List.of(variableAst("@", "_", tokenIndex))), tokenIndex), tokenIndex);
+                segments.add(List.of(chunk));
             }
         }
 
-        return List.of(result);
+        // Use unified method with ListNode wrapper
+        return BlockRefactor.buildNestedStructure(
+                segments,
+                tokenIndex,
+                MIN_CHUNK_SIZE,
+                elements -> {
+                    // Wrap elements in a ListNode before creating BlockNode
+                    ListNode listNode = new ListNode(elements, tokenIndex);
+                    listNode.setAnnotation("chunkAlreadyRefactored", true);
+                    return List.of(listNode);
+                },
+                block -> {
+                    block.setAnnotation("blockAlreadyRefactored", true);
+                    return block;
+                },
+                wrappedElements -> new BlockNode(wrappedElements, tokenIndex)
+        );
     }
 
     /**
@@ -220,7 +219,7 @@ public class LargeNodeRefactorer {
      * @param nodes the list of nodes to estimate
      * @return estimated total bytecode size in bytes
      */
-    private static long estimateTotalBytecodeSize(List<Node> nodes) {
+    public static long estimateTotalBytecodeSize(List<Node> nodes) {
         if (nodes.isEmpty()) {
             return 0;
         }

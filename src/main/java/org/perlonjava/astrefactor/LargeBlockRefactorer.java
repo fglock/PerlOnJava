@@ -1,7 +1,6 @@
 package org.perlonjava.astrefactor;
 
 import org.perlonjava.astnode.*;
-import org.perlonjava.astvisitor.BytecodeSizeEstimator;
 import org.perlonjava.astvisitor.ControlFlowDetectorVisitor;
 import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.parser.Parser;
@@ -135,9 +134,8 @@ public class LargeBlockRefactorer {
      *
      * @param node   The block to chunk
      * @param parser The parser instance for access to error utilities (can be null)
-     * @return true if chunking was successful, false otherwise
      */
-    private static boolean trySmartChunking(BlockNode node, Parser parser) {
+    private static void trySmartChunking(BlockNode node, Parser parser) {
         // First check if the block contains any control flow that would be unsafe to refactor
         // This catches cases where we're inside a loop body but don't know it yet (loop node not created)
         controlFlowDetector.reset();
@@ -146,7 +144,7 @@ public class LargeBlockRefactorer {
             if (controlFlowDetector.hasUnsafeControlFlow()) {
                 // Block contains last/next/redo/goto that would break if we wrap in closures
                 // Skip refactoring - we cannot safely refactor blocks with control flow
-                return false;
+                return;
             }
         }
 
@@ -188,18 +186,17 @@ public class LargeBlockRefactorer {
             node.elements.clear();
             node.elements.addAll(processedElements);
             node.setAnnotation("blockAlreadyRefactored", true);
-            return true;
+            return;
         }
 
         // If refactoring didn't help and block is still too large, throw an error
         if (node.elements.size() > LARGE_BLOCK_ELEMENT_COUNT) {
-            long estimatedSize = estimateTotalBytecodeSize(node.elements);
+            long estimatedSize = LargeNodeRefactorer.estimateTotalBytecodeSize(node.elements);
             if (estimatedSize > LARGE_BYTECODE_SIZE) {
                 errorCantRefactorLargeBlock(node.tokenIndex, parser, estimatedSize);
             }
         }
 
-        return false;
     }
 
     static void errorCantRefactorLargeBlock(int tokenIndex, Parser parser, long estimatedSize) {
@@ -227,8 +224,6 @@ public class LargeBlockRefactorer {
         controlFlowDetector.reset();
         element.accept(controlFlowDetector);
         return controlFlowDetector.hasUnsafeControlFlow();
-
-        // Variable declarations are OK - closures capture lexical variables from outer scope
     }
 
     /**
@@ -242,68 +237,19 @@ public class LargeBlockRefactorer {
      */
     @SuppressWarnings("unchecked")
     private static List<Node> buildNestedStructure(List<Object> segments, int tokenIndex) {
-        if (segments.isEmpty()) {
-            return new ArrayList<>();
-        }
-
-        List<Node> result = new ArrayList<>();
-
-        // Process segments forward, accumulating direct elements and building nested closures at the end
-        for (int i = 0; i < segments.size(); i++) {
-            Object segment = segments.get(i);
-
-            if (segment instanceof Node directNode) {
-                // Direct elements (labels, variable declarations, control flow) stay at block level
-                result.add(directNode);
-            } else if (segment instanceof List) {
-                List<Node> chunk = (List<Node>) segment;
-                if (chunk.size() >= MIN_CHUNK_SIZE) {
-                    // Create closure for this chunk at tail position
-                    // Collect remaining chunks to nest inside this closure
-                    List<Node> blockElements = new ArrayList<>(chunk);
-
-                    // Build nested closures for remaining chunks
-                    for (int j = i + 1; j < segments.size(); j++) {
-                        Object nextSegment = segments.get(j);
-                        if (nextSegment instanceof Node) {
-                            blockElements.add((Node) nextSegment);
-                        } else if (nextSegment instanceof List) {
-                            List<Node> nextChunk = (List<Node>) nextSegment;
-                            if (nextChunk.size() >= MIN_CHUNK_SIZE) {
-                                // Create nested closure for next chunk
-                                List<Node> nestedElements = new ArrayList<>(nextChunk);
-                                // Add all remaining segments to the nested closure
-                                for (int k = j + 1; k < segments.size(); k++) {
-                                    Object remainingSegment = segments.get(k);
-                                    if (remainingSegment instanceof Node) {
-                                        nestedElements.add((Node) remainingSegment);
-                                    } else {
-                                        nestedElements.addAll((List<Node>) remainingSegment);
-                                    }
-                                }
-                                BlockNode nestedBlock = createMarkedBlock(nestedElements, tokenIndex);
-                                Node nestedClosure = BlockRefactor.createAnonSubCall(tokenIndex, nestedBlock);
-                                blockElements.add(nestedClosure);
-                                j = segments.size(); // Break outer loop
-                                break;
-                            } else {
-                                blockElements.addAll(nextChunk);
-                            }
-                        }
-                    }
-
-                    BlockNode block = createMarkedBlock(blockElements, tokenIndex);
-                    Node closure = BlockRefactor.createAnonSubCall(tokenIndex, block);
-                    result.add(closure);
-                    break; // All remaining segments are now inside the closure
-                } else {
-                    // Chunk too small - add elements directly
-                    result.addAll(chunk);
-                }
-            }
-        }
-
-        return result;
+        return BlockRefactor.buildNestedStructure(
+                segments,
+                tokenIndex,
+                MIN_CHUNK_SIZE,
+                elements -> elements, // Identity function - no wrapping needed for blocks
+                block -> {
+                    // CRITICAL: Must use thread-local flag to prevent recursion
+                    // BlockNode constructor calls maybeRefactorBlock
+                    block.setAnnotation("blockAlreadyRefactored", true);
+                    return block;
+                },
+                wrappedElements -> createMarkedBlock(wrappedElements, tokenIndex)
+        );
     }
 
     /**
@@ -361,34 +307,4 @@ public class LargeBlockRefactorer {
                 node instanceof TryNode;
     }
 
-    /**
-     * Estimates the total bytecode size for a list of nodes.
-     * Uses sampling for efficiency on large lists.
-     *
-     * @param nodes the list of nodes to estimate
-     * @return estimated total bytecode size in bytes
-     */
-    private static long estimateTotalBytecodeSize(List<Node> nodes) {
-        if (nodes.isEmpty()) {
-            return 0;
-        }
-
-        // For small lists, calculate exact size
-        if (nodes.size() <= 10) {
-            long total = 0;
-            for (Node node : nodes) {
-                total += BytecodeSizeEstimator.estimateSnippetSize(node);
-            }
-            return total;
-        }
-
-        // For large lists, use sampling
-        int sampleSize = Math.min(10, nodes.size());
-        long totalSampleSize = 0;
-        for (int i = 0; i < sampleSize; i++) {
-            int index = (int) (((long) i * (nodes.size() - 1)) / (sampleSize - 1));
-            totalSampleSize += BytecodeSizeEstimator.estimateSnippetSize(nodes.get(index));
-        }
-        return (totalSampleSize * nodes.size()) / sampleSize;
-    }
 }
