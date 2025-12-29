@@ -4,7 +4,7 @@ import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
-import org.perlonjava.astrefactor.LargeBlockRefactorer;import org.perlonjava.astvisitor.EmitterVisitor;
+import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.runtime.RuntimeContextType;
 
 import java.util.List;
@@ -19,12 +19,6 @@ public class EmitBlock {
      */
     public static void emitBlock(EmitterVisitor emitterVisitor, BlockNode node) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
-
-        // Try to refactor large blocks using the helper class
-        if (LargeBlockRefactorer.processBlock(emitterVisitor, node)) {
-            // Block was refactored and emitted by the helper
-            return;
-        }
 
         emitterVisitor.ctx.logDebug("generateCodeBlock start context:" + emitterVisitor.ctx.contextType);
         int scopeIndex = emitterVisitor.ctx.symbolTable.enterScope();

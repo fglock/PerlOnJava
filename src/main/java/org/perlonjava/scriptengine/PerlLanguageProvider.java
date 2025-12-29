@@ -154,6 +154,10 @@ public class PerlLanguageProvider {
             }
         }
 
+        // Second-pass refactoring: apply the same logic that was previously done at code-gen time
+        // This runs after first-pass refactoring has reduced overall code size
+        org.perlonjava.astrefactor.LargeBlockRefactorer.applySecondPass(ast, parser);
+
         // ast = ConstantFoldingVisitor.foldConstants(ast);
 
         if (ctx.compilerOptions.parseOnly) {

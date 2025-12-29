@@ -65,41 +65,180 @@ public class LargeBlockRefactorer {
     }
 
     /**
-     * Process a block and refactor it if necessary to avoid method size limits.
-     * This is the code-generation time entry point (legacy, kept for compatibility).
+     * Second-pass AST processor: walks the entire AST after parsing and applies
+     * the same refactoring logic that was previously done at code-gen time.
+     * This allows blocks to be refactored based on the reduced size after first-pass refactoring.
+     *
+     * @param ast    The root AST node
+     * @param parser The parser for error reporting
+     */
+    public static void applySecondPass(Node ast, Parser parser) {
+        if (!IS_REFACTORING_ENABLED) {
+            return;
+        }
+
+        SecondPassProcessor processor = new SecondPassProcessor(parser);
+        ast.accept(processor);
+    }
+
+    /**
+     * AST processor that applies second-pass refactoring to all blocks.
+     */
+    private static class SecondPassProcessor implements org.perlonjava.astvisitor.Visitor {
+        private final Parser parser;
+
+        SecondPassProcessor(Parser parser) {
+            this.parser = parser;
+        }
+
+        @Override
+        public void visit(BlockNode node) {
+            // Apply the same logic as processBlock, but at parse time
+            // CRITICAL: Skip if this block was already refactored to prevent infinite recursion
+            if (node.getBooleanAnnotation("blockAlreadyRefactored")) {
+                // Continue to children
+                for (Node element : node.elements) {
+                    if (element != null) element.accept(this);
+                }
+                return;
+            }
+
+            // Skip if block is already a subroutine or is a special block
+            if (node.getBooleanAnnotation("blockIsSubroutine")) {
+                for (Node element : node.elements) {
+                    if (element != null) element.accept(this);
+                }
+                return;
+            }
+
+            // Determine if we need to refactor (same logic as shouldRefactorBlock)
+            boolean needsRefactoring = false;
+            if (node.elements.size() > MIN_CHUNK_SIZE) {
+                needsRefactoring = true; // Refactoring is enabled (we're in second pass)
+            }
+
+            if (needsRefactoring && !isSpecialContext(node)) {
+                // Try whole-block refactoring (same as tryWholeBlockRefactoring but at parse time)
+                tryWholeBlockRefactoringAtParseTime(node, parser);
+            }
+
+            // Continue walking into child blocks
+            for (Node element : node.elements) {
+                if (element != null) {
+                    element.accept(this);
+                }
+            }
+        }
+
+        // Traverse the AST
+        @Override public void visit(OperatorNode node) {
+            if (node.operand != null) node.operand.accept(this);
+        }
+        @Override public void visit(BinaryOperatorNode node) {
+            if (node.left != null) node.left.accept(this);
+            if (node.right != null) node.right.accept(this);
+        }
+        @Override public void visit(TernaryOperatorNode node) {
+            if (node.condition != null) node.condition.accept(this);
+            if (node.trueExpr != null) node.trueExpr.accept(this);
+            if (node.falseExpr != null) node.falseExpr.accept(this);
+        }
+        @Override public void visit(IfNode node) {
+            if (node.condition != null) node.condition.accept(this);
+            if (node.thenBranch != null) node.thenBranch.accept(this);
+            if (node.elseBranch != null) node.elseBranch.accept(this);
+        }
+        @Override public void visit(For1Node node) {
+            if (node.variable != null) node.variable.accept(this);
+            if (node.list != null) node.list.accept(this);
+            if (node.body != null) node.body.accept(this);
+        }
+        @Override public void visit(For3Node node) {
+            if (node.initialization != null) node.initialization.accept(this);
+            if (node.condition != null) node.condition.accept(this);
+            if (node.increment != null) node.increment.accept(this);
+            if (node.body != null) node.body.accept(this);
+        }
+        @Override public void visit(TryNode node) {
+            if (node.tryBlock != null) node.tryBlock.accept(this);
+            if (node.catchBlock != null) node.catchBlock.accept(this);
+            if (node.finallyBlock != null) node.finallyBlock.accept(this);
+        }
+        @Override public void visit(ListNode node) {
+            for (Node element : node.elements) {
+                if (element != null) element.accept(this);
+            }
+        }
+        @Override public void visit(SubroutineNode node) {
+            if (node.block != null) node.block.accept(this);
+        }
+        @Override public void visit(HashLiteralNode node) {
+            for (Node element : node.elements) {
+                if (element != null) element.accept(this);
+            }
+        }
+        @Override public void visit(ArrayLiteralNode node) {
+            for (Node element : node.elements) {
+                if (element != null) element.accept(this);
+            }
+        }
+        
+        // Leaf nodes
+        @Override public void visit(IdentifierNode node) {}
+        @Override public void visit(NumberNode node) {}
+        @Override public void visit(StringNode node) {}
+        @Override public void visit(LabelNode node) {}
+        @Override public void visit(CompilerFlagNode node) {}
+        @Override public void visit(FormatNode node) {}
+        @Override public void visit(FormatLine node) {}
+    }
+
+    /**
+     * Try to refactor entire block at parse time (second pass).
+     * Same logic as tryWholeBlockRefactoring but modifies AST instead of emitting.
+     */
+    private static void tryWholeBlockRefactoringAtParseTime(BlockNode node, Parser parser) {
+        // Check for unsafe control flow
+        controlFlowDetector.reset();
+        node.accept(controlFlowDetector);
+        if (controlFlowDetector.hasUnsafeControlFlow()) {
+            return;
+        }
+
+        // Mark as refactored to prevent recursion
+        node.setAnnotation("blockAlreadyRefactored", true);
+
+        // Create wrapper: sub { original_block_contents }->(@_)
+        List<Node> originalElements = new ArrayList<>(node.elements);
+        
+        skipRefactoring.set(true);
+        try {
+            BlockNode innerBlock = new BlockNode(originalElements, node.tokenIndex);
+            innerBlock.setAnnotation("blockAlreadyRefactored", true);
+            
+            BinaryOperatorNode subCall = createAnonSubCall(node.tokenIndex, innerBlock);
+            
+            // Replace block contents with the subroutine call
+            node.elements.clear();
+            node.elements.add(subCall);
+        } finally {
+            skipRefactoring.set(false);
+        }
+    }
+
+    /**
+     * Code-generation time entry point - no longer performs refactoring.
+     * All refactoring now happens at parse time (first pass + second pass).
      *
      * @param emitterVisitor The emitter visitor context
      * @param node           The block to process
-     * @return true if the block was refactored and emitted, false if no refactoring was needed
+     * @return always false - no code-gen refactoring
      */
     public static boolean processBlock(EmitterVisitor emitterVisitor, BlockNode node) {
-        // CRITICAL: Skip if this block was already refactored to prevent infinite recursion
-        if (node.getBooleanAnnotation("blockAlreadyRefactored")) {
-            return false;
-        }
-
-        // Skip if block is already a subroutine or is a special block
-        if (node.getBooleanAnnotation("blockIsSubroutine")) {
-            return false;
-        }
-
-        // Determine if we need to refactor
-        boolean needsRefactoring = shouldRefactorBlock(node, emitterVisitor, IS_REFACTORING_ENABLED);
-
-        if (!needsRefactoring) {
-            return false;
-        }
-
-        // Skip refactoring for special blocks (BEGIN, END, INIT, CHECK, UNITCHECK)
-        // These blocks have special compilation semantics and cannot be refactored
-        if (isSpecialContext(node)) {
-            return false;
-        }
-
-        // Fallback: Try whole-block refactoring
-        return tryWholeBlockRefactoring(emitterVisitor, node);  // Block was refactored and emitted
-
-        // No refactoring was possible
+        // All refactoring now happens at parse time via:
+        // 1. First pass: maybeRefactorBlock (during BlockNode construction)
+        // 2. Second pass: applySecondPass (after full AST is built)
+        return false;
     }
 
     /**
