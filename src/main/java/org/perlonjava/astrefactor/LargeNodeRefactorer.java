@@ -2,14 +2,12 @@ package org.perlonjava.astrefactor;
 
 import org.perlonjava.astnode.*;
 import org.perlonjava.astvisitor.BytecodeSizeEstimator;
-import org.perlonjava.astvisitor.ControlFlowDetectorVisitor;
 import org.perlonjava.parser.Parser;
 
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.perlonjava.astrefactor.LargeBlockRefactorer.errorCantRefactorLargeBlock;
-import static org.perlonjava.parser.ParserNodeUtils.variableAst;
+import static org.perlonjava.astrefactor.BlockRefactor.*;
 
 /**
  * Generic helper class for refactoring large AST node lists to avoid JVM's "Method too large" error.
@@ -33,30 +31,12 @@ import static org.perlonjava.parser.ParserNodeUtils.variableAst;
  */
 public class LargeNodeRefactorer {
 
-    // Reusable visitor for control flow detection
-    private static final ControlFlowDetectorVisitor controlFlowDetector = new ControlFlowDetectorVisitor();
-
     /**
      * Check if refactoring is enabled via environment variable.
      * When JPERL_LARGECODE=refactor, large literals will be automatically split.
      */
     static final boolean IS_REFACTORING_ENABLED = "refactor".equals(System.getenv("JPERL_LARGECODE"));
-    /**
-     * Minimum number of elements before considering refactoring.
-     * Lists smaller than this are never refactored.
-     * Set conservatively low since bytecode estimation is unreliable.
-     */
-    private static final int LARGE_ELEMENT_COUNT = 200;
-    /**
-     * Target maximum bytecode size per chunk (in bytes).
-     * When total estimated bytecode exceeds this, refactoring is triggered.
-     */
-    private static final int LARGE_BYTECODE_SIZE = 30000;
-    /**
-     * Minimum elements per chunk. Chunks smaller than this are inlined directly
-     * rather than wrapped in a subroutine. This also breaks the recursion.
-     */
-    private static final int MIN_CHUNK_SIZE = 50;
+    
     /**
      * Maximum elements per chunk. Limits chunk size even if bytecode estimates
      * suggest larger chunks would fit.
@@ -104,7 +84,7 @@ public class LargeNodeRefactorer {
 
         // Check if any chunk that will be wrapped contains unsafe control flow
         // Control flow in lists/arrays/hashes can break if wrapped in closures
-        if (hasUnsafeControlFlowInChunks(chunks)) {
+        if (hasUnsafeControlFlowInChunks(chunks, MIN_CHUNK_SIZE)) {
             // Chunks contain control flow that would break if wrapped
             // Skip refactoring - cannot safely refactor this list
             return elements;
@@ -113,7 +93,7 @@ public class LargeNodeRefactorer {
         // For LIST nodes, create nested closures for proper lexical scoping
         List<Node> result = createNestedListClosures(chunks, tokenIndex);
         // Check if refactoring was successful by estimating bytecode size
-        long estimatedSize = estimateTotalBytecodeSize(result);
+        long estimatedSize = BlockRefactor.estimateTotalBytecodeSize(result);
         if (estimatedSize > LARGE_BYTECODE_SIZE) {
             errorCantRefactorLargeBlock(tokenIndex, parser, estimatedSize);
         }
@@ -152,7 +132,7 @@ public class LargeNodeRefactorer {
         // Use unified method with ListNode wrapper
         // The wrapping is necessary because the closure needs to return a list of elements,
         // not just execute them sequentially.
-        return BlockRefactor.buildNestedStructure(
+        return buildNestedStructure(
                 segments,
                 tokenIndex,
                 MIN_CHUNK_SIZE,
@@ -171,13 +151,16 @@ public class LargeNodeRefactorer {
      * @return true if the list exceeds size thresholds and should be refactored
      */
     private static boolean shouldRefactor(List<Node> elements) {
-        // Quick check: element count threshold
-        if (elements.size() < LARGE_ELEMENT_COUNT) {
-            return false;
-        }
-
         // Use sampling to estimate bytecode size - avoid O(n) traversal
         int n = elements.size();
+        if (n == 0) {
+            return false;
+        }
+        if (n == 1) {
+            long size = BytecodeSizeEstimator.estimateSnippetSize(elements.get(0));
+            return size > LARGE_BYTECODE_SIZE;
+        }
+        
         int sampleSize = Math.min(10, n);
         long totalSampleSize = 0;
         for (int i = 0; i < sampleSize; i++) {
@@ -231,60 +214,5 @@ public class LargeNodeRefactorer {
         return chunks;
     }
 
-    /**
-     * Estimates the total bytecode size for a list of nodes.
-     * Uses sampling for efficiency on large lists.
-     *
-     * @param nodes the list of nodes to estimate
-     * @return estimated total bytecode size in bytes
-     */
-    public static long estimateTotalBytecodeSize(List<Node> nodes) {
-        if (nodes.isEmpty()) {
-            return 0;
-        }
 
-        // For small lists, calculate exact size
-        if (nodes.size() <= 10) {
-            long total = 0;
-            for (Node node : nodes) {
-                total += BytecodeSizeEstimator.estimateSnippetSize(node);
-            }
-            return total;
-        }
-
-        // For large lists, use sampling
-        int sampleSize = Math.min(10, nodes.size());
-        long totalSampleSize = 0;
-        for (int i = 0; i < sampleSize; i++) {
-            int index = (int) (((long) i * (nodes.size() - 1)) / (sampleSize - 1));
-            totalSampleSize += BytecodeSizeEstimator.estimateSnippetSize(nodes.get(index));
-        }
-        return (totalSampleSize * nodes.size()) / sampleSize;
-    }
-
-    /**
-     * Check if any chunk that will be wrapped in a closure contains unsafe control flow.
-     * Only checks chunks (ListNode) that are large enough to be wrapped (>= MIN_CHUNK_SIZE).
-     * This implements the same safety logic as LargeBlockRefactorer.
-     *
-     * @param chunks List of ListNode chunks
-     * @return true if unsafe control flow found in chunks that will be wrapped
-     */
-    private static boolean hasUnsafeControlFlowInChunks(List<Node> chunks) {
-        for (Node chunk : chunks) {
-            if (chunk instanceof ListNode listChunk) {
-                // Only check chunks that will be wrapped (size >= MIN_CHUNK_SIZE)
-                if (listChunk.elements.size() >= MIN_CHUNK_SIZE) {
-                    controlFlowDetector.reset();
-                    for (Node element : listChunk.elements) {
-                        element.accept(controlFlowDetector);
-                        if (controlFlowDetector.hasUnsafeControlFlow()) {
-                            return true;
-                        }
-                    }
-                }
-            }
-        }
-        return false;
-    }
 }
