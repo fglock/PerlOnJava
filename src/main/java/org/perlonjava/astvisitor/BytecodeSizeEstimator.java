@@ -1,6 +1,6 @@
 package org.perlonjava.astvisitor;
 
-import org.perlonjava.astnode.*;
+import org.perlonjava.astnode.*;import org.perlonjava.astrefactor.LargeBlockRefactorer;import org.perlonjava.astrefactor.LargeNodeRefactorer;
 
 /**
  * BytecodeSizeEstimator provides accurate bytecode size estimation for PerlOnJava methods.
@@ -28,8 +28,8 @@ import org.perlonjava.astnode.*;
  *   <li>Code snippets are partial AST fragments where method overhead doesn't apply</li>
  * </ul>
  *
- * @see org.perlonjava.codegen.LargeNodeRefactorer
- * @see org.perlonjava.codegen.LargeBlockRefactorer
+ * @see LargeNodeRefactorer
+ * @see LargeBlockRefactorer
  */
 public class BytecodeSizeEstimator implements Visitor {
 

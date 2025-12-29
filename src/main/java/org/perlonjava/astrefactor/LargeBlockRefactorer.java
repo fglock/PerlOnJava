@@ -1,7 +1,6 @@
-package org.perlonjava.codegen;
+package org.perlonjava.astrefactor;
 
 import org.perlonjava.astnode.*;
-import org.perlonjava.astrefactor.BlockRefactor;
 import org.perlonjava.astvisitor.BytecodeSizeEstimator;
 import org.perlonjava.astvisitor.ControlFlowDetectorVisitor;
 import org.perlonjava.astvisitor.EmitterVisitor;
