@@ -27,13 +27,6 @@ import static org.perlonjava.parser.ParserNodeUtils.variableAst;
  *   <li>{@link org.perlonjava.astnode.BlockNode} - handled by {@link LargeBlockRefactorer} for control flow safety</li>
  * </ul>
  * <p>
- * <b>Chunk Wrapping Strategy:</b>
- * <ul>
- *   <li>Arrays: {@code [@{sub{[chunk1]}->(@_)}, @{sub{[chunk2]}->(@_)}, ...]}</li>
- *   <li>Hashes: {@code {%{sub{{chunk1}}->(@_)}, %{sub{{chunk2}}->(@_)}, ...}}</li>
- *   <li>Lists: {@code sub{ chunk1, sub{ chunk2 }->(@_) }->(@_)} - nested for proper closure scope</li>
- * </ul>
- * <p>
  * <b>Integration:</b> Called automatically from AST node constructors when enabled.
  * This ensures the AST is always the right size from creation time.
  * <p>
@@ -73,32 +66,10 @@ public class LargeNodeRefactorer {
     private static final int MAX_CHUNK_SIZE = 200;
 
     /**
-     * Enum identifying the type of AST node being refactored.
-     * Used to determine the appropriate chunk wrapping and dereference strategy.
-     */
-    public enum NodeType {
-        /**
-         * Array literal: [...] - chunks wrapped with @{sub{[...]}->()}
-         */
-        ARRAY,
-        /**
-         * Hash literal: {...} - chunks wrapped with %{sub{{...}}->()}, chunk size forced even
-         */
-        HASH,
-        /**
-         * List: (...) - chunks wrapped with sub{(...)}->()
-         */
-        LIST
-    }
-
-    /**
      * Check if refactoring is enabled via environment variable.
      * When JPERL_LARGECODE=refactor, large literals will be automatically split.
      */
-    private static boolean isRefactoringEnabled() {
-        String largeCodeMode = System.getenv("JPERL_LARGECODE");
-        return "refactor".equals(largeCodeMode);
-    }
+    static final boolean IS_REFACTORING_ENABLED = "refactor".equals(System.getenv("JPERL_LARGECODE"));
 
     /**
      * Main entry point: called from AST node constructors to potentially refactor large element lists.
@@ -115,61 +86,32 @@ public class LargeNodeRefactorer {
      *
      * @param elements   the original elements list from the AST node constructor
      * @param tokenIndex the token index for creating new AST nodes (for error reporting)
-     * @param nodeType   the type of node being constructed (affects wrapping strategy)
      * @param parser     the parser instance for access to error utilities (can be null if not available)
      * @return the original list if no refactoring needed, or a new list with chunked elements
      */
-    public static List<Node> maybeRefactorElements(List<Node> elements, int tokenIndex, NodeType nodeType, Parser parser) {
-        if (!isRefactoringEnabled() || !shouldRefactor(elements)) {
+    public static List<Node> maybeRefactorElements(List<Node> elements, int tokenIndex, Parser parser) {
+        if (!IS_REFACTORING_ENABLED || !shouldRefactor(elements)) {
             return elements;
         }
 
         int chunkSize = calculateChunkSize(elements);
-        if (nodeType == NodeType.HASH && chunkSize % 2 != 0) {
-            chunkSize++; // Ensure even number for key-value pairs
-        }
-
         List<Node> chunks = splitIntoChunks(elements, chunkSize);
-        
+
         // For LIST nodes, create nested closures for proper lexical scoping
-        if (nodeType == NodeType.LIST) {
-            List<Node> result = createNestedListClosures(chunks, tokenIndex);
-            // Check if refactoring was successful by estimating bytecode size
-            long estimatedSize = estimateTotalBytecodeSize(result);
-            if (estimatedSize > LARGE_BYTECODE_SIZE) {
-                String message = "List is too large (" + elements.size() + " elements, estimated " + estimatedSize + " bytes) " +
+        List<Node> result = createNestedListClosures(chunks, tokenIndex);
+        // Check if refactoring was successful by estimating bytecode size
+        long estimatedSize = estimateTotalBytecodeSize(result);
+        if (estimatedSize > LARGE_BYTECODE_SIZE) {
+            String message = "List is too large (" + elements.size() + " elements, estimated " + estimatedSize + " bytes) " +
                     "and refactoring failed to reduce it below " + LARGE_BYTECODE_SIZE + " bytes. " +
                     "Consider breaking the list into smaller parts or using a different data structure.";
-                if (parser != null) {
-                    throw new PerlCompilerException(tokenIndex, message, parser.ctx.errorUtil);
-                } else {
-                    throw new PerlCompilerException(message);
-                }
-            }
-            return result;
-        }
-        
-        List<Node> refactoredElements = new ArrayList<>();
-        for (Node chunk : chunks) {
-            List<Node> chunkElements = chunk instanceof ListNode ? ((ListNode) chunk).elements : List.of(chunk);
-            refactoredElements.addAll(chunkElements);
-        }
-
-        // Check if refactoring was successful for arrays and hashes by estimating bytecode size
-        long estimatedSize = estimateTotalBytecodeSize(refactoredElements);
-        if (estimatedSize > LARGE_BYTECODE_SIZE) {
-            String typeName = nodeType == NodeType.ARRAY ? "Array" : "Hash";
-            String message = typeName + " is too large (" + elements.size() + " elements, estimated " + estimatedSize + " bytes) " +
-                "and refactoring failed to reduce it below " + LARGE_BYTECODE_SIZE + " bytes. " +
-                "Consider breaking the " + typeName.toLowerCase() + " into smaller parts or using a different approach.";
             if (parser != null) {
                 throw new PerlCompilerException(tokenIndex, message, parser.ctx.errorUtil);
             } else {
                 throw new PerlCompilerException(message);
             }
         }
-
-        return refactoredElements;
+        return result;
     }
 
     /**
@@ -184,20 +126,20 @@ public class LargeNodeRefactorer {
         if (chunks.isEmpty()) {
             return new ArrayList<>();
         }
-        
+
         // If only one chunk and it's small, just return its elements
-        if (chunks.size() == 1 && chunks.get(0) instanceof ListNode listChunk && 
-            listChunk.elements.size() < MIN_CHUNK_SIZE) {
+        if (chunks.size() == 1 && chunks.get(0) instanceof ListNode listChunk &&
+                listChunk.elements.size() < MIN_CHUNK_SIZE) {
             return listChunk.elements;
         }
-        
+
         // Build nested structure from innermost to outermost
         Node result = null;
-        
+
         for (int i = chunks.size() - 1; i >= 0; i--) {
             Node chunk = chunks.get(i);
             List<Node> chunkElements = chunk instanceof ListNode ? ((ListNode) chunk).elements : List.of(chunk);
-            
+
             if (chunkElements.size() < MIN_CHUNK_SIZE && result == null) {
                 // Last chunk is small and there's no nested closure yet - skip wrapping
                 result = new ListNode(new ArrayList<>(chunkElements), tokenIndex);
@@ -207,7 +149,7 @@ public class LargeNodeRefactorer {
                 if (result != null) {
                     blockElements.add(result);
                 }
-                
+
                 ListNode listNode = new ListNode(blockElements, tokenIndex);
                 listNode.setAnnotation("chunkAlreadyRefactored", true);
                 BlockNode block = new BlockNode(List.of(listNode), tokenIndex);
@@ -217,55 +159,8 @@ public class LargeNodeRefactorer {
                         new ArrayList<>(List.of(variableAst("@", "_", tokenIndex))), tokenIndex), tokenIndex);
             }
         }
-        
+
         return List.of(result);
-    }
-
-    /**
-     * Creates a wrapper AST node for a chunk of elements.
-     * <p>
-     * The wrapper structure depends on the node type:
-     * <ul>
-     *   <li>ARRAY: {@code @{ sub { [elements] }->() }} - array ref created in sub, then dereferenced</li>
-     *   <li>HASH: {@code %{ sub { {elements} }->() }} - hash ref created in sub, then dereferenced</li>
-     *   <li>LIST: Not used - see {@link #createNestedListClosures(List, int)}</li>
-     * </ul>
-     *
-     * @param chunkElements the elements to wrap in this chunk
-     * @param tokenIndex    token index for new nodes
-     * @param nodeType      determines wrapping strategy
-     * @return an AST node representing the wrapped chunk
-     */
-    private static Node createChunkWrapper(List<Node> chunkElements, int tokenIndex, NodeType nodeType) {
-        Node innerLiteral;
-        String derefOp;
-
-        switch (nodeType) {
-            case ARRAY:
-                ArrayLiteralNode arr = new ArrayLiteralNode(chunkElements, tokenIndex);
-                arr.setAnnotation("chunkAlreadyRefactored", true);
-                innerLiteral = arr;
-                derefOp = "@";
-                break;
-            case HASH:
-                HashLiteralNode hash = new HashLiteralNode(chunkElements, tokenIndex);
-                hash.setAnnotation("chunkAlreadyRefactored", true);
-                innerLiteral = hash;
-                derefOp = "%";
-                break;
-            case LIST:
-            default:
-                // LIST case should not reach here - handled by createNestedListClosures
-                throw new IllegalStateException("LIST nodes should be handled by createNestedListClosures");
-        }
-
-        // For array/hash: @{ sub { [...] }->() } or %{ sub { {...} }->() }
-        BlockNode block = new BlockNode(List.of(innerLiteral), tokenIndex);
-        block.setAnnotation("blockAlreadyRefactored", true);  // Prevent LargeBlockRefactorer from processing
-        SubroutineNode sub = new SubroutineNode(null, null, null, block, false, tokenIndex);
-        BinaryOperatorNode call = new BinaryOperatorNode("->", sub, new ListNode(
-                new ArrayList<>(List.of(variableAst("@", "_", tokenIndex))), tokenIndex), tokenIndex);
-        return new OperatorNode(derefOp, call, tokenIndex);
     }
 
     /**

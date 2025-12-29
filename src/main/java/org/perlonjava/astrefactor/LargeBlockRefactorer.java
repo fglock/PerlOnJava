@@ -10,6 +10,8 @@ import org.perlonjava.runtime.PerlCompilerException;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.perlonjava.astrefactor.LargeNodeRefactorer.IS_REFACTORING_ENABLED;
+
 /**
  * Helper class for refactoring large blocks to avoid JVM's "Method too large" error.
  * <p>
@@ -30,14 +32,6 @@ public class LargeBlockRefactorer {
     private static final ThreadLocal<Boolean> skipRefactoring = ThreadLocal.withInitial(() -> false);
 
     /**
-     * Check if refactoring is enabled via environment variable.
-     */
-    private static boolean isRefactoringEnabled() {
-        String largeCodeMode = System.getenv("JPERL_LARGECODE");
-        return "refactor".equals(largeCodeMode);
-    }
-
-    /**
      * Parse-time entry point: called from BlockNode constructor to refactor large blocks.
      * This applies smart chunking to split safe statement sequences into closures.
      *
@@ -46,7 +40,7 @@ public class LargeBlockRefactorer {
      */
     public static void maybeRefactorBlock(BlockNode node, Parser parser) {
         // Skip if refactoring is not enabled
-        if (!isRefactoringEnabled()) {
+        if (!IS_REFACTORING_ENABLED) {
             return;
         }
 
@@ -109,13 +103,6 @@ public class LargeBlockRefactorer {
         if (isSpecialContext(node)) {
             return false;
         }
-
-        // TEMPORARILY DISABLED: Smart chunking has timing issues with special blocks (BEGIN/require)
-        // Causes NPE in SpecialBlockParser when functions aren't defined yet during compilation
-        // if (trySmartChunking(node)) {
-        //     // Block was successfully chunked, continue with normal emission
-        //     return false;
-        // }
 
         // Fallback: Try whole-block refactoring
         return tryWholeBlockRefactoring(emitterVisitor, node);  // Block was refactored and emitted

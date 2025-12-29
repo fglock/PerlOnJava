@@ -84,7 +84,7 @@ public class ListNode extends AbstractNode {
      */
     public ListNode(List<Node> elements, int tokenIndex, Parser parser) {
         this.tokenIndex = tokenIndex;
-        this.elements = LargeNodeRefactorer.maybeRefactorElements(elements, tokenIndex, LargeNodeRefactorer.NodeType.LIST, parser);
+        this.elements = LargeNodeRefactorer.maybeRefactorElements(elements, tokenIndex, parser);
         this.handle = null;
     }
 
