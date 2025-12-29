@@ -60,6 +60,11 @@ public class LargeNodeRefactorer {
     private static final int MAX_CHUNK_SIZE = 200;
 
     /**
+     * Thread-local flag to prevent recursion when creating nested blocks.
+     */
+    private static final ThreadLocal<Boolean> skipRefactoring = ThreadLocal.withInitial(() -> false);
+
+    /**
      * Main entry point: called from AST node constructors to potentially refactor large element lists.
      * <p>
      * This method checks if refactoring is needed based on:
@@ -124,21 +129,14 @@ public class LargeNodeRefactorer {
         }
 
         // Use unified method with ListNode wrapper
+        // The wrapping is necessary because the closure needs to return a list of elements,
+        // not just execute them sequentially.
         return BlockRefactor.buildNestedStructure(
                 segments,
                 tokenIndex,
                 MIN_CHUNK_SIZE,
-                elements -> {
-                    // Wrap elements in a ListNode before creating BlockNode
-                    ListNode listNode = new ListNode(elements, tokenIndex);
-                    listNode.setAnnotation("chunkAlreadyRefactored", true);
-                    return List.of(listNode);
-                },
-                block -> {
-                    block.setAnnotation("blockAlreadyRefactored", true);
-                    return block;
-                },
-                wrappedElements -> new BlockNode(wrappedElements, tokenIndex)
+                true, // returnTypeIsList = true: wrap in ListNode to return list
+                skipRefactoring
         );
     }
 

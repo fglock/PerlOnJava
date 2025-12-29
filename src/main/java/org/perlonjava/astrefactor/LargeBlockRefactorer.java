@@ -237,18 +237,13 @@ public class LargeBlockRefactorer {
      */
     @SuppressWarnings("unchecked")
     private static List<Node> buildNestedStructure(List<Object> segments, int tokenIndex) {
+        // No wrapping needed - blocks execute statements sequentially
         return BlockRefactor.buildNestedStructure(
                 segments,
                 tokenIndex,
                 MIN_CHUNK_SIZE,
-                elements -> elements, // Identity function - no wrapping needed for blocks
-                block -> {
-                    // CRITICAL: Must use thread-local flag to prevent recursion
-                    // BlockNode constructor calls maybeRefactorBlock
-                    block.setAnnotation("blockAlreadyRefactored", true);
-                    return block;
-                },
-                wrappedElements -> createMarkedBlock(wrappedElements, tokenIndex)
+                false, // returnTypeIsList = false: execute statements, don't return list
+                skipRefactoring
         );
     }
 
