@@ -2,6 +2,7 @@ package org.perlonjava.astrefactor;
 
 import org.perlonjava.astnode.*;
 import org.perlonjava.astvisitor.ControlFlowDetectorVisitor;
+import org.perlonjava.astvisitor.ControlFlowFinder;
 import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.parser.Parser;
 import org.perlonjava.runtime.PerlCompilerException;
@@ -136,36 +137,32 @@ public class LargeBlockRefactorer {
      * @param parser The parser instance for access to error utilities (can be null)
      */
     private static void trySmartChunking(BlockNode node, Parser parser) {
-        // First check if the block contains any control flow that would be unsafe to refactor
-        // This catches cases where we're inside a loop body but don't know it yet (loop node not created)
-        controlFlowDetector.reset();
-        for (Node element : node.elements) {
-            element.accept(controlFlowDetector);
-            if (controlFlowDetector.hasUnsafeControlFlow()) {
-                // Block contains last/next/redo/goto that would break if we wrap in closures
-                // Skip refactoring - we cannot safely refactor blocks with control flow
-                return;
-            }
+        // Check if the block has any labels (stored in BlockNode.labels field)
+        // Labels define goto/next/last targets and must remain at block level
+        if (node.labels != null && !node.labels.isEmpty()) {
+            // Block has labels - skip refactoring to preserve label scope
+            return;
         }
 
         List<Object> segments = new ArrayList<>();  // Either Node (direct) or List<Node> (chunk)
         List<Node> currentChunk = new ArrayList<>();
 
         for (Node element : node.elements) {
-            if (shouldBreakChunk(element)) {
+            if (isCompleteBlock(element)) {
+                // Complete blocks are already scoped - but check for labeled control flow
+                // Labeled control flow might reference labels outside the block
+                if (!currentChunk.isEmpty()) {
+                    segments.add(new ArrayList<>(currentChunk));
+                    currentChunk.clear();
+                }
+                segments.add(element);
+            } else if (shouldBreakChunk(element)) {
                 // This element cannot be in a chunk (has unsafe control flow or is a label)
                 if (!currentChunk.isEmpty()) {
                     segments.add(new ArrayList<>(currentChunk));
                     currentChunk.clear();
                 }
                 // Add the element directly
-                segments.add(element);
-            } else if (isCompleteBlock(element)) {
-                // Complete blocks are already scoped
-                if (!currentChunk.isEmpty()) {
-                    segments.add(new ArrayList<>(currentChunk));
-                    currentChunk.clear();
-                }
                 segments.add(element);
             } else {
                 // Safe element, add to current chunk
@@ -178,6 +175,31 @@ public class LargeBlockRefactorer {
             segments.add(new ArrayList<>(currentChunk));
         }
 
+        // Check ALL segments (both direct and chunks) for UNSAFE control flow
+        // Use ControlFlowDetectorVisitor which considers loop depth
+        // Unlabeled next/last/redo inside loops are safe, but labeled control flow is not
+        for (Object segment : segments) {
+            if (segment instanceof Node directNode) {
+                controlFlowDetector.reset();
+                directNode.accept(controlFlowDetector);
+                if (controlFlowDetector.hasUnsafeControlFlow()) {
+                    // Segment has unsafe control flow - skip refactoring
+                    return;
+                }
+            } else if (segment instanceof List) {
+                @SuppressWarnings("unchecked")
+                List<Node> chunk = (List<Node>) segment;
+                for (Node element : chunk) {
+                    controlFlowDetector.reset();
+                    element.accept(controlFlowDetector);
+                    if (controlFlowDetector.hasUnsafeControlFlow()) {
+                        // Chunk has unsafe control flow - skip refactoring
+                        return;
+                    }
+                }
+            }
+        }
+        
         // Build nested structure if we have any chunks
         List<Node> processedElements = BlockRefactor.buildNestedStructure(
                 segments,
@@ -219,6 +241,9 @@ public class LargeBlockRefactorer {
 
     /**
      * Determine if an element should break the current chunk.
+     * Labels and ANY control flow statements break chunks - they must stay as direct elements.
+     * This is more conservative than ControlFlowDetectorVisitor because we need to catch
+     * ALL control flow, not just "unsafe" control flow (which considers loop depth).
      */
     private static boolean shouldBreakChunk(Node element) {
         // Labels break chunks - they're targets for goto/next/last
@@ -226,17 +251,19 @@ public class LargeBlockRefactorer {
             return true;
         }
 
-        // Control flow statements that jump outside the block break chunks
-        controlFlowDetector.reset();
-        element.accept(controlFlowDetector);
-        return controlFlowDetector.hasUnsafeControlFlow();
+        // Check if element contains ANY control flow (last/next/redo/goto)
+        // We use a custom visitor that doesn't consider loop depth
+        ControlFlowFinder finder = new ControlFlowFinder();
+        element.accept(finder);
+        return finder.foundControlFlow;
     }
 
     /**
      * Try to refactor the entire block as a subroutine.
      */
     private static boolean tryWholeBlockRefactoring(EmitterVisitor emitterVisitor, BlockNode node) {
-        // Check for unsafe control flow
+        // Check for unsafe control flow using ControlFlowDetectorVisitor
+        // This properly handles loop depth - unlabeled next/last/redo inside loops are safe
         controlFlowDetector.reset();
         node.accept(controlFlowDetector);
         if (controlFlowDetector.hasUnsafeControlFlow()) {
@@ -268,6 +295,35 @@ public class LargeBlockRefactorer {
                 node instanceof For3Node ||
                 node instanceof IfNode ||
                 node instanceof TryNode;
+    }
+
+    /**
+     * Check if a chunk would be wrapped in a closure based on its size.
+     *
+     * @param chunk The chunk to check
+     * @return true if the chunk is large enough to be wrapped (>= MIN_CHUNK_SIZE)
+     */
+    private static boolean chunkWouldBeWrapped(List<Node> chunk) {
+        return chunk.size() >= MIN_CHUNK_SIZE;
+    }
+
+    /**
+     * Check if a chunk contains unsafe control flow.
+     * This checks for any control flow statements (last/next/redo/goto) that would break
+     * if the chunk is wrapped in a closure.
+     *
+     * @param chunk The chunk to check
+     * @return true if unsafe control flow found
+     */
+    private static boolean chunkHasUnsafeControlFlow(List<Node> chunk) {
+        controlFlowDetector.reset();
+        for (Node element : chunk) {
+            element.accept(controlFlowDetector);
+            if (controlFlowDetector.hasUnsafeControlFlow()) {
+                return true;
+            }
+        }
+        return false;
     }
 
 }
