@@ -187,13 +187,28 @@ public class SubroutineParser {
             String packageName = IdentifierParser.parseSubroutineIdentifier(parser);
             // System.out.println("maybe indirect object: " + packageName + "->" + subName);
 
-            // Check if the packageName is not a subroutine or operator
-            // IMPORTANT: Also check if it's a lexical sub - lexical subs should NOT be treated as package names
+            // PERL RULE: Indirect object syntax requires identifier to be a package
+            // Check packageExistsCache which is populated when 'package' statement is parsed
+            // Note: packageExistsCache uses the package name as-is, not normalized
+            Boolean isPackage = GlobalVariable.packageExistsCache.get(packageName);
+            LexerToken token = peek(parser);
             String fullName1 = NameNormalizer.normalizeVariableName(packageName, parser.ctx.symbolTable.getCurrentPackage());
             boolean isLexicalSub = parser.ctx.symbolTable.getSymbolEntry("&" + packageName) != null;
-            if (!GlobalVariable.existsGlobalCodeRef(fullName1) && !isLexicalSub && isValidIndirectMethod(packageName)) {
-                LexerToken token = peek(parser);
-                if (!(token.text.equals("->") || token.text.equals("=>") || INFIX_OP.contains(token.text))) {
+            boolean isKnownSub = GlobalVariable.existsGlobalCodeRef(fullName1);
+            
+            // Reject if:
+            // 1. Explicitly marked as non-package (false in cache), OR
+            // 2. Unknown package (null) AND unknown subroutine (!isKnownSub) AND followed by '('
+            //    - this is a function call like mycan(...)
+            // Allow if:
+            // - Marked as package (true), OR
+            // - Unknown (null) but NOT followed by '(' - like 'new NonExistentClass'
+            if ((isPackage != null && !isPackage) || (isPackage == null && !isKnownSub && token.text.equals("("))) {
+                parser.tokenIndex = currentIndex2;
+            } else {
+                // Not a known subroutine, check if it's valid indirect object syntax
+                if (!isKnownSub && !isLexicalSub && isValidIndirectMethod(packageName)) {
+                    if (!(token.text.equals("->") || token.text.equals("=>") || INFIX_OP.contains(token.text))) {
                     // System.out.println("  package loaded: " + packageName + "->" + subName);
 
                     ListNode arguments;
@@ -211,11 +226,12 @@ public class SubroutineParser {
                                             currentIndex),
                                     arguments, currentIndex2),
                             currentIndex2);
+                    }
                 }
-            }
 
-            // backtrack
-            parser.tokenIndex = currentIndex2;
+                // backtrack
+                parser.tokenIndex = currentIndex2;
+            }
         }
 
         // Create an identifier node for the subroutine name
@@ -337,6 +353,12 @@ public class SubroutineParser {
             // 'parseSubroutineIdentifier' is called to handle cases where the subroutine name might be complex
             // (e.g., namespaced, fully qualified names). It may return null if no valid name is found.
             subName = IdentifierParser.parseSubroutineIdentifier(parser);
+            
+            // Mark named subroutines as non-packages in packageExistsCache immediately
+            // This helps indirect object detection distinguish subs from packages
+            if (subName != null) {
+                GlobalVariable.packageExistsCache.put(subName, false);
+            }
         }
 
         // Initialize the prototype node to null. This will store the prototype of the subroutine if it exists.
