@@ -27,44 +27,32 @@ public class EmitBlock {
         }
 
         for (MyVarInit init : collector.inits) {
-            if (init.beginId == 0) {
-                String initClassName = EmitterMethodCreator.getVariableClassName(init.varName);
-                mv.visitTypeInsn(Opcodes.NEW, initClassName);
-                mv.visitInsn(Opcodes.DUP);
-                mv.visitMethodInsn(
-                        Opcodes.INVOKESPECIAL,
-                        initClassName,
-                        "<init>",
-                        "()V",
-                        false);
-            } else {
-                String initMethodName;
-                String initMethodDescriptor;
-                switch (init.varName.charAt(0)) {
-                    case '$' -> {
-                        initMethodName = "retrieveBeginScalar";
-                        initMethodDescriptor = "(Ljava/lang/String;I)Lorg/perlonjava/runtime/RuntimeScalar;";
-                    }
-                    case '@' -> {
-                        initMethodName = "retrieveBeginArray";
-                        initMethodDescriptor = "(Ljava/lang/String;I)Lorg/perlonjava/runtime/RuntimeArray;";
-                    }
-                    case '%' -> {
-                        initMethodName = "retrieveBeginHash";
-                        initMethodDescriptor = "(Ljava/lang/String;I)Lorg/perlonjava/runtime/RuntimeHash;";
-                    }
-                    default -> throw new PerlCompilerException(node.tokenIndex, "Unsupported variable type: " + init.varName.charAt(0), emitterVisitor.ctx.errorUtil);
+            String initMethodName;
+            String initMethodDescriptor;
+            switch (init.varName.charAt(0)) {
+                case '$' -> {
+                    initMethodName = "retrieveBeginScalar";
+                    initMethodDescriptor = "(Ljava/lang/String;I)Lorg/perlonjava/runtime/RuntimeScalar;";
                 }
-
-                mv.visitLdcInsn(init.varName);
-                mv.visitLdcInsn(init.beginId);
-                mv.visitMethodInsn(
-                        Opcodes.INVOKESTATIC,
-                        "org/perlonjava/runtime/PersistentVariable",
-                        initMethodName,
-                        initMethodDescriptor,
-                        false);
+                case '@' -> {
+                    initMethodName = "retrieveBeginArray";
+                    initMethodDescriptor = "(Ljava/lang/String;I)Lorg/perlonjava/runtime/RuntimeArray;";
+                }
+                case '%' -> {
+                    initMethodName = "retrieveBeginHash";
+                    initMethodDescriptor = "(Ljava/lang/String;I)Lorg/perlonjava/runtime/RuntimeHash;";
+                }
+                default -> throw new PerlCompilerException(node.tokenIndex, "Unsupported variable type: " + init.varName.charAt(0), emitterVisitor.ctx.errorUtil);
             }
+
+            mv.visitLdcInsn(init.varName);
+            mv.visitLdcInsn(init.beginId);
+            mv.visitMethodInsn(
+                    Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/PersistentVariable",
+                    initMethodName,
+                    initMethodDescriptor,
+                    false);
             mv.visitVarInsn(Opcodes.ASTORE, init.varIndex);
         }
     }
@@ -114,6 +102,9 @@ public class EmitBlock {
         }
 
         private void addMyVar(String varName, int beginId, OperatorNode astNode) {
+            if (beginId == 0) {
+                return;
+            }
             if (!seen.add(varName)) {
                 return;
             }
