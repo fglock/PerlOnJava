@@ -360,6 +360,14 @@ public class EmitVariable {
                 } else {
                     // Regular case: `&$a`
                     node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    
+                    // Handle symbolic references when no strict refs
+                    if (!emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_REFS)) {
+                        // no strict refs - resolve symbolic code references
+                        emitterVisitor.pushCurrentPackage();
+                        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
+                                "codeDerefNonStrict", "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                    }
                 }
 
                 mv.visitVarInsn(Opcodes.ALOAD, 1);  // push @_ to stack

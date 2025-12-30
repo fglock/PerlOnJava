@@ -1205,6 +1205,27 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         };
     }
 
+    /**
+     * Dereference a scalar as a code reference when no strict refs is active.
+     * Handles symbolic references like &$func where $func contains a subroutine name.
+     *
+     * @param packageName The current package name for resolving unqualified names
+     * @return RuntimeScalar containing the code reference
+     */
+    public RuntimeScalar codeDerefNonStrict(String packageName) {
+        // If already a CODE reference, return as-is
+        if (type == RuntimeScalarType.CODE) {
+            return this;
+        }
+        
+        // Treat as symbolic reference to subroutine name
+        String subName = this.toString();
+        // Normalize the name with current package context
+        String fullName = NameNormalizer.normalizeVariableName(subName, packageName);
+        // Get the code reference from global symbol table
+        return GlobalVariable.getGlobalCodeRef(fullName);
+    }
+
     // Return a reference to this
     public RuntimeScalar createReference() {
         RuntimeScalar result = new RuntimeScalar();
