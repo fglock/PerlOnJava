@@ -189,6 +189,24 @@ public class EmitterMethodCreator implements Opcodes {
             // Each allocateLocalVariable() call is immediately followed by a store instruction,
             // so slots are properly initialized when allocated during bytecode emission.
 
+            // IMPORTANT (JVM verifier): captured/lexical variables may live in *sparse* local slots,
+            // because their indices come from the symbol table (pad) and can include gaps.
+            //
+            // During bytecode emission we also allocate temporary locals via
+            // ctx.symbolTable.allocateLocalVariable(). If that allocator's current index is still
+            // below env.length, temporaries could be assigned into slots that are reserved for
+            // captured variables (even if those slots are currently "null" gaps in env[]), or into
+            // slots that will be accessed later as references.
+            //
+            // That overlap can produce invalid stack frames such as: locals[n] == TOP at an ALOAD,
+            // which the JVM rejects with VerifyError: Bad local variable type.
+            //
+            // Ensure temporaries start *after* the captured variable range.
+            int currentLocalIndex = ctx.symbolTable.getCurrentLocalVariableIndex();
+            if (env.length > currentLocalIndex) {
+                ctx.symbolTable.resetLocalVariableIndex(env.length);
+            }
+
             // Create a label for the return point
             ctx.javaClassInfo.returnLabel = new Label();
 
