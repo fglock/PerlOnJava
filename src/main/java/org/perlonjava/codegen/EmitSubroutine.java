@@ -40,26 +40,17 @@ public class EmitSubroutine {
         // Alternately, scan the AST for variables and capture only the ones that are used
         Map<Integer, SymbolTable.SymbolEntry> visibleVariables = ctx.symbolTable.getAllVisibleVariables();
         
-        // IMPORTANT: Package-level subs (named subs) should NOT capture closure variables from their 
-        // definition context. Only anonymous subs (my sub, state sub, or true anonymous subs) should
-        // capture variables. This prevents issues like defining 'sub bar::foo' inside a block with
-        // 'our sub foo' from incorrectly capturing the 'our sub' as a closure variable.
-        boolean isPackageSub = node.name != null && !node.name.equals("<anon>");
-        if (isPackageSub) {
-            // Package subs should not capture any closure variables
-            // They can only access global variables and their parameters
-            visibleVariables.clear();
-        } else {
-            // For anonymous/lexical subs, filter out 'our sub' declarations only
-            visibleVariables.entrySet().removeIf(entry -> {
-                SymbolTable.SymbolEntry symbolEntry = entry.getValue();
-                if (symbolEntry.name().startsWith("&") && symbolEntry.ast() instanceof OperatorNode operatorNode) {
-                    Boolean isOurSub = (Boolean) operatorNode.getAnnotation("isOurSub");
-                    return isOurSub != null && isOurSub;
-                }
-                return false;
-            });
-        }
+        // Filter out 'our sub' declarations from closure capture. This avoids incorrectly capturing
+        // package-visible sub declarations while still allowing normal lexical variables to be
+        // closed over by both anonymous and named subs.
+        visibleVariables.entrySet().removeIf(entry -> {
+            SymbolTable.SymbolEntry symbolEntry = entry.getValue();
+            if (symbolEntry.name().startsWith("&") && symbolEntry.ast() instanceof OperatorNode operatorNode) {
+                Boolean isOurSub = (Boolean) operatorNode.getAnnotation("isOurSub");
+                return isOurSub != null && isOurSub;
+            }
+            return false;
+        });
         
         ctx.logDebug("AnonSub ctx.symbolTable.getAllVisibleVariables");
 
@@ -85,9 +76,8 @@ public class EmitSubroutine {
         String[] newEnv = newSymbolTable.getVariableNames();
         ctx.logDebug("AnonSub " + newSymbolTable);
 
-        // Reset the index counter to start after the closure variables
-        // This prevents allocateLocalVariable() from creating slots that overlap with uninitialized slots
-        // We need to use the MAXIMUM of newEnv.length and the current index to avoid conflicts
+        // After adding closure variables, the index is now at newEnv.length
+        // Reset it to start after the closure variables for new local variable allocation
         int currentVarIndex = newSymbolTable.getCurrentLocalVariableIndex();
         int resetTo = Math.max(newEnv.length, currentVarIndex);
         newSymbolTable.resetLocalVariableIndex(resetTo);

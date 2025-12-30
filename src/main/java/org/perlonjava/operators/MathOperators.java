@@ -223,7 +223,7 @@ public class MathOperators {
 
             // Handle division by zero
             if (divisor == 0.0) {
-                throw new PerlCompilerException("Division by zero in modulus operation");
+                throw new PerlCompilerException("Illegal modulus zero");
             }
 
             // Calculate modulus using double precision
@@ -240,6 +240,11 @@ public class MathOperators {
         // Use long arithmetic to handle large integers (beyond int range)
         long dividend = arg1.getLong();
         long divisor = arg2.getLong();
+
+        // Handle division by zero
+        if (divisor == 0) {
+            throw new PerlCompilerException("Illegal modulus zero");
+        }
         long result = dividend % divisor;
         
         // Adjust result for Perl-style modulus behavior

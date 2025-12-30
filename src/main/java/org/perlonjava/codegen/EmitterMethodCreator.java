@@ -1,6 +1,15 @@
 package org.perlonjava.codegen;
 
 import org.objectweb.asm.*;
+import org.objectweb.asm.tree.AbstractInsnNode;
+import org.objectweb.asm.tree.ClassNode;
+import org.objectweb.asm.tree.MethodNode;
+import org.objectweb.asm.tree.VarInsnNode;
+import org.objectweb.asm.tree.analysis.Analyzer;
+import org.objectweb.asm.tree.analysis.AnalyzerException;
+import org.objectweb.asm.tree.analysis.BasicValue;
+import org.objectweb.asm.tree.analysis.BasicVerifier;
+import org.objectweb.asm.util.Printer;
 import org.objectweb.asm.util.TraceClassVisitor;
 import org.perlonjava.astnode.Node;
 import org.perlonjava.astvisitor.EmitterVisitor;
@@ -10,6 +19,7 @@ import org.perlonjava.runtime.RuntimeContextType;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.util.List;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.*;
 
@@ -97,7 +107,7 @@ public class EmitterMethodCreator implements Opcodes {
         String className = ctx.javaClassInfo.javaClassName;
         String methodName = "apply";
         byte[] classData = null;
-        
+
         try {
             String[] env = ctx.symbolTable.getVariableNames();
 
@@ -174,8 +184,9 @@ public class EmitterMethodCreator implements Opcodes {
             // Skip some indices because they are reserved for special arguments (this, "@_" and call
             // context)
             for (int i = skipVariables; i < env.length; i++) {
-                // Skip null entries (gaps in sparse array)
                 if (env[i] == null) {
+                    mv.visitInsn(Opcodes.ACONST_NULL);
+                    mv.visitVarInsn(Opcodes.ASTORE, i);
                     continue;
                 }
                 String descriptor = getVariableDescriptor(env[i]);
@@ -188,6 +199,13 @@ public class EmitterMethodCreator implements Opcodes {
             // Note: We no longer pre-initialize slots with NULL values.
             // Each allocateLocalVariable() call is immediately followed by a store instruction,
             // so slots are properly initialized when allocated during bytecode emission.
+
+            // Ensure temporary locals allocated via allocateLocalVariable() do not overlap with
+            // declared/captured variable slots addressed by their (potentially sparse) indices.
+            int currentLocalIndex = ctx.symbolTable.getCurrentLocalVariableIndex();
+            if (env.length > currentLocalIndex) {
+                ctx.symbolTable.resetLocalVariableIndex(env.length);
+            }
 
             // Create a label for the return point
             ctx.javaClassInfo.returnLabel = new Label();
@@ -281,6 +299,8 @@ public class EmitterMethodCreator implements Opcodes {
             cw.visitEnd();
             classData = cw.toByteArray(); // Generate the bytecode
 
+            assertValidBytecodeIfEnabled(ctx, ast, classData);
+
             if (ctx.compilerOptions.disassembleEnabled) {
                 // Disassemble the bytecode for debugging purposes
                 ClassReader cr = new ClassReader(classData);
@@ -330,19 +350,19 @@ public class EmitterMethodCreator implements Opcodes {
                     "AST Node: %s\n" +
                     "Actual bytecode size: %d bytes (limit: 65535)\n" +
                     "Error: %s\n",
-                    className,
-                    methodName,
+                    ctx.javaClassInfo.javaClassName,
+                    "apply",
                     ast.getClass().getSimpleName(),
                     classData != null ? classData.length : 0,
                     e.getMessage()
             ));
-            
+
             // Add refactoring information if available
             if (ast instanceof org.perlonjava.astnode.BlockNode) {
                 org.perlonjava.astnode.BlockNode blockNode = (org.perlonjava.astnode.BlockNode) ast;
                 Object estimatedSize = blockNode.getAnnotation("estimatedBytecodeSize");
                 Object skipReason = blockNode.getAnnotation("refactorSkipReason");
-                
+
                 if (estimatedSize != null) {
                     errorMsg.append(String.format("Estimated bytecode size: %s bytes\n", estimatedSize));
                 }
@@ -350,16 +370,103 @@ public class EmitterMethodCreator implements Opcodes {
                     errorMsg.append(String.format("Refactoring status: %s\n", skipReason));
                 }
             }
-            
+
             errorMsg.append("Hint: If this is a 'Method too large' error, try enabling JPERL_LARGECODE=refactor");
-            
+
             throw new PerlCompilerException(
                     ast.getIndex(),
                     errorMsg.toString(),
                     ctx.errorUtil,
                     e);
         }
+    }
 
+    private static void assertValidBytecodeIfEnabled(EmitterContext ctx, Node ast, byte[] classData) {
+        boolean verifyEnabled = ctx.compilerOptions.disassembleEnabled ||
+                "1".equals(System.getenv("JPERL_VERIFY_BYTECODE"));
+        if (!verifyEnabled) {
+            return;
+        }
+
+        try {
+            ClassReader cr = new ClassReader(classData);
+            ClassNode cn = new ClassNode();
+            cr.accept(cn, ClassReader.SKIP_DEBUG);
+
+            @SuppressWarnings("unchecked")
+            List<MethodNode> methods = (List<MethodNode>) cn.methods;
+            for (MethodNode mn : methods) {
+                try {
+                    Analyzer<BasicValue> analyzer = new Analyzer<>(new BasicVerifier());
+                    analyzer.analyze(cn.name, mn);
+                } catch (AnalyzerException e) {
+                    AbstractInsnNode insn = e.node;
+                    int insnIndex = -1;
+                    String opcode = "<unknown>";
+                    Integer varInsnLocal = null;
+                    if (insn != null) {
+                        insnIndex = mn.instructions.indexOf(insn);
+                        int op = insn.getOpcode();
+                        if (op >= 0 && op < Printer.OPCODES.length) {
+                            opcode = Printer.OPCODES[op];
+                        }
+                        if (insn instanceof VarInsnNode varInsnNode) {
+                            varInsnLocal = varInsnNode.var;
+                        }
+                    }
+
+                    StringBuilder message = new StringBuilder();
+                    message.append("Bytecode verification failed during code generation\n");
+                    message.append("Class: ").append(ctx.javaClassInfo.javaClassName).append("\n");
+                    message.append("Method: ").append(mn.name).append(mn.desc).append("\n");
+                    message.append("Insn index: ").append(insnIndex).append("\n");
+                    message.append("Opcode: ").append(opcode);
+                    if (varInsnLocal != null) {
+                        message.append(" var=").append(varInsnLocal);
+                    }
+                    message.append("\n");
+                    message.append("Error: ").append(e.getMessage());
+
+                    Integer localIndex = varInsnLocal != null ? varInsnLocal : extractLocalIndex(e.getMessage());
+                    if (localIndex != null) {
+                        String trace = ctx.symbolTable.dumpLocalAllocationTrace(localIndex, 8);
+                        if (trace != null && !trace.isEmpty()) {
+                            message.append("\n\nLocal allocation trace (near locals[")
+                                    .append(localIndex)
+                                    .append("]):\n")
+                                    .append(trace);
+                        }
+                    }
+
+                    throw new PerlCompilerException(ast.getIndex(), message.toString(), ctx.errorUtil, e);
+                }
+            }
+        } catch (RuntimeException e) {
+            String message = "Bytecode verification failed during code generation\n" +
+                    "Class: " + ctx.javaClassInfo.javaClassName + "\n" +
+                    "Error: " + e.getMessage();
+            throw new PerlCompilerException(ast.getIndex(), message, ctx.errorUtil, e);
+        }
+    }
+
+    private static Integer extractLocalIndex(String message) {
+        if (message == null) {
+            return null;
+        }
+        int idx = message.indexOf("locals[");
+        if (idx < 0) {
+            return null;
+        }
+        int start = idx + "locals[".length();
+        int end = message.indexOf(']', start);
+        if (end < 0) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(message.substring(start, end));
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 
     /**

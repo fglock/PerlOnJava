@@ -42,7 +42,7 @@ public class PersistentVariable {
      */
     public static RuntimeScalar retrieveBeginScalar(String var, int id) {
         String beginVar = beginVariable(id, var.substring(1));
-        RuntimeScalar temp = GlobalVariable.removeGlobalVariable(beginVar);
+        RuntimeScalar temp = GlobalVariable.getGlobalVariable(beginVar);
         return temp == null ? new RuntimeScalar() : temp;
     }
 
@@ -56,7 +56,7 @@ public class PersistentVariable {
      */
     public static RuntimeArray retrieveBeginArray(String var, int id) {
         String beginVar = beginVariable(id, var.substring(1));
-        RuntimeArray temp = GlobalVariable.removeGlobalArray(beginVar);
+        RuntimeArray temp = GlobalVariable.getGlobalArray(beginVar);
         return temp == null ? new RuntimeArray() : temp;
     }
 
@@ -70,7 +70,7 @@ public class PersistentVariable {
      */
     public static RuntimeHash retrieveBeginHash(String var, int id) {
         String beginVar = beginVariable(id, var.substring(1));
-        RuntimeHash temp = GlobalVariable.removeGlobalHash(beginVar);
+        RuntimeHash temp = GlobalVariable.getGlobalHash(beginVar);
         return temp == null ? new RuntimeHash() : temp;
     }
 }

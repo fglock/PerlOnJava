@@ -57,68 +57,31 @@ public class BlockRefactor {
             return new ArrayList<>();
         }
 
-        List<Node> result = new ArrayList<>();
+        List<Node> tail = new ArrayList<>();
 
-        // Process segments forward, accumulating direct elements and building nested closures at the end
-        for (int i = 0; i < segments.size(); i++) {
+        for (int i = segments.size() - 1; i >= 0; i--) {
             Object segment = segments.get(i);
 
             if (segment instanceof Node directNode) {
-                // Direct elements (labels, variable declarations, control flow) stay at block level
-                result.add(directNode);
-            } else if (segment instanceof List) {
-                List<Node> chunk = (List<Node>) segment;
-                if (chunk.size() >= minChunkSize) {
-                    // Create closure for this chunk at tail position
-                    // Collect remaining chunks to nest inside this closure
-                    List<Node> blockElements = new ArrayList<>(chunk);
+                tail.add(0, directNode);
+                continue;
+            }
 
-                    // Build nested closures for remaining chunks
-                    for (int j = i + 1; j < segments.size(); j++) {
-                        Object nextSegment = segments.get(j);
-                        if (nextSegment instanceof Node) {
-                            blockElements.add((Node) nextSegment);
-                        } else if (nextSegment instanceof List) {
-                            List<Node> nextChunk = (List<Node>) nextSegment;
-                            if (nextChunk.size() >= minChunkSize) {
-                                // Create nested closure for next chunk
-                                List<Node> nestedElements = new ArrayList<>(nextChunk);
-                                // Add all remaining segments to the nested closure
-                                for (int k = j + 1; k < segments.size(); k++) {
-                                    Object remainingSegment = segments.get(k);
-                                    if (remainingSegment instanceof Node) {
-                                        nestedElements.add((Node) remainingSegment);
-                                    } else {
-                                        nestedElements.addAll((List<Node>) remainingSegment);
-                                    }
-                                }
-                                List<Node> wrappedNested = returnTypeIsList ? wrapInListNode(nestedElements, tokenIndex) : nestedElements;
-                                BlockNode nestedBlock = createBlockNode(wrappedNested, tokenIndex, skipRefactoring);
-                                nestedBlock.setAnnotation("blockAlreadyRefactored", true);
-                                Node nestedClosure = createAnonSubCall(tokenIndex, nestedBlock);
-                                blockElements.add(nestedClosure);
-                                j = segments.size(); // Break outer loop
-                                break;
-                            } else {
-                                blockElements.addAll(nextChunk);
-                            }
-                        }
-                    }
-
-                    List<Node> wrapped = returnTypeIsList ? wrapInListNode(blockElements, tokenIndex) : blockElements;
-                    BlockNode block = createBlockNode(wrapped, tokenIndex, skipRefactoring);
-                    block.setAnnotation("blockAlreadyRefactored", true);
-                    Node closure = createAnonSubCall(tokenIndex, block);
-                    result.add(closure);
-                    break; // All remaining segments are now inside the closure
-                } else {
-                    // Chunk too small - add elements directly
-                    result.addAll(chunk);
-                }
+            List<Node> chunk = (List<Node>) segment;
+            if (chunk.size() >= minChunkSize) {
+                List<Node> blockElements = new ArrayList<>(chunk);
+                blockElements.addAll(tail);
+                List<Node> wrapped = returnTypeIsList ? wrapInListNode(blockElements, tokenIndex) : blockElements;
+                BlockNode block = createBlockNode(wrapped, tokenIndex, skipRefactoring);
+                Node closure = createAnonSubCall(tokenIndex, block);
+                tail = new ArrayList<>();
+                tail.add(closure);
+            } else {
+                tail.addAll(0, chunk);
             }
         }
 
-        return result;
+        return tail;
     }
 
     /**
@@ -134,14 +97,15 @@ public class BlockRefactor {
      * Creates a BlockNode using thread-local flag to prevent recursion.
      */
     private static BlockNode createBlockNode(List<Node> elements, int tokenIndex, ThreadLocal<Boolean> skipRefactoring) {
-        skipRefactoring.set(true);
-        try {
-            BlockNode block = new BlockNode(elements, tokenIndex);
-            block.setAnnotation("blockAlreadyRefactored", true);
-            return block;
-        } finally {
-            skipRefactoring.set(false);
+        BlockNode block = new BlockNode(elements, tokenIndex);
+        List<String> labels = new ArrayList<>();
+        for (Node element : elements) {
+            if (element instanceof LabelNode labelNode) {
+                labels.add(labelNode.label);
+            }
         }
+        block.labels = labels;
+        return block;
     }
 
     /**

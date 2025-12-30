@@ -42,12 +42,6 @@ public class LargeBlockRefactorer {
             return;
         }
 
-        // Skip if we're inside createMarkedBlock (prevents recursion)
-        if (skipRefactoring.get()) {
-            node.setAnnotation("refactorSkipReason", "Inside createMarkedBlock (recursion prevention)");
-            return;
-        }
-
         // Skip if already refactored (prevents infinite recursion)
         if (node.getBooleanAnnotation("blockAlreadyRefactored")) {
             node.setAnnotation("refactorSkipReason", "Already refactored");
@@ -99,19 +93,14 @@ public class LargeBlockRefactorer {
         // Create wrapper: sub { original_block_contents }->(@_)
         List<Node> originalElements = new ArrayList<>(node.elements);
 
-        skipRefactoring.set(true);
-        try {
-            BlockNode innerBlock = new BlockNode(originalElements, node.tokenIndex);
-            innerBlock.setAnnotation("blockAlreadyRefactored", true);
+        BlockNode innerBlock = new BlockNode(originalElements, node.tokenIndex);
+        innerBlock.setAnnotation("blockAlreadyRefactored", true);
 
-            BinaryOperatorNode subCall = createAnonSubCall(node.tokenIndex, innerBlock);
+        BinaryOperatorNode subCall = createAnonSubCall(node.tokenIndex, innerBlock);
 
-            // Replace block contents with the subroutine call
-            node.elements.clear();
-            node.elements.add(subCall);
-        } finally {
-            skipRefactoring.set(false);
-        }
+        // Replace block contents with the subroutine call
+        node.elements.clear();
+        node.elements.add(subCall);
     }
 
     /**
@@ -158,15 +147,7 @@ public class LargeBlockRefactorer {
         List<Node> currentChunk = new ArrayList<>();
 
         for (Node element : node.elements) {
-            if (isCompleteBlock(element)) {
-                // Complete blocks are already scoped - but check for labeled control flow
-                // Labeled control flow might reference labels outside the block
-                if (!currentChunk.isEmpty()) {
-                    segments.add(new ArrayList<>(currentChunk));
-                    currentChunk.clear();
-                }
-                segments.add(element);
-            } else if (shouldBreakChunk(element)) {
+            if (shouldBreakChunk(element)) {
                 // This element cannot be in a chunk (has unsafe control flow or is a label)
                 if (!currentChunk.isEmpty()) {
                     segments.add(new ArrayList<>(currentChunk));
@@ -185,41 +166,57 @@ public class LargeBlockRefactorer {
             segments.add(new ArrayList<>(currentChunk));
         }
 
-        // Check ALL segments (both direct and chunks) for UNSAFE control flow
-        // Use ControlFlowDetectorVisitor which considers loop depth
-        // Unlabeled next/last/redo inside loops are safe, but labeled control flow is not
+        // Normalize chunks: if a chunk contains unsafe control flow, split it so that unsafe
+        // elements become direct segments and only safe elements remain in chunks.
+        List<Object> normalizedSegments = new ArrayList<>();
         for (Object segment : segments) {
             if (segment instanceof Node directNode) {
+                normalizedSegments.add(directNode);
+                continue;
+            }
+            @SuppressWarnings("unchecked")
+            List<Node> chunk = (List<Node>) segment;
+            List<Node> safeSubChunk = new ArrayList<>();
+            for (Node element : chunk) {
                 controlFlowDetector.reset();
-                directNode.accept(controlFlowDetector);
+                element.accept(controlFlowDetector);
                 if (controlFlowDetector.hasUnsafeControlFlow()) {
-                    // Segment has unsafe control flow - skip refactoring
-                    node.setAnnotation("refactorSkipReason", "Unsafe control flow in direct segment");
-                    return;
-                }
-            } else if (segment instanceof List) {
-                @SuppressWarnings("unchecked")
-                List<Node> chunk = (List<Node>) segment;
-                for (Node element : chunk) {
-                    controlFlowDetector.reset();
-                    element.accept(controlFlowDetector);
-                    if (controlFlowDetector.hasUnsafeControlFlow()) {
-                        // Chunk has unsafe control flow - skip refactoring
-                        node.setAnnotation("refactorSkipReason", "Unsafe control flow in chunk");
-                        return;
+                    if (!safeSubChunk.isEmpty()) {
+                        normalizedSegments.add(new ArrayList<>(safeSubChunk));
+                        safeSubChunk.clear();
                     }
+                    normalizedSegments.add(element);
+                } else {
+                    safeSubChunk.add(element);
                 }
             }
+            if (!safeSubChunk.isEmpty()) {
+                normalizedSegments.add(new ArrayList<>(safeSubChunk));
+            }
         }
+        segments = normalizedSegments;
 
         // Build nested structure if we have any chunks
         List<Node> processedElements = buildNestedStructure(
                 segments,
                 node.tokenIndex,
                 MIN_CHUNK_SIZE,
-                false, // returnTypeIsList = false: execute statements, don't return list
+                false,
                 skipRefactoring
         );
+
+        if (processedElements.size() >= node.elements.size()) {
+            long fallbackEstimated = estimateTotalBytecodeSize(processedElements);
+            if (fallbackEstimated > LARGE_BYTECODE_SIZE) {
+                processedElements = buildNestedStructure(
+                        segments,
+                        node.tokenIndex,
+                        1,
+                        false,
+                        skipRefactoring
+                );
+            }
+        }
 
         // Apply chunking if we reduced the element count
         if (processedElements.size() < node.elements.size()) {
@@ -232,8 +229,23 @@ public class LargeBlockRefactorer {
             node.setAnnotation("refactoredBytecodeSize", newEstimatedSize);
             long originalSize = (Long) node.getAnnotation("estimatedBytecodeSize");
             if (newEstimatedSize > LARGE_BYTECODE_SIZE) {
-                node.setAnnotation("refactorSkipReason", String.format("Refactoring failed: size %d still > threshold %d", newEstimatedSize, LARGE_BYTECODE_SIZE));
-                errorCantRefactorLargeBlock(node.tokenIndex, parser, newEstimatedSize);
+                List<Node> fallbackElements = buildNestedStructure(
+                        segments,
+                        node.tokenIndex,
+                        1,
+                        false,
+                        skipRefactoring
+                );
+                long fallbackSize = estimateTotalBytecodeSize(fallbackElements);
+                if (fallbackSize > LARGE_BYTECODE_SIZE) {
+                    node.setAnnotation("refactorSkipReason", String.format("Refactoring failed: size %d still > threshold %d", newEstimatedSize, LARGE_BYTECODE_SIZE));
+                    errorCantRefactorLargeBlock(node.tokenIndex, parser, fallbackSize);
+                }
+                node.elements.clear();
+                node.elements.addAll(fallbackElements);
+                node.setAnnotation("refactoredBytecodeSize", fallbackSize);
+                node.setAnnotation("refactorSkipReason", String.format("Successfully refactored (fallback): %d -> %d bytes", originalSize, fallbackSize));
+                return;
             }
             node.setAnnotation("refactorSkipReason", String.format("Successfully refactored: %d -> %d bytes", originalSize, newEstimatedSize));
             return;
@@ -262,11 +274,12 @@ public class LargeBlockRefactorer {
             return true;
         }
 
-        // Check if element contains ANY control flow (last/next/redo/goto)
-        // We use a custom visitor that doesn't consider loop depth
-        ControlFlowFinder finder = new ControlFlowFinder();
-        element.accept(finder);
-        return finder.foundControlFlow;
+        // Break chunk only if the element contains UNSAFE control flow.
+        // Regular loop control inside a loop body (unlabeled next/last/redo) is safe to wrap
+        // as long as it stays within the same element subtree.
+        controlFlowDetector.reset();
+        element.accept(controlFlowDetector);
+        return controlFlowDetector.hasUnsafeControlFlow();
     }
 
     /**

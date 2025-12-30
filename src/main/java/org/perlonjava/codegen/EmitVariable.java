@@ -1,5 +1,6 @@
 package org.perlonjava.codegen;
 
+import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
@@ -782,7 +783,8 @@ public class EmitVariable {
                     String name = ((IdentifierNode) identifierNode).name;
                     String var = sigil + name;
                     emitterVisitor.ctx.logDebug("MY " + operator + " " + sigil + name);
-                    if (emitterVisitor.ctx.symbolTable.getVariableIndexInCurrentScope(var) != -1) {
+                    boolean alreadyExistsInScope = emitterVisitor.ctx.symbolTable.getVariableIndexInCurrentScope(var) != -1;
+                    if (alreadyExistsInScope) {
                         if (Warnings.warningManager.isWarningEnabled("redefine")) {
                             System.err.println(
                                     emitterVisitor.ctx.errorUtil.errorMessage(node.getIndex(),
@@ -801,18 +803,26 @@ public class EmitVariable {
                     // Determine the class name based on the sigil
                     String className = EmitterMethodCreator.getVariableClassName(sigil);
 
+                    boolean didPushValue = true;
+
                     if (operator.equals("my")) {
                         // "my":
                         if (sigilNode.id == 0) {
-                            // Create a new instance of the determined class
-                            ctx.mv.visitTypeInsn(Opcodes.NEW, className);
-                            ctx.mv.visitInsn(Opcodes.DUP);
-                            ctx.mv.visitMethodInsn(
-                                    Opcodes.INVOKESPECIAL,
-                                    className,
-                                    "<init>",
-                                    "()V",
-                                    false);
+                            if (!alreadyExistsInScope) {
+                                // Create a new instance of the determined class
+                                ctx.mv.visitTypeInsn(Opcodes.NEW, className);
+                                ctx.mv.visitInsn(Opcodes.DUP);
+                                ctx.mv.visitMethodInsn(
+                                        Opcodes.INVOKESPECIAL,
+                                        className,
+                                        "<init>",
+                                        "()V",
+                                        false);
+                            } else {
+                                // Variable already exists in this scope (likely pre-initialized).
+                                // Do not allocate or overwrite; just reuse existing local slot.
+                                didPushValue = false;
+                            }
                         } else {
                             // The variable was initialized by a BEGIN block
 
@@ -884,7 +894,9 @@ public class EmitVariable {
                         fetchGlobalVariable(emitterVisitor.ctx, true, sigil, name, node.getIndex());
                     }
                     // Store the variable in a JVM local variable
-                    emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, varIndex);
+                    if (didPushValue) {
+                        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, varIndex);
+                    }
                     
                     // For declared references in non-void context, return a reference to the variable
                     if (isDeclaredReference && emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {

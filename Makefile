@@ -1,4 +1,4 @@
-.PHONY: all clean test test-unit test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper dev
+.PHONY: all clean test test-unit test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build jar run wrapper dev
 
 all: build
 
@@ -15,6 +15,14 @@ ifeq ($(OS),Windows_NT)
 	gradlew.bat classes testUnitParallel --parallel shadowJar
 else
 	./gradlew classes testUnitParallel --parallel shadowJar
+endif
+
+# Build the runnable jar without running tests
+jar: wrapper
+ifeq ($(OS),Windows_NT)
+	gradlew.bat classes shadowJar
+else
+	./gradlew classes shadowJar
 endif
 
 # Development build - forces recompilation (use during active development)

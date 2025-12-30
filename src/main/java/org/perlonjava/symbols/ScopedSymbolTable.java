@@ -48,6 +48,9 @@ public class ScopedSymbolTable {
     // Cache for the getAllVisibleVariables method
     private Map<Integer, SymbolTable.SymbolEntry> visibleVariablesCache;
 
+    private static final boolean TRACE_LOCALS = "1".equals(System.getenv("JPERL_TRACE_LOCALS"));
+    private final Map<Integer, String> localAllocationTrace = TRACE_LOCALS ? new HashMap<>() : null;
+
     /**
      * Constructs a ScopedSymbolTable.
      * Initializes the warning, feature categories, and strict options stacks with default values for the global scope.
@@ -193,7 +196,16 @@ public class ScopedSymbolTable {
      */
     public int addVariable(String name, String variableDeclType, OperatorNode ast) {
         clearVisibleVariablesCache();
-        return symbolTableStack.peek().addVariable(name, variableDeclType, getCurrentPackage(), ast);
+        SymbolTable current = symbolTableStack.peek();
+        boolean alreadyExists = current.variableIndex.containsKey(name);
+        int index = current.addVariable(name, variableDeclType, getCurrentPackage(), ast);
+        if (TRACE_LOCALS && !alreadyExists) {
+            String site = captureAllocationSite();
+            String reason = "addVariable name=" + name + " decl=" + variableDeclType;
+            localAllocationTrace.put(index, reason + " at " + site);
+            System.err.println("ALLOC local[" + index + "] " + reason + " at " + site);
+        }
+        return index;
     }
 
     /**
@@ -240,7 +252,13 @@ public class ScopedSymbolTable {
                         getCurrentPackage(), ast));
             } else {
                 // If it doesn't exist in current scope, just add it
-                currentScope.addVariable(name, variableDeclType, getCurrentPackage(), ast);
+                int index = currentScope.addVariable(name, variableDeclType, getCurrentPackage(), ast);
+                if (TRACE_LOCALS) {
+                    String site = captureAllocationSite();
+                    String reason = "replaceVariable(add) name=" + name + " decl=" + variableDeclType;
+                    localAllocationTrace.put(index, reason + " at " + site);
+                    System.err.println("ALLOC local[" + index + "] " + reason + " at " + site);
+                }
             }
             clearVisibleVariablesCache();
         }
@@ -458,8 +476,51 @@ public class ScopedSymbolTable {
      * @throws IllegalStateException if there is no current scope available for allocation.
      */
     public int allocateLocalVariable() {
-        // Allocate a new index in the current scope by incrementing the index counter
-        return symbolTableStack.peek().index++;
+        SymbolTable st = symbolTableStack.peek();
+        int allocatedIndex = st.index++;
+        if (TRACE_LOCALS) {
+            String site = captureAllocationSite();
+            localAllocationTrace.put(allocatedIndex, "allocateLocalVariable at " + site);
+            System.err.println("ALLOC local[" + allocatedIndex + "] allocateLocalVariable at " + site);
+        }
+        return allocatedIndex;
+    }
+
+    public String getLocalAllocationTrace(int localIndex) {
+        if (!TRACE_LOCALS) {
+            return null;
+        }
+        return localAllocationTrace.get(localIndex);
+    }
+
+    public String dumpLocalAllocationTrace(int centerLocalIndex, int radius) {
+        if (!TRACE_LOCALS) {
+            return null;
+        }
+        StringBuilder sb = new StringBuilder();
+        int start = Math.max(0, centerLocalIndex - radius);
+        int end = centerLocalIndex + radius;
+        for (int i = start; i <= end; i++) {
+            String trace = localAllocationTrace.get(i);
+            if (trace != null) {
+                sb.append("local[").append(i).append("]: ").append(trace).append("\n");
+            }
+        }
+        return sb.toString();
+    }
+
+    private static String captureAllocationSite() {
+        StackTraceElement[] st = Thread.currentThread().getStackTrace();
+        // 0=getStackTrace, 1=captureAllocationSite, 2=allocateLocalVariable, 3=caller
+        for (int i = 3; i < st.length; i++) {
+            StackTraceElement el = st[i];
+            String cls = el.getClassName();
+            if (!cls.equals(ScopedSymbolTable.class.getName())) {
+                return el.getClassName() + "." + el.getMethodName() + "(" + el.getFileName() + ":" + el.getLineNumber() + ")";
+            }
+        }
+        StackTraceElement el = st[Math.min(3, st.length - 1)];
+        return el.getClassName() + "." + el.getMethodName() + "(" + el.getFileName() + ":" + el.getLineNumber() + ")";
     }
 
     /**
