@@ -193,6 +193,15 @@ public class EmitSubroutine {
         }
 
         node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR)); // Target - left parameter: Code ref
+        
+        // Handle symbolic references when no strict refs
+        if (!emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(org.perlonjava.perlmodule.Strict.HINT_STRICT_REFS)) {
+            // no strict refs - resolve symbolic code references
+            emitterVisitor.pushCurrentPackage();
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
+                    "codeDerefNonStrict", "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        }
+        
         mv.visitLdcInsn(subroutineName);
 
         // Generate native RuntimeBase[] array for parameters instead of RuntimeList
