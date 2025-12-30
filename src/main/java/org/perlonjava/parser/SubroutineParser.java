@@ -387,9 +387,12 @@ public class SubroutineParser {
 
         // Save the current subroutine context and set the new one
         String previousSubroutine = parser.ctx.symbolTable.getCurrentSubroutine();
+        boolean previousInSubroutineBody = parser.ctx.symbolTable.isInSubroutineBody();
 
         // Set the current subroutine name (use empty string for anonymous subs)
         parser.ctx.symbolTable.setCurrentSubroutine(subName != null ? subName : "");
+        // We are now parsing inside a subroutine body (named or anonymous)
+        parser.ctx.symbolTable.setInSubroutineBody(true);
 
         try {
             // Parse the block of the subroutine, which contains the actual code.
@@ -411,6 +414,7 @@ public class SubroutineParser {
         } finally {
             // Restore the previous subroutine context
             parser.ctx.symbolTable.setCurrentSubroutine(previousSubroutine);
+            parser.ctx.symbolTable.setInSubroutineBody(previousInSubroutineBody);
         }
     }
 
