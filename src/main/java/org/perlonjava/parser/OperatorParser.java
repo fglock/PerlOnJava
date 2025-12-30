@@ -417,8 +417,8 @@ public class OperatorParser {
                 case "shift":
                     // create `@_` variable
                     // in main program, use `@ARGV`
-                    boolean isSub = parser.ctx.symbolTable.getCurrentSubroutine() != null;
-                    operand = parser.isTopLevelScript && !isSub ? atArgv(parser) : atUnderscore(parser);
+                    boolean isSub = parser.ctx.symbolTable.isInSubroutineBody();
+                    operand = isSub ? atUnderscore(parser) : atArgv(parser);
                     break;
                 case "localtime":
                 case "gmtime":
