@@ -70,6 +70,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // Method context information for next::method support
     public String packageName;
     public String subName;
+    // Source package for imported forward declarations (used for AUTOLOAD resolution)
+    public String sourcePackage = null;
     // Flag to indicate this is a symbolic reference created by \&{string} that should always be "defined"
     public boolean isSymbolicReference = false;
     // Flag to indicate this is a built-in operator
@@ -587,7 +589,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // Try to find AUTOLOAD for this subroutine
                 String subroutineName = code.packageName + "::" + code.subName;
                 if (code.packageName != null && code.subName != null && !subroutineName.isEmpty()) {
-                    // Check if AUTOLOAD exists
+                    // First check if AUTOLOAD exists in the current package
                     String autoloadString = code.packageName + "::AUTOLOAD";
                     RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(autoloadString);
                     if (autoload.getDefinedBoolean()) {
@@ -595,6 +597,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         getGlobalVariable(autoloadString).set(subroutineName);
                         // Call AUTOLOAD
                         return apply(autoload, a, callContext);
+                    }
+                    
+                    // If this is an imported forward declaration, check AUTOLOAD in the source package
+                    if (code.sourcePackage != null && !code.sourcePackage.equals(code.packageName)) {
+                        String sourceAutoloadString = code.sourcePackage + "::AUTOLOAD";
+                        RuntimeScalar sourceAutoload = GlobalVariable.getGlobalCodeRef(sourceAutoloadString);
+                        if (sourceAutoload.getDefinedBoolean()) {
+                            // Set $AUTOLOAD name to the original package function name
+                            String sourceSubroutineName = code.sourcePackage + "::" + code.subName;
+                            getGlobalVariable(sourceAutoloadString).set(sourceSubroutineName);
+                            // Call AUTOLOAD from the source package
+                            return apply(sourceAutoload, a, callContext);
+                        }
                     }
                 }
                 throw new PerlCompilerException("Undefined subroutine &" + subroutineName + " called at ");
