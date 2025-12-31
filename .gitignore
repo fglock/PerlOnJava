@@ -65,3 +65,7 @@ test_*.json
 
 t.pl
 test_yaml_0yml
+
+# Ignore some Perl modules we are testing
+Image-ExifTool-*
+
