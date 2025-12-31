@@ -360,6 +360,7 @@ The following areas are currently under active development to enhance the functi
 
  - Add modules: `TOML`.
  - Bugfix: operator override in Time::Hires now works.
+ - Bugfix: internal temp variables are now pre-initialized.
  - Optimization: faster list assignment.
  - Optimization: faster type resolution in Perl scalars.
  - Optimization: `make` now runs tests in parallel.
