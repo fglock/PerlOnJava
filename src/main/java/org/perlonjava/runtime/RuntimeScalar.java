@@ -1205,6 +1205,50 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         };
     }
 
+    // Method to implement `&$v`, when "no strict refs" is in effect
+    // This looks up the CODE slot from a glob when the scalar contains a string
+    public RuntimeScalar codeDerefNonStrict(String packageName) {
+        // Check if object is eligible for overloading
+        int blessId = blessedId(this);
+        if (blessId != 0) {
+            // Prepare overload context and check if object is eligible for overloading
+            OverloadContext ctx = OverloadContext.prepare(blessId);
+            if (ctx != null) {
+                // Try overload method
+                RuntimeScalar result = ctx.tryOverload("(&{}", new RuntimeArray(this));
+                // If the subroutine returns the object itself then it will not be called again
+                if (result != null && result.value.hashCode() != this.value.hashCode()) {
+                    return result.codeDerefNonStrict(packageName);
+                }
+            }
+        }
+
+        return switch (type) {
+            case CODE -> this;  // Already a CODE reference - return unchanged
+            case UNDEF -> this; // UNDEF - return unchanged to preserve error behavior
+            case REFERENCE -> {
+                // Dereference and check if it's a CODE reference
+                RuntimeScalar deref = this.undefine();
+                if (deref.type == RuntimeScalarType.CODE) {
+                    yield deref;
+                }
+                // Not a CODE reference - fall through to symbolic reference handling
+                String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
+                yield GlobalVariable.getGlobalCodeRef(varName);
+            }
+            case GLOB, GLOBREFERENCE -> {
+                // Get the CODE slot from the glob
+                RuntimeGlob glob = (RuntimeGlob) value;
+                yield GlobalVariable.getGlobalCodeRef(glob.globName);
+            }
+            default -> {
+                // Symbolic reference: treat the scalar's string value as a subroutine name
+                String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
+                yield GlobalVariable.getGlobalCodeRef(varName);
+            }
+        };
+    }
+
     // Return a reference to this
     public RuntimeScalar createReference() {
         RuntimeScalar result = new RuntimeScalar();
