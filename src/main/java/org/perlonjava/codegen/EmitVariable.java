@@ -360,8 +360,30 @@ public class EmitVariable {
                 } else {
                     // Regular case: `&$a`
                     node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    
+                    // Check if the variable is a lexical subroutine (already a CODE reference)
+                    // Lexical subs have a "hiddenVarName" annotation and should not be dereferenced
+                    boolean isLexicalSub = false;
+                    if (node.operand instanceof OperatorNode opNode && opNode.operator.equals("$")) {
+                        String hiddenVarName = (String) opNode.getAnnotation("hiddenVarName");
+                        isLexicalSub = (hiddenVarName != null);
+                    }
+                    
+                    // Dereference the scalar to get the CODE reference
+                    if (!isLexicalSub) {
+                        // Not a lexical sub: call codeDerefNonStrict to look up CODE slot from glob if needed
+                        // This handles both CODE references (returns unchanged) and symbolic references
+                        emitterVisitor.pushCurrentPackage();
+                        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, 
+                                "org/perlonjava/runtime/RuntimeScalar", 
+                                "codeDerefNonStrict", 
+                                "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;", 
+                                false);
+                    }
                 }
 
+                emitterVisitor.ctx.logDebug("EmitVariable: about to call RuntimeCode.apply for &$var");
+                
                 mv.visitVarInsn(Opcodes.ALOAD, 1);  // push @_ to stack
                 emitterVisitor.pushCallContext();   // push call context to stack
                 mv.visitMethodInsn(
