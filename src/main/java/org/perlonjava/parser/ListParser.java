@@ -222,11 +222,11 @@ public class ListParser {
             return false;
         }
         
-        // Special case: and/or/xor before => should be treated as barewords, not terminators
-        if (token.text.equals("and") || token.text.equals("or") || token.text.equals("xor")) {
+        // Special case: and/or/xor/when before => should be treated as barewords, not terminators
+        if (token.text.equals("and") || token.text.equals("or") || token.text.equals("xor") || token.text.equals("when")) {
             // Look ahead to see if => follows
             int saveIndex = parser.tokenIndex;
-            TokenUtils.consume(parser); // consume and/or/xor
+            TokenUtils.consume(parser); // consume and/or/xor/when
             LexerToken nextToken = TokenUtils.peek(parser);
             parser.tokenIndex = saveIndex; // restore
             if (nextToken.text.equals("=>")) {
@@ -297,8 +297,8 @@ public class ListParser {
         // Check if this is a list terminator, but we need to restore position for the check
         boolean isTerminator = false;
         if (ParserTables.LIST_TERMINATORS.contains(token.text)) {
-            // Special case: check if and/or/xor followed by =>
-            if (token.text.equals("and") || token.text.equals("or") || token.text.equals("xor")) {
+            // Special case: check if and/or/xor/when followed by =>
+            if (token.text.equals("and") || token.text.equals("or") || token.text.equals("xor") || token.text.equals("when")) {
                 if (nextToken.text.equals("=>")) {
                     isTerminator = false; // Not a terminator, it's a hash key
                 } else {
