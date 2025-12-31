@@ -236,7 +236,7 @@ public class BytecodeSizeEstimator implements Visitor {
         // When constant pool grows beyond 256 entries, LDC becomes LDC_W (3 bytes instead of 2)
         if (node.elements.size() > 200) {
             // Large constant pool: LDC_W costs 3 bytes instead of 2
-            estimatedSize += node.elements.size() * 1; // +1 byte per element for LDC_W
+            estimatedSize += node.elements.size(); // +1 byte per element for LDC_W
         }
     }
 
