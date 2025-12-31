@@ -185,10 +185,6 @@ public class EmitterMethodCreator implements Opcodes {
                 mv.visitVarInsn(Opcodes.ASTORE, i);
             }
 
-            // Note: We no longer pre-initialize slots with NULL values.
-            // Each allocateLocalVariable() call is immediately followed by a store instruction,
-            // so slots are properly initialized when allocated during bytecode emission.
-
             // IMPORTANT (JVM verifier): captured/lexical variables may live in *sparse* local slots,
             // because their indices come from the symbol table (pad) and can include gaps.
             //
@@ -205,6 +201,21 @@ public class EmitterMethodCreator implements Opcodes {
             int currentLocalIndex = ctx.symbolTable.getCurrentLocalVariableIndex();
             if (env.length > currentLocalIndex) {
                 ctx.symbolTable.resetLocalVariableIndex(env.length);
+            }
+
+            // Pre-initialize temporary local slots to avoid VerifyError
+            // Temporaries are allocated dynamically during bytecode emission via
+            // ctx.symbolTable.allocateLocalVariable(). We pre-initialize slots to ensure
+            // they're not in TOP state when accessed. Use a visitor to estimate the
+            // actual number needed based on AST structure rather than a fixed count.
+            int preInitTempLocalsStart = ctx.symbolTable.getCurrentLocalVariableIndex();
+            org.perlonjava.astvisitor.TempLocalCountVisitor tempCountVisitor = 
+                new org.perlonjava.astvisitor.TempLocalCountVisitor();
+            ast.accept(tempCountVisitor);
+            int preInitTempLocalsCount = Math.max(8, tempCountVisitor.getMaxTempCount() + 4);  // Add buffer
+            for (int i = preInitTempLocalsStart; i < preInitTempLocalsStart + preInitTempLocalsCount; i++) {
+                mv.visitInsn(Opcodes.ACONST_NULL);
+                mv.visitVarInsn(Opcodes.ASTORE, i);
             }
 
             // Create a label for the return point
