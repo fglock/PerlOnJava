@@ -69,11 +69,17 @@ public class StatementResolver {
 
                 case "while", "until" -> StatementParser.parseWhileStatement(parser, label);
 
-                case "given" -> StatementParser.parseGivenStatement(parser);
+                case "given" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("switch")
+                        ? StatementParser.parseGivenStatement(parser)
+                        : null;
 
-                case "when" -> StatementParser.parseWhenStatement(parser);
+                case "when" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("switch")
+                        ? StatementParser.parseWhenStatement(parser)
+                        : null;
 
-                case "default" -> StatementParser.parseDefaultStatement(parser);
+                case "default" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("switch")
+                        ? StatementParser.parseDefaultStatement(parser)
+                        : null;
 
                 case "try" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("try")
                         ? StatementParser.parseTryStatement(parser)
