@@ -89,4 +89,38 @@ use Test::More;
     is($result2, "persistent", "Second call to same dynamic sub works");
 }
 
+# Test 8: Forward-declared but undefined sub should trigger AUTOLOAD
+{
+    package TestForwardDecl;
+    use vars qw($AUTOLOAD);
+    
+    sub declared_but_undefined;  # Forward declaration
+    
+    sub AUTOLOAD {
+        our $AUTOLOAD;
+        return "autoloaded:$AUTOLOAD";
+    }
+    
+    package main;
+    no strict 'refs';
+    my $name = "TestForwardDecl::declared_but_undefined";
+    my $result = &$name();
+    is($result, "autoloaded:TestForwardDecl::declared_but_undefined", 
+       "Forward-declared undefined sub triggers AUTOLOAD when called via &\$name");
+}
+
+# Test 9: Forward-declared undefined sub without AUTOLOAD should die
+{
+    package TestNoDeclNoAutoload;
+    
+    sub another_undefined;  # Forward declaration, no AUTOLOAD
+    
+    package main;
+    no strict 'refs';
+    my $name = "TestNoDeclNoAutoload::another_undefined";
+    eval { &$name() };
+    like($@, qr/Undefined subroutine/, 
+         "Forward-declared undefined sub without AUTOLOAD throws error");
+}
+
 done_testing();
