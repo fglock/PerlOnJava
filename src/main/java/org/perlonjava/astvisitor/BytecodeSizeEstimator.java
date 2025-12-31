@@ -160,9 +160,11 @@ public class BytecodeSizeEstimator implements Visitor {
 
     @Override
     public void visit(StringNode node) {
-        // String literals: LDC + object creation = LDC_INSTRUCTION + OBJECT_CREATION (10 bytes)
-        int stringSize = LDC_INSTRUCTION + OBJECT_CREATION;
-        estimatedSize += stringSize;
+        // String literals: Based on actual disassembly showing:
+        //   LDC <constant>         (2-3 bytes for constant pool index)
+        //   INVOKESTATIC           (3 bytes) - getScalarByteString or similar
+        // Total: 5-6 bytes per string
+        estimatedSize += LDC_INSTRUCTION + INVOKE_STATIC; // 3 + 3 = 6 bytes
     }
 
     @Override
@@ -216,12 +218,25 @@ public class BytecodeSizeEstimator implements Visitor {
 
     @Override
     public void visit(ListNode node) {
-        // Mirror EmitLiteral.emitList() patterns
-        estimatedSize += OBJECT_CREATION; // Create RuntimeList
+        // Mirror EmitLiteral.emitList() patterns in LIST context
+        // Based on actual disassembly: each element requires DUP + element evaluation + add
+        
+        estimatedSize += OBJECT_CREATION; // Create RuntimeList (NEW + DUP + INVOKESPECIAL = 7 bytes)
 
         for (Node element : node.elements) {
+            // Per-element list overhead (DUP + add call)
+            estimatedSize += DUP_INSTRUCTION;           // Duplicate RuntimeList reference (1 byte)
+            estimatedSize += METHOD_CALL_OVERHEAD;      // RuntimeList.add() call (4 bytes)
+            
+            // Let the element estimate itself via visitor pattern
             element.accept(this);
-            estimatedSize += METHOD_CALL_OVERHEAD; // Add to list
+        }
+        
+        // Constant pool overhead for large lists
+        // When constant pool grows beyond 256 entries, LDC becomes LDC_W (3 bytes instead of 2)
+        if (node.elements.size() > 200) {
+            // Large constant pool: LDC_W costs 3 bytes instead of 2
+            estimatedSize += node.elements.size(); // +1 byte per element for LDC_W
         }
     }
 
