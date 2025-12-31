@@ -584,7 +584,20 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             RuntimeCode code = (RuntimeCode) runtimeScalar.value;
             // Check if it's an unfilled forward declaration (not defined)
             if (!code.defined()) {
-                throw new PerlCompilerException("Undefined subroutine (lexical) called at ");
+                // Try to find AUTOLOAD for this subroutine
+                String subroutineName = code.packageName + "::" + code.subName;
+                if (code.packageName != null && code.subName != null && !subroutineName.isEmpty()) {
+                    // Check if AUTOLOAD exists
+                    String autoloadString = code.packageName + "::AUTOLOAD";
+                    RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(autoloadString);
+                    if (autoload.getDefinedBoolean()) {
+                        // Set $AUTOLOAD name
+                        getGlobalVariable(autoloadString).set(subroutineName);
+                        // Call AUTOLOAD
+                        return apply(autoload, a, callContext);
+                    }
+                }
+                throw new PerlCompilerException("Undefined subroutine &" + subroutineName + " called at ");
             }
             // Cast the value to RuntimeCode and call apply()
             return code.apply(a, callContext);
@@ -649,19 +662,25 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
 
             // Does AUTOLOAD exist?
-            if (!subroutineName.isEmpty()) {
+            // If subroutineName is empty, construct it from the RuntimeCode's package and sub name
+            String fullSubName = subroutineName;
+            if (fullSubName.isEmpty() && code.packageName != null && code.subName != null) {
+                fullSubName = code.packageName + "::" + code.subName;
+            }
+            
+            if (!fullSubName.isEmpty()) {
                 // Check if AUTOLOAD exists
-                String autoloadString = subroutineName.substring(0, subroutineName.lastIndexOf("::") + 2) + "AUTOLOAD";
+                String autoloadString = fullSubName.substring(0, fullSubName.lastIndexOf("::") + 2) + "AUTOLOAD";
                 // System.err.println("AUTOLOAD: " + fullName);
                 RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(autoloadString);
                 if (autoload.getDefinedBoolean()) {
                     // System.err.println("AUTOLOAD exists: " + fullName);
                     // Set $AUTOLOAD name
-                    getGlobalVariable(autoloadString).set(subroutineName);
+                    getGlobalVariable(autoloadString).set(fullSubName);
                     // Call AUTOLOAD
                     return apply(autoload, a, callContext);
                 }
-                throw new PerlCompilerException("Undefined subroutine &" + subroutineName + " called at ");
+                throw new PerlCompilerException("Undefined subroutine &" + fullSubName + " called at ");
             }
         }
 
