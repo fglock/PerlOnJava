@@ -150,7 +150,8 @@ public class LargeNodeRefactorer {
      * @return true if the list exceeds size thresholds and should be refactored
      */
     private static boolean shouldRefactor(List<Node> elements) {
-        // Use sampling to estimate bytecode size - avoid O(n) traversal
+        // Estimate bytecode size by visiting all elements (no sampling)
+        // Sampling was causing inaccurate estimates for mixed element types
         int n = elements.size();
         if (n == 0) {
             return false;
@@ -160,14 +161,13 @@ public class LargeNodeRefactorer {
             return size > LARGE_BYTECODE_SIZE;
         }
         
-        int sampleSize = Math.min(10, n);
-        long totalSampleSize = 0;
-        for (int i = 0; i < sampleSize; i++) {
-            int index = (int) (((long) i * (n - 1)) / (sampleSize - 1));
-            totalSampleSize += BytecodeSizeEstimator.estimateSnippetSize(elements.get(index));
+        // Estimate all elements for accurate size calculation
+        long totalSize = 0;
+        for (Node element : elements) {
+            totalSize += BytecodeSizeEstimator.estimateSnippetSize(element);
         }
-        long estimatedTotalSize = (totalSampleSize * n) / sampleSize;
-        return estimatedTotalSize > LARGE_BYTECODE_SIZE;
+        
+        return totalSize > LARGE_BYTECODE_SIZE;
     }
 
     /**
