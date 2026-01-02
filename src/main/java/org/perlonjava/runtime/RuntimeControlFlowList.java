@@ -127,5 +127,31 @@ public class RuntimeControlFlowList extends RuntimeList {
         }
         return this;  // Return self for chaining
     }
+    
+    /**
+     * Create a RuntimeControlFlowList from a registry action code.
+     * Used by emitControlFlowCheck to convert registry action to marked list.
+     * 
+     * @param action The action code (1=LAST, 2=NEXT, 3=REDO)
+     * @param label The loop label (or null)
+     * @return A marked RuntimeControlFlowList
+     */
+    public static RuntimeControlFlowList createFromAction(int action, String label) {
+        ControlFlowType type;
+        switch (action) {
+            case 1:
+                type = ControlFlowType.LAST;
+                break;
+            case 2:
+                type = ControlFlowType.NEXT;
+                break;
+            case 3:
+                type = ControlFlowType.REDO;
+                break;
+            default:
+                throw new IllegalArgumentException("Invalid action code: " + action);
+        }
+        return new RuntimeControlFlowList(type, label, "(registry)", 0);
+    }
 }
 

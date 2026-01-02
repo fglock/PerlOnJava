@@ -304,12 +304,13 @@ public class EmitSubroutine {
         
         // Check for control flow (last/next/redo/goto/tail calls)
         // This MUST happen before context conversion (before POP in VOID context)
-        // DISABLED: TABLESWITCH in emitControlFlowCheck causes ASM frame computation errors
-        // in nested/refactored contexts. The test_nonlocal_next.pl passes when enabled but
-        // pack_utf8.t and other tests fail with "ArrayIndexOutOfBoundsException: Index 0 out of bounds"
         // 
-        // TODO: Need to find a way to make this work without TABLESWITCH, or only enable
-        // in contexts where ASM can handle it (e.g., not in LargeBlockRefactorer-created subs)
+        // TRIED: Java's approach using RETURN instead of GOTO
+        // - Java uses ARETURN (terminal instruction) which doesn't need frame merging
+        // - We implemented this: check registry, create marked RuntimeControlFlowList, RETURN it
+        // - Result: No ASM errors! But causes infinite loop in test_nonlocal_next.pl
+        // - Issue: The returned marked value propagates up but loops may not check it properly
+        // - Need to verify that loops at all levels check for marked returns and handle them
         if (false && ENABLE_CONTROL_FLOW_CHECKS) {
             emitControlFlowCheck(emitterVisitor.ctx);
         }
@@ -381,6 +382,11 @@ public class EmitSubroutine {
     private static void emitControlFlowCheck(EmitterContext ctx) {
         // After a subroutine call, check if non-local control flow was registered
         // This enables next/last/redo LABEL to work from inside closures
+        //
+        // KEY INSIGHT from Java compiler: Use RETURN instead of GOTO
+        // Java uses ARETURN (terminal instruction) instead of GOTO (needs frame merging)
+        // We do the same: if control flow is registered, create a marked RuntimeControlFlowList
+        // and RETURN it. The loop level will check and handle it.
         
         // Stack: [RuntimeList result]
         
@@ -391,9 +397,6 @@ public class EmitSubroutine {
         if (innermostLoop != null) {
             // We're inside a loop - check if non-local control flow was registered
             Label continueNormally = new Label();
-            Label handleLast = new Label();
-            Label handleNext = new Label();
-            Label handleRedo = new Label();
             
             // Stack: [RuntimeList result]
             
@@ -413,37 +416,39 @@ public class EmitSubroutine {
                     false);
             // Stack: [RuntimeList result] [int action]
             
-            // Use TABLESWITCH to jump based on action
-            // This is cleaner than multiple IF checks and avoids needing to store the action
-            ctx.mv.visitTableSwitchInsn(
-                    1,  // min (LAST)
-                    3,  // max (REDO)
-                    continueNormally,  // default (0=none or out of range)
-                    handleLast,   // 1: LAST
-                    handleNext,   // 2: NEXT  
-                    handleRedo    // 3: REDO
-            );
+            // If action == 0 (none), continue normally
+            ctx.mv.visitInsn(Opcodes.DUP);
+            ctx.mv.visitJumpInsn(Opcodes.IFEQ, continueNormally);
             
-            // Handle LAST
-            ctx.mv.visitLabel(handleLast);
-            ctx.mv.visitInsn(Opcodes.POP); // Pop the result
-            ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, innermostLoop.asmStackLevel);
-            ctx.mv.visitJumpInsn(Opcodes.GOTO, innermostLoop.lastLabel);
+            // Action != 0: Create a marked RuntimeControlFlowList and RETURN it
+            // This is the key: we RETURN instead of GOTO, just like Java does
+            // Stack: [RuntimeList result] [int action]
             
-            // Handle NEXT
-            ctx.mv.visitLabel(handleNext);
-            ctx.mv.visitInsn(Opcodes.POP); // Pop the result
-            ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, innermostLoop.asmStackLevel);
-            ctx.mv.visitJumpInsn(Opcodes.GOTO, innermostLoop.nextLabel);
+            // Pop the result (we don't need it)
+            ctx.mv.visitInsn(Opcodes.SWAP);
+            ctx.mv.visitInsn(Opcodes.POP);
+            // Stack: [int action]
             
-            // Handle REDO
-            ctx.mv.visitLabel(handleRedo);
-            ctx.mv.visitInsn(Opcodes.POP); // Pop the result
-            ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, innermostLoop.asmStackLevel);
-            ctx.mv.visitJumpInsn(Opcodes.GOTO, innermostLoop.redoLabel);
+            // Convert action to ControlFlowType
+            // Create: RuntimeControlFlowList.createFromAction(action, labelName)
+            if (innermostLoop.labelName != null) {
+                ctx.mv.visitLdcInsn(innermostLoop.labelName);
+            } else {
+                ctx.mv.visitInsn(Opcodes.ACONST_NULL);
+            }
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/RuntimeControlFlowList",
+                    "createFromAction",
+                    "(ILjava/lang/String;)Lorg/perlonjava/runtime/RuntimeControlFlowList;",
+                    false);
+            // Stack: [RuntimeControlFlowList marked]
+            
+            // RETURN the marked list (terminal instruction, no frame merging needed!)
+            ctx.mv.visitInsn(Opcodes.ARETURN);
             
             // No action: continue normally with result on stack
             ctx.mv.visitLabel(continueNormally);
+            ctx.mv.visitInsn(Opcodes.POP); // Pop the duplicate action (0)
             // Stack: [RuntimeList result]
         }
         // If not inside a loop, don't check registry (result stays on stack)
