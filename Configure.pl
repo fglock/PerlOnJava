@@ -269,10 +269,10 @@ sub update_to_latest_versions {
         }
     }
 
-    # Update Gradle dependencies
+    # Update Gradle dependencies using version catalog
     if (-f 'build.gradle') {
-        print "Updating Gradle dependencies to latest versions...\n";
-        my $gradle_output = `./gradlew useLatestVersions`;
+        print "Updating Gradle dependencies to latest versions using version catalog...\n";
+        my $gradle_output = `./gradlew versionCatalogUpdate`;
         my $gradle_status = $? >> 8;
         if ($gradle_status != 0) {
             warn "Failed to update Gradle dependencies. Exit status: $gradle_status\n";
