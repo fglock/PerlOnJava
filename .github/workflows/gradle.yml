@@ -38,11 +38,11 @@ jobs:
         run: gradle wrapper
 
       # Windows: Compile and run unit tests (skip shadowJar to avoid socket errors)
-      # testClasses compiles both main and test sources
+      # Use 'test' task which is configured to run unit tests with 'unit' tag
       - name: Build and test with Gradle (Windows)
         if: runner.os == 'Windows'
         shell: cmd
-        run: gradlew.bat testClasses testUnit --no-daemon --stacktrace
+        run: gradlew.bat test --no-daemon --stacktrace
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false"
 
