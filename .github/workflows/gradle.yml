@@ -26,13 +26,16 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: 8.10.2
 
-      - name: Build with Gradle
-        run: gradle build --no-daemon --no-parallel
+      - name: Build with Gradle (Windows)
+        if: runner.os == 'Windows'
+        run: ./gradlew.bat build --no-daemon --no-parallel --stacktrace
         env:
-          GRADLE_OPTS: "-Dorg.gradle.daemon=false"
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx2g"
+
+      - name: Build with Gradle (Linux)
+        if: runner.os == 'Linux'
+        run: ./gradlew build --no-daemon --stacktrace
 
       - name: Upload test results
         if: failure()
