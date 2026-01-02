@@ -311,14 +311,18 @@ public class EmitSubroutine {
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
         } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
             if (ENABLE_CONTROL_FLOW_CHECKS) {
-                LoopLabels innermostLoop = emitterVisitor.ctx.javaClassInfo.getInnermostLoopLabels();
+                LoopLabels innermostLoop = null;
+                for (LoopLabels loopLabels : emitterVisitor.ctx.javaClassInfo.loopLabelStack) {
+                    if (loopLabels.isTrueLoop && loopLabels.context == RuntimeContextType.VOID) {
+                        innermostLoop = loopLabels;
+                        break;
+                    }
+                }
                 if (innermostLoop != null) {
                     Label noAction = new Label();
                     Label noMarker = new Label();
-                    Label handleLast = new Label();
-                    Label handleNext = new Label();
-                    Label handleRedo = new Label();
-                    Label unknownAction = new Label();
+                    Label checkNext = new Label();
+                    Label checkRedo = new Label();
 
                     // action = checkLoopAndGetAction(loopLabel)
                     if (innermostLoop.labelName != null) {
@@ -339,34 +343,27 @@ public class EmitSubroutine {
 
                     // action != 0: pop call result, clean stack, jump to next/last/redo
                     mv.visitInsn(Opcodes.POP);
-                    emitterVisitor.ctx.javaClassInfo.stackLevelManager.emitPopInstructions(mv, innermostLoop.asmStackLevel);
 
                     // if (action == 1) last
                     mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
                     mv.visitInsn(Opcodes.ICONST_1);
-                    mv.visitJumpInsn(Opcodes.IF_ICMPEQ, handleLast);
-                    // if (action == 2) next
-                    mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
-                    mv.visitInsn(Opcodes.ICONST_2);
-                    mv.visitJumpInsn(Opcodes.IF_ICMPEQ, handleNext);
-                    // if (action == 3) redo
-                    mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
-                    mv.visitInsn(Opcodes.ICONST_3);
-                    mv.visitJumpInsn(Opcodes.IF_ICMPEQ, handleRedo);
-
-                    // Unknown action: unwind this loop (do NOT fall through to noMarker)
-                    mv.visitJumpInsn(Opcodes.GOTO, unknownAction);
-
-                    mv.visitLabel(handleLast);
+                    mv.visitJumpInsn(Opcodes.IF_ICMPNE, checkNext);
                     mv.visitJumpInsn(Opcodes.GOTO, innermostLoop.lastLabel);
 
-                    mv.visitLabel(handleNext);
+                    // if (action == 2) next
+                    mv.visitLabel(checkNext);
+                    mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
+                    mv.visitInsn(Opcodes.ICONST_2);
+                    mv.visitJumpInsn(Opcodes.IF_ICMPNE, checkRedo);
                     mv.visitJumpInsn(Opcodes.GOTO, innermostLoop.nextLabel);
 
-                    mv.visitLabel(handleRedo);
-                    mv.visitJumpInsn(Opcodes.GOTO, innermostLoop.redoLabel);
+                    // if (action == 3) redo
+                    mv.visitLabel(checkRedo);
+                    mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
+                    mv.visitInsn(Opcodes.ICONST_3);
+                    mv.visitJumpInsn(Opcodes.IF_ICMPEQ, innermostLoop.redoLabel);
 
-                    mv.visitLabel(unknownAction);
+                    // Unknown action: unwind this loop (do NOT fall through to noMarker)
                     mv.visitJumpInsn(Opcodes.GOTO, innermostLoop.lastLabel);
 
                     // action == 0: if marker still present, unwind this loop (label targets outer)
@@ -379,7 +376,6 @@ public class EmitSubroutine {
                     mv.visitJumpInsn(Opcodes.IFEQ, noMarker);
 
                     mv.visitInsn(Opcodes.POP);
-                    emitterVisitor.ctx.javaClassInfo.stackLevelManager.emitPopInstructions(mv, innermostLoop.asmStackLevel);
                     mv.visitJumpInsn(Opcodes.GOTO, innermostLoop.lastLabel);
 
                     mv.visitLabel(noMarker);
