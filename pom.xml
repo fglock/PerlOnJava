@@ -186,6 +186,8 @@
                     <argLine>--enable-native-access=ALL-UNNAMED</argLine>
                     <groups>unit</groups>
                     <excludedGroups>full</excludedGroups>
+                    <!-- Use in-process execution to avoid fork crashes -->
+                    <forkCount>0</forkCount>
                 </configuration>
             </plugin>
         </plugins>

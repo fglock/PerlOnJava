@@ -358,13 +358,15 @@ The following areas are currently under active development to enhance the functi
 
 - **v5.42.3**: Next minor version
 
- - Add modules: `TOML`.
- - Bugfix: operator override in Time::Hires now works.
- - Bugfix: internal temp variables are now pre-initialized.
- - Optimization: faster list assignment.
- - Optimization: faster type resolution in Perl scalars.
- - Optimization: `make` now runs tests in parallel.
- - Planned release date: 2026-02-10.
+  - Non-local control flow: `last`/`next`/`redo`/`goto LABEL`
+  - Tail call with trampoline for `goto &NAME` and `goto __SUB__`
+  - Add modules: `TOML`.
+  - Bugfix: operator override in Time::Hires now works.
+  - Bugfix: internal temp variables are now pre-initialized.
+  - Optimization: faster list assignment.
+  - Optimization: faster type resolution in Perl scalars.
+  - Optimization: `make` now runs tests in parallel.
+  - Planned release date: 2026-02-10.
 
 - Work in Progress
   - PerlIO

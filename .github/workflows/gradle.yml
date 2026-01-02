@@ -26,11 +26,20 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: 8.10.2
 
-      - name: Build with Gradle
-        run: gradle build --no-daemon
+      # Use Makefile's 'ci' target which handles platform differences
+      # Windows: builds shadowJar and runs unit tests with jperl.bat
+      # Linux: full Gradle build with tests
+      - name: Build with Make (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: make ci
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false"
+
+      - name: Build with Make (Linux)
+        if: runner.os == 'Linux'
+        run: make ci
 
       - name: Upload test results
         if: failure()

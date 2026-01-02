@@ -519,13 +519,10 @@ public class ModuleOperators {
                         String resourcePath = "/lib/" + fileName;
                         URL resource = RuntimeScalar.class.getResource(resourcePath);
                         if (resource != null) {
-                            String path = resource.getPath();
-                            // Remove leading slash if on Windows
-                            if (SystemUtils.osIsWindows() && path.startsWith("/")) {
-                                path = path.substring(1);
-                            }
-                            fullName = Paths.get(path);
-                            actualFileName = fullName.toString();
+                            // For JAR resources, use the resource path directly instead of converting to filesystem path
+                            // This avoids Windows path issues with colons in JAR URLs like "file:/D:/..."
+                            actualFileName = resourcePath;
+                            fullName = null;  // No filesystem path for JAR resources
 
                             try (InputStream is = resource.openStream();
                                  BufferedReader reader = new BufferedReader(new InputStreamReader(is))) {
