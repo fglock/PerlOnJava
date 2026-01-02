@@ -14,8 +14,6 @@ jobs:
     strategy:
       matrix:
         os: [windows-latest, ubuntu-latest]
-      fail-fast: false
-    continue-on-error: ${{ matrix.os == 'windows-latest' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -39,14 +37,14 @@ jobs:
         if: runner.os == 'Linux'
         run: gradle wrapper
 
-      # Windows: Use cmd.exe to invoke gradlew.bat with aggressive daemon prevention
-      # and no parallel execution to avoid socket communication errors
-      - name: Build with Gradle (Windows)
+      # Windows: Run only unit tests to reduce CI load and avoid socket errors
+      # Full build (shadowJar, etc.) seems to trigger daemon communication issues
+      - name: Build and test with Gradle (Windows)
         if: runner.os == 'Windows'
         shell: cmd
-        run: gradlew.bat build --no-daemon --no-parallel --stacktrace
+        run: gradlew.bat classes testUnit --no-daemon --stacktrace
         env:
-          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.parallel=false"
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false"
 
       # Linux: Use standard gradlew invocation
       - name: Build with Gradle (Linux)
