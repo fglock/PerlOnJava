@@ -1,0 +1,28 @@
+[versions]
+asm = "9.9.1"
+commons-csv = "1.14.1"
+fastjson2 = "2.0.60"
+icu4j = "78.1"
+jna = "5.18.1"
+junit-jupiter = "6.1.0-M1"
+snakeyaml-engine = "3.0.1"
+tomlj = "1.1.1"
+
+[libraries]
+asm = { module = "org.ow2.asm:asm", version.ref = "asm" }
+asm-util = { module = "org.ow2.asm:asm-util", version.ref = "asm" }
+commons-csv = { module = "org.apache.commons:commons-csv", version.ref = "commons-csv" }
+fastjson2 = { module = "com.alibaba.fastjson2:fastjson2", version.ref = "fastjson2" }
+icu4j = { module = "com.ibm.icu:icu4j", version.ref = "icu4j" }
+jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
+jna-platform = { module = "net.java.dev.jna:jna-platform", version.ref = "jna" }
+junit-jupiter-api = { module = "org.junit.jupiter:junit-jupiter-api", version.ref = "junit-jupiter" }
+junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine", version.ref = "junit-jupiter" }
+junit-jupiter-params = { module = "org.junit.jupiter:junit-jupiter-params", version.ref = "junit-jupiter" }
+snakeyaml-engine = { module = "org.snakeyaml:snakeyaml-engine", version.ref = "snakeyaml-engine" }
+tomlj = { module = "org.tomlj:tomlj", version.ref = "tomlj" }
+
+[plugins]
+ospackage = "com.netflix.nebula.ospackage:12.1.1"
+shadow = "com.gradleup.shadow:9.3.0"
+version-catalog-update = "nl.littlerobots.version-catalog-update:1.0.1"
