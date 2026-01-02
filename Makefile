@@ -7,9 +7,10 @@ ci: wrapper
 ifeq ($(OS),Windows_NT)
 	gradlew.bat clean compileJava compileTestJava installDist --no-daemon --stacktrace
 	@echo "Running unit tests with jperl..."
+	@ls -la build/install/perlonjava/bin/ || true
 	@for test in src/test/resources/unit/*.t; do \
 		echo "Testing $$test" && \
-		build/install/perlonjava/bin/jperl "$$test" || exit 1; \
+		./build/install/perlonjava/bin/jperl.bat "$$test" || exit 1; \
 	done
 else
 	./gradlew build --no-daemon --stacktrace
