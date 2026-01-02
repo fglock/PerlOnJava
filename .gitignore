@@ -13,7 +13,8 @@ target/
 .java-version
 build/
 bin/
-gradle/
+gradle/*
+!gradle/libs.versions.toml
 gradlew
 gradlew.bat
 .idea/
