@@ -168,5 +168,26 @@ public class RuntimeControlFlowRegistry {
             marker.throwError();
         }
     }
+    
+    /**
+     * Check the registry and wrap the result if needed.
+     * This is the SIMPLEST approach to avoid ASM frame computation issues:
+     * - No branching in bytecode (no TABLESWITCH, no IF chains, no GOTOs)
+     * - Just a single method call that returns either the original or a marked list
+     * - All the logic is in Java code, not bytecode
+     * 
+     * @param result The original result from the subroutine call
+     * @param labelName The loop's label (null for unlabeled)
+     * @return Either the original result or a marked RuntimeControlFlowList
+     */
+    public static RuntimeList checkAndWrapIfNeeded(RuntimeList result, String labelName) {
+        int action = checkLoopAndGetAction(labelName);
+        if (action == 0) {
+            // No action - return original result
+            return result;
+        }
+        // Action detected - return a marked RuntimeControlFlowList
+        return RuntimeControlFlowList.createFromAction(action, labelName);
+    }
 }
 
