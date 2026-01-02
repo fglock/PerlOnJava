@@ -317,9 +317,15 @@ public class BytecodeSizeEstimator implements Visitor {
 
     @Override
     public void visit(SubroutineNode node) {
-        // Subroutine body is not part of the current block
-        // if (node.block != null) node.block.accept(this);
+        // Subroutine creation overhead (NEW + DUP + INVOKESPECIAL + makeCodeObject)
         estimatedSize += OBJECT_CREATION + METHOD_CALL_OVERHEAD; // Subroutine creation
+        
+        // IMPORTANT: The subroutine body is compiled into a separate Java class with an apply() method.
+        // We need to estimate the body size to detect if the apply() method will exceed JVM limits.
+        // The body will be refactored by LargeBlockRefactorer if it's too large.
+        if (node.block != null) {
+            node.block.accept(this);
+        }
     }
 
     @Override
