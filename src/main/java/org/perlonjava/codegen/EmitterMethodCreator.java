@@ -101,6 +101,10 @@ public class EmitterMethodCreator implements Opcodes {
     }
 
     public static byte[] getBytecode(EmitterContext ctx, Node ast, boolean useTryCatch) {
+        String className = ctx.javaClassInfo.javaClassName;
+        String methodName = "apply";
+        byte[] classData = null;
+        
         try {
             String[] env = ctx.symbolTable.getVariableNames();
 
@@ -115,8 +119,8 @@ public class EmitterMethodCreator implements Opcodes {
             ByteCodeSourceMapper.setDebugInfoFileName(ctx);
 
             // Define the class with version, access flags, name, signature, superclass, and interfaces
-            cw.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC, ctx.javaClassInfo.javaClassName, null, "java/lang/Object", null);
-            ctx.logDebug("Create class: " + ctx.javaClassInfo.javaClassName);
+            cw.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC, className, null, "java/lang/Object", null);
+            ctx.logDebug("Create class: " + className);
 
             // Add instance fields to the class for closure variables
             for (String fieldName : env) {
@@ -188,17 +192,35 @@ public class EmitterMethodCreator implements Opcodes {
                 mv.visitVarInsn(Opcodes.ASTORE, i);
             }
 
-            // Pre-initialize additional slots that might be allocated by localSetup or other mechanisms
-            // This prevents VerifyErrors when slots are accessed before explicit initialization
-            // We initialize slots from env.length up to the current variable index + buffer
-            // The symbol table tracks how many slots were allocated during parsing
-            int currentVarIndex = ctx.symbolTable.getCurrentLocalVariableIndex();
-            // Add a buffer of 201 slots to include slot 200 reserved for control flow handling
-            // This is especially important for complex subroutines like those in Pod::Simple
-            int maxPreInitSlots = Math.max(Math.max(currentVarIndex, env.length) + 50, 201);
-            ctx.logDebug("Pre-initializing slots from " + env.length + " to " + maxPreInitSlots + 
-                        " (currentVarIndex=" + currentVarIndex + ")");
-            for (int i = env.length; i < maxPreInitSlots; i++) {
+            // IMPORTANT (JVM verifier): captured/lexical variables may live in *sparse* local slots,
+            // because their indices come from the symbol table (pad) and can include gaps.
+            //
+            // During bytecode emission we also allocate temporary locals via
+            // ctx.symbolTable.allocateLocalVariable(). If that allocator's current index is still
+            // below env.length, temporaries could be assigned into slots that are reserved for
+            // captured variables (even if those slots are currently "null" gaps in env[]), or into
+            // slots that will be accessed later as references.
+            //
+            // That overlap can produce invalid stack frames such as: locals[n] == TOP at an ALOAD,
+            // which the JVM rejects with VerifyError: Bad local variable type.
+            //
+            // Ensure temporaries start *after* the captured variable range.
+            int currentLocalIndex = ctx.symbolTable.getCurrentLocalVariableIndex();
+            if (env.length > currentLocalIndex) {
+                ctx.symbolTable.resetLocalVariableIndex(env.length);
+            }
+
+            // Pre-initialize temporary local slots to avoid VerifyError
+            // Temporaries are allocated dynamically during bytecode emission via
+            // ctx.symbolTable.allocateLocalVariable(). We pre-initialize slots to ensure
+            // they're not in TOP state when accessed. Use a visitor to estimate the
+            // actual number needed based on AST structure rather than a fixed count.
+            int preInitTempLocalsStart = ctx.symbolTable.getCurrentLocalVariableIndex();
+            org.perlonjava.astvisitor.TempLocalCountVisitor tempCountVisitor = 
+                new org.perlonjava.astvisitor.TempLocalCountVisitor();
+            ast.accept(tempCountVisitor);
+            int preInitTempLocalsCount = Math.max(8, tempCountVisitor.getMaxTempCount() + 4);  // Add buffer
+            for (int i = preInitTempLocalsStart; i < preInitTempLocalsStart + preInitTempLocalsCount; i++) {
                 mv.visitInsn(Opcodes.ACONST_NULL);
                 mv.visitVarInsn(Opcodes.ASTORE, i);
             }
@@ -477,7 +499,7 @@ public class EmitterMethodCreator implements Opcodes {
 
             // Complete the class
             cw.visitEnd();
-            byte[] classData = cw.toByteArray(); // Generate the bytecode
+            classData = cw.toByteArray(); // Generate the bytecode
 
             if (ctx.compilerOptions.disassembleEnabled) {
                 // Disassemble the bytecode for debugging purposes
@@ -519,9 +541,41 @@ public class EmitterMethodCreator implements Opcodes {
         } catch (PerlCompilerException e) {
             throw e;
         } catch (RuntimeException e) {
+            // Enhanced error message with debugging information
+            StringBuilder errorMsg = new StringBuilder();
+            errorMsg.append(String.format(
+                    "Unexpected runtime error during bytecode generation\n" +
+                    "Class: %s\n" +
+                    "Method: %s\n" +
+                    "AST Node: %s\n" +
+                    "Actual bytecode size: %d bytes (limit: 65535)\n" +
+                    "Error: %s\n",
+                    className,
+                    methodName,
+                    ast.getClass().getSimpleName(),
+                    classData != null ? classData.length : 0,
+                    e.getMessage()
+            ));
+            
+            // Add refactoring information if available
+            if (ast instanceof org.perlonjava.astnode.BlockNode) {
+                org.perlonjava.astnode.BlockNode blockNode = (org.perlonjava.astnode.BlockNode) ast;
+                Object estimatedSize = blockNode.getAnnotation("estimatedBytecodeSize");
+                Object skipReason = blockNode.getAnnotation("refactorSkipReason");
+                
+                if (estimatedSize != null) {
+                    errorMsg.append(String.format("Estimated bytecode size: %s bytes\n", estimatedSize));
+                }
+                if (skipReason != null) {
+                    errorMsg.append(String.format("Refactoring status: %s\n", skipReason));
+                }
+            }
+            
+            errorMsg.append("Hint: If this is a 'Method too large' error, try enabling JPERL_LARGECODE=refactor");
+            
             throw new PerlCompilerException(
                     ast.getIndex(),
-                    "Unexpected runtime error during bytecode generation",
+                    errorMsg.toString(),
                     ctx.errorUtil,
                     e);
         }

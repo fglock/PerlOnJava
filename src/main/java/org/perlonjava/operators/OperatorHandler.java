@@ -101,7 +101,7 @@ public record OperatorHandler(String className, String methodName, int methodTyp
 
         // Time
         put("time", "time", "org/perlonjava/operators/Time", "()Lorg/perlonjava/runtime/RuntimeScalar;");
-        put("times", "times", "org/perlonjava/operators/Time", "(I)Lorg/perlonjava/runtime/RuntimeBase;");
+        put("times", "times", "org/perlonjava/operators/Time", "(I)Lorg/perlonjava/runtime/RuntimeList;");
         put("gmtime", "gmtime", "org/perlonjava/operators/Time", "(Lorg/perlonjava/runtime/RuntimeList;I)Lorg/perlonjava/runtime/RuntimeList;");
         put("localtime", "localtime", "org/perlonjava/operators/Time", "(Lorg/perlonjava/runtime/RuntimeList;I)Lorg/perlonjava/runtime/RuntimeList;");
         put("sleep", "sleep", "org/perlonjava/operators/Time", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");

@@ -206,6 +206,7 @@ public class EmitLiteral {
                         "getScalarByteString",
                         "(I)Lorg/perlonjava/runtime/RuntimeScalar;",
                         false);
+                return;
             } else {
                 // String is too long for cache or null, create new object
                 mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeScalarReadOnly");

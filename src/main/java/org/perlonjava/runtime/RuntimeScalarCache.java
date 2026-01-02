@@ -17,6 +17,11 @@ public class RuntimeScalarCache {
     private static final AtomicInteger nextStringIndex = new AtomicInteger(0);
     private static final ConcurrentHashMap<String, Integer> stringToIndex = new ConcurrentHashMap<>();
     private static final Object stringCacheLock = new Object();
+    // Dynamic byte string cache
+    private static final AtomicInteger nextByteStringIndex = new AtomicInteger(0);
+    private static final ConcurrentHashMap<String, Integer> byteStringToIndex = new ConcurrentHashMap<>();
+    private static final Object byteStringCacheLock = new Object();
+    private static volatile RuntimeScalarReadOnly[] scalarByteString = new RuntimeScalarReadOnly[INITIAL_STRING_CACHE_SIZE];
     // Cached RuntimeScalarReadOnly objects for common boolean and undefined values
     public static RuntimeScalarReadOnly scalarTrue;
     public static RuntimeScalarReadOnly scalarFalse;
@@ -48,14 +53,58 @@ public class RuntimeScalarCache {
         // Don't pre-register strings - let them be added naturally
     }
 
+    /**
+     * Gets or creates a cache index for the specified byte string.
+     * Returns -1 if the string should not be cached (too long or null).
+     *
+     * @param s the string to cache
+     * @return the cache index, or -1 if not cacheable
+     */
     public static int getOrCreateByteStringIndex(String s) {
-        // XXX TODO Create cache for octet strings
-        return -1;
+        if (s == null || s.length() > MAX_CACHED_STRING_LENGTH) {
+            return -1;
+        }
+
+        // Check if already cached
+        Integer existingIndex = byteStringToIndex.get(s);
+        if (existingIndex != null) {
+            return existingIndex;
+        }
+
+        // Need to add new string
+        synchronized (byteStringCacheLock) {
+            // Double-check after acquiring lock
+            existingIndex = byteStringToIndex.get(s);
+            if (existingIndex != null) {
+                return existingIndex;
+            }
+
+            int index = nextByteStringIndex.getAndIncrement();
+
+            // Grow array if needed
+            if (index >= scalarByteString.length) {
+                int newSize = scalarByteString.length * 2;
+                RuntimeScalarReadOnly[] newArray = Arrays.copyOf(scalarByteString, newSize);
+                scalarByteString = newArray;
+            }
+
+            RuntimeScalarReadOnly cached = new RuntimeScalarReadOnly(s);
+            cached.type = RuntimeScalarType.BYTE_STRING;
+            scalarByteString[index] = cached;
+            byteStringToIndex.put(s, index);
+
+            return index;
+        }
     }
 
+    /**
+     * Retrieves a cached RuntimeScalar for the byte string at the specified index.
+     *
+     * @param index the index of the byte string in the cache
+     * @return the cached RuntimeScalar representing the byte string value
+     */
     public static RuntimeScalar getScalarByteString(int index) {
-        // XXX TODO Create cache for octet strings
-        return scalarString[index];
+        return scalarByteString[index];
     }
 
     /**

@@ -3,10 +3,7 @@ package org.perlonjava.codegen;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
-import org.perlonjava.astnode.BinaryOperatorNode;
-import org.perlonjava.astnode.IdentifierNode;
-import org.perlonjava.astnode.OperatorNode;
-import org.perlonjava.astnode.SubroutineNode;
+import org.perlonjava.astnode.*;
 import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.RuntimeCode;
@@ -16,6 +13,8 @@ import org.perlonjava.symbols.SymbolTable;
 
 import java.util.Arrays;
 import java.util.Map;
+
+import static org.perlonjava.perlmodule.Strict.HINT_STRICT_REFS;
 
 /**
  * The EmitSubroutine class is responsible for handling subroutine-related operations
@@ -223,6 +222,7 @@ public class EmitSubroutine {
      */
     static void handleApplyOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         emitterVisitor.ctx.logDebug("handleApplyElementOperator " + node + " in context " + emitterVisitor.ctx.contextType);
+        MethodVisitor mv = emitterVisitor.ctx.mv;
 
         String subroutineName = "";
         if (node.left instanceof OperatorNode operatorNode && operatorNode.operator.equals("&")) {
@@ -233,14 +233,73 @@ public class EmitSubroutine {
         }
 
         node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR)); // Target - left parameter: Code ref
-        emitterVisitor.ctx.mv.visitLdcInsn(subroutineName);
-        node.right.accept(emitterVisitor.with(RuntimeContextType.LIST)); // Right parameter: parameter list
+        
+        // Dereference the scalar to get the CODE reference if needed
+        // When we have &$x() the left side is OperatorNode("$") (the & is consumed by the parser)
+        // We need to look up the CODE slot from the glob if the scalar contains a string.
+        // Check if the left side is a scalar variable
+        if (node.left instanceof OperatorNode operatorNode && operatorNode.operator.equals("$")) {
+            // This is &$var() or $var->() syntax - check if we need to dereference
+            
+            // Check if the variable is a lexical subroutine (already a CODE reference)
+            // Lexical subs have a "hiddenVarName" annotation and should not be dereferenced
+            String hiddenVarName = (String) operatorNode.getAnnotation("hiddenVarName");
+            boolean isLexicalSub = (hiddenVarName != null);
+            
+            // Only call codeDerefNonStrict when strict refs is disabled AND not a lexical sub
+            // This allows symbolic references like: my $x = "main::test"; &$x()
+            if (!isLexicalSub && !emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_REFS)) {
+                // Without strict refs and not a lexical sub: allow symbolic references
+                // Call codeDerefNonStrict to look up CODE slot from glob if needed
+                emitterVisitor.pushCurrentPackage();
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, 
+                        "org/perlonjava/runtime/RuntimeScalar", 
+                        "codeDerefNonStrict", 
+                        "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;", 
+                        false);
+            }
+        }
+        
+        mv.visitLdcInsn(subroutineName);
+
+        // Generate native RuntimeBase[] array for parameters instead of RuntimeList
+        ListNode paramList = ListNode.makeList(node.right);
+        int argCount = paramList.elements.size();
+
+        // Create array of RuntimeBase with size equal to number of arguments
+        if (argCount <= 5) {
+            mv.visitInsn(Opcodes.ICONST_0 + argCount);
+        } else if (argCount <= 127) {
+            mv.visitIntInsn(Opcodes.BIPUSH, argCount);
+        } else {
+            mv.visitIntInsn(Opcodes.SIPUSH, argCount);
+        }
+        mv.visitTypeInsn(Opcodes.ANEWARRAY, "org/perlonjava/runtime/RuntimeBase");
+
+        // Populate the array with arguments
+        EmitterVisitor listVisitor = emitterVisitor.with(RuntimeContextType.LIST);
+        for (int index = 0; index < argCount; index++) {
+            mv.visitInsn(Opcodes.DUP); // Duplicate array reference
+            if (index <= 5) {
+                mv.visitInsn(Opcodes.ICONST_0 + index);
+            } else if (index <= 127) {
+                mv.visitIntInsn(Opcodes.BIPUSH, index);
+            } else {
+                mv.visitIntInsn(Opcodes.SIPUSH, index);
+            }
+
+            // Generate code for argument in LIST context
+            paramList.elements.get(index).accept(listVisitor);
+
+            mv.visitInsn(Opcodes.AASTORE); // Store in array
+        }
+
         emitterVisitor.pushCallContext();   // Push call context to stack
-        emitterVisitor.ctx.mv.visitMethodInsn(
+        mv.visitMethodInsn(
                 Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/RuntimeCode",
                 "apply",
-                "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;Lorg/perlonjava/runtime/RuntimeBase;I)Lorg/perlonjava/runtime/RuntimeList;",
+                "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;[Lorg/perlonjava/runtime/RuntimeBase;I)Lorg/perlonjava/runtime/RuntimeList;",
                 false); // Generate an .apply() call
         
         // Check for control flow (last/next/redo/goto/tail calls)
@@ -251,11 +310,11 @@ public class EmitSubroutine {
         
         if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
             // Transform the value in the stack to RuntimeScalar
-            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
         } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
             // Remove the value from the stack
             // (If it was a control flow marker, emitControlFlowCheck already handled it)
-            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
+            mv.visitInsn(Opcodes.POP);
         }
     }
 

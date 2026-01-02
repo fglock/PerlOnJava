@@ -1,6 +1,7 @@
 package org.perlonjava.perlmodule;
 
 import org.perlonjava.operators.MathOperators;
+import org.perlonjava.parser.ParserTables;
 import org.perlonjava.runtime.*;
 
 import static org.perlonjava.runtime.RuntimeContextType.SCALAR;
@@ -154,9 +155,9 @@ public class Exporter extends PerlModuleBase {
         String caller = callerList.scalar().toString();
 
         // Retrieve the export lists and tags from the package
-        RuntimeArray export = GlobalVariable.getGlobalArray(packageScalar + "::EXPORT");
-        RuntimeArray exportOk = GlobalVariable.getGlobalArray(packageScalar + "::EXPORT_OK");
-        RuntimeHash exportTags = GlobalVariable.getGlobalHash(packageScalar + "::EXPORT_TAGS");
+        RuntimeArray export = GlobalVariable.getGlobalArray(packageName + "::EXPORT");
+        RuntimeArray exportOk = GlobalVariable.getGlobalArray(packageName + "::EXPORT_OK");
+        RuntimeHash exportTags = GlobalVariable.getGlobalHash(packageName + "::EXPORT_TAGS");
 
         // If no specific symbols are requested, default to exporting all symbols in @EXPORT
         if (args.size() == 0) {
@@ -199,9 +200,9 @@ public class Exporter extends PerlModuleBase {
         for (RuntimeBase symbolObj : tagArray.elements) {
             String symbolString = symbolObj.toString();
 
-            boolean isExported = export.elements.stream()
+            boolean isExported = export != null && export.elements.stream()
                     .anyMatch(e -> e.toString().equals(symbolString));
-            boolean isExportOk = exportOk.elements.stream()
+            boolean isExportOk = exportOk != null && exportOk.elements.stream()
                     .anyMatch(e -> e.toString().equals(symbolString));
 
             if (!isExported && !isExportOk && !symbolString.matches("^[$@%*]")) {
@@ -212,9 +213,9 @@ public class Exporter extends PerlModuleBase {
                 } else {
                     finalSymbolString = "&" + symbolString;
                 }
-                isExported = export.elements.stream()
+                isExported = export != null && export.elements.stream()
                         .anyMatch(e -> e.toString().equals(finalSymbolString));
-                isExportOk = exportOk.elements.stream()
+                isExportOk = exportOk != null && exportOk.elements.stream()
                         .anyMatch(e -> e.toString().equals(finalSymbolString));
             }
 
@@ -275,7 +276,21 @@ public class Exporter extends PerlModuleBase {
     private static void importFunction(String packageName, String caller, String functionName) {
         RuntimeScalar exportSymbol = GlobalVariable.getGlobalCodeRef(packageName + "::" + functionName);
         if (exportSymbol.type == RuntimeScalarType.CODE) {
-            GlobalVariable.getGlobalCodeRef(caller + "::" + functionName).set(exportSymbol);
+            String fullName = caller + "::" + functionName;
+            RuntimeScalar importedRef = GlobalVariable.getGlobalCodeRef(fullName);
+            importedRef.set(exportSymbol);
+            
+            // If the exported symbol is a forward declaration (undefined), annotate it with the source package
+            // so that AUTOLOAD can be resolved from the original package
+            if (exportSymbol.value instanceof RuntimeCode code && !code.defined()) {
+                code.sourcePackage = packageName;
+            }
+            
+            // If this function name is an overridable operator (like 'time'), mark it in isSubs
+            // so the parser knows to treat it as a subroutine call instead of the builtin
+            if (ParserTables.OVERRIDABLE_OP.contains(functionName)) {
+                GlobalVariable.isSubs.put(fullName, true);
+            }
         } else {
             throw new PerlCompilerException("Function " + functionName + " not found in package " + packageName);
         }

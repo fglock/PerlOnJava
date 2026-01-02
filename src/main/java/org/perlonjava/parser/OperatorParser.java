@@ -18,8 +18,7 @@ import java.util.Map;
 
 import static org.perlonjava.lexer.LexerTokenType.*;
 import static org.perlonjava.parser.NumberParser.parseNumber;
-import static org.perlonjava.parser.ParserNodeUtils.atUnderscore;
-import static org.perlonjava.parser.ParserNodeUtils.scalarUnderscore;
+import static org.perlonjava.parser.ParserNodeUtils.*;
 import static org.perlonjava.parser.SubroutineParser.consumeAttributes;
 import static org.perlonjava.parser.TokenUtils.consume;
 import static org.perlonjava.parser.TokenUtils.peek;
@@ -390,8 +389,15 @@ public class OperatorParser {
             consumeAttributes(parser, attributes);
         }
         if (!attributes.isEmpty()) {
-            // Add the attributes to the operand
-            decl.annotations = Map.of("attributes", attributes);
+            // Add the attributes to the operand, preserving any existing annotations
+            if (decl.annotations != null && decl.annotations.containsKey("isDeclaredReference")) {
+                // Create a new map with both the existing isDeclaredReference and new attributes
+                java.util.Map<String, Object> newAnnotations = new java.util.HashMap<>(decl.annotations);
+                newAnnotations.put("attributes", attributes);
+                decl.annotations = newAnnotations;
+            } else {
+                decl.annotations = Map.of("attributes", attributes);
+            }
         }
 
         return decl;
@@ -410,8 +416,9 @@ public class OperatorParser {
                 case "pop":
                 case "shift":
                     // create `@_` variable
-                    // XXX in main program, use `@ARGV`
-                    operand = atUnderscore(parser);
+                    // in main program, use `@ARGV`
+                    boolean isSub = parser.ctx.symbolTable.isInSubroutineBody();
+                    operand = isSub ? atUnderscore(parser) : atArgv(parser);
                     break;
                 case "localtime":
                 case "gmtime":
@@ -661,7 +668,8 @@ public class OperatorParser {
             if (TokenUtils.peek(parser).text.equals(")")) {
                 operand = new OperatorNode("undef", null, currentIndex);
             } else {
-                operand = parser.parseExpression(parser.getPrecedence(token.text) + 1);
+                // Parentheses group a full expression; allow low-precedence operators like `and`/`or`.
+                operand = parser.parseExpression(0);
             }
             TokenUtils.consume(parser, OPERATOR, ")");
             return new OperatorNode(token.text, operand, currentIndex);
@@ -943,6 +951,24 @@ public class OperatorParser {
         } else if (token.text.matches("^v\\d+$")) {
             consume(parser);
             operand = StringParser.parseVstring(parser, token.text, parser.tokenIndex);
+        } else if (token.type == IDENTIFIER && !ParsePrimary.isIsQuoteLikeOperator(token.text)) {
+            // `require` bareword module name - parse directly without going through expression parser
+            // This avoids treating module names like "Encode" as subroutine calls when a sub
+            // with the same name exists in the current package (e.g., sub Encode in Image::ExifTool)
+            // But don't intercept quote-like operators like q(), qq(), etc.
+            String moduleName = IdentifierParser.parseSubroutineIdentifier(parser);
+            parser.ctx.logDebug("require module name `" + moduleName + "`");
+            if (moduleName == null) {
+                throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
+            }
+
+            // Check if module name starts with ::
+            if (moduleName.startsWith("::")) {
+                throw new PerlCompilerException(parser.tokenIndex, "Bareword in require must not start with a double-colon: \"" + moduleName + "\"", parser.ctx.errorUtil);
+            }
+
+            String fileName = NameNormalizer.moduleToFilename(moduleName);
+            operand = ListNode.makeList(new StringNode(fileName, parser.tokenIndex));
         } else {
             // Check for the specific pattern: :: followed by identifier (which is invalid for require)
             if (token.type == LexerTokenType.OPERATOR && token.text.equals("::")) {

@@ -78,40 +78,24 @@ public class SubroutineParser {
                 
                 // Use lexical sub when:
                 // 1. There are explicit parentheses, OR
-                // 2. There's no prototype (no ambiguity), OR
-                // 3. The next token isn't a bareword identifier (to avoid indirect method call confusion)
+                // 2. There's a prototype, OR
+                // 3. The next token isn't a bareword identifier (to avoid indirect method call confusion), OR
+                // 4. We're parsing a code reference for sort/map/grep (parsingForLoopVariable is true)
                 boolean useExplicitParen = nextToken.text.equals("(");
                 boolean hasPrototype = lexicalPrototype != null;
                 boolean nextIsIdentifier = nextToken.type == LexerTokenType.IDENTIFIER;
                 
-                if (useExplicitParen || hasPrototype || !nextIsIdentifier) {
+                if (useExplicitParen || hasPrototype || !nextIsIdentifier || parser.parsingForLoopVariable) {
                     // This is a lexical sub/method - use the hidden variable instead of package lookup
                     // The varNode is the "my $name__lexsub_123" or "my $name__lexmethod_123" variable
                     
-                    // Parse arguments using prototype if available
-                    ListNode arguments;
-                    if (useExplicitParen) {
-                        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
-                        List<Node> argList = ListParser.parseList(parser, ")", 0);
-                        arguments = new ListNode(argList, parser.tokenIndex);
-                    } else if (hasPrototype) {
-                        // Use prototype to parse arguments
-                        arguments = consumeArgsWithPrototype(parser, lexicalPrototype);
-                    } else {
-                        // No parentheses, no prototype, no arguments
-                        arguments = new ListNode(parser.tokenIndex);
-                    }
-                    
-                    // Return a call to the hidden variable using $hiddenVar(arguments) syntax
-                    // The varNode contains the variable declaration with the hidden variable name stored as annotation
+                    // Get the hidden variable name for the lexical sub
                     String hiddenVarName = (String) varNode.getAnnotation("hiddenVarName");
                     if (hiddenVarName != null) {
                         // Get the package where this lexical sub was declared
-                        // This ensures we access the correct global variable even after package switches
                         String declaringPackage = (String) varNode.getAnnotation("declaringPackage");
                         
                         // Make the hidden variable name fully qualified with the declaring package
-                        // This prevents package-dependent normalization issues
                         String qualifiedHiddenVarName = hiddenVarName;
                         if (declaringPackage != null && !hiddenVarName.contains("::")) {
                             qualifiedHiddenVarName = declaringPackage + "::" + hiddenVarName;
@@ -131,6 +115,30 @@ public class SubroutineParser {
                         } else if (varNode.operator.equals("state") && varNode.operand instanceof OperatorNode innerNode) {
                             // Fallback: copy ID from the declaration
                             dollarOp.id = innerNode.id;
+                        }
+                        
+                        // If parsingForLoopVariable is set, we just need the code reference, not a call
+                        // This is used by sort/map/grep when parsing the comparison sub
+                        if (parser.parsingForLoopVariable) {
+                            return dollarOp;
+                        }
+                        
+                        // Parse arguments using prototype if available
+                        ListNode arguments;
+                        if (useExplicitParen) {
+                            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
+                            if (hasPrototype) {
+                                // Use prototype to parse arguments (already consumed opening paren)
+                                arguments = consumeArgsWithPrototype(parser, lexicalPrototype, false);
+                                TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
+                            } else {
+                                List<Node> argList = ListParser.parseList(parser, ")", 0);
+                                arguments = new ListNode(argList, parser.tokenIndex);
+                            }
+                        } else {
+                            // No explicit parentheses - parse arguments with prototype (or null for no prototype)
+                            // This matches behavior of regular package subs which call consumeArgsWithPrototype
+                            arguments = consumeArgsWithPrototype(parser, lexicalPrototype);
                         }
                         
                         // Call the hidden variable directly: $hiddenVar(arguments)
@@ -179,13 +187,28 @@ public class SubroutineParser {
             String packageName = IdentifierParser.parseSubroutineIdentifier(parser);
             // System.out.println("maybe indirect object: " + packageName + "->" + subName);
 
-            // Check if the packageName is not a subroutine or operator
-            // IMPORTANT: Also check if it's a lexical sub - lexical subs should NOT be treated as package names
+            // PERL RULE: Indirect object syntax requires identifier to be a package
+            // Check packageExistsCache which is populated when 'package' statement is parsed
+            // Note: packageExistsCache uses the package name as-is, not normalized
+            Boolean isPackage = GlobalVariable.packageExistsCache.get(packageName);
+            LexerToken token = peek(parser);
             String fullName1 = NameNormalizer.normalizeVariableName(packageName, parser.ctx.symbolTable.getCurrentPackage());
             boolean isLexicalSub = parser.ctx.symbolTable.getSymbolEntry("&" + packageName) != null;
-            if (!GlobalVariable.existsGlobalCodeRef(fullName1) && !isLexicalSub && isValidIndirectMethod(packageName)) {
-                LexerToken token = peek(parser);
-                if (!(token.text.equals("->") || token.text.equals("=>") || INFIX_OP.contains(token.text))) {
+            boolean isKnownSub = GlobalVariable.existsGlobalCodeRef(fullName1);
+            
+            // Reject if:
+            // 1. Explicitly marked as non-package (false in cache), OR
+            // 2. Unknown package (null) AND unknown subroutine (!isKnownSub) AND followed by '('
+            //    - this is a function call like mycan(...)
+            // Allow if:
+            // - Marked as package (true), OR
+            // - Unknown (null) but NOT followed by '(' - like 'new NonExistentClass'
+            if ((isPackage != null && !isPackage) || (isPackage == null && !isKnownSub && token.text.equals("("))) {
+                parser.tokenIndex = currentIndex2;
+            } else {
+                // Not a known subroutine, check if it's valid indirect object syntax
+                if (!isKnownSub && !isLexicalSub && isValidIndirectMethod(packageName)) {
+                    if (!(token.text.equals("->") || token.text.equals("=>") || INFIX_OP.contains(token.text))) {
                     // System.out.println("  package loaded: " + packageName + "->" + subName);
 
                     ListNode arguments;
@@ -203,11 +226,12 @@ public class SubroutineParser {
                                             currentIndex),
                                     arguments, currentIndex2),
                             currentIndex2);
+                    }
                 }
-            }
 
-            // backtrack
-            parser.tokenIndex = currentIndex2;
+                // backtrack
+                parser.tokenIndex = currentIndex2;
+            }
         }
 
         // Create an identifier node for the subroutine name
@@ -329,6 +353,12 @@ public class SubroutineParser {
             // 'parseSubroutineIdentifier' is called to handle cases where the subroutine name might be complex
             // (e.g., namespaced, fully qualified names). It may return null if no valid name is found.
             subName = IdentifierParser.parseSubroutineIdentifier(parser);
+            
+            // Mark named subroutines as non-packages in packageExistsCache immediately
+            // This helps indirect object detection distinguish subs from packages
+            if (subName != null) {
+                GlobalVariable.packageExistsCache.put(subName, false);
+            }
         }
 
         // Initialize the prototype node to null. This will store the prototype of the subroutine if it exists.
@@ -379,9 +409,12 @@ public class SubroutineParser {
 
         // Save the current subroutine context and set the new one
         String previousSubroutine = parser.ctx.symbolTable.getCurrentSubroutine();
+        boolean previousInSubroutineBody = parser.ctx.symbolTable.isInSubroutineBody();
 
         // Set the current subroutine name (use empty string for anonymous subs)
         parser.ctx.symbolTable.setCurrentSubroutine(subName != null ? subName : "");
+        // We are now parsing inside a subroutine body (named or anonymous)
+        parser.ctx.symbolTable.setInSubroutineBody(true);
 
         try {
             // Parse the block of the subroutine, which contains the actual code.
@@ -403,6 +436,7 @@ public class SubroutineParser {
         } finally {
             // Restore the previous subroutine context
             parser.ctx.symbolTable.setCurrentSubroutine(previousSubroutine);
+            parser.ctx.symbolTable.setInSubroutineBody(previousInSubroutineBody);
         }
     }
 

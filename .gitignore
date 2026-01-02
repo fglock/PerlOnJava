@@ -2,6 +2,7 @@
 *.jar
 *.swp
 *.bak
+*.versionsBackup
 dependency-reduced-pom.xml
 asm-9.7.jar
 google-java-format-1.22.0-all-deps.jar
@@ -12,7 +13,8 @@ target/
 .java-version
 build/
 bin/
-gradle/
+gradle/*
+!gradle/libs.versions.toml
 gradlew
 gradlew.bat
 .idea/
@@ -61,4 +63,10 @@ logs/
 !README.md
 test_*.log
 test_*.json
+
+t.pl
+test_yaml_0yml
+
+# Ignore some Perl modules we are testing
+Image-ExifTool-*
 

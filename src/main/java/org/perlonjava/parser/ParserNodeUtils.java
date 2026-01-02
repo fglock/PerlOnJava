@@ -104,8 +104,16 @@ public class ParserNodeUtils {
      * @return An OperatorNode representing the array variable @_
      */
     static OperatorNode atUnderscore(Parser parser) {
-        return new OperatorNode("@",
-                new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex);
+        return variableAst("@", "_", parser.tokenIndex);
+    }
+
+    static OperatorNode atArgv(Parser parser) {
+        return variableAst("@", "main::ARGV", parser.tokenIndex);
+    }
+
+    public static OperatorNode variableAst(String sigil, String name, int tokenIndex) {
+        return new OperatorNode(sigil,
+                new IdentifierNode(name, tokenIndex), tokenIndex);
     }
 
     /**

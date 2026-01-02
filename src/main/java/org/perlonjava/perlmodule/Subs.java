@@ -1,5 +1,6 @@
 package org.perlonjava.perlmodule;
 
+import org.perlonjava.parser.ParserTables;
 import org.perlonjava.runtime.*;
 
 /**
@@ -19,6 +20,7 @@ public class Subs extends PerlModuleBase {
         Subs subs = new Subs();
         try {
             subs.registerMethod("import", "importSubs", ";$");
+            subs.registerMethod("mark_overridable", "markOverridable", "$$");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing subs method: " + e.getMessage());
         }
@@ -47,6 +49,25 @@ public class Subs extends PerlModuleBase {
             GlobalVariable.isSubs.put(fullName, true);
         }
 
+        return new RuntimeList();
+    }
+
+    /**
+     * Marks a fully-qualified subroutine name as an override for a core operator.
+     * Called from Perl Exporter.pm when importing overridable operators like 'time'.
+     *
+     * @param args The arguments: package::subname, operator_name
+     * @param ctx  The context.
+     * @return An empty RuntimeList.
+     */
+    public static RuntimeList markOverridable(RuntimeArray args, int ctx) {
+        if (args.size() >= 2) {
+            String fullName = args.get(0).toString();
+            String operatorName = args.get(1).toString();
+            if (ParserTables.OVERRIDABLE_OP.contains(operatorName)) {
+                GlobalVariable.isSubs.put(fullName, true);
+            }
+        }
         return new RuntimeList();
     }
 }

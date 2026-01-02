@@ -1,6 +1,6 @@
 package org.perlonjava.astvisitor;
 
-import org.perlonjava.astnode.*;
+import org.perlonjava.astnode.*;import org.perlonjava.astrefactor.LargeBlockRefactorer;import org.perlonjava.astrefactor.LargeNodeRefactorer;
 
 /**
  * BytecodeSizeEstimator provides accurate bytecode size estimation for PerlOnJava methods.
@@ -15,6 +15,21 @@ import org.perlonjava.astnode.*;
  * <p>
  * Based on comprehensive analysis of EmitLiteral, EmitBinaryOperator, EmitBlock and other emitter classes.
  * Uses official JVM bytecode instruction sizes with empirically derived calibration.
+ * <p>
+ * <b>Usage:</b>
+ * <ul>
+ *   <li>{@link #estimateSize(Node)} - For complete methods (includes BASE_OVERHEAD of 1950 bytes)</li>
+ *   <li>{@link #estimateSnippetSize(Node)} - For code snippets/chunks (no BASE_OVERHEAD, used by LargeNodeRefactorer)</li>
+ * </ul>
+ * <p>
+ * The distinction between these methods is important:
+ * <ul>
+ *   <li>Complete methods have fixed overhead (class structure, method entry/exit, etc.)</li>
+ *   <li>Code snippets are partial AST fragments where method overhead doesn't apply</li>
+ * </ul>
+ *
+ * @see LargeNodeRefactorer
+ * @see LargeBlockRefactorer
  */
 public class BytecodeSizeEstimator implements Visitor {
 
@@ -49,6 +64,7 @@ public class BytecodeSizeEstimator implements Visitor {
 
     /**
      * Static method to estimate bytecode size of an AST.
+     * Includes BASE_OVERHEAD - use for complete methods.
      *
      * @param ast The AST node to analyze
      * @return Estimated bytecode size in bytes (with scientific calibration applied)
@@ -57,6 +73,35 @@ public class BytecodeSizeEstimator implements Visitor {
         BytecodeSizeEstimator estimator = new BytecodeSizeEstimator();
         ast.accept(estimator);
         return estimator.getEstimatedSize();
+    }
+
+    /**
+     * Static method to estimate bytecode size of an AST snippet.
+     * Does NOT include BASE_OVERHEAD - use for code snippets, chunks, or partial AST.
+     * Results are cached in the AST node's annotations to avoid repeated traversal.
+     *
+     * @param ast The AST node to analyze
+     * @return Estimated bytecode size in bytes (calibration factor only, no base overhead)
+     */
+    public static int estimateSnippetSize(Node ast) {
+        // Check cache first
+        if (ast instanceof AbstractNode abstractNode) {
+            Object cached = abstractNode.getAnnotation("cachedBytecodeSize");
+            if (cached instanceof Integer) {
+                return (Integer) cached;
+            }
+        }
+        
+        BytecodeSizeEstimator estimator = new BytecodeSizeEstimator();
+        ast.accept(estimator);
+        int size = estimator.getRawEstimatedSize();
+        
+        // Cache the result
+        if (ast instanceof AbstractNode abstractNode) {
+            abstractNode.setAnnotation("cachedBytecodeSize", size);
+        }
+        
+        return size;
     }
 
     @Override
@@ -71,6 +116,7 @@ public class BytecodeSizeEstimator implements Visitor {
 
     /**
      * Get the estimated bytecode size with scientifically derived calibration.
+     * Includes BASE_OVERHEAD - use for complete methods.
      * <p>
      * Formula: actual = 1.035 × estimated + 1950 (R² = 1.0000)
      * <p>
@@ -83,6 +129,18 @@ public class BytecodeSizeEstimator implements Visitor {
      */
     public int getEstimatedSize() {
         return (int) Math.round(CALIBRATION_FACTOR * estimatedSize + BASE_OVERHEAD);
+    }
+
+    /**
+     * Get the estimated bytecode size without BASE_OVERHEAD.
+     * Use for code snippets, chunks, or partial AST where method overhead is not applicable.
+     * <p>
+     * Formula: actual = 1.035 × estimated (no base overhead)
+     *
+     * @return Calibrated bytecode size estimate in bytes (without method overhead)
+     */
+    public int getRawEstimatedSize() {
+        return (int) Math.round(CALIBRATION_FACTOR * estimatedSize);
     }
 
     // Implement all required Visitor interface methods - mirroring EmitterVisitor pattern
@@ -102,9 +160,11 @@ public class BytecodeSizeEstimator implements Visitor {
 
     @Override
     public void visit(StringNode node) {
-        // String literals: LDC + object creation = LDC_INSTRUCTION + OBJECT_CREATION (10 bytes)
-        int stringSize = LDC_INSTRUCTION + OBJECT_CREATION;
-        estimatedSize += stringSize;
+        // String literals: Based on actual disassembly showing:
+        //   LDC <constant>         (2-3 bytes for constant pool index)
+        //   INVOKESTATIC           (3 bytes) - getScalarByteString or similar
+        // Total: 5-6 bytes per string
+        estimatedSize += LDC_INSTRUCTION + INVOKE_STATIC; // 3 + 3 = 6 bytes
     }
 
     @Override
@@ -158,12 +218,25 @@ public class BytecodeSizeEstimator implements Visitor {
 
     @Override
     public void visit(ListNode node) {
-        // Mirror EmitLiteral.emitList() patterns
-        estimatedSize += OBJECT_CREATION; // Create RuntimeList
+        // Mirror EmitLiteral.emitList() patterns in LIST context
+        // Based on actual disassembly: each element requires DUP + element evaluation + add
+        
+        estimatedSize += OBJECT_CREATION; // Create RuntimeList (NEW + DUP + INVOKESPECIAL = 7 bytes)
 
         for (Node element : node.elements) {
+            // Per-element list overhead (DUP + add call)
+            estimatedSize += DUP_INSTRUCTION;           // Duplicate RuntimeList reference (1 byte)
+            estimatedSize += METHOD_CALL_OVERHEAD;      // RuntimeList.add() call (4 bytes)
+            
+            // Let the element estimate itself via visitor pattern
             element.accept(this);
-            estimatedSize += METHOD_CALL_OVERHEAD; // Add to list
+        }
+        
+        // Constant pool overhead for large lists
+        // When constant pool grows beyond 256 entries, LDC becomes LDC_W (3 bytes instead of 2)
+        if (node.elements.size() > 200) {
+            // Large constant pool: LDC_W costs 3 bytes instead of 2
+            estimatedSize += node.elements.size(); // +1 byte per element for LDC_W
         }
     }
 
@@ -183,14 +256,20 @@ public class BytecodeSizeEstimator implements Visitor {
     @Override
     public void visit(HashLiteralNode node) {
         // Mirror EmitLiteral.emitHashLiteral() patterns
-        estimatedSize += OBJECT_CREATION; // Create RuntimeHash
-
+        // HashLiteralNode creates a ListNode first, then converts to hash
+        // See EmitLiteral.emitHashLiteral() lines 131-140
+        
+        // Create RuntimeList: NEW + DUP + INVOKESPECIAL
+        estimatedSize += OBJECT_CREATION; // 7 bytes
+        
+        // Add each element to the list
         for (Node element : node.elements) {
             element.accept(this);
-            estimatedSize += METHOD_CALL_OVERHEAD; // Add to hash
+            estimatedSize += DUP_INSTRUCTION + METHOD_CALL_OVERHEAD; // DUP + add() = 5 bytes per element
         }
-
-        estimatedSize += INVOKE_VIRTUAL; // createReference()
+        
+        // Convert list to hash reference: INVOKESTATIC createHashRef
+        estimatedSize += INVOKE_STATIC; // 3 bytes
     }
 
     @Override

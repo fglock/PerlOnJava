@@ -70,6 +70,10 @@ imports:
     target: perl5_t/t/re/pat.t
     patch: pat.t.patch
 
+  - source: perl5/t/porting/manifest.t
+    target: perl5_t/t/porting/manifest.t
+    patch: manifest.t.patch
+
   # Pod modules from CPAN distributions
   # Pod::Simple - Core POD parser
   - source: perl5/cpan/Pod-Simple/lib/Pod
