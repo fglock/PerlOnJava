@@ -5,7 +5,12 @@ all: build
 # CI build - optimized for CI/CD environments
 ci: wrapper
 ifeq ($(OS),Windows_NT)
-	mvn clean compile -B
+	gradlew.bat clean compileJava compileTestJava installDist --no-daemon --stacktrace
+	@echo "Running unit tests with jperl..."
+	@for %%f in (src\test\resources\unit\*.t) do ( \
+		echo Testing %%f && \
+		build\install\perlonjava\bin\jperl.bat %%f || exit /b 1 \
+	)
 else
 	./gradlew build --no-daemon --stacktrace
 endif
