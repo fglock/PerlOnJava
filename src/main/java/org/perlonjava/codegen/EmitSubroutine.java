@@ -54,7 +54,7 @@ public class EmitSubroutine {
     // Without call-site checks, marked returns propagate through normal return paths.
     // This works correctly but is less efficient for deeply nested loops crossing subroutines.
     // Performance impact is minimal since most control flow is local (uses plain JVM GOTO).
-    private static final boolean ENABLE_CONTROL_FLOW_CHECKS = false;
+    private static final boolean ENABLE_CONTROL_FLOW_CHECKS = true;
     
     // Set to true to enable debug output for control flow checks
     private static final boolean DEBUG_CONTROL_FLOW = false;
@@ -304,7 +304,13 @@ public class EmitSubroutine {
         
         // Check for control flow (last/next/redo/goto/tail calls)
         // This MUST happen before context conversion (before POP in VOID context)
-        if (ENABLE_CONTROL_FLOW_CHECKS) {
+        // DISABLED: TABLESWITCH in emitControlFlowCheck causes ASM frame computation errors
+        // in nested/refactored contexts. The test_nonlocal_next.pl passes when enabled but
+        // pack_utf8.t and other tests fail with "ArrayIndexOutOfBoundsException: Index 0 out of bounds"
+        // 
+        // TODO: Need to find a way to make this work without TABLESWITCH, or only enable
+        // in contexts where ASM can handle it (e.g., not in LargeBlockRefactorer-created subs)
+        if (false && ENABLE_CONTROL_FLOW_CHECKS) {
             emitControlFlowCheck(emitterVisitor.ctx);
         }
         
@@ -373,58 +379,73 @@ public class EmitSubroutine {
      * @param ctx The emitter context
      */
     private static void emitControlFlowCheck(EmitterContext ctx) {
-        // ULTRA-SIMPLIFIED pattern to avoid ALL ASM frame computation issues:
-        // Work entirely on the stack, never touch local variables
-        
-        Label notMarked = new Label();
-        Label isMarked = new Label();
+        // After a subroutine call, check if non-local control flow was registered
+        // This enables next/last/redo LABEL to work from inside closures
         
         // Stack: [RuntimeList result]
         
-        // Duplicate for checking
-        ctx.mv.visitInsn(Opcodes.DUP);
-        // Stack: [RuntimeList] [RuntimeList]
-        
-        // Check if marked
-        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                "org/perlonjava/runtime/RuntimeList",
-                "isNonLocalGoto",
-                "()Z",
-                false);
-        // Stack: [RuntimeList] [boolean]
-        
-        // If marked (true), jump to handler
-        ctx.mv.visitJumpInsn(Opcodes.IFNE, isMarked);
-        
-        // Not marked: result is already on stack, continue normally
-        ctx.mv.visitJumpInsn(Opcodes.GOTO, notMarked);
-        
-        // Marked: handle control flow
-        ctx.mv.visitLabel(isMarked);
-        // Stack: [RuntimeList marked]
-        
-        // Clean the stack to level 0 (this pops everything including our marked list)
-        // So we need to save it first - but we can't use local variables!
-        // Solution: Don't clean stack here - jump to a handler that expects [RuntimeList] on stack
-        
-        // CRITICAL FIX: Jump to innermost loop handler (if inside a loop), otherwise returnLabel
+        // Check the registry for any pending control flow
+        // Get the innermost loop labels (if we're inside a loop)
         LoopLabels innermostLoop = ctx.javaClassInfo.getInnermostLoopLabels();
-        if (innermostLoop != null && innermostLoop.controlFlowHandler != null) {
-            // Inside a loop - jump to its handler
-            // Handler expects: stack cleaned to level 0, then [RuntimeControlFlowList]
-            // But we have: arbitrary stack depth, then [RuntimeControlFlowList]
-            // We MUST clean the stack first, but this requires knowing what's on it
-            // This is the fundamental problem!
-            
-            // For now, propagate to returnLabel instead
-            ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
-        } else {
-            // Not inside a loop - jump to returnLabel
-            ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
-        }
         
-        // Not marked: continue with result on stack
-        ctx.mv.visitLabel(notMarked);
-        // Stack: [RuntimeList result]
+        if (innermostLoop != null) {
+            // We're inside a loop - check if non-local control flow was registered
+            Label continueNormally = new Label();
+            Label handleLast = new Label();
+            Label handleNext = new Label();
+            Label handleRedo = new Label();
+            
+            // Stack: [RuntimeList result]
+            
+            // Push the label name (or null if no label)
+            if (innermostLoop.labelName != null) {
+                ctx.mv.visitLdcInsn(innermostLoop.labelName);
+            } else {
+                ctx.mv.visitInsn(Opcodes.ACONST_NULL);
+            }
+            
+            // Call: int action = RuntimeControlFlowRegistry.checkLoopAndGetAction(String labelName)
+            // Returns: 0=none, 1=last, 2=next, 3=redo
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/RuntimeControlFlowRegistry",
+                    "checkLoopAndGetAction",
+                    "(Ljava/lang/String;)I",
+                    false);
+            // Stack: [RuntimeList result] [int action]
+            
+            // Use TABLESWITCH to jump based on action
+            // This is cleaner than multiple IF checks and avoids needing to store the action
+            ctx.mv.visitTableSwitchInsn(
+                    1,  // min (LAST)
+                    3,  // max (REDO)
+                    continueNormally,  // default (0=none or out of range)
+                    handleLast,   // 1: LAST
+                    handleNext,   // 2: NEXT  
+                    handleRedo    // 3: REDO
+            );
+            
+            // Handle LAST
+            ctx.mv.visitLabel(handleLast);
+            ctx.mv.visitInsn(Opcodes.POP); // Pop the result
+            ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, innermostLoop.asmStackLevel);
+            ctx.mv.visitJumpInsn(Opcodes.GOTO, innermostLoop.lastLabel);
+            
+            // Handle NEXT
+            ctx.mv.visitLabel(handleNext);
+            ctx.mv.visitInsn(Opcodes.POP); // Pop the result
+            ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, innermostLoop.asmStackLevel);
+            ctx.mv.visitJumpInsn(Opcodes.GOTO, innermostLoop.nextLabel);
+            
+            // Handle REDO
+            ctx.mv.visitLabel(handleRedo);
+            ctx.mv.visitInsn(Opcodes.POP); // Pop the result
+            ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, innermostLoop.asmStackLevel);
+            ctx.mv.visitJumpInsn(Opcodes.GOTO, innermostLoop.redoLabel);
+            
+            // No action: continue normally with result on stack
+            ctx.mv.visitLabel(continueNormally);
+            // Stack: [RuntimeList result]
+        }
+        // If not inside a loop, don't check registry (result stays on stack)
     }
 }
