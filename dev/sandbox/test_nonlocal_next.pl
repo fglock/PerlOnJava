@@ -68,11 +68,27 @@ if ($result eq "outer:1 inner after_next end outer:2 inner outer:3 inner after_n
 }
 
 print "\n";
-print "=== CURRENT STATUS ===\n";
-print "The registry-based approach for non-local control flow has a design limitation:\n";
-print "- When 'next LABEL' is called inside a closure, it registers a marker and returns normally\n";
-print "- The loop checks the registry at the END of each iteration\n";
-print "- This means code after the closure call still executes before the jump happens\n";
+print "=== INVESTIGATION RESULTS ===\n";
+print "The non-local control flow feature requires checking the registry IMMEDIATELY after\n";
+print "subroutine calls return (in EmitSubroutine.handleApplyOperator).\n";
 print "\n";
-print "To make this test pass, we need to check the registry IMMEDIATELY after the closure returns,\n";
-print "not just at the end of the loop iteration.\n";
+print "IMPLEMENTATION ATTEMPTED:\n";
+print "- Added emitControlFlowCheck() that uses TABLESWITCH to jump based on registry action\n";
+print "- This works perfectly for simple cases (test passes!)\n";
+print "- BUT: TABLESWITCH causes ASM frame computation errors in nested/refactored contexts\n";
+print "- Error: 'ArrayIndexOutOfBoundsException: Index 0 out of bounds' in ASM Frame.merge()\n";
+print "\n";
+print "THE PROBLEM:\n";
+print "- TABLESWITCH creates complex control flow with multiple branch targets\n";
+print "- ASM's automatic frame computation fails when TABLESWITCH is in nested anonymous\n";
+print "  subroutines created by LargeBlockRefactorer\n";
+print "- pack_utf8.t and other tests fail with ASM errors when the check is enabled\n";
+print "\n";
+print "POSSIBLE SOLUTIONS:\n";
+print "1. Use IF chains instead of TABLESWITCH (but this also causes ASM issues)\n";
+print "2. Pre-allocate temp slots at method entry (avoid dynamic allocation)\n";
+print "3. Only enable checks in non-refactored contexts (detect LargeBlockRefactorer subs)\n";
+print "4. Use manual frame hints with visitFrame() at merge points\n";
+print "5. Redesign to avoid checking after every call (performance impact)\n";
+print "\n";
+print "CURRENT STATUS: Feature disabled due to ASM limitations\n";
