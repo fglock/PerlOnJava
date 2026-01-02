@@ -303,7 +303,7 @@ sub skip {
         die qq[$0: expected skip(why, count), got skip($arg)\n];
     }
     for (1..$n) {
-        ok(1, "$test # skip $why");
+        ok(1, "# skip $why");
     }
     local $^W = 0;
     last SKIP;
