@@ -30,7 +30,9 @@ jobs:
           gradle-version: 8.10.2
 
       - name: Build with Gradle
-        run: gradle build --no-daemon
+        run: gradle build --no-daemon --no-parallel
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false"
 
       - name: Upload test results
         if: failure()
