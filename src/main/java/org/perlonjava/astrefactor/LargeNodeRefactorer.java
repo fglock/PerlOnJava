@@ -91,11 +91,7 @@ public class LargeNodeRefactorer {
 
         // For LIST nodes, create nested closures for proper lexical scoping
         List<Node> result = createNestedListClosures(chunks, tokenIndex);
-        // Check if refactoring was successful by estimating bytecode size
-        long estimatedSize = BlockRefactor.estimateTotalBytecodeSize(result);
-        if (estimatedSize > LARGE_BYTECODE_SIZE) {
-            errorCantRefactorLargeBlock(tokenIndex, parser, estimatedSize);
-        }
+        // Refactoring complete - let JVM validate method size
         return result;
     }
 

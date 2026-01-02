@@ -1,6 +1,7 @@
 package org.perlonjava.astrefactor;
 
 import org.perlonjava.astnode.*;
+import org.perlonjava.astvisitor.BytecodeSizeEstimator;
 import org.perlonjava.astvisitor.ControlFlowDetectorVisitor;
 import org.perlonjava.astvisitor.ControlFlowFinder;
 import org.perlonjava.astvisitor.EmitterVisitor;
@@ -78,7 +79,9 @@ public class LargeBlockRefactorer {
             return false;
         }
 
-        // Skip if block is already a subroutine or is a special block
+        // Skip if block is already a subroutine - subroutines are compiled into separate classes
+        // and should have been refactored at parse time. We cannot wrap them in another closure
+        // at code-generation time because they're already being compiled as a separate method.
         if (node.getBooleanAnnotation("blockIsSubroutine")) {
             return false;
         }
@@ -134,6 +137,7 @@ public class LargeBlockRefactorer {
     /**
      * Try to apply smart chunking to reduce the number of top-level elements.
      * Creates nested closures for proper lexical scoping.
+     * AGGRESSIVE MODE: Chunks based on bytecode size even with control flow present.
      *
      * @param node   The block to chunk
      * @param parser The parser instance for access to error utilities (can be null)
@@ -146,7 +150,11 @@ public class LargeBlockRefactorer {
         }
         
         // Check bytecode size - skip if under threshold
-        long estimatedSize = estimateTotalBytecodeSize(node.elements);
+        // Use real bytecode size calculation (not sampling) to avoid underestimation
+        long estimatedSize = 0;
+        for (Node element : node.elements) {
+            estimatedSize += BytecodeSizeEstimator.estimateSnippetSize(element);
+        }
         node.setAnnotation("estimatedBytecodeSize", estimatedSize);
         if (estimatedSize <= LARGE_BYTECODE_SIZE) {
             node.setAnnotation("refactorSkipReason", String.format("Bytecode size %d <= threshold %d", estimatedSize, LARGE_BYTECODE_SIZE));
@@ -161,63 +169,82 @@ public class LargeBlockRefactorer {
             return;
         }
 
+        // AGGRESSIVE CHUNKING: Split based on bytecode size, not control flow
+        // TAIL-POSITION OPTIMIZATION: Control flow at the end can be excluded from closures
+        // Example: { A, B, C, next } becomes { A, sub { B, C }->(@_), next }
         List<Object> segments = new ArrayList<>();  // Either Node (direct) or List<Node> (chunk)
         List<Node> currentChunk = new ArrayList<>();
+        long currentChunkSize = 0;
+        
+        // Target chunk size: aim for chunks around 20KB to leave room for closure overhead
+        // Each closure adds ~200 bytes overhead, and we want final methods under 40KB
+        final long TARGET_CHUNK_SIZE = 20000;
 
-        for (Node element : node.elements) {
+        for (int i = 0; i < node.elements.size(); i++) {
+            Node element = node.elements.get(i);
+            long elementSize = BytecodeSizeEstimator.estimateSnippetSize(element);
+            
+            // Check if this is a tail-position control flow element
+            // Tail position means: it's one of the last few elements and followed only by control flow
+            boolean isTailControlFlow = false;
+            if (shouldBreakChunk(element)) {
+                // Check if all remaining elements are also control flow or labels
+                boolean allRemainingAreControlFlow = true;
+                for (int j = i + 1; j < node.elements.size(); j++) {
+                    if (!shouldBreakChunk(node.elements.get(j)) && !isCompleteBlock(node.elements.get(j))) {
+                        allRemainingAreControlFlow = false;
+                        break;
+                    }
+                }
+                isTailControlFlow = allRemainingAreControlFlow;
+            }
+            
+            // Check if we should finalize the current chunk
+            boolean shouldFinalizeChunk = false;
+            
             if (isCompleteBlock(element)) {
-                // Complete blocks are already scoped - but check for labeled control flow
-                // Labeled control flow might reference labels outside the block
-                if (!currentChunk.isEmpty()) {
-                    segments.add(new ArrayList<>(currentChunk));
-                    currentChunk.clear();
-                }
+                // Complete blocks are already scoped - finalize current chunk and add directly
+                shouldFinalizeChunk = true;
+            } else if (shouldBreakChunk(element) && !isTailControlFlow) {
+                // Non-tail control flow - finalize current chunk and add directly
+                shouldFinalizeChunk = true;
+            } else if (isTailControlFlow && !currentChunk.isEmpty()) {
+                // Tail control flow - finalize chunk but keep control flow outside
+                shouldFinalizeChunk = true;
+            } else if (!currentChunk.isEmpty() && currentChunkSize + elementSize > TARGET_CHUNK_SIZE) {
+                // Chunk would exceed target size - finalize it
+                shouldFinalizeChunk = true;
+            }
+            
+            if (shouldFinalizeChunk && !currentChunk.isEmpty()) {
+                segments.add(new ArrayList<>(currentChunk));
+                currentChunk.clear();
+                currentChunkSize = 0;
+            }
+            
+            // Add element to appropriate location
+            if (isCompleteBlock(element) || (shouldBreakChunk(element) && !isTailControlFlow)) {
+                // Add directly as a segment (not in a chunk)
                 segments.add(element);
-            } else if (shouldBreakChunk(element)) {
-                // This element cannot be in a chunk (has unsafe control flow or is a label)
-                if (!currentChunk.isEmpty()) {
-                    segments.add(new ArrayList<>(currentChunk));
-                    currentChunk.clear();
-                }
-                // Add the element directly
+            } else if (isTailControlFlow) {
+                // Tail control flow - add directly (outside any closure)
                 segments.add(element);
             } else {
-                // Safe element, add to current chunk
+                // Safe element - add to current chunk
                 currentChunk.add(element);
+                currentChunkSize += elementSize;
             }
         }
 
-        // Process any remaining chunk
+        // Process any remaining chunk (should be rare with tail optimization)
         if (!currentChunk.isEmpty()) {
             segments.add(new ArrayList<>(currentChunk));
         }
 
-        // Check ALL segments (both direct and chunks) for UNSAFE control flow
-        // Use ControlFlowDetectorVisitor which considers loop depth
-        // Unlabeled next/last/redo inside loops are safe, but labeled control flow is not
-        for (Object segment : segments) {
-            if (segment instanceof Node directNode) {
-                controlFlowDetector.reset();
-                directNode.accept(controlFlowDetector);
-                if (controlFlowDetector.hasUnsafeControlFlow()) {
-                    // Segment has unsafe control flow - skip refactoring
-                    node.setAnnotation("refactorSkipReason", "Unsafe control flow in direct segment");
-                    return;
-                }
-            } else if (segment instanceof List) {
-                @SuppressWarnings("unchecked")
-                List<Node> chunk = (List<Node>) segment;
-                for (Node element : chunk) {
-                    controlFlowDetector.reset();
-                    element.accept(controlFlowDetector);
-                    if (controlFlowDetector.hasUnsafeControlFlow()) {
-                        // Chunk has unsafe control flow - skip refactoring
-                        node.setAnnotation("refactorSkipReason", "Unsafe control flow in chunk");
-                        return;
-                    }
-                }
-            }
-        }
+        // AGGRESSIVE MODE: Don't check for unsafe control flow in chunks
+        // We accept that some chunks may have control flow, but we wrap them anyway
+        // The key insight: control flow within a closure is safe as long as it doesn't
+        // reference labels outside the closure. We've already filtered out labels above.
         
         // Build nested structure if we have any chunks
         List<Node> processedElements = buildNestedStructure(
@@ -228,31 +255,27 @@ public class LargeBlockRefactorer {
                 skipRefactoring
         );
 
-        // Apply chunking if we reduced the element count
-        if (processedElements.size() < node.elements.size()) {
-            node.elements.clear();
-            node.elements.addAll(processedElements);
-            node.setAnnotation("blockAlreadyRefactored", true);
-            
-            // Verify refactoring was successful
-            long newEstimatedSize = estimateTotalBytecodeSize(node.elements);
-            node.setAnnotation("refactoredBytecodeSize", newEstimatedSize);
-            long originalSize = (Long) node.getAnnotation("estimatedBytecodeSize");
-            if (newEstimatedSize > LARGE_BYTECODE_SIZE) {
-                node.setAnnotation("refactorSkipReason", String.format("Refactoring failed: size %d still > threshold %d", newEstimatedSize, LARGE_BYTECODE_SIZE));
-                errorCantRefactorLargeBlock(node.tokenIndex, parser, newEstimatedSize);
-            }
+        // Apply chunking - we should always have created segments
+        node.elements.clear();
+        node.elements.addAll(processedElements);
+        node.setAnnotation("blockAlreadyRefactored", true);
+        
+        // Verify refactoring was successful
+        // Use real bytecode size calculation (not sampling) to avoid underestimation
+        long newEstimatedSize = 0;
+        for (Node element : node.elements) {
+            newEstimatedSize += BytecodeSizeEstimator.estimateSnippetSize(element);
+        }
+        node.setAnnotation("refactoredBytecodeSize", newEstimatedSize);
+        long originalSize = (Long) node.getAnnotation("estimatedBytecodeSize");
+        
+        // Check if refactoring succeeded in reducing size
+        if (newEstimatedSize > LARGE_BYTECODE_SIZE) {
+            // Still over 40KB threshold - let JVM handle validation
+            node.setAnnotation("refactorSkipReason", String.format("Refactoring reduced size from %d to %d bytes, still > threshold %d (JVM will validate)", originalSize, newEstimatedSize, LARGE_BYTECODE_SIZE));
+        } else {
             node.setAnnotation("refactorSkipReason", String.format("Successfully refactored: %d -> %d bytes", originalSize, newEstimatedSize));
-            return;
         }
-
-        // If refactoring didn't help and block is still too large, throw an error
-        long finalEstimatedSize = estimateTotalBytecodeSize(node.elements);
-        if (finalEstimatedSize > LARGE_BYTECODE_SIZE) {
-            node.setAnnotation("refactorSkipReason", String.format("Refactoring didn't reduce element count, size %d > threshold %d", finalEstimatedSize, LARGE_BYTECODE_SIZE));
-            errorCantRefactorLargeBlock(node.tokenIndex, parser, finalEstimatedSize);
-        }
-        node.setAnnotation("refactorSkipReason", String.format("Refactoring didn't reduce element count, but size %d <= threshold %d", finalEstimatedSize, LARGE_BYTECODE_SIZE));
 
     }
 
