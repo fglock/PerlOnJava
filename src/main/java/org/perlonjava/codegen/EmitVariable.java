@@ -360,8 +360,30 @@ public class EmitVariable {
                 } else {
                     // Regular case: `&$a`
                     node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    
+                    // Check if the variable is a lexical subroutine (already a CODE reference)
+                    // Lexical subs have a "hiddenVarName" annotation and should not be dereferenced
+                    boolean isLexicalSub = false;
+                    if (node.operand instanceof OperatorNode opNode && opNode.operator.equals("$")) {
+                        String hiddenVarName = (String) opNode.getAnnotation("hiddenVarName");
+                        isLexicalSub = (hiddenVarName != null);
+                    }
+                    
+                    // Dereference the scalar to get the CODE reference
+                    if (!isLexicalSub) {
+                        // Not a lexical sub: call codeDerefNonStrict to look up CODE slot from glob if needed
+                        // This handles both CODE references (returns unchanged) and symbolic references
+                        emitterVisitor.pushCurrentPackage();
+                        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, 
+                                "org/perlonjava/runtime/RuntimeScalar", 
+                                "codeDerefNonStrict", 
+                                "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;", 
+                                false);
+                    }
                 }
 
+                emitterVisitor.ctx.logDebug("EmitVariable: about to call RuntimeCode.apply for &$var");
+                
                 mv.visitVarInsn(Opcodes.ALOAD, 1);  // push @_ to stack
                 emitterVisitor.pushCallContext();   // push call context to stack
                 mv.visitMethodInsn(
@@ -610,8 +632,10 @@ public class EmitVariable {
         EmitterContext ctx = emitterVisitor.ctx;
 
         String operator = node.operator;
+        ctx.logDebug("handleMyOperator: operator=" + operator + ", operand type=" + (node.operand != null ? node.operand.getClass().getSimpleName() : "null") + ", contextType=" + ctx.contextType);
         if (node.operand instanceof ListNode listNode) { // my ($a, $b)  our ($a, $b)
             // process each item of the list; then returns the list
+            ctx.logDebug("handleMyOperator: ListNode operand, contextType=" + ctx.contextType + ", annotations=" + node.annotations);
             for (Node element : listNode.elements) {
                 if (element instanceof OperatorNode && "undef".equals(((OperatorNode) element).operator)) {
                     continue; // skip "undef"
@@ -666,7 +690,94 @@ public class EmitVariable {
                 }
             }
             if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
-                listNode.accept(emitterVisitor);
+                // Check if this is a declared reference (my \($b, $c))
+                boolean isDeclaredReference = node.annotations != null &&
+                        Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"));
+                
+                if (isDeclaredReference) {
+                    // For declared references, return a list of references to the variables
+                    emitterVisitor.ctx.logDebug("handleMyOperator: isDeclaredReference=true, emitting references for list elements");
+                    MethodVisitor mv = emitterVisitor.ctx.mv;
+                    
+                    // Create a new RuntimeList
+                    mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
+                    mv.visitInsn(Opcodes.DUP);
+                    mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "()V", false);
+                    
+                    // For each element in the list, emit the variable and create a reference
+                    for (Node element : listNode.elements) {
+                        ctx.logDebug("handleMyOperator: processing element: " + element + ", class=" + element.getClass().getSimpleName());
+                        if (element instanceof OperatorNode elemOpNode && "$@%".contains(elemOpNode.operator)) {
+                            ctx.logDebug("handleMyOperator: emitting createReference for " + elemOpNode.operator);
+                            mv.visitInsn(Opcodes.DUP);  // Dup the RuntimeList
+                            
+                            // Emit the variable in SCALAR context
+                            element.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                            
+                            // Create a reference to the variable
+                            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                                    "org/perlonjava/runtime/RuntimeBase",
+                                    "createReference",
+                                    "()Lorg/perlonjava/runtime/RuntimeScalar;",
+                                    false);
+                            
+                            // Add to the list
+                            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                                    "org/perlonjava/runtime/RuntimeList",
+                                    "add",
+                                    "(Lorg/perlonjava/runtime/RuntimeScalar;)V",
+                                    false);
+                        }
+                    }
+                } else {
+                    // Check if any element has isDeclaredReference annotation
+                    boolean hasAnyDeclaredRef = false;
+                    for (Node element : listNode.elements) {
+                        if (element instanceof OperatorNode elemOpNode && 
+                            elemOpNode.annotations != null && 
+                            Boolean.TRUE.equals(elemOpNode.annotations.get("isDeclaredReference"))) {
+                            hasAnyDeclaredRef = true;
+                            break;
+                        }
+                    }
+                    
+                    if (hasAnyDeclaredRef) {
+                        // Mixed case: some elements are declared refs, some are not
+                        // Build the list manually, emitting references for declared refs
+                        emitterVisitor.ctx.logDebug("handleMyOperator: hasAnyDeclaredRef=true, building mixed list");
+                        MethodVisitor mv = emitterVisitor.ctx.mv;
+                        
+                        mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
+                        mv.visitInsn(Opcodes.DUP);
+                        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "()V", false);
+                        
+                        for (Node element : listNode.elements) {
+                            if (element instanceof OperatorNode elemOpNode && "$@%".contains(elemOpNode.operator)) {
+                                mv.visitInsn(Opcodes.DUP);
+                                element.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                                
+                                // If this element has isDeclaredReference, create a reference
+                                if (elemOpNode.annotations != null && 
+                                    Boolean.TRUE.equals(elemOpNode.annotations.get("isDeclaredReference"))) {
+                                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                                            "org/perlonjava/runtime/RuntimeBase",
+                                            "createReference",
+                                            "()Lorg/perlonjava/runtime/RuntimeScalar;",
+                                            false);
+                                }
+                                
+                                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                                        "org/perlonjava/runtime/RuntimeList",
+                                        "add",
+                                        "(Lorg/perlonjava/runtime/RuntimeScalar;)V",
+                                        false);
+                            }
+                        }
+                    } else {
+                        emitterVisitor.ctx.logDebug("handleMyOperator: isDeclaredReference=false, emitting listNode directly");
+                        listNode.accept(emitterVisitor);
+                    }
+                }
             }
             return;
         } else if (node.operand instanceof OperatorNode sigilNode) { //  [my our] followed by [$ @ %]

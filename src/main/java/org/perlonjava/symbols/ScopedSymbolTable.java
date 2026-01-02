@@ -45,6 +45,8 @@ public class ScopedSymbolTable {
     private final Stack<PackageInfo> packageStack = new Stack<>();
     // Stack to manage nested subroutine names for error messages
     private final Stack<String> subroutineStack = new Stack<>();
+    // Stack to track whether we are inside a subroutine body (named or anonymous)
+    private final Stack<Boolean> inSubroutineBodyStack = new Stack<>();
     // Cache for the getAllVisibleVariables method
     private Map<Integer, SymbolTable.SymbolEntry> visibleVariablesCache;
 
@@ -71,6 +73,8 @@ public class ScopedSymbolTable {
         packageStack.push(new PackageInfo("main", false, null));
         // Initialize the subroutine stack with empty string (no subroutine)
         subroutineStack.push("");
+        // Initialize the subroutine-body flag stack (false at top level)
+        inSubroutineBodyStack.push(false);
         // Initialize an empty symbol table
         symbolTableStack.push(new SymbolTable(0));
     }
@@ -127,6 +131,8 @@ public class ScopedSymbolTable {
         packageStack.push(packageStack.peek());
         // Push a copy of the current subroutine name onto the stack
         subroutineStack.push(subroutineStack.peek());
+        // Push a copy of the current subroutine-body flag onto the stack
+        inSubroutineBodyStack.push(inSubroutineBodyStack.peek());
         // Push a copy of the current warning categories map onto the stack
         warningFlagsStack.push(warningFlagsStack.peek());
         // Push a copy of the current feature categories map onto the stack
@@ -151,10 +157,26 @@ public class ScopedSymbolTable {
             symbolTableStack.pop();
             packageStack.pop();
             subroutineStack.pop();
+            inSubroutineBodyStack.pop();
             warningFlagsStack.pop();
             featureFlagsStack.pop();
             strictOptionsStack.pop();
         }
+    }
+
+    /**
+     * Returns true if we are currently parsing inside a subroutine body (named or anonymous).
+     */
+    public boolean isInSubroutineBody() {
+        return inSubroutineBodyStack.peek();
+    }
+
+    /**
+     * Sets whether we are currently parsing inside a subroutine body (named or anonymous).
+     */
+    public void setInSubroutineBody(boolean inSubroutineBody) {
+        inSubroutineBodyStack.pop();
+        inSubroutineBodyStack.push(inSubroutineBody);
     }
 
     /**
@@ -431,6 +453,9 @@ public class ScopedSymbolTable {
 
         // Clone the current subroutine
         st.setCurrentSubroutine(this.getCurrentSubroutine());
+
+        // Clone whether we are inside a subroutine body
+        st.setInSubroutineBody(this.isInSubroutineBody());
 
         // Clone warning flags
         st.warningFlagsStack.pop(); // Remove the initial value pushed by enterScope

@@ -69,11 +69,17 @@ public class StatementResolver {
 
                 case "while", "until" -> StatementParser.parseWhileStatement(parser, label);
 
-                case "given" -> StatementParser.parseGivenStatement(parser);
+                case "given" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("switch")
+                        ? StatementParser.parseGivenStatement(parser)
+                        : null;
 
-                case "when" -> StatementParser.parseWhenStatement(parser);
+                case "when" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("switch")
+                        ? StatementParser.parseWhenStatement(parser)
+                        : null;
 
-                case "default" -> StatementParser.parseDefaultStatement(parser);
+                case "default" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("switch")
+                        ? StatementParser.parseDefaultStatement(parser)
+                        : null;
 
                 case "try" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("try")
                         ? StatementParser.parseTryStatement(parser)
@@ -275,14 +281,34 @@ public class StatementResolver {
                                     }
                                 }
                                 
-                                // Then check for prototype if not already set by attribute
+                                // Then check for prototype/signature
+                                // When signatures are enabled, we need to look ahead:
+                                // - (...) { ... } means signature + body
+                                // - (...) ; means prototype (forward declaration)
                                 if (prototype == null && peek(parser).text.equals("(")) {
-                                    // Parse the prototype
-                                    prototype = ((StringNode) StringParser.parseRawString(parser, "q")).value;
+                                    if (parser.ctx.symbolTable.isFeatureCategoryEnabled("signatures")) {
+                                        // Look ahead to see if there's a body after the parens
+                                        int savedIndex = parser.tokenIndex;
+                                        StringParser.parseRawString(parser, "q"); // consume the parens
+                                        boolean hasBodyAfterParens = peek(parser).text.equals("{");
+                                        parser.tokenIndex = savedIndex; // restore position
+                                        
+                                        if (!hasBodyAfterParens) {
+                                            // Forward declaration: (...) ; - parse as prototype
+                                            prototype = ((StringNode) StringParser.parseRawString(parser, "q")).value;
+                                        }
+                                        // else: leave (...) for parseSubroutineDefinition to handle as signature
+                                    } else {
+                                        // Signatures not enabled - always parse as prototype
+                                        prototype = ((StringNode) StringParser.parseRawString(parser, "q")).value;
+                                    }
                                 }
                                 
                                 // Now check if there's a body
-                                hasBody = peek(parser).text.equals("{");
+                                // When signatures are enabled, (...) followed by { also indicates a body
+                                String peekText = peek(parser).text;
+                                hasBody = peekText.equals("{") || 
+                                         (peekText.equals("(") && parser.ctx.symbolTable.isFeatureCategoryEnabled("signatures"));
 
                                 if (hasBody) {
                                     // Full definition: my sub name {...} or my sub name (...) {...}
@@ -315,13 +341,28 @@ public class StatementResolver {
                                     }
                                     BinaryOperatorNode assignment = new BinaryOperatorNode("=", varRef, anonSub, parser.tokenIndex);
 
-                                    // Execute assignment immediately during parsing (like a BEGIN block)
-                                    // This is crucial for cases like: state sub foo{...}; use overload => \&foo;
-                                    BlockNode beginBlock = new BlockNode(new ArrayList<>(List.of(assignment)), parser.tokenIndex);
-                                    SpecialBlockParser.runSpecialBlock(parser, "BEGIN", beginBlock);
+                                    // Check if we're inside a subroutine
+                                    String currentSub = parser.ctx.symbolTable.getCurrentSubroutine();
+                                    boolean insideSubroutine = currentSub != null && !currentSub.isEmpty();
                                     
-                                    // Return empty list since the assignment already executed
-                                    yield new ListNode(parser.tokenIndex);
+                                    if (declaration.equals("state") || !insideSubroutine) {
+                                        // For state sub: Execute assignment immediately during parsing (like a BEGIN block)
+                                        // This is crucial for cases like: state sub foo{...}; use overload => \&foo;
+                                        // The closure is created once and reused across all calls
+                                        //
+                                        // For my sub at FILE SCOPE: Also execute at compile time so that
+                                        // use statements (like use overload) can access the sub reference
+                                        BlockNode beginBlock = new BlockNode(new ArrayList<>(List.of(assignment)), parser.tokenIndex);
+                                        SpecialBlockParser.runSpecialBlock(parser, "BEGIN", beginBlock);
+                                        
+                                        // Return empty list since the assignment already executed
+                                        yield new ListNode(parser.tokenIndex);
+                                    } else {
+                                        // For my sub INSIDE ANOTHER SUB: Return the assignment to be executed at runtime
+                                        // This creates a fresh closure each time the enclosing scope is entered,
+                                        // correctly capturing the current values of closure variables
+                                        yield assignment;
+                                    }
                                 } else {
                                     // Forward declaration: my sub name; or my sub name ($);
                                     // For forward declarations, add &subName immediately since there's no body to be invisible in
@@ -334,8 +375,39 @@ public class StatementResolver {
                                     if (prototype != null) {
                                         // Store prototype in varDecl annotation
                                         varDecl.setAnnotation("prototype", prototype);
+                                        
+                                        // Create a stub RuntimeCode with the prototype set
+                                        // This is needed so that prototype(\&sub) works for forward declarations
+                                        String declaringPackage = parser.ctx.symbolTable.getCurrentPackage();
+                                        String qualifiedHiddenVarName = declaringPackage + "::" + hiddenVarName;
+                                        
+                                        // Create a subroutine stub with the prototype that returns undef
+                                        // The body needs at least a return statement to avoid bytecode issues
+                                        List<Node> stubBody = new ArrayList<>();
+                                        stubBody.add(new OperatorNode("undef", null, parser.tokenIndex));
+                                        SubroutineNode stubSub = new SubroutineNode(
+                                                null,  // anonymous
+                                                prototype,
+                                                attributes.isEmpty() ? null : attributes,
+                                                new BlockNode(stubBody, parser.tokenIndex),
+                                                false,  // useTryCatch
+                                                parser.tokenIndex
+                                        );
+                                        
+                                        // Create assignment: $hiddenVarName = sub { }
+                                        OperatorNode varRef = new OperatorNode("$", 
+                                                new IdentifierNode(qualifiedHiddenVarName, parser.tokenIndex), 
+                                                parser.tokenIndex);
+                                        BinaryOperatorNode stubAssignment = new BinaryOperatorNode("=", varRef, stubSub, parser.tokenIndex);
+                                        
+                                        // Execute the stub assignment in a BEGIN block
+                                        BlockNode beginBlock = new BlockNode(new ArrayList<>(List.of(stubAssignment)), parser.tokenIndex);
+                                        SpecialBlockParser.runSpecialBlock(parser, "BEGIN", beginBlock);
+                                        
+                                        // Return empty list since stub was created
+                                        yield new ListNode(parser.tokenIndex);
                                     }
-                                    // Just declare the variable
+                                    // Just declare the variable (no prototype case)
                                     yield varDecl;
                                 }
                             }

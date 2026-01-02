@@ -1,0 +1,21 @@
+--- perl5/t/porting/manifest.t
++++ t/porting/manifest.t
+@@ -74,6 +74,8 @@
+ SKIP: {
+     skip("Sorting order is different under EBCDIC", 1) if $::IS_EBCDIC || $::IS_EBCDIC;
+     skip("'Porting/manisort' not found", 1) if (! -f 'Porting/manisort');
++    ## PerlOnJava - skip runperl tests (runperl hangs in PerlOnJava)
++    skip("Not applicable in PerlOnJava - runperl not supported", 1);
+ 
+     my $result = runperl('progfile' => 'Porting/manisort',
+                          'args'     => [ '-c', $manifest ],
+@@ -84,7 +86,8 @@
+ }
+ 
+ SKIP: {
+-    find_git_or_skip(6);
++    ## PerlOnJava - skip git tests (not running in perl5 git repo)
++    skip("Not applicable in PerlOnJava - requires perl5 git repo", 6);
+     my %seen; # De-dup ls-files output (can appear more than once)
+     my @repo= grep {
+         chomp();

@@ -396,7 +396,7 @@ public class StatementParser {
         // Add all the statements from the block
         statements.addAll(blockContent.elements);
 
-        return new BlockNode(statements, index);
+        return new BlockNode(statements, index, parser);
     }
 
     /**

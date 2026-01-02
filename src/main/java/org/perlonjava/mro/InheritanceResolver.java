@@ -328,8 +328,8 @@ public class InheritanceResolver {
             }
 
             // Method not found in current class, check AUTOLOAD
-            if (!autoloadEnabled || methodName.equals("((") || methodName.equals("()")) {
-                // refuse to AUTOLOAD tie() flags and overload markers
+            if (!autoloadEnabled || methodName.startsWith("(")) {
+                // refuse to AUTOLOAD tie() flags and overload markers (all start with "(")
             } else {
                 // Check for AUTOLOAD in current class
                 String autoloadName = className + "::AUTOLOAD";

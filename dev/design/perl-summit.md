@@ -74,7 +74,6 @@ perlito5 support for:
 - Mo.pm (pure perl, small); Moo
 - Exporter.pm (needs caller for import()); Sub::Exporter
 
-
 perlito AST
 - shorter names
 - more information
@@ -86,4 +85,3 @@ perl5 parser
 - markov
 - complete
 - formatted perl5 emitter; remove parenthesis
-

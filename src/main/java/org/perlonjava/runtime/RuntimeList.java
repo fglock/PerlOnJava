@@ -386,39 +386,51 @@ public class RuntimeList extends RuntimeBase {
      */
     public RuntimeArray setFromList(RuntimeList value) {
 
-        // Flatten the right side
-        RuntimeArray original = new RuntimeArray();
-        value.addToArray(original);
+        // Materialize the RHS once into a flat list.
+        // Avoids O(n^2) from repeated RuntimeArray.shift() which does removeFirst() on ArrayList.
+        RuntimeArray rhs = new RuntimeArray();
+        value.addToArray(rhs);
 
-        // Retrieve the list
-        RuntimeArray arr = new RuntimeArray();
-        original.addToArray(arr);
+        List<RuntimeScalar> rhsElements = rhs.elements;
+        int rhsSize = rhsElements.size();
+        int rhsIndex = 0;
 
         // Build result with assigned values (including undef for unassigned scalars)
         RuntimeArray result = new RuntimeArray();
         // Store original size for scalar context
-        result.scalarContextSize = original.elements.size();
-        
+        result.scalarContextSize = rhsSize;
+
         for (RuntimeBase elem : elements) {
             if (elem instanceof RuntimeScalarReadOnly runtimeScalarReadOnly && !runtimeScalarReadOnly.getDefinedBoolean()) {
-                RuntimeArray.shift(arr);
+                // Discard one RHS value
+                if (rhsIndex < rhsSize) {
+                    rhsIndex++;
+                }
             } else if (elem instanceof RuntimeScalar runtimeScalar) {
-                RuntimeScalar assigned = RuntimeArray.shift(arr);
+                RuntimeScalar assigned = (rhsIndex < rhsSize) ? rhsElements.get(rhsIndex++) : new RuntimeScalar();
                 runtimeScalar.set(assigned);
                 result.elements.add(runtimeScalar);  // Add reference to the variable itself
             } else if (elem instanceof RuntimeArray runtimeArray) {
-                runtimeArray.elements = arr.elements;
-                result.elements.addAll(arr.elements);  // Use original references
-                arr.elements = new ArrayList<>();
+                List<RuntimeScalar> remaining = (rhsIndex < rhsSize)
+                        ? new ArrayList<>(rhsElements.subList(rhsIndex, rhsSize))
+                        : new ArrayList<>();
+                runtimeArray.elements = remaining;
+                result.elements.addAll(remaining);  // Use original references
+                rhsIndex = rhsSize; // Consume the rest
             } else if (elem instanceof RuntimeHash runtimeHash) {
-                RuntimeHash hash = RuntimeHash.createHashForAssignment(arr);
+                RuntimeArray remainingArr = new RuntimeArray();
+                remainingArr.elements = (rhsIndex < rhsSize)
+                        ? new ArrayList<>(rhsElements.subList(rhsIndex, rhsSize))
+                        : new ArrayList<>();
+
+                RuntimeHash hash = RuntimeHash.createHashForAssignment(remainingArr);
                 runtimeHash.elements = hash.elements;
                 // Add lvalue references to hash elements for list assignment
                 for (Map.Entry<String, RuntimeScalar> entry : hash.elements.entrySet()) {
                     result.elements.add(new RuntimeScalar(entry.getKey()));
                     result.elements.add(entry.getValue());  // Add reference to hash value
                 }
-                arr.elements = new ArrayList<>();
+                rhsIndex = rhsSize; // Consume the rest
             }
         }
         return result;
