@@ -99,14 +99,19 @@ public class EmitBlock {
                 element.accept(voidVisitor);
             }
             
-            // Check RuntimeControlFlowRegistry after each statement (if in a LABELED loop)
-            // Only check for loops with explicit labels (like SKIP:) to avoid overhead in regular loops
-            if (node.isLoop && node.labelName != null) {
-                LoopLabels loopLabels = emitterVisitor.ctx.javaClassInfo.findLoopLabelsByName(node.labelName);
-                if (loopLabels != null) {
-                    emitRegistryCheck(mv, loopLabels, redoLabel, nextLabel, nextLabel);
-                }
-            }
+            // TODO: Non-local control flow registry checks are disabled because they cause
+            // bytecode verification errors when used with bare labeled blocks (like TODO:)
+            // The registry check assumes a clean stack but statements in VOID context
+            // may leave values on the stack, causing "Operand stack underflow" errors.
+            // This needs to be redesigned to work correctly with all block types.
+            //
+            // Original code:
+            // if (node.isLoop && node.labelName != null) {
+            //     LoopLabels loopLabels = emitterVisitor.ctx.javaClassInfo.findLoopLabelsByName(node.labelName);
+            //     if (loopLabels != null) {
+            //         emitRegistryCheck(mv, loopLabels, redoLabel, nextLabel, nextLabel);
+            //     }
+            // }
         }
 
         if (node.isLoop) {
