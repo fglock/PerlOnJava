@@ -28,14 +28,25 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       # Use Makefile's 'ci' target which handles platform differences
-      # Windows: builds without tests to avoid Gradle daemon socket errors
-      # Linux: full build with tests
+      # Windows: uses Maven to run tests (avoids Gradle daemon socket errors)
+      # Linux: full Gradle build with tests
       - name: Build with Make (Windows)
         if: runner.os == 'Windows'
         shell: cmd
         run: make ci
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false"
+
+      - name: Show test summary (Windows)
+        if: always() && runner.os == 'Windows'
+        shell: bash
+        run: |
+          echo "=== Maven Test Summary ==="
+          if [ -d "target/surefire-reports" ]; then
+            find target/surefire-reports -name "*.txt" -exec cat {} \;
+          else
+            echo "No test reports found - tests may not have run"
+          fi
 
       - name: Build with Make (Linux)
         if: runner.os == 'Linux'
