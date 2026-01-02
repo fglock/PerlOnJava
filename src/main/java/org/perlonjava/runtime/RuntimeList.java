@@ -116,7 +116,14 @@ public class RuntimeList extends RuntimeBase {
      * @param value The value to add.
      */
     public void add(RuntimeBase value) {
-        if (value instanceof RuntimeList list) {
+        // CRITICAL: RuntimeControlFlowList must NOT be flattened!
+        // It's a control flow marker that should propagate, not a normal list
+        if (value instanceof RuntimeControlFlowList) {
+            // This is a control flow marker - should not happen in normal code
+            // If we reach here, it means a control flow marker wasn't caught properly
+            // For now, just add it as-is to avoid corrupting the marker
+            this.elements.add(value);
+        } else if (value instanceof RuntimeList list) {
             this.elements.addAll(list.elements);
         } else {
             this.elements.add(value);
@@ -554,5 +561,17 @@ public class RuntimeList extends RuntimeBase {
             }
             return currentIterator.next();
         }
+    }
+    
+    // ========== Control Flow Support ==========
+    
+    /**
+     * Check if this RuntimeList represents non-local control flow.
+     * Uses instanceof check which is optimized by JIT compiler.
+     * 
+     * @return true if this is a RuntimeControlFlowList, false otherwise
+     */
+    public boolean isNonLocalGoto() {
+        return this instanceof RuntimeControlFlowList;
     }
 }

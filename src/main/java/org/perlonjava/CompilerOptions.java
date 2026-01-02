@@ -66,6 +66,7 @@ public class CompilerOptions implements Cloneable {
     public String debugFlags = ""; // For -D
     // Unicode/encoding flags for -C switches
     public boolean unicodeStdin = false; // -CS or -CI
+    public boolean isMainProgram = false; // True if this is the top-level main script
     public boolean unicodeStdout = false; // -CO
     public boolean unicodeStderr = false; // -CE
     public boolean unicodeInput = false; // -CI (same as stdin)

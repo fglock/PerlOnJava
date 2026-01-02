@@ -21,6 +21,23 @@ public class JavaClassInfo {
      * The label to return to after method execution.
      */
     public Label returnLabel;
+    
+    /**
+     * Local variable slot for tail call trampoline - stores codeRef.
+     */
+    public int tailCallCodeRefSlot;
+    
+    /**
+     * Local variable slot for tail call trampoline - stores args.
+     */
+    public int tailCallArgsSlot;
+    
+    /**
+     * Local variable slot for temporarily storing marked RuntimeControlFlowList during call-site checks.
+     */
+    public int controlFlowTempSlot;
+
+    public int controlFlowActionSlot;
 
     /**
      * Manages the stack level for the class.
@@ -59,10 +76,62 @@ public class JavaClassInfo {
     }
 
     /**
-     * Pops the top set of loop labels from the loop label stack.
+     * Pushes a new set of loop labels with isTrueLoop flag.
+     *
+     * @param labelName     the name of the loop label
+     * @param nextLabel     the label for the next iteration
+     * @param redoLabel     the label for redoing the current iteration
+     * @param lastLabel     the label for exiting the loop
+     * @param stackLevel    the current stack level
+     * @param context       the context type
+     * @param isTrueLoop    whether this is a true loop (for/while/until) or pseudo-loop (do-while/bare)
      */
-    public void popLoopLabels() {
-        loopLabelStack.pop();
+    public void pushLoopLabels(String labelName, Label nextLabel, Label redoLabel, Label lastLabel, int stackLevel, int context, boolean isTrueLoop) {
+        loopLabelStack.push(new LoopLabels(labelName, nextLabel, redoLabel, lastLabel, stackLevel, context, isTrueLoop));
+    }
+    
+    /**
+     * Pushes a LoopLabels object onto the loop label stack.
+     * This is useful when you've already constructed a LoopLabels object with a control flow handler.
+     *
+     * @param loopLabels the LoopLabels object to push
+     */
+    public void pushLoopLabels(LoopLabels loopLabels) {
+        loopLabelStack.push(loopLabels);
+    }
+
+    /**
+     * Pops the top set of loop labels from the loop label stack and returns it.
+     *
+     * @return the popped LoopLabels object
+     */
+    public LoopLabels popLoopLabels() {
+        return loopLabelStack.pop();
+    }
+    
+    /**
+     * Gets the innermost (current) loop labels.
+     * Returns null if not currently inside a loop.
+     *
+     * @return the innermost LoopLabels object, or null if none
+     */
+    public LoopLabels getInnermostLoopLabels() {
+        return loopLabelStack.peek();
+    }
+
+    /**
+     * Gets the parent loop labels (the loop containing the current loop).
+     * Returns null if there's no parent loop.
+     *
+     * @return the parent LoopLabels object, or null if none
+     */
+    public LoopLabels getParentLoopLabels() {
+        if (loopLabelStack.size() < 2) {
+            return null;
+        }
+        // Convert deque to array to access second-to-top element
+        LoopLabels[] array = loopLabelStack.toArray(new LoopLabels[0]);
+        return array[array.length - 2];
     }
 
     /**

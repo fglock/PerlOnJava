@@ -1,13 +1,22 @@
-.PHONY: all clean test test-unit test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper dev
+.PHONY: all clean test test-unit test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper dev ci
 
 all: build
 
-wrapper:
+# CI build - optimized for CI/CD environments
+ci: wrapper
 ifeq ($(OS),Windows_NT)
-	@if not exist gradlew.bat gradle wrapper
+	gradlew.bat clean compileJava shadowJar --no-daemon --stacktrace
+	@echo "Running unit tests with jperl.bat..."
+	@for test in src/test/resources/unit/*.t; do \
+		echo "Testing $$test" && \
+		./jperl.bat "$$test" || exit 1; \
+	done
 else
-	@test -f ./gradlew || gradle wrapper
+	./gradlew build --no-daemon --stacktrace
 endif
+
+wrapper:
+	@test -f ./gradlew || gradle wrapper
 
 # Standard build - incremental compilation with parallel tests (4 JVMs)
 build: wrapper
