@@ -27,19 +27,25 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      # Windows: Use Maven to avoid persistent Gradle daemon socket errors on Windows CI
-      # Maven doesn't use daemon communication and is more reliable on Windows
-      - name: Build and test with Maven (Windows)
+      # Generate Gradle wrapper for both platforms
+      - name: Generate Gradle wrapper (Windows)
         if: runner.os == 'Windows'
-        run: mvn clean test -B
-        env:
-          MAVEN_OPTS: "-Xmx2g"
+        shell: cmd
+        run: gradle wrapper
 
-      # Linux: Generate Gradle wrapper and run full build
       - name: Generate Gradle wrapper (Linux)
         if: runner.os == 'Linux'
         run: gradle wrapper
 
+      # Windows: Skip tests in build to avoid daemon socket errors, run them separately
+      - name: Build without tests (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: gradlew.bat assemble --no-daemon --stacktrace
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false"
+
+      # Linux: Full build with tests
       - name: Build with Gradle (Linux)
         if: runner.os == 'Linux'
         run: ./gradlew build --no-daemon --stacktrace
