@@ -311,6 +311,19 @@ public class EmitSubroutine {
         // - Result: No ASM errors! But causes infinite loop in test_nonlocal_next.pl
         // - Issue: The returned marked value propagates up but loops may not check it properly
         // - Need to verify that loops at all levels check for marked returns and handle them
+        // LATEST ATTEMPT: Single helper method with no branching
+        // - checkAndWrapIfNeeded() returns either original or marked list
+        // - No ASM errors! ✅
+        // - But in VOID context, we need to check if marked before POPping
+        // - If marked, we RETURN it - but this returns from wrong method level again
+        // 
+        // THE CORE PROBLEM: We cannot use RETURN because it exits the entire method
+        // We cannot use GOTO because it breaks ASM frame computation
+        // 
+        // CONCLUSION: Non-local control flow across subroutine boundaries requires
+        // a fundamentally different approach than what we've tried. The registry-based
+        // approach works at the loop level (loops check registry after body), but
+        // checking after EVERY subroutine call is problematic.
         if (false && ENABLE_CONTROL_FLOW_CHECKS) {
             emitControlFlowCheck(emitterVisitor.ctx);
         }
@@ -319,9 +332,28 @@ public class EmitSubroutine {
             // Transform the value in the stack to RuntimeScalar
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
         } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            // Remove the value from the stack
-            // (If it was a control flow marker, emitControlFlowCheck already handled it)
-            mv.visitInsn(Opcodes.POP);
+            // In VOID context, we normally POP the result
+            // BUT: If control flow check is enabled and the result is a marked RuntimeControlFlowList,
+            // we need to propagate it up (not POP it) so the loop can handle it
+            if (ENABLE_CONTROL_FLOW_CHECKS) {
+                // Check if the result is marked
+                Label notMarked = new Label();
+                mv.visitInsn(Opcodes.DUP);  // Duplicate for checking
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, 
+                        "org/perlonjava/runtime/RuntimeList", 
+                        "isNonLocalGoto", 
+                        "()Z", 
+                        false);
+                mv.visitJumpInsn(Opcodes.IFEQ, notMarked);
+                // It's marked - RETURN it (don't POP)
+                mv.visitInsn(Opcodes.ARETURN);
+                // Not marked - POP it
+                mv.visitLabel(notMarked);
+                mv.visitInsn(Opcodes.POP);
+            } else {
+                // Control flow checks disabled - just POP
+                mv.visitInsn(Opcodes.POP);
+            }
         }
     }
 
@@ -383,10 +415,10 @@ public class EmitSubroutine {
         // After a subroutine call, check if non-local control flow was registered
         // This enables next/last/redo LABEL to work from inside closures
         //
-        // KEY INSIGHT from Java compiler: Use RETURN instead of GOTO
-        // Java uses ARETURN (terminal instruction) instead of GOTO (needs frame merging)
-        // We do the same: if control flow is registered, create a marked RuntimeControlFlowList
-        // and RETURN it. The loop level will check and handle it.
+        // APPROACH: Use a helper method to simplify the control flow
+        // Instead of complex branching with TABLESWITCH or multiple IFs,
+        // call a single helper method that does all the checking and returns
+        // either the original result or a marked RuntimeControlFlowList
         
         // Stack: [RuntimeList result]
         
@@ -396,7 +428,8 @@ public class EmitSubroutine {
         
         if (innermostLoop != null) {
             // We're inside a loop - check if non-local control flow was registered
-            Label continueNormally = new Label();
+            // Call helper: RuntimeControlFlowRegistry.checkAndWrapIfNeeded(result, labelName)
+            // Returns: either the original result or a marked RuntimeControlFlowList
             
             // Stack: [RuntimeList result]
             
@@ -407,49 +440,20 @@ public class EmitSubroutine {
                 ctx.mv.visitInsn(Opcodes.ACONST_NULL);
             }
             
-            // Call: int action = RuntimeControlFlowRegistry.checkLoopAndGetAction(String labelName)
-            // Returns: 0=none, 1=last, 2=next, 3=redo
+            // Call: RuntimeList result = RuntimeControlFlowRegistry.checkAndWrapIfNeeded(result, labelName)
+            // This method checks the registry and returns either:
+            // - The original result if no action (action == 0)
+            // - A marked RuntimeControlFlowList if action detected
             ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/RuntimeControlFlowRegistry",
-                    "checkLoopAndGetAction",
-                    "(Ljava/lang/String;)I",
+                    "checkAndWrapIfNeeded",
+                    "(Lorg/perlonjava/runtime/RuntimeList;Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeList;",
                     false);
-            // Stack: [RuntimeList result] [int action]
+            // Stack: [RuntimeList result_or_marked]
             
-            // If action == 0 (none), continue normally
-            ctx.mv.visitInsn(Opcodes.DUP);
-            ctx.mv.visitJumpInsn(Opcodes.IFEQ, continueNormally);
-            
-            // Action != 0: Create a marked RuntimeControlFlowList and RETURN it
-            // This is the key: we RETURN instead of GOTO, just like Java does
-            // Stack: [RuntimeList result] [int action]
-            
-            // Pop the result (we don't need it)
-            ctx.mv.visitInsn(Opcodes.SWAP);
-            ctx.mv.visitInsn(Opcodes.POP);
-            // Stack: [int action]
-            
-            // Convert action to ControlFlowType
-            // Create: RuntimeControlFlowList.createFromAction(action, labelName)
-            if (innermostLoop.labelName != null) {
-                ctx.mv.visitLdcInsn(innermostLoop.labelName);
-            } else {
-                ctx.mv.visitInsn(Opcodes.ACONST_NULL);
-            }
-            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/RuntimeControlFlowList",
-                    "createFromAction",
-                    "(ILjava/lang/String;)Lorg/perlonjava/runtime/RuntimeControlFlowList;",
-                    false);
-            // Stack: [RuntimeControlFlowList marked]
-            
-            // RETURN the marked list (terminal instruction, no frame merging needed!)
-            ctx.mv.visitInsn(Opcodes.ARETURN);
-            
-            // No action: continue normally with result on stack
-            ctx.mv.visitLabel(continueNormally);
-            ctx.mv.visitInsn(Opcodes.POP); // Pop the duplicate action (0)
-            // Stack: [RuntimeList result]
+            // No branching needed! The helper method handles everything.
+            // The result is either the original or a marked list.
+            // The loop level will check if it's marked and handle it.
         }
         // If not inside a loop, don't check registry (result stays on stack)
     }
