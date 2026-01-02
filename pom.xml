@@ -186,9 +186,8 @@
                     <argLine>--enable-native-access=ALL-UNNAMED</argLine>
                     <groups>unit</groups>
                     <excludedGroups>full</excludedGroups>
-                    <!-- Prevent fork reuse to handle tests that call System.exit() -->
-                    <reuseForks>false</reuseForks>
-                    <forkCount>1</forkCount>
+                    <!-- Use in-process execution to avoid fork crashes -->
+                    <forkCount>0</forkCount>
                 </configuration>
             </plugin>
         </plugins>
