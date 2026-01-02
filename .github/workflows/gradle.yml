@@ -27,26 +27,19 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      # Generate Gradle wrapper files (matches Makefile 'wrapper' target behavior)
-      - name: Generate Gradle wrapper (Windows)
+      # Windows: Use Maven to avoid persistent Gradle daemon socket errors on Windows CI
+      # Maven doesn't use daemon communication and is more reliable on Windows
+      - name: Build and test with Maven (Windows)
         if: runner.os == 'Windows'
-        shell: cmd
-        run: gradle wrapper
+        run: mvn clean test -B
+        env:
+          MAVEN_OPTS: "-Xmx2g"
 
+      # Linux: Generate Gradle wrapper and run full build
       - name: Generate Gradle wrapper (Linux)
         if: runner.os == 'Linux'
         run: gradle wrapper
 
-      # Windows: Compile and run unit tests (skip shadowJar to avoid socket errors)
-      # Use 'test' task which is configured to run unit tests with 'unit' tag
-      - name: Build and test with Gradle (Windows)
-        if: runner.os == 'Windows'
-        shell: cmd
-        run: gradlew.bat test --no-daemon --stacktrace
-        env:
-          GRADLE_OPTS: "-Dorg.gradle.daemon=false"
-
-      # Linux: Use standard gradlew invocation
       - name: Build with Gradle (Linux)
         if: runner.os == 'Linux'
         run: ./gradlew build --no-daemon --stacktrace
