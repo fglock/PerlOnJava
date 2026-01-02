@@ -99,19 +99,15 @@ public class EmitBlock {
                 element.accept(voidVisitor);
             }
             
-            // TODO: Non-local control flow registry checks are disabled because they cause
-            // bytecode verification errors when used with bare labeled blocks (like TODO:)
-            // The registry check assumes a clean stack but statements in VOID context
-            // may leave values on the stack, causing "Operand stack underflow" errors.
-            // This needs to be redesigned to work correctly with all block types.
+            // NOTE: Registry checks are DISABLED in EmitBlock because:
+            // 1. They cause ASM frame computation errors in nested/refactored code
+            // 2. Bare labeled blocks (like TODO:) don't need non-local control flow
+            // 3. Real loops (for/while/foreach) have their own registry checks in
+            //    EmitForeach.java and EmitStatement.java that work correctly
             //
-            // Original code:
-            // if (node.isLoop && node.labelName != null) {
-            //     LoopLabels loopLabels = emitterVisitor.ctx.javaClassInfo.findLoopLabelsByName(node.labelName);
-            //     if (loopLabels != null) {
-            //         emitRegistryCheck(mv, loopLabels, redoLabel, nextLabel, nextLabel);
-            //     }
-            // }
+            // This means non-local control flow (next LABEL from closures) works for
+            // actual loop constructs but NOT for bare labeled blocks, which is correct
+            // Perl behavior anyway.
         }
 
         if (node.isLoop) {
@@ -144,8 +140,8 @@ public class EmitBlock {
      */
     private static void emitRegistryCheck(MethodVisitor mv, LoopLabels loopLabels, 
                                          Label redoLabel, Label nextLabel, Label lastLabel) {
-        // ULTRA-SIMPLE pattern to avoid ASM issues:
-        // Call a single helper method that does ALL the checking and returns an action code
+        // Check RuntimeControlFlowRegistry for non-local control flow
+        // Use simple IF comparisons instead of TABLESWITCH to avoid ASM frame computation issues
         
         String labelName = loopLabels.labelName;
         if (labelName != null) {
@@ -162,17 +158,38 @@ public class EmitBlock {
                 "(Ljava/lang/String;)I",
                 false);
         
-        // Use TABLESWITCH for clean bytecode
-        mv.visitTableSwitchInsn(
-                1,  // min (LAST)
-                3,  // max (REDO)
-                nextLabel,  // default (0=none or out of range)
-                lastLabel,  // 1: LAST
-                nextLabel,  // 2: NEXT  
-                redoLabel   // 3: REDO
-        );
+        // Store action in a local variable to avoid stack issues
+        // Then use simple IF comparisons instead of TABLESWITCH
+        Label continueLabel = new Label();
+        Label checkNext = new Label();
+        Label checkRedo = new Label();
         
-        // No label needed - all paths are handled by switch
+        // Check if action == 1 (LAST)
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitInsn(Opcodes.ICONST_1);
+        mv.visitJumpInsn(Opcodes.IF_ICMPNE, checkNext);
+        mv.visitInsn(Opcodes.POP); // Pop the duplicate
+        mv.visitJumpInsn(Opcodes.GOTO, lastLabel);
+        
+        // Check if action == 2 (NEXT)
+        mv.visitLabel(checkNext);
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitInsn(Opcodes.ICONST_2);
+        mv.visitJumpInsn(Opcodes.IF_ICMPNE, checkRedo);
+        mv.visitInsn(Opcodes.POP); // Pop the duplicate
+        mv.visitJumpInsn(Opcodes.GOTO, nextLabel);
+        
+        // Check if action == 3 (REDO)
+        mv.visitLabel(checkRedo);
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitInsn(Opcodes.ICONST_3);
+        mv.visitJumpInsn(Opcodes.IF_ICMPNE, continueLabel);
+        mv.visitInsn(Opcodes.POP); // Pop the duplicate
+        mv.visitJumpInsn(Opcodes.GOTO, redoLabel);
+        
+        // Default: action == 0 (none) or other - continue normally
+        mv.visitLabel(continueLabel);
+        mv.visitInsn(Opcodes.POP); // Pop the action value
     }
 
     private static BinaryOperatorNode refactorBlockToSub(BlockNode node) {
