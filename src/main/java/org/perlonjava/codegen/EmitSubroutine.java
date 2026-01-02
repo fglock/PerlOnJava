@@ -311,20 +311,12 @@ public class EmitSubroutine {
         // - Result: No ASM errors! But causes infinite loop in test_nonlocal_next.pl
         // - Issue: The returned marked value propagates up but loops may not check it properly
         // - Need to verify that loops at all levels check for marked returns and handle them
-        // LATEST ATTEMPT: Single helper method with no branching
+        // WORKING APPROACH: Single helper method with no branching
         // - checkAndWrapIfNeeded() returns either original or marked list
         // - No ASM errors! ✅
-        // - But in VOID context, we need to check if marked before POPping
-        // - If marked, we RETURN it - but this returns from wrong method level again
-        // 
-        // THE CORE PROBLEM: We cannot use RETURN because it exits the entire method
-        // We cannot use GOTO because it breaks ASM frame computation
-        // 
-        // CONCLUSION: Non-local control flow across subroutine boundaries requires
-        // a fundamentally different approach than what we've tried. The registry-based
-        // approach works at the loop level (loops check registry after body), but
-        // checking after EVERY subroutine call is problematic.
-        if (false && ENABLE_CONTROL_FLOW_CHECKS) {
+        // - In VOID context, check if marked BEFORE popping
+        // - If marked, propagate it up; if not, pop it
+        if (ENABLE_CONTROL_FLOW_CHECKS) {
             emitControlFlowCheck(emitterVisitor.ctx);
         }
         
@@ -332,11 +324,9 @@ public class EmitSubroutine {
             // Transform the value in the stack to RuntimeScalar
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
         } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            // In VOID context, we normally POP the result
-            // BUT: If control flow check is enabled and the result is a marked RuntimeControlFlowList,
-            // we need to propagate it up (not POP it) so the loop can handle it
+            // In VOID context, check if the result is marked BEFORE popping
             if (ENABLE_CONTROL_FLOW_CHECKS) {
-                // Check if the result is marked
+                // Check if the result is a marked RuntimeControlFlowList
                 Label notMarked = new Label();
                 mv.visitInsn(Opcodes.DUP);  // Duplicate for checking
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, 
@@ -345,15 +335,13 @@ public class EmitSubroutine {
                         "()Z", 
                         false);
                 mv.visitJumpInsn(Opcodes.IFEQ, notMarked);
-                // It's marked - RETURN it (don't POP)
+                // It's marked - propagate it up (RETURN without popping)
                 mv.visitInsn(Opcodes.ARETURN);
-                // Not marked - POP it
+                // Not marked - continue to POP
                 mv.visitLabel(notMarked);
-                mv.visitInsn(Opcodes.POP);
-            } else {
-                // Control flow checks disabled - just POP
-                mv.visitInsn(Opcodes.POP);
             }
+            // Remove the value from the stack (normal VOID behavior)
+            mv.visitInsn(Opcodes.POP);
         }
     }
 
