@@ -378,12 +378,12 @@ my @copy = @{$z};         # ERROR
 - ✅  **`for` loop variable**: The `for` loop variable is aliased to list elements.
 - ✅  **`for` loop variable**: Iterate over multiple values at a time is implemented.
 - ✅  **`for` loop variable**: You can use fully qualified global variables as the variable in a for loop.
-- ✅  **loop control operators**: `next`, `last`, `redo` with labels are implemented.
-- ✅  **`goto` operator**: `goto LABEL` is implemented.
+- ✅  **loop control operators**: `next LABEL`, `last LABEL`, `redo LABEL` with literal labels are implemented, including non-local control flow (jumping from subroutines to caller's loops).
+- ✅  **`goto` operator**: `goto LABEL` with literal labels is implemented.
 - ✅  **`goto &name`**: Tail call optimization with trampoline is implemented.
 - ✅  **`goto __SUB__`**: Recursive tail call is implemented.
-- ❌  **loop control operators**: `next`, `last`, `redo` with EXPR are not implemented.
-- ❌  **`goto` operator**: `goto EXPR` is not implemented.
+- ❌  **loop control operators**: `next EXPR`, `last EXPR`, `redo EXPR` with dynamic expressions (e.g., `$label = "OUTER"; next $label`) are not implemented.
+- ❌  **`goto` operator**: `goto EXPR` with dynamic expressions is not implemented.
 - ✅  **setting `$_` in `while` loop with `<>`**: automatic setting `$_` in `while` loops is implemented.
 - ✅  **`do BLOCK while`**: `do` executes once before the conditional is evaluated.
 - ✅  **`...` ellipsis statement**: `...` is supported.
