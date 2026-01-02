@@ -27,7 +27,17 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      # Windows: Use cmd.exe to invoke gradlew.bat to avoid PowerShell path issues
+      # Generate Gradle wrapper files (matches Makefile 'wrapper' target behavior)
+      - name: Generate Gradle wrapper (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: gradle wrapper
+
+      - name: Generate Gradle wrapper (Linux)
+        if: runner.os == 'Linux'
+        run: gradle wrapper
+
+      # Windows: Use cmd.exe to invoke gradlew.bat
       - name: Build with Gradle (Windows)
         if: runner.os == 'Windows'
         shell: cmd
