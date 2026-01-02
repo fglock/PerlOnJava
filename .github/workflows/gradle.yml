@@ -31,14 +31,14 @@ jobs:
       # Windows CI runners occasionally fail with "Connection reset by peer" errors
       # when Gradle daemon tries to communicate between processes.
       # Workarounds:
-      # - Use Gradle wrapper (./gradlew.bat) instead of gradle command for consistency
+      # - Use Gradle wrapper (gradlew.bat) instead of gradle command for consistency
       # - --no-daemon: Disable daemon mode completely
       # - --no-parallel: Prevent parallel execution that can cause socket conflicts
       # - -Xmx2g: Increase heap size to prevent memory-related socket issues
       # - --stacktrace: Provide detailed error information if issues occur
       - name: Build with Gradle (Windows)
         if: runner.os == 'Windows'
-        run: ./gradlew.bat build --no-daemon --no-parallel --stacktrace
+        run: .\gradlew.bat build --no-daemon --no-parallel --stacktrace
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx2g"
 
