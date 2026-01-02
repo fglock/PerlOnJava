@@ -5,7 +5,7 @@ all: build
 # CI build - optimized for CI/CD environments
 ci: wrapper
 ifeq ($(OS),Windows_NT)
-	gradlew.bat assemble --no-daemon --stacktrace
+	mvn clean test -B
 else
 	./gradlew build --no-daemon --stacktrace
 endif
