@@ -265,7 +265,7 @@ public class EmitForeach {
         if (node.continueBlock != null) {
             node.continueBlock.accept(emitterVisitor.with(RuntimeContextType.VOID));
             // Check registry again after continue block
-            emitRegistryCheck(mv, currentLoopLabels, redoLabel, continueLabel, loopEnd);
+            emitRegistryCheck(mv, currentLoopLabels, redoLabel, loopStart, loopEnd);
         }
 
         mv.visitJumpInsn(Opcodes.GOTO, loopStart);
