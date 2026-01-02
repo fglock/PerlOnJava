@@ -303,44 +303,89 @@ public class EmitSubroutine {
                 false); // Generate an .apply() call
         
         // Check for control flow (last/next/redo/goto/tail calls)
-        // This MUST happen before context conversion (before POP in VOID context)
-        // 
-        // TRIED: Java's approach using RETURN instead of GOTO
-        // - Java uses ARETURN (terminal instruction) which doesn't need frame merging
-        // - We implemented this: check registry, create marked RuntimeControlFlowList, RETURN it
-        // - Result: No ASM errors! But causes infinite loop in test_nonlocal_next.pl
-        // - Issue: The returned marked value propagates up but loops may not check it properly
-        // - Need to verify that loops at all levels check for marked returns and handle them
-        // WORKING APPROACH: Single helper method with no branching
-        // - checkAndWrapIfNeeded() returns either original or marked list
-        // - No ASM errors! ✅
-        // - In VOID context, check if marked BEFORE popping
-        // - If marked, propagate it up; if not, pop it
-        if (ENABLE_CONTROL_FLOW_CHECKS) {
-            emitControlFlowCheck(emitterVisitor.ctx);
-        }
+        // NOTE: Call-site control flow is handled in VOID context below (after the call result is on stack).
+        // Do not call emitControlFlowCheck here, as it can clear the registry and/or require returning.
         
         if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
             // Transform the value in the stack to RuntimeScalar
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
         } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            // In VOID context, check if the result is marked BEFORE popping
             if (ENABLE_CONTROL_FLOW_CHECKS) {
-                // Check if the result is a marked RuntimeControlFlowList
-                Label notMarked = new Label();
-                mv.visitInsn(Opcodes.DUP);  // Duplicate for checking
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, 
-                        "org/perlonjava/runtime/RuntimeList", 
-                        "isNonLocalGoto", 
-                        "()Z", 
-                        false);
-                mv.visitJumpInsn(Opcodes.IFEQ, notMarked);
-                // It's marked - propagate it up (RETURN without popping)
-                mv.visitInsn(Opcodes.ARETURN);
-                // Not marked - continue to POP
-                mv.visitLabel(notMarked);
+                LoopLabels innermostLoop = emitterVisitor.ctx.javaClassInfo.getInnermostLoopLabels();
+                if (innermostLoop != null) {
+                    Label noAction = new Label();
+                    Label noMarker = new Label();
+                    Label handleLast = new Label();
+                    Label handleNext = new Label();
+                    Label handleRedo = new Label();
+                    Label unknownAction = new Label();
+
+                    // action = checkLoopAndGetAction(loopLabel)
+                    if (innermostLoop.labelName != null) {
+                        mv.visitLdcInsn(innermostLoop.labelName);
+                    } else {
+                        mv.visitInsn(Opcodes.ACONST_NULL);
+                    }
+                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/RuntimeControlFlowRegistry",
+                            "checkLoopAndGetAction",
+                            "(Ljava/lang/String;)I",
+                            false);
+                    mv.visitVarInsn(Opcodes.ISTORE, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
+
+                    // if (action == 0) goto noAction
+                    mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
+                    mv.visitJumpInsn(Opcodes.IFEQ, noAction);
+
+                    // action != 0: pop call result, clean stack, jump to next/last/redo
+                    mv.visitInsn(Opcodes.POP);
+                    emitterVisitor.ctx.javaClassInfo.stackLevelManager.emitPopInstructions(mv, innermostLoop.asmStackLevel);
+
+                    // if (action == 1) last
+                    mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
+                    mv.visitInsn(Opcodes.ICONST_1);
+                    mv.visitJumpInsn(Opcodes.IF_ICMPEQ, handleLast);
+                    // if (action == 2) next
+                    mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
+                    mv.visitInsn(Opcodes.ICONST_2);
+                    mv.visitJumpInsn(Opcodes.IF_ICMPEQ, handleNext);
+                    // if (action == 3) redo
+                    mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
+                    mv.visitInsn(Opcodes.ICONST_3);
+                    mv.visitJumpInsn(Opcodes.IF_ICMPEQ, handleRedo);
+
+                    // Unknown action: unwind this loop (do NOT fall through to noMarker)
+                    mv.visitJumpInsn(Opcodes.GOTO, unknownAction);
+
+                    mv.visitLabel(handleLast);
+                    mv.visitJumpInsn(Opcodes.GOTO, innermostLoop.lastLabel);
+
+                    mv.visitLabel(handleNext);
+                    mv.visitJumpInsn(Opcodes.GOTO, innermostLoop.nextLabel);
+
+                    mv.visitLabel(handleRedo);
+                    mv.visitJumpInsn(Opcodes.GOTO, innermostLoop.redoLabel);
+
+                    mv.visitLabel(unknownAction);
+                    mv.visitJumpInsn(Opcodes.GOTO, innermostLoop.lastLabel);
+
+                    // action == 0: if marker still present, unwind this loop (label targets outer)
+                    mv.visitLabel(noAction);
+                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/RuntimeControlFlowRegistry",
+                            "hasMarker",
+                            "()Z",
+                            false);
+                    mv.visitJumpInsn(Opcodes.IFEQ, noMarker);
+
+                    mv.visitInsn(Opcodes.POP);
+                    emitterVisitor.ctx.javaClassInfo.stackLevelManager.emitPopInstructions(mv, innermostLoop.asmStackLevel);
+                    mv.visitJumpInsn(Opcodes.GOTO, innermostLoop.lastLabel);
+
+                    mv.visitLabel(noMarker);
+                }
             }
-            // Remove the value from the stack (normal VOID behavior)
+
             mv.visitInsn(Opcodes.POP);
         }
     }

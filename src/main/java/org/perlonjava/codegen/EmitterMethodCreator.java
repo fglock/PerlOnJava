@@ -236,6 +236,9 @@ public class EmitterMethodCreator implements Opcodes {
             // This is used at call sites to temporarily store marked RuntimeControlFlowList
             int controlFlowTempSlot = ctx.symbolTable.allocateLocalVariable();
             ctx.javaClassInfo.controlFlowTempSlot = controlFlowTempSlot;
+
+            int controlFlowActionSlot = ctx.symbolTable.allocateLocalVariable();
+            ctx.javaClassInfo.controlFlowActionSlot = controlFlowActionSlot;
             
             // Create a label for the return point
             ctx.javaClassInfo.returnLabel = new Label();

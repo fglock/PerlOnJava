@@ -37,6 +37,8 @@ public class JavaClassInfo {
      */
     public int controlFlowTempSlot;
 
+    public int controlFlowActionSlot;
+
     /**
      * Manages the stack level for the class.
      */
