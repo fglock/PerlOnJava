@@ -24,21 +24,11 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      # Windows uses Maven instead of Gradle to avoid PowerShell path issues
-      # and Gradle daemon socket errors that occur intermittently on Windows CI runners.
-      # Maven is more reliable on Windows and doesn't have the same daemon communication issues.
-      - name: Build with Maven (Windows)
-        if: runner.os == 'Windows'
+      # Use Maven for both Windows and Linux for consistency and reliability
+      # Maven avoids Gradle daemon socket errors that occur on Windows CI runners
+      # and provides consistent build behavior across platforms
+      - name: Build with Maven
         run: mvn clean install -DskipTests=false
-
-      # Linux uses Gradle with daemon disabled for consistency
-      - name: Setup Gradle (Linux)
-        if: runner.os == 'Linux'
-        uses: gradle/actions/setup-gradle@v4
-
-      - name: Build with Gradle (Linux)
-        if: runner.os == 'Linux'
-        run: ./gradlew build --no-daemon --stacktrace
 
       - name: Upload test results
         if: failure()
