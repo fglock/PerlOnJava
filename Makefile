@@ -1,6 +1,14 @@
-.PHONY: all clean test test-unit test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper dev
+.PHONY: all clean test test-unit test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper dev ci
 
 all: build
+
+# CI build - optimized for CI/CD environments
+ci: wrapper
+ifeq ($(OS),Windows_NT)
+	gradlew.bat assemble --no-daemon --stacktrace
+else
+	./gradlew build --no-daemon --stacktrace
+endif
 
 wrapper:
 ifeq ($(OS),Windows_NT)

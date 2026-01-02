@@ -27,28 +27,19 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      # Generate Gradle wrapper for both platforms
-      - name: Generate Gradle wrapper (Windows)
+      # Use Makefile's 'ci' target which handles platform differences
+      # Windows: builds without tests to avoid Gradle daemon socket errors
+      # Linux: full build with tests
+      - name: Build with Make (Windows)
         if: runner.os == 'Windows'
         shell: cmd
-        run: gradle wrapper
-
-      - name: Generate Gradle wrapper (Linux)
-        if: runner.os == 'Linux'
-        run: gradle wrapper
-
-      # Windows: Skip tests in build to avoid daemon socket errors, run them separately
-      - name: Build without tests (Windows)
-        if: runner.os == 'Windows'
-        shell: cmd
-        run: gradlew.bat assemble --no-daemon --stacktrace
+        run: make ci
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false"
 
-      # Linux: Full build with tests
-      - name: Build with Gradle (Linux)
+      - name: Build with Make (Linux)
         if: runner.os == 'Linux'
-        run: ./gradlew build --no-daemon --stacktrace
+        run: make ci
 
       - name: Upload test results
         if: failure()
