@@ -518,6 +518,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public RuntimeList getList() {
         // If the scalar contains a RuntimeControlFlowList, return it directly to propagate control flow
         if (value instanceof RuntimeControlFlowList) {
+            System.err.println("DEBUG: RuntimeScalar.getList() unwrapping RuntimeControlFlowList");
             return (RuntimeControlFlowList) value;
         }
         return new RuntimeList(this);

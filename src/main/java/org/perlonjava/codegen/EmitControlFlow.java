@@ -95,20 +95,25 @@ public class EmitControlFlow {
                     false);
             
             // Register the marker: RuntimeControlFlowRegistry.register(marker)
+            // Keep marker on stack for RuntimeControlFlowList constructor
+            ctx.mv.visitInsn(Opcodes.DUP);
             ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/RuntimeControlFlowRegistry",
                     "register",
                     "(Lorg/perlonjava/runtime/ControlFlowMarker;)V",
                     false);
             
-            // Return empty list (marker is in registry, will be checked by loop)
-            // We MUST NOT jump to returnLabel as it breaks ASM frame computation
-            ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
-            ctx.mv.visitInsn(Opcodes.DUP);
+            // Return RuntimeControlFlowList (marker is on stack from DUP above)
+            // This allows control flow to propagate through scalar context
+            ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeControlFlowList");
+            ctx.mv.visitInsn(Opcodes.DUP_X1);  // stack: marker, list, list
+            ctx.mv.visitInsn(Opcodes.SWAP);     // stack: marker, list, list -> list, marker, list
+            ctx.mv.visitInsn(Opcodes.POP);      // stack: list, marker
+            ctx.mv.visitInsn(Opcodes.SWAP);     // stack: marker, list
             ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL, 
-                    "org/perlonjava/runtime/RuntimeList", 
+                    "org/perlonjava/runtime/RuntimeControlFlowList", 
                     "<init>", 
-                    "()V", 
+                    "(Lorg/perlonjava/runtime/ControlFlowMarker;)V", 
                     false);
             ctx.mv.visitInsn(Opcodes.ARETURN);
             return;
