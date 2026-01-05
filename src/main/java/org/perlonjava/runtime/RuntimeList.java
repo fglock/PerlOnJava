@@ -319,16 +319,21 @@ public class RuntimeList extends RuntimeBase {
     }
 
     /**
-     * Gets the scalar value of the list.
+     * Converts the list to a scalar value.
+     * In Perl, a list in scalar context returns the last element.
+     * For control flow lists, return a scalar containing the list to propagate control flow.
      *
      * @return The scalar value of the last element in the list.
      */
     public RuntimeScalar scalar() {
+        // If this is a control flow list, wrap it in a scalar to propagate control flow
+        if (this instanceof RuntimeControlFlowList) {
+            return new RuntimeScalar(this);
+        }
         if (isEmpty()) {
             return scalarUndef; // Return undefined if empty
         }
-        // XXX expand the last element
-        return elements.getLast().scalar();
+        return get(size() - 1).scalar(); // Return the last element as a scalar
     }
 
     /**
