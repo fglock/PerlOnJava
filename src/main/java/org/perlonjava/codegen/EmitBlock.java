@@ -103,8 +103,9 @@ public class EmitBlock {
             // Only check if:
             // 1. This is a labeled loop block (node.isLoop && node.labelName != null)
             // 2. Not the last statement (i < list.size() - 1)
-            // 3. Block doesn't contain loop constructs (for/while/foreach handle their own control flow)
-            if (node.isLoop && node.labelName != null && i < list.size() - 1) {
+            // 3. Simple block (≤5 statements) to avoid ASM frame computation errors
+            // 4. Block doesn't contain loop constructs (for/while/foreach handle their own control flow)
+            if (node.isLoop && node.labelName != null && i < list.size() - 1 && list.size() <= 5) {
                 // Check if this block contains actual loop constructs
                 boolean hasLoopConstruct = false;
                 for (Node elem : list) {
