@@ -307,36 +307,82 @@ public class EmitSubroutine {
         // Do not call emitControlFlowCheck here, as it can clear the registry and/or require returning.
         
         if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
-            // Transform the value in the stack to RuntimeScalar
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
-            
-            // Check for control flow AFTER scalar conversion
+            // Check for control flow before converting to scalar
+            // Only emit control flow check if we're actually inside a loop
             if (ENABLE_CONTROL_FLOW_CHECKS && !emitterVisitor.ctx.javaClassInfo.loopLabelStack.isEmpty()) {
                 LoopLabels innermostLoop = null;
                 for (LoopLabels loopLabels : emitterVisitor.ctx.javaClassInfo.loopLabelStack) {
+                    // Check any true loop, not just SCALAR context loops
                     if (loopLabels.isTrueLoop) {
                         innermostLoop = loopLabels;
                         break;
                     }
                 }
                 if (innermostLoop != null) {
-                    Label noControlFlow = new Label();
+                    Label noAction = new Label();
+                    Label noMarker = new Label();
+                    Label checkNext = new Label();
+                    Label checkRedo = new Label();
 
-                    // Check if there's a control flow marker
+                    // action = checkLoopAndGetAction(loopLabel)
+                    if (innermostLoop.labelName != null) {
+                        mv.visitLdcInsn(innermostLoop.labelName);
+                    } else {
+                        mv.visitInsn(Opcodes.ACONST_NULL);
+                    }
+                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/RuntimeControlFlowRegistry",
+                            "checkLoopAndGetAction",
+                            "(Ljava/lang/String;)I",
+                            false);
+                    mv.visitVarInsn(Opcodes.ISTORE, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
+
+                    // if (action == 0) goto noAction
+                    mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
+                    mv.visitJumpInsn(Opcodes.IFEQ, noAction);
+
+                    // action != 0: pop call result, clean stack, jump to next/last/redo
+                    mv.visitInsn(Opcodes.POP);
+
+                    // if (action == 1) last
+                    mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
+                    mv.visitInsn(Opcodes.ICONST_1);
+                    mv.visitJumpInsn(Opcodes.IF_ICMPNE, checkNext);
+                    mv.visitJumpInsn(Opcodes.GOTO, innermostLoop.lastLabel);
+
+                    // if (action == 2) next
+                    mv.visitLabel(checkNext);
+                    mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
+                    mv.visitInsn(Opcodes.ICONST_2);
+                    mv.visitJumpInsn(Opcodes.IF_ICMPNE, checkRedo);
+                    mv.visitJumpInsn(Opcodes.GOTO, innermostLoop.nextLabel);
+
+                    // if (action == 3) redo
+                    mv.visitLabel(checkRedo);
+                    mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
+                    mv.visitInsn(Opcodes.ICONST_3);
+                    mv.visitJumpInsn(Opcodes.IF_ICMPEQ, innermostLoop.redoLabel);
+
+                    // Unknown action: unwind this loop (do NOT fall through to noMarker)
+                    mv.visitJumpInsn(Opcodes.GOTO, innermostLoop.lastLabel);
+
+                    // action == 0: if marker still present, unwind this loop (label targets outer)
+                    mv.visitLabel(noAction);
                     mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                             "org/perlonjava/runtime/RuntimeControlFlowRegistry",
                             "hasMarker",
                             "()Z",
                             false);
-                    mv.visitJumpInsn(Opcodes.IFEQ, noControlFlow);
-                    
-                    // Has marker: pop scalar result and jump to loop exit
+                    mv.visitJumpInsn(Opcodes.IFEQ, noMarker);
+
                     mv.visitInsn(Opcodes.POP);
                     mv.visitJumpInsn(Opcodes.GOTO, innermostLoop.lastLabel);
-                    
-                    mv.visitLabel(noControlFlow);
+
+                    mv.visitLabel(noMarker);
                 }
             }
+            // Transform the value in the stack to RuntimeScalar
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
         } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
             if (ENABLE_CONTROL_FLOW_CHECKS) {
                 LoopLabels innermostLoop = null;
