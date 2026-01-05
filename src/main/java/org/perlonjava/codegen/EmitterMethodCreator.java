@@ -497,19 +497,7 @@ public class EmitterMethodCreator implements Opcodes {
 
             mv.visitInsn(Opcodes.ARETURN); // Returns an Object
             // Visit the maximum stack size and local variables
-            try {
-                mv.visitMaxs(0, 0);
-            } catch (ArrayIndexOutOfBoundsException e) {
-                System.err.println("ASM Frame.merge error in class: " + className);
-                System.err.println("Method: apply");
-                System.err.println("Context: " + ctx.contextType);
-                System.err.println("Loop stack size: " + ctx.javaClassInfo.loopLabelStack.size());
-                if (!ctx.javaClassInfo.loopLabelStack.isEmpty()) {
-                    System.err.println("Innermost loop: " + ctx.javaClassInfo.loopLabelStack.peek());
-                }
-                e.printStackTrace();
-                throw new PerlCompilerException("ASM Frame.merge error in " + className + ": " + e.getMessage());
-            }
+            mv.visitMaxs(0, 0);
             mv.visitEnd();
 
             // Finalize the class

@@ -328,7 +328,6 @@ public class RuntimeList extends RuntimeBase {
     public RuntimeScalar scalar() {
         // If this is a control flow list, wrap it in a scalar to propagate control flow
         if (this instanceof RuntimeControlFlowList) {
-            System.err.println("DEBUG: RuntimeList.scalar() wrapping RuntimeControlFlowList");
             return new RuntimeScalar(this);
         }
         if (isEmpty()) {
