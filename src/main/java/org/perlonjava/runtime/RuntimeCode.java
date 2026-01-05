@@ -878,9 +878,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 this.compilerSupplier.get(); // Wait for the task to finish
             }
 
-            if (isStatic) {
+            try {
                 return (RuntimeList) this.methodHandle.invoke(a, callContext);
-            } else {
+            } catch (java.lang.invoke.WrongMethodTypeException e) {
+                if (this.codeObject == null) {
+                    throw e;
+                }
                 return (RuntimeList) this.methodHandle.invoke(this.codeObject, a, callContext);
             }
         } catch (NullPointerException e) {
@@ -918,9 +921,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 this.compilerSupplier.get(); // Wait for the task to finish
             }
 
-            if (isStatic) {
+            try {
                 return (RuntimeList) this.methodHandle.invoke(a, callContext);
-            } else {
+            } catch (java.lang.invoke.WrongMethodTypeException e) {
+                if (this.codeObject == null) {
+                    throw new PerlCompilerException("Undefined subroutine &" + subroutineName + " called at ");
+                }
                 return (RuntimeList) this.methodHandle.invoke(this.codeObject, a, callContext);
             }
         } catch (NullPointerException e) {
