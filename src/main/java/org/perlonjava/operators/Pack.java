@@ -187,12 +187,13 @@ public class Pack {
     }
 
     public static RuntimeScalar pack(RuntimeList args) {
-        if (args.isEmpty()) {
-            throw new PerlCompilerException("pack: not enough arguments");
-        }
+        try {
+            if (args.isEmpty()) {
+                throw new PerlCompilerException("pack: not enough arguments");
+            }
 
-        RuntimeScalar templateScalar = args.getFirst();
-        String template = templateScalar.toString();
+            RuntimeScalar templateScalar = args.getFirst();
+            String template = templateScalar.toString();
         
         if (TRACE_PACK) {
             System.err.println("TRACE Pack.pack() called:");
@@ -213,12 +214,10 @@ public class Pack {
         List<RuntimeScalar> values = flattened.elements;
 
         PackBuffer output = new PackBuffer();
-        int valueIndex = 0;
 
-        // Pre-scan template for C0 to determine initial mode
-        // If C0 appears anywhere, start in byte mode from the beginning
-        boolean byteMode = template.contains("C0");  // Start in byte mode if C0 is present
-        boolean byteModeUsed = byteMode;  // Track if byte mode was ever used
+        // Start in character mode. C0/U0 directives toggle mode at their position.
+        boolean byteMode = false;
+        boolean byteModeUsed = false;
 
         // Track if 'U' was used in normal mode (not byte mode)
         boolean hasUnicodeInNormalMode = false;
@@ -240,13 +239,37 @@ public class Pack {
          * The loop variable 'i' tracks current position. Some operations advance
          * 'i' beyond the current character to skip processed content.
          */
+        PackState state = packInto(template, values, output, 0, byteMode, byteModeUsed, hasUnicodeInNormalMode);
+
+        byteModeUsed = state.byteModeUsed;
+        hasUnicodeInNormalMode = state.hasUnicodeInNormalMode;
+
+            // Convert buffer to string based on whether UTF-8 flag should be set
+            if (!byteModeUsed && hasUnicodeInNormalMode) {
+                // UTF-8 flag set: interpret all values as Latin-1 characters
+                // This matches Perl's utf8::upgrade behavior where each byte becomes a character
+                return new RuntimeScalar(output.toUpgradedString());
+            } else {
+                // No UTF-8 flag: return as byte string
+                return new RuntimeScalar(output.toByteArray());
+            }
+        } catch (OutOfMemoryError e) {
+            throw new PerlCompilerException("Out of memory during pack");
+        }
+    }
+
+    private record PackState(int valueIndex, boolean byteMode, boolean byteModeUsed, boolean hasUnicodeInNormalMode) {
+    }
+
+    private static PackState packInto(String template, List<RuntimeScalar> values, PackBuffer output,
+                                      int valueIndex, boolean byteMode, boolean byteModeUsed,
+                                      boolean hasUnicodeInNormalMode) {
         for (int i = 0; i < template.length(); i++) {
+            int formatPos = i;
             char format = template.charAt(i);
-            // DEBUG: main loop i=" + i + ", format='" + format + "' (code " + (int) format + ")"
 
             // Skip spaces - whitespace is ignored for formatting/readability
             if (Character.isWhitespace(format)) {
-                // DEBUG: skipping whitespace
                 continue;
             }
 
@@ -257,49 +280,77 @@ public class Pack {
             }
 
             // Safety check for misplaced brackets
-            // Brackets should only appear immediately after a format character, not standalone
             if (format == '[' || format == ']') {
                 throw new PerlCompilerException("Invalid type '" + format + "' in pack");
             }
 
             // Handle commas - ignored for Perl compatibility but emit warning
             if (format == ',') {
-                // Emit warning like Perl does
                 WarnDie.warn(
-                    new RuntimeScalar("Invalid type ',' in pack"),
-                    RuntimeScalarCache.scalarEmptyString
+                        new RuntimeScalar("Invalid type ',' in pack"),
+                        RuntimeScalarCache.scalarEmptyString
                 );
                 continue;
             }
 
-            /**
-             * Handle groups - RECURSIVE PROCESSING
-             * 
-             * Format: (template)count or (template)[count]
-             * Example: (si)3 packs 3 short-int pairs
-             * 
-             * Processing:
-             * 1. handleGroup finds the matching ')' 
-             * 2. Extracts the group content
-             * 3. Recursively calls Pack.pack() for the group content
-             * 4. Repeats for the specified count
-             * 
-             * NESTING: Each group recursion should increment depth counter.
-             * Deep nesting (>100 levels) should throw "Too deeply nested ()-groups"
-             */
             if (format == '(') {
-                if (TRACE_PACK) {
-                    System.err.println("TRACE Pack: Found '(' at position " + i);
-                    System.err.println("  Calling PackGroupHandler.handleGroup");
-                    System.err.flush();
+                int closePos = PackHelper.findMatchingParen(template, i);
+                if (closePos == -1) {
+                    throw new PerlCompilerException("pack: unmatched parenthesis in template");
                 }
-                PackGroupHandler.GroupResult result = PackGroupHandler.handleGroup(template, i, values, output, valueIndex, Pack::pack);
-                i = result.position();
-                valueIndex = result.valueIndex();
-                if (TRACE_PACK) {
-                    System.err.println("TRACE Pack: Group processed, new position: " + i);
-                    System.err.flush();
+
+                String groupContent = template.substring(i + 1, closePos);
+                GroupInfo groupInfo = PackParser.parseGroupInfo(template, closePos);
+
+                if (groupInfo.endian != ' ' && PackHelper.hasConflictingEndianness(groupContent, groupInfo.endian)) {
+                    throw new PerlCompilerException("Can't use '" + groupInfo.endian + "' in a group with different byte-order in pack");
                 }
+
+                String effectiveContent = groupContent;
+                if (groupInfo.endian != ' ') {
+                    effectiveContent = GroupEndiannessHelper.applyGroupEndianness(groupContent, groupInfo.endian);
+                }
+
+                int groupValueCount = PackHelper.countValuesNeeded(groupContent);
+                int repeatCount = groupInfo.repeatCount;
+
+                boolean outerByteMode = byteMode;
+
+                if (repeatCount == Integer.MAX_VALUE) {
+                    // Repeat as many complete iterations as possible.
+                    // If the group consumes no values, '*' would otherwise loop forever.
+                    if (groupValueCount <= 0 || groupValueCount == Integer.MAX_VALUE) {
+                        // Zero iterations
+                    } else {
+                        while (values.size() - valueIndex >= groupValueCount) {
+                            int beforeValueIndex = valueIndex;
+                            output.pushGroupStart(output.size());
+                            PackState inner = packInto(effectiveContent, values, output, valueIndex, outerByteMode, byteModeUsed, hasUnicodeInNormalMode);
+                            output.popGroupStart();
+                            valueIndex = inner.valueIndex;
+                            byteModeUsed = inner.byteModeUsed;
+                            hasUnicodeInNormalMode = inner.hasUnicodeInNormalMode;
+
+                            if (valueIndex == beforeValueIndex) {
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    for (int rep = 0; rep < repeatCount; rep++) {
+                        output.pushGroupStart(output.size());
+                        PackState inner = packInto(effectiveContent, values, output, valueIndex, outerByteMode, byteModeUsed, hasUnicodeInNormalMode);
+                        output.popGroupStart();
+                        valueIndex = inner.valueIndex;
+                        byteModeUsed = inner.byteModeUsed;
+                        hasUnicodeInNormalMode = inner.hasUnicodeInNormalMode;
+                    }
+                }
+
+                // Mode switches inside the group are scoped.
+                byteMode = outerByteMode;
+
+                i = groupInfo.endPosition - 1;
                 continue;
             }
 
@@ -323,15 +374,11 @@ public class Pack {
                 throw new PerlCompilerException("Invalid type '!' in pack");
             }
 
-            // Parse modifiers BEFORE parsing counts
-            ParsedModifiers modifiers = PackParser.parseModifiers(template, i);
+            ParsedModifiers modifiers = PackParser.parseModifiers(template, formatPos);
 
-            // Check if this numeric format is part of a '/' construct
-            // Check from current position i (not after modifiers) to catch S / A* with spaces
             if (PackHelper.isNumericFormat(format) || format == 'Z' || format == 'A' || format == 'a') {
                 int slashPos = PackHelper.checkForSlashConstruct(template, i);
                 if (slashPos != -1) {
-                    // DEBUG: Detected slash construct for format '" + format + "' at position " + i
                     PackGroupHandler.GroupResult result = PackGroupHandler.handleSlashConstruct(template, i, slashPos, format, values, valueIndex, output, modifiers, Pack::pack);
                     i = result.position();
                     valueIndex = result.valueIndex();
@@ -339,70 +386,65 @@ public class Pack {
                 }
             }
 
-            // Update position after checking for slash
-            i = modifiers.endPosition;
-
-            // Parse repeat count
-            ParsedCount parsedCount = PackParser.parseRepeatCount(template, i);
-            i = parsedCount.endPosition;
+            ParsedCount parsedCount = PackParser.parseRepeatCount(template, modifiers.endPosition);
             int count = parsedCount.count;
             boolean hasStar = parsedCount.hasStar;
+            
+            // Update loop counter to skip past the count we just parsed
+            // The for-loop will increment i at the end of this iteration
+            i = parsedCount.endPosition;
 
-            // Check if '/' has a repeat count (which is invalid)
             if (format == '/' && (count > 1 || hasStar)) {
                 throw new PerlCompilerException("'/' does not take a repeat count");
             }
 
             if (hasStar && count == 1) {
-                count = values.size() - valueIndex; // Use all remaining values
+                // Per perldoc -f pack:
+                // - @, x, X: '*' is equivalent to 0
+                // - .: '*' has special meaning and is handled in ControlPackHandler
+                // - otherwise: consume all remaining values
+                if (format == '@' || format == 'x' || format == 'X') {
+                    count = 0;
+                } else if (format != '.') {
+                    count = values.size() - valueIndex;
+                }
             }
 
-            // Handle the format using handlers where possible
             PackFormatHandler handler = handlers.get(format);
             if (handler != null) {
                 valueIndex = handler.pack(values, valueIndex, count, hasStar, modifiers, output);
             } else {
-                // Handle special cases that need state management or don't have handlers yet
                 switch (format) {
                     case 'a':
                     case 'A':
                     case 'Z':
-                        // These still use PackHelper due to byteMode dependency
                         valueIndex = PackHelper.handleStringFormat(valueIndex, values, hasStar, format, count, byteMode, output);
                         break;
                     case '/':
-                        // In Perl, '/' can appear after any format, but requires code after it
-                        // Skip whitespace after '/'
                         int nextPos = i + 1;
                         while (nextPos < template.length() && Character.isWhitespace(template.charAt(nextPos))) {
                             nextPos++;
                         }
-
                         if (nextPos >= template.length()) {
                             throw new PerlCompilerException("Code missing after '/'");
                         } else {
                             throw new PerlCompilerException("Invalid type '/' in pack");
                         }
                     case 'U':
-                        // Unicode format needs special handling for state management
                         hasUnicodeInNormalMode = PackHelper.handleUnicode(values, valueIndex, count, byteMode, hasUnicodeInNormalMode, output);
                         valueIndex += count;
                         break;
                     case 'W':
-                        // Wide character format - like U but without Unicode range validation
                         hasUnicodeInNormalMode = PackHelper.handleWideCharacter(values, valueIndex, count, byteMode, hasUnicodeInNormalMode, output);
                         valueIndex += count;
                         break;
                     default:
-                        // Check for misplaced brackets
                         if (format == '[' || format == ']') {
                             throw new PerlCompilerException("Mismatched brackets in template");
                         }
-                        // Check for standalone * which is invalid
                         if (format == '*') {
                             throw new PerlCompilerException("Invalid type '*' in pack");
                         }
-                        // Check for standalone modifiers that should only appear after valid format characters
                         if (format == '<' || format == '>') {
                             throw new PerlCompilerException("Invalid type '" + format + "' in pack");
                         }
@@ -414,14 +456,6 @@ public class Pack {
             }
         }
 
-        // Convert buffer to string based on whether UTF-8 flag should be set
-        if (!byteModeUsed && hasUnicodeInNormalMode) {
-            // UTF-8 flag set: interpret all values as Latin-1 characters
-            // This matches Perl's utf8::upgrade behavior where each byte becomes a character
-            return new RuntimeScalar(output.toUpgradedString());
-        } else {
-            // No UTF-8 flag: return as byte string
-            return new RuntimeScalar(output.toByteArray());
-        }
+        return new PackState(valueIndex, byteMode, byteModeUsed, hasUnicodeInNormalMode);
     }
 }

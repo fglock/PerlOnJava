@@ -192,7 +192,9 @@ public class PackHelper {
      * @throws PerlCompilerException if the value is infinite or NaN
      */
     public static void handleInfinity(RuntimeScalar value, char format) {
-        String strValue = value.toString().trim();
+        // Avoid calling value.toString() directly here, as that can trigger string overloading.
+        // For numeric formats, Perl should use numeric overloading (0+) rather than stringification.
+        String strValue = value.getNumber().toString().trim();
         if (strValue.equalsIgnoreCase("Inf") || strValue.equalsIgnoreCase("+Inf") || strValue.equalsIgnoreCase("Infinity")) {
             if (format == 'w') {
                 throw new PerlCompilerException("Cannot compress Inf");
