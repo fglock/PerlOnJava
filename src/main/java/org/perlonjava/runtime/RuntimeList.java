@@ -326,10 +326,11 @@ public class RuntimeList extends RuntimeBase {
      * @return The scalar value of the last element in the list.
      */
     public RuntimeScalar scalar() {
-        // If this is a control flow list, wrap it in a scalar to propagate control flow
-        if (this instanceof RuntimeControlFlowList) {
-            return new RuntimeScalar(this);
-        }
+        // DISABLED: Runtime propagation causes regressions in perl5_t tests
+        // The wrapping mechanism interferes with normal scalar operations
+        // if (this instanceof RuntimeControlFlowList) {
+        //     return new RuntimeScalar(this);
+        // }
         if (isEmpty()) {
             return scalarUndef; // Return undefined if empty
         }

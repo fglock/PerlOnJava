@@ -516,10 +516,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     // Get the list value of the Scalar
     public RuntimeList getList() {
-        // If the scalar contains a RuntimeControlFlowList, return it directly to propagate control flow
-        if (value instanceof RuntimeControlFlowList) {
-            return (RuntimeControlFlowList) value;
-        }
+        // DISABLED: Runtime propagation causes regressions in perl5_t tests
+        // if (value instanceof RuntimeControlFlowList) {
+        //     return (RuntimeControlFlowList) value;
+        // }
         return new RuntimeList(this);
     }
 
