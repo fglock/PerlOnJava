@@ -195,12 +195,27 @@ public class ControlPackHandler implements PackFormatHandler {
                 }
                 break;
             case '@':
-                handleAbsolutePosition(count, output);
+                // @ positions relative to start of innermost group
+                // @!N means position in bytes relative to group start
+                // @* is equivalent to @0
+                int baseIndex = output.getGroupStart(1);
+                if (hasStar) {
+                    count = 0;
+                }
+                if (modifiers.nativeSize) {
+                    int baseByte = output.byteOffsetOfIndex(baseIndex);
+                    output.moveToBytePosition(baseByte + count);
+                } else {
+                    output.moveToIndex(baseIndex + count);
+                }
                 break;
             case '.':
                 // . means null-fill or truncate to position specified by value
-                // .  (no count or count > 0): absolute positioning
-                // .0 (count == 0): relative positioning (current + offset)
+                // Per perldoc pack:
+                // - .0: offset relative to current position
+                // - .*: offset relative to start of string
+                // - .n: offset relative to start of nth innermost group (or start of string if n too large)
+                // - .! uses byte-based positioning (for UTF-8 / multi-byte characters)
                 if (valueIndex >= values.size()) {
                     throw new PerlCompilerException("pack: '.' requires a position value");
                 }
@@ -208,34 +223,27 @@ public class ControlPackHandler implements PackFormatHandler {
                 valueIndex++;
                 int offset = (int) posValue.getDouble();
 
-                int currentSize = output.size();
-                int targetPos;
-                
-                if (count == 0) {
-                    // .0 means relative to current position
-                    targetPos = currentSize + offset;
+                int base;
+                if (hasStar) {
+                    base = 0;
+                } else if (count == 0) {
+                    base = modifiers.nativeSize ? output.byteSize() : output.size();
                 } else {
-                    // . means absolute position
-                    targetPos = offset;
+                    int baseIndexForDot = output.getGroupStart(count);
+                    base = modifiers.nativeSize ? output.byteOffsetOfIndex(baseIndexForDot) : baseIndexForDot;
                 }
 
-                // Handle negative target positions: throw error (can't position before string start)
+                int targetPos = base + offset;
+
                 if (targetPos < 0) {
                     throw new PerlCompilerException("'.' outside of string in pack");
                 }
 
-                if (targetPos > currentSize) {
-                    // Null-fill to reach the target position
-                    for (int k = currentSize; k < targetPos; k++) {
-                        output.write(0);
-                    }
-                } else if (targetPos < currentSize) {
-                    // Truncate to the target position
-                    byte[] currentData = output.toByteArray();
-                    output.reset();
-                    output.write(currentData, 0, targetPos);
+                if (modifiers.nativeSize) {
+                    output.moveToBytePosition(targetPos);
+                } else {
+                    output.moveToIndex(targetPos);
                 }
-                // If targetPos == currentSize, do nothing
                 break;
         }
         return valueIndex;

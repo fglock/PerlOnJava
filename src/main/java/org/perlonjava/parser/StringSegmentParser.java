@@ -890,6 +890,11 @@ public abstract class StringSegmentParser {
             return false;
         }
 
+        // Special arrays @!, @+, @- do not interpolate in double-quoted strings
+        if ("@".equals(sigil) && (nextToken.text.equals("!") || nextToken.text.equals("+") || nextToken.text.equals("-"))) {
+            return false;
+        }
+
         // Regex: don't interpolate "$" if followed by whitespace or newlines
         // "@" sigil: never interpolate if immediately followed by whitespace or newlines
         // "$#" sigil: don't interpolate if followed by whitespace or newlines
