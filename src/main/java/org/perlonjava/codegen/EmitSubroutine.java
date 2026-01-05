@@ -379,8 +379,6 @@ public class EmitSubroutine {
                     mv.visitJumpInsn(Opcodes.GOTO, innermostLoop.lastLabel);
 
                     mv.visitLabel(noMarker);
-                    // Provide explicit frame hint: RuntimeList is on stack at this point
-                    mv.visitFrame(Opcodes.F_SAME1, 0, null, 1, new Object[]{"org/perlonjava/runtime/RuntimeList"});
                 }
             }
             // Transform the value in the stack to RuntimeScalar
