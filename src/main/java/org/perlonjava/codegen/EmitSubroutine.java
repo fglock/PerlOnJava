@@ -308,8 +308,12 @@ public class EmitSubroutine {
         
         if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
             // Check for control flow before converting to scalar
+            // DISABLED: Causes ASM Frame.merge errors
+            // The issue: This check is emitted for ALL scalar context calls inside loops,
+            // but it causes ASM errors when compiling subroutines that don't have loops themselves.
+            // The loopLabelStack.isEmpty() check happens at CALL time, not COMPILE time.
             // Only emit control flow check if we're actually inside a loop
-            if (ENABLE_CONTROL_FLOW_CHECKS && !emitterVisitor.ctx.javaClassInfo.loopLabelStack.isEmpty()) {
+            if (false && ENABLE_CONTROL_FLOW_CHECKS && !emitterVisitor.ctx.javaClassInfo.loopLabelStack.isEmpty()) {
                 LoopLabels innermostLoop = null;
                 for (LoopLabels loopLabels : emitterVisitor.ctx.javaClassInfo.loopLabelStack) {
                     // Check any true loop, not just SCALAR context loops
