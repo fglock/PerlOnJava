@@ -319,6 +319,8 @@ public class EmitSubroutine {
                 if (innermostLoop != null) {
                     Label noAction = new Label();
                     Label noMarker = new Label();
+                    Label checkNext = new Label();
+                    Label checkRedo = new Label();
 
                     // action = checkLoopAndGetAction(loopLabel)
                     if (innermostLoop.labelName != null) {
@@ -341,8 +343,6 @@ public class EmitSubroutine {
                     mv.visitInsn(Opcodes.POP);
 
                     // if (action == 1) last
-                    Label checkNext = new Label();
-                    Label checkRedo = new Label();
                     mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
                     mv.visitInsn(Opcodes.ICONST_1);
                     mv.visitJumpInsn(Opcodes.IF_ICMPNE, checkNext);
