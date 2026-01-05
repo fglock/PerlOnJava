@@ -105,16 +105,18 @@ public class EmitControlFlow {
             
             // Return RuntimeControlFlowList (marker is on stack from DUP above)
             // This allows control flow to propagate through scalar context
+            // Stack: marker
             ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeControlFlowList");
-            ctx.mv.visitInsn(Opcodes.DUP_X1);  // stack: marker, list, list
-            ctx.mv.visitInsn(Opcodes.SWAP);     // stack: marker, list, list -> list, marker, list
-            ctx.mv.visitInsn(Opcodes.POP);      // stack: list, marker
-            ctx.mv.visitInsn(Opcodes.SWAP);     // stack: marker, list
+            // Stack: marker, uninit_list
+            ctx.mv.visitInsn(Opcodes.DUP);  // Stack: marker, uninit_list, uninit_list
+            ctx.mv.visitInsn(Opcodes.DUP2_X1);  // Stack: uninit_list, uninit_list, marker, uninit_list
+            ctx.mv.visitInsn(Opcodes.POP2);  // Stack: uninit_list, uninit_list, marker
             ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL, 
                     "org/perlonjava/runtime/RuntimeControlFlowList", 
                     "<init>", 
                     "(Lorg/perlonjava/runtime/ControlFlowMarker;)V", 
                     false);
+            // Stack: list (initialized)
             ctx.mv.visitInsn(Opcodes.ARETURN);
             return;
         }
