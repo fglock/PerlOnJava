@@ -43,6 +43,20 @@ public class PointerPackHandler implements PackFormatHandler {
         return pointerMap.get(hashCode);
     }
 
+    /**
+     * Modifies a string value associated with a pointer hash code.
+     * This method simulates XS::APItest::modify_pv for testing purposes.
+     *
+     * @param hashCode The hash code of the pointer to modify
+     * @param len The length to set (overwrites with 'y' characters)
+     */
+    public static void modifyPointer(int hashCode, int len) {
+        if (pointerMap.containsKey(hashCode)) {
+            String modified = "y".repeat(Math.max(0, len));
+            pointerMap.put(hashCode, modified);
+        }
+    }
+
     @Override
     public int pack(List<RuntimeScalar> values, int valueIndex, int count, boolean hasStar,
                     ParsedModifiers modifiers, PackBuffer output) {

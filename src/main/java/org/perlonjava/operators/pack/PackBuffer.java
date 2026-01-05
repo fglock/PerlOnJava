@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Stack;
 
 /**
  * PackBuffer is a specialized buffer for pack operations that can store both:
@@ -18,6 +19,8 @@ import java.util.List;
 public class PackBuffer {
     private final List<Integer> values = new ArrayList<>();
     private final List<Boolean> isCharacter = new ArrayList<>();
+    private final Stack<Integer> groupStartStack = new Stack<>();
+    private int currentPosition = 0;
 
     /**
      * Write a raw byte value (from binary formats like N, V, s, etc.)
@@ -114,6 +117,112 @@ public class PackBuffer {
      */
     public int size() {
         return values.size();
+    }
+
+    /**
+     * Push a group start position onto the stack for relative positioning
+     */
+    public void pushGroupStart(int position) {
+        groupStartStack.push(position);
+    }
+
+    /**
+     * Pop a group start position from the stack
+     */
+    public void popGroupStart() {
+        if (!groupStartStack.isEmpty()) {
+            groupStartStack.pop();
+        }
+    }
+
+    /**
+     * Get the group start position at the specified depth (1 = innermost)
+     */
+    public int getGroupStart(int depth) {
+        if (groupStartStack.isEmpty()) {
+            return 0;
+        }
+        int index = groupStartStack.size() - depth;
+        if (index < 0) {
+            return 0;
+        }
+        return groupStartStack.get(index);
+    }
+
+    /**
+     * Get the byte offset of a character index
+     */
+    public int byteOffsetOfIndex(int index) {
+        int byteOffset = 0;
+        for (int i = 0; i < Math.min(index, values.size()); i++) {
+            int value = values.get(i);
+            if (isCharacter.get(i) && value > 127) {
+                // UTF-8 encoding for characters > 127
+                if (value <= 0x7FF) {
+                    byteOffset += 2;
+                } else if (value <= 0xFFFF) {
+                    byteOffset += 3;
+                } else {
+                    byteOffset += 4;
+                }
+            } else {
+                byteOffset += 1;
+            }
+        }
+        return byteOffset;
+    }
+
+    /**
+     * Move to a specific character index
+     */
+    public void moveToIndex(int index) {
+        currentPosition = index;
+        // Pad with nulls if needed
+        while (values.size() < index) {
+            writeByte(0);
+        }
+        // Truncate if moving backwards
+        while (values.size() > index) {
+            values.remove(values.size() - 1);
+            isCharacter.remove(isCharacter.size() - 1);
+        }
+    }
+
+    /**
+     * Move to a specific byte position
+     */
+    public void moveToBytePosition(int bytePos) {
+        // Find the character index that corresponds to this byte position
+        int byteOffset = 0;
+        int charIndex = 0;
+        while (charIndex < values.size() && byteOffset < bytePos) {
+            int value = values.get(charIndex);
+            if (isCharacter.get(charIndex) && value > 127) {
+                if (value <= 0x7FF) {
+                    byteOffset += 2;
+                } else if (value <= 0xFFFF) {
+                    byteOffset += 3;
+                } else {
+                    byteOffset += 4;
+                }
+            } else {
+                byteOffset += 1;
+            }
+            charIndex++;
+        }
+        // Pad with nulls if we haven't reached the byte position
+        while (byteOffset < bytePos) {
+            writeByte(0);
+            byteOffset++;
+        }
+        currentPosition = charIndex;
+    }
+
+    /**
+     * Get the current byte size (accounting for UTF-8 encoding)
+     */
+    public int byteSize() {
+        return byteOffsetOfIndex(values.size());
     }
 
     /**
