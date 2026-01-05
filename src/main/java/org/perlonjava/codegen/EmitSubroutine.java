@@ -319,55 +319,9 @@ public class EmitSubroutine {
                     }
                 }
                 if (innermostLoop != null) {
-                    Label noAction = new Label();
                     Label noMarker = new Label();
-                    Label checkNext = new Label();
-                    Label checkRedo = new Label();
 
-                    // action = checkLoopAndGetAction(loopLabel)
-                    if (innermostLoop.labelName != null) {
-                        mv.visitLdcInsn(innermostLoop.labelName);
-                    } else {
-                        mv.visitInsn(Opcodes.ACONST_NULL);
-                    }
-                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                            "org/perlonjava/runtime/RuntimeControlFlowRegistry",
-                            "checkLoopAndGetAction",
-                            "(Ljava/lang/String;)I",
-                            false);
-                    mv.visitVarInsn(Opcodes.ISTORE, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
-
-                    // if (action == 0) goto noAction
-                    mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
-                    mv.visitJumpInsn(Opcodes.IFEQ, noAction);
-
-                    // action != 0: pop call result, clean stack, jump to next/last/redo
-                    mv.visitInsn(Opcodes.POP);
-
-                    // if (action == 1) last
-                    mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
-                    mv.visitInsn(Opcodes.ICONST_1);
-                    mv.visitJumpInsn(Opcodes.IF_ICMPNE, checkNext);
-                    mv.visitJumpInsn(Opcodes.GOTO, innermostLoop.lastLabel);
-
-                    // if (action == 2) next
-                    mv.visitLabel(checkNext);
-                    mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
-                    mv.visitInsn(Opcodes.ICONST_2);
-                    mv.visitJumpInsn(Opcodes.IF_ICMPNE, checkRedo);
-                    mv.visitJumpInsn(Opcodes.GOTO, innermostLoop.nextLabel);
-
-                    // if (action == 3) redo
-                    mv.visitLabel(checkRedo);
-                    mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
-                    mv.visitInsn(Opcodes.ICONST_3);
-                    mv.visitJumpInsn(Opcodes.IF_ICMPEQ, innermostLoop.redoLabel);
-
-                    // Unknown action: unwind this loop (do NOT fall through to noMarker)
-                    mv.visitJumpInsn(Opcodes.GOTO, innermostLoop.lastLabel);
-
-                    // action == 0: if marker still present, unwind this loop (label targets outer)
-                    mv.visitLabel(noAction);
+                    // Check if there's a control flow marker
                     mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                             "org/perlonjava/runtime/RuntimeControlFlowRegistry",
                             "hasMarker",
@@ -375,9 +329,11 @@ public class EmitSubroutine {
                             false);
                     mv.visitJumpInsn(Opcodes.IFEQ, noMarker);
 
+                    // Has marker: pop RuntimeList and jump to loop exit
                     mv.visitInsn(Opcodes.POP);
                     mv.visitJumpInsn(Opcodes.GOTO, innermostLoop.lastLabel);
 
+                    // No marker: continue with scalar conversion
                     mv.visitLabel(noMarker);
                 }
             }
