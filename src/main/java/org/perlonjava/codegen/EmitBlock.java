@@ -101,9 +101,12 @@ public class EmitBlock {
             
             // Check for non-local control flow after each statement
             // This is needed for labeled blocks like SKIP: to handle last/next/redo
-            if (node.isLoop && i < list.size() - 1) {
+            // Only enable for simple blocks to avoid ASM frame computation errors
+            if (node.isLoop && i < list.size() - 1 && list.size() <= 5) {
                 // After each statement (except the last), check if control flow was triggered
                 // Use RuntimeControlFlowRegistry to check without ASM issues
+                // Only enabled for simple blocks (5 or fewer statements) to avoid VerifyError
+                
                 Label continueBlock = new Label();
                 
                 // if (!RuntimeControlFlowRegistry.hasMarker()) continue
