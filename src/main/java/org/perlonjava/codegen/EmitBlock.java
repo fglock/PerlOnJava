@@ -99,15 +99,38 @@ public class EmitBlock {
                 element.accept(voidVisitor);
             }
             
-            // NOTE: Registry checks are DISABLED in EmitBlock because:
-            // 1. They cause ASM frame computation errors in nested/refactored code
-            // 2. Bare labeled blocks (like TODO:) don't need non-local control flow
-            // 3. Real loops (for/while/foreach) have their own registry checks in
-            //    EmitForeach.java and EmitStatement.java that work correctly
-            //
-            // This means non-local control flow (next LABEL from closures) works for
-            // actual loop constructs but NOT for bare labeled blocks, which is correct
-            // Perl behavior anyway.
+            // Check for non-local control flow after each statement
+            // This is needed for labeled blocks like SKIP: to handle last/next/redo
+            if (node.isLoop && i < list.size() - 1) {
+                // After each statement (except the last), check if control flow was triggered
+                // Use RuntimeControlFlowRegistry to check without ASM issues
+                Label continueBlock = new Label();
+                
+                // if (!RuntimeControlFlowRegistry.hasMarker()) continue
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/RuntimeControlFlowRegistry",
+                        "hasMarker",
+                        "()Z",
+                        false);
+                mv.visitJumpInsn(Opcodes.IFEQ, continueBlock);
+                
+                // Has marker: check if it matches this loop
+                if (node.labelName != null) {
+                    mv.visitLdcInsn(node.labelName);
+                } else {
+                    mv.visitInsn(Opcodes.ACONST_NULL);
+                }
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/RuntimeControlFlowRegistry",
+                        "checkLoopAndGetAction",
+                        "(Ljava/lang/String;)I",
+                        false);
+                
+                // If action != 0, jump to nextLabel (exit block)
+                mv.visitJumpInsn(Opcodes.IFNE, nextLabel);
+                
+                mv.visitLabel(continueBlock);
+            }
         }
 
         if (node.isLoop) {
