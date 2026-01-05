@@ -309,6 +309,34 @@ public class EmitSubroutine {
         if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
             // Transform the value in the stack to RuntimeScalar
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+            
+            // Check for control flow AFTER scalar conversion
+            if (ENABLE_CONTROL_FLOW_CHECKS && !emitterVisitor.ctx.javaClassInfo.loopLabelStack.isEmpty()) {
+                LoopLabels innermostLoop = null;
+                for (LoopLabels loopLabels : emitterVisitor.ctx.javaClassInfo.loopLabelStack) {
+                    if (loopLabels.isTrueLoop) {
+                        innermostLoop = loopLabels;
+                        break;
+                    }
+                }
+                if (innermostLoop != null) {
+                    Label noControlFlow = new Label();
+
+                    // Check if there's a control flow marker
+                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/RuntimeControlFlowRegistry",
+                            "hasMarker",
+                            "()Z",
+                            false);
+                    mv.visitJumpInsn(Opcodes.IFEQ, noControlFlow);
+                    
+                    // Has marker: pop scalar result and jump to loop exit
+                    mv.visitInsn(Opcodes.POP);
+                    mv.visitJumpInsn(Opcodes.GOTO, innermostLoop.lastLabel);
+                    
+                    mv.visitLabel(noControlFlow);
+                }
+            }
         } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
             if (ENABLE_CONTROL_FLOW_CHECKS) {
                 LoopLabels innermostLoop = null;
