@@ -308,7 +308,8 @@ public class EmitSubroutine {
         
         if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
             // Check for control flow before converting to scalar
-            if (ENABLE_CONTROL_FLOW_CHECKS) {
+            // Only check if we're inside a loop (loopLabelStack is not empty)
+            if (ENABLE_CONTROL_FLOW_CHECKS && !emitterVisitor.ctx.javaClassInfo.loopLabelStack.isEmpty()) {
                 LoopLabels innermostLoop = null;
                 for (LoopLabels loopLabels : emitterVisitor.ctx.javaClassInfo.loopLabelStack) {
                     if (loopLabels.isTrueLoop) {
