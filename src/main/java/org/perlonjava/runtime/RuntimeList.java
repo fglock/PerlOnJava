@@ -334,7 +334,7 @@ public class RuntimeList extends RuntimeBase {
         if (isEmpty()) {
             return scalarUndef; // Return undefined if empty
         }
-        return get(size() - 1).scalar(); // Return the last element as a scalar
+        return elements.get(size() - 1).scalar(); // Return the last element as a scalar
     }
 
     /**
