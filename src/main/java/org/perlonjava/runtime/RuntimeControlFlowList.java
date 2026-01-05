@@ -30,6 +30,21 @@ public class RuntimeControlFlowList extends RuntimeList {
     }
     
     /**
+     * Constructor from existing ControlFlowMarker.
+     * Used when propagating control flow through scalar context.
+     * 
+     * @param marker The control flow marker
+     */
+    public RuntimeControlFlowList(ControlFlowMarker marker) {
+        super();
+        this.marker = marker;
+        if (DEBUG_TAILCALL) {
+            System.err.println("[DEBUG-0c] RuntimeControlFlowList constructor (marker): type=" + marker.type + 
+                              ", label=" + marker.label);
+        }
+    }
+    
+    /**
      * Constructor for tail call (goto &NAME).
      * 
      * @param codeRef The code reference to call
