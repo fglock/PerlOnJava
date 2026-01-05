@@ -99,21 +99,47 @@ public class EmitBlock {
                 element.accept(voidVisitor);
             }
             
-            // NOTE: Registry checks are DISABLED in EmitBlock because:
-            // 1. They cause ASM frame computation errors in nested/refactored code
-            // 2. They interfere with normal loop execution (for/while/foreach)
-            // 3. Real loops (for/while/foreach) have their own registry checks in
-            //    EmitForeach.java and EmitStatement.java that work correctly
-            //
-            // For bare labeled blocks like SKIP:, control flow propagation works through
-            // the RuntimeControlFlowList wrapping mechanism:
-            // - last SKIP returns RuntimeControlFlowList
-            // - RuntimeList.scalar() wraps it in RuntimeScalar
-            // - RuntimeScalar.getList() unwraps it
-            // - The marker stays in RuntimeControlFlowRegistry
-            // - When execution returns to the caller, the marker is checked
-            //
-            // This approach avoids bytecode-level checks that cause ASM errors.
+            // Check for non-local control flow after each statement in bare labeled blocks
+            // Only check if:
+            // 1. This is a labeled loop block (node.isLoop && node.labelName != null)
+            // 2. Not the last statement (i < list.size() - 1)
+            // 3. Block doesn't contain loop constructs (for/while/foreach handle their own control flow)
+            if (node.isLoop && node.labelName != null && i < list.size() - 1) {
+                // Check if this block contains actual loop constructs
+                boolean hasLoopConstruct = false;
+                for (Node elem : list) {
+                    if (elem instanceof For1Node || elem instanceof For3Node) {
+                        hasLoopConstruct = true;
+                        break;
+                    }
+                }
+                
+                // Only add registry check for bare labeled blocks (like SKIP:)
+                if (!hasLoopConstruct) {
+                    Label continueBlock = new Label();
+                    
+                    // if (!RuntimeControlFlowRegistry.hasMarker()) continue
+                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/RuntimeControlFlowRegistry",
+                            "hasMarker",
+                            "()Z",
+                            false);
+                    mv.visitJumpInsn(Opcodes.IFEQ, continueBlock);
+                    
+                    // Has marker: check if it matches this loop
+                    mv.visitLdcInsn(node.labelName);
+                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/RuntimeControlFlowRegistry",
+                            "checkLoopAndGetAction",
+                            "(Ljava/lang/String;)I",
+                            false);
+                    
+                    // If action != 0, jump to nextLabel (exit block)
+                    mv.visitJumpInsn(Opcodes.IFNE, nextLabel);
+                    
+                    mv.visitLabel(continueBlock);
+                }
+            }
         }
 
         if (node.isLoop) {
