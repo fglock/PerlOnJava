@@ -49,6 +49,11 @@ logs/
 .perlonjava_env_ready
 *.diff
 *.patch
+
+.windsurf/
+Image-ExifTool-13.44/
+dev/examples/DiagnoseBytecodeEstimation.pl
+dev/prompts/fix_pat_advanced_verifyerror.md
 # But allow patch files in import-perl5/patches/
 !dev/import-perl5/patches/*.patch
 

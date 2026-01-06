@@ -286,8 +286,15 @@ sub BAIL_OUT {
     exit 255;
 }
 
-sub skip {
-    die "Test::More::skip() is not implemented";
+sub skip($;$) {
+    my ($name, $count) = @_;
+    $count ||= 1;
+    for (1..$count) {
+        $Test_Count++;
+        my $result = "ok";
+        print "$Test_Indent$result $Test_Count # skip $name\n";
+    }
+    last SKIP;
 }
 
 # Workaround to avoid non-local goto (last SKIP).
