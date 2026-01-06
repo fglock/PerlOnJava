@@ -287,6 +287,7 @@ public class EmitSubroutine {
             codeRefSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
         }
         mv.visitVarInsn(Opcodes.ASTORE, codeRefSlot);
+        emitterVisitor.ctx.javaClassInfo.decrementStackLevel(1);
 
         int nameSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
         boolean pooledName = nameSlot >= 0;
@@ -326,6 +327,7 @@ public class EmitSubroutine {
 
             paramList.elements.get(index).accept(listVisitor);
             mv.visitVarInsn(Opcodes.ASTORE, argSlot);
+            emitterVisitor.ctx.javaClassInfo.decrementStackLevel(1);
 
             mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
             if (index <= 5) {
