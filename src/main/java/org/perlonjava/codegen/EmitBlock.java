@@ -150,6 +150,16 @@ public class EmitBlock {
 
         if (node.isLoop) {
             emitterVisitor.ctx.javaClassInfo.popLoopLabels();
+            
+            // Clear any stale markers when exiting a labeled block
+            // This prevents markers from affecting subsequent labeled blocks
+            if (node.labelName != null) {
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/RuntimeControlFlowRegistry",
+                        "clear",
+                        "()V",
+                        false);
+            }
         }
 
         // Pop labels used inside the block

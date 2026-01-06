@@ -133,4 +133,20 @@ sub ok_tap {
     ok_tap($out eq 'AC', 'last LABEL3 exits LABEL3 block (2 frames, void context)');
 }
 
+# 10) Stale marker bug - labeled block in eval leaves marker
+{
+    my $out = '';
+    # This eval creates a labeled block that might leave a stale marker
+    eval "\${\x{30cd}single:\x{30cd}colon} = 'test'";
+    $out .= 'A';
+    
+    # This SKIP block should work normally, not be affected by stale marker
+    MYLABEL: {
+        $out .= 'B';
+        $out .= 'C';
+    }
+    $out .= 'D';
+    ok_tap($out eq 'ABCD', 'labeled block in eval does not leave stale marker');
+}
+
 print "1..$t\n";
