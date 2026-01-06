@@ -51,86 +51,86 @@ sub ok_tap {
     ok_tap($out eq 'AC', 'last MYLABEL exits MYLABEL block (2 frames, void context)');
 }
 
-# 4) Single frame - TODO
+# 4) Single frame - LABEL2
 {
     my $out = '';
-    sub todo_once { last TODO }
-    TODO: {
+    sub test2_once { last LABEL2 }
+    LABEL2: {
         $out .= 'A';
-        todo_once();
+        test2_once();
         $out .= 'B';
     }
     $out .= 'C';
-    ok_tap($out eq 'AC', 'last TODO exits TODO block (single frame)');
+    ok_tap($out eq 'AC', 'last LABEL2 exits LABEL2 block (single frame)');
 }
 
-# 5) Two frames, scalar context - TODO
+# 5) Two frames, scalar context - LABEL2
 {
     my $out = '';
-    sub inner_todo { last TODO }
-    sub outer_todo { my $x = inner_todo(); return $x; }
-    TODO: {
+    sub inner_label2 { last LABEL2 }
+    sub outer_label2 { my $x = inner_label2(); return $x; }
+    LABEL2: {
         $out .= 'A';
-        my $r = outer_todo();
+        my $r = outer_label2();
         $out .= 'B';
     }
     $out .= 'C';
-    ok_tap($out eq 'AC', 'last TODO exits TODO block (2 frames, scalar context)');
+    ok_tap($out eq 'AC', 'last LABEL2 exits LABEL2 block (2 frames, scalar context)');
 }
 
-# 6) Two frames, void context - TODO
+# 6) Two frames, void context - LABEL2
 {
     my $out = '';
-    sub innerv_todo { last TODO }
-    sub outerv_todo { innerv_todo(); }
-    TODO: {
+    sub innerv_label2 { last LABEL2 }
+    sub outerv_label2 { innerv_label2(); }
+    LABEL2: {
         $out .= 'A';
-        outerv_todo();
+        outerv_label2();
         $out .= 'B';
     }
     $out .= 'C';
-    ok_tap($out eq 'AC', 'last TODO exits TODO block (2 frames, void context)');
+    ok_tap($out eq 'AC', 'last LABEL2 exits LABEL2 block (2 frames, void context)');
 }
 
-# 7) Single frame - CLEANUP
+# 7) Single frame - LABEL3
 {
     my $out = '';
-    sub cleanup_once { last CLEANUP }
-    CLEANUP: {
+    sub test3_once { last LABEL3 }
+    LABEL3: {
         $out .= 'A';
-        cleanup_once();
+        test3_once();
         $out .= 'B';
     }
     $out .= 'C';
-    ok_tap($out eq 'AC', 'last CLEANUP exits CLEANUP block (single frame)');
+    ok_tap($out eq 'AC', 'last LABEL3 exits LABEL3 block (single frame)');
 }
 
-# 8) Two frames, scalar context - CLEANUP
+# 8) Two frames, scalar context - LABEL3
 {
     my $out = '';
-    sub inner_cleanup { last CLEANUP }
-    sub outer_cleanup { my $x = inner_cleanup(); return $x; }
-    CLEANUP: {
+    sub inner_label3 { last LABEL3 }
+    sub outer_label3 { my $x = inner_label3(); return $x; }
+    LABEL3: {
         $out .= 'A';
-        my $r = outer_cleanup();
+        my $r = outer_label3();
         $out .= 'B';
     }
     $out .= 'C';
-    ok_tap($out eq 'AC', 'last CLEANUP exits CLEANUP block (2 frames, scalar context)');
+    ok_tap($out eq 'AC', 'last LABEL3 exits LABEL3 block (2 frames, scalar context)');
 }
 
-# 9) Two frames, void context - CLEANUP
+# 9) Two frames, void context - LABEL3
 {
     my $out = '';
-    sub innerv_cleanup { last CLEANUP }
-    sub outerv_cleanup { innerv_cleanup(); }
-    CLEANUP: {
+    sub innerv_label3 { last LABEL3 }
+    sub outerv_label3 { innerv_label3(); }
+    LABEL3: {
         $out .= 'A';
-        outerv_cleanup();
+        outerv_label3();
         $out .= 'B';
     }
     $out .= 'C';
-    ok_tap($out eq 'AC', 'last CLEANUP exits CLEANUP block (2 frames, void context)');
+    ok_tap($out eq 'AC', 'last LABEL3 exits LABEL3 block (2 frames, void context)');
 }
 
 print "1..$t\n";
