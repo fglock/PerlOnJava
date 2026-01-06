@@ -16,7 +16,6 @@ our @EXPORT = qw(
     pass fail diag note done_testing is_deeply subtest
     use_ok require_ok BAIL_OUT
     skip
-    skip_internal
     eq_array eq_hash eq_set
 );
 
@@ -286,21 +285,15 @@ sub BAIL_OUT {
     exit 255;
 }
 
-sub skip {
-    die "Test::More::skip() is not implemented";
-}
-
-# Workaround to avoid non-local goto (last SKIP).
-# The skip_internal subroutine is called from a macro in TestMoreHelper.java
-#
-sub skip_internal {
+sub skip($;$) {
     my ($name, $count) = @_;
+    $count ||= 1;
     for (1..$count) {
         $Test_Count++;
         my $result = "ok";
         print "$Test_Indent$result $Test_Count # skip $name\n";
     }
-    return 1;
+    last SKIP;
 }
 
 # Legacy comparison functions - simple implementations using is_deeply
