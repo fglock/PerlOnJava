@@ -1,5 +1,6 @@
 package org.perlonjava.codegen;
 
+import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.BinaryOperatorNode;
 import org.perlonjava.astnode.IdentifierNode;
@@ -14,6 +15,8 @@ import org.perlonjava.runtime.ScalarUtils;
 import static org.perlonjava.codegen.EmitOperator.emitOperator;
 
 public class EmitBinaryOperator {
+    static final boolean ENABLE_SPILL_BINARY_LHS = System.getenv("JPERL_NO_SPILL_BINARY_LHS") == null;
+
     static void handleBinaryOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node, OperatorHandler operatorHandler) {
         EmitterVisitor scalarVisitor =
                 emitterVisitor.with(RuntimeContextType.SCALAR); // execute operands in scalar context
@@ -52,8 +55,27 @@ public class EmitBinaryOperator {
         if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_INTEGER)) {
             if (node.operator.equals("%")) {
                 // Use integer modulus when "use integer" is in effect
-                node.left.accept(scalarVisitor); // left parameter
-                right.accept(scalarVisitor); // right parameter
+                MethodVisitor mv = emitterVisitor.ctx.mv;
+                if (ENABLE_SPILL_BINARY_LHS) {
+                    node.left.accept(scalarVisitor);
+                    int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+                    boolean pooled = leftSlot >= 0;
+                    if (!pooled) {
+                        leftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                    }
+                    mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
+
+                    right.accept(scalarVisitor);
+
+                    mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+                    mv.visitInsn(Opcodes.SWAP);
+                    if (pooled) {
+                        emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+                    }
+                } else {
+                    node.left.accept(scalarVisitor); // left parameter
+                    right.accept(scalarVisitor); // right parameter
+                }
                 emitterVisitor.ctx.mv.visitMethodInsn(
                         Opcodes.INVOKESTATIC,
                         "org/perlonjava/operators/MathOperators",
@@ -64,8 +86,27 @@ public class EmitBinaryOperator {
                 return;
             } else if (node.operator.equals("/")) {
                 // Use integer division when "use integer" is in effect
-                node.left.accept(scalarVisitor); // left parameter
-                right.accept(scalarVisitor); // right parameter
+                MethodVisitor mv = emitterVisitor.ctx.mv;
+                if (ENABLE_SPILL_BINARY_LHS) {
+                    node.left.accept(scalarVisitor);
+                    int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+                    boolean pooled = leftSlot >= 0;
+                    if (!pooled) {
+                        leftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                    }
+                    mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
+
+                    right.accept(scalarVisitor);
+
+                    mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+                    mv.visitInsn(Opcodes.SWAP);
+                    if (pooled) {
+                        emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+                    }
+                } else {
+                    node.left.accept(scalarVisitor); // left parameter
+                    right.accept(scalarVisitor); // right parameter
+                }
                 emitterVisitor.ctx.mv.visitMethodInsn(
                         Opcodes.INVOKESTATIC,
                         "org/perlonjava/operators/MathOperators",
@@ -76,8 +117,27 @@ public class EmitBinaryOperator {
                 return;
             } else if (node.operator.equals("<<")) {
                 // Use integer left shift when "use integer" is in effect
-                node.left.accept(scalarVisitor); // left parameter
-                right.accept(scalarVisitor); // right parameter
+                MethodVisitor mv = emitterVisitor.ctx.mv;
+                if (ENABLE_SPILL_BINARY_LHS) {
+                    node.left.accept(scalarVisitor);
+                    int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+                    boolean pooled = leftSlot >= 0;
+                    if (!pooled) {
+                        leftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                    }
+                    mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
+
+                    right.accept(scalarVisitor);
+
+                    mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+                    mv.visitInsn(Opcodes.SWAP);
+                    if (pooled) {
+                        emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+                    }
+                } else {
+                    node.left.accept(scalarVisitor); // left parameter
+                    right.accept(scalarVisitor); // right parameter
+                }
                 emitterVisitor.ctx.mv.visitMethodInsn(
                         Opcodes.INVOKESTATIC,
                         "org/perlonjava/operators/BitwiseOperators",
@@ -88,8 +148,27 @@ public class EmitBinaryOperator {
                 return;
             } else if (node.operator.equals(">>")) {
                 // Use integer right shift when "use integer" is in effect
-                node.left.accept(scalarVisitor); // left parameter
-                right.accept(scalarVisitor); // right parameter
+                MethodVisitor mv = emitterVisitor.ctx.mv;
+                if (ENABLE_SPILL_BINARY_LHS) {
+                    node.left.accept(scalarVisitor);
+                    int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+                    boolean pooled = leftSlot >= 0;
+                    if (!pooled) {
+                        leftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                    }
+                    mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
+
+                    right.accept(scalarVisitor);
+
+                    mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+                    mv.visitInsn(Opcodes.SWAP);
+                    if (pooled) {
+                        emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+                    }
+                } else {
+                    node.left.accept(scalarVisitor); // left parameter
+                    right.accept(scalarVisitor); // right parameter
+                }
                 emitterVisitor.ctx.mv.visitMethodInsn(
                         Opcodes.INVOKESTATIC,
                         "org/perlonjava/operators/BitwiseOperators",
@@ -101,8 +180,27 @@ public class EmitBinaryOperator {
             }
         }
 
-        node.left.accept(scalarVisitor); // left parameter
-        right.accept(scalarVisitor); // right parameter
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        if (ENABLE_SPILL_BINARY_LHS) {
+            node.left.accept(scalarVisitor); // left parameter
+            int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+            boolean pooled = leftSlot >= 0;
+            if (!pooled) {
+                leftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            }
+            mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
+
+            right.accept(scalarVisitor); // right parameter
+
+            mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+            mv.visitInsn(Opcodes.SWAP);
+            if (pooled) {
+                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+            }
+        } else {
+            node.left.accept(scalarVisitor); // left parameter
+            right.accept(scalarVisitor); // right parameter
+        }
         // stack: [left, right]
         emitOperator(node, emitterVisitor);
     }
@@ -111,10 +209,39 @@ public class EmitBinaryOperator {
         // compound assignment operators like `+=`
         EmitterVisitor scalarVisitor =
                 emitterVisitor.with(RuntimeContextType.SCALAR); // execute operands in scalar context
-        node.left.accept(scalarVisitor); // target - left parameter
-        emitterVisitor.ctx.mv.visitInsn(Opcodes.DUP);
-        node.right.accept(scalarVisitor); // right parameter
-        // stack: [left, left, right]
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        if (ENABLE_SPILL_BINARY_LHS) {
+            node.left.accept(scalarVisitor); // target - left parameter
+            int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+            boolean pooledLeft = leftSlot >= 0;
+            if (!pooledLeft) {
+                leftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            }
+            mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
+
+            node.right.accept(scalarVisitor); // right parameter
+            int rightSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+            boolean pooledRight = rightSlot >= 0;
+            if (!pooledRight) {
+                rightSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            }
+            mv.visitVarInsn(Opcodes.ASTORE, rightSlot);
+
+            mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitVarInsn(Opcodes.ALOAD, rightSlot);
+
+            if (pooledRight) {
+                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+            }
+            if (pooledLeft) {
+                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+            }
+        } else {
+            node.left.accept(scalarVisitor); // target - left parameter
+            mv.visitInsn(Opcodes.DUP);
+            node.right.accept(scalarVisitor); // right parameter
+        }
         // perform the operation
         String baseOperator = node.operator.substring(0, node.operator.length() - 1);
         // Create a BinaryOperatorNode for the base operation
@@ -126,7 +253,7 @@ public class EmitBinaryOperator {
         );
         EmitOperator.emitOperator(baseOpNode, scalarVisitor);
         // assign to the Lvalue
-        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "set", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "set", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
         EmitOperator.handleVoidContext(emitterVisitor);
     }
 

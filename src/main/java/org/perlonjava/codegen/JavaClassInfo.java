@@ -39,6 +39,9 @@ public class JavaClassInfo {
 
     public int controlFlowActionSlot;
 
+    public int[] spillSlots;
+    public int spillTop;
+
     /**
      * Manages the stack level for the class.
      */
@@ -61,6 +64,21 @@ public class JavaClassInfo {
         this.stackLevelManager = new StackLevelManager();
         this.loopLabelStack = new ArrayDeque<>();
         this.gotoLabelStack = new ArrayDeque<>();
+        this.spillSlots = new int[0];
+        this.spillTop = 0;
+    }
+
+    public int acquireSpillSlot() {
+        if (spillTop >= spillSlots.length) {
+            return -1;
+        }
+        return spillSlots[spillTop++];
+    }
+
+    public void releaseSpillSlot() {
+        if (spillTop > 0) {
+            spillTop--;
+        }
     }
 
     /**

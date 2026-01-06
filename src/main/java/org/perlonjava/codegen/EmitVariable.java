@@ -441,6 +441,10 @@ public class EmitVariable {
 
                 node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));   // emit the value
 
+                boolean spillRhs = !(left instanceof OperatorNode op && op.operator.equals("keys"));
+                int rhsSlot = -1;
+                boolean pooledRhs = false;
+
                 if (isLocalAssignment) {
                     // Clone the scalar before calling local()
                     if (right instanceof OperatorNode operatorNode && operatorNode.operator.equals("*")) {
@@ -456,7 +460,21 @@ public class EmitVariable {
                     }
                 }
 
+                if (spillRhs) {
+                    rhsSlot = ctx.javaClassInfo.acquireSpillSlot();
+                    pooledRhs = rhsSlot >= 0;
+                    if (!pooledRhs) {
+                        rhsSlot = ctx.symbolTable.allocateLocalVariable();
+                    }
+                    mv.visitVarInsn(Opcodes.ASTORE, rhsSlot);
+                }
+
                 node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));   // emit the variable
+
+                if (spillRhs) {
+                    mv.visitVarInsn(Opcodes.ALOAD, rhsSlot);
+                    mv.visitInsn(Opcodes.SWAP);
+                }
 
                 OperatorNode nodeLeft = null;
                 if (node.left instanceof OperatorNode operatorNode) {
@@ -486,6 +504,9 @@ public class EmitVariable {
                         mv.visitInsn(Opcodes.SWAP); // Stack: [value, hash]
                         mv.visitInsn(Opcodes.POP);  // Stack: [value]
                         // value is left on stack as the result of the assignment
+                        if (pooledRhs) {
+                            ctx.javaClassInfo.releaseSpillSlot();
+                        }
                         return;  // Skip normal assignment processing
                     }
 
@@ -517,6 +538,10 @@ public class EmitVariable {
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, leftDescriptor, "set", rightDescriptor, false);
                 } else {
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "addToScalar", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                }
+
+                if (pooledRhs) {
+                    ctx.javaClassInfo.releaseSpillSlot();
                 }
                 break;
             case RuntimeContextType.LIST:

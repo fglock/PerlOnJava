@@ -19,6 +19,8 @@ import org.perlonjava.runtime.RuntimeDescriptorConstants;
  */
 public class EmitOperator {
 
+    private static final boolean ENABLE_SPILL_BINARY_LHS = System.getenv("JPERL_NO_SPILL_BINARY_LHS") == null;
+
     static void emitOperator(Node node, EmitterVisitor emitterVisitor) {
         // Extract operator string from the node
         String operator = null;
@@ -417,8 +419,25 @@ public class EmitOperator {
         EmitterVisitor scalarVisitor =
                 emitterVisitor.with(RuntimeContextType.SCALAR); // execute operands in scalar context
         // Accept both left and right operands in SCALAR context.
-        node.left.accept(scalarVisitor); // target - left parameter
-        node.right.accept(scalarVisitor); // right parameter
+        if (ENABLE_SPILL_BINARY_LHS) {
+            MethodVisitor mv = emitterVisitor.ctx.mv;
+            node.left.accept(scalarVisitor); // target - left parameter
+            int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+            boolean pooled = leftSlot >= 0;
+            if (!pooled) {
+                leftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            }
+            mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
+            node.right.accept(scalarVisitor); // right parameter
+            mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+            mv.visitInsn(Opcodes.SWAP);
+            if (pooled) {
+                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+            }
+        } else {
+            node.left.accept(scalarVisitor); // target - left parameter
+            node.right.accept(scalarVisitor); // right parameter
+        }
         emitOperator(node, emitterVisitor);
     }
 

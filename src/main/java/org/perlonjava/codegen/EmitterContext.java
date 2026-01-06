@@ -150,6 +150,10 @@ public class EmitterContext {
         }
     }
 
+    public void clearContextCache() {
+        contextCache.clear();
+    }
+
     @Override
     public String toString() {
         return "EmitterContext{\n" +

@@ -1,6 +1,13 @@
 package org.perlonjava.codegen;
 
 import org.objectweb.asm.*;
+import org.objectweb.asm.tree.ClassNode;
+import org.objectweb.asm.tree.MethodNode;
+import org.objectweb.asm.tree.analysis.Analyzer;
+import org.objectweb.asm.tree.analysis.AnalyzerException;
+import org.objectweb.asm.tree.analysis.BasicValue;
+import org.objectweb.asm.tree.analysis.BasicInterpreter;
+import org.objectweb.asm.util.CheckClassAdapter;
 import org.objectweb.asm.util.TraceClassVisitor;
 import org.perlonjava.astnode.Node;
 import org.perlonjava.astvisitor.EmitterVisitor;
@@ -36,6 +43,27 @@ public class EmitterMethodCreator implements Opcodes {
     // Generate a unique internal class name
     public static String generateClassName() {
         return "org/perlonjava/anon" + classCounter++;
+    }
+
+    private static void debugAnalyzeWithBasicInterpreter(ClassReader cr, PrintWriter out) {
+        try {
+            ClassNode cn = new ClassNode();
+            cr.accept(cn, ClassReader.EXPAND_FRAMES);
+            for (Object m : cn.methods) {
+                MethodNode mn = (MethodNode) m;
+                try {
+                    Analyzer<BasicValue> analyzer = new Analyzer<>(new BasicInterpreter());
+                    analyzer.analyze(cn.name, mn);
+                } catch (AnalyzerException ae) {
+                    int insnIndex = (ae.node != null) ? mn.instructions.indexOf(ae.node) : -1;
+                    out.println("BasicInterpreter failure in " + cn.name + "." + mn.name + mn.desc + " at instruction " + insnIndex);
+                    ae.printStackTrace(out);
+                    return;
+                }
+            }
+        } catch (Throwable t) {
+            t.printStackTrace(out);
+        }
     }
 
     /**
@@ -101,16 +129,58 @@ public class EmitterMethodCreator implements Opcodes {
     }
 
     public static byte[] getBytecode(EmitterContext ctx, Node ast, boolean useTryCatch) {
+        boolean asmDebug = System.getenv("JPERL_ASM_DEBUG") != null;
+        try {
+            return getBytecodeInternal(ctx, ast, useTryCatch, false);
+        } catch (ArrayIndexOutOfBoundsException frameComputeCrash) {
+            // In normal operation we MUST NOT fall back to no-frames output, as that will fail
+            // verification on modern JVMs ("Expecting a stackmap frame...").
+            //
+            // When JPERL_ASM_DEBUG is enabled, do a diagnostic pass without COMPUTE_FRAMES so we can
+            // disassemble + analyze the produced bytecode.
+            frameComputeCrash.printStackTrace();
+            if (asmDebug) {
+                try {
+                    // Reset JavaClassInfo to avoid reusing partially-resolved Labels.
+                    if (ctx != null && ctx.javaClassInfo != null) {
+                        String previousName = ctx.javaClassInfo.javaClassName;
+                        ctx.javaClassInfo = new JavaClassInfo();
+                        ctx.javaClassInfo.javaClassName = previousName;
+                        ctx.clearContextCache();
+                    }
+                    getBytecodeInternal(ctx, ast, useTryCatch, true);
+                } catch (Throwable diagErr) {
+                    diagErr.printStackTrace();
+                }
+            }
+            throw new PerlCompilerException(
+                    ast.getIndex(),
+                    "Internal compiler error: ASM frame computation failed. " +
+                            "Re-run with JPERL_ASM_DEBUG=1 to print disassembly and analysis. " +
+                            "Original error: " + frameComputeCrash.getMessage(),
+                    ctx.errorUtil,
+                    frameComputeCrash);
+        }
+    }
+
+    private static byte[] getBytecodeInternal(EmitterContext ctx, Node ast, boolean useTryCatch, boolean disableFrames) {
         String className = ctx.javaClassInfo.javaClassName;
         String methodName = "apply";
         byte[] classData = null;
+        boolean asmDebug = System.getenv("JPERL_ASM_DEBUG") != null;
         
         try {
             String[] env = ctx.symbolTable.getVariableNames();
 
             // Create a ClassWriter with COMPUTE_FRAMES and COMPUTE_MAXS options for automatic frame and max
             // stack size calculation
-            ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
+            // Only disable COMPUTE_FRAMES for the explicit diagnostic pass (disableFrames=true).
+            // In normal operation (even when JPERL_ASM_DEBUG is enabled) we want COMPUTE_FRAMES,
+            // otherwise the generated class may fail verification on modern JVMs.
+            int cwFlags = disableFrames
+                    ? ClassWriter.COMPUTE_MAXS
+                    : (ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
+            ClassWriter cw = new ClassWriter(cwFlags);
             ctx.cw = cw;
 
             // The context type is determined by the caller.
@@ -231,14 +301,34 @@ public class EmitterMethodCreator implements Opcodes {
             int tailCallArgsSlot = ctx.symbolTable.allocateLocalVariable();
             ctx.javaClassInfo.tailCallCodeRefSlot = tailCallCodeRefSlot;
             ctx.javaClassInfo.tailCallArgsSlot = tailCallArgsSlot;
+            mv.visitInsn(Opcodes.ACONST_NULL);
+            mv.visitVarInsn(Opcodes.ASTORE, tailCallCodeRefSlot);
+            mv.visitInsn(Opcodes.ACONST_NULL);
+            mv.visitVarInsn(Opcodes.ASTORE, tailCallArgsSlot);
             
             // Allocate slot for control flow check temp storage
             // This is used at call sites to temporarily store marked RuntimeControlFlowList
             int controlFlowTempSlot = ctx.symbolTable.allocateLocalVariable();
             ctx.javaClassInfo.controlFlowTempSlot = controlFlowTempSlot;
+            mv.visitInsn(Opcodes.ACONST_NULL);
+            mv.visitVarInsn(Opcodes.ASTORE, controlFlowTempSlot);
 
             int controlFlowActionSlot = ctx.symbolTable.allocateLocalVariable();
             ctx.javaClassInfo.controlFlowActionSlot = controlFlowActionSlot;
+            mv.visitInsn(Opcodes.ICONST_0);
+            mv.visitVarInsn(Opcodes.ISTORE, controlFlowActionSlot);
+
+            int spillSlotCount = System.getenv("JPERL_SPILL_SLOTS") != null
+                    ? Integer.parseInt(System.getenv("JPERL_SPILL_SLOTS"))
+                    : 16;
+            ctx.javaClassInfo.spillSlots = new int[spillSlotCount];
+            ctx.javaClassInfo.spillTop = 0;
+            for (int i = 0; i < spillSlotCount; i++) {
+                int slot = ctx.symbolTable.allocateLocalVariable();
+                ctx.javaClassInfo.spillSlots[i] = slot;
+                mv.visitInsn(Opcodes.ACONST_NULL);
+                mv.visitVarInsn(Opcodes.ASTORE, slot);
+            }
             
             // Create a label for the return point
             ctx.javaClassInfo.returnLabel = new Label();
@@ -510,13 +600,66 @@ public class EmitterMethodCreator implements Opcodes {
                 StringWriter sw = new StringWriter();
                 PrintWriter pw = new PrintWriter(sw);
                 TraceClassVisitor tcv = new TraceClassVisitor(pw);
-                cr.accept(tcv, 0);
+                cr.accept(tcv, ClassReader.EXPAND_FRAMES);
 
                 System.out.println(sw);
             }
+
+            if (asmDebug) {
+                try {
+                    ClassReader cr = new ClassReader(classData);
+
+                    StringWriter sw = new StringWriter();
+                    PrintWriter pw = new PrintWriter(sw);
+                    TraceClassVisitor tcv = new TraceClassVisitor(pw);
+                    cr.accept(tcv, ClassReader.EXPAND_FRAMES);
+                    pw.flush();
+                    System.err.println(sw);
+
+                    PrintWriter verifyPw = new PrintWriter(System.err);
+                    String thisClassNameDot = className.replace('/', '.');
+                    final byte[] verifyClassData = classData;
+                    ClassLoader verifyLoader = new ClassLoader(GlobalVariable.globalClassLoader) {
+                        @Override
+                        protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+                            if (name.equals(thisClassNameDot)) {
+                                synchronized (getClassLoadingLock(name)) {
+                                    Class<?> loaded = findLoadedClass(name);
+                                    if (loaded == null) {
+                                        loaded = defineClass(name, verifyClassData, 0, verifyClassData.length);
+                                    }
+                                    if (resolve) {
+                                        resolveClass(loaded);
+                                    }
+                                    return loaded;
+                                }
+                            }
+                            return super.loadClass(name, resolve);
+                        }
+                    };
+
+                    boolean verified = false;
+                    try {
+                        CheckClassAdapter.verify(cr, verifyLoader, true, verifyPw);
+                        verified = true;
+                    } catch (Throwable verifyErr) {
+                        verifyErr.printStackTrace(verifyPw);
+                    }
+                    verifyPw.flush();
+
+                    // Always run a classloader-free verifier pass to get a concrete method/instruction index.
+                    // CheckClassAdapter.verify() can fail or be noisy when it cannot load generated anon classes.
+                    debugAnalyzeWithBasicInterpreter(cr, verifyPw);
+                    verifyPw.flush();
+                } catch (Throwable t) {
+                    t.printStackTrace();
+                }
+            }
             return classData;
         } catch (ArrayIndexOutOfBoundsException e) {
-            // Print full stack trace for debugging
+            if (!disableFrames) {
+                throw e;
+            }
             e.printStackTrace();
             throw new PerlCompilerException(
                     ast.getIndex(),

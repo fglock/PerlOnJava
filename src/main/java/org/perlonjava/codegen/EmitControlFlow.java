@@ -63,7 +63,7 @@ public class EmitControlFlow {
         }
         
         if (loopLabels == null) {
-            // Non-local control flow: register in RuntimeControlFlowRegistry and return normally
+            // Non-local control flow: return tagged RuntimeControlFlowList
             ctx.logDebug("visit(next): Non-local control flow for " + operator + " " + labelStr);
             
             // Determine control flow type
@@ -71,8 +71,8 @@ public class EmitControlFlow {
                     : operator.equals("last") ? ControlFlowType.LAST
                     : ControlFlowType.REDO;
             
-            // Create ControlFlowMarker: new ControlFlowMarker(type, label, fileName, lineNumber)
-            ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/ControlFlowMarker");
+            // Create RuntimeControlFlowList: new RuntimeControlFlowList(type, label, fileName, lineNumber)
+            ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeControlFlowList");
             ctx.mv.visitInsn(Opcodes.DUP);
             ctx.mv.visitFieldInsn(Opcodes.GETSTATIC, 
                     "org/perlonjava/runtime/ControlFlowType", 
@@ -89,27 +89,12 @@ public class EmitControlFlow {
             int lineNumber = ctx.errorUtil != null ? ctx.errorUtil.getLineNumber(node.tokenIndex) : 0;
             ctx.mv.visitLdcInsn(lineNumber);
             ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
-                    "org/perlonjava/runtime/ControlFlowMarker",
+                    "org/perlonjava/runtime/RuntimeControlFlowList",
                     "<init>",
                     "(Lorg/perlonjava/runtime/ControlFlowType;Ljava/lang/String;Ljava/lang/String;I)V",
                     false);
             
-            // Register the marker: RuntimeControlFlowRegistry.register(marker)
-            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/RuntimeControlFlowRegistry",
-                    "register",
-                    "(Lorg/perlonjava/runtime/ControlFlowMarker;)V",
-                    false);
-            
-            // Return empty list (marker is in registry, will be checked by loop)
-            // We MUST NOT jump to returnLabel as it breaks ASM frame computation
-            ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
-            ctx.mv.visitInsn(Opcodes.DUP);
-            ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL, 
-                    "org/perlonjava/runtime/RuntimeList", 
-                    "<init>", 
-                    "()V", 
-                    false);
+            // Return the tagged list (will be detected at subroutine return boundary)
             ctx.mv.visitInsn(Opcodes.ARETURN);
             return;
         }
