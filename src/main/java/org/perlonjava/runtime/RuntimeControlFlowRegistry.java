@@ -104,11 +104,40 @@ public class RuntimeControlFlowRegistry {
     }
     
     /**
-     * Check if there's a control flow marker that matches this loop, and return an action code.
-     * This is an ultra-simplified version that does all checking in one call to avoid ASM issues.
+     * Check if the current marker (if any) matches the given label.
+     * Does NOT clear the marker - just checks if it matches.
      * 
-     * @param labelName The loop's label (null for unlabeled)
-     * @return 0=no action, 1=LAST, 2=NEXT, 3=REDO, 4=GOTO (leave in registry)
+     * @param labelName The label to check against
+     * @return true if there's a marker and it matches this label
+     */
+    public static boolean markerMatchesLabel(String labelName) {
+        ControlFlowMarker marker = currentMarker.get();
+        if (marker == null) {
+            return false;
+        }
+        
+        // Check if marker's label matches (Perl semantics)
+        if (marker.label == null) {
+            // Unlabeled control flow matches any loop
+            return true;
+        } else if (labelName == null) {
+            // Labeled control flow doesn't match unlabeled loop
+            return false;
+        } else {
+            // Both labeled - must match exactly
+            return marker.label.equals(labelName);
+        }
+    }
+    
+    /**
+     * Check if there's a pending control flow marker for a specific loop label.
+     * If the marker matches, clear it and return the action code.
+     * If it doesn't match, leave it for an outer loop.
+     * 
+     * This is called at loop boundaries to check for non-local control flow.
+     * 
+     * @param labelName The label of the current loop (null for unlabeled loops)
+     * @return Action code: 0=no match, 1=LAST, 2=NEXT, 3=REDO
      */
     public static int checkLoopAndGetAction(String labelName) {
         ControlFlowMarker marker = currentMarker.get();

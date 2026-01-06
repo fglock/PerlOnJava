@@ -151,14 +151,31 @@ public class EmitBlock {
         if (node.isLoop) {
             emitterVisitor.ctx.javaClassInfo.popLoopLabels();
             
-            // Clear any stale markers when exiting a labeled block
-            // This prevents markers from affecting subsequent labeled blocks
+            // Conditionally clear stale markers when exiting a labeled block
+            // Only clear if the marker matches THIS block's label
+            // This prevents:
+            // 1. Stale markers from eval'd labeled blocks affecting subsequent blocks
+            // 2. Clearing markers meant for outer blocks
             if (node.labelName != null) {
+                Label skipClear = new Label();
+                
+                // if (!markerMatchesLabel(labelName)) skip clearing
+                mv.visitLdcInsn(node.labelName);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/RuntimeControlFlowRegistry",
+                        "markerMatchesLabel",
+                        "(Ljava/lang/String;)Z",
+                        false);
+                mv.visitJumpInsn(Opcodes.IFEQ, skipClear);
+                
+                // Marker matches - clear it
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/RuntimeControlFlowRegistry",
                         "clear",
                         "()V",
                         false);
+                
+                mv.visitLabel(skipClear);
             }
         }
 
