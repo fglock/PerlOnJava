@@ -100,23 +100,18 @@ public class EmitBlock {
             }
             
             // NOTE: Registry checks are DISABLED in EmitBlock because:
-            // 1. They cause regressions in op/pack.t (stops at test 245 instead of 14579)
-            // 2. Bare labeled blocks don't need non-local control flow checks
+            // 1. They cause ASM frame computation errors in nested/refactored code
+            // 2. Bare labeled blocks (like TODO:) don't need non-local control flow
             // 3. Real loops (for/while/foreach) have their own registry checks in
             //    EmitForeach.java and EmitStatement.java that work correctly
             //
-            // This means non-local control flow (last LABEL from closures) works for
+            // This means non-local control flow (next LABEL from closures) works for
             // actual loop constructs but NOT for bare labeled blocks, which is correct
             // Perl behavior anyway.
         }
 
         if (node.isLoop) {
             emitterVisitor.ctx.javaClassInfo.popLoopLabels();
-            
-            // NOTE: We do NOT clear the registry here because:
-            // 1. If the marker was handled by this block, it was already cleared by checkLoopAndGetAction
-            // 2. If the marker is for an outer block, we must NOT clear it
-            // 3. Clearing here causes op/pack.t to stop at test 245 instead of 14579
         }
 
         // Pop labels used inside the block
