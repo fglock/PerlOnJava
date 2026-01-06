@@ -52,6 +52,10 @@ logs/
 # But allow patch files in import-perl5/patches/
 !dev/import-perl5/patches/*.patch
 
+skip_control_flow.t
+dev/design/CONTROL_FLOW_FIX_RESULTS.md
+dev/prompts/CONTROL_FLOW_FIX_INSTRUCTIONS.md
+
 # Ignore test artifact files (numbered .txt and .pod files)
 [0-9][0-9][0-9][0-9][0-9][0-9].txt
 [0-9][0-9][0-9][0-9][0-9].pod
