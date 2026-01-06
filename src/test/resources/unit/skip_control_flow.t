@@ -149,4 +149,37 @@ sub ok_tap {
     ok_tap($out eq 'ABCD', 'labeled block in eval does not leave stale marker');
 }
 
+# 11) Registry clearing bug - large SKIP block (>3 statements) with skip()
+{
+    my $out = '';
+    my $count = 0;
+    
+    # SKIP block with >3 statements (so registry check won't run inside)
+    # But registry clearing at exit WILL run
+    SKIP: {
+        my $a = 1;  # statement 1
+        my $b = 2;  # statement 2  
+        my $c = 3;  # statement 3
+        my $d = 4;  # statement 4
+        $out .= 'S';
+        last SKIP;  # This sets a marker, but block has >3 statements so no check
+        $out .= 'X';
+    }
+    # When SKIP exits, registry is cleared unconditionally
+    # This removes the marker that was correctly set by last SKIP
+    
+    $out .= 'A';
+    
+    # This loop should run 3 times
+    for my $i (1..3) {
+        INNER: {
+            $out .= 'L';
+            $count++;
+        }
+    }
+    
+    $out .= 'B';
+    ok_tap($out eq 'SALLLB' && $count == 3, 'large SKIP block does not break subsequent loops');
+}
+
 print "1..$t\n";
