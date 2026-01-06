@@ -99,51 +99,13 @@ public class EmitBlock {
                 element.accept(voidVisitor);
             }
             
-            // Check for non-local control flow after each statement in labeled blocks
-            // Only for simple blocks to avoid ASM VerifyError
-            if (node.isLoop && node.labelName != null && i < list.size() - 1 && list.size() <= 3) {
-                // Check if block contains loop constructs (they handle their own control flow)
-                boolean hasLoopConstruct = false;
-                for (Node elem : list) {
-                    if (elem instanceof For1Node || elem instanceof For3Node) {
-                        hasLoopConstruct = true;
-                        break;
-                    }
-                }
-                
-                if (!hasLoopConstruct) {
-                    Label continueBlock = new Label();
-                    
-                    // if (!RuntimeControlFlowRegistry.hasMarker()) continue
-                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                            "org/perlonjava/runtime/RuntimeControlFlowRegistry",
-                            "hasMarker",
-                            "()Z",
-                            false);
-                    mv.visitJumpInsn(Opcodes.IFEQ, continueBlock);
-                    
-                    // Has marker: check if it matches this loop
-                    mv.visitLdcInsn(node.labelName);
-                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                            "org/perlonjava/runtime/RuntimeControlFlowRegistry",
-                            "checkLoopAndGetAction",
-                            "(Ljava/lang/String;)I",
-                            false);
-                    
-                    // If action != 0, jump to nextLabel (exit block)
-                    mv.visitJumpInsn(Opcodes.IFNE, nextLabel);
-                    
-                    mv.visitLabel(continueBlock);
-                }
-            }
-            
             // NOTE: Registry checks are DISABLED in EmitBlock because:
-            // 1. They cause ASM frame computation errors in nested/refactored code
-            // 2. Bare labeled blocks (like TODO:) don't need non-local control flow
+            // 1. They cause regressions in op/pack.t (stops at test 245 instead of 14579)
+            // 2. Bare labeled blocks don't need non-local control flow checks
             // 3. Real loops (for/while/foreach) have their own registry checks in
             //    EmitForeach.java and EmitStatement.java that work correctly
             //
-            // This means non-local control flow (next LABEL from closures) works for
+            // This means non-local control flow (last LABEL from closures) works for
             // actual loop constructs but NOT for bare labeled blocks, which is correct
             // Perl behavior anyway.
         }
