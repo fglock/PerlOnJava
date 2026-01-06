@@ -113,32 +113,10 @@ public class EmitBlock {
         if (node.isLoop) {
             emitterVisitor.ctx.javaClassInfo.popLoopLabels();
             
-            // Conditionally clear stale markers when exiting a labeled block
-            // Only clear if the marker matches THIS block's label
-            // This prevents:
-            // 1. Stale markers from eval'd labeled blocks affecting subsequent blocks
-            // 2. Clearing markers meant for outer blocks
-            if (node.labelName != null) {
-                Label skipClear = new Label();
-                
-                // if (!markerMatchesLabel(labelName)) skip clearing
-                mv.visitLdcInsn(node.labelName);
-                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                        "org/perlonjava/runtime/RuntimeControlFlowRegistry",
-                        "markerMatchesLabel",
-                        "(Ljava/lang/String;)Z",
-                        false);
-                mv.visitJumpInsn(Opcodes.IFEQ, skipClear);
-                
-                // Marker matches - clear it
-                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                        "org/perlonjava/runtime/RuntimeControlFlowRegistry",
-                        "clear",
-                        "()V",
-                        false);
-                
-                mv.visitLabel(skipClear);
-            }
+            // NOTE: We do NOT clear the registry here because:
+            // 1. If the marker was handled by this block, it was already cleared by checkLoopAndGetAction
+            // 2. If the marker is for an outer block, we must NOT clear it
+            // 3. Clearing here causes op/pack.t to stop at test 245 instead of 14579
         }
 
         // Pop labels used inside the block
