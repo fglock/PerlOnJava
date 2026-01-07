@@ -1,6 +1,7 @@
 package org.perlonjava.codegen;
 
 import org.objectweb.asm.*;
+import org.objectweb.asm.tree.AbstractInsnNode;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.MethodNode;
 import org.objectweb.asm.tree.analysis.Analyzer;
@@ -8,6 +9,7 @@ import org.objectweb.asm.tree.analysis.AnalyzerException;
 import org.objectweb.asm.tree.analysis.BasicValue;
 import org.objectweb.asm.tree.analysis.BasicInterpreter;
 import org.objectweb.asm.util.CheckClassAdapter;
+import org.objectweb.asm.util.Printer;
 import org.objectweb.asm.util.TraceClassVisitor;
 import org.perlonjava.astnode.Node;
 import org.perlonjava.astvisitor.EmitterVisitor;
@@ -47,6 +49,46 @@ public class EmitterMethodCreator implements Opcodes {
         return "org/perlonjava/anon" + classCounter++;
     }
 
+    private static String insnToString(AbstractInsnNode n) {
+        if (n == null) {
+            return "<null>";
+        }
+        int op = n.getOpcode();
+        String opName = (op >= 0 && op < Printer.OPCODES.length) ? Printer.OPCODES[op] : "<no-opcode>";
+
+        if (n instanceof org.objectweb.asm.tree.VarInsnNode vn) {
+            return opName + " " + vn.var;
+        }
+        if (n instanceof org.objectweb.asm.tree.MethodInsnNode mn) {
+            return opName + " " + mn.owner + "." + mn.name + mn.desc;
+        }
+        if (n instanceof org.objectweb.asm.tree.FieldInsnNode fn) {
+            return opName + " " + fn.owner + "." + fn.name + " : " + fn.desc;
+        }
+        if (n instanceof org.objectweb.asm.tree.TypeInsnNode tn) {
+            return opName + " " + tn.desc;
+        }
+        if (n instanceof org.objectweb.asm.tree.LdcInsnNode ln) {
+            return opName + " " + String.valueOf(ln.cst);
+        }
+        if (n instanceof org.objectweb.asm.tree.IntInsnNode in) {
+            return opName + " " + in.operand;
+        }
+        if (n instanceof org.objectweb.asm.tree.IincInsnNode ii) {
+            return opName + " " + ii.var + " " + ii.incr;
+        }
+        if (n instanceof org.objectweb.asm.tree.LineNumberNode ln) {
+            return "LINE " + ln.line;
+        }
+        if (n instanceof org.objectweb.asm.tree.LabelNode) {
+            return "LABEL";
+        }
+        if (n instanceof org.objectweb.asm.tree.JumpInsnNode) {
+            return opName + " <label>";
+        }
+        return opName;
+    }
+
     private static void debugAnalyzeWithBasicInterpreter(ClassReader cr, PrintWriter out) {
         try {
             ClassNode cn = new ClassNode();
@@ -58,7 +100,175 @@ public class EmitterMethodCreator implements Opcodes {
                     analyzer.analyze(cn.name, mn);
                 } catch (AnalyzerException ae) {
                     int insnIndex = (ae.node != null) ? mn.instructions.indexOf(ae.node) : -1;
+                    if (insnIndex < 0) {
+                        try {
+                            String msg = String.valueOf(ae);
+                            int atPos = msg.indexOf("Error at instruction ");
+                            if (atPos >= 0) {
+                                int start = atPos + "Error at instruction ".length();
+                                int end = start;
+                                while (end < msg.length() && Character.isDigit(msg.charAt(end))) {
+                                    end++;
+                                }
+                                if (end > start) {
+                                    insnIndex = Integer.parseInt(msg.substring(start, end));
+                                }
+                            }
+                        } catch (Throwable ignored) {
+                        }
+                    }
                     out.println("BasicInterpreter failure in " + cn.name + "." + mn.name + mn.desc + " at instruction " + insnIndex);
+                    if (insnIndex >= 0) {
+                        int from = Math.max(0, insnIndex - 10);
+                        int to = Math.min(mn.instructions.size() - 1, insnIndex + 10);
+                        for (int i = from; i <= to; i++) {
+                            org.objectweb.asm.tree.AbstractInsnNode n = mn.instructions.get(i);
+                            if (n instanceof org.objectweb.asm.tree.JumpInsnNode j) {
+                                int target = mn.instructions.indexOf(j.label);
+                                out.println("  [" + i + "] " + insnToString(n) + " -> [" + target + "]");
+                            } else {
+                                out.println("  [" + i + "] " + insnToString(n));
+                            }
+                        }
+
+                        org.objectweb.asm.tree.AbstractInsnNode failing = mn.instructions.get(insnIndex);
+                        if (failing instanceof org.objectweb.asm.tree.JumpInsnNode j) {
+                            int target = mn.instructions.indexOf(j.label);
+                            if (target >= 0) {
+                                out.println("  --- jump target window: [" + target + "] ---");
+                                int tFrom = Math.max(0, target - 10);
+                                int tTo = Math.min(mn.instructions.size() - 1, target + 10);
+                                for (int i = tFrom; i <= tTo; i++) {
+                                    org.objectweb.asm.tree.AbstractInsnNode n = mn.instructions.get(i);
+                                    if (n instanceof org.objectweb.asm.tree.JumpInsnNode tj) {
+                                        int tTarget = mn.instructions.indexOf(tj.label);
+                                        out.println("  [" + i + "] " + insnToString(n) + " -> [" + tTarget + "]");
+                                    } else {
+                                        out.println("  [" + i + "] " + insnToString(n));
+                                    }
+                                }
+
+                                out.println("  --- other predecessors targeting [" + target + "] ---");
+                                java.util.ArrayList<Integer> predecessors = new java.util.ArrayList<>();
+                                for (int i = 0; i < mn.instructions.size(); i++) {
+                                    if (i == insnIndex) {
+                                        continue;
+                                    }
+                                    org.objectweb.asm.tree.AbstractInsnNode n = mn.instructions.get(i);
+                                    if (n instanceof org.objectweb.asm.tree.JumpInsnNode pj && pj.label == j.label) {
+                                        out.println("  [" + i + "] " + insnToString(n) + " -> [" + target + "]");
+                                        predecessors.add(i);
+                                    }
+                                }
+
+                                try {
+                                    Analyzer<BasicValue> analyzer = new Analyzer<>(new BasicInterpreter());
+                                    try {
+                                        analyzer.analyze(cn.name, mn);
+                                    } catch (AnalyzerException ignored) {
+                                    }
+
+                                    org.objectweb.asm.tree.analysis.Frame<BasicValue>[] frames = analyzer.getFrames();
+                                    java.util.ArrayList<Integer> framePoints = new java.util.ArrayList<>();
+                                    framePoints.add(insnIndex);
+                                    framePoints.add(target);
+                                    framePoints.addAll(predecessors);
+
+                                    out.println("  --- frame stack sizes (if available) ---");
+                                    for (Integer idx : framePoints) {
+                                        if (idx == null || idx < 0 || idx >= frames.length) {
+                                            continue;
+                                        }
+                                        org.objectweb.asm.tree.analysis.Frame<BasicValue> f = frames[idx];
+                                        if (f == null) {
+                                            out.println("  [" + idx + "] <no frame>");
+                                            continue;
+                                        }
+                                        out.println("  [" + idx + "] stack=" + f.getStackSize() + " locals=" + f.getLocals());
+                                        int ss = f.getStackSize();
+                                        for (int si = 0; si < ss; si++) {
+                                            BasicValue v = f.getStack(si);
+                                            out.println("    stack[" + si + "]=" + String.valueOf(v));
+                                        }
+                                    }
+                                } catch (Throwable t) {
+                                    out.println("  <frame dump failed: " + t + ">");
+                                }
+
+                                try {
+                                    org.objectweb.asm.tree.analysis.Analyzer<org.objectweb.asm.tree.analysis.SourceValue> srcAnalyzer =
+                                            new org.objectweb.asm.tree.analysis.Analyzer<>(new org.objectweb.asm.tree.analysis.SourceInterpreter());
+                                    try {
+                                        srcAnalyzer.analyze(cn.name, mn);
+                                    } catch (org.objectweb.asm.tree.analysis.AnalyzerException ignored) {
+                                    }
+                                    org.objectweb.asm.tree.analysis.Frame<org.objectweb.asm.tree.analysis.SourceValue>[] srcFrames = srcAnalyzer.getFrames();
+                                    if (insnIndex >= 0 && insnIndex < srcFrames.length) {
+                                        org.objectweb.asm.tree.analysis.Frame<org.objectweb.asm.tree.analysis.SourceValue> sf = srcFrames[insnIndex];
+                                        if (sf != null) {
+                                            out.println("  --- source stack at [" + insnIndex + "] ---");
+                                            int ss = sf.getStackSize();
+                                            java.util.LinkedHashSet<Integer> sourceInsnsToPrint = new java.util.LinkedHashSet<>();
+                                            for (int si = 0; si < ss; si++) {
+                                                org.objectweb.asm.tree.analysis.SourceValue sv = sf.getStack(si);
+                                                out.print("    stack[" + si + "] sources=");
+                                                if (sv != null && sv.insns != null) {
+                                                    out.print("[");
+                                                    boolean first = true;
+                                                    for (org.objectweb.asm.tree.AbstractInsnNode in : sv.insns) {
+                                                        int idx = mn.instructions.indexOf(in);
+                                                        if (idx >= 0) {
+                                                            sourceInsnsToPrint.add(idx);
+                                                        }
+                                                        if (!first) {
+                                                            out.print(", ");
+                                                        }
+                                                        out.print(idx);
+                                                        first = false;
+                                                    }
+                                                    out.println("]");
+                                                } else {
+                                                    out.println("[]");
+                                                }
+                                            }
+
+                                            for (Integer srcIdx : sourceInsnsToPrint) {
+                                                out.println("  --- source instruction window: [" + srcIdx + "] ---");
+                                                int sFrom = Math.max(0, srcIdx - 6);
+                                                int sTo = Math.min(mn.instructions.size() - 1, srcIdx + 6);
+                                                for (int i = sFrom; i <= sTo; i++) {
+                                                    org.objectweb.asm.tree.AbstractInsnNode n = mn.instructions.get(i);
+                                                    if (n instanceof org.objectweb.asm.tree.JumpInsnNode pj) {
+                                                        int sTarget = mn.instructions.indexOf(pj.label);
+                                                        out.println("  [" + i + "] " + insnToString(n) + " -> [" + sTarget + "]");
+                                                    } else {
+                                                        out.println("  [" + i + "] " + insnToString(n));
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                } catch (Throwable t) {
+                                    out.println("  <source dump failed: " + t + ">");
+                                }
+
+                                for (Integer p : predecessors) {
+                                    out.println("  --- predecessor window: [" + p + "] -> [" + target + "] ---");
+                                    int pFrom = Math.max(0, p - 6);
+                                    int pTo = Math.min(mn.instructions.size() - 1, p + 6);
+                                    for (int i = pFrom; i <= pTo; i++) {
+                                        org.objectweb.asm.tree.AbstractInsnNode n = mn.instructions.get(i);
+                                        if (n instanceof org.objectweb.asm.tree.JumpInsnNode pj) {
+                                            int pTarget = mn.instructions.indexOf(pj.label);
+                                            out.println("  [" + i + "] " + insnToString(n) + " -> [" + pTarget + "]");
+                                        } else {
+                                            out.println("  [" + i + "] " + insnToString(n));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                     ae.printStackTrace(out);
                     return;
                 }
@@ -277,6 +487,8 @@ public class EmitterMethodCreator implements Opcodes {
             for (int i = skipVariables; i < env.length; i++) {
                 // Skip null entries (gaps in sparse array)
                 if (env[i] == null) {
+                    mv.visitInsn(Opcodes.ACONST_NULL);
+                    mv.visitVarInsn(Opcodes.ASTORE, i);
                     continue;
                 }
                 String descriptor = getVariableDescriptor(env[i]);
@@ -313,7 +525,7 @@ public class EmitterMethodCreator implements Opcodes {
             org.perlonjava.astvisitor.TempLocalCountVisitor tempCountVisitor = 
                 new org.perlonjava.astvisitor.TempLocalCountVisitor();
             ast.accept(tempCountVisitor);
-            int preInitTempLocalsCount = Math.max(8, tempCountVisitor.getMaxTempCount() + 4);  // Add buffer
+            int preInitTempLocalsCount = Math.max(128, tempCountVisitor.getMaxTempCount() + 64);  // Add buffer
             for (int i = preInitTempLocalsStart; i < preInitTempLocalsStart + preInitTempLocalsCount; i++) {
                 mv.visitInsn(Opcodes.ACONST_NULL);
                 mv.visitVarInsn(Opcodes.ASTORE, i);
