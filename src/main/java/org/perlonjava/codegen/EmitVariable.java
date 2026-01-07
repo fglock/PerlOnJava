@@ -571,11 +571,24 @@ public class EmitVariable {
                     );
                 }
 
+                // Spill RHS list before evaluating the LHS so LHS evaluation can safely propagate
+                // non-local control flow without leaving RHS values on the operand stack.
+                int rhsListSlot = ctx.javaClassInfo.acquireSpillSlot();
+                boolean pooledRhsList = rhsListSlot >= 0;
+                if (!pooledRhsList) {
+                    rhsListSlot = ctx.symbolTable.allocateLocalVariable();
+                }
+                mv.visitVarInsn(Opcodes.ASTORE, rhsListSlot);
+
                 // For declared references, we need special handling
                 // The my operator needs to be processed to create the variables first
-                node.left.accept(emitterVisitor.with(RuntimeContextType.LIST));   // emit the variable
-                mv.visitInsn(Opcodes.SWAP); // move the target first
+                node.left.accept(emitterVisitor.with(RuntimeContextType.LIST));   // emit the variable (target)
+                mv.visitVarInsn(Opcodes.ALOAD, rhsListSlot);                      // reload RHS list
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "setFromList", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeArray;", false);
+
+                if (pooledRhsList) {
+                    ctx.javaClassInfo.releaseSpillSlot();
+                }
                 EmitOperator.handleScalarContext(emitterVisitor, node);
                 break;
             default:

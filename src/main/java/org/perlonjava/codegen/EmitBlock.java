@@ -32,6 +32,14 @@ public class EmitBlock {
                 emitterVisitor.with(RuntimeContextType.VOID); // statements in the middle of the block have context VOID
         List<Node> list = node.elements;
 
+        int lastNonNullIndex = -1;
+        for (int i = list.size() - 1; i >= 0; i--) {
+            if (list.get(i) != null) {
+                lastNonNullIndex = i;
+                break;
+            }
+        }
+
         // Create labels for the block as a loop, like `L1: {...}`
         Label redoLabel = new Label();
         Label nextLabel = new Label();
@@ -89,7 +97,7 @@ public class EmitBlock {
             ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, element.getIndex());
 
             // Emit the statement with current context
-            if (i == list.size() - 1) {
+            if (i == lastNonNullIndex) {
                 // Special case for the last element
                 emitterVisitor.ctx.logDebug("Last element: " + element);
                 element.accept(emitterVisitor);

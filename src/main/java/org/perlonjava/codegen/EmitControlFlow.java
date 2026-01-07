@@ -103,7 +103,7 @@ public class EmitControlFlow {
         ctx.logDebug("visit(next): asmStackLevel: " + ctx.javaClassInfo.stackLevelManager.getStackLevel());
 
         // Clean up the stack before jumping by popping values up to the loop's stack level
-        ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, loopLabels.asmStackLevel);
+        ctx.javaClassInfo.resetStackLevel();
 
         // Handle return values based on context
         if (loopLabels.context != RuntimeContextType.VOID) {
@@ -160,7 +160,22 @@ public class EmitControlFlow {
         }
 
         // Clean up stack before return
-        ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, 0);
+        ctx.javaClassInfo.resetStackLevel();
+
+        // Bare return: ensure we still push a value (empty list) before jumping to returnLabel.
+        // The method epilogue expects a RuntimeBase/RuntimeList on the JVM operand stack.
+        if (node.operand == null || (node.operand instanceof ListNode list && list.elements.isEmpty())) {
+            ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
+            ctx.mv.visitInsn(Opcodes.DUP);
+            ctx.mv.visitMethodInsn(
+                    Opcodes.INVOKESPECIAL,
+                    "org/perlonjava/runtime/RuntimeList",
+                    "<init>",
+                    "()V",
+                    false);
+            ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
+            return;
+        }
 
         // Handle special case for single-element return lists
         if (node.operand instanceof ListNode list) {
@@ -191,7 +206,7 @@ public class EmitControlFlow {
         ctx.logDebug("visit(goto &sub): Emitting TAILCALL marker");
         
         // Clean up stack before creating the marker
-        ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, 0);
+        ctx.javaClassInfo.resetStackLevel();
         
         // Create new RuntimeControlFlowList for tail call
         ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeControlFlowList");
@@ -309,9 +324,20 @@ public class EmitControlFlow {
                         "<init>",
                         "(Lorg/perlonjava/runtime/ControlFlowType;Ljava/lang/String;Ljava/lang/String;I)V",
                         false);
-                
-                // Clean stack and jump to returnLabel
-                ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, 0);
+
+                int markerSlot = ctx.javaClassInfo.acquireSpillSlot();
+                boolean pooledMarker = markerSlot >= 0;
+                if (!pooledMarker) {
+                    markerSlot = ctx.symbolTable.allocateLocalVariable();
+                }
+                ctx.mv.visitVarInsn(Opcodes.ASTORE, markerSlot);
+
+                // Clean stack and jump to returnLabel with the marker on stack.
+                ctx.javaClassInfo.resetStackLevel();
+                ctx.mv.visitVarInsn(Opcodes.ALOAD, markerSlot);
+                if (pooledMarker) {
+                    ctx.javaClassInfo.releaseSpillSlot();
+                }
                 ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
                 return;
             }
@@ -346,16 +372,27 @@ public class EmitControlFlow {
                     "<init>",
                     "(Lorg/perlonjava/runtime/ControlFlowType;Ljava/lang/String;Ljava/lang/String;I)V",
                     false);
-            
-            // Clean stack and jump to returnLabel
-            ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, 0);
+
+            int markerSlot = ctx.javaClassInfo.acquireSpillSlot();
+            boolean pooledMarker = markerSlot >= 0;
+            if (!pooledMarker) {
+                markerSlot = ctx.symbolTable.allocateLocalVariable();
+            }
+            ctx.mv.visitVarInsn(Opcodes.ASTORE, markerSlot);
+
+            // Clean stack and jump to returnLabel with the marker on stack.
+            ctx.javaClassInfo.resetStackLevel();
+            ctx.mv.visitVarInsn(Opcodes.ALOAD, markerSlot);
+            if (pooledMarker) {
+                ctx.javaClassInfo.releaseSpillSlot();
+            }
             ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
             return;
         }
 
         // Local goto: use fast GOTO (existing code)
         // Clean up stack before jumping to maintain stack consistency
-        ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, targetLabel.asmStackLevel);
+        ctx.javaClassInfo.resetStackLevel();
 
         // Emit the goto instruction
         ctx.mv.visitJumpInsn(Opcodes.GOTO, targetLabel.gotoLabel);
