@@ -95,7 +95,36 @@ public class StatementParser {
         // Parse optional loop variable
         Node varNode = null;
         LexerToken token = TokenUtils.peek(parser); // "my" "$" "(" "CORE::my"
-        if (token.text.equals("my") || token.text.equals("our") || token.text.equals("CORE") || token.text.equals("$")) {
+        if (token.type == LexerTokenType.IDENTIFIER &&
+                (token.text.equals("my") || token.text.equals("our") || token.text.equals("state"))) {
+            // Ensure `for my $x (...)` is parsed as a variable declaration, not as `$x`.
+            // This is critical for strict-vars correctness inside the loop body.
+            int declIndex = parser.tokenIndex;
+            parser.parsingForLoopVariable = true;
+            TokenUtils.consume(parser, LexerTokenType.IDENTIFIER);
+            varNode = OperatorParser.parseVariableDeclaration(parser, token.text, declIndex);
+            parser.parsingForLoopVariable = false;
+        } else if (token.type == LexerTokenType.IDENTIFIER && token.text.equals("CORE")
+                && parser.tokens.get(parser.tokenIndex).text.equals("CORE")
+                && parser.tokens.size() > parser.tokenIndex + 1
+                && parser.tokens.get(parser.tokenIndex + 1).text.equals("::")) {
+            // Handle CORE::my/our/state
+            TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // CORE
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "::");
+            LexerToken coreOp = TokenUtils.peek(parser);
+            if (coreOp.type == LexerTokenType.IDENTIFIER &&
+                    (coreOp.text.equals("my") || coreOp.text.equals("our") || coreOp.text.equals("state"))) {
+                int declIndex = parser.tokenIndex;
+                parser.parsingForLoopVariable = true;
+                TokenUtils.consume(parser, LexerTokenType.IDENTIFIER);
+                varNode = OperatorParser.parseVariableDeclaration(parser, coreOp.text, declIndex);
+                parser.parsingForLoopVariable = false;
+            } else {
+                parser.parsingForLoopVariable = true;
+                varNode = ParsePrimary.parsePrimary(parser);
+                parser.parsingForLoopVariable = false;
+            }
+        } else if (token.text.equals("$")) {
             parser.parsingForLoopVariable = true;
             varNode = ParsePrimary.parsePrimary(parser);
             parser.parsingForLoopVariable = false;

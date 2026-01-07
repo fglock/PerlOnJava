@@ -16,7 +16,9 @@ import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
 
 import java.io.PrintWriter;
-import java.io.StringWriter;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.*;
 
@@ -139,6 +141,23 @@ public class EmitterMethodCreator implements Opcodes {
             // When JPERL_ASM_DEBUG is enabled, do a diagnostic pass without COMPUTE_FRAMES so we can
             // disassemble + analyze the produced bytecode.
             frameComputeCrash.printStackTrace();
+            try {
+                String failingClass = (ctx != null && ctx.javaClassInfo != null)
+                        ? ctx.javaClassInfo.javaClassName
+                        : "<unknown>";
+                int failingIndex = ast != null ? ast.getIndex() : -1;
+                String fileName = (ctx != null && ctx.errorUtil != null) ? ctx.errorUtil.getFileName() : "<unknown>";
+                int lineNumber = -1;
+                if (ctx != null && ctx.errorUtil != null && failingIndex >= 0) {
+                    // ErrorMessageUtil caches line-number scanning state; reset it for an accurate lookup here.
+                    ctx.errorUtil.setTokenIndex(-1);
+                    ctx.errorUtil.setLineNumber(1);
+                    lineNumber = ctx.errorUtil.getLineNumber(failingIndex);
+                }
+                String at = lineNumber >= 0 ? (fileName + ":" + lineNumber) : fileName;
+                System.err.println("ASM frame compute crash in generated class: " + failingClass + " (astIndex=" + failingIndex + ", at " + at + ")");
+            } catch (Throwable ignored) {
+            }
             if (asmDebug) {
                 try {
                     // Reset JavaClassInfo to avoid reusing partially-resolved Labels.
@@ -168,6 +187,11 @@ public class EmitterMethodCreator implements Opcodes {
         String methodName = "apply";
         byte[] classData = null;
         boolean asmDebug = System.getenv("JPERL_ASM_DEBUG") != null;
+        String asmDebugClassFilter = System.getenv("JPERL_ASM_DEBUG_CLASS");
+        boolean asmDebugClassMatches = asmDebugClassFilter == null
+                || asmDebugClassFilter.isEmpty()
+                || className.contains(asmDebugClassFilter)
+                || className.replace('/', '.').contains(asmDebugClassFilter);
         
         try {
             String[] env = ctx.symbolTable.getVariableNames();
@@ -594,27 +618,75 @@ public class EmitterMethodCreator implements Opcodes {
             cw.visitEnd();
             classData = cw.toByteArray(); // Generate the bytecode
 
+            if (asmDebug && asmDebugClassMatches && asmDebugClassFilter != null && !asmDebugClassFilter.isEmpty()) {
+                try {
+                    Path outDir = Paths.get(System.getProperty("java.io.tmpdir"), "perlonjava-asm");
+                    Path outFile = outDir.resolve(className + ".class");
+                    Files.createDirectories(outFile.getParent());
+                    Files.write(outFile, classData);
+                } catch (Throwable ignored) {
+                }
+            }
+
             if (ctx.compilerOptions.disassembleEnabled) {
                 // Disassemble the bytecode for debugging purposes
                 ClassReader cr = new ClassReader(classData);
-                StringWriter sw = new StringWriter();
-                PrintWriter pw = new PrintWriter(sw);
+                PrintWriter pw = new PrintWriter(System.out);
                 TraceClassVisitor tcv = new TraceClassVisitor(pw);
                 cr.accept(tcv, ClassReader.EXPAND_FRAMES);
-
-                System.out.println(sw);
+                pw.flush();
             }
 
-            if (asmDebug) {
+            if (asmDebug && !disableFrames && asmDebugClassMatches && asmDebugClassFilter != null && !asmDebugClassFilter.isEmpty()) {
                 try {
                     ClassReader cr = new ClassReader(classData);
 
-                    StringWriter sw = new StringWriter();
-                    PrintWriter pw = new PrintWriter(sw);
+                    PrintWriter pw = new PrintWriter(System.err);
                     TraceClassVisitor tcv = new TraceClassVisitor(pw);
                     cr.accept(tcv, ClassReader.EXPAND_FRAMES);
                     pw.flush();
-                    System.err.println(sw);
+
+                    PrintWriter verifyPw = new PrintWriter(System.err);
+                    String thisClassNameDot = className.replace('/', '.');
+                    final byte[] verifyClassData = classData;
+                    ClassLoader verifyLoader = new ClassLoader(GlobalVariable.globalClassLoader) {
+                        @Override
+                        protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+                            if (name.equals(thisClassNameDot)) {
+                                synchronized (getClassLoadingLock(name)) {
+                                    Class<?> loaded = findLoadedClass(name);
+                                    if (loaded == null) {
+                                        loaded = defineClass(name, verifyClassData, 0, verifyClassData.length);
+                                    }
+                                    if (resolve) {
+                                        resolveClass(loaded);
+                                    }
+                                    return loaded;
+                                }
+                            }
+                            return super.loadClass(name, resolve);
+                        }
+                    };
+
+                    try {
+                        CheckClassAdapter.verify(cr, verifyLoader, true, verifyPw);
+                    } catch (Throwable verifyErr) {
+                        verifyErr.printStackTrace(verifyPw);
+                    }
+                    verifyPw.flush();
+                } catch (Throwable t) {
+                    t.printStackTrace();
+                }
+            }
+
+            if (asmDebug && disableFrames && asmDebugClassMatches) {
+                try {
+                    ClassReader cr = new ClassReader(classData);
+
+                    PrintWriter pw = new PrintWriter(System.err);
+                    TraceClassVisitor tcv = new TraceClassVisitor(pw);
+                    cr.accept(tcv, ClassReader.EXPAND_FRAMES);
+                    pw.flush();
 
                     PrintWriter verifyPw = new PrintWriter(System.err);
                     String thisClassNameDot = className.replace('/', '.');

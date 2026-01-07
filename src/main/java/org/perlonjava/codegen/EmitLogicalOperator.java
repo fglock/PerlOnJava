@@ -81,11 +81,21 @@ public class EmitLogicalOperator {
         MethodVisitor mv = emitterVisitor.ctx.mv;
         Label endLabel = new Label(); // Label for the end of the operation
 
+        // Evaluate the left side once and spill it to keep the operand stack clean.
+        // This is critical when the right side may perform non-local control flow (return/last/next/redo)
+        // and jump away during evaluation.
         node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR)); // target - left parameter
-        // The left parameter is in the stack
 
+        int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+        boolean pooledLeft = leftSlot >= 0;
+        if (!pooledLeft) {
+            leftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        }
+        mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
+
+        // Reload left for boolean test
+        mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
         mv.visitInsn(Opcodes.DUP);
-        // Stack is [left, left]
 
         // Convert the result to a boolean
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", getBoolean, "()Z", false);
@@ -94,17 +104,28 @@ public class EmitLogicalOperator {
         // If the boolean value is true, jump to endLabel (we keep the left operand)
         mv.visitJumpInsn(compareOpcode, endLabel);
 
-        node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR)); // Evaluate right operand in scalar context
-        // Stack is [left, right]
+        mv.visitInsn(Opcodes.POP);
 
-        mv.visitInsn(Opcodes.SWAP);   // Stack becomes [right, left]
+        // Left was false: evaluate right operand in scalar context.
+        // Stack is clean here, so any non-local control flow jump doesn't leave stray values behind.
+        node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+
+        // Load left back for assignment
+        mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+        // Stack is [right, left]
+
+        mv.visitInsn(Opcodes.SWAP);   // Stack becomes [left, right]
 
         // Assign right to left
-        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "addToScalar", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "set", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
         // Stack is [right]
 
         // At this point, the stack either has the left (if it was true) or the right (if left was false)
         mv.visitLabel(endLabel);
+
+        if (pooledLeft) {
+            emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+        }
 
         // If the context is VOID, pop the result from the stack
         EmitOperator.handleVoidContext(emitterVisitor);
@@ -236,6 +257,25 @@ public class EmitLogicalOperator {
         MethodVisitor mv = emitterVisitor.ctx.mv;
         Label endLabel = new Label();
 
+        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+            node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", getBoolean, "()Z", false);
+            mv.visitJumpInsn(compareOpcode, endLabel);
+
+            // The condition value has been consumed by getBoolean() and the conditional jump.
+            // Keep StackLevelManager in sync with the actual operand stack (empty) so that
+            // downstream non-local control flow (return/last/next/redo/goto) doesn't emit POPs
+            // based on stale stack accounting.
+            emitterVisitor.ctx.javaClassInfo.resetStackLevel();
+
+            node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+            mv.visitInsn(Opcodes.POP);
+
+            mv.visitLabel(endLabel);
+            emitterVisitor.ctx.javaClassInfo.resetStackLevel();
+            return;
+        }
+
         // check if the right operand contains a variable declaration
         OperatorNode declaration = FindDeclarationVisitor.findOperator(node.right, "my");
         if (declaration != null) {
@@ -274,29 +314,60 @@ public class EmitLogicalOperator {
         Label elseLabel = new Label();
         Label endLabel = new Label();
 
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        int contextType = emitterVisitor.ctx.contextType;
+
         // Visit the condition node in scalar context
         node.condition.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
 
         // Convert the result to a boolean
-        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "getBoolean", "()Z", false);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "getBoolean", "()Z", false);
 
         // Jump to the else label if the condition is false
-        emitterVisitor.ctx.mv.visitJumpInsn(Opcodes.IFEQ, elseLabel);
+        mv.visitJumpInsn(Opcodes.IFEQ, elseLabel);
 
         // Visit the then branch
+        if (contextType == RuntimeContextType.VOID) {
+            node.trueExpr.accept(emitterVisitor);
+            mv.visitJumpInsn(Opcodes.GOTO, endLabel);
+
+            // Visit the else label
+            mv.visitLabel(elseLabel);
+            node.falseExpr.accept(emitterVisitor);
+
+            // Visit the end label
+            mv.visitLabel(endLabel);
+
+            emitterVisitor.ctx.logDebug("TERNARY_OP end");
+            return;
+        }
+
+        int resultSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+        boolean usedSpillSlot = resultSlot != -1;
+        if (!usedSpillSlot) {
+            resultSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        }
+
         node.trueExpr.accept(emitterVisitor);
+        mv.visitVarInsn(Opcodes.ASTORE, resultSlot);
 
         // Jump to the end label after executing the then branch
-        emitterVisitor.ctx.mv.visitJumpInsn(Opcodes.GOTO, endLabel);
+        mv.visitJumpInsn(Opcodes.GOTO, endLabel);
 
         // Visit the else label
-        emitterVisitor.ctx.mv.visitLabel(elseLabel);
+        mv.visitLabel(elseLabel);
 
         // Visit the else branch
         node.falseExpr.accept(emitterVisitor);
+        mv.visitVarInsn(Opcodes.ASTORE, resultSlot);
 
         // Visit the end label
-        emitterVisitor.ctx.mv.visitLabel(endLabel);
+        mv.visitLabel(endLabel);
+
+        mv.visitVarInsn(Opcodes.ALOAD, resultSlot);
+        if (usedSpillSlot) {
+            emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+        }
 
         emitterVisitor.ctx.logDebug("TERNARY_OP end");
     }

@@ -37,7 +37,22 @@ public class EmitRegex {
 
         // Handle non-regex operator case (e.g., $v =~ $qr OR $v =~ qr//)
         node.right.accept(scalarVisitor);
+
+        int regexSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+        boolean pooledRegex = regexSlot >= 0;
+        if (!pooledRegex) {
+            regexSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        }
+        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, regexSlot);
+
         node.left.accept(scalarVisitor);
+
+        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, regexSlot);
+        emitterVisitor.ctx.mv.visitInsn(Opcodes.SWAP);
+
+        if (pooledRegex) {
+            emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+        }
         emitMatchRegex(emitterVisitor);  // Use caller's context for regex matching
     }
 
@@ -171,8 +186,22 @@ public class EmitRegex {
                 "org/perlonjava/regex/RuntimeRegex", "getReplacementRegex",
                 "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
 
+        int regexSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+        boolean pooledRegex = regexSlot >= 0;
+        if (!pooledRegex) {
+            regexSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        }
+        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, regexSlot);
+
         // Use default variable $_ if none specified
         handleVariableBinding(operand, 3, scalarVisitor);
+
+        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, regexSlot);
+        emitterVisitor.ctx.mv.visitInsn(Opcodes.SWAP);
+
+        if (pooledRegex) {
+            emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+        }
 
         emitMatchRegex(emitterVisitor);
     }
@@ -214,8 +243,22 @@ public class EmitRegex {
                 "org/perlonjava/regex/RuntimeRegex", "getQuotedRegex",
                 "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
 
+        int regexSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+        boolean pooledRegex = regexSlot >= 0;
+        if (!pooledRegex) {
+            regexSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        }
+        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, regexSlot);
+
         // Use default variable $_ if none specified
         handleVariableBinding(operand, 2, scalarVisitor);
+
+        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, regexSlot);
+        emitterVisitor.ctx.mv.visitInsn(Opcodes.SWAP);
+
+        if (pooledRegex) {
+            emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+        }
 
         emitMatchRegex(emitterVisitor);
     }

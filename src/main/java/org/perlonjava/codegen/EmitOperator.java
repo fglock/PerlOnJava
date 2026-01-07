@@ -114,8 +114,22 @@ public class EmitOperator {
         // Emit the File Handle
         emitFileHandle(emitterVisitor.with(RuntimeContextType.SCALAR), node.left);
 
+        int handleSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+        boolean pooledHandle = handleSlot >= 0;
+        if (!pooledHandle) {
+            handleSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        }
+        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, handleSlot);
+
         // Accept the right operand in LIST context
         node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
+
+        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, handleSlot);
+        emitterVisitor.ctx.mv.visitInsn(Opcodes.SWAP);
+
+        if (pooledHandle) {
+            emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+        }
 
         // Emit the operator
         emitOperator(node, emitterVisitor);
@@ -194,6 +208,9 @@ public class EmitOperator {
             // Push context
             emitterVisitor.pushCallContext();
 
+            int callContextSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ISTORE, callContextSlot);
+
             // Create array for varargs operators
             MethodVisitor mv = emitterVisitor.ctx.mv;
 
@@ -201,12 +218,16 @@ public class EmitOperator {
             mv.visitIntInsn(Opcodes.SIPUSH, operand.elements.size());
             mv.visitTypeInsn(Opcodes.ANEWARRAY, "org/perlonjava/runtime/RuntimeBase");
 
+            int argsArraySlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+            boolean pooledArgsArray = argsArraySlot >= 0;
+            if (!pooledArgsArray) {
+                argsArraySlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            }
+            mv.visitVarInsn(Opcodes.ASTORE, argsArraySlot);
+
             // Populate the array with arguments
             int index = 0;
             for (Node arg : operand.elements) {
-                mv.visitInsn(Opcodes.DUP); // Duplicate array reference
-                mv.visitIntInsn(Opcodes.SIPUSH, index);
-
                 // Generate code for argument
                 String argContext = (String) arg.getAnnotation("context");
                 if (argContext != null && argContext.equals("SCALAR")) {
@@ -215,11 +236,32 @@ public class EmitOperator {
                     arg.accept(listVisitor);
                 }
 
+                int argSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+                boolean pooledArg = argSlot >= 0;
+                if (!pooledArg) {
+                    argSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                }
+                mv.visitVarInsn(Opcodes.ASTORE, argSlot);
+
+                mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
+                mv.visitIntInsn(Opcodes.SIPUSH, index);
+                mv.visitVarInsn(Opcodes.ALOAD, argSlot);
                 mv.visitInsn(Opcodes.AASTORE); // Store in array
+
+                if (pooledArg) {
+                    emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+                }
                 index++;
             }
 
+            mv.visitVarInsn(Opcodes.ILOAD, callContextSlot);
+            mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
+
             emitOperator(node, emitterVisitor);
+
+            if (pooledArgsArray) {
+                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+            }
         }
     }
 
@@ -373,8 +415,31 @@ public class EmitOperator {
     // Handles the 'substr' operator, which extracts a substring from a string.
     static void handleSubstr(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         // Accept the left operand in SCALAR context and the right operand in LIST context.
-        node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
+        // Spill the left operand before evaluating the right side so non-local control flow
+        // propagation can't jump to returnLabel with an extra value on the JVM operand stack.
+        if (ENABLE_SPILL_BINARY_LHS) {
+            MethodVisitor mv = emitterVisitor.ctx.mv;
+            node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+
+            int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+            boolean pooled = leftSlot >= 0;
+            if (!pooled) {
+                leftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            }
+            mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
+
+            node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
+
+            mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+            mv.visitInsn(Opcodes.SWAP);
+
+            if (pooled) {
+                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+            }
+        } else {
+            node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+            node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
+        }
         emitOperator(node, emitterVisitor);
     }
 

@@ -107,6 +107,19 @@ public class PerlScriptExecutionTest {
                 .sorted() // Ensure deterministic order
                 .collect(Collectors.toList());
 
+        String testFilter = System.getenv("JPERL_TEST_FILTER");
+        if (testFilter != null && !testFilter.isEmpty()) {
+            sortedScripts = sortedScripts.stream()
+                    .filter(s -> s.contains(testFilter))
+                    .collect(Collectors.toList());
+
+            if (sortedScripts.isEmpty()) {
+                throw new IOException("No tests matched JPERL_TEST_FILTER='" + testFilter + "'");
+            }
+
+            return sortedScripts.stream();
+        }
+
         // Sharding logic
         String shardIndexProp = System.getProperty("test.shard.index");
         String shardTotalProp = System.getProperty("test.shard.total");

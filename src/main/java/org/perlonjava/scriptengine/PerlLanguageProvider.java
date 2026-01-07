@@ -171,7 +171,11 @@ public class PerlLanguageProvider {
         ctx.logDebug("createClassWithMethod");
         // Create a new instance of ErrorMessageUtil, resetting the line counter
         ctx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
-        ctx.symbolTable = globalSymbolTable.snapShot(); // reset the symbol table
+        // Snapshot the symbol table after parsing.
+        // The parser records lexical declarations (e.g., `for my $p (...)`) and pragma state
+        // (strict/warnings/features) into ctx.symbolTable. Resetting to a fresh global snapshot
+        // loses those declarations and causes strict-vars failures during codegen.
+        ctx.symbolTable = ctx.symbolTable.snapShot();
         Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(
                 ctx,
                 ast,
@@ -221,7 +225,8 @@ public class PerlLanguageProvider {
         // Create the Java class from the AST
         ctx.logDebug("createClassWithMethod");
         ctx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
-        ctx.symbolTable = globalSymbolTable.snapShot();
+        // Snapshot the symbol table as seen by the parser (includes lexical decls + pragma state).
+        ctx.symbolTable = ctx.symbolTable.snapShot();
         Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(
                 ctx,
                 ast,

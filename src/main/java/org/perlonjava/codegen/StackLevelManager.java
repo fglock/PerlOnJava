@@ -66,9 +66,18 @@ public class StackLevelManager {
      * @param targetStackLevel the desired stack level to adjust to.
      */
     public void emitPopInstructions(MethodVisitor mv, int targetStackLevel) {
-        int s = this.stackLevel;
+        int current = this.stackLevel;
+        if (current <= targetStackLevel) {
+            return;
+        }
+
+        int s = current;
         while (s-- > targetStackLevel) {
             mv.visitInsn(Opcodes.POP);
         }
+
+        // Keep the tracked stack level consistent with the actual JVM operand stack.
+        // If we emitted POPs, the stack height is now the target level.
+        this.stackLevel = targetStackLevel;
     }
 }

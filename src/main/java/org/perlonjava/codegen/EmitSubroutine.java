@@ -352,8 +352,24 @@ public class EmitSubroutine {
             Label propagateToCaller = new Label();
             Label checkLoopLabels = new Label();
 
+            int baseStackLevel = emitterVisitor.ctx.javaClassInfo.stackLevelManager.getStackLevel();
+            int belowResultStackLevel = Math.max(0, baseStackLevel - 1);
+            JavaClassInfo.SpillRef[] baseSpills = new JavaClassInfo.SpillRef[belowResultStackLevel];
+
             // Store result in temp slot
             mv.visitVarInsn(Opcodes.ASTORE, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+
+            // If the caller kept values on the JVM operand stack below the call result (e.g. a left operand),
+            // spill them now so control-flow propagation can jump to returnLabel with an empty stack.
+            for (int i = belowResultStackLevel - 1; i >= 0; i--) {
+                baseSpills[i] = emitterVisitor.ctx.javaClassInfo.acquireSpillRefOrAllocate(emitterVisitor.ctx.symbolTable);
+                emitterVisitor.ctx.javaClassInfo.storeSpillRef(mv, baseSpills[i]);
+            }
+
+            // We just removed the entire base stack from the JVM operand stack via ASTORE.
+            // Keep StackLevelManager in sync; otherwise later emitPopInstructions() may POP the wrong values
+            // (including control-flow markers), producing invalid stackmap frames.
+            emitterVisitor.ctx.javaClassInfo.resetStackLevel();
 
             // Load and check if it's a control flow marker
             mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
@@ -411,21 +427,39 @@ public class EmitSubroutine {
                 mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
                 mv.visitInsn(Opcodes.ICONST_0);
                 mv.visitJumpInsn(Opcodes.IF_ICMPNE, checkNext);
-                emitterVisitor.ctx.javaClassInfo.stackLevelManager.emitPopInstructions(mv, loopLabels.asmStackLevel);
-                mv.visitJumpInsn(Opcodes.GOTO, loopLabels.lastLabel);
+                if (loopLabels.lastLabel == emitterVisitor.ctx.javaClassInfo.returnLabel) {
+                    mv.visitJumpInsn(Opcodes.GOTO, propagateToCaller);
+                } else {
+                    emitterVisitor.ctx.javaClassInfo.stackLevelManager.emitPopInstructions(mv, loopLabels.asmStackLevel);
+                    if (loopLabels.context != RuntimeContextType.VOID) {
+                        EmitOperator.emitUndef(mv);
+                    }
+                    mv.visitJumpInsn(Opcodes.GOTO, loopLabels.lastLabel);
+                }
 
                 // if (type == NEXT (1)) goto nextLabel
                 mv.visitLabel(checkNext);
                 mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
                 mv.visitInsn(Opcodes.ICONST_1);
                 mv.visitJumpInsn(Opcodes.IF_ICMPNE, checkRedo);
-                emitterVisitor.ctx.javaClassInfo.stackLevelManager.emitPopInstructions(mv, loopLabels.asmStackLevel);
-                mv.visitJumpInsn(Opcodes.GOTO, loopLabels.nextLabel);
+                if (loopLabels.nextLabel == emitterVisitor.ctx.javaClassInfo.returnLabel) {
+                    mv.visitJumpInsn(Opcodes.GOTO, propagateToCaller);
+                } else {
+                    emitterVisitor.ctx.javaClassInfo.stackLevelManager.emitPopInstructions(mv, loopLabels.asmStackLevel);
+                    if (loopLabels.context != RuntimeContextType.VOID) {
+                        EmitOperator.emitUndef(mv);
+                    }
+                    mv.visitJumpInsn(Opcodes.GOTO, loopLabels.nextLabel);
+                }
 
                 // if (type == REDO (2)) goto redoLabel
                 mv.visitLabel(checkRedo);
-                emitterVisitor.ctx.javaClassInfo.stackLevelManager.emitPopInstructions(mv, loopLabels.asmStackLevel);
-                mv.visitJumpInsn(Opcodes.GOTO, loopLabels.redoLabel);
+                if (loopLabels.redoLabel == emitterVisitor.ctx.javaClassInfo.returnLabel) {
+                    mv.visitJumpInsn(Opcodes.GOTO, propagateToCaller);
+                } else {
+                    emitterVisitor.ctx.javaClassInfo.stackLevelManager.emitPopInstructions(mv, loopLabels.asmStackLevel);
+                    mv.visitJumpInsn(Opcodes.GOTO, loopLabels.redoLabel);
+                }
 
                 mv.visitLabel(nextLoopCheck);
             }
@@ -435,13 +469,27 @@ public class EmitSubroutine {
 
             // Propagate: jump to returnLabel with the marked list
             mv.visitLabel(propagateToCaller);
-            emitterVisitor.ctx.javaClassInfo.stackLevelManager.emitPopInstructions(mv, 0);
+            for (JavaClassInfo.SpillRef ref : baseSpills) {
+                if (ref != null) {
+                    emitterVisitor.ctx.javaClassInfo.releaseSpillRef(ref);
+                }
+            }
             mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
             mv.visitJumpInsn(Opcodes.GOTO, emitterVisitor.ctx.javaClassInfo.returnLabel);
 
             // Not a control flow marker - load it back and continue
             mv.visitLabel(notControlFlow);
+            for (JavaClassInfo.SpillRef ref : baseSpills) {
+                if (ref != null) {
+                    emitterVisitor.ctx.javaClassInfo.loadSpillRef(mv, ref);
+                    emitterVisitor.ctx.javaClassInfo.releaseSpillRef(ref);
+                }
+            }
+            if (belowResultStackLevel > 0) {
+                emitterVisitor.ctx.javaClassInfo.incrementStackLevel(belowResultStackLevel);
+            }
             mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+            emitterVisitor.ctx.javaClassInfo.incrementStackLevel(1);
         }
 
         if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
