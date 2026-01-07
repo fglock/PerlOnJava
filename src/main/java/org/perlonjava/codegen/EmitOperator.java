@@ -326,9 +326,32 @@ public class EmitOperator {
 
     // Handles the 'push' operator, which adds elements to an array.
     static void handlePushOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
-        // Accept both left and right operands in LIST context.
-        node.left.accept(emitterVisitor.with(RuntimeContextType.LIST));
-        node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
+        // Spill the left operand before evaluating the right side so non-local control flow
+        // propagation can't jump to returnLabel with an extra value on the JVM operand stack.
+        if (ENABLE_SPILL_BINARY_LHS) {
+            MethodVisitor mv = emitterVisitor.ctx.mv;
+            node.left.accept(emitterVisitor.with(RuntimeContextType.LIST));
+
+            int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+            boolean pooled = leftSlot >= 0;
+            if (!pooled) {
+                leftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            }
+            mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
+
+            node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
+
+            mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+            mv.visitInsn(Opcodes.SWAP);
+
+            if (pooled) {
+                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+            }
+        } else {
+            // Accept both left and right operands in LIST context.
+            node.left.accept(emitterVisitor.with(RuntimeContextType.LIST));
+            node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
+        }
         emitOperator(node, emitterVisitor);
     }
 
