@@ -108,8 +108,12 @@ public class TestMoreHelper {
                     subName.name = fullName;
                 }
 
+                // Ensure the `last SKIP` runs regardless of the return value of skip().
+                BinaryOperatorNode skipCall = new BinaryOperatorNode("(", op.left, op.right, index);
+                BinaryOperatorNode skipCallOrTrue = new BinaryOperatorNode("||", skipCall, new NumberNode("1", index), index);
+
                 op.operator = "&&";
-                op.left = new BinaryOperatorNode("(", op.left, op.right, index);
+                op.left = skipCallOrTrue;
                 op.right = new OperatorNode("last",
                         new ListNode(List.of(new IdentifierNode("SKIP", index)), index), index);
             }

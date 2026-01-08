@@ -2,6 +2,8 @@ package org.perlonjava.perlmodule;
 
 import org.perlonjava.runtime.RuntimeArray;
 import org.perlonjava.runtime.RuntimeList;
+import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.operators.WarnDie;
 
 import java.lang.reflect.Method;
 
@@ -54,9 +56,10 @@ public class XSLoader extends PerlModuleBase {
             initialize.invoke(null);
             return scalarTrue.getList();
         } catch (Exception e) {
-            // System.err.println("Failed to load Java module: " + moduleName + " (class: " + className + ")");
-            // e.printStackTrace();
-            return scalarFalse.getList();
+            return WarnDie.die(
+                    new RuntimeScalar("Can't load Java XS module: " + moduleName),
+                    new RuntimeScalar("\n")
+            ).getList();
         }
     }
 }

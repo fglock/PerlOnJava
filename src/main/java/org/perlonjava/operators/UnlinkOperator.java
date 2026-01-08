@@ -1,11 +1,5 @@
 package org.perlonjava.operators;
 
-import com.sun.jna.LastErrorException;
-import com.sun.jna.Native;
-import com.sun.jna.Platform;
-import com.sun.jna.platform.win32.Kernel32;
-import org.perlonjava.nativ.NativeUtils;
-import org.perlonjava.nativ.PosixLibrary;
 import org.perlonjava.runtime.*;
 
 import java.io.IOException;
@@ -65,53 +59,32 @@ public class UnlinkOperator {
         try {
             Path path = RuntimeIO.resolvePath(fileName);
 
-            // Try native deletion first for better platform compatibility
-            if (NativeUtils.IS_WINDOWS) {
-                // Use Windows API directly
-                boolean result = Kernel32.INSTANCE.DeleteFile(path.toString());
-                if (!result) {
-                    int error = Kernel32.INSTANCE.GetLastError();
-                    setUnlinkError(error);
-                    return false;
-                }
-                return true;
-            } else if (Platform.isLinux() || Platform.isMac()) {
-                // Use POSIX unlink
-                try {
-                    int result = PosixLibrary.INSTANCE.unlink(path.toString());
-                    if (result != 0) {
-                        setUnlinkError(Native.getLastError());
-                        return false;
-                    }
-                    return true;
-                } catch (LastErrorException e) {
-                    setUnlinkError(e.getErrorCode());
-                    return false;
-                }
-            } else {
-                // Fallback to Java NIO for other platforms
-                Files.delete(path);
-                return true;
-            }
+            // Avoid native/JNA unlink implementations.
+            // Some environments (including perl5 test runs) may not have JNA available,
+            // and loading com.sun.jna classes can crash the test harness during cleanup.
+            Files.delete(path);
+            return true;
         } catch (NoSuchFileException e) {
             getGlobalVariable("main::!").set("No such file or directory");
-            Native.setLastError(2); // ENOENT
             return false;
         } catch (AccessDeniedException e) {
             getGlobalVariable("main::!").set("Permission denied");
-            Native.setLastError(13); // EACCES
             return false;
         } catch (DirectoryNotEmptyException e) {
             getGlobalVariable("main::!").set("Directory not empty");
-            Native.setLastError(39); // ENOTEMPTY
+            return false;
+        } catch (FileSystemException e) {
+            // Common case on some platforms when trying to unlink a directory
+            String msg = e.getMessage();
+            if (msg != null && msg.toLowerCase().contains("directory")) {
+                getGlobalVariable("main::!").set("Is a directory");
+                return false;
+            }
+            getGlobalVariable("main::!").set(msg != null ? msg : "File system error");
             return false;
         } catch (IOException e) {
             String errorMessage = e.getMessage();
             getGlobalVariable("main::!").set(errorMessage != null ? errorMessage : "I/O error");
-            // Try to set appropriate errno based on the exception
-            if (errorMessage != null && errorMessage.contains("in use")) {
-                Native.setLastError(16); // EBUSY
-            }
             return false;
         }
     }
@@ -123,61 +96,34 @@ public class UnlinkOperator {
         String message;
         int errno;
 
-        if (NativeUtils.IS_WINDOWS) {
-            // Map Windows error codes to errno and messages
-            switch (errorCode) {
-                case 2:   // ERROR_FILE_NOT_FOUND
-                case 3:   // ERROR_PATH_NOT_FOUND
-                    message = "No such file or directory";
-                    errno = 2; // ENOENT
-                    break;
-                case 5:   // ERROR_ACCESS_DENIED
-                    message = "Permission denied";
-                    errno = 13; // EACCES
-                    break;
-                case 32:  // ERROR_SHARING_VIOLATION
-                case 33:  // ERROR_LOCK_VIOLATION
-                    message = "Resource busy";
-                    errno = 16; // EBUSY
-                    break;
-                case 145: // ERROR_DIR_NOT_EMPTY
-                    message = "Directory not empty";
-                    errno = 39; // ENOTEMPTY
-                    break;
-                default:
-                    message = "Error " + errorCode;
-                    errno = errorCode;
-            }
-        } else {
-            // POSIX errno values
-            switch (errorCode) {
-                case 2:   // ENOENT
-                    message = "No such file or directory";
-                    errno = 2;
-                    break;
-                case 13:  // EACCES
-                    message = "Permission denied";
-                    errno = 13;
-                    break;
-                case 16:  // EBUSY
-                    message = "Resource busy";
-                    errno = 16;
-                    break;
-                case 21:  // EISDIR
-                    message = "Is a directory";
-                    errno = 21;
-                    break;
-                case 39:  // ENOTEMPTY
-                    message = "Directory not empty";
-                    errno = 39;
-                    break;
-                default:
-                    message = "Error " + errorCode;
-                    errno = errorCode;
-            }
+        // Best-effort mapping; we only set $! message here.
+        // We intentionally do not depend on native/JNA errno plumbing.
+        switch (errorCode) {
+            case 2:
+                message = "No such file or directory";
+                errno = 2;
+                break;
+            case 13:
+                message = "Permission denied";
+                errno = 13;
+                break;
+            case 16:
+                message = "Resource busy";
+                errno = 16;
+                break;
+            case 21:
+                message = "Is a directory";
+                errno = 21;
+                break;
+            case 39:
+                message = "Directory not empty";
+                errno = 39;
+                break;
+            default:
+                message = "Error " + errorCode;
+                errno = errorCode;
         }
 
         getGlobalVariable("main::!").set(message);
-        Native.setLastError(errno);
     }
 }

@@ -246,6 +246,26 @@ public class SubroutineParser {
         // Check if the subroutine call has parentheses
         boolean hasParentheses = peek(parser).text.equals("(");
         if (!subExists && !hasParentheses) {
+            // Perl allows calling not-yet-declared subs without parentheses when the
+            // following token is not an identifier (e.g. `skip "msg", 2;`).
+            // This is heavily used by the perl5 test harness (test.pl) inside SKIP/TODO blocks.
+            // Keep indirect method call disambiguation for the identifier-followed case.
+            LexerToken nextTok = peek(parser);
+            boolean terminator = nextTok.text.equals(";")
+                    || nextTok.text.equals("}")
+                    || nextTok.text.equals(")")
+                    || nextTok.text.equals("]")
+                    || nextTok.text.equals(",");
+            if (!terminator
+                    && nextTok.type != LexerTokenType.IDENTIFIER
+                    && !nextTok.text.equals("->")
+                    && !nextTok.text.equals("=>")) {
+                ListNode arguments = consumeArgsWithPrototype(parser, "@");
+                return new BinaryOperatorNode("(",
+                        new OperatorNode("&", nameNode, currentIndex),
+                        arguments,
+                        currentIndex);
+            }
             return parseIndirectMethodCall(parser, nameNode);
         }
 
