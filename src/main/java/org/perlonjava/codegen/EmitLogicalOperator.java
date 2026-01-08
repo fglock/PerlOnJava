@@ -37,14 +37,21 @@ public class EmitLogicalOperator {
         flipFlops.putIfAbsent(flipFlopId, op);   // Initialize to false state
 
         // Emit bytecode to evaluate the flip-flop operator
+        int flipFlopIdSlot = ctx.symbolTable.allocateLocalVariable();
         mv.visitLdcInsn(flipFlopId);
-        
-        // Emit left operand - convert quoteRegex to matchRegex
+        mv.visitVarInsn(Opcodes.ISTORE, flipFlopIdSlot);
+
+        int leftSlot = ctx.symbolTable.allocateLocalVariable();
         emitFlipFlopOperand(emitterVisitor, node.left);
-        
-        // Emit right operand - convert quoteRegex to matchRegex
+        mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
+
+        int rightSlot = ctx.symbolTable.allocateLocalVariable();
         emitFlipFlopOperand(emitterVisitor, node.right);
-        
+        mv.visitVarInsn(Opcodes.ASTORE, rightSlot);
+
+        mv.visitVarInsn(Opcodes.ILOAD, flipFlopIdSlot);
+        mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+        mv.visitVarInsn(Opcodes.ALOAD, rightSlot);
         mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/operators/ScalarFlipFlopOperator", "evaluate", "(ILorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
 
         // If the context is VOID, pop the result from the stack

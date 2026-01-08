@@ -43,6 +43,8 @@ test_*.pl
 *.tmp
 test_*.tmp
 pack_test_*.log
+*.log
+make_repro_asm.log
 out.json
 test_results.json
 logs/

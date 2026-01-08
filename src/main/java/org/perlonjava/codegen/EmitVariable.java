@@ -393,6 +393,8 @@ public class EmitVariable {
                         "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeArray;I)Lorg/perlonjava/runtime/RuntimeList;",
                         false); // generate an .apply() call
 
+                emitterVisitor.ctx.javaClassInfo.incrementStackLevel(1);
+
                 // Handle context conversion: RuntimeCode.apply() always returns RuntimeList
                 // but we need to convert based on the calling context
                 if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {

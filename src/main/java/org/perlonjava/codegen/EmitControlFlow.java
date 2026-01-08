@@ -159,12 +159,12 @@ public class EmitControlFlow {
             }
         }
 
-        // Clean up stack before return
+        // Clean up tracked stack before return
         ctx.javaClassInfo.resetStackLevel();
 
-        // Bare return: ensure we still push a value (empty list) before jumping to returnLabel.
-        // The method epilogue expects a RuntimeBase/RuntimeList on the JVM operand stack.
-        if (node.operand == null || (node.operand instanceof ListNode list && list.elements.isEmpty())) {
+        boolean hasOperand = !(node.operand == null || (node.operand instanceof ListNode list && list.elements.isEmpty()));
+
+        if (!hasOperand) {
             ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
             ctx.mv.visitInsn(Opcodes.DUP);
             ctx.mv.visitMethodInsn(
@@ -173,23 +173,13 @@ public class EmitControlFlow {
                     "<init>",
                     "()V",
                     false);
-            ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
-            return;
+        } else if (node.operand instanceof ListNode list && list.elements.size() == 1) {
+            list.elements.getFirst().accept(emitterVisitor.with(RuntimeContextType.RUNTIME));
+        } else {
+            node.operand.accept(emitterVisitor.with(RuntimeContextType.RUNTIME));
         }
 
-        // Handle special case for single-element return lists
-        if (node.operand instanceof ListNode list) {
-            if (list.elements.size() == 1) {
-                // Optimize single-value returns
-                list.elements.getFirst().accept(emitterVisitor.with(RuntimeContextType.RUNTIME));
-                emitterVisitor.ctx.mv.visitJumpInsn(Opcodes.GOTO, emitterVisitor.ctx.javaClassInfo.returnLabel);
-                return;
-            }
-        }
-
-        // Process the return value(s) and jump to the subroutine's return point
-        node.operand.accept(emitterVisitor.with(RuntimeContextType.RUNTIME));
-        emitterVisitor.ctx.mv.visitJumpInsn(Opcodes.GOTO, emitterVisitor.ctx.javaClassInfo.returnLabel);
+        ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
     }
     
     /**
@@ -205,7 +195,7 @@ public class EmitControlFlow {
         
         ctx.logDebug("visit(goto &sub): Emitting TAILCALL marker");
         
-        // Clean up stack before creating the marker
+        // Clean up tracked stack before creating the marker
         ctx.javaClassInfo.resetStackLevel();
         
         // Create new RuntimeControlFlowList for tail call
