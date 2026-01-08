@@ -250,6 +250,11 @@ public class SubroutineParser {
             // following token is not an identifier (e.g. `skip "msg", 2;`).
             // This is heavily used by the perl5 test harness (test.pl) inside SKIP/TODO blocks.
             // Keep indirect method call disambiguation for the identifier-followed case.
+            // IMPORTANT: do not apply this heuristic for method calls (`->method`) because
+            // it can misparse expressions like `$obj->method ? 0 : 1`.
+            if (isMethod) {
+                return parseIndirectMethodCall(parser, nameNode);
+            }
             LexerToken nextTok = peek(parser);
             boolean terminator = nextTok.text.equals(";")
                     || nextTok.text.equals("}")
