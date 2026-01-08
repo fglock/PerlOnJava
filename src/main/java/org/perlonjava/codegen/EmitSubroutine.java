@@ -23,6 +23,18 @@ import static org.perlonjava.perlmodule.Strict.HINT_STRICT_REFS;
 public class EmitSubroutine {
     // Feature flags for control flow implementation
     // 
+    // IMPORTANT:
+    // These flags are intentionally conservative and are part of perl5 test-suite stability.
+    // In particular, many core tests rely on SKIP/TODO blocks implemented via test.pl:
+    //   sub skip { ...; last SKIP; }
+    // which requires non-local control flow (LAST/NEXT/REDO/GOTO) to propagate across
+    // subroutine boundaries correctly.
+    //
+    // Historically, toggling these flags has caused large test regressions (e.g. op/pack.t collapsing)
+    // and JVM verifier/ASM frame computation failures due to stack-map frame merge issues.
+    // Do not change these settings unless you also re-run the perl5 test suite and verify
+    // both semantics and bytecode verification.
+    // 
     // WHAT THIS WOULD DO IF ENABLED:
     // After every subroutine call, check if the returned RuntimeList is a RuntimeControlFlowList
     // (marked with last/next/redo/goto), and if so, immediately propagate it to returnLabel
@@ -54,7 +66,7 @@ public class EmitSubroutine {
     // Without call-site checks, marked returns propagate through normal return paths.
     // This works correctly but is less efficient for deeply nested loops crossing subroutines.
     // Performance impact is minimal since most control flow is local (uses plain JVM GOTO).
-    private static final boolean ENABLE_CONTROL_FLOW_CHECKS = false;
+    private static final boolean ENABLE_CONTROL_FLOW_CHECKS = true;
     
     // Set to true to enable debug output for control flow checks
     private static final boolean DEBUG_CONTROL_FLOW = false;
@@ -349,7 +361,8 @@ public class EmitSubroutine {
         // If RuntimeCode.apply() returned a RuntimeControlFlowList marker, handle it here.
         if (ENABLE_CONTROL_FLOW_CHECKS
                 && emitterVisitor.ctx.javaClassInfo.returnLabel != null
-                && emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot >= 0) {
+                && emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot >= 0
+                && emitterVisitor.ctx.javaClassInfo.stackLevelManager.getStackLevel() <= 1) {
 
             Label notControlFlow = new Label();
             Label propagateToCaller = new Label();
