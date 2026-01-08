@@ -174,17 +174,53 @@ public class EmitOperator {
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
         if (node.operand instanceof ListNode operand) {
             if (!operand.elements.isEmpty()) {
-                // Accept the first two elements in SCALAR context.
+                MethodVisitor mv = emitterVisitor.ctx.mv;
+
+                int arg0Slot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+                boolean pooledArg0 = arg0Slot >= 0;
+                if (!pooledArg0) {
+                    arg0Slot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                }
+
+                int arg1Slot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+                boolean pooledArg1 = arg1Slot >= 0;
+                if (!pooledArg1) {
+                    arg1Slot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                }
+
+                int arg2Slot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+                boolean pooledArg2 = arg2Slot >= 0;
+                if (!pooledArg2) {
+                    arg2Slot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                }
+
                 operand.elements.get(0).accept(scalarVisitor);
+                mv.visitVarInsn(Opcodes.ASTORE, arg0Slot);
+
                 operand.elements.get(1).accept(scalarVisitor);
+                mv.visitVarInsn(Opcodes.ASTORE, arg1Slot);
+
                 if (operand.elements.size() == 3) {
-                    // Accept the third element if it exists.
                     operand.elements.get(2).accept(scalarVisitor);
                 } else {
-                    // Otherwise, use 'undef' as the third element.
                     new OperatorNode("undef", null, node.tokenIndex).accept(scalarVisitor);
                 }
-                // Invoke the virtual method for the operator.
+                mv.visitVarInsn(Opcodes.ASTORE, arg2Slot);
+
+                mv.visitVarInsn(Opcodes.ALOAD, arg0Slot);
+                mv.visitVarInsn(Opcodes.ALOAD, arg1Slot);
+                mv.visitVarInsn(Opcodes.ALOAD, arg2Slot);
+
+                if (pooledArg2) {
+                    emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+                }
+                if (pooledArg1) {
+                    emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+                }
+                if (pooledArg0) {
+                    emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+                }
+
                 emitOperator(node, emitterVisitor);
             }
         }

@@ -8,6 +8,8 @@ import org.objectweb.asm.tree.analysis.Analyzer;
 import org.objectweb.asm.tree.analysis.AnalyzerException;
 import org.objectweb.asm.tree.analysis.BasicValue;
 import org.objectweb.asm.tree.analysis.BasicInterpreter;
+import org.objectweb.asm.tree.analysis.SourceInterpreter;
+import org.objectweb.asm.tree.analysis.SourceValue;
 import org.objectweb.asm.util.CheckClassAdapter;
 import org.objectweb.asm.util.Printer;
 import org.objectweb.asm.util.TraceClassVisitor;
@@ -169,6 +171,17 @@ public class EmitterMethodCreator implements Opcodes {
                                     }
 
                                     org.objectweb.asm.tree.analysis.Frame<BasicValue>[] frames = analyzer.getFrames();
+
+                                    org.objectweb.asm.tree.analysis.Frame<SourceValue>[] sourceFrames = null;
+                                    try {
+                                        Analyzer<SourceValue> sourceAnalyzer = new Analyzer<>(new SourceInterpreter());
+                                        try {
+                                            sourceAnalyzer.analyze(cn.name, mn);
+                                        } catch (AnalyzerException ignored) {
+                                        }
+                                        sourceFrames = sourceAnalyzer.getFrames();
+                                    } catch (Throwable ignored) {
+                                    }
                                     java.util.ArrayList<Integer> framePoints = new java.util.ArrayList<>();
                                     framePoints.add(insnIndex);
                                     framePoints.add(target);
@@ -185,71 +198,60 @@ public class EmitterMethodCreator implements Opcodes {
                                             continue;
                                         }
                                         out.println("  [" + idx + "] stack=" + f.getStackSize() + " locals=" + f.getLocals());
-                                        int ss = f.getStackSize();
-                                        for (int si = 0; si < ss; si++) {
-                                            BasicValue v = f.getStack(si);
-                                            out.println("    stack[" + si + "]=" + String.valueOf(v));
+                                        for (int s = 0; s < f.getStackSize(); s++) {
+                                            out.println("    stack[" + s + "]=" + f.getStack(s));
+                                        }
+
+                                        if (sourceFrames != null && idx >= 0 && idx < sourceFrames.length) {
+                                            org.objectweb.asm.tree.analysis.Frame<SourceValue> sf = sourceFrames[idx];
+                                            if (sf != null) {
+                                                out.println("    --- stack sources at [" + idx + "] ---");
+                                                java.util.LinkedHashSet<Integer> sourceInsnsToPrint = new java.util.LinkedHashSet<>();
+                                                for (int s = 0; s < sf.getStackSize(); s++) {
+                                                    SourceValue sv = sf.getStack(s);
+                                                    if (sv == null || sv.insns == null) {
+                                                        continue;
+                                                    }
+                                                    java.util.ArrayList<Integer> srcIdxs = new java.util.ArrayList<>();
+                                                    for (org.objectweb.asm.tree.AbstractInsnNode src : sv.insns) {
+                                                        int si = mn.instructions.indexOf(src);
+                                                        if (si >= 0) {
+                                                            srcIdxs.add(si);
+                                                            sourceInsnsToPrint.add(si);
+                                                        }
+                                                    }
+                                                    if (!srcIdxs.isEmpty()) {
+                                                        out.println("      stack[" + s + "] sources=" + srcIdxs);
+                                                    }
+                                                }
+
+                                                int printed = 0;
+                                                for (Integer srcIdx : sourceInsnsToPrint) {
+                                                    if (srcIdx == null) {
+                                                        continue;
+                                                    }
+                                                    if (printed++ >= 12) {
+                                                        out.println("      (additional source windows omitted)");
+                                                        break;
+                                                    }
+                                                    out.println("    --- source instruction window: [" + srcIdx + "] ---");
+                                                    int sFrom = Math.max(0, srcIdx - 20);
+                                                    int sTo = Math.min(mn.instructions.size() - 1, srcIdx + 20);
+                                                    for (int i = sFrom; i <= sTo; i++) {
+                                                        org.objectweb.asm.tree.AbstractInsnNode n = mn.instructions.get(i);
+                                                        if (n instanceof org.objectweb.asm.tree.JumpInsnNode pj) {
+                                                            int sTarget = mn.instructions.indexOf(pj.label);
+                                                            out.println("    [" + i + "] " + insnToString(n) + " -> [" + sTarget + "]");
+                                                        } else {
+                                                            out.println("    [" + i + "] " + insnToString(n));
+                                                        }
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 } catch (Throwable t) {
                                     out.println("  <frame dump failed: " + t + ">");
-                                }
-
-                                try {
-                                    org.objectweb.asm.tree.analysis.Analyzer<org.objectweb.asm.tree.analysis.SourceValue> srcAnalyzer =
-                                            new org.objectweb.asm.tree.analysis.Analyzer<>(new org.objectweb.asm.tree.analysis.SourceInterpreter());
-                                    try {
-                                        srcAnalyzer.analyze(cn.name, mn);
-                                    } catch (org.objectweb.asm.tree.analysis.AnalyzerException ignored) {
-                                    }
-                                    org.objectweb.asm.tree.analysis.Frame<org.objectweb.asm.tree.analysis.SourceValue>[] srcFrames = srcAnalyzer.getFrames();
-                                    if (insnIndex >= 0 && insnIndex < srcFrames.length) {
-                                        org.objectweb.asm.tree.analysis.Frame<org.objectweb.asm.tree.analysis.SourceValue> sf = srcFrames[insnIndex];
-                                        if (sf != null) {
-                                            out.println("  --- source stack at [" + insnIndex + "] ---");
-                                            int ss = sf.getStackSize();
-                                            java.util.LinkedHashSet<Integer> sourceInsnsToPrint = new java.util.LinkedHashSet<>();
-                                            for (int si = 0; si < ss; si++) {
-                                                org.objectweb.asm.tree.analysis.SourceValue sv = sf.getStack(si);
-                                                out.print("    stack[" + si + "] sources=");
-                                                if (sv != null && sv.insns != null) {
-                                                    out.print("[");
-                                                    boolean first = true;
-                                                    for (org.objectweb.asm.tree.AbstractInsnNode in : sv.insns) {
-                                                        int idx = mn.instructions.indexOf(in);
-                                                        if (idx >= 0) {
-                                                            sourceInsnsToPrint.add(idx);
-                                                        }
-                                                        if (!first) {
-                                                            out.print(", ");
-                                                        }
-                                                        out.print(idx);
-                                                        first = false;
-                                                    }
-                                                    out.println("]");
-                                                } else {
-                                                    out.println("[]");
-                                                }
-                                            }
-
-                                            for (Integer srcIdx : sourceInsnsToPrint) {
-                                                out.println("  --- source instruction window: [" + srcIdx + "] ---");
-                                                int sFrom = Math.max(0, srcIdx - 6);
-                                                int sTo = Math.min(mn.instructions.size() - 1, srcIdx + 6);
-                                                for (int i = sFrom; i <= sTo; i++) {
-                                                    org.objectweb.asm.tree.AbstractInsnNode n = mn.instructions.get(i);
-                                                    if (n instanceof org.objectweb.asm.tree.JumpInsnNode pj) {
-                                                        int sTarget = mn.instructions.indexOf(pj.label);
-                                                        out.println("  [" + i + "] " + insnToString(n) + " -> [" + sTarget + "]");
-                                                    } else {
-                                                        out.println("  [" + i + "] " + insnToString(n));
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                } catch (Throwable t) {
-                                    out.println("  <source dump failed: " + t + ">");
                                 }
 
                                 for (Integer p : predecessors) {
@@ -933,6 +935,52 @@ public class EmitterMethodCreator implements Opcodes {
 
                     // Always run a classloader-free verifier pass to get a concrete method/instruction index.
                     // CheckClassAdapter.verify() can fail or be noisy when it cannot load generated anon classes.
+                    debugAnalyzeWithBasicInterpreter(cr, verifyPw);
+                    verifyPw.flush();
+                } catch (Throwable t) {
+                    t.printStackTrace();
+                }
+            }
+
+            if (asmDebug && !disableFrames && asmDebugClassMatches
+                    && asmDebugClassFilter != null && !asmDebugClassFilter.isEmpty()) {
+                try {
+                    ClassReader cr = new ClassReader(classData);
+
+                    PrintWriter pw = new PrintWriter(System.err);
+                    TraceClassVisitor tcv = new TraceClassVisitor(pw);
+                    cr.accept(tcv, ClassReader.EXPAND_FRAMES);
+                    pw.flush();
+
+                    PrintWriter verifyPw = new PrintWriter(System.err);
+                    String thisClassNameDot = className.replace('/', '.');
+                    final byte[] verifyClassData = classData;
+                    ClassLoader verifyLoader = new ClassLoader(GlobalVariable.globalClassLoader) {
+                        @Override
+                        protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+                            if (name.equals(thisClassNameDot)) {
+                                synchronized (getClassLoadingLock(name)) {
+                                    Class<?> loaded = findLoadedClass(name);
+                                    if (loaded == null) {
+                                        loaded = defineClass(name, verifyClassData, 0, verifyClassData.length);
+                                    }
+                                    if (resolve) {
+                                        resolveClass(loaded);
+                                    }
+                                    return loaded;
+                                }
+                            }
+                            return super.loadClass(name, resolve);
+                        }
+                    };
+
+                    try {
+                        CheckClassAdapter.verify(cr, verifyLoader, true, verifyPw);
+                    } catch (Throwable verifyErr) {
+                        verifyErr.printStackTrace(verifyPw);
+                    }
+                    verifyPw.flush();
+
                     debugAnalyzeWithBasicInterpreter(cr, verifyPw);
                     verifyPw.flush();
                 } catch (Throwable t) {
