@@ -352,11 +352,38 @@ public class EmitOperator {
         // Handle:  splice @array, LIST
         emitterVisitor.ctx.logDebug("handleSpliceBuiltin " + node);
         Node args = node.operand;
-        // Remove the first element from the list and accept it in LIST context.
-        Node operand = ((ListNode) args).elements.removeFirst();
-        operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
-        // Accept the remaining arguments in LIST context.
-        args.accept(emitterVisitor.with(RuntimeContextType.LIST));
+        if (args instanceof ListNode listArgs) {
+            if (!listArgs.elements.isEmpty()) {
+                // Remove the first element from the list and accept it in LIST context.
+                // Restore the list afterwards to avoid mutating the AST.
+                Node first;
+                try {
+                    first = listArgs.elements.removeFirst();
+                } catch (java.util.NoSuchElementException e) {
+                    // Defensive: treat as no args.
+                    first = null;
+                }
+
+                if (first != null) {
+                    try {
+                        first.accept(emitterVisitor.with(RuntimeContextType.LIST));
+                        // Accept the remaining arguments in LIST context.
+                        args.accept(emitterVisitor.with(RuntimeContextType.LIST));
+                    } finally {
+                        listArgs.elements.addFirst(first);
+                    }
+                } else {
+                    // Accept all arguments in LIST context.
+                    args.accept(emitterVisitor.with(RuntimeContextType.LIST));
+                }
+            } else {
+                // Accept all arguments in LIST context.
+                args.accept(emitterVisitor.with(RuntimeContextType.LIST));
+            }
+        } else {
+            // Accept all arguments in LIST context.
+            args.accept(emitterVisitor.with(RuntimeContextType.LIST));
+        }
         emitOperator(node, emitterVisitor);
     }
 

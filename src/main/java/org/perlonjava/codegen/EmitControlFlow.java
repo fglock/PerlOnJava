@@ -198,44 +198,51 @@ public class EmitControlFlow {
         // Clean up tracked stack before creating the marker
         ctx.javaClassInfo.resetStackLevel();
         
-        // Create new RuntimeControlFlowList for tail call
-        ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeControlFlowList");
-        ctx.mv.visitInsn(Opcodes.DUP);
-        
-        // Evaluate the coderef (&NAME) in scalar context
         subNode.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        
-        // Evaluate the arguments and convert to RuntimeArray
-        // The arguments are typically @_ which needs to be evaluated and converted
+        int codeRefSlot = ctx.javaClassInfo.acquireSpillSlot();
+        boolean pooledCodeRef = codeRefSlot >= 0;
+        if (!pooledCodeRef) {
+            codeRefSlot = ctx.symbolTable.allocateLocalVariable();
+        }
+        ctx.mv.visitVarInsn(Opcodes.ASTORE, codeRefSlot);
+
         argsNode.accept(emitterVisitor.with(RuntimeContextType.LIST));
-        
-        // getList() returns RuntimeList, then call getArrayOfAlias()
         ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                 "org/perlonjava/runtime/RuntimeBase",
                 "getList",
                 "()Lorg/perlonjava/runtime/RuntimeList;",
                 false);
-        
         ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                 "org/perlonjava/runtime/RuntimeList",
                 "getArrayOfAlias",
                 "()Lorg/perlonjava/runtime/RuntimeArray;",
                 false);
-        
-        // Push fileName
+        int argsSlot = ctx.javaClassInfo.acquireSpillSlot();
+        boolean pooledArgs = argsSlot >= 0;
+        if (!pooledArgs) {
+            argsSlot = ctx.symbolTable.allocateLocalVariable();
+        }
+        ctx.mv.visitVarInsn(Opcodes.ASTORE, argsSlot);
+
+        ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeControlFlowList");
+        ctx.mv.visitInsn(Opcodes.DUP);
+        ctx.mv.visitVarInsn(Opcodes.ALOAD, codeRefSlot);
+        ctx.mv.visitVarInsn(Opcodes.ALOAD, argsSlot);
         ctx.mv.visitLdcInsn(ctx.compilerOptions.fileName != null ? ctx.compilerOptions.fileName : "(eval)");
-        
-        // Push lineNumber
         int lineNumber = ctx.errorUtil != null ? ctx.errorUtil.getLineNumber(subNode.tokenIndex) : 0;
         ctx.mv.visitLdcInsn(lineNumber);
-        
-        // Call RuntimeControlFlowList constructor for tail call
-        // Signature: (RuntimeScalar codeRef, RuntimeArray args, String fileName, int lineNumber)
         ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
                 "org/perlonjava/runtime/RuntimeControlFlowList",
                 "<init>",
                 "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeArray;Ljava/lang/String;I)V",
                 false);
+
+        if (pooledArgs) {
+            ctx.javaClassInfo.releaseSpillSlot();
+        }
+        if (pooledCodeRef) {
+            ctx.javaClassInfo.releaseSpillSlot();
+        }
         
         // Jump to returnLabel (trampoline will handle it)
         ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);

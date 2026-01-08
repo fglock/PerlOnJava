@@ -54,7 +54,7 @@ public class EmitSubroutine {
     // Without call-site checks, marked returns propagate through normal return paths.
     // This works correctly but is less efficient for deeply nested loops crossing subroutines.
     // Performance impact is minimal since most control flow is local (uses plain JVM GOTO).
-    private static final boolean ENABLE_CONTROL_FLOW_CHECKS = true;
+    private static final boolean ENABLE_CONTROL_FLOW_CHECKS = false;
     
     // Set to true to enable debug output for control flow checks
     private static final boolean DEBUG_CONTROL_FLOW = false;
@@ -347,8 +347,9 @@ public class EmitSubroutine {
 
         // Tagged returns control-flow handling:
         // If RuntimeCode.apply() returned a RuntimeControlFlowList marker, handle it here.
-        if (emitterVisitor.ctx.javaClassInfo.returnLabel != null &&
-                emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot >= 0) {
+        if (ENABLE_CONTROL_FLOW_CHECKS
+                && emitterVisitor.ctx.javaClassInfo.returnLabel != null
+                && emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot >= 0) {
 
             Label notControlFlow = new Label();
             Label propagateToCaller = new Label();

@@ -413,6 +413,9 @@ public class EmitterMethodCreator implements Opcodes {
             // Only disable COMPUTE_FRAMES for the explicit diagnostic pass (disableFrames=true).
             // In normal operation (even when JPERL_ASM_DEBUG is enabled) we want COMPUTE_FRAMES,
             // otherwise the generated class may fail verification on modern JVMs.
+            // For the diagnostic (disableFrames=true) pass we disable COMPUTE_FRAMES so ASM does not
+            // attempt to compute stack map frames (which may crash if invalid bytecode was generated).
+            // Keep COMPUTE_MAXS enabled so max stack/locals are correct and we can run analyzers.
             int cwFlags = disableFrames
                     ? ClassWriter.COMPUTE_MAXS
                     : (ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
