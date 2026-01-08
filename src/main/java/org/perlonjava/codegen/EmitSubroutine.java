@@ -333,6 +333,8 @@ public class EmitSubroutine {
                 "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;[Lorg/perlonjava/runtime/RuntimeBase;I)Lorg/perlonjava/runtime/RuntimeList;",
                 false); // Generate an .apply() call
 
+        emitterVisitor.ctx.javaClassInfo.incrementStackLevel(1);
+
         if (pooledArgsArray) {
             emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
         }
@@ -352,9 +354,8 @@ public class EmitSubroutine {
             Label propagateToCaller = new Label();
             Label checkLoopLabels = new Label();
 
-            int baseStackLevel = emitterVisitor.ctx.javaClassInfo.stackLevelManager.getStackLevel();
-            int belowResultStackLevel = Math.max(0, baseStackLevel - 1);
-            JavaClassInfo.SpillRef[] baseSpills = new JavaClassInfo.SpillRef[belowResultStackLevel];
+            int belowResultStackLevel = 0;
+            JavaClassInfo.SpillRef[] baseSpills = new JavaClassInfo.SpillRef[0];
 
             // Store result in temp slot
             mv.visitVarInsn(Opcodes.ASTORE, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);

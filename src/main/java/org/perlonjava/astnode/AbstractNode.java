@@ -18,6 +18,11 @@ public abstract class AbstractNode implements Node {
     // Lazy initialization - only created when first annotation is set
     public Map<String, Object> annotations;
 
+    private int internalAnnotationFlags;
+    private static final int FLAG_BLOCK_ALREADY_REFACTORED = 1;
+    private static final int FLAG_QUEUED_FOR_REFACTOR = 2;
+    private static final int FLAG_CHUNK_ALREADY_REFACTORED = 4;
+
     @Override
     public int getIndex() {
         return tokenIndex;
@@ -47,6 +52,20 @@ public abstract class AbstractNode implements Node {
     }
 
     public void setAnnotation(String key, Object value) {
+        if (value instanceof Boolean boolVal && boolVal) {
+            if ("blockAlreadyRefactored".equals(key)) {
+                internalAnnotationFlags |= FLAG_BLOCK_ALREADY_REFACTORED;
+                return;
+            }
+            if ("queuedForRefactor".equals(key)) {
+                internalAnnotationFlags |= FLAG_QUEUED_FOR_REFACTOR;
+                return;
+            }
+            if ("chunkAlreadyRefactored".equals(key)) {
+                internalAnnotationFlags |= FLAG_CHUNK_ALREADY_REFACTORED;
+                return;
+            }
+        }
         if (annotations == null) {
             annotations = new HashMap<>();
         }
@@ -54,6 +73,15 @@ public abstract class AbstractNode implements Node {
     }
 
     public Object getAnnotation(String key) {
+        if ("blockAlreadyRefactored".equals(key)) {
+            return (internalAnnotationFlags & FLAG_BLOCK_ALREADY_REFACTORED) != 0;
+        }
+        if ("queuedForRefactor".equals(key)) {
+            return (internalAnnotationFlags & FLAG_QUEUED_FOR_REFACTOR) != 0;
+        }
+        if ("chunkAlreadyRefactored".equals(key)) {
+            return (internalAnnotationFlags & FLAG_CHUNK_ALREADY_REFACTORED) != 0;
+        }
         return annotations == null ? null : annotations.get(key);
     }
 

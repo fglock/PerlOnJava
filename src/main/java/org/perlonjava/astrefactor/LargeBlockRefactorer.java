@@ -6,7 +6,9 @@ import org.perlonjava.astvisitor.ControlFlowFinder;
 import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.parser.Parser;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.List;
 
 import static org.perlonjava.astrefactor.BlockRefactor.*;
@@ -26,6 +28,39 @@ public class LargeBlockRefactorer {
     // Thread-local flag to prevent recursion when creating chunk blocks
     private static final ThreadLocal<Boolean> skipRefactoring = ThreadLocal.withInitial(() -> false);
 
+    private static final ThreadLocal<ControlFlowFinder> controlFlowFinderTl = ThreadLocal.withInitial(ControlFlowFinder::new);
+
+    private static final ThreadLocal<Deque<BlockNode>> pendingRefactorBlocks = ThreadLocal.withInitial(ArrayDeque::new);
+    private static final ThreadLocal<Boolean> processingPendingRefactors = ThreadLocal.withInitial(() -> false);
+
+    public static void enqueueForRefactor(BlockNode node) {
+        if (!IS_REFACTORING_ENABLED || node == null) {
+            return;
+        }
+        if (node.getBooleanAnnotation("queuedForRefactor")) {
+            return;
+        }
+        node.setAnnotation("queuedForRefactor", true);
+        pendingRefactorBlocks.get().addLast(node);
+    }
+
+    private static void processPendingRefactors() {
+        if (processingPendingRefactors.get()) {
+            return;
+        }
+        processingPendingRefactors.set(true);
+        Deque<BlockNode> queue = pendingRefactorBlocks.get();
+        try {
+            while (!queue.isEmpty()) {
+                BlockNode block = queue.removeFirst();
+                maybeRefactorBlock(block, null);
+            }
+        } finally {
+            queue.clear();
+            processingPendingRefactors.set(false);
+        }
+    }
+
     /**
      * Parse-time entry point: called from BlockNode constructor to refactor large blocks.
      * This applies smart chunking to split safe statement sequences into closures.
@@ -44,24 +79,33 @@ public class LargeBlockRefactorer {
 
         // Skip if we're inside createMarkedBlock (prevents recursion)
         if (skipRefactoring.get()) {
-            node.setAnnotation("refactorSkipReason", "Inside createMarkedBlock (recursion prevention)");
+            if (node.annotations != null) {
+                node.setAnnotation("refactorSkipReason", "Inside createMarkedBlock (recursion prevention)");
+            }
             return;
         }
 
         // Skip if already refactored (prevents infinite recursion)
         if (node.getBooleanAnnotation("blockAlreadyRefactored")) {
-            node.setAnnotation("refactorSkipReason", "Already refactored");
+            if (parser != null || node.annotations != null) {
+                node.setAnnotation("refactorSkipReason", "Already refactored");
+            }
             return;
         }
 
         // Skip special blocks (BEGIN, END, etc.)
         if (isSpecialContext(node)) {
-            node.setAnnotation("refactorSkipReason", "Special block (BEGIN/END/etc)");
+            if (parser != null || node.annotations != null) {
+                node.setAnnotation("refactorSkipReason", "Special block (BEGIN/END/etc)");
+            }
             return;
         }
 
         // Apply smart chunking
         trySmartChunking(node, parser);
+
+        // Refactor any blocks created during this pass (iteratively, not recursively).
+        processPendingRefactors();
     }
 
     /**
@@ -141,118 +185,206 @@ public class LargeBlockRefactorer {
     private static void trySmartChunking(BlockNode node, Parser parser) {
         // Minimal check: skip very small blocks to avoid estimation overhead
         if (node.elements.size() <= MIN_CHUNK_SIZE) {
-            node.setAnnotation("refactorSkipReason", String.format("Element count %d <= %d (minimal threshold)", node.elements.size(), MIN_CHUNK_SIZE));
+            if (parser != null || node.annotations != null) {
+                node.setAnnotation("refactorSkipReason", "Element count " + node.elements.size() + " <= " + MIN_CHUNK_SIZE + " (minimal threshold)");
+            }
             return;
         }
         
         // Check bytecode size - skip if under threshold
         long estimatedSize = estimateTotalBytecodeSize(node.elements);
-        node.setAnnotation("estimatedBytecodeSize", estimatedSize);
-        if (estimatedSize <= LARGE_BYTECODE_SIZE) {
-            node.setAnnotation("refactorSkipReason", String.format("Bytecode size %d <= threshold %d", estimatedSize, LARGE_BYTECODE_SIZE));
+        long estimatedHalf = estimatedSize / 2;
+        long estimatedSizeWithSafetyMargin = estimatedSize > Long.MAX_VALUE - estimatedHalf ? Long.MAX_VALUE : estimatedSize + estimatedHalf;
+        if (parser != null || node.annotations != null) {
+            node.setAnnotation("estimatedBytecodeSize", estimatedSize);
+            node.setAnnotation("estimatedBytecodeSizeWithSafetyMargin", estimatedSizeWithSafetyMargin);
+        }
+        boolean forceRefactorByElementCount = node.elements.size() >= LARGE_ELEMENT_COUNT;
+        if (!forceRefactorByElementCount && estimatedSizeWithSafetyMargin <= LARGE_BYTECODE_SIZE) {
+            if (parser != null || node.annotations != null) {
+                node.setAnnotation("refactorSkipReason", "Bytecode size " + estimatedSize + " <= threshold " + LARGE_BYTECODE_SIZE);
+            }
             return;
         }
-        
-        // Check if the block has any labels (stored in BlockNode.labels field)
-        // Labels define goto/next/last targets and must remain at block level
-        if (node.labels != null && !node.labels.isEmpty()) {
-            // Block has labels - skip refactoring to preserve label scope
-            node.setAnnotation("refactorSkipReason", "Block has labels");
-            return;
-        }
 
-        List<Object> segments = new ArrayList<>();  // Either Node (direct) or List<Node> (chunk)
-        List<Node> currentChunk = new ArrayList<>();
+        int effectiveMinChunkSize = MIN_CHUNK_SIZE;
+        // Guard against creating an excessive number of nested closures on extremely large blocks.
+        // Too many closures can blow up memory long before bytecode size is reduced.
+        final int maxNestedClosures = 512;
 
-        for (Node element : node.elements) {
-            if (isCompleteBlock(element)) {
-                // Complete blocks are already scoped - but check for labeled control flow
-                // Labeled control flow might reference labels outside the block
-                if (!currentChunk.isEmpty()) {
-                    segments.add(new ArrayList<>(currentChunk));
-                    currentChunk.clear();
-                }
-                segments.add(element);
-            } else if (shouldBreakChunk(element)) {
-                // This element cannot be in a chunk (has unsafe control flow or is a label)
-                if (!currentChunk.isEmpty()) {
-                    segments.add(new ArrayList<>(currentChunk));
-                    currentChunk.clear();
-                }
-                // Add the element directly
-                segments.add(element);
-            } else {
-                // Safe element, add to current chunk
-                currentChunk.add(element);
-            }
-        }
-
-        // Process any remaining chunk
-        if (!currentChunk.isEmpty()) {
-            segments.add(new ArrayList<>(currentChunk));
-        }
-
-        // Check ALL segments (both direct and chunks) for UNSAFE control flow
-        // Use ControlFlowDetectorVisitor which considers loop depth
-        // Unlabeled next/last/redo inside loops are safe, but labeled control flow is not
-        for (Object segment : segments) {
-            if (segment instanceof Node directNode) {
-                controlFlowDetector.reset();
-                directNode.accept(controlFlowDetector);
-                if (controlFlowDetector.hasUnsafeControlFlow()) {
-                    // Segment has unsafe control flow - skip refactoring
-                    node.setAnnotation("refactorSkipReason", "Unsafe control flow in direct segment");
-                    return;
-                }
-            } else if (segment instanceof List) {
-                @SuppressWarnings("unchecked")
-                List<Node> chunk = (List<Node>) segment;
-                for (Node element : chunk) {
-                    controlFlowDetector.reset();
-                    element.accept(controlFlowDetector);
-                    if (controlFlowDetector.hasUnsafeControlFlow()) {
-                        // Chunk has unsafe control flow - skip refactoring
-                        node.setAnnotation("refactorSkipReason", "Unsafe control flow in chunk");
-                        return;
-                    }
-                }
-            }
-        }
-        
-        // Build nested structure if we have any chunks
-        List<Node> processedElements = buildNestedStructure(
-                segments,
-                node.tokenIndex,
-                MIN_CHUNK_SIZE,
-                false, // returnTypeIsList = false: execute statements, don't return list
-                skipRefactoring
+        int maxNestedClosuresEffective = (int) Math.min(
+                maxNestedClosures,
+                Math.max(1L, (estimatedSizeWithSafetyMargin + LARGE_BYTECODE_SIZE - 1) / LARGE_BYTECODE_SIZE)
         );
+
+        int closuresCreated = 0;
+        if (node.elements.size() > (long) effectiveMinChunkSize * maxNestedClosuresEffective) {
+            effectiveMinChunkSize = Math.max(MIN_CHUNK_SIZE, (node.elements.size() + maxNestedClosuresEffective - 1) / maxNestedClosuresEffective);
+            if (parser != null || node.annotations != null) {
+                node.setAnnotation("refactorEffectiveMinChunkSize", effectiveMinChunkSize);
+            }
+        }
+
+        // Streaming construction from the end to avoid building large intermediate segment lists.
+        // We only materialize block bodies for chunks that will actually be wrapped.
+        List<Node> suffixReversed = new ArrayList<>();
+        Node tailClosure = null;
+        boolean createdAnyClosure = false;
+
+        int safeRunEndExclusive = node.elements.size();
+        int safeRunLen = 0;
+        boolean safeRunActive = false;
+
+        for (int i = node.elements.size() - 1; i >= 0; i--) {
+            Node element = node.elements.get(i);
+            boolean safeForChunk = !shouldBreakChunk(element);
+
+            if (safeForChunk) {
+                safeRunActive = true;
+                safeRunLen++;
+                continue;
+            }
+
+            if (safeRunActive) {
+                int safeRunStart = safeRunEndExclusive - safeRunLen;
+                while (safeRunLen >= effectiveMinChunkSize) {
+                    int remainingBudget = maxNestedClosuresEffective - closuresCreated;
+                    if (remainingBudget <= 0) {
+                        break;
+                    }
+
+                    int chunkLen = Math.max(effectiveMinChunkSize, (safeRunLen + remainingBudget - 1) / remainingBudget);
+                    if (chunkLen > safeRunLen) {
+                        chunkLen = safeRunLen;
+                    }
+                    int chunkStart = safeRunEndExclusive - chunkLen;
+
+                    List<Node> blockElements = new ArrayList<>(chunkLen + suffixReversed.size() + (tailClosure != null ? 1 : 0));
+                    for (int j = chunkStart; j < safeRunEndExclusive; j++) {
+                        blockElements.add(node.elements.get(j));
+                    }
+                    for (int k = suffixReversed.size() - 1; k >= 0; k--) {
+                        blockElements.add(suffixReversed.get(k));
+                    }
+                    if (tailClosure != null) {
+                        blockElements.add(tailClosure);
+                    }
+
+                    BlockNode block = createBlockNode(blockElements, node.tokenIndex, skipRefactoring);
+                    tailClosure = createAnonSubCall(node.tokenIndex, block);
+                    suffixReversed.clear();
+                    createdAnyClosure = true;
+                    closuresCreated++;
+
+                    safeRunEndExclusive = chunkStart;
+                    safeRunLen -= chunkLen;
+                }
+
+                safeRunStart = safeRunEndExclusive - safeRunLen;
+                for (int j = safeRunEndExclusive - 1; j >= safeRunStart; j--) {
+                    suffixReversed.add(node.elements.get(j));
+                }
+
+                safeRunActive = false;
+                safeRunLen = 0;
+            }
+
+            suffixReversed.add(element);
+            safeRunEndExclusive = i;
+        }
+
+        if (safeRunActive) {
+            int safeRunStart = safeRunEndExclusive - safeRunLen;
+            while (safeRunLen >= effectiveMinChunkSize) {
+                int remainingBudget = maxNestedClosuresEffective - closuresCreated;
+                if (remainingBudget <= 0) {
+                    break;
+                }
+
+                int chunkLen = Math.max(effectiveMinChunkSize, (safeRunLen + remainingBudget - 1) / remainingBudget);
+                if (chunkLen > safeRunLen) {
+                    chunkLen = safeRunLen;
+                }
+                int chunkStart = safeRunEndExclusive - chunkLen;
+
+                List<Node> blockElements = new ArrayList<>(chunkLen + suffixReversed.size() + (tailClosure != null ? 1 : 0));
+                for (int j = chunkStart; j < safeRunEndExclusive; j++) {
+                    blockElements.add(node.elements.get(j));
+                }
+                for (int k = suffixReversed.size() - 1; k >= 0; k--) {
+                    blockElements.add(suffixReversed.get(k));
+                }
+                if (tailClosure != null) {
+                    blockElements.add(tailClosure);
+                }
+
+                BlockNode block = createBlockNode(blockElements, node.tokenIndex, skipRefactoring);
+                tailClosure = createAnonSubCall(node.tokenIndex, block);
+                suffixReversed.clear();
+                createdAnyClosure = true;
+                closuresCreated++;
+
+                safeRunEndExclusive = chunkStart;
+                safeRunLen -= chunkLen;
+            }
+
+            safeRunStart = safeRunEndExclusive - safeRunLen;
+            for (int j = safeRunEndExclusive - 1; j >= safeRunStart; j--) {
+                suffixReversed.add(node.elements.get(j));
+            }
+        }
+
+        if (!createdAnyClosure) {
+            if (parser != null || node.annotations != null) {
+                node.setAnnotation("refactorSkipReason", "No chunk >= effective min chunk size " + effectiveMinChunkSize);
+            }
+            return;
+        }
+
+        List<Node> processedElements = new ArrayList<>(suffixReversed.size() + 1);
+        for (int k = suffixReversed.size() - 1; k >= 0; k--) {
+            processedElements.add(suffixReversed.get(k));
+        }
+        processedElements.add(tailClosure);
 
         // Apply chunking if we reduced the element count
         if (processedElements.size() < node.elements.size()) {
-            node.elements.clear();
-            node.elements.addAll(processedElements);
+            node.elements = processedElements;
+            // Mark the block as refactored
             node.setAnnotation("blockAlreadyRefactored", true);
-            
-            // Verify refactoring was successful
+
+            // Verify the refactored block is smaller
             long newEstimatedSize = estimateTotalBytecodeSize(node.elements);
-            node.setAnnotation("refactoredBytecodeSize", newEstimatedSize);
-            long originalSize = (Long) node.getAnnotation("estimatedBytecodeSize");
-            if (newEstimatedSize > LARGE_BYTECODE_SIZE) {
-                node.setAnnotation("refactorSkipReason", String.format("Refactoring failed: size %d still > threshold %d", newEstimatedSize, LARGE_BYTECODE_SIZE));
+            long newEstimatedHalf = newEstimatedSize / 2;
+            long newEstimatedSizeWithSafetyMargin = newEstimatedSize > Long.MAX_VALUE - newEstimatedHalf ? Long.MAX_VALUE : newEstimatedSize + newEstimatedHalf;
+            if (parser != null || node.annotations != null) {
+                node.setAnnotation("refactoredBytecodeSize", newEstimatedSize);
+            }
+            long originalSize = estimatedSize;
+            if (newEstimatedSizeWithSafetyMargin > LARGE_BYTECODE_SIZE) {
+                if (parser != null || node.annotations != null) {
+                    node.setAnnotation("refactorSkipReason", "Refactoring failed: size " + newEstimatedSize + " still > threshold " + LARGE_BYTECODE_SIZE);
+                }
                 errorCantRefactorLargeBlock(node.tokenIndex, parser, newEstimatedSize);
             }
-            node.setAnnotation("refactorSkipReason", String.format("Successfully refactored: %d -> %d bytes", originalSize, newEstimatedSize));
-            return;
+            if (parser != null || node.annotations != null) {
+                node.setAnnotation("refactorSkipReason", "Successfully refactored: " + originalSize + " -> " + newEstimatedSize + " bytes");
+            }
         }
 
         // If refactoring didn't help and block is still too large, throw an error
         long finalEstimatedSize = estimateTotalBytecodeSize(node.elements);
-        if (finalEstimatedSize > LARGE_BYTECODE_SIZE) {
-            node.setAnnotation("refactorSkipReason", String.format("Refactoring didn't reduce element count, size %d > threshold %d", finalEstimatedSize, LARGE_BYTECODE_SIZE));
+        long finalEstimatedHalf = finalEstimatedSize / 2;
+        long finalEstimatedSizeWithSafetyMargin = finalEstimatedSize > Long.MAX_VALUE - finalEstimatedHalf ? Long.MAX_VALUE : finalEstimatedSize + finalEstimatedHalf;
+        if (finalEstimatedSizeWithSafetyMargin > LARGE_BYTECODE_SIZE) {
+            if (parser != null || node.annotations != null) {
+                node.setAnnotation("refactorSkipReason", "Refactoring didn't reduce element count, size " + finalEstimatedSize + " > threshold " + LARGE_BYTECODE_SIZE);
+            }
             errorCantRefactorLargeBlock(node.tokenIndex, parser, finalEstimatedSize);
         }
-        node.setAnnotation("refactorSkipReason", String.format("Refactoring didn't reduce element count, but size %d <= threshold %d", finalEstimatedSize, LARGE_BYTECODE_SIZE));
+        if (parser != null || node.annotations != null) {
+            node.setAnnotation("refactorSkipReason", "Refactoring didn't reduce element count, but size " + finalEstimatedSize + " <= threshold " + LARGE_BYTECODE_SIZE);
+        }
 
     }
 
@@ -271,8 +403,8 @@ public class LargeBlockRefactorer {
 
         // Check if element contains ANY control flow (last/next/redo/goto)
         // We use a custom visitor that doesn't consider loop depth
-        ControlFlowFinder finder = new ControlFlowFinder();
-        element.accept(finder);
+        ControlFlowFinder finder = controlFlowFinderTl.get();
+        finder.scan(element);
         return finder.foundControlFlow;
     }
 
@@ -283,7 +415,7 @@ public class LargeBlockRefactorer {
         // Check for unsafe control flow using ControlFlowDetectorVisitor
         // This properly handles loop depth - unlabeled next/last/redo inside loops are safe
         controlFlowDetector.reset();
-        node.accept(controlFlowDetector);
+        controlFlowDetector.scan(node);
         if (controlFlowDetector.hasUnsafeControlFlow()) {
             return false;
         }
@@ -342,6 +474,18 @@ public class LargeBlockRefactorer {
             }
         }
         return false;
+    }
+
+    private static BlockNode createBlockNode(List<Node> elements, int tokenIndex, ThreadLocal<Boolean> skipRefactoring) {
+        BlockNode block;
+        skipRefactoring.set(true);
+        try {
+            block = new BlockNode(elements, tokenIndex);
+        } finally {
+            skipRefactoring.set(false);
+        }
+        enqueueForRefactor(block);
+        return block;
     }
 
 }

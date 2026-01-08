@@ -955,6 +955,33 @@ public class EmitterMethodCreator implements Opcodes {
             // Special handling for ASM frame computation errors
             // Print stack trace to help debug the issue
             e.printStackTrace();
+            if (asmDebug) {
+                try {
+                    String failingClass = (ctx != null && ctx.javaClassInfo != null)
+                            ? ctx.javaClassInfo.javaClassName
+                            : "<unknown>";
+                    int failingIndex = ast != null ? ast.getIndex() : -1;
+                    String fileName = (ctx != null && ctx.errorUtil != null) ? ctx.errorUtil.getFileName() : "<unknown>";
+                    System.err.printf(
+                            "ASM frame compute crash in generated class: %s (astIndex=%d, at %s)\n",
+                            failingClass,
+                            failingIndex,
+                            fileName);
+                } catch (Throwable t) {
+                    t.printStackTrace();
+                }
+                try {
+                    if (ctx != null && ctx.javaClassInfo != null) {
+                        String previousName = ctx.javaClassInfo.javaClassName;
+                        ctx.javaClassInfo = new JavaClassInfo();
+                        ctx.javaClassInfo.javaClassName = previousName;
+                        ctx.clearContextCache();
+                    }
+                    getBytecodeInternal(ctx, ast, useTryCatch, true);
+                } catch (Throwable t) {
+                    t.printStackTrace();
+                }
+            }
             String formattedError = String.format(
                     "ASM bytecode generation failed: %s\n" +
                             "This typically occurs when:\n" +
