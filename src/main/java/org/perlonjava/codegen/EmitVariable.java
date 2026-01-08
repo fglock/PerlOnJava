@@ -443,7 +443,7 @@ public class EmitVariable {
 
                 node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));   // emit the value
 
-                boolean spillRhs = !(left instanceof OperatorNode op && op.operator.equals("keys"));
+                boolean spillRhs = true;
                 int rhsSlot = -1;
                 boolean pooledRhs = false;
 
@@ -471,13 +471,6 @@ public class EmitVariable {
                     mv.visitVarInsn(Opcodes.ASTORE, rhsSlot);
                 }
 
-                node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));   // emit the variable
-
-                if (spillRhs) {
-                    mv.visitVarInsn(Opcodes.ALOAD, rhsSlot);
-                    mv.visitInsn(Opcodes.SWAP);
-                }
-
                 OperatorNode nodeLeft = null;
                 if (node.left instanceof OperatorNode operatorNode) {
                     nodeLeft = operatorNode;
@@ -487,33 +480,44 @@ public class EmitVariable {
 
                     if (nodeLeft.operator.equals("keys")) {
                         // `keys %x = $number`  - preallocate hash capacity
-                        // The left side has evaluated keys %x, but we need the hash itself
-                        // Stack before: nothing (we'll emit both sides fresh)
-                        // Emit the hash operand directly instead of calling keys
+                        // Emit the hash operand directly instead of calling keys.
                         if (nodeLeft.operand != null) {
                             nodeLeft.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
                         }
                         // Stack: [hash]
-                        node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                        mv.visitVarInsn(Opcodes.ALOAD, rhsSlot);
                         // Stack: [hash, value]
                         mv.visitInsn(Opcodes.DUP2);  // Stack: [hash, value, hash, value]
-                        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, 
-                            "org/perlonjava/runtime/RuntimeScalar",
-                            "getInt", "()I", false); // Stack: [hash, value, hash, int]
                         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                            "org/perlonjava/runtime/RuntimeHash",
-                            "preallocateCapacity", "(I)V", false); // Stack: [hash, value]
+                                "org/perlonjava/runtime/RuntimeScalar",
+                                "getInt", "()I", false); // Stack: [hash, value, hash, int]
+                        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                                "org/perlonjava/runtime/RuntimeHash",
+                                "preallocateCapacity", "(I)V", false); // Stack: [hash, value]
                         mv.visitInsn(Opcodes.SWAP); // Stack: [value, hash]
                         mv.visitInsn(Opcodes.POP);  // Stack: [value]
-                        // value is left on stack as the result of the assignment
+
+                        if (ctx.contextType == RuntimeContextType.VOID) {
+                            mv.visitInsn(Opcodes.POP);
+                        }
+
                         if (pooledRhs) {
                             ctx.javaClassInfo.releaseSpillSlot();
                         }
                         return;  // Skip normal assignment processing
                     }
+                }
 
+                node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));   // emit the variable
+
+                if (spillRhs) {
+                    mv.visitVarInsn(Opcodes.ALOAD, rhsSlot);
+                    mv.visitInsn(Opcodes.SWAP);
+                }
+
+                if (nodeLeft != null) {
                     if (nodeLeft.operator.equals("\\")) {
-                        // `\$b = \$a` requires "refaliasing"
+                        // `\\$b = \\$a` requires "refaliasing"
                         if (!ctx.symbolTable.isFeatureCategoryEnabled("refaliasing")) {
                             throw new PerlCompilerException(node.tokenIndex, "Experimental aliasing via reference not enabled", ctx.errorUtil);
                         }

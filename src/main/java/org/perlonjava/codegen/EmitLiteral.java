@@ -375,48 +375,29 @@ public class EmitLiteral {
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "()V", false);
         // Stack: [RuntimeList]
 
-        JavaClassInfo.SpillRef listRef = null;
-        listRef = emitterVisitor.ctx.javaClassInfo.tryAcquirePooledSpillRef();
-        if (listRef != null) {
-            emitterVisitor.ctx.javaClassInfo.storeSpillRef(mv, listRef);
-        }
-        // Stack: [] (if listRef != null) else [RuntimeList]
+        JavaClassInfo.SpillRef listRef = emitterVisitor.ctx.javaClassInfo.acquireSpillRefOrAllocate(emitterVisitor.ctx.symbolTable);
+        emitterVisitor.ctx.javaClassInfo.storeSpillRef(mv, listRef);
+        // Stack: []
 
         // Populate the list with elements
         for (Node element : node.elements) {
-            if (listRef != null) {
-                // Generate code for the element with an empty operand stack so non-local control flow
-                // cannot leak extra operands.
-                element.accept(emitterVisitor);
-                JavaClassInfo.SpillRef elementRef = emitterVisitor.ctx.javaClassInfo.acquireSpillRefOrAllocate(emitterVisitor.ctx.symbolTable);
-                emitterVisitor.ctx.javaClassInfo.storeSpillRef(mv, elementRef);
+            // Generate code for the element with an empty operand stack so non-local control flow
+            // cannot leak extra operands.
+            element.accept(emitterVisitor);
+            JavaClassInfo.SpillRef elementRef = emitterVisitor.ctx.javaClassInfo.acquireSpillRefOrAllocate(emitterVisitor.ctx.symbolTable);
+            emitterVisitor.ctx.javaClassInfo.storeSpillRef(mv, elementRef);
 
-                emitterVisitor.ctx.javaClassInfo.loadSpillRef(mv, listRef);
-                emitterVisitor.ctx.javaClassInfo.loadSpillRef(mv, elementRef);
-                emitterVisitor.ctx.javaClassInfo.releaseSpillRef(elementRef);
-
-                // Add the element to the list
-                addElementToList(mv, element, contextType);
-                // Stack: []
-            } else {
-                mv.visitInsn(Opcodes.DUP);
-                // Stack: [RuntimeList]
-
-                emitterVisitor.ctx.javaClassInfo.incrementStackLevel(1);
-                // Generate code for the element, preserving the list's context
-                element.accept(emitterVisitor);
-                emitterVisitor.ctx.javaClassInfo.decrementStackLevel(1);
-
-                // Add the element to the list
-                addElementToList(mv, element, contextType);
-                // Stack: [RuntimeList]
-            }
-        }
-
-        if (listRef != null) {
             emitterVisitor.ctx.javaClassInfo.loadSpillRef(mv, listRef);
-            emitterVisitor.ctx.javaClassInfo.releaseSpillRef(listRef);
+            emitterVisitor.ctx.javaClassInfo.loadSpillRef(mv, elementRef);
+            emitterVisitor.ctx.javaClassInfo.releaseSpillRef(elementRef);
+
+            // Add the element to the list
+            addElementToList(mv, element, contextType);
+            // Stack: []
         }
+
+        emitterVisitor.ctx.javaClassInfo.loadSpillRef(mv, listRef);
+        emitterVisitor.ctx.javaClassInfo.releaseSpillRef(listRef);
         emitterVisitor.ctx.logDebug("visit(ListNode) end");
     }
 
