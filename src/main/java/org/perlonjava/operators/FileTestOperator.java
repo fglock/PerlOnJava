@@ -49,6 +49,26 @@ public class FileTestOperator {
 
     static RuntimeScalar lastFileHandle = new RuntimeScalar();
 
+    static boolean lastStatOk = false;
+    static int lastStatErrno = 0;
+    static RuntimeScalar lastStatArg = new RuntimeScalar();
+
+    static void updateLastStat(RuntimeScalar arg, boolean ok, int errno) {
+        lastStatArg.set(arg);
+        lastStatOk = ok;
+        lastStatErrno = errno;
+    }
+
+    private static boolean isUnderscoreTypeglob(RuntimeScalar fileHandle) {
+        if (fileHandle.value instanceof org.perlonjava.runtime.RuntimeGlob runtimeGlob) {
+            return runtimeGlob.globName != null && runtimeGlob.globName.endsWith("::_");
+        }
+        if (fileHandle.value instanceof RuntimeIO runtimeIO) {
+            return runtimeIO.globName != null && runtimeIO.globName.endsWith("::_");
+        }
+        return false;
+    }
+
     // Helper method to check if a string looks like a filehandle name
     private static boolean looksLikeFilehandle(String name) {
         // Check if it's a typical filehandle name (all caps, starts with letter, no path separators)
@@ -56,6 +76,16 @@ public class FileTestOperator {
     }
 
     public static RuntimeScalar fileTestLastHandle(String operator) {
+        // Perl's special '_' uses the last stat buffer. If the last stat failed,
+        // most operators report EBADF, except -T/-B which preserve the original errno.
+        if (!lastStatOk) {
+            if (operator.equals("-T") || operator.equals("-B")) {
+                getGlobalVariable("main::!").set(lastStatErrno != 0 ? lastStatErrno : 2);
+                return scalarUndef;
+            }
+            getGlobalVariable("main::!").set(9); // EBADF
+            return scalarUndef;
+        }
         return fileTest(operator, lastFileHandle);
     }
 
@@ -75,58 +105,37 @@ public class FileTestOperator {
 
             // Check if fh is null (invalid filehandle)
             if (fh == null) {
+                // Special case: -T/-B on * _ (or \*_) should preserve last stat errno when the last stat failed,
+                // even if the underscore typeglob doesn't have its IO slot initialized.
+                if ((operator.equals("-T") || operator.equals("-B")) && !lastStatOk && isUnderscoreTypeglob(fileHandle)) {
+                    getGlobalVariable("main::!").set(lastStatErrno != 0 ? lastStatErrno : 2);
+                    return scalarUndef;
+                }
                 // Set $! to EBADF (Bad file descriptor) = 9
                 getGlobalVariable("main::!").set(9);
-                return operator.equals("-l") ? scalarFalse : scalarUndef;
+                return scalarUndef;
+            }
+
+            // Special case: -T/-B on * _ (or \*_) should preserve last stat errno when the last stat failed.
+            if ((operator.equals("-T") || operator.equals("-B")) && !lastStatOk && isUnderscoreTypeglob(fileHandle)) {
+                getGlobalVariable("main::!").set(lastStatErrno != 0 ? lastStatErrno : 2);
+                return scalarUndef;
             }
 
             // Check for closed handle or no valid IO handles
             if ((fh.ioHandle == null || fh.ioHandle instanceof ClosedIOHandle) &&
                     fh.directoryIO == null) {
+                if ((operator.equals("-T") || operator.equals("-B")) && !lastStatOk && isUnderscoreTypeglob(fileHandle)) {
+                    getGlobalVariable("main::!").set(lastStatErrno != 0 ? lastStatErrno : 2);
+                    return scalarUndef;
+                }
                 // Set $! to EBADF (Bad file descriptor) = 9
                 getGlobalVariable("main::!").set(9);
-                return operator.equals("-l") ? scalarFalse : scalarUndef;
+                return scalarUndef;
             }
-
-            // Special handling for -t operator on file handles
-            if (operator.equals("-t")) {
-                // Check if the file handle is a TTY
-                // For now, return false for all file handles as we don't have TTY detection
-                return scalarFalse;
-            }
-
-            // Special handling for -f operator on file handles
-            if (operator.equals("-f")) {
-                // For filehandles, -f should return true if it's a regular file
-                // Check if it's a pipe or special handle
-                if (fh.ioHandle instanceof PipeInputChannel || fh.ioHandle instanceof PipeOutputChannel) {
-                    // Pipes are not regular files
-                    getGlobalVariable("main::!").set(0); // Clear error
-                    return scalarFalse;
-                }
-
-                // Check if it's a directory handle
-                if (fh.directoryIO != null) {
-                    // Directory handles are not regular files
-                    getGlobalVariable("main::!").set(0); // Clear error
-                    return scalarFalse;
-                }
-
-                // Check if it's an in-memory scalar handle
-                if (fh.ioHandle instanceof ScalarBackedIO) {
-                    // In-memory scalar handles are not regular files
-                    getGlobalVariable("main::!").set(0); // Clear error
-                    return scalarFalse;
-                }
-
-                // For most other filehandles (file I/O), assume it's a regular file
-                getGlobalVariable("main::!").set(0); // Clear error
-                return scalarTrue;
-            }
-
-            // For most other operators on file handles, return undef and set EBADF
+            // For file test operators on file handles, return undef and set EBADF
             getGlobalVariable("main::!").set(9);
-            return operator.equals("-l") ? scalarFalse : scalarUndef;
+            return scalarUndef;
         }
 
         // Handle undef - treat as non-existent file
@@ -197,8 +206,12 @@ public class FileTestOperator {
                 case "-e" -> {
                     // Check if file exists
                     boolean exists = Files.exists(path);
-                    getGlobalVariable("main::!").set(exists ? 0 : 2); // Clear error or set ENOENT
-                    yield getScalarBoolean(exists);
+                    if (!exists) {
+                        getGlobalVariable("main::!").set(2); // ENOENT
+                        yield scalarUndef;
+                    }
+                    getGlobalVariable("main::!").set(0); // Clear error
+                    yield scalarTrue;
                 }
                 case "-z" -> {
                     // Check if file is empty (zero size)
@@ -240,8 +253,28 @@ public class FileTestOperator {
                 case "-l" -> {
                     // Check if path is a symbolic link
                     boolean isSymLink = Files.isSymbolicLink(path);
-                    getGlobalVariable("main::!").set(isSymLink || Files.exists(path) ? 0 : 2);
-                    yield getScalarBoolean(isSymLink);
+                    if (isSymLink) {
+                        getGlobalVariable("main::!").set(0);
+                        yield scalarTrue;
+                    }
+                    if (!Files.exists(path)) {
+                        getGlobalVariable("main::!").set(2);
+                        yield scalarUndef;
+                    }
+                    getGlobalVariable("main::!").set(0);
+                    yield scalarFalse;
+                }
+                case "-o" -> {
+                    // Check if file is owned by the effective user id (approximate with current user)
+                    if (!Files.exists(path)) {
+                        getGlobalVariable("main::!").set(2); // ENOENT
+                        yield scalarUndef;
+                    }
+                    getGlobalVariable("main::!").set(0); // Clear error
+                    UserPrincipal owner = Files.getOwner(path);
+                    UserPrincipal currentUser = path.getFileSystem().getUserPrincipalLookupService()
+                            .lookupPrincipalByName(System.getProperty("user.name"));
+                    yield getScalarBoolean(owner.equals(currentUser));
                 }
                 case "-p" -> {
                     // Approximate check for named pipe (FIFO)
@@ -374,7 +407,7 @@ public class FileTestOperator {
         } catch (IOException e) {
             // Set error message in global variable and return false/undef
             getGlobalVariable("main::!").set(2); // ENOENT for most file operations
-            return operator.equals("-l") ? scalarFalse : scalarUndef;
+            return scalarUndef;
         }
     }
 

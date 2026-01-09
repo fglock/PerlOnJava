@@ -19,6 +19,7 @@ import java.nio.file.attribute.PosixFilePermission;
 import java.util.Set;
 
 import static org.perlonjava.operators.FileTestOperator.lastFileHandle;
+import static org.perlonjava.operators.FileTestOperator.updateLastStat;
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeIO.resolvePath;
 import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
@@ -111,6 +112,7 @@ public class Stat {
             if (fh == null) {
                 // Set $! to EBADF (Bad file descriptor) = 9
                 getGlobalVariable("main::!").set(9);
+                updateLastStat(arg, false, 9);
                 return res; // Return empty list
             }
 
@@ -119,12 +121,14 @@ public class Stat {
                     fh.directoryIO == null) {
                 // Set $! to EBADF (Bad file descriptor) = 9
                 getGlobalVariable("main::!").set(9);
+                updateLastStat(arg, false, 9);
                 return res; // Return empty list
             }
 
             // For in-memory file handles (like PerlIO::scalar), we can't stat them
             // They should return EBADF
             getGlobalVariable("main::!").set(9);
+            updateLastStat(arg, false, 9);
             return res;
         }
 
@@ -147,6 +151,7 @@ public class Stat {
 
             // It looks like a filehandle but isn't one, return EBADF
             getGlobalVariable("main::!").set(9);
+            updateLastStat(arg, false, 9);
             return res;
         }
 
@@ -163,13 +168,16 @@ public class Stat {
             statInternal(res, basicAttr, posixAttr);
             // Clear $! on success
             getGlobalVariable("main::!").set(0);
+            updateLastStat(arg, true, 0);
         } catch (NoSuchFileException e) {
             // Set $! to ENOENT (No such file or directory) = 2
             getGlobalVariable("main::!").set(2);
+            updateLastStat(arg, false, 2);
         } catch (IOException e) {
             // Returns the empty list if "stat" fails.
             // Set a generic error code for other IO errors
             getGlobalVariable("main::!").set(5); // EIO (Input/output error)
+            updateLastStat(arg, false, 5);
         }
         return res;
     }
@@ -186,6 +194,7 @@ public class Stat {
             if (fh == null) {
                 // Set $! to EBADF (Bad file descriptor) = 9
                 getGlobalVariable("main::!").set(9);
+                updateLastStat(arg, false, 9);
                 return res; // Return empty list
             }
 
@@ -194,12 +203,14 @@ public class Stat {
                     fh.directoryIO == null) {
                 // Set $! to EBADF (Bad file descriptor) = 9
                 getGlobalVariable("main::!").set(9);
+                updateLastStat(arg, false, 9);
                 return res; // Return empty list
             }
 
             // For in-memory file handles (like PerlIO::scalar), we can't lstat them
             // They should return EBADF
             getGlobalVariable("main::!").set(9);
+            updateLastStat(arg, false, 9);
             return res;
         }
 
@@ -222,6 +233,7 @@ public class Stat {
 
             // It looks like a filehandle but isn't one, return EBADF
             getGlobalVariable("main::!").set(9);
+            updateLastStat(arg, false, 9);
             return res;
         }
 
@@ -240,13 +252,16 @@ public class Stat {
             statInternal(res, basicAttr, posixAttr);
             // Clear $! on success
             getGlobalVariable("main::!").set(0);
+            updateLastStat(arg, true, 0);
         } catch (NoSuchFileException e) {
             // Set $! to ENOENT (No such file or directory) = 2
             getGlobalVariable("main::!").set(2);
+            updateLastStat(arg, false, 2);
         } catch (IOException e) {
             // Returns the empty list if "lstat" fails.
             // Set a generic error code for other IO errors
             getGlobalVariable("main::!").set(5); // EIO (Input/output error)
+            updateLastStat(arg, false, 5);
         }
         return res;
     }
