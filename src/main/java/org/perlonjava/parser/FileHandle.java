@@ -102,6 +102,10 @@ public class FileHandle {
             String name = IdentifierParser.parseSubroutineIdentifier(parser);
             if (name != null) {
                 fileHandle = parseBarewordHandle(parser, name);
+                if (fileHandle == null && name.matches("^[A-Z_][A-Z0-9_]*$")) {
+                    GlobalVariable.getGlobalIO(normalizeBarewordHandle(parser, name));
+                    fileHandle = parseBarewordHandle(parser, name);
+                }
             }
         }
         // Handle scalar variable file handles
