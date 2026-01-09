@@ -385,13 +385,13 @@ public class IOOperator {
     public static RuntimeScalar print(RuntimeList runtimeList, RuntimeScalar fileHandle) {
         RuntimeIO fh = fileHandle.getRuntimeIO();
 
+        if (fh instanceof TieHandle tieHandle) {
+            return TieHandle.tiedPrint(tieHandle, runtimeList);
+        }
+
         if (fh == null || ((fh.ioHandle == null || fh.ioHandle instanceof ClosedIOHandle) && fh.directoryIO == null)) {
             getGlobalVariable("main::!").set(9);
             return scalarFalse;
-        }
-
-        if (fh instanceof TieHandle tieHandle) {
-            return TieHandle.tiedPrint(tieHandle, runtimeList);
         }
 
         StringBuilder sb = new StringBuilder();
@@ -428,6 +428,14 @@ public class IOOperator {
      * @return A RuntimeScalar indicating the result of the write operation.
      */
     public static RuntimeScalar say(RuntimeList runtimeList, RuntimeScalar fileHandle) {
+        RuntimeIO fh = fileHandle.getRuntimeIO();
+        if (fh instanceof TieHandle tieHandle) {
+            RuntimeList args = new RuntimeList();
+            args.elements.addAll(runtimeList.elements);
+            args.elements.add(new RuntimeScalar("\n"));
+            return TieHandle.tiedPrint(tieHandle, args);
+        }
+
         StringBuilder sb = new StringBuilder();
         String separator = getGlobalVariable("main::,").toString(); // fetch $,
         boolean first = true;
@@ -446,7 +454,6 @@ public class IOOperator {
 
         try {
             // Write the content to the file handle
-            RuntimeIO fh = fileHandle.getRuntimeIO();
             if (fh == null || ((fh.ioHandle == null || fh.ioHandle instanceof ClosedIOHandle) && fh.directoryIO == null)) {
                 getGlobalVariable("main::!").set(9);
                 return scalarFalse;
