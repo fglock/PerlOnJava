@@ -19,6 +19,4 @@ sub boot_DynaLoader {
     # placeholder
 }
 
-undef &boot_DynaLoader;
-
 1;
