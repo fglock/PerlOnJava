@@ -753,10 +753,7 @@ public class PrototypeArgs {
             }
             throwNotEnoughArgumentsError(parser);
         }
-        // IMPORTANT: When parsing a single prototype argument, the comma token acts as an
-        // argument separator, not as Perl's comma operator. Use a higher precedence than
-        // ',' to prevent consuming additional arguments into the current expression.
-        Node expr = parser.parseExpression(parser.getPrecedence(",") + 1);
+        Node expr = parser.parseExpression(parser.getPrecedence(","));
         if (expr == null) {
             if (!isOptional) {
                 throwNotEnoughArgumentsError(parser);
