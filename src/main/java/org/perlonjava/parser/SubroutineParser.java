@@ -162,7 +162,9 @@ public class SubroutineParser {
         // Otherwise, check that the subroutine exists in the global namespace - then fetch prototype and attributes
         // Special case: For method calls to 'new', don't require existence check (for generated constructors)
         boolean isNewMethod = isMethod && subName.equals("new");
-        boolean subExists = isNewMethod || (!isMethod && GlobalVariable.existsGlobalCodeRef(fullName));
+        // IMPORTANT: GlobalVariable.getGlobalCodeRef() can create placeholder RuntimeCode entries.
+        // Treat a subroutine as existing only if it has a real implementation (RuntimeCode.defined()).
+        boolean subExists = isNewMethod || (!isMethod && GlobalVariable.existsGlobalCodeRefAsScalar(fullName).getBoolean());
         String prototype = null;
         List<String> attributes = null;
         if (!isNewMethod && subExists) {
@@ -194,7 +196,7 @@ public class SubroutineParser {
             LexerToken token = peek(parser);
             String fullName1 = NameNormalizer.normalizeVariableName(packageName, parser.ctx.symbolTable.getCurrentPackage());
             boolean isLexicalSub = parser.ctx.symbolTable.getSymbolEntry("&" + packageName) != null;
-            boolean isKnownSub = GlobalVariable.existsGlobalCodeRef(fullName1);
+            boolean isKnownSub = GlobalVariable.existsGlobalCodeRefAsScalar(fullName1).getBoolean();
             
             // Reject if:
             // 1. Explicitly marked as non-package (false in cache), OR
@@ -261,7 +263,12 @@ public class SubroutineParser {
                     || nextTok.text.equals(")")
                     || nextTok.text.equals("]")
                     || nextTok.text.equals(",");
+            boolean infixOp = nextTok.type == LexerTokenType.OPERATOR
+                    && (INFIX_OP.contains(nextTok.text)
+                        || nextTok.text.equals("?")
+                        || nextTok.text.equals(":"));
             if (!terminator
+                    && !infixOp
                     && nextTok.type != LexerTokenType.IDENTIFIER
                     && !nextTok.text.equals("->")
                     && !nextTok.text.equals("=>")) {
