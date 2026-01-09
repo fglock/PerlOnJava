@@ -30,6 +30,17 @@ import static org.perlonjava.parser.ParserNodeUtils.scalarUnderscore;
  */
 public class PrototypeArgs {
 
+    private static boolean isOpenDupMode(Node modeNode) {
+        if (modeNode instanceof StringNode stringNode) {
+            String mode = stringNode.value;
+            return mode.equals("<&") || mode.equals(">&") || mode.equals(">>&") ||
+                    mode.equals("+<&") || mode.equals("+>&") || mode.equals("+>>&") ||
+                    mode.equals("<&=") || mode.equals(">&=") || mode.equals(">>&=") ||
+                    mode.equals("+<&=") || mode.equals("+>&=") || mode.equals("+>>&=");
+        }
+        return false;
+    }
+
     /**
      * Throws a "Not enough arguments" error with the subroutine name if available.
      *
@@ -447,6 +458,30 @@ public class PrototypeArgs {
         if (needComma) {
             consumeCommas(parser);
         }
+
+        String operatorName = parser.ctx.symbolTable.getCurrentSubroutine();
+        if ("open".equals(operatorName) && args.elements.size() >= 2 && isOpenDupMode(args.elements.get(1))) {
+            int saveIndex = parser.tokenIndex;
+            Node filehandle = FileHandle.parseFileHandle(parser);
+            if (filehandle != null) {
+                filehandle.setAnnotation("context", "SCALAR");
+                args.elements.add(filehandle);
+
+                // Parse any remaining arguments after the filehandle
+                if (isComma(TokenUtils.peek(parser))) {
+                    consumeCommas(parser);
+                    ListNode remaining = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
+                    args.elements.addAll(remaining.elements);
+                }
+                return;
+            }
+
+            // FileHandle.parseFileHandle() can consume tokens and then decide it's not a filehandle
+            // (print-specific disambiguation). For open dup-modes, the third argument is allowed
+            // to be a scalar filehandle variable, so we must backtrack if no filehandle was produced.
+            parser.tokenIndex = saveIndex;
+        }
+
         ListNode argList = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
         // @ and % consume remaining arguments in LIST context
 //        for (Node element : argList.elements) {
@@ -718,7 +753,10 @@ public class PrototypeArgs {
             }
             throwNotEnoughArgumentsError(parser);
         }
-        Node expr = parser.parseExpression(parser.getPrecedence(","));
+        // IMPORTANT: When parsing a single prototype argument, the comma token acts as an
+        // argument separator, not as Perl's comma operator. Use a higher precedence than
+        // ',' to prevent consuming additional arguments into the current expression.
+        Node expr = parser.parseExpression(parser.getPrecedence(",") + 1);
         if (expr == null) {
             if (!isOptional) {
                 throwNotEnoughArgumentsError(parser);

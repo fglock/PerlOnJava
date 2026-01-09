@@ -131,6 +131,10 @@ public class CustomOutputStreamHandle implements IOHandle {
     @Override
     public RuntimeScalar close() {
         try {
+            if (outputStream == System.out || outputStream == System.err) {
+                outputStream.flush();
+                return scalarTrue;
+            }
             outputStream.close();
             return new RuntimeScalar(1); // Indicate success
         } catch (IOException e) {
