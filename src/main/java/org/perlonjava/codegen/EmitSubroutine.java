@@ -236,6 +236,15 @@ public class EmitSubroutine {
         emitterVisitor.ctx.logDebug("handleApplyElementOperator " + node + " in context " + emitterVisitor.ctx.contextType);
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
+        // Capture the call context into a local slot early.
+        // IMPORTANT: Do not leave the context int on the JVM operand stack while evaluating
+        // subroutine arguments. Argument evaluation may trigger non-local control flow
+        // propagation (e.g. last/next/redo) which jumps out of the expression; any stray
+        // stack items would then break ASM frame merging.
+        int callContextSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        emitterVisitor.pushCallContext();
+        mv.visitVarInsn(Opcodes.ISTORE, callContextSlot);
+
         String subroutineName = "";
         if (node.left instanceof OperatorNode operatorNode && operatorNode.operator.equals("&")) {
             if (operatorNode.operand instanceof IdentifierNode identifierNode) {
@@ -337,7 +346,7 @@ public class EmitSubroutine {
         mv.visitVarInsn(Opcodes.ALOAD, codeRefSlot);
         mv.visitVarInsn(Opcodes.ALOAD, nameSlot);
         mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
-        emitterVisitor.pushCallContext();   // Push call context to stack
+        mv.visitVarInsn(Opcodes.ILOAD, callContextSlot);   // Push call context to stack
         mv.visitMethodInsn(
                 Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/RuntimeCode",

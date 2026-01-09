@@ -385,6 +385,11 @@ public class IOOperator {
     public static RuntimeScalar print(RuntimeList runtimeList, RuntimeScalar fileHandle) {
         RuntimeIO fh = fileHandle.getRuntimeIO();
 
+        if (fh == null || ((fh.ioHandle == null || fh.ioHandle instanceof ClosedIOHandle) && fh.directoryIO == null)) {
+            getGlobalVariable("main::!").set(9);
+            return scalarFalse;
+        }
+
         if (fh instanceof TieHandle tieHandle) {
             return TieHandle.tiedPrint(tieHandle, runtimeList);
         }
@@ -442,6 +447,10 @@ public class IOOperator {
         try {
             // Write the content to the file handle
             RuntimeIO fh = fileHandle.getRuntimeIO();
+            if (fh == null || ((fh.ioHandle == null || fh.ioHandle instanceof ClosedIOHandle) && fh.directoryIO == null)) {
+                getGlobalVariable("main::!").set(9);
+                return scalarFalse;
+            }
             return fh.write(sb.toString());
         } catch (Exception e) {
             getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());

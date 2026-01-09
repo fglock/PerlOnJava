@@ -715,7 +715,15 @@ public class OperatorParser {
         }
 
         // Parse optional single argument (or default to $_)
-        ListNode listNode = ListParser.parseZeroOrOneList(parser, 0);
+        // If we've already consumed '(', we must parse a full expression up to ')'.
+        // Using parseZeroOrOneList here would parse without parentheses and may stop
+        // at low-precedence operators like the ternary ?:, leading to parse errors.
+        ListNode listNode;
+        if (paren) {
+            listNode = new ListNode(ListParser.parseList(parser, ")", 0), parser.tokenIndex);
+        } else {
+            listNode = ListParser.parseZeroOrOneList(parser, 0);
+        }
         Node operand;
         if (listNode.elements.isEmpty()) {
             // No arg: default to $_ (matches existing behavior of parseOperatorWithOneOptionalArgument)
@@ -727,9 +735,6 @@ public class OperatorParser {
             return null; // unreachable
         }
 
-        if (paren) {
-            TokenUtils.consume(parser, OPERATOR, ")");
-        }
         return new OperatorNode(token.text, operand, currentIndex);
     }
 

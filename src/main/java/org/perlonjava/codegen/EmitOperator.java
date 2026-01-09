@@ -482,10 +482,18 @@ public class EmitOperator {
         // Generate unique IDs for this glob instance
         int globId = ScalarGlobOperator.currentId++;
 
-        // public static RuntimeBase evaluate(id, patternArg, ctx)
+        int globIdSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
         mv.visitLdcInsn(globId);
+        mv.visitVarInsn(Opcodes.ISTORE, globIdSlot);
+
         // Accept the operand in SCALAR context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        int patternSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        mv.visitVarInsn(Opcodes.ASTORE, patternSlot);
+
+        // public static RuntimeBase evaluate(id, patternArg, ctx)
+        mv.visitVarInsn(Opcodes.ILOAD, globIdSlot);
+        mv.visitVarInsn(Opcodes.ALOAD, patternSlot);
         emitterVisitor.pushCallContext();
         emitOperator(node, emitterVisitor);
     }
