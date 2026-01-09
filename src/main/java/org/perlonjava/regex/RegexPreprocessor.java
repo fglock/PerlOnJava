@@ -40,6 +40,15 @@ public class RegexPreprocessor {
     // named capture (?<one> ... ) replace underscore in name
 
     static int captureGroupCount;
+    static boolean deferredUnicodePropertyEncountered;
+
+    static void markDeferredUnicodePropertyEncountered() {
+        deferredUnicodePropertyEncountered = true;
+    }
+
+    static boolean hadDeferredUnicodePropertyEncountered() {
+        return deferredUnicodePropertyEncountered;
+    }
 
     /**
      * Preprocesses a given regex string to make it compatible with Java's regex engine.
@@ -53,6 +62,7 @@ public class RegexPreprocessor {
      */
     static String preProcessRegex(String s, RegexFlags regexFlags) {
         captureGroupCount = 0;
+        deferredUnicodePropertyEncountered = false;
 
         s = convertPythonStyleGroups(s);
         s = transformSimpleConditionals(s);

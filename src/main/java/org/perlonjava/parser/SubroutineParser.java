@@ -162,20 +162,25 @@ public class SubroutineParser {
         // Otherwise, check that the subroutine exists in the global namespace - then fetch prototype and attributes
         // Special case: For method calls to 'new', don't require existence check (for generated constructors)
         boolean isNewMethod = isMethod && subName.equals("new");
-        // IMPORTANT: GlobalVariable.getGlobalCodeRef() can create placeholder RuntimeCode entries.
-        // Treat a subroutine as existing only if it has a real implementation (RuntimeCode.defined()).
-        boolean subExists = isNewMethod || (!isMethod && GlobalVariable.existsGlobalCodeRefAsScalar(fullName).getBoolean());
+        boolean subExists = isNewMethod;
         String prototype = null;
         List<String> attributes = null;
-        if (!isNewMethod && subExists) {
-            // Fetch the subroutine reference
+        if (!isNewMethod && !isMethod && GlobalVariable.existsGlobalCodeRef(fullName)) {
             RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName);
-            if (codeRef.value == null) {
-                // subExists = false;
-            } else {
-                prototype = ((RuntimeCode) codeRef.value).prototype;
-                attributes = ((RuntimeCode) codeRef.value).attributes;
+            if (codeRef.value instanceof RuntimeCode runtimeCode) {
+                prototype = runtimeCode.prototype;
+                attributes = runtimeCode.attributes;
+                subExists = runtimeCode.methodHandle != null
+                        || runtimeCode.compilerSupplier != null
+                        || runtimeCode.isBuiltin
+                        || prototype != null
+                        // Forward declarations like `sub foo;` create a RuntimeCode with a non-null
+                        // attributes list (possibly empty). Placeholders created implicitly use null.
+                        || attributes != null;
             }
+        }
+        if (!subExists && !isNewMethod && !isMethod) {
+            subExists = GlobalVariable.existsGlobalCodeRefAsScalar(fullName).getBoolean();
         }
         parser.ctx.logDebug("SubroutineCall exists " + subExists + " prototype `" + prototype + "` attributes " + attributes);
 
@@ -196,7 +201,17 @@ public class SubroutineParser {
             LexerToken token = peek(parser);
             String fullName1 = NameNormalizer.normalizeVariableName(packageName, parser.ctx.symbolTable.getCurrentPackage());
             boolean isLexicalSub = parser.ctx.symbolTable.getSymbolEntry("&" + packageName) != null;
-            boolean isKnownSub = GlobalVariable.existsGlobalCodeRefAsScalar(fullName1).getBoolean();
+            boolean isKnownSub = false;
+            if (GlobalVariable.existsGlobalCodeRef(fullName1)) {
+                RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName1);
+                if (codeRef.value instanceof RuntimeCode runtimeCode) {
+                    isKnownSub = runtimeCode.methodHandle != null
+                            || runtimeCode.compilerSupplier != null
+                            || runtimeCode.isBuiltin
+                            || runtimeCode.prototype != null
+                            || runtimeCode.attributes != null;
+                }
+            }
             
             // Reject if:
             // 1. Explicitly marked as non-package (false in cache), OR
