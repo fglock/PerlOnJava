@@ -199,6 +199,8 @@ public class IOOperator {
 //        open FILEHANDLE,EXPR
 //        open FILEHANDLE
 
+        boolean ioDebug = System.getenv("JPERL_IO_DEBUG") != null;
+
         // Get the filehandle - this should be an lvalue RuntimeScalar
         // For array/hash elements like $fh0[0], this is the actual lvalue that can be modified
         // We assert it's a RuntimeScalar rather than calling .scalar() which would create a copy
@@ -218,12 +220,20 @@ public class IOOperator {
             // 3-argument open
             RuntimeScalar secondArg = args[2].scalar();
 
-            // Check for filehandle duplication modes (<&, >&, +<&, <&=, >&=, +<&=)
-            if (mode.equals("<&") || mode.equals(">&") || mode.equals("+<&") ||
-                    mode.equals("<&=") || mode.equals(">&=") || mode.equals("+<&=")) {
+            // Check for filehandle duplication modes (<&, >&, >>&, +<&, +>&, +>>& and &= variants)
+            if (mode.equals("<&") || mode.equals(">&") || mode.equals(">>&") ||
+                    mode.equals("+<&") || mode.equals("+>&") || mode.equals("+>>&") ||
+                    mode.equals("<&=") || mode.equals(">&=") || mode.equals(">>&=") ||
+                    mode.equals("+<&=") || mode.equals("+>&=") || mode.equals("+>>&=")) {
                 // Handle filehandle duplication
                 String argStr = secondArg.toString();
                 boolean isParsimonious = mode.endsWith("="); // &= modes reuse file descriptor
+
+                if (ioDebug) {
+                    System.err.println("[JPERL_IO_DEBUG] open dup-mode: mode=" + mode + " argStr=" + argStr +
+                            " argType=" + secondArg.type);
+                    System.err.flush();
+                }
 
                 // Check if it's a numeric file descriptor
                 if (argStr.matches("^\\d+$")) {
@@ -247,6 +257,18 @@ public class IOOperator {
                     try {
                         RuntimeIO sourceHandle = secondArg.getRuntimeIO();
                         if (sourceHandle != null && sourceHandle.ioHandle != null) {
+                            if (ioDebug) {
+                                String srcFileno;
+                                try {
+                                    srcFileno = sourceHandle.ioHandle.fileno().toString();
+                                } catch (Throwable t) {
+                                    srcFileno = "<err>";
+                                }
+                                System.err.println("[JPERL_IO_DEBUG] open dup-mode sourceHandle ioHandle=" +
+                                        sourceHandle.ioHandle.getClass().getName() + " fileno=" + srcFileno +
+                                        " ioHandleId=" + System.identityHashCode(sourceHandle.ioHandle));
+                                System.err.flush();
+                            }
                             if (isParsimonious) {
                                 // &= mode: reuse the same file descriptor (parsimonious)
                                 fh = sourceHandle;
@@ -305,6 +327,19 @@ public class IOOperator {
 
         // Check if the filehandle already contains a GLOB
         if ((fileHandle.type == RuntimeScalarType.GLOB || fileHandle.type == RuntimeScalarType.GLOBREFERENCE) && fileHandle.value instanceof RuntimeGlob glob) {
+            if (ioDebug && glob.globName != null && (glob.globName.equals("main::STDOUT") || glob.globName.equals("main::STDERR") || glob.globName.equals("main::STDIN"))) {
+                String ioHandleClass = fh != null && fh.ioHandle != null ? fh.ioHandle.getClass().getName() : "null";
+                String filenoStr;
+                try {
+                    filenoStr = fh != null && fh.ioHandle != null ? fh.ioHandle.fileno().toString() : "undef";
+                } catch (Throwable t) {
+                    filenoStr = "<err>";
+                }
+                System.err.println("[JPERL_IO_DEBUG] open assign " + glob.globName + " mode=" + mode +
+                        " ioHandle=" + ioHandleClass + " fileno=" + filenoStr +
+                        " ioHandleId=" + (fh != null && fh.ioHandle != null ? System.identityHashCode(fh.ioHandle) : 0));
+                System.err.flush();
+            }
             glob.setIO(fh);
         } else {
             // Create a new anonymous GLOB and assign it to the lvalue
@@ -1918,6 +1953,20 @@ public class IOOperator {
         RuntimeIO duplicate = new RuntimeIO();
         duplicate.ioHandle = original.ioHandle;
         duplicate.currentLineNumber = original.currentLineNumber;
+
+        if (System.getenv("JPERL_IO_DEBUG") != null) {
+            String origFileno;
+            try {
+                origFileno = original.ioHandle.fileno().toString();
+            } catch (Throwable t) {
+                origFileno = "<err>";
+            }
+            System.err.println("[JPERL_IO_DEBUG] duplicateFileHandle: origIoHandle=" + original.ioHandle.getClass().getName() +
+                    " origFileno=" + origFileno +
+                    " origIoHandleId=" + System.identityHashCode(original.ioHandle) +
+                    " dupIoHandleId=" + System.identityHashCode(duplicate.ioHandle));
+            System.err.flush();
+        }
 
         return duplicate;
     }

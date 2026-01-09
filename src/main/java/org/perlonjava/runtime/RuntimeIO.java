@@ -10,6 +10,7 @@ package org.perlonjava.runtime;
 
 import org.perlonjava.io.*;
 import org.perlonjava.operators.WarnDie;
+import org.perlonjava.perlmodule.Warnings;
 
 import java.io.File;
 import java.io.IOException;
@@ -354,7 +355,11 @@ public class RuntimeIO extends RuntimeScalar {
                 return org.perlonjava.operators.IOOperator.openFileHandleDup(fileName, mode);
             }
 
-            Path filePath = resolvePath(fileName);
+            Path filePath = resolvePath(fileName, "open");
+            if (filePath == null) {
+                getGlobalVariable("main::!").set(2);
+                return null;
+            }
             Set<StandardOpenOption> options = fh.convertMode(mode);
 
             // Initialize ioHandle with CustomFileChannel
@@ -555,7 +560,16 @@ public class RuntimeIO extends RuntimeScalar {
      * @return Path object for the file
      */
     public static Path resolvePath(String fileName) {
-        Path path = Paths.get(fileName);
+        return resolvePath(fileName, "path");
+    }
+
+    public static Path resolvePath(String fileName, String opName) {
+        String sanitized = sanitizePathname(opName, fileName);
+        if (sanitized == null) {
+            return null;
+        }
+
+        Path path = Paths.get(sanitized);
 
         // If the path is already absolute, return it as-is
         if (path.isAbsolute()) {
@@ -563,7 +577,7 @@ public class RuntimeIO extends RuntimeScalar {
         }
 
         // For relative paths, resolve against current directory
-        return Paths.get(System.getProperty("user.dir")).resolve(fileName).toAbsolutePath();
+        return Paths.get(System.getProperty("user.dir")).resolve(sanitized).toAbsolutePath();
     }
 
     /**
@@ -667,7 +681,10 @@ public class RuntimeIO extends RuntimeScalar {
         }
 
         if (runtimeScalar.value instanceof RuntimeGlob runtimeGlob) {
-            fh = (RuntimeIO) runtimeGlob.getIO().value;
+            RuntimeScalar ioScalar = runtimeGlob.getIO();
+            if (ioScalar != null) {
+                fh = ioScalar.getRuntimeIO();
+            }
         } else if (runtimeScalar.value instanceof RuntimeIO runtimeIO) {
             // Direct I/O handle
             fh = runtimeIO;
@@ -697,7 +714,57 @@ public class RuntimeIO extends RuntimeScalar {
      * Helper method to convert a Path to a File, resolving relative paths first.
      */
     public static File resolveFile(String pathString) {
-        return resolvePath(pathString).toFile();
+        Path path = resolvePath(pathString, "path");
+        return path != null ? path.toFile() : null;
+    }
+
+    public static File resolveFile(String pathString, String opName) {
+        Path path = resolvePath(pathString, opName);
+        return path != null ? path.toFile() : null;
+    }
+
+    public static String sanitizePathname(String opName, String fileName) {
+        if (fileName == null) {
+            return null;
+        }
+
+        String s = fileName;
+        while (!s.isEmpty() && s.charAt(s.length() - 1) == '\0') {
+            s = s.substring(0, s.length() - 1);
+        }
+        if (s.indexOf('\0') >= 0) {
+            if (Warnings.warningManager.isWarningEnabled("syscalls")) {
+                String display = fileName.replace("\0", "\\0");
+                WarnDie.warn(
+                        new RuntimeScalar("Invalid \\\\0 character in pathname for " + opName + ": " + display),
+                        new RuntimeScalar("")
+                );
+            }
+            return null;
+        }
+        return s;
+    }
+
+    public static String sanitizeGlobPattern(String pattern) {
+        if (pattern == null) {
+            return null;
+        }
+
+        String s = pattern;
+        while (!s.isEmpty() && s.charAt(s.length() - 1) == '\0') {
+            s = s.substring(0, s.length() - 1);
+        }
+        if (s.indexOf('\0') >= 0) {
+            if (Warnings.warningManager.isWarningEnabled("syscalls")) {
+                String display = pattern.replace("\0", "\\0");
+                WarnDie.warn(
+                        new RuntimeScalar("Invalid \\\\0 character in pattern for glob: " + display),
+                        new RuntimeScalar("")
+                );
+            }
+            return null;
+        }
+        return s;
     }
 
     /**
@@ -918,6 +985,16 @@ public class RuntimeIO extends RuntimeScalar {
         }
         lastAccesseddHandle = this;
         RuntimeScalar result = ioHandle.write(data);
+        if (System.getenv("JPERL_IO_DEBUG") != null) {
+            if (("main::STDOUT".equals(globName) || "main::STDERR".equals(globName)) &&
+                    (ioHandle instanceof ClosedIOHandle || !result.getDefinedBoolean())) {
+                System.err.println("[JPERL_IO_DEBUG] write failed: glob=" + globName +
+                        " ioHandle=" + (ioHandle == null ? "null" : ioHandle.getClass().getName()) +
+                        " defined=" + result.getDefinedBoolean() +
+                        " errno=" + getGlobalVariable("main::!").toString());
+                System.err.flush();
+            }
+        }
         if (data.endsWith("\n")) {
             ioHandle.flush();
         }
