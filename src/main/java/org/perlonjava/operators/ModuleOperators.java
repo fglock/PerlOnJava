@@ -587,6 +587,11 @@ public class ModuleOperators {
         }
         parsedArgs.code = code;
 
+        String requireDebugPre = System.getenv("JPERL_REQUIRE_DEBUG");
+        if (requireDebugPre != null && !requireDebugPre.isEmpty()) {
+            System.err.println((isRequire ? "require" : "do") + " loading " + fileName + " => " + parsedArgs.fileName);
+        }
+
         // Set %INC if requested (before execution)
         if (setINC) {
             // Check if the hook already set %INC to a custom value

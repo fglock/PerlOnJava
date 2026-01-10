@@ -23,6 +23,9 @@ public abstract class AbstractNode implements Node {
     private static final int FLAG_QUEUED_FOR_REFACTOR = 2;
     private static final int FLAG_CHUNK_ALREADY_REFACTORED = 4;
 
+    private int cachedBytecodeSize = Integer.MIN_VALUE;
+    private byte cachedHasAnyControlFlow = -1;
+
     @Override
     public int getIndex() {
         return tokenIndex;
@@ -70,6 +73,22 @@ public abstract class AbstractNode implements Node {
             annotations = new HashMap<>();
         }
         annotations.put(key, value);
+    }
+
+    public Integer getCachedBytecodeSize() {
+        return cachedBytecodeSize == Integer.MIN_VALUE ? null : cachedBytecodeSize;
+    }
+
+    public void setCachedBytecodeSize(int size) {
+        this.cachedBytecodeSize = size;
+    }
+
+    public Boolean getCachedHasAnyControlFlow() {
+        return cachedHasAnyControlFlow < 0 ? null : cachedHasAnyControlFlow != 0;
+    }
+
+    public void setCachedHasAnyControlFlow(boolean hasAnyControlFlow) {
+        this.cachedHasAnyControlFlow = (byte) (hasAnyControlFlow ? 1 : 0);
     }
 
     public Object getAnnotation(String key) {

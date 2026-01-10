@@ -39,6 +39,14 @@ public class ControlFlowFinder implements Visitor {
             return;
         }
 
+        if (root instanceof AbstractNode abstractNode) {
+            Boolean cached = abstractNode.getCachedHasAnyControlFlow();
+            if (cached != null) {
+                foundControlFlow = cached;
+                return;
+            }
+        }
+
         int top = 0;
 
         ensureCapacity(0);
@@ -461,6 +469,10 @@ public class ControlFlowFinder implements Visitor {
 
             // Leaf nodes
             top--;
+        }
+
+        if (root instanceof AbstractNode abstractNode) {
+            abstractNode.setCachedHasAnyControlFlow(foundControlFlow);
         }
     }
 
