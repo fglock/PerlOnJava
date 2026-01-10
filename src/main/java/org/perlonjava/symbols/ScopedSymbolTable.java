@@ -35,7 +35,7 @@ public class ScopedSymbolTable {
     }
 
     // Stack to manage warning categories for each scope
-    public final Stack<Integer> warningFlagsStack = new Stack<>();
+    public final Stack<BitSet> warningFlagsStack = new Stack<>();
     // Stack to manage feature categories for each scope
     public final Stack<Integer> featureFlagsStack = new Stack<>();
     // Stack to manage strict options for each scope
@@ -57,14 +57,14 @@ public class ScopedSymbolTable {
     public ScopedSymbolTable() {
         // Initialize the warning categories stack with experimental warnings enabled by default
         // Experimental warnings are always on by default in Perl
-        int defaultWarnings = 0;
+        BitSet defaultWarnings = new BitSet();
         // Enable all experimental:: warnings by default
         for (Map.Entry<String, Integer> entry : warningBitPositions.entrySet()) {
             if (entry.getKey().startsWith("experimental::")) {
-                defaultWarnings |= (1 << entry.getValue());
+                defaultWarnings.set(entry.getValue());
             }
         }
-        warningFlagsStack.push(defaultWarnings);
+        warningFlagsStack.push((BitSet) defaultWarnings.clone());
         // Initialize the feature categories stack with an empty map for the global scope
         featureFlagsStack.push(0);
         // Initialize the strict options stack with 0 for the global scope
@@ -94,12 +94,12 @@ public class ScopedSymbolTable {
         return result.toString();
     }
 
-    public static String stringifyWarningFlags(int warningFlags) {
+    public static String stringifyWarningFlags(BitSet warningFlags) {
         StringBuilder result = new StringBuilder();
         for (Map.Entry<String, Integer> entry : warningBitPositions.entrySet()) {
             String warningName = entry.getKey();
             int bitPosition = entry.getValue();
-            if ((warningFlags & (1 << bitPosition)) != 0) {
+            if (bitPosition >= 0 && warningFlags.get(bitPosition)) {
                 if (!result.isEmpty()) {
                     result.append(", ");
                 }
@@ -134,7 +134,7 @@ public class ScopedSymbolTable {
         // Push a copy of the current subroutine-body flag onto the stack
         inSubroutineBodyStack.push(inSubroutineBodyStack.peek());
         // Push a copy of the current warning categories map onto the stack
-        warningFlagsStack.push(warningFlagsStack.peek());
+        warningFlagsStack.push((BitSet) warningFlagsStack.peek().clone());
         // Push a copy of the current feature categories map onto the stack
         featureFlagsStack.push(featureFlagsStack.peek());
         // Push a copy of the current strict options onto the stack
@@ -459,7 +459,7 @@ public class ScopedSymbolTable {
 
         // Clone warning flags
         st.warningFlagsStack.pop(); // Remove the initial value pushed by enterScope
-        st.warningFlagsStack.push(this.warningFlagsStack.peek());
+        st.warningFlagsStack.push((BitSet) this.warningFlagsStack.peek().clone());
 
         // Clone feature flags
         st.featureFlagsStack.pop(); // Remove the initial value pushed by enterScope
@@ -536,11 +536,11 @@ public class ScopedSymbolTable {
         sb.append("  ],\n");
 
         sb.append("  warningCategories: {\n");
-        int warningFlags = warningFlagsStack.peek();
+        BitSet warningFlags = warningFlagsStack.peek();
         for (Map.Entry<String, Integer> entry : warningBitPositions.entrySet()) {
             String warningName = entry.getKey();
             int bitPosition = entry.getValue();
-            boolean isEnabled = (warningFlags & (1 << bitPosition)) != 0;
+            boolean isEnabled = bitPosition >= 0 && warningFlags.get(bitPosition);
             sb.append("    ").append(warningName).append(": ").append(isEnabled).append(",\n");
         }
         sb.append("  },\n");
@@ -563,20 +563,20 @@ public class ScopedSymbolTable {
     public void enableWarningCategory(String category) {
         Integer bitPosition = warningBitPositions.get(category);
         if (bitPosition != null) {
-            warningFlagsStack.push(warningFlagsStack.pop() | (1 << bitPosition));
+            warningFlagsStack.peek().set(bitPosition);
         }
     }
 
     public void disableWarningCategory(String category) {
         Integer bitPosition = warningBitPositions.get(category);
         if (bitPosition != null) {
-            warningFlagsStack.push(warningFlagsStack.pop() & ~(1 << bitPosition));
+            warningFlagsStack.peek().clear(bitPosition);
         }
     }
 
     public boolean isWarningCategoryEnabled(String category) {
         Integer bitPosition = warningBitPositions.get(category);
-        return bitPosition != null && (warningFlagsStack.peek() & (1 << bitPosition)) != 0;
+        return bitPosition != null && warningFlagsStack.peek().get(bitPosition);
     }
 
     // Methods for managing features using bit positions
@@ -636,7 +636,7 @@ public class ScopedSymbolTable {
 
         // Copy warning flags
         this.warningFlagsStack.pop();
-        this.warningFlagsStack.push(source.warningFlagsStack.peek());
+        this.warningFlagsStack.push((BitSet) source.warningFlagsStack.peek().clone());
 
         // Copy feature flags
         this.featureFlagsStack.pop();
