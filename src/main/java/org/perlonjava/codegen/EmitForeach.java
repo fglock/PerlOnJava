@@ -187,8 +187,7 @@ public class EmitForeach {
             // This preserves aliasing semantics while ensuring list is evaluated before any
             // parent block's local $_ takes effect (e.g., in nested for loops)
             node.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "getArrayOfAlias", "()Lorg/perlonjava/runtime/RuntimeArray;", false);
-            
+
             // For statement modifiers, localize $_ ourselves
             if (needLocalizeUnderscore) {
                 mv.visitLdcInsn(globalVarName);
@@ -199,10 +198,28 @@ public class EmitForeach {
                         false);
                 mv.visitInsn(Opcodes.POP);  // Discard the returned scalar
             }
-            
-            // Get iterator from the array of aliases
+
+            // IMPORTANT: avoid materializing huge ranges.
+            // PerlRange.setArrayOfAlias() currently expands to a full list, which can OOM
+            // in Benchmark.pm (for (1..$n) with large $n).
+            Label notRangeLabel = new Label();
+            Label afterIterLabel = new Label();
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitTypeInsn(Opcodes.INSTANCEOF, "org/perlonjava/runtime/PerlRange");
+            mv.visitJumpInsn(Opcodes.IFEQ, notRangeLabel);
+
+            // Range: iterate directly.
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "iterator", "()Ljava/util/Iterator;", false);
+            mv.visitVarInsn(Opcodes.ASTORE, iteratorIndex);
+            mv.visitJumpInsn(Opcodes.GOTO, afterIterLabel);
+
+            // Non-range: preserve aliasing semantics by iterating an array-of-alias.
+            mv.visitLabel(notRangeLabel);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "getArrayOfAlias", "()Lorg/perlonjava/runtime/RuntimeArray;", false);
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray", "iterator", "()Ljava/util/Iterator;", false);
             mv.visitVarInsn(Opcodes.ASTORE, iteratorIndex);
+
+            mv.visitLabel(afterIterLabel);
         } else {
             // Standard path: obtain iterator for the list
             node.list.accept(emitterVisitor.with(RuntimeContextType.LIST));

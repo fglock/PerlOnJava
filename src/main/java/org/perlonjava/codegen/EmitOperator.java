@@ -81,6 +81,12 @@ public class EmitOperator {
     static void handleOpWithList(EmitterVisitor emitterVisitor, OperatorNode node) {
         // Accept the operand in LIST context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
+
+        // keys() depends on context (scalar/list/void), so pass call context.
+        if (node.operator.equals("keys")) {
+            emitterVisitor.pushCallContext();
+        }
+
         emitOperator(node, emitterVisitor);
     }
 

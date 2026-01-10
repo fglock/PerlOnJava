@@ -7,7 +7,7 @@ import org.perlonjava.astvisitor.Visitor;
  * compiler flags such as warnings, features, and strict options.
  */
 public class CompilerFlagNode extends AbstractNode {
-    private final int warningFlags;
+    private final java.util.BitSet warningFlags;
     private final int featureFlags;
     private final int strictOptions;
 
@@ -19,8 +19,8 @@ public class CompilerFlagNode extends AbstractNode {
      * @param strictOptions the bitmask representing the state of strict options
      * @param tokenIndex    the index of the token in the source code
      */
-    public CompilerFlagNode(int warningFlags, int featureFlags, int strictOptions, int tokenIndex) {
-        this.warningFlags = warningFlags;
+    public CompilerFlagNode(java.util.BitSet warningFlags, int featureFlags, int strictOptions, int tokenIndex) {
+        this.warningFlags = (java.util.BitSet) warningFlags.clone();
         this.featureFlags = featureFlags;
         this.strictOptions = strictOptions;
         this.tokenIndex = tokenIndex;
@@ -31,7 +31,7 @@ public class CompilerFlagNode extends AbstractNode {
      *
      * @return the warning flags bitmask
      */
-    public int getWarningFlags() {
+    public java.util.BitSet getWarningFlags() {
         return warningFlags;
     }
 
