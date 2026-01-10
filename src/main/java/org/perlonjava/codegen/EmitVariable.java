@@ -87,6 +87,19 @@ public class EmitVariable {
         String var = NameNormalizer.normalizeVariableName(varName, ctx.symbolTable.getCurrentPackage());
         ctx.logDebug("GETVAR lookup global " + sigil + varName + " normalized to " + var + " createIfNotExists:" + createIfNotExists);
 
+        // Perl creates package symbols at compile time when they are referenced.
+        // Our emitter runs before the program executes, so we pre-vivify globals here
+        // when creation is allowed. This makes stash enumeration (keys %pkg::) match Perl.
+        if (createIfNotExists) {
+            if (sigil.equals("$")) {
+                GlobalVariable.getGlobalVariable(var);
+            } else if (sigil.equals("@")) {
+                GlobalVariable.getGlobalArray(var);
+            } else if (sigil.equals("%") && !var.endsWith("::")) {
+                GlobalVariable.getGlobalHash(var);
+            }
+        }
+
         if (sigil.equals("$") && (createIfNotExists || GlobalVariable.existsGlobalVariable(var))) {
             // fetch a global variable
             ctx.mv.visitLdcInsn(var);

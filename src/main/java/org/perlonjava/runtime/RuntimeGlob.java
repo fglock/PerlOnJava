@@ -209,6 +209,13 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 }
                 yield new RuntimeScalar(); // Return undef if code doesn't exist
             }
+            case "PACKAGE" -> {
+                // Return the package that owns this glob. If the package has been undefined,
+                // its bless id will have been anonymized to "__ANON__".
+                int lastColonIndex = this.globName.lastIndexOf("::");
+                String pkg = lastColonIndex >= 0 ? this.globName.substring(0, lastColonIndex) : "main";
+                yield new RuntimeScalar(NameNormalizer.getBlessStrForClassName(pkg));
+            }
             case "IO" -> {
                 // In Perl, accessing the IO slot returns a GLOB reference that can be blessed
                 // Convert GLOB type to GLOBREFERENCE so it behaves like other references
