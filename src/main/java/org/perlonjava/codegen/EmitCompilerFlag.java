@@ -9,7 +9,7 @@ public class EmitCompilerFlag {
 
         // Set the warning flags
         currentScope.warningFlagsStack.pop();
-        currentScope.warningFlagsStack.push(node.getWarningFlags());
+        currentScope.warningFlagsStack.push((java.util.BitSet) node.getWarningFlags().clone());
 
         // Set the feature flags
         currentScope.featureFlagsStack.pop();
