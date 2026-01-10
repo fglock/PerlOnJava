@@ -599,7 +599,7 @@ public class StatementParser {
 
         // return the current compiler flags
         return new CompilerFlagNode(
-                ctx.symbolTable.warningFlagsStack.getLast(),
+                (java.util.BitSet) ctx.symbolTable.warningFlagsStack.getLast().clone(),
                 ctx.symbolTable.featureFlagsStack.getLast(),
                 ctx.symbolTable.strictOptionsStack.getLast(),
                 parser.tokenIndex);

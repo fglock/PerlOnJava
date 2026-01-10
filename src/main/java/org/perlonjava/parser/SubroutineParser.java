@@ -452,6 +452,10 @@ public class SubroutineParser {
             return new ListNode(parser.tokenIndex);
         }
 
+        if (!wantName && !peek(parser).text.equals("{")) {
+            parser.throwCleanError("Illegal declaration of anonymous subroutine");
+        }
+
         // After parsing name, prototype, and attributes, we expect an opening curly brace '{' to denote the start of the subroutine block.
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
 
