@@ -495,6 +495,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
         } else {
             // Regular method lookup through inheritance
+            if ("__ANON__".equals(perlClassName)) {
+                throw new PerlCompilerException("Can't use anonymous symbol table for method lookup");
+            }
             method = InheritanceResolver.findMethodInHierarchy(methodName, perlClassName, null, 0);
         }
 

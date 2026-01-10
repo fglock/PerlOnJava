@@ -1,5 +1,7 @@
 package org.perlonjava.runtime;
 
+import org.perlonjava.mro.InheritanceResolver;
+
 import java.util.*;
 
 /**
@@ -303,7 +305,26 @@ public class RuntimeStash extends RuntimeHash {
      * @return The current RuntimeStash instance after undefining its elements.
      */
     public RuntimeStash undefine() {
+        // Perl: undef %pkg:: clears the package symbol table and makes the stash anonymous.
+        // We must remove all slots from the GlobalVariable maps, not just clear the view.
+        String prefix = this.namespace;
+
+        GlobalVariable.globalVariables.keySet().removeIf(k -> k.startsWith(prefix));
+        GlobalVariable.globalArrays.keySet().removeIf(k -> k.startsWith(prefix));
+        GlobalVariable.globalHashes.keySet().removeIf(k -> k.startsWith(prefix));
+        GlobalVariable.globalCodeRefs.keySet().removeIf(k -> k.startsWith(prefix));
+        GlobalVariable.globalIORefs.keySet().removeIf(k -> k.startsWith(prefix));
+        GlobalVariable.globalFormatRefs.keySet().removeIf(k -> k.startsWith(prefix));
+
         this.elements.clear();
+
+        // Make existing blessed objects become anonymous (__ANON__).
+        // namespace is stored with trailing "::".
+        String className = prefix.endsWith("::") ? prefix.substring(0, prefix.length() - 2) : prefix;
+        NameNormalizer.anonymizeBlessId(className);
+
+        // Method resolution depends on the stash.
+        InheritanceResolver.invalidateCache();
         return this;
     }
 
