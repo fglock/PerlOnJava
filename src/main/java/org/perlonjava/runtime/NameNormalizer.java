@@ -92,7 +92,7 @@ public class NameNormalizer {
         StringBuilder normalized = new StringBuilder(variable.length() + defaultPackage.length() + 2);
         if (variable.startsWith("::")) {
             // $::x
-            normalized.append(defaultPackage).append(variable);
+            normalized.append("main").append(variable);
         } else if (variable.contains("::")) {
             // If already in a package, return as-is
             normalized.append(variable);
