@@ -49,7 +49,11 @@ public class Operator {
         // Process each file in the list
         for (int i = 1; i < runtimeList.size(); i++) {
             String fileName = runtimeList.elements.get(i).toString();
-            String path = RuntimeIO.resolvePath(fileName).toString();
+            Path resolved = RuntimeIO.resolvePath(fileName, "chmod");
+            if (resolved == null) {
+                continue;
+            }
+            String path = resolved.toString();
 
             boolean success;
 

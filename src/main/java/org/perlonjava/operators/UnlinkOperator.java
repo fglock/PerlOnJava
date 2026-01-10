@@ -57,7 +57,10 @@ public class UnlinkOperator {
      */
     private static boolean deleteFile(String fileName) {
         try {
-            Path path = RuntimeIO.resolvePath(fileName);
+            Path path = RuntimeIO.resolvePath(fileName, "unlink");
+            if (path == null) {
+                return false;
+            }
 
             // Avoid native/JNA unlink implementations.
             // Some environments (including perl5 test runs) may not have JNA available,

@@ -307,7 +307,7 @@ public record OperatorHandler(String className, String methodName, int methodTyp
                 new OperatorHandler("org/perlonjava/runtime/RuntimeBase",
                         "keys",
                         Opcodes.INVOKEVIRTUAL,
-                        "()Lorg/perlonjava/runtime/RuntimeArray;"));
+                        "(I)Lorg/perlonjava/runtime/RuntimeBase;"));
         operatorHandlers.put("values",
                 new OperatorHandler("org/perlonjava/runtime/RuntimeBase",
                         "values",
