@@ -115,6 +115,10 @@ public class RuntimeIO extends RuntimeScalar {
      */
     public static RuntimeIO lastAccesseddHandle;
 
+    // Tracks the last handle used for output writes (print/say/etc). This must not
+    // clobber lastAccesseddHandle, which is used for ${^LAST_FH} and $.
+    public static RuntimeIO lastWrittenHandle;
+
     /**
      * The currently selected filehandle for output operations.
      * Used by print/printf when no filehandle is specified.
@@ -128,6 +132,7 @@ public class RuntimeIO extends RuntimeScalar {
         MODE_OPTIONS.put(">>", EnumSet.of(StandardOpenOption.WRITE, StandardOpenOption.CREATE, StandardOpenOption.APPEND));
         MODE_OPTIONS.put("+<", EnumSet.of(StandardOpenOption.READ, StandardOpenOption.WRITE));
         MODE_OPTIONS.put("+>", EnumSet.of(StandardOpenOption.READ, StandardOpenOption.WRITE, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING));
+        MODE_OPTIONS.put("+>>", EnumSet.of(StandardOpenOption.READ, StandardOpenOption.WRITE, StandardOpenOption.CREATE));
     }
 
     /**
@@ -194,7 +199,7 @@ public class RuntimeIO extends RuntimeScalar {
      * @param out the OutputStream to wrap
      */
     public static void setCustomOutputStream(OutputStream out) {
-        lastAccesseddHandle = new RuntimeIO(new CustomOutputStreamHandle(out));
+        lastWrittenHandle = new RuntimeIO(new CustomOutputStreamHandle(out));
     }
 
     /**
@@ -228,7 +233,8 @@ public class RuntimeIO extends RuntimeScalar {
         getGlobalIO("main::STDOUT").setIO(stdout);
         getGlobalIO("main::STDERR").setIO(stderr);
         getGlobalIO("main::STDIN").setIO(stdin);
-        lastAccesseddHandle = stdout;
+        lastAccesseddHandle = null;
+        lastWrittenHandle = stdout;
         selectedHandle = stdout;
     }
 
@@ -373,9 +379,14 @@ public class RuntimeIO extends RuntimeScalar {
                 fh.ioHandle.truncate(0);
             }
             // Position at end of file for append mode
-            if (">>".equals(mode)) {
+            if (">>".equals(mode) || "+>>".equals(mode)) {
                 RuntimeScalar size = fh.ioHandle.tell();
                 fh.ioHandle.seek(size.getLong()); // Move to end for appending
+                if (fh.ioHandle instanceof org.perlonjava.io.CustomFileChannel cfc) {
+                    cfc.setAppendMode(true);
+                } else if (fh.ioHandle instanceof org.perlonjava.io.LayeredIOHandle layered && layered.getDelegate() instanceof org.perlonjava.io.CustomFileChannel cfc) {
+                    cfc.setAppendMode(true);
+                }
             }
 
             // Apply any I/O layers
@@ -976,14 +987,14 @@ public class RuntimeIO extends RuntimeScalar {
         needFlush = true;
         // Only flush lastAccessedHandle if it's a different handle AND doesn't share the same ioHandle
         // (duplicated handles share the same ioHandle, so flushing would be redundant and could cause deadlocks)
-        if (lastAccesseddHandle != null && 
-            lastAccesseddHandle != this && 
-            lastAccesseddHandle.needFlush && 
-            lastAccesseddHandle.ioHandle != this.ioHandle) {
+        if (lastWrittenHandle != null &&
+            lastWrittenHandle != this &&
+            lastWrittenHandle.needFlush &&
+            lastWrittenHandle.ioHandle != this.ioHandle) {
             // Synchronize terminal output for stdout and stderr
-            lastAccesseddHandle.flush();
+            lastWrittenHandle.flush();
         }
-        lastAccesseddHandle = this;
+        lastWrittenHandle = this;
         RuntimeScalar result = ioHandle.write(data);
         if (System.getenv("JPERL_IO_DEBUG") != null) {
             if (("main::STDOUT".equals(globName) || "main::STDERR".equals(globName)) &&

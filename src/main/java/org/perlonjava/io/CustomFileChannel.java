@@ -66,6 +66,9 @@ public class CustomFileChannel implements IOHandle {
      */
     private boolean isEOF;
 
+    // When true, writes should always occur at end-of-file (Perl's append semantics).
+    private boolean appendMode;
+
     /**
      * Helper for handling multi-byte character decoding across read boundaries
      */
@@ -81,6 +84,7 @@ public class CustomFileChannel implements IOHandle {
     public CustomFileChannel(Path path, Set<StandardOpenOption> options) throws IOException {
         this.fileChannel = FileChannel.open(path, options);
         this.isEOF = false;
+        this.appendMode = false;
     }
 
     /**
@@ -105,6 +109,11 @@ public class CustomFileChannel implements IOHandle {
             throw new IllegalArgumentException("Invalid options for FileDescriptor");
         }
         this.isEOF = false;
+        this.appendMode = false;
+    }
+
+    public void setAppendMode(boolean appendMode) {
+        this.appendMode = appendMode;
     }
 
     /**
@@ -135,6 +144,15 @@ public class CustomFileChannel implements IOHandle {
                 isEOF = true;
             }
 
+            // Also treat "at end of file" as EOF for Perl semantics (eof true after last successful read)
+            try {
+                if (fileChannel.position() >= fileChannel.size()) {
+                    isEOF = true;
+                }
+            } catch (IOException e) {
+                // ignore
+            }
+
             // Convert bytes to string where each char represents a byte
             StringBuilder result = new StringBuilder(bytesRead);
             for (int i = 0; i < bytesRead; i++) {
@@ -159,6 +177,9 @@ public class CustomFileChannel implements IOHandle {
     @Override
     public RuntimeScalar write(String string) {
         try {
+            if (appendMode) {
+                fileChannel.position(fileChannel.size());
+            }
             byte[] data = new byte[string.length()];
             for (int i = 0; i < string.length(); i++) {
                 data[i] = (byte) string.charAt(i);
@@ -256,7 +277,12 @@ public class CustomFileChannel implements IOHandle {
             }
 
             fileChannel.position(newPosition);
-            isEOF = false;  // Clear EOF flag after seeking
+            // Perl semantics: seeking to EOF sets eof flag, seeking elsewhere clears it.
+            try {
+                isEOF = (fileChannel.position() >= fileChannel.size());
+            } catch (IOException e) {
+                isEOF = false;
+            }
             return scalarTrue;
         } catch (IOException e) {
             return handleIOException(e, "seek failed");
