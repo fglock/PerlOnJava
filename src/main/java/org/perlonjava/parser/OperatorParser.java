@@ -746,16 +746,30 @@ public class OperatorParser {
         if (operand.elements.isEmpty()) {
             String defaultHandle = switch (operator) {
                 case "readline" -> "main::ARGV";
-                case "eof" -> "main::STDIN";
-                case "tell" -> "main::^LAST_FH";
+                case "eof", "tell" -> null;
                 case "truncate" ->
                         throw new PerlCompilerException(parser.tokenIndex, "Not enough arguments for " + token.text, parser.ctx.errorUtil);
                 default ->
                         throw new PerlCompilerException(parser.tokenIndex, "Unexpected value: " + token.text, parser.ctx.errorUtil);
             };
-            handle = new IdentifierNode(defaultHandle, currentIndex);
+            if (defaultHandle == null) {
+                handle = new OperatorNode("undef", null, currentIndex);
+            } else {
+                handle = new IdentifierNode(defaultHandle, currentIndex);
+            }
         } else {
             handle = operand.elements.removeFirst();
+
+            if (handle instanceof IdentifierNode idNode) {
+                String name = idNode.name;
+                if (name.matches("^[A-Z_][A-Z0-9_]*$")) {
+                    GlobalVariable.getGlobalIO(FileHandle.normalizeBarewordHandle(parser, name));
+                    Node fh = FileHandle.parseBarewordHandle(parser, name);
+                    if (fh != null) {
+                        handle = fh;
+                    }
+                }
+            }
         }
         return new BinaryOperatorNode(operator, handle, operand, currentIndex);
     }

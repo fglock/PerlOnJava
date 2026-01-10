@@ -89,6 +89,7 @@ public class IOOperator {
                     whence = runtimeList.elements.get(1).scalar().getInt();
                 }
 
+                RuntimeIO.lastAccesseddHandle = runtimeIO;
                 return runtimeIO.ioHandle.seek(position, whence);
             } else {
                 return RuntimeIO.handleIOError("No file handle available for seek");
@@ -119,30 +120,33 @@ public class IOOperator {
     }
 
     public static RuntimeScalar tell(RuntimeScalar fileHandle) {
+        boolean argless = !fileHandle.getDefinedBoolean();
         RuntimeIO fh = fileHandle.getRuntimeIO();
         
         // If no explicit filehandle was provided (tell with no args),
         // fall back to the last accessed handle like Perl does.
         if (fh == null) {
-            RuntimeIO last = RuntimeIO.lastAccesseddHandle;
-            if (last != null) {
-                return last.tell();
+            if (argless) {
+                RuntimeIO last = RuntimeIO.lastAccesseddHandle;
+                if (last != null) {
+                    return last.tell();
+                }
+                GlobalVariable.getGlobalVariable("main::!").set(9);
+                return new RuntimeScalar(-1);
             }
-            // Set $! to EBADF (9) and return undef
             GlobalVariable.getGlobalVariable("main::!").set(9);
-            return RuntimeScalarCache.scalarUndef;
+            return new RuntimeScalar(-1);
         }
 
         if (fh instanceof TieHandle tieHandle) {
             return TieHandle.tiedTell(tieHandle);
         }
 
-        if (fh.ioHandle != null) {
-            return fh.ioHandle.tell();
+        if (fh.ioHandle == null || fh.ioHandle instanceof ClosedIOHandle) {
+            GlobalVariable.getGlobalVariable("main::!").set(9);
+            return new RuntimeScalar(-1);
         }
-        // Set $! to EBADF (9) and return undef if no underlying handle
-        GlobalVariable.getGlobalVariable("main::!").set(9);
-        return RuntimeScalarCache.scalarUndef;
+        return fh.tell();
     }
 
     public static RuntimeScalar binmode(RuntimeScalar fileHandle, RuntimeList runtimeList) {
@@ -326,8 +330,26 @@ public class IOOperator {
         }
 
         // Check if the filehandle already contains a GLOB
+        RuntimeGlob targetGlob = null;
         if ((fileHandle.type == RuntimeScalarType.GLOB || fileHandle.type == RuntimeScalarType.GLOBREFERENCE) && fileHandle.value instanceof RuntimeGlob glob) {
-            if (ioDebug && glob.globName != null && (glob.globName.equals("main::STDOUT") || glob.globName.equals("main::STDERR") || glob.globName.equals("main::STDIN"))) {
+            targetGlob = glob;
+        } else if ((fileHandle.type == RuntimeScalarType.STRING || fileHandle.type == RuntimeScalarType.BYTE_STRING) && fileHandle.value instanceof String name) {
+            // Symbolic filehandle: open($fh, ...) where $fh contains "TST" should open main::TST
+            // so later bareword usage like <TST> resolves to the correct global handle.
+            if (!name.isEmpty() && name.matches("^[A-Za-z_][A-Za-z0-9_]*(::[A-Za-z_][A-Za-z0-9_]*)*$")) {
+                String fullName = name.contains("::") ? name : ("main::" + name);
+                targetGlob = GlobalVariable.getGlobalIO(fullName);
+
+                // Store a reference to the named glob in the scalar lvalue
+                RuntimeScalar newGlob = new RuntimeScalar();
+                newGlob.type = RuntimeScalarType.GLOBREFERENCE;
+                newGlob.value = targetGlob;
+                fileHandle.set(newGlob);
+            }
+        }
+
+        if (targetGlob != null) {
+            if (ioDebug && targetGlob.globName != null && (targetGlob.globName.equals("main::STDOUT") || targetGlob.globName.equals("main::STDERR") || targetGlob.globName.equals("main::STDIN"))) {
                 String ioHandleClass = fh != null && fh.ioHandle != null ? fh.ioHandle.getClass().getName() : "null";
                 String filenoStr;
                 try {
@@ -335,12 +357,12 @@ public class IOOperator {
                 } catch (Throwable t) {
                     filenoStr = "<err>";
                 }
-                System.err.println("[JPERL_IO_DEBUG] open assign " + glob.globName + " mode=" + mode +
+                System.err.println("[JPERL_IO_DEBUG] open assign " + targetGlob.globName + " mode=" + mode +
                         " ioHandle=" + ioHandleClass + " fileno=" + filenoStr +
                         " ioHandleId=" + (fh != null && fh.ioHandle != null ? System.identityHashCode(fh.ioHandle) : 0));
                 System.err.flush();
             }
-            glob.setIO(fh);
+            targetGlob.setIO(fh);
         } else {
             // Create a new anonymous GLOB and assign it to the lvalue
             RuntimeScalar newGlob = new RuntimeScalar();
@@ -507,11 +529,23 @@ public class IOOperator {
      * @return A RuntimeScalar with the flag.
      */
     public static RuntimeScalar eof(RuntimeScalar fileHandle) {
+        boolean argless = !fileHandle.getDefinedBoolean();
         RuntimeIO fh = fileHandle.getRuntimeIO();
 
         // Handle undefined or invalid filehandle
         if (fh == null) {
-            // Set $! to EBADF (Bad file descriptor) - errno 9
+            if (argless) {
+                RuntimeIO last = RuntimeIO.lastAccesseddHandle;
+                if (last != null) {
+                    return last.eof();
+                }
+                // Perl's eof() defaults to ARGV if ${^LAST_FH} is unset
+                RuntimeIO argv = new RuntimeScalar("main::ARGV").getRuntimeIO();
+                if (argv == null || argv.ioHandle == null || argv.ioHandle instanceof ClosedIOHandle) {
+                    return RuntimeScalarCache.scalarTrue;
+                }
+                return argv.eof();
+            }
             GlobalVariable.getGlobalVariable("main::!")
                     .set(new RuntimeScalar(9));
             return RuntimeScalarCache.scalarUndef;
@@ -525,11 +559,22 @@ public class IOOperator {
     }
 
     public static RuntimeScalar eof(RuntimeList runtimeList, RuntimeScalar fileHandle) {
+        boolean argless = !fileHandle.getDefinedBoolean();
         RuntimeIO fh = fileHandle.getRuntimeIO();
 
         // Handle undefined or invalid filehandle
         if (fh == null) {
-            // Set $! to EBADF (Bad file descriptor) - errno 9
+            if (argless) {
+                RuntimeIO last = RuntimeIO.lastAccesseddHandle;
+                if (last != null) {
+                    return last.eof();
+                }
+                RuntimeIO argv = new RuntimeScalar("main::ARGV").getRuntimeIO();
+                if (argv == null || argv.ioHandle == null || argv.ioHandle instanceof ClosedIOHandle) {
+                    return RuntimeScalarCache.scalarTrue;
+                }
+                return argv.eof();
+            }
             GlobalVariable.getGlobalVariable("main::!")
                     .set(new RuntimeScalar(9));
             return RuntimeScalarCache.scalarUndef;

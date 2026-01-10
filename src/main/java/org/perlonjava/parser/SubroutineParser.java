@@ -277,7 +277,8 @@ public class SubroutineParser {
                     || nextTok.text.equals("}")
                     || nextTok.text.equals(")")
                     || nextTok.text.equals("]")
-                    || nextTok.text.equals(",");
+                    || nextTok.text.equals(",")
+                    || nextTok.type == LexerTokenType.EOF;
             boolean infixOp = nextTok.type == LexerTokenType.OPERATOR
                     && (INFIX_OP.contains(nextTok.text)
                         || nextTok.text.equals("?")

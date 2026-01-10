@@ -2,6 +2,8 @@ package org.perlonjava.runtime;
 
 import org.perlonjava.regex.RuntimeRegex;
 
+import java.util.Stack;
+
 import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
@@ -16,6 +18,11 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
  * parts of the string before or after a match.</p>
  */
 public class ScalarSpecialVariable extends RuntimeBaseProxy {
+
+    private record InputLineState(RuntimeIO lastHandle, int lastLineNumber, RuntimeScalar localValue) {
+    }
+
+    private static final Stack<InputLineState> inputLineStateStack = new Stack<>();
 
     // The type of special variable, represented by an enum.
     final Id variableId;
@@ -55,7 +62,30 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
      */
     @Override
     void vivify() {
+        if (variableId == Id.INPUT_LINE_NUMBER) {
+            if (lvalue == null) {
+                lvalue = new RuntimeScalar(0);
+            }
+            return;
+        }
         throw new PerlCompilerException("Modification of a read-only value attempted");
+    }
+
+    @Override
+    public RuntimeScalar set(RuntimeScalar value) {
+        if (variableId == Id.INPUT_LINE_NUMBER) {
+            vivify();
+            if (RuntimeIO.lastAccesseddHandle != null) {
+                RuntimeIO.lastAccesseddHandle.currentLineNumber = value.getInt();
+                lvalue.set(RuntimeIO.lastAccesseddHandle.currentLineNumber);
+            } else {
+                lvalue.set(value);
+            }
+            this.type = lvalue.type;
+            this.value = lvalue.value;
+            return lvalue;
+        }
+        return super.set(value);
     }
 
     // Add itself to a RuntimeArray.
@@ -98,9 +128,15 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                     yield postmatch != null ? new RuntimeScalar(postmatch) : scalarUndef;
                 }
                 case LAST_FH -> new RuntimeScalar(RuntimeIO.lastAccesseddHandle);
-                case INPUT_LINE_NUMBER -> RuntimeIO.lastAccesseddHandle == null
-                        ? scalarUndef
-                        : getScalarInt(RuntimeIO.lastAccesseddHandle.currentLineNumber);
+                case INPUT_LINE_NUMBER -> {
+                    if (RuntimeIO.lastAccesseddHandle == null) {
+                        if (lvalue != null) {
+                            yield lvalue;
+                        }
+                        yield scalarUndef;
+                    }
+                    yield getScalarInt(RuntimeIO.lastAccesseddHandle.currentLineNumber);
+                }
                 case LAST_PAREN_MATCH -> {
                     String lastCapture = RuntimeRegex.lastCaptureString();
                     yield lastCapture != null ? new RuntimeScalar(lastCapture) : scalarUndef;
@@ -214,19 +250,14 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
      */
     @Override
     public void dynamicSaveState() {
-        System.out.println("ScalarSpecialVariable.dynamicSaveState");
-//        // Create a new RuntimeScalar to save the current state
-//        RuntimeScalar currentState = new RuntimeScalar();
-//        // Copy the current type and value to the new state
-//        currentState.type = this.type;
-//        currentState.value = this.value;
-//        currentState.blessId = this.blessId;
-//        // Push the current state onto the stack
-//        dynamicStateStack.push(currentState);
-//        // Clear the current type and value
-//        this.type = UNDEF;
-//        this.value = null;
-//        this.blessId = 0;
+        if (variableId == Id.INPUT_LINE_NUMBER) {
+            RuntimeIO handle = RuntimeIO.lastAccesseddHandle;
+            int lineNumber = handle != null ? handle.currentLineNumber : (lvalue != null ? lvalue.getInt() : 0);
+            RuntimeScalar localValue = lvalue != null ? new RuntimeScalar(lvalue) : null;
+            inputLineStateStack.push(new InputLineState(handle, lineNumber, localValue));
+            return;
+        }
+        super.dynamicSaveState();
     }
 
     /**
@@ -237,15 +268,22 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
      */
     @Override
     public void dynamicRestoreState() {
-        System.out.println("ScalarSpecialVariable.dynamicRestoreState");
-//        if (!dynamicStateStack.isEmpty()) {
-//            // Pop the most recent saved state from the stack
-//            RuntimeScalar previousState = dynamicStateStack.pop();
-//            // Restore the type, value from the saved state
-//            this.type = previousState.type;
-//            this.value = previousState.value;
-//            this.blessId = previousState.blessId;
-//        }
+        if (variableId == Id.INPUT_LINE_NUMBER) {
+            if (!inputLineStateStack.isEmpty()) {
+                InputLineState previous = inputLineStateStack.pop();
+                RuntimeIO.lastAccesseddHandle = previous.lastHandle;
+                if (previous.lastHandle != null) {
+                    previous.lastHandle.currentLineNumber = previous.lastLineNumber;
+                }
+                lvalue = previous.localValue;
+                if (lvalue != null) {
+                    this.type = lvalue.type;
+                    this.value = lvalue.value;
+                }
+            }
+            return;
+        }
+        super.dynamicRestoreState();
     }
 
     /**
