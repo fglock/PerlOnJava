@@ -13,8 +13,10 @@ import org.objectweb.asm.tree.analysis.SourceValue;
 import org.objectweb.asm.util.CheckClassAdapter;
 import org.objectweb.asm.util.Printer;
 import org.objectweb.asm.util.TraceClassVisitor;
-import org.perlonjava.astnode.Node;
+import org.perlonjava.astnode.*;
 import org.perlonjava.astvisitor.EmitterVisitor;
+import org.perlonjava.astrefactor.LargeBlockRefactorer;
+import org.perlonjava.parser.Parser;
 import org.perlonjava.runtime.GlobalVariable;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
@@ -346,6 +348,31 @@ public class EmitterMethodCreator implements Opcodes {
         boolean asmDebug = System.getenv("JPERL_ASM_DEBUG") != null;
         try {
             return getBytecodeInternal(ctx, ast, useTryCatch, false);
+        } catch (MethodTooLargeException tooLarge) {
+            // Best-effort: try a more aggressive large-block refactor pass, then retry once.
+            // This is only enabled when refactoring is explicitly requested.
+            String largecode = System.getenv("JPERL_LARGECODE");
+            boolean refactorEnabled = largecode != null && largecode.equalsIgnoreCase("refactor");
+            if (refactorEnabled && ast instanceof BlockNode blockAst) {
+                try {
+                    LargeBlockRefactorer.forceRefactorForCodegen(blockAst);
+
+                    // Reset JavaClassInfo to avoid reusing partially-resolved Labels.
+                    if (ctx != null && ctx.javaClassInfo != null) {
+                        String previousName = ctx.javaClassInfo.javaClassName;
+                        ctx.javaClassInfo = new JavaClassInfo();
+                        ctx.javaClassInfo.javaClassName = previousName;
+                        ctx.clearContextCache();
+                    }
+
+                    return getBytecodeInternal(ctx, ast, useTryCatch, false);
+                } catch (MethodTooLargeException retryTooLarge) {
+                    throw retryTooLarge;
+                } catch (Throwable ignored) {
+                    // Fall through to the original exception.
+                }
+            }
+            throw tooLarge;
         } catch (ArrayIndexOutOfBoundsException frameComputeCrash) {
             // In normal operation we MUST NOT fall back to no-frames output, as that will fail
             // verification on modern JVMs ("Expecting a stackmap frame...").
@@ -835,6 +862,142 @@ public class EmitterMethodCreator implements Opcodes {
             cw.visitEnd();
             classData = cw.toByteArray(); // Generate the bytecode
 
+            String bytecodeSizeDebug = System.getenv("JPERL_BYTECODE_SIZE_DEBUG");
+            if (bytecodeSizeDebug != null && !bytecodeSizeDebug.isEmpty()) {
+                try {
+                    System.err.println("BYTECODE_SIZE class=" + className + " bytes=" + classData.length);
+
+                    java.io.DataInputStream in = new java.io.DataInputStream(new java.io.ByteArrayInputStream(classData));
+                    int magic = in.readInt();
+                    if (magic != 0xCAFEBABE) {
+                        throw new RuntimeException("Bad class magic");
+                    }
+                    in.readUnsignedShort(); // minor
+                    in.readUnsignedShort(); // major
+
+                    int cpCount = in.readUnsignedShort();
+                    String[] utf8 = new String[cpCount];
+                    for (int i = 1; i < cpCount; i++) {
+                        int tag = in.readUnsignedByte();
+                        switch (tag) {
+                            case 1: { // Utf8
+                                int len = in.readUnsignedShort();
+                                byte[] buf = new byte[len];
+                                in.readFully(buf);
+                                utf8[i] = new String(buf, java.nio.charset.StandardCharsets.UTF_8);
+                                break;
+                            }
+                            case 3: // Integer
+                            case 4: // Float
+                                in.readInt();
+                                break;
+                            case 5: // Long
+                            case 6: // Double
+                                in.readLong();
+                                i++; // takes two cp slots
+                                break;
+                            case 7: // Class
+                            case 8: // String
+                            case 16: // MethodType
+                            case 19: // Module
+                            case 20: // Package
+                                in.readUnsignedShort();
+                                break;
+                            case 9: // Fieldref
+                            case 10: // Methodref
+                            case 11: // InterfaceMethodref
+                            case 12: // NameAndType
+                            case 18: // InvokeDynamic
+                                in.readUnsignedShort();
+                                in.readUnsignedShort();
+                                break;
+                            case 15: // MethodHandle
+                                in.readUnsignedByte();
+                                in.readUnsignedShort();
+                                break;
+                            case 17: // Dynamic
+                                in.readUnsignedShort();
+                                in.readUnsignedShort();
+                                break;
+                            default:
+                                throw new RuntimeException("Unknown constant pool tag: " + tag);
+                        }
+                    }
+
+                    in.readUnsignedShort(); // access_flags
+                    in.readUnsignedShort(); // this_class
+                    in.readUnsignedShort(); // super_class
+
+                    int interfacesCount = in.readUnsignedShort();
+                    for (int i = 0; i < interfacesCount; i++) {
+                        in.readUnsignedShort();
+                    }
+
+                    int fieldsCount = in.readUnsignedShort();
+                    for (int i = 0; i < fieldsCount; i++) {
+                        in.readUnsignedShort();
+                        in.readUnsignedShort();
+                        in.readUnsignedShort();
+                        int ac = in.readUnsignedShort();
+                        for (int a = 0; a < ac; a++) {
+                            in.readUnsignedShort();
+                            int alen = in.readInt();
+                            in.skipBytes(alen);
+                        }
+                    }
+
+                    int methodsCount = in.readUnsignedShort();
+                    long maxCodeLen = -1;
+                    for (int i = 0; i < methodsCount; i++) {
+                        in.readUnsignedShort(); // access
+                        int nameIdx = in.readUnsignedShort();
+                        int descIdx = in.readUnsignedShort();
+                        String mName = (nameIdx > 0 && nameIdx < utf8.length) ? utf8[nameIdx] : ("#" + nameIdx);
+                        String mDesc = (descIdx > 0 && descIdx < utf8.length) ? utf8[descIdx] : ("#" + descIdx);
+                        int ac = in.readUnsignedShort();
+                        long codeLen = -1;
+                        for (int a = 0; a < ac; a++) {
+                            int attrNameIdx = in.readUnsignedShort();
+                            String attrName = (attrNameIdx > 0 && attrNameIdx < utf8.length) ? utf8[attrNameIdx] : null;
+                            int alen = in.readInt();
+                            if ("Code".equals(attrName)) {
+                                in.readUnsignedShort(); // max_stack
+                                in.readUnsignedShort(); // max_locals
+                                codeLen = Integer.toUnsignedLong(in.readInt());
+                                // Skip rest of Code attribute
+                                in.skipBytes((int) codeLen);
+                                int exCount = in.readUnsignedShort();
+                                in.skipBytes(exCount * 8);
+                                int codeAttrCount = in.readUnsignedShort();
+                                for (int ca = 0; ca < codeAttrCount; ca++) {
+                                    in.readUnsignedShort();
+                                    int calen = in.readInt();
+                                    in.skipBytes(calen);
+                                }
+                            } else {
+                                in.skipBytes(alen);
+                            }
+                        }
+
+                        if (codeLen >= 0) {
+                            if (codeLen > maxCodeLen) {
+                                maxCodeLen = codeLen;
+                            }
+                            boolean isApply = "apply".equals(mName);
+                            boolean isLarge = codeLen >= 30000;
+                            if (isApply || isLarge) {
+                                System.err.println("BYTECODE_SIZE method=" + mName + mDesc + " code_bytes=" + codeLen);
+                            }
+                        }
+                    }
+
+                    if (maxCodeLen >= 0) {
+                        System.err.println("BYTECODE_SIZE max_code_bytes=" + maxCodeLen);
+                    }
+                } catch (Throwable ignored) {
+                }
+            }
+
             if (asmDebug && asmDebugClassMatches && asmDebugClassFilter != null && !asmDebugClassFilter.isEmpty()) {
                 try {
                     Path outDir = Paths.get(System.getProperty("java.io.tmpdir"), "perlonjava-asm");
@@ -1047,6 +1210,9 @@ public class EmitterMethodCreator implements Opcodes {
                     formattedError,
                     ctx.errorUtil);
         } catch (PerlCompilerException e) {
+            throw e;
+        } catch (MethodTooLargeException e) {
+            // Let this propagate so getBytecode() can attempt large-code refactoring and retry.
             throw e;
         } catch (RuntimeException e) {
             // Enhanced error message with debugging information

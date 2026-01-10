@@ -94,9 +94,9 @@ public class BytecodeSizeEstimator implements Visitor {
     public static int estimateSnippetSize(Node ast) {
         // Check cache first
         if (ast instanceof AbstractNode abstractNode) {
-            Object cached = abstractNode.getAnnotation("cachedBytecodeSize");
-            if (cached instanceof Integer) {
-                return (Integer) cached;
+            Integer cached = abstractNode.getCachedBytecodeSize();
+            if (cached != null) {
+                return cached;
             }
         }
         
@@ -106,9 +106,7 @@ public class BytecodeSizeEstimator implements Visitor {
         
         // Cache the result
         if (ast instanceof AbstractNode abstractNode) {
-            if (abstractNode.annotations != null) {
-                abstractNode.setAnnotation("cachedBytecodeSize", size);
-            }
+            abstractNode.setCachedBytecodeSize(size);
         }
         
         return size;

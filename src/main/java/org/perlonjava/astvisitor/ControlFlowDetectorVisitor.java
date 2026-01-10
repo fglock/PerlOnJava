@@ -112,9 +112,11 @@ public class ControlFlowDetectorVisitor implements Visitor {
                             }
                         }
 
-                        if ("next".equals(oper) && isLabeled) {
-                            if (DEBUG) System.err.println("ControlFlowDetector(scan): safe labeled next at tokenIndex=" + op.tokenIndex + " label=" + label);
-                        } else if (currentLoopDepth == 0 || isLabeled) {
+                        if (isLabeled) {
+                            if (DEBUG) System.err.println("ControlFlowDetector(scan): UNSAFE " + oper + " (labeled) at tokenIndex=" + op.tokenIndex + " label=" + label);
+                            hasUnsafeControlFlow = true;
+                            continue;
+                        } else if (currentLoopDepth == 0) {
                             if (DEBUG) System.err.println("ControlFlowDetector(scan): UNSAFE " + oper + " at tokenIndex=" + op.tokenIndex + " loopDepth=" + currentLoopDepth + " isLabeled=" + isLabeled + " label=" + label);
                             hasUnsafeControlFlow = true;
                             continue;

@@ -28,10 +28,12 @@ public class BlockRefactor {
      * @return a BinaryOperatorNode representing the anonymous subroutine call
      */
     public static BinaryOperatorNode createAnonSubCall(int tokenIndex, BlockNode nestedBlock) {
+        ArrayList<Node> args = new ArrayList<>(1);
+        args.add(variableAst("@", "_", tokenIndex));
         return new BinaryOperatorNode(
                 "->",
                 new SubroutineNode(null, null, null, nestedBlock, false, tokenIndex),
-                new ListNode(new ArrayList<>(List.of(variableAst("@", "_", tokenIndex))), tokenIndex),
+                new ListNode(args, tokenIndex),
                 tokenIndex
         );
     }
@@ -141,9 +143,6 @@ public class BlockRefactor {
         } finally {
             skipRefactoring.set(false);
         }
-
-        // Defer refactoring of blocks created during refactoring to an iterative queue.
-        LargeBlockRefactorer.enqueueForRefactor(block);
         return block;
     }
 
@@ -176,6 +175,17 @@ public class BlockRefactor {
             totalSampleSize += BytecodeSizeEstimator.estimateSnippetSize(nodes.get(index));
         }
         return (totalSampleSize * nodes.size()) / sampleSize;
+    }
+
+    public static long estimateTotalBytecodeSizeExact(List<Node> nodes) {
+        if (nodes.isEmpty()) {
+            return 0;
+        }
+        long total = 0;
+        for (Node node : nodes) {
+            total += BytecodeSizeEstimator.estimateSnippetSize(node);
+        }
+        return total;
     }
 
     /**
