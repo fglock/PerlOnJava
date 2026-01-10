@@ -103,12 +103,27 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                     if (nextSeparatorIndex == -1) {
                         entryKey = remainingKey;
                     } else {
-                        entryKey = remainingKey.substring(0, nextSeparatorIndex + 2);
+                        // Stash keys for nested packages are reported without the trailing "::"
+                        // (e.g. "Foo" instead of "Foo::")
+                        entryKey = remainingKey.substring(0, nextSeparatorIndex);
                     }
+
+                    // Special sort variables should not show up in stash enumeration
+                    if (entryKey.equals("a") || entryKey.equals("b")) {
+                        continue;
+                    }
+
+                    if (entryKey.isEmpty()) {
+                        continue;
+                    }
+
+                    String globName = (nextSeparatorIndex == -1)
+                            ? (namespace + entryKey)
+                            : (namespace + entryKey + "::");
 
                     // Add the entry only if it's not already in the set of unique keys
                     if (uniqueKeys.add(entryKey)) {
-                        entries.add(new SimpleEntry<>(entryKey, new RuntimeStashEntry(key, true)));
+                        entries.add(new SimpleEntry<>(entryKey, new RuntimeStashEntry(globName, true)));
                     }
                 }
             }

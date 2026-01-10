@@ -160,6 +160,20 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     public abstract RuntimeArray keys();
 
     /**
+     * Context-aware keys() operator.
+     *
+     * <p>Default implementation materializes the key list via {@link #keys()}.
+     * Subclasses may override to avoid allocation in scalar/void contexts.</p>
+     */
+    public RuntimeBase keys(int ctx) {
+        RuntimeArray list = keys();
+        if (ctx == RuntimeContextType.SCALAR) {
+            return list.scalar();
+        }
+        return list;
+    }
+
+    /**
      * Retrieves the result of values() as a RuntimeArray instance.
      *
      * @return a RuntimeArray object representing the values
