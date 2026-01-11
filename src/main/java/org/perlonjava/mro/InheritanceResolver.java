@@ -304,7 +304,8 @@ public class InheritanceResolver {
         // Search through the class hierarchy starting from the specified index
         for (int i = startFromIndex; i < linearizedClasses.size(); i++) {
             String className = linearizedClasses.get(i);
-            String normalizedClassMethodName = NameNormalizer.normalizeVariableName(methodName, className);
+            String effectiveClassName = GlobalVariable.resolveStashAlias(className);
+            String normalizedClassMethodName = NameNormalizer.normalizeVariableName(methodName, effectiveClassName);
 
             if (TRACE_METHOD_RESOLUTION) {
                 System.err.println("  Checking class: '" + className + "'");
@@ -316,6 +317,10 @@ public class InheritanceResolver {
             // Check if method exists in current class
             if (GlobalVariable.existsGlobalCodeRef(normalizedClassMethodName)) {
                 RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(normalizedClassMethodName);
+                // Perl method lookup should ignore undefined CODE slots (e.g. after `undef *pkg::method`).
+                if (!codeRef.getDefinedBoolean()) {
+                    continue;
+                }
                 // Cache the found method
                 cacheMethod(cacheKey, codeRef);
                 
@@ -332,7 +337,7 @@ public class InheritanceResolver {
                 // refuse to AUTOLOAD tie() flags and overload markers (all start with "(")
             } else {
                 // Check for AUTOLOAD in current class
-                String autoloadName = className + "::AUTOLOAD";
+                String autoloadName = (effectiveClassName.endsWith("::") ? effectiveClassName : effectiveClassName + "::") + "AUTOLOAD";
                 if (GlobalVariable.existsGlobalCodeRef(autoloadName)) {
                     RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(autoloadName);
                     if (autoload.getDefinedBoolean()) {

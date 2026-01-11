@@ -1,6 +1,7 @@
 package org.perlonjava.runtime;
 
 import org.perlonjava.regex.RuntimeRegex;
+ import org.perlonjava.mro.InheritanceResolver;
 
 import java.util.AbstractMap;
 import java.util.HashSet;
@@ -188,6 +189,9 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                 oldValue.set(value);
             }
 
+            // Any stash mutation can affect method lookup; clear method resolution caches.
+            InheritanceResolver.invalidateCache();
+
             return oldValue;
         }
         return scalarUndef;
@@ -239,9 +243,33 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
             }
 
             // Return a glob reference - create a new RuntimeGlob that will be detached
-            return new RuntimeGlob(fullKey);
+            RuntimeScalar result = new RuntimeGlob(fullKey);
+
+            // Any stash mutation can affect method lookup; clear method resolution caches.
+            InheritanceResolver.invalidateCache();
+
+            return result;
         }
         return scalarUndef;
+    }
+
+    @Override
+    public void clear() {
+        if (this.mode == Id.STASH) {
+            String prefix = namespace;
+
+            GlobalVariable.globalVariables.keySet().removeIf(k -> k.startsWith(prefix));
+            GlobalVariable.globalArrays.keySet().removeIf(k -> k.startsWith(prefix));
+            GlobalVariable.globalHashes.keySet().removeIf(k -> k.startsWith(prefix));
+            GlobalVariable.globalCodeRefs.keySet().removeIf(k -> k.startsWith(prefix));
+            GlobalVariable.globalIORefs.keySet().removeIf(k -> k.startsWith(prefix));
+            GlobalVariable.globalFormatRefs.keySet().removeIf(k -> k.startsWith(prefix));
+
+            InheritanceResolver.invalidateCache();
+            GlobalVariable.clearPackageCache();
+            return;
+        }
+        super.clear();
     }
 
     /**

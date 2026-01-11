@@ -6,6 +6,7 @@ import org.perlonjava.codegen.EmitterMethodCreator;
 import org.perlonjava.codegen.JavaClassInfo;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
+import org.perlonjava.mro.InheritanceResolver;
 import org.perlonjava.runtime.*;
 import org.perlonjava.symbols.SymbolTable;
 
@@ -531,6 +532,10 @@ public class SubroutineParser {
         String lexicalKey = "&" + subName;
         org.perlonjava.symbols.SymbolTable.SymbolEntry lexicalEntry = parser.ctx.symbolTable.getSymbolEntry(lexicalKey);
         String packageToUse = parser.ctx.symbolTable.getCurrentPackage();
+
+        // If the package stash has been aliased (e.g. via `*{Pkg::} = *{Other::}`), then
+        // new symbols defined in this package should land in the effective stash.
+        packageToUse = GlobalVariable.resolveStashAlias(packageToUse);
         
         if (lexicalEntry != null && lexicalEntry.ast() instanceof OperatorNode varNode) {
             // Check if this is an "our sub" forward declaration
@@ -591,6 +596,7 @@ public class SubroutineParser {
         // - register the subroutine in the namespace
         String fullName = NameNormalizer.normalizeVariableName(subName, packageToUse);
         RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName);
+        InheritanceResolver.invalidateCache();
         if (codeRef.value == null) {
             codeRef.type = RuntimeScalarType.CODE;
             codeRef.value = new RuntimeCode(subName, attributes);

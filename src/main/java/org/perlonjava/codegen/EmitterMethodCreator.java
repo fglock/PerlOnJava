@@ -620,7 +620,7 @@ public class EmitterMethodCreator implements Opcodes {
                 Label endCatch = new Label();
 
                 // Define the try-catch block
-                mv.visitTryCatchBlock(tryStart, tryEnd, catchBlock, "java/lang/Exception");
+                mv.visitTryCatchBlock(tryStart, tryEnd, catchBlock, "java/lang/Throwable");
 
                 mv.visitLabel(tryStart);
                 // --------------------------------
@@ -652,12 +652,12 @@ public class EmitterMethodCreator implements Opcodes {
                 // Start of the catch block
                 mv.visitLabel(catchBlock);
 
-                // The exception object is on the stack
-                // Catch the exception
+                // The throwable object is on the stack
+                // Catch the throwable
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/operators/WarnDie",
                         "catchEval",
-                        "(Ljava/lang/Exception;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                        "(Ljava/lang/Throwable;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
 
                 // End of the catch block
                 mv.visitLabel(endCatch);
