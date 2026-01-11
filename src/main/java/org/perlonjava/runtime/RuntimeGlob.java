@@ -74,7 +74,14 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 return value;
             case REFERENCE:
                 if (value.value instanceof RuntimeScalar) {
-                    GlobalVariable.getGlobalVariable(this.globName).set(value.scalarDeref());
+                    RuntimeScalar deref = value.scalarDeref();
+                    // `*foo = \&bar` assigns to the CODE slot.
+                    if (deref.type == RuntimeScalarType.CODE) {
+                        GlobalVariable.getGlobalCodeRef(this.globName).set(deref);
+                        InheritanceResolver.invalidateCache();
+                    } else {
+                        GlobalVariable.getGlobalVariable(this.globName).set(deref);
+                    }
                 }
                 return value;
             case UNDEF:
@@ -114,6 +121,15 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * @return The scalar value associated with the provided RuntimeGlob.
      */
     public RuntimeScalar set(RuntimeGlob value) {
+        markGlobAsAssigned();
+
+        if (this.globName.endsWith("::") && value.globName.endsWith("::")) {
+            GlobalVariable.setStashAlias(this.globName, value.globName);
+            InheritanceResolver.invalidateCache();
+            GlobalVariable.clearPackageCache();
+            return value.scalar();
+        }
+
         // Retrieve the RuntimeScalar value associated with the provided RuntimeGlob.
         RuntimeScalar result = value.scalar();
 
@@ -131,7 +147,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
 
         // Alias the IO slot: both names point to the same IO object
         RuntimeGlob sourceIO = GlobalVariable.getGlobalIO(globName);
-        GlobalVariable.globalIORefs.put(this.globName, sourceIO);
+        this.IO = sourceIO.IO;
 
         // Alias the ARRAY slot: both names point to the same RuntimeArray object
         RuntimeArray sourceArray = GlobalVariable.getGlobalArray(globName);
@@ -468,6 +484,10 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * @return The current RuntimeGlob instance after undefining its elements.
      */
     public RuntimeGlob undefine() {
+        if (this.globName.endsWith("::")) {
+            new RuntimeStash(this.globName).undefine();
+            return this;
+        }
         // Undefine CODE
         GlobalVariable.getGlobalCodeRef(this.globName).set(new RuntimeScalar());
 

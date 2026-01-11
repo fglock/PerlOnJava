@@ -23,6 +23,11 @@ public class RuntimeStash extends RuntimeHash {
     public RuntimeStash(String namespace) {
         this.namespace = namespace;
         this.elements = new HashSpecialVariable(HashSpecialVariable.Id.STASH, namespace);
+        // Keep the RuntimeHash.elements field in sync with this stash view.
+        // RuntimeStash defines its own `elements` field (field hiding), but inherited
+        // RuntimeHash operations (e.g. setFromList used by `%{Pkg::} = ()`) operate
+        // on RuntimeHash.elements.
+        super.elements = this.elements;
     }
 
     /**
@@ -151,6 +156,9 @@ public class RuntimeStash extends RuntimeHash {
         GlobalVariable.globalHashes.remove(fullKey);
         GlobalVariable.globalIORefs.remove(fullKey);
         GlobalVariable.globalFormatRefs.remove(fullKey);
+
+        // Removing symbols from a stash can affect method lookup.
+        InheritanceResolver.invalidateCache();
 
         // If only CODE slot existed, return it directly (Perl behavior)
         if (code != null && code.getDefinedBoolean()) {
@@ -309,6 +317,8 @@ public class RuntimeStash extends RuntimeHash {
         // We must remove all slots from the GlobalVariable maps, not just clear the view.
         String prefix = this.namespace;
 
+        GlobalVariable.clearStashAlias(prefix);
+
         GlobalVariable.globalVariables.keySet().removeIf(k -> k.startsWith(prefix));
         GlobalVariable.globalArrays.keySet().removeIf(k -> k.startsWith(prefix));
         GlobalVariable.globalHashes.keySet().removeIf(k -> k.startsWith(prefix));
@@ -325,6 +335,7 @@ public class RuntimeStash extends RuntimeHash {
 
         // Method resolution depends on the stash.
         InheritanceResolver.invalidateCache();
+        GlobalVariable.clearPackageCache();
         return this;
     }
 
@@ -366,10 +377,12 @@ public class RuntimeStash extends RuntimeHash {
         // Create a new RuntimeStash to save the current state
         RuntimeStash currentState = new RuntimeStash(this.namespace);
         currentState.elements = new HashMap<>(this.elements);
+        ((RuntimeHash) currentState).elements = currentState.elements;
         currentState.blessId = this.blessId;
         dynamicStateStack.push(currentState);
         // Clear the hash
         this.elements.clear();
+        super.elements = this.elements;
         this.blessId = 0;
     }
 
@@ -383,6 +396,7 @@ public class RuntimeStash extends RuntimeHash {
             // Restore the elements map and blessId from the most recent saved state
             RuntimeStash previousState = dynamicStateStack.pop();
             this.elements = previousState.elements;
+            super.elements = this.elements;
             this.blessId = previousState.blessId;
         }
     }
