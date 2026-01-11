@@ -543,10 +543,13 @@ public class EmitterMethodCreator implements Opcodes {
             // which the JVM rejects with VerifyError: Bad local variable type.
             //
             // Ensure temporaries start *after* the captured variable range.
-            int currentLocalIndex = ctx.symbolTable.getCurrentLocalVariableIndex();
-            if (env.length > currentLocalIndex) {
-                ctx.symbolTable.resetLocalVariableIndex(env.length);
-            }
+            //
+            // NOTE: ctx.symbolTable.allocateLocalVariable() mutates the symbol table's internal
+            // index counter. In eval-string compilation we may reuse the captured symbol table
+            // instance across many eval invocations. If we don't reset the counter for each
+            // generated method, the local slot numbers will grow without bound (eventually
+            // producing invalid stack map frames / VerifyError).
+            ctx.symbolTable.resetLocalVariableIndex(env.length);
 
             // Pre-initialize temporary local slots to avoid VerifyError
             // Temporaries are allocated dynamically during bytecode emission via
