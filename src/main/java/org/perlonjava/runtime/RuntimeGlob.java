@@ -79,6 +79,12 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                     if (deref.type == RuntimeScalarType.CODE) {
                         GlobalVariable.getGlobalCodeRef(this.globName).set(deref);
                         InheritanceResolver.invalidateCache();
+                    } else if (deref.type == RuntimeScalarType.ARRAYREFERENCE && deref.value instanceof RuntimeArray arr) {
+                        // `*foo = \@bar` assigns to the ARRAY slot.
+                        GlobalVariable.globalArrays.put(this.globName, arr);
+                    } else if (deref.type == RuntimeScalarType.HASHREFERENCE && deref.value instanceof RuntimeHash hash) {
+                        // `*foo = \%bar` assigns to the HASH slot.
+                        GlobalVariable.globalHashes.put(this.globName, hash);
                     } else {
                         GlobalVariable.getGlobalVariable(this.globName).set(deref);
                     }

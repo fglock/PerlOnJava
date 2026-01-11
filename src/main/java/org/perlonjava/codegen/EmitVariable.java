@@ -49,6 +49,63 @@ import static org.perlonjava.perlmodule.Strict.HINT_STRICT_VARS;
  */
 public class EmitVariable {
 
+    private static boolean isBuiltinSpecialLengthOneVar(String sigil, String name) {
+        if (!"$".equals(sigil) || name == null || name.length() != 1) {
+            return false;
+        }
+        char c = name.charAt(0);
+        // In Perl, many single-character non-identifier variables (punctuation/digits)
+        // are built-in special vars and are exempt from strict 'vars'.
+        return !Character.isLetter(c);
+    }
+
+    private static boolean isBuiltinSpecialScalarVar(String sigil, String name) {
+        if (!"$".equals(sigil) || name == null || name.isEmpty()) {
+            return false;
+        }
+        // ${^FOO} variables are encoded as a leading ASCII control character.
+        // (e.g. ${^GLOBAL_PHASE} -> "\aLOBAL_PHASE"). These are built-in and strict-safe.
+        if (name.charAt(0) < 32) {
+            return true;
+        }
+        return name.equals("ARGV")
+                || name.equals("ARGVOUT")
+                || name.equals("ENV")
+                || name.equals("INC")
+                || name.equals("SIG")
+                || name.equals("STDIN")
+                || name.equals("STDOUT")
+                || name.equals("STDERR");
+    }
+
+    private static boolean isNonAsciiLengthOneScalarAllowedUnderNoUtf8(EmitterContext ctx, String sigil, String name) {
+        if (!"$".equals(sigil) || name == null || name.length() != 1) {
+            return false;
+        }
+        char c = name.charAt(0);
+        return c > 127 && !ctx.symbolTable.isStrictOptionEnabled(org.perlonjava.perlmodule.Strict.HINT_UTF8);
+    }
+
+    private static boolean isBuiltinSpecialContainerVar(String sigil, String name) {
+        if (name == null) {
+            return false;
+        }
+        if ("%".equals(sigil)) {
+            return name.equals("SIG")
+                    || name.equals("ENV")
+                    || name.equals("INC")
+                    || name.equals("+")
+                    || name.equals("-");
+        }
+        if ("@".equals(sigil)) {
+            return name.equals("ARGV")
+                    || name.equals("INC")
+                    || name.equals("+")
+                    || name.equals("-");
+        }
+        return false;
+    }
+
     /**
      * Emits bytecode to fetch a global (package) variable.
      * 
@@ -100,7 +157,7 @@ public class EmitVariable {
             }
         }
 
-        if (sigil.equals("$") && (createIfNotExists || GlobalVariable.existsGlobalVariable(var))) {
+        if (sigil.equals("$") && createIfNotExists) {
             // fetch a global variable
             ctx.mv.visitLdcInsn(var);
             ctx.mv.visitMethodInsn(
@@ -112,7 +169,7 @@ public class EmitVariable {
             return;
         }
 
-        if (sigil.equals("@") && (createIfNotExists || GlobalVariable.existsGlobalArray(var))) {
+        if (sigil.equals("@") && createIfNotExists) {
             // fetch a global variable
             ctx.mv.visitLdcInsn(var);
             ctx.mv.visitMethodInsn(
@@ -138,7 +195,7 @@ public class EmitVariable {
             return;
         }
 
-        if (sigil.equals("%") && (createIfNotExists || GlobalVariable.existsGlobalHash(var))) {
+        if (sigil.equals("%") && createIfNotExists) {
             // fetch a global variable
             ctx.mv.visitLdcInsn(var);
             ctx.mv.visitMethodInsn(
@@ -275,10 +332,26 @@ public class EmitVariable {
                 String normalizedName = NameNormalizer.normalizeVariableName(name, emitterVisitor.ctx.symbolTable.getCurrentPackage());
                 boolean isSpecialSortVar = sigil.equals("$") && ("main::a".equals(normalizedName) || "main::b".equals(normalizedName));
 
+                boolean allowIfAlreadyExists = false;
+                if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_VARS)) {
+                    if (sigil.equals("$")) {
+                        allowIfAlreadyExists = GlobalVariable.existsGlobalVariable(normalizedName);
+                    } else if (sigil.equals("@")) {
+                        allowIfAlreadyExists = GlobalVariable.existsGlobalArray(normalizedName);
+                    } else if (sigil.equals("%") && !normalizedName.endsWith("::")) {
+                        allowIfAlreadyExists = GlobalVariable.existsGlobalHash(normalizedName);
+                    }
+                }
+
                 // Compute createIfNotExists flag - determines if variable can be auto-vivified
                 boolean createIfNotExists = name.contains("::")  // Fully qualified: $Package::var
                         || ScalarUtils.isInteger(name)           // Regex capture: $1, $2, etc.
                         || isSpecialSortVar                      // Sort variables: $a, $b
+                        || isBuiltinSpecialLengthOneVar(sigil, name) // $%, $-, $[, $}, etc.
+                        || isBuiltinSpecialScalarVar(sigil, name) // ${^GLOBAL_PHASE}, $ARGV, $ENV, etc.
+                        || isBuiltinSpecialContainerVar(sigil, name) // %SIG, %ENV, @ARGV, etc.
+                        || isNonAsciiLengthOneScalarAllowedUnderNoUtf8(emitterVisitor.ctx, sigil, name)
+                        || allowIfAlreadyExists
                         || !emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_VARS)  // no strict 'vars'
                         || (isDeclared && isLexical);            // Lexically declared (my/our/state)
                 

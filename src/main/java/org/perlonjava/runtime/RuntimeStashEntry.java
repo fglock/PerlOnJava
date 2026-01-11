@@ -54,15 +54,23 @@ public class RuntimeStashEntry extends RuntimeGlob {
         type = RuntimeScalarType.GLOB;
         if (value.type == REFERENCE) {
             if (value.value instanceof RuntimeScalar) {
-                RuntimeScalar targetScalar = value.scalarDeref();
-                // Make the target scalar slot point to the same RuntimeScalar object (aliasing)
-                GlobalVariable.globalVariables.put(this.globName, targetScalar);
+                RuntimeScalar deref = value.scalarDeref();
+                if (deref.type == HASHREFERENCE && deref.value instanceof RuntimeHash hash) {
+                    // `*foo = \%bar` assigns to the HASH slot.
+                    GlobalVariable.globalHashes.put(this.globName, hash);
+                } else if (deref.type == ARRAYREFERENCE && deref.value instanceof RuntimeArray arr) {
+                    // `*foo = \@bar` assigns to the ARRAY slot.
+                    GlobalVariable.globalArrays.put(this.globName, arr);
+                } else {
+                    // Default: scalar slot.
+                    GlobalVariable.globalVariables.put(this.globName, deref);
 
-                // Also create a constant subroutine for bareword access
-                RuntimeCode code = new RuntimeCode("", null);
-                code.constantValue = targetScalar.getList();
-                GlobalVariable.getGlobalCodeRef(this.globName).set(
-                        new RuntimeScalar(code));
+                    // Also create a constant subroutine for bareword access
+                    RuntimeCode code = new RuntimeCode("", null);
+                    code.constantValue = deref.getList();
+                    GlobalVariable.getGlobalCodeRef(this.globName).set(
+                            new RuntimeScalar(code));
+                }
             }
             return value;
         }

@@ -141,10 +141,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // If so, treat it as Unicode source to preserve Unicode characters during parsing
         String evalString = code.toString();
         boolean hasUnicode = false;
-        for (int i = 0; i < evalString.length(); i++) {
-            if (evalString.charAt(i) > 127) {
-                hasUnicode = true;
-                break;
+        boolean utf8Hint = ctx.symbolTable.isStrictOptionEnabled(org.perlonjava.perlmodule.Strict.HINT_UTF8);
+        if (utf8Hint && code.type != RuntimeScalarType.BYTE_STRING) {
+            for (int i = 0; i < evalString.length(); i++) {
+                if (evalString.charAt(i) > 127) {
+                    hasUnicode = true;
+                    break;
+                }
             }
         }
 
@@ -190,6 +193,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // codegen, otherwise the generated <init>(...) descriptor may not match what the
         // call site is looking up via reflection.
         ScopedSymbolTable capturedSymbolTable = ctx.symbolTable;
+
+        // eval may include lexical pragmas (use strict/warnings/features). We need those flags
+        // during codegen of the eval body, but they must NOT leak back into the caller scope.
+        BitSet savedWarningFlags = (BitSet) capturedSymbolTable.warningFlagsStack.peek().clone();
+        int savedFeatureFlags = capturedSymbolTable.featureFlagsStack.peek();
+        int savedStrictOptions = capturedSymbolTable.strictOptionsStack.peek();
 
         // Parse using a mutable clone so lexical declarations inside the eval do not
         // change the captured environment / constructor signature.
@@ -250,6 +259,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     ast,
                     false
             );
+        } finally {
+            // Restore caller lexical flags (do not leak eval pragmas).
+            capturedSymbolTable.warningFlagsStack.pop();
+            capturedSymbolTable.warningFlagsStack.push((BitSet) savedWarningFlags.clone());
+
+            capturedSymbolTable.featureFlagsStack.pop();
+            capturedSymbolTable.featureFlagsStack.push(savedFeatureFlags);
+
+            capturedSymbolTable.strictOptionsStack.pop();
+            capturedSymbolTable.strictOptionsStack.push(savedStrictOptions);
+
+            setCurrentScope(capturedSymbolTable);
         }
 
         // Cache the result (unless debugging is enabled)
