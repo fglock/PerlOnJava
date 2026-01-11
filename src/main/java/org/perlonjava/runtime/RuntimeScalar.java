@@ -1200,7 +1200,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case GLOB, GLOBREFERENCE -> (RuntimeGlob) value;
             default -> {
                 String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
-                yield new RuntimeGlob(varName);
+                // Use the canonical glob object for this symbol name.
+                // This ensures the IO slot is shared/visible across operations like:
+                //   *{"\3"} = *DATA; readline v3
+                // where readline resolves the handle via GlobalVariable.getGlobalIO("main::\x03").
+                yield GlobalVariable.getGlobalIO(varName);
             }
         };
     }

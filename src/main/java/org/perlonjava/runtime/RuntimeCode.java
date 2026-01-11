@@ -8,9 +8,10 @@ import org.perlonjava.codegen.EmitterMethodCreator;
 import org.perlonjava.codegen.JavaClassInfo;
 import org.perlonjava.lexer.Lexer;
 import org.perlonjava.lexer.LexerToken;
+import org.perlonjava.parser.Parser;
 import org.perlonjava.mro.InheritanceResolver;
 import org.perlonjava.operators.ModuleOperators;
-import org.perlonjava.parser.Parser;
+import org.perlonjava.scriptengine.PerlLanguageProvider;
 import org.perlonjava.symbols.ScopedSymbolTable;
 
 import java.lang.invoke.MethodHandle;
@@ -21,10 +22,13 @@ import java.lang.reflect.InvocationTargetException;
 import java.util.*;
 import java.util.function.Supplier;
 
+import static org.perlonjava.Configuration.getPerlVersionNoV;
 import static org.perlonjava.parser.ParserTables.CORE_PROTOTYPES;
-import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
+import static org.perlonjava.runtime.GlobalVariable.*;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 import static org.perlonjava.runtime.RuntimeScalarType.*;
+import static org.perlonjava.runtime.SpecialBlock.runEndBlocks;
+import static org.perlonjava.parser.SpecialBlockParser.setCurrentScope;
 import static org.perlonjava.runtime.SpecialBlock.runUnitcheckBlocks;
 
 /**
@@ -181,11 +185,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
         }
 
-        ScopedSymbolTable symbolTable = ctx.symbolTable.snapShot();
+        // IMPORTANT: The eval call site (EmitEval) computes the constructor signature from
+        // ctx.symbolTable (captured at compile-time). We must use that exact symbol table for
+        // codegen, otherwise the generated <init>(...) descriptor may not match what the
+        // call site is looking up via reflection.
+        ScopedSymbolTable capturedSymbolTable = ctx.symbolTable;
+
+        // Parse using a mutable clone so lexical declarations inside the eval do not
+        // change the captured environment / constructor signature.
+        ScopedSymbolTable parseSymbolTable = capturedSymbolTable.snapShot();
 
         EmitterContext evalCtx = new EmitterContext(
                 new JavaClassInfo(),  // internal java class name
-                ctx.symbolTable.snapShot(), // symbolTable
+                parseSymbolTable, // symbolTable
                 null, // method visitor
                 null, // class writer
                 ctx.contextType, // call context
@@ -212,7 +224,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             // Create a new instance of ErrorMessageUtil, resetting the line counter
             evalCtx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
-            evalCtx.symbolTable = symbolTable.snapShot(); // reset the symboltable
+            ScopedSymbolTable postParseSymbolTable = evalCtx.symbolTable;
+            evalCtx.symbolTable = capturedSymbolTable;
+            evalCtx.symbolTable.copyFlagsFrom(postParseSymbolTable);
+            setCurrentScope(evalCtx.symbolTable);
             generatedClass = EmitterMethodCreator.createClassWithMethod(
                     evalCtx,
                     ast,
@@ -228,7 +243,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // In case of error return an "undef" ast and class
             ast = new OperatorNode("undef", null, 1);
             evalCtx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
-            evalCtx.symbolTable = symbolTable.snapShot(); // reset the symboltable
+            evalCtx.symbolTable = capturedSymbolTable;
+            setCurrentScope(evalCtx.symbolTable);
             generatedClass = EmitterMethodCreator.createClassWithMethod(
                     evalCtx,
                     ast,

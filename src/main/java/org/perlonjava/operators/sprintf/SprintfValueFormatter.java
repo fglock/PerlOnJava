@@ -99,10 +99,20 @@ public class SprintfValueFormatter {
         return vectorFormatter.formatVectorString(value, flags, width, precision, conversionChar, separator);
     }
 
+    public String formatVectorStringBytes(RuntimeScalar value, String flags, int width,
+                                          int precision, char conversionChar, String separator) {
+        return vectorFormatter.formatVectorStringBytes(value, flags, width, precision, conversionChar, separator);
+    }
+
     // Keep original method for default separator
     public String formatVectorString(RuntimeScalar value, String flags, int width,
                                      int precision, char conversionChar) {
         return vectorFormatter.formatVectorString(value, flags, width, precision, conversionChar);
+    }
+
+    public String formatVectorStringBytes(RuntimeScalar value, String flags, int width,
+                                          int precision, char conversionChar) {
+        return vectorFormatter.formatVectorStringBytes(value, flags, width, precision, conversionChar);
     }
 
     /**
