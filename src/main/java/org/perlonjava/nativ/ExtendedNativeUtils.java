@@ -1,5 +1,6 @@
 package org.perlonjava.nativ;
 
+import org.perlonjava.parser.StringParser;
 import org.perlonjava.runtime.*;
 
 import java.net.InetAddress;
@@ -351,6 +352,7 @@ public class ExtendedNativeUtils extends NativeUtils {
             byte[] addr;
             if (args[0] instanceof RuntimeScalar) {
                 String addrStr = args[0].toString();
+                StringParser.assertNoWideCharacters(addrStr, "gethostbyaddr");
                 if (addrStr.length() == 4) {
                     // Packed address
                     addr = addrStr.getBytes(StandardCharsets.ISO_8859_1);
@@ -379,6 +381,8 @@ public class ExtendedNativeUtils extends NativeUtils {
             RuntimeArray.push(result, addresses);
 
             return result;
+        } catch (PerlCompilerException e) {
+            throw e;
         } catch (Exception e) {
             return new RuntimeArray();
         }

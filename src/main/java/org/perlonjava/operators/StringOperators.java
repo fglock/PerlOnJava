@@ -4,6 +4,7 @@ import com.ibm.icu.lang.UCharacter;
 import com.ibm.icu.text.CaseMap;
 import com.ibm.icu.text.Normalizer2;
 import org.perlonjava.parser.NumberParser;
+import org.perlonjava.perlmodule.Warnings;
 import org.perlonjava.runtime.*;
 
 import java.nio.charset.StandardCharsets;
@@ -276,6 +277,14 @@ public class StringOperators {
     }
 
     public static RuntimeScalar stringConcat(RuntimeScalar runtimeScalar, RuntimeScalar b) {
+        return new RuntimeScalar(runtimeScalar + b.toString());
+    }
+
+    public static RuntimeScalar stringConcatWarnUninitialized(RuntimeScalar runtimeScalar, RuntimeScalar b) {
+        if (!runtimeScalar.getDefinedBoolean() || !b.getDefinedBoolean()) {
+            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in concatenation (.)"),
+                    RuntimeScalarCache.scalarEmptyString);
+        }
         return new RuntimeScalar(runtimeScalar + b.toString());
     }
 

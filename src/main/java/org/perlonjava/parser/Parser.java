@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.perlonjava.parser.TokenUtils.peek;
+import static org.perlonjava.parser.SpecialBlockParser.setCurrentScope;
 
 /**
  * The Parser class is responsible for parsing a list of tokens into an abstract syntax tree (AST).
@@ -52,6 +53,9 @@ public class Parser {
     public Parser(EmitterContext ctx, List<LexerToken> tokens) {
         this.ctx = ctx;
         this.tokens = tokens;
+        if (ctx != null && ctx.symbolTable != null) {
+            setCurrentScope(ctx.symbolTable);
+        }
     }
 
     // Add this constructor to the Parser class
@@ -61,6 +65,9 @@ public class Parser {
         this.tokenIndex = 0;
         // Share the heredoc nodes list instead of creating a new one
         this.heredocNodes = sharedHeredocNodes;
+        if (ctx != null && ctx.symbolTable != null) {
+            setCurrentScope(ctx.symbolTable);
+        }
     }
 
     public static boolean isExpressionTerminator(LexerToken token) {

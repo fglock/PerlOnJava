@@ -166,6 +166,8 @@ public class RuntimeIO extends RuntimeScalar {
      */
     boolean needFlush;
 
+    boolean autoFlush;
+
     /**
      * Creates a new uninitialized I/O handle.
      * The handle must be opened before use.
@@ -976,6 +978,17 @@ public class RuntimeIO extends RuntimeScalar {
         return ioHandle.flush();
     }
 
+    public boolean isAutoFlush() {
+        return autoFlush;
+    }
+
+    public void setAutoFlush(boolean autoFlush) {
+        this.autoFlush = autoFlush;
+        if (autoFlush) {
+            flush();
+        }
+    }
+
     /**
      * Writes data to this handle.
      * Sets the needFlush flag.
@@ -1006,7 +1019,7 @@ public class RuntimeIO extends RuntimeScalar {
                 System.err.flush();
             }
         }
-        if (data.endsWith("\n")) {
+        if (autoFlush || data.endsWith("\n")) {
             ioHandle.flush();
         }
         return result;

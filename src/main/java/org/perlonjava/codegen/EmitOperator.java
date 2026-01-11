@@ -12,6 +12,7 @@ import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
 import org.perlonjava.runtime.RuntimeDescriptorConstants;
+import org.perlonjava.symbols.ScopedSymbolTable;
 
 /**
  * The EmitOperator class is responsible for handling various operators
@@ -517,6 +518,8 @@ public class EmitOperator {
         // Accept the left operand in SCALAR context and the right operand in LIST context.
         // Spill the left operand before evaluating the right side so non-local control flow
         // propagation can't jump to returnLabel with an extra value on the JVM operand stack.
+        boolean isBytes = emitterVisitor.ctx.symbolTable != null &&
+                emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_BYTES);
         if (ENABLE_SPILL_BINARY_LHS) {
             MethodVisitor mv = emitterVisitor.ctx.mv;
             node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
@@ -540,6 +543,23 @@ public class EmitOperator {
             node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
             node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
         }
+
+        if (node.operator.equals("sprintf") && isBytes) {
+            emitterVisitor.ctx.mv.visitMethodInsn(
+                    Opcodes.INVOKESTATIC,
+                    "org/perlonjava/operators/SprintfOperator",
+                    "sprintfBytes",
+                    "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                    false);
+
+            if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                handleVoidContext(emitterVisitor);
+            } else if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+                handleScalarContext(emitterVisitor, node);
+            }
+            return;
+        }
+
         emitOperator(node, emitterVisitor);
     }
 
@@ -626,6 +646,23 @@ public class EmitOperator {
             node.left.accept(scalarVisitor); // target - left parameter
             node.right.accept(scalarVisitor); // right parameter
         }
+
+        ScopedSymbolTable symbolTable = emitterVisitor.ctx.symbolTable;
+        boolean warnUninitialized = symbolTable != null && symbolTable.isWarningCategoryEnabled("uninitialized");
+        if (warnUninitialized) {
+            emitterVisitor.ctx.mv.visitMethodInsn(
+                    Opcodes.INVOKESTATIC,
+                    "org/perlonjava/operators/StringOperators",
+                    "stringConcatWarnUninitialized",
+                    "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                    false);
+
+            if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                handleVoidContext(emitterVisitor);
+            }
+            return;
+        }
+
         emitOperator(node, emitterVisitor);
     }
 

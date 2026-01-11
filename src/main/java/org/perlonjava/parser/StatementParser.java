@@ -514,11 +514,9 @@ public class StatementParser {
                 }
             }
             if (packageName == null) {
-                // `use` statement can terminate after Version
-                token = TokenUtils.peek(parser);
-                if (token.type == LexerTokenType.EOF || token.text.equals("}") || token.text.equals(";")) {
-                    return new ListNode(parser.tokenIndex);
-                }
+                // `use` statement can terminate after Version.
+                // Do not early-return here; we still want to consume an optional statement terminator
+                // and return a CompilerFlagNode so lexical flag changes are applied during codegen.
             }
         }
 
@@ -587,6 +585,7 @@ public class StatementParser {
                             ctx.logDebug("Use call : " + importMethod + "(" + args + ")");
                             RuntimeArray importArgs = args.getArrayOfAlias();
                             RuntimeArray.unshift(importArgs, new RuntimeScalar(packageName));
+                            setCurrentScope(parser.ctx.symbolTable);
                             RuntimeCode.apply(code, importArgs, RuntimeContextType.SCALAR);
                         }
                     }
@@ -924,7 +923,7 @@ public class StatementParser {
         if (token.type == LexerTokenType.NUMBER) {
             return parseNumber(parser, TokenUtils.consume(parser));
         }
-        if (token.type == LexerTokenType.IDENTIFIER && token.text.matches("v\\d+")) {
+        if (token.type == LexerTokenType.IDENTIFIER && token.text.matches("v\\d+(\\.\\d+)*")) {
             return parseVstring(parser, TokenUtils.consume(parser).text, parser.tokenIndex);
         }
         return null;

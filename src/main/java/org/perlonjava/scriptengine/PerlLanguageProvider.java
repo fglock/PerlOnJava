@@ -9,7 +9,9 @@ import org.perlonjava.lexer.Lexer;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.parser.DataSection;
 import org.perlonjava.parser.Parser;
+import org.perlonjava.parser.SpecialBlockParser;
 import org.perlonjava.perlmodule.Strict;
+import org.perlonjava.runtime.ErrorMessageUtil;
 import org.perlonjava.runtime.*;
 import org.perlonjava.symbols.ScopedSymbolTable;
 
@@ -176,6 +178,7 @@ public class PerlLanguageProvider {
         // (strict/warnings/features) into ctx.symbolTable. Resetting to a fresh global snapshot
         // loses those declarations and causes strict-vars failures during codegen.
         ctx.symbolTable = ctx.symbolTable.snapShot();
+        SpecialBlockParser.setCurrentScope(ctx.symbolTable);
         Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(
                 ctx,
                 ast,
@@ -227,6 +230,7 @@ public class PerlLanguageProvider {
         ctx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
         // Snapshot the symbol table as seen by the parser (includes lexical decls + pragma state).
         ctx.symbolTable = ctx.symbolTable.snapShot();
+        SpecialBlockParser.setCurrentScope(ctx.symbolTable);
         Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(
                 ctx,
                 ast,
