@@ -42,14 +42,6 @@ public class IdentifierParser {
             if (tokenAfter.type == LexerTokenType.EOF || tokenAfter.type == LexerTokenType.NEWLINE) {
                 parser.throwError("syntax error");
             }
-            boolean identifierLike = tokenAfter.type == LexerTokenType.IDENTIFIER
-                    || tokenAfter.type == LexerTokenType.NUMBER
-                    || tokenAfter.text.equals("{")
-                    || tokenAfter.text.equals("::")
-                    || tokenAfter.text.equals("'");
-            if (!identifierLike) {
-                parser.throwError("syntax error");
-            }
         }
 
         // Check if the identifier is enclosed in braces

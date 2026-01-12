@@ -239,14 +239,6 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 yield new RuntimeScalar(NameNormalizer.getBlessStrForClassName(pkg));
             }
             case "IO" -> {
-                // In Perl, accessing the IO slot returns a GLOB reference that can be blessed
-                // Convert GLOB type to GLOBREFERENCE so it behaves like other references
-                if (IO.type == RuntimeScalarType.GLOB && IO.value instanceof RuntimeIO) {
-                    RuntimeScalar ioRef = new RuntimeScalar();
-                    ioRef.type = RuntimeScalarType.GLOBREFERENCE;
-                    ioRef.value = IO.value;
-                    yield ioRef;
-                }
                 yield IO;
             }
             case "SCALAR" -> GlobalVariable.getGlobalVariable(this.globName);
