@@ -60,6 +60,34 @@ public class EmitOperator {
         }
     }
 
+    static void emitOperatorWithKey(String operator, Node node, EmitterVisitor emitterVisitor) {
+        // Invoke the method for the operator.
+        OperatorHandler operatorHandler = OperatorHandler.get(operator);
+        if (operatorHandler == null) {
+            throw new PerlCompilerException(node.getIndex(), "Operator \"" + operator + "\" doesn't have a defined JVM descriptor", emitterVisitor.ctx.errorUtil);
+        }
+        emitterVisitor.ctx.logDebug("emitOperator " +
+                operatorHandler.methodType() + " " +
+                operatorHandler.className() + " " +
+                operatorHandler.methodName() + " " +
+                operatorHandler.descriptor()
+        );
+        emitterVisitor.ctx.mv.visitMethodInsn(
+                operatorHandler.methodType(),
+                operatorHandler.className(),
+                operatorHandler.methodName(),
+                operatorHandler.descriptor(),
+                false
+        );
+
+        // Handle context
+        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+            handleVoidContext(emitterVisitor);
+        } else if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+            handleScalarContext(emitterVisitor, node);
+        }
+    }
+
     /**
      * Handles the 'readdir' operator, which reads directory contents.
      *
@@ -889,9 +917,9 @@ public class EmitOperator {
                                        EmitterVisitor emitterVisitor) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        OperatorHandler operatorHandler = OperatorHandler.get(node.operator);
+        OperatorHandler operatorHandler = OperatorHandler.get(operator);
         if (operatorHandler != null) {
-            emitOperator(node, emitterVisitor);
+            emitOperatorWithKey(operator, node, emitterVisitor);
         } else {
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                     "org/perlonjava/runtime/RuntimeScalar",

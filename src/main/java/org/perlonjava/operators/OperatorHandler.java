@@ -57,6 +57,7 @@ public record OperatorHandler(String className, String methodName, int methodTyp
         put("binary|", "bitwiseOrBinary", "org/perlonjava/operators/BitwiseOperators");
         put("binary^", "bitwiseXorBinary", "org/perlonjava/operators/BitwiseOperators");
         put("binary~", "bitwiseNotBinary", "org/perlonjava/operators/BitwiseOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("integerBitwiseNot", "integerBitwiseNot", "org/perlonjava/operators/BitwiseOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
 
         // Scalar
         put("ord", "ord", "org/perlonjava/operators/ScalarOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
