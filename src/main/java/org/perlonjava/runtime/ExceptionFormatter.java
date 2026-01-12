@@ -63,7 +63,7 @@ public class ExceptionFormatter {
                     entry.add(String.valueOf(callerInfo.line()));
                     entry.add(null);  // No subroutine name available for use statements
                     stackTrace.add(entry);
-                    lastFileName = callerInfo.filename();
+                    lastFileName = callerInfo.filename() != null ? callerInfo.filename() : "";
                     callerStackIndex++;
                 }
             } else if (element.getClassName().contains("org.perlonjava.anon") ||
@@ -85,14 +85,14 @@ public class ExceptionFormatter {
                     entry.add(String.valueOf(loc.lineNumber()));
                     entry.add(subName);  // Add subroutine name
                     stackTrace.add(entry);
-                    lastFileName = loc.sourceFileName();
+                    lastFileName = loc.sourceFileName() != null ? loc.sourceFileName() : "";
                 }
             }
         }
 
         // Add the outermost artificial stack entry if different from last file
         var callerInfo = CallerStack.peek(callerStackIndex);
-        if (callerInfo != null && !lastFileName.equals(callerInfo.filename())) {
+        if (callerInfo != null && callerInfo.filename() != null && !lastFileName.equals(callerInfo.filename())) {
             var entry = new ArrayList<String>();
             entry.add(callerInfo.packageName());
             entry.add(callerInfo.filename());

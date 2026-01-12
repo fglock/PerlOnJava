@@ -239,6 +239,15 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 yield new RuntimeScalar(NameNormalizer.getBlessStrForClassName(pkg));
             }
             case "IO" -> {
+                // Accessing the IO slot yields a blessable reference-like value.
+                // We model this by returning a GLOBREFERENCE wrapper around the RuntimeIO.
+                if (IO != null && IO.type == RuntimeScalarType.GLOB && IO.value instanceof RuntimeIO) {
+                    RuntimeScalar ioRef = new RuntimeScalar();
+                    ioRef.type = RuntimeScalarType.GLOBREFERENCE;
+                    ioRef.value = IO.value;
+                    ioRef.blessId = IO.blessId;
+                    yield ioRef;
+                }
                 yield IO;
             }
             case "SCALAR" -> GlobalVariable.getGlobalVariable(this.globName);
