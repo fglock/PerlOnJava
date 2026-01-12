@@ -85,6 +85,22 @@ public class Utf8 extends PerlModuleBase {
     /**
      * Converts the internal representation of the string to UTF-8.
      *
+     * <p>In Perl, utf8::upgrade() ensures the UTF-8 flag is on for the scalar.
+     * This affects how the string is interpreted internally:
+     * <ul>
+     *   <li>BYTE_STRING (UTF-8 flag off): bytes are interpreted as Latin-1 code points (0x00-0xFF).
+     *       If the bytes form valid UTF-8, decode them to Unicode characters. Otherwise, keep
+     *       Latin-1 interpretation (each byte becomes a character with that code point).</li>
+     *   <li>STRING (UTF-8 flag on): already contains Unicode characters. This is a no-op;
+     *       the string content is NOT modified. This is critical: a string like "\x{100}" (U+0100)
+     *       must remain U+0100, not be corrupted to '?' or other replacement characters.</li>
+     *   <li>Other types: convert to string and mark as STRING type.</li>
+     * </ul>
+     *
+     * <p><strong>IMPORTANT:</strong> Do NOT use {@code string.getBytes(ISO_8859_1)} on strings
+     * that may contain characters > 0xFF, as Java will replace unmappable characters with '?'.
+     * For BYTE_STRING, extract raw byte values directly from char codes.</p>
+     *
      * @param args The arguments passed to the method.
      * @param ctx  The context in which the method is called.
      * @return A RuntimeList containing the number of octets necessary to represent the string as UTF-8.
@@ -100,7 +116,44 @@ public class Utf8 extends PerlModuleBase {
         // Don't modify read-only scalars (e.g., string literals)
         if (!(scalar instanceof RuntimeScalarReadOnly)) {
             if (scalar.type == BYTE_STRING) {
-                byte[] bytes = string.getBytes(StandardCharsets.ISO_8859_1);
+                // BYTE_STRING: interpret bytes as Latin-1, then decode as UTF-8 if valid.
+                //
+                // IMPORTANT CORNER CASE (regression-prone):
+                // In a perfect world, BYTE_STRING values would only ever contain characters in
+                // the 0x00..0xFF range (representing raw octets). However, some parts of the
+                // interpreter/compiler may currently construct a BYTE_STRING that already
+                // contains Unicode code points > 0xFF (e.g. from "\x{100}" yielding U+0100).
+                //
+                // If we blindly treat such a value as bytes and cast each char to (byte), Java
+                // will truncate U+0100 (256) to 0x00 and we corrupt the string to "\0".
+                // This breaks re/regexp.t cases that do:
+                //   $subject = "\x{100}"; utf8::upgrade($subject);
+                // and then expect the subject to still contain U+0100.
+                //
+                // Therefore:
+                // - If the current BYTE_STRING already contains chars > 0xFF, treat it as
+                //   already-upgraded Unicode content and simply flip the type to STRING.
+                //   (No re-decoding step; content must not change.)
+                boolean hasNonByteChars = false;
+                for (int i = 0; i < string.length(); i++) {
+                    if (string.charAt(i) > 0xFF) {
+                        hasNonByteChars = true;
+                        break;
+                    }
+                }
+                if (hasNonByteChars) {
+                    scalar.set(string);
+                    scalar.type = STRING;
+                    return new RuntimeScalar(utf8Bytes.length).getList();
+                }
+
+                // Extract raw byte values (0x00-0xFF) directly from char codes.
+                // Do NOT use getBytes(ISO_8859_1) on values that may contain characters > 0xFF,
+                // as Java will replace unmappable characters with '?'.
+                byte[] bytes = new byte[string.length()];
+                for (int i = 0; i < string.length(); i++) {
+                    bytes[i] = (byte) string.charAt(i);
+                }
                 CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
                         .onMalformedInput(CodingErrorAction.REPORT)
                         .onUnmappableCharacter(CodingErrorAction.REPORT);
@@ -109,13 +162,29 @@ public class Utf8 extends PerlModuleBase {
                     scalar.set(decoded.toString());
                 } catch (CharacterCodingException e) {
                     // Not valid UTF-8: keep Latin-1 codepoint semantics.
+                    // Each byte value becomes a character with that code point.
                     scalar.set(string);
                 }
                 scalar.type = STRING;
             } else if (scalar.type != STRING) {
+                // Other types (INTEGER, DOUBLE, UNDEF, etc.): convert to string and mark as STRING.
+                //
+                // CRITICAL: We must call scalar.set(string) to ensure the scalar's internal
+                // value is updated to the string representation. Just setting scalar.type = STRING
+                // is NOT sufficient, as the scalar may still hold its original numeric/other value.
+                //
+                // Example: "\x{100}" may initially be stored as an INTEGER with value 256.
+                // toString() returns "Ā" (U+0100), but the scalar's internal value is still 256.
+                // We must call set(string) to store "Ā" as the actual string value.
+                //
+                // WARNING: Do NOT skip this set() call, as it will cause regressions where
+                // utf8::upgrade() corrupts Unicode strings to wrong values (e.g., U+0100 -> U+0000).
                 scalar.set(string);
                 scalar.type = STRING;
             }
+            // If scalar.type == STRING: already upgraded, do nothing.
+            // The string content must NOT be modified - it already contains correct Unicode characters.
+            // This is a no-op case and is critical for preserving Unicode strings like "\x{100}".
         }
 
         return new RuntimeScalar(utf8Bytes.length).getList();

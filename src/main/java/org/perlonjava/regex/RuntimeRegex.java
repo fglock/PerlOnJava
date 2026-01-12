@@ -45,6 +45,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     public static String lastMatchedString = null;
     public static int lastMatchStart = -1;
     public static int lastMatchEnd = -1;
+    private static String[] lastCaptures = null;
+    private static int[] lastCaptureStarts = null;
+    private static int[] lastCaptureEnds = null;
     // Store match information from last successful pattern (persists across failed matches)
     public static String lastSuccessfulMatchedString = null;
     public static int lastSuccessfulMatchStart = -1;
@@ -53,7 +56,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     // ${^LAST_SUCCESSFUL_PATTERN}
     public static RuntimeRegex lastSuccessfulPattern = null;
     // Indicates if \G assertion is used
-    private final boolean useGAssertion = false;
+    private boolean useGAssertion = false;
     // Compiled regex pattern
     public Pattern pattern;
     int patternFlags;
@@ -96,6 +99,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             validateModifiers(modifiers);
 
             regex.regexFlags = fromModifiers(modifiers, patternString);
+            regex.useGAssertion = regex.regexFlags.useGAssertion();
             regex.patternFlags = regex.regexFlags.toPatternFlags();
 
             String javaPattern = null;
@@ -400,9 +404,15 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             }
         }
 
-        // Start matching from the current position if defined
-        if (isPosDefined) {
+        // Only honor pos() for /g (or when \G is in use). Plain m// should not be influenced
+        // by a previously set pos() from earlier /g matches on the same string.
+        //
+        // For \G specifically, Perl anchors the match at pos() (or at 0 if pos is undef).
+        boolean usePos = regex.useGAssertion || (isPosDefined && regex.regexFlags.isGlobalMatch());
+        if (usePos) {
             matcher.region(startPos, inputStr.length());
+        } else {
+            startPos = 0;
         }
 
         boolean found = false;
@@ -418,10 +428,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         lastMatchedString = null;
         lastMatchStart = -1;
         lastMatchEnd = -1;
+        lastCaptures = null;
+        lastCaptureStarts = null;
+        lastCaptureEnds = null;
 
         while (matcher.find()) {
             // If \G is used, ensure the match starts at the expected position
-            if (regex.useGAssertion && isPosDefined && matcher.start() != startPos) {
+            if (regex.useGAssertion && matcher.start() != startPos) {
                 break;
             }
 
@@ -435,6 +448,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             lastMatchedString = matcher.group(0);
             lastMatchStart = matcher.start();
             lastMatchEnd = matcher.end();
+
+            snapshotCaptures(matcher);
             // System.err.println("DEBUG: Set globalMatcher for match at position " + matcher.start() + "-" + matcher.end());
             // System.err.println("DEBUG: Stored match info - matched: '" + lastMatchedString + "', start: " + lastMatchStart + ", end: " + lastMatchEnd);
 
@@ -446,7 +461,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 // save captures in return list if needed
                 if (ctx == RuntimeContextType.LIST) {
                     for (int i = 1; i <= captureCount; i++) {
-                        String matchedStr = matcher.group(i);
+                        String matchedStr = lastCaptures != null && i < lastCaptures.length ? lastCaptures[i] : matcher.group(i);
                         if (matchedStr != null) {
                             matchedGroups.add(new RuntimeScalar(matchedStr));
                         }
@@ -509,6 +524,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             lastSuccessfulMatchStart = -1;
             lastSuccessfulMatchEnd = -1;
             lastSuccessfulMatchString = null;
+            lastCaptures = null;
+            lastCaptureStarts = null;
+            lastCaptureEnds = null;
         }
 
         if (found) {
@@ -813,13 +831,28 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     public static String captureString(int group) {
-        if (globalMatcher == null || group < 0 || group > globalMatcher.groupCount()) {
+        if (group < 0) {
             return null;
         }
-        return globalMatcher.group(group);
+        if (lastCaptures == null) {
+            if (globalMatcher == null || group > globalMatcher.groupCount()) {
+                return null;
+            }
+            return globalMatcher.group(group);
+        }
+        if (group >= lastCaptures.length) {
+            return null;
+        }
+        return lastCaptures[group];
     }
 
     public static String lastCaptureString() {
+        if (lastCaptures != null) {
+            if (lastCaptures.length == 0) {
+                return null;
+            }
+            return lastCaptures[lastCaptures.length - 1];
+        }
         if (globalMatcher == null) {
             return null;
         }
@@ -828,13 +861,21 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     public static RuntimeScalar matcherStart(int group) {
-        if (globalMatcher == null) {
+        if (group < 0) {
             return scalarUndef;
         }
-        if (group < 0 || group > globalMatcher.groupCount()) {
-            return scalarUndef;
+        int start;
+        if (lastCaptureStarts != null) {
+            if (group >= lastCaptureStarts.length) {
+                return scalarUndef;
+            }
+            start = lastCaptureStarts[group];
+        } else {
+            if (globalMatcher == null || group > globalMatcher.groupCount()) {
+                return scalarUndef;
+            }
+            start = globalMatcher.start(group);
         }
-        int start = globalMatcher.start(group);
         // If the group didn't participate in the match, start() returns -1
         // Perl returns undef in this case
         if (start == -1) {
@@ -844,13 +885,21 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     public static RuntimeScalar matcherEnd(int group) {
-        if (globalMatcher == null) {
+        if (group < 0) {
             return scalarUndef;
         }
-        if (group < 0 || group > globalMatcher.groupCount()) {
-            return scalarUndef;
+        int end;
+        if (lastCaptureEnds != null) {
+            if (group >= lastCaptureEnds.length) {
+                return scalarUndef;
+            }
+            end = lastCaptureEnds[group];
+        } else {
+            if (globalMatcher == null || group > globalMatcher.groupCount()) {
+                return scalarUndef;
+            }
+            end = globalMatcher.end(group);
         }
-        int end = globalMatcher.end(group);
         // If the group didn't participate in the match, end() returns -1
         // Perl returns undef in this case
         if (end == -1) {
@@ -860,11 +909,55 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     public static int matcherSize() {
+        if (lastCaptures != null) {
+            return lastCaptures.length;
+        }
         if (globalMatcher == null) {
             return 0;
         }
         // +1 because groupCount is zero-based, and we include the entire match
         return globalMatcher.groupCount() + 1;
+    }
+
+    private static void snapshotCaptures(Matcher matcher) {
+        int groupCount = matcher.groupCount();
+        int size = groupCount + 1;
+
+        String[] caps = new String[size];
+        int[] starts = new int[size];
+        int[] ends = new int[size];
+
+        for (int i = 0; i < size; i++) {
+            caps[i] = matcher.group(i);
+            starts[i] = matcher.start(i);
+            ends[i] = matcher.end(i);
+        }
+
+        // Perl semantics: when a quantified group repeats (especially with alternation),
+        // captures that were set in an earlier iteration but not in the final iteration
+        // must be cleared (undef). Java's regex engine may keep those old values.
+        //
+        // Apply a conservative normalization only when group 1 spans the final match
+        // (ends at the end of the overall match). This matches the common structure in
+        // re/regexp.t cases like ((foo)|(bar))* and (aa(bb)?)+.
+        if (size > 2 && starts[1] != -1 && ends[1] == ends[0]) {
+            int threshold = starts[1];
+            for (int i = 2; i < size; i++) {
+                if (starts[i] == -1 || ends[i] == -1) {
+                    continue;
+                }
+                // Clear captures that are entirely before the start of the last segment.
+                if (ends[i] <= threshold && starts[i] < threshold) {
+                    caps[i] = null;
+                    starts[i] = -1;
+                    ends[i] = -1;
+                }
+            }
+        }
+
+        lastCaptures = caps;
+        lastCaptureStarts = starts;
+        lastCaptureEnds = ends;
     }
 
     /**
