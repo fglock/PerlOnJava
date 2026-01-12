@@ -6,6 +6,7 @@ import org.perlonjava.runtime.RuntimeArray;
 import org.perlonjava.runtime.RuntimeList;
 import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.runtime.RuntimeScalarCache;
+import org.perlonjava.runtime.RuntimeScalarReadOnly;
 import org.perlonjava.symbols.ScopedSymbolTable;
 
 import java.nio.ByteBuffer;
@@ -96,22 +97,25 @@ public class Utf8 extends PerlModuleBase {
         String string = scalar.toString();
         byte[] utf8Bytes = string.getBytes(StandardCharsets.UTF_8);
 
-        if (scalar.type == BYTE_STRING) {
-            byte[] bytes = string.getBytes(StandardCharsets.ISO_8859_1);
-            CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
-                    .onMalformedInput(CodingErrorAction.REPORT)
-                    .onUnmappableCharacter(CodingErrorAction.REPORT);
-            try {
-                CharBuffer decoded = decoder.decode(ByteBuffer.wrap(bytes));
-                scalar.set(decoded.toString());
-            } catch (CharacterCodingException e) {
-                // Not valid UTF-8: keep Latin-1 codepoint semantics.
+        // Don't modify read-only scalars (e.g., string literals)
+        if (!(scalar instanceof RuntimeScalarReadOnly)) {
+            if (scalar.type == BYTE_STRING) {
+                byte[] bytes = string.getBytes(StandardCharsets.ISO_8859_1);
+                CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
+                        .onMalformedInput(CodingErrorAction.REPORT)
+                        .onUnmappableCharacter(CodingErrorAction.REPORT);
+                try {
+                    CharBuffer decoded = decoder.decode(ByteBuffer.wrap(bytes));
+                    scalar.set(decoded.toString());
+                } catch (CharacterCodingException e) {
+                    // Not valid UTF-8: keep Latin-1 codepoint semantics.
+                    scalar.set(string);
+                }
+                scalar.type = STRING;
+            } else if (scalar.type != STRING) {
                 scalar.set(string);
+                scalar.type = STRING;
             }
-            scalar.type = STRING;
-        } else if (scalar.type != STRING) {
-            scalar.set(string);
-            scalar.type = STRING;
         }
 
         return new RuntimeScalar(utf8Bytes.length).getList();
