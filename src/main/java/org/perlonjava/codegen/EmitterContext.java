@@ -71,6 +71,12 @@ public class EmitterContext {
     public boolean quoteMetaEnabled;
 
     /**
+     * Captured environment array for eval - stores the exact variable names array
+     * from compile-time so runtime constructor generation matches
+     */
+    public String[] capturedEnv;
+
+    /**
      * Constructs a new EmitterContext with the specified parameters.
      *
      * @param javaClassInfo   the name of the Java class being generated

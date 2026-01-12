@@ -290,9 +290,10 @@ public class EmitterMethodCreator implements Opcodes {
      * @return A descriptor string representing the type of the Perl variable.
      */
     public static String getVariableDescriptor(String varName) {
-        // Ensure the variable name is not empty
+        // Handle null or empty variable names (gaps in symbol table)
+        // These represent unused slots in the local variable array
         if (varName == null || varName.isEmpty()) {
-            throw new PerlCompilerException("Variable name cannot be null or empty");
+            return "Lorg/perlonjava/runtime/RuntimeScalar;";
         }
 
         // Extract the first character of the variable name
@@ -314,9 +315,10 @@ public class EmitterMethodCreator implements Opcodes {
      * @return A class name string representing the type of the Perl variable.
      */
     public static String getVariableClassName(String varName) {
-        // Ensure the variable name is not empty
+        // Handle null or empty variable names (gaps in symbol table)
+        // These represent unused slots in the local variable array
         if (varName == null || varName.isEmpty()) {
-            throw new PerlCompilerException("Variable name cannot be null or empty");
+            return "org/perlonjava/runtime/RuntimeScalar";
         }
 
         // Extract the first character of the variable name
@@ -433,7 +435,8 @@ public class EmitterMethodCreator implements Opcodes {
                 || className.replace('/', '.').contains(asmDebugClassFilter);
         
         try {
-            String[] env = ctx.symbolTable.getVariableNames();
+            // Use capturedEnv if available (for eval), otherwise get from symbol table
+            String[] env = (ctx.capturedEnv != null) ? ctx.capturedEnv : ctx.symbolTable.getVariableNames();
 
             // Create a ClassWriter with COMPUTE_FRAMES and COMPUTE_MAXS options for automatic frame and max
             // stack size calculation
@@ -460,6 +463,10 @@ public class EmitterMethodCreator implements Opcodes {
 
             // Add instance fields to the class for closure variables
             for (String fieldName : env) {
+                // Skip null entries (gaps in sparse symbol table)
+                if (fieldName == null || fieldName.isEmpty()) {
+                    continue;
+                }
                 String descriptor = getVariableDescriptor(fieldName);
                 ctx.logDebug("Create instance field: " + descriptor);
                 cw.visitField(Opcodes.ACC_PUBLIC, fieldName, descriptor, null, null).visitEnd();
@@ -469,9 +476,10 @@ public class EmitterMethodCreator implements Opcodes {
             cw.visitField(Opcodes.ACC_PUBLIC, "__SUB__", "Lorg/perlonjava/runtime/RuntimeScalar;", null, null).visitEnd();
 
             // Add a constructor with parameters for initializing the fields
+            // Include ALL env slots (even nulls) so signature matches caller expectations
             StringBuilder constructorDescriptor = new StringBuilder("(");
             for (int i = skipVariables; i < env.length; i++) {
-                String descriptor = getVariableDescriptor(env[i]);
+                String descriptor = getVariableDescriptor(env[i]);  // handles nulls gracefully
                 constructorDescriptor.append(descriptor);
             }
             constructorDescriptor.append(")V");
@@ -488,6 +496,10 @@ public class EmitterMethodCreator implements Opcodes {
                     "()V",
                     false); // Call the superclass constructor
             for (int i = skipVariables; i < env.length; i++) {
+                // Skip null entries (gaps in sparse symbol table)
+                if (env[i] == null || env[i].isEmpty()) {
+                    continue;
+                }
                 String descriptor = getVariableDescriptor(env[i]);
 
                 mv.visitVarInsn(Opcodes.ALOAD, 0); // Load 'this'
