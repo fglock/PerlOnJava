@@ -190,6 +190,28 @@ public class BitwiseOperators {
     }
 
     /**
+     * Performs a bitwise NOT operation with signed (integer) semantics.
+     * This is used when "use integer" pragma is in effect.
+     *
+     * @param runtimeScalar The operand.
+     * @return A new RuntimeScalar with the result of the integer bitwise NOT operation.
+     */
+    public static RuntimeScalar integerBitwiseNot(RuntimeScalar runtimeScalar) {
+        // Fetch tied scalar once to avoid redundant FETCH calls
+        RuntimeScalar val = runtimeScalar.type == RuntimeScalarType.TIED_SCALAR ? runtimeScalar.tiedFetch() : runtimeScalar;
+
+        // In Perl, if the operand is a reference or doesn't look like a number, use string operations
+        if (!ScalarUtils.looksLikeNumber(val)) {
+            return bitwiseNotDot(val);
+        }
+
+        // Use signed 32-bit integer semantics
+        int value = val.getInt();
+        int result = ~value;
+        return new RuntimeScalar(result);
+    }
+
+    /**
      * Performs a bitwise AND operation on a single string RuntimeScalar object.
      * This simulates the Perl bitwise string operator &.
      *
