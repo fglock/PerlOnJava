@@ -214,7 +214,7 @@ public class EmitLiteral {
             return;
         }
 
-        if (!ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8)) {
+        if (!ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8) && !ctx.compilerOptions.isUnicodeSource) {
             // Under `no utf8` - create a octet string
 
             int stringIndex = RuntimeScalarCache.getOrCreateByteStringIndex(node.value);
