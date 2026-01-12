@@ -421,7 +421,19 @@ public class EmitVariable {
             case "*":
                 // `*$a`
                 emitterVisitor.ctx.logDebug("GETVAR `*$a`");
-                if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_REFS)) {
+                boolean isPostfixDeref = Boolean.TRUE.equals(node.getAnnotation("postfixDeref"));
+                boolean postfixLiteralSymbol = isPostfixDeref
+                        && (node.operand instanceof StringNode || node.operand instanceof IdentifierNode);
+
+                if (postfixLiteralSymbol) {
+                    node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    emitterVisitor.pushCurrentPackage();
+                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                            "org/perlonjava/runtime/RuntimeScalar",
+                            "globDerefPostfix",
+                            "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeGlob;",
+                            false);
+                } else if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_REFS)) {
                     node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "globDeref", "()Lorg/perlonjava/runtime/RuntimeGlob;", false);
                 } else {

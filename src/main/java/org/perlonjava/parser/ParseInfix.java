@@ -115,6 +115,28 @@ public class ParseInfix {
                         TokenUtils.consume(parser);
                         right = new ListNode(ListParser.parseList(parser, ")", 0), parser.tokenIndex);
                         return new BinaryOperatorNode(token.text, left, right, parser.tokenIndex);
+                    case "**":
+                        // Postfix GLOB dereference: $ref->**
+                        // Equivalent to prefix glob deref `*$ref`.
+                        TokenUtils.consume(parser);
+                        OperatorNode globDeref = new OperatorNode("*", left, parser.tokenIndex);
+                        globDeref.setAnnotation("postfixDeref", true);
+                        return globDeref;
+                    case "*":
+                        // Postfix glob slot access: $ref->*{IO} or $ref->*{CODE}
+                        // Parse as *$ref{...}
+                        TokenUtils.consume(parser); // consume '*'
+                        if (peek(parser).text.equals("{")) {
+                            TokenUtils.consume(parser); // consume '{'
+                            right = new HashLiteralNode(parseHashSubscript(parser), parser.tokenIndex);
+                            OperatorNode globForSlot = new OperatorNode("*", left, parser.tokenIndex);
+                            globForSlot.setAnnotation("postfixDeref", true);
+                            return new BinaryOperatorNode("{",
+                                    globForSlot,
+                                    right,
+                                    parser.tokenIndex);
+                        }
+                        throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);
                     case "{":
                         TokenUtils.consume(parser);
                         right = new HashLiteralNode(parseHashSubscript(parser), parser.tokenIndex);
