@@ -207,25 +207,18 @@ public class FileTestOperator {
     public static RuntimeScalar fileTest(String operator, RuntimeScalar fileHandle) {
         lastFileHandle.set(fileHandle);
 
-        // Perl's -l treats non-bareword globrefs as file names (stringification), but warns.
-        if (operator.equals("-l") && fileHandle.type == RuntimeScalarType.GLOBREFERENCE && fileHandle.value instanceof org.perlonjava.runtime.RuntimeGlob) {
-            warnFilehandleL(fileHandle);
-            RuntimeScalar asFilename = new RuntimeScalar(fileHandle.toString());
-            return fileTest(operator, asFilename);
-        }
-
         // Check if the argument is a file handle (GLOB or GLOBREFERENCE)
         if (fileHandle.type == RuntimeScalarType.GLOB || fileHandle.type == RuntimeScalarType.GLOBREFERENCE) {
-            // Perl warns on -l applied to a filehandle (including IO refs like *foo{IO}),
-            // and returns undef with ENOENT.
-            if (operator.equals("-l") && (fileHandle.getRuntimeIO() != null || isIORef(fileHandle))) {
+            RuntimeIO fh = fileHandle.getRuntimeIO();
+
+            // Perl warns on -l applied to a filehandle (including unopened filehandles and IO refs),
+            // and returns undef with EBADF. Check this before checking if fh is null.
+            if (operator.equals("-l")) {
                 warnFilehandleL(fileHandle);
-                getGlobalVariable("main::!").set(2);
-                updateLastStat(fileHandle, false, 2);
+                getGlobalVariable("main::!").set(9);  // EBADF
+                updateLastStat(fileHandle, false, 9);
                 return scalarUndef;
             }
-
-            RuntimeIO fh = fileHandle.getRuntimeIO();
 
             // Check if fh is null (invalid filehandle)
             if (fh == null) {
