@@ -63,6 +63,20 @@ public class RegexPreprocessorHelper {
             sb.append(nextChar);
             return offset;
         }
+        if (nextChar == 'k' && offset + 1 < length && s.charAt(offset + 1) == '{') {
+            // Handle \k{ name } backreference (Perl syntax)
+            offset += 2; // Skip past \k{
+            int endBrace = s.indexOf('}', offset);
+            if (endBrace != -1) {
+                String name = s.substring(offset, endBrace).trim();
+                // Convert to Java syntax \k<name>
+                sb.setLength(sb.length() - 1); // Remove the backslash
+                sb.append("\\k<").append(name).append(">");
+                return endBrace;
+            } else {
+                RegexPreprocessor.regexError(s, offset - 2, "Unterminated \\k{...} backreference");
+            }
+        }
         if (nextChar == 'k' && offset + 1 < length && s.charAt(offset + 1) == '\'') {
             // Handle \k'name' backreference (Perl syntax)
             offset += 2; // Skip past \k'
@@ -375,17 +389,21 @@ public class RegexPreprocessorHelper {
                     sb.append(String.format("\\x{%X}", octalValue));
                     offset += octalLength - 1; // -1 because caller will increment
                 } else if (octalValue <= 255 && octalLength == 3) {
-                    // Standard 3-digit octal, prepend 0 for Java
+                    // Standard 3-digit octal, prepend 0 for Java and consume all digits
+                    String digits = s.substring(offset, offset + 3);
                     sb.append('0');
-                    sb.append(Character.toChars(c2));
+                    sb.append(digits);
+                    offset += 2; // consume 2 extra digits (caller will increment once)
                 } else if (c2 == '0' && octalLength == 1) {
                     // Single \0 becomes \00
                     sb.append('0');
                     sb.append('0');
                 } else if (c2 >= '1' && c2 <= '3' && octalLength == 3) {
-                    // 3-digit octal starting with 1-3, prepend 0
+                    // 3-digit octal starting with 1-3, prepend 0 and consume all digits
+                    String digits = s.substring(offset, offset + 3);
                     sb.append('0');
-                    sb.append(Character.toChars(c2));
+                    sb.append(digits);
+                    offset += 2; // consume 2 extra digits (caller will increment once)
                 } else {
                     // Short octal or single digit, pass through
                     sb.append(Character.toChars(c2));
@@ -611,9 +629,11 @@ public class RegexPreprocessorHelper {
                                 offset += octalLength - 1; // -1 because outer loop will increment
                                 lastChar = octalValue;
                             } else if (octalValue <= 255 && octalLength == 3) {
-                                // Standard 3-digit octal, prepend 0 for Java
+                                // Standard 3-digit octal, prepend 0 for Java and consume all digits
+                                String digits = s.substring(offset, offset + 3);
                                 sb.append('0');
-                                sb.append(Character.toChars(c2));
+                                sb.append(digits);
+                                offset += 2; // consume 2 extra digits (outer loop will increment once)
                                 lastChar = octalValue;
                             } else if (c2 == '0' && octalLength == 1) {
                                 // Single \0 becomes \00
@@ -621,9 +641,11 @@ public class RegexPreprocessorHelper {
                                 sb.append('0');
                                 lastChar = 0;
                             } else if (c2 >= '1' && c2 <= '3' && octalLength == 3) {
-                                // 3-digit octal starting with 1-3, prepend 0
+                                // 3-digit octal starting with 1-3, prepend 0 and consume all digits
+                                String digits = s.substring(offset, offset + 3);
                                 sb.append('0');
-                                sb.append(Character.toChars(c2));
+                                sb.append(digits);
+                                offset += 2; // consume 2 extra digits (outer loop will increment once)
                                 lastChar = octalValue;
                             } else {
                                 // Short octal or single digit, pass through

@@ -45,9 +45,10 @@ public class CharacterClassMapper {
     }
 
     public static String getMappedClass(String className) {
-        // Check for empty POSIX class [:]
+        // Empty POSIX class [:] is treated as literal text in Perl regexes.
+        // Return null so the caller can fall back to literal '[' handling.
         if (className.equals("[:]")) {
-            throw new PerlCompilerException("POSIX class [:] unknown");
+            return null;
         }
 
         String replacement = CHARACTER_CLASSES.get(className);
