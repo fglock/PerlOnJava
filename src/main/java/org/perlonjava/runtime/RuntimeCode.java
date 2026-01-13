@@ -177,9 +177,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
         }
         
-        // Check if the result is already cached (include hasUnicode and isEvalbytes in cache key)
+        // Check if the result is already cached (include hasUnicode, isEvalbytes, and feature flags in cache key)
         // Skip caching when $^P is set, so each eval gets a unique filename
-        String cacheKey = code.toString() + '\0' + evalTag + '\0' + hasUnicode + '\0' + ctx.isEvalbytes;
+        int featureFlags = ctx.symbolTable.featureFlagsStack.peek();
+        String cacheKey = code.toString() + '\0' + evalTag + '\0' + hasUnicode + '\0' + ctx.isEvalbytes + '\0' + featureFlags;
         Class<?> cachedClass = null;
         if (!isDebugging) {
             synchronized (evalCache) {
@@ -207,6 +208,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         // Parse using a mutable clone so lexical declarations inside the eval do not
         // change the captured environment / constructor signature.
+        // IMPORTANT: The parseSymbolTable starts with the captured flags so that
+        // the eval code is parsed with the correct feature/strict/warning context
         ScopedSymbolTable parseSymbolTable = capturedSymbolTable.snapShot();
 
         EmitterContext evalCtx = new EmitterContext(
