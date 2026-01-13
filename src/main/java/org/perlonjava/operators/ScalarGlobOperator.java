@@ -62,6 +62,15 @@ public class ScalarGlobOperator {
      */
     public static RuntimeBase evaluate(int id, RuntimeScalar patternArg, int ctx) {
         String pattern = patternArg.toString();
+        String sanitized = RuntimeIO.sanitizeGlobPattern(pattern);
+        if (sanitized == null) {
+            if (ctx == RuntimeContextType.SCALAR) {
+                getGlobalVariable("main::_").set(scalarUndef);
+                return scalarUndef;
+            }
+            return new RuntimeList();
+        }
+        pattern = sanitized;
 
         if (ctx == RuntimeContextType.SCALAR) {
             return evaluateInScalarContext(id, pattern);

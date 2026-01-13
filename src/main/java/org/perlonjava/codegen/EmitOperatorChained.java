@@ -49,7 +49,22 @@ public class EmitOperatorChained {
 
         // Emit first comparison
         operands.get(0).accept(scalarVisitor);
+
+        int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+        boolean pooledLeft = leftSlot >= 0;
+        if (!pooledLeft) {
+            leftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        }
+        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
+
         operands.get(1).accept(scalarVisitor);
+
+        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+        emitterVisitor.ctx.mv.visitInsn(Opcodes.SWAP);
+
+        if (pooledLeft) {
+            emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+        }
         // Create a BinaryOperatorNode for the first comparison
         BinaryOperatorNode firstCompNode = new BinaryOperatorNode(
                 operators.get(0),
@@ -77,8 +92,24 @@ public class EmitOperatorChained {
 
                 // Previous was true, do next comparison
                 emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
+
                 operands.get(i).accept(scalarVisitor);
+
+                int chainLeftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+                boolean pooledChainLeft = chainLeftSlot >= 0;
+                if (!pooledChainLeft) {
+                    chainLeftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                }
+                emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, chainLeftSlot);
+
                 operands.get(i + 1).accept(scalarVisitor);
+
+                emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, chainLeftSlot);
+                emitterVisitor.ctx.mv.visitInsn(Opcodes.SWAP);
+
+                if (pooledChainLeft) {
+                    emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+                }
                 // Create a BinaryOperatorNode for this comparison
                 BinaryOperatorNode compNode = new BinaryOperatorNode(
                         operators.get(i),

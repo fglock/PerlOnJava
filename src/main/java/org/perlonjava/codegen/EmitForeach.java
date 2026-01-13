@@ -39,9 +39,11 @@ public class EmitForeach {
     public static void emitFor1(EmitterVisitor emitterVisitor, For1Node node) {
         emitterVisitor.ctx.logDebug("FOR1 start");
 
+        Node variableNode = node.variable;
+
         // Check if the loop variable is a complex lvalue expression like $$f
         // If so, emit as while loop with explicit assignment
-        if (node.variable instanceof OperatorNode opNode &&
+        if (variableNode instanceof OperatorNode opNode &&
                 opNode.operand instanceof OperatorNode nestedOpNode &&
                 opNode.operator.equals("$") && nestedOpNode.operator.equals("$")) {
 
@@ -60,7 +62,7 @@ public class EmitForeach {
         // Check if the variable is global
         boolean loopVariableIsGlobal = false;
         String globalVarName = null;
-        if (node.variable instanceof OperatorNode opNode && opNode.operator.equals("$")) {
+        if (variableNode instanceof OperatorNode opNode && opNode.operator.equals("$")) {
             if (opNode.operand instanceof IdentifierNode idNode) {
                 String varName = opNode.operator + idNode.name;
                 int varIndex = emitterVisitor.ctx.symbolTable.getVariableIndex(varName);
@@ -72,7 +74,7 @@ public class EmitForeach {
         }
 
         // First declare the variables if it's a my/our operator
-        if (node.variable instanceof OperatorNode opNode &&
+        if (variableNode instanceof OperatorNode opNode &&
                 (opNode.operator.equals("my") || opNode.operator.equals("our"))) {
             boolean isWarningEnabled = Warnings.warningManager.isWarningEnabled("redefine");
             if (isWarningEnabled) {
@@ -80,9 +82,26 @@ public class EmitForeach {
                 Warnings.warningManager.setWarningState("redefine", false);
             }
             // emit the variable declarations
-            node.variable.accept(emitterVisitor.with(RuntimeContextType.VOID));
-            // rewrite the variable node without the declaration
-            node.variable = opNode.operand;
+            variableNode.accept(emitterVisitor.with(RuntimeContextType.VOID));
+            // Use the variable node without the declaration for codegen, but do not mutate the AST.
+            variableNode = opNode.operand;
+
+            if (opNode.operator.equals("my") && variableNode instanceof OperatorNode declVar
+                    && declVar.operator.equals("$") && declVar.operand instanceof IdentifierNode declId) {
+                String varName = declVar.operator + declId.name;
+                int varIndex = emitterVisitor.ctx.symbolTable.getVariableIndex(varName);
+                if (varIndex == -1) {
+                    varIndex = emitterVisitor.ctx.symbolTable.addVariable(varName, "my", declVar);
+                    mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeScalar");
+                    mv.visitInsn(Opcodes.DUP);
+                    mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                            "org/perlonjava/runtime/RuntimeScalar",
+                            "<init>",
+                            "()V",
+                            false);
+                    mv.visitVarInsn(Opcodes.ASTORE, varIndex);
+                }
+            }
 
             if (isWarningEnabled) {
                 // restore warnings
@@ -91,6 +110,26 @@ public class EmitForeach {
 
             // Reset global variable check after rewriting
             loopVariableIsGlobal = false;
+        }
+
+        if (variableNode instanceof OperatorNode opNode &&
+                opNode.operator.equals("state") && opNode.operand instanceof OperatorNode declVar
+                && declVar.operator.equals("$") && declVar.operand instanceof IdentifierNode declId) {
+            variableNode.accept(emitterVisitor.with(RuntimeContextType.VOID));
+            variableNode = opNode.operand;
+            String varName = declVar.operator + declId.name;
+            int varIndex = emitterVisitor.ctx.symbolTable.getVariableIndex(varName);
+            if (varIndex == -1) {
+                varIndex = emitterVisitor.ctx.symbolTable.addVariable(varName, "state", declVar);
+                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeScalar");
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                        "org/perlonjava/runtime/RuntimeScalar",
+                        "<init>",
+                        "()V",
+                        false);
+                mv.visitVarInsn(Opcodes.ASTORE, varIndex);
+            }
         }
 
         // For global $_ as loop variable, we need to:
@@ -122,6 +161,8 @@ public class EmitForeach {
         
         Local.localRecord localRecord = Local.localSetup(emitterVisitor.ctx, node, mv);
 
+        int iteratorIndex = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+
         // Check if the list was pre-evaluated by EmitBlock (for nested for loops with local $_)
         if (node.preEvaluatedArrayIndex >= 0) {
             // Use the pre-evaluated array that was stored before local $_ was emitted
@@ -140,13 +181,13 @@ public class EmitForeach {
             
             // Get iterator from the pre-evaluated array
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray", "iterator", "()Ljava/util/Iterator;", false);
+            mv.visitVarInsn(Opcodes.ASTORE, iteratorIndex);
         } else if (isGlobalUnderscore) {
             // Global $_ as loop variable: evaluate list to array of aliases first
             // This preserves aliasing semantics while ensuring list is evaluated before any
             // parent block's local $_ takes effect (e.g., in nested for loops)
             node.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "getArrayOfAlias", "()Lorg/perlonjava/runtime/RuntimeArray;", false);
-            
+
             // For statement modifiers, localize $_ ourselves
             if (needLocalizeUnderscore) {
                 mv.visitLdcInsn(globalVarName);
@@ -157,13 +198,33 @@ public class EmitForeach {
                         false);
                 mv.visitInsn(Opcodes.POP);  // Discard the returned scalar
             }
-            
-            // Get iterator from the array of aliases
+
+            // IMPORTANT: avoid materializing huge ranges.
+            // PerlRange.setArrayOfAlias() currently expands to a full list, which can OOM
+            // in Benchmark.pm (for (1..$n) with large $n).
+            Label notRangeLabel = new Label();
+            Label afterIterLabel = new Label();
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitTypeInsn(Opcodes.INSTANCEOF, "org/perlonjava/runtime/PerlRange");
+            mv.visitJumpInsn(Opcodes.IFEQ, notRangeLabel);
+
+            // Range: iterate directly.
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "iterator", "()Ljava/util/Iterator;", false);
+            mv.visitVarInsn(Opcodes.ASTORE, iteratorIndex);
+            mv.visitJumpInsn(Opcodes.GOTO, afterIterLabel);
+
+            // Non-range: preserve aliasing semantics by iterating an array-of-alias.
+            mv.visitLabel(notRangeLabel);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "getArrayOfAlias", "()Lorg/perlonjava/runtime/RuntimeArray;", false);
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray", "iterator", "()Ljava/util/Iterator;", false);
+            mv.visitVarInsn(Opcodes.ASTORE, iteratorIndex);
+
+            mv.visitLabel(afterIterLabel);
         } else {
             // Standard path: obtain iterator for the list
             node.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "iterator", "()Ljava/util/Iterator;", false);
+            mv.visitVarInsn(Opcodes.ASTORE, iteratorIndex);
         }
 
         mv.visitLabel(loopStart);
@@ -172,30 +233,26 @@ public class EmitForeach {
         EmitStatement.emitSignalCheck(mv);
 
         // Check if iterator has more elements
-        mv.visitInsn(Opcodes.DUP);
+        mv.visitVarInsn(Opcodes.ALOAD, iteratorIndex);
         mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "hasNext", "()Z", true);
         mv.visitJumpInsn(Opcodes.IFEQ, loopEnd);
 
         // Handle multiple variables case
-        if (node.variable instanceof ListNode varList) {
+        if (variableNode instanceof ListNode varList) {
             for (int i = 0; i < varList.elements.size(); i++) {
-                // Duplicate iterator
-                mv.visitInsn(Opcodes.DUP);
-
-                // Check if iterator has more elements
-                mv.visitInsn(Opcodes.DUP);
-                mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "hasNext", "()Z", true);
                 Label hasValueLabel = new Label();
                 Label endValueLabel = new Label();
+                mv.visitVarInsn(Opcodes.ALOAD, iteratorIndex);
+                mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "hasNext", "()Z", true);
                 mv.visitJumpInsn(Opcodes.IFNE, hasValueLabel);
 
                 // No more elements - assign undef
-                mv.visitInsn(Opcodes.POP); // Pop the iterator copy
                 EmitOperator.emitUndef(mv);
                 mv.visitJumpInsn(Opcodes.GOTO, endValueLabel);
 
                 // Has more elements - get next value
                 mv.visitLabel(hasValueLabel);
+                mv.visitVarInsn(Opcodes.ALOAD, iteratorIndex);
                 mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "next", "()Ljava/lang/Object;", true);
                 mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeScalar");
 
@@ -212,7 +269,7 @@ public class EmitForeach {
             }
         } else {
             // Original single variable case
-            mv.visitInsn(Opcodes.DUP);
+            mv.visitVarInsn(Opcodes.ALOAD, iteratorIndex);
             mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "next", "()Ljava/lang/Object;", true);
             mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeScalar");
 
@@ -225,7 +282,7 @@ public class EmitForeach {
                         "aliasGlobalVariable",
                         "(Ljava/lang/String;Lorg/perlonjava/runtime/RuntimeScalar;)V",
                         false);
-            } else if (node.variable instanceof OperatorNode operatorNode) {
+            } else if (variableNode instanceof OperatorNode operatorNode) {
                 // Local variable case
                 String varName = operatorNode.operator + ((IdentifierNode) operatorNode.operand).name;
                 int varIndex = emitterVisitor.ctx.symbolTable.getVariableIndex(varName);
@@ -233,8 +290,6 @@ public class EmitForeach {
                 mv.visitVarInsn(Opcodes.ASTORE, varIndex);
             }
         }
-
-        emitterVisitor.ctx.javaClassInfo.incrementStackLevel(1);
 
         Label redoLabel = new Label();
         mv.visitLabel(redoLabel);
@@ -307,9 +362,6 @@ public class EmitForeach {
         Local.localTeardown(localRecord, mv);
 
         emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
-
-        emitterVisitor.ctx.javaClassInfo.decrementStackLevel(1);
-        mv.visitInsn(Opcodes.POP);
 
         if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
             // Foreach loop returns empty string when it completes normally
@@ -530,18 +582,21 @@ public class EmitForeach {
         node.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "iterator", "()Ljava/util/Iterator;", false);
 
+        int iteratorIndex = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        mv.visitVarInsn(Opcodes.ASTORE, iteratorIndex);
+
         mv.visitLabel(loopStart);
 
         // Check for pending signals (alarm, etc.) at loop entry
         EmitStatement.emitSignalCheck(mv);
 
         // Check if iterator has more elements
-        mv.visitInsn(Opcodes.DUP);
+        mv.visitVarInsn(Opcodes.ALOAD, iteratorIndex);
         mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "hasNext", "()Z", true);
         mv.visitJumpInsn(Opcodes.IFEQ, loopEnd);
 
         // Get next value
-        mv.visitInsn(Opcodes.DUP);
+        mv.visitVarInsn(Opcodes.ALOAD, iteratorIndex);
         mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "next", "()Ljava/lang/Object;", true);
         mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeScalar");
 
@@ -552,8 +607,6 @@ public class EmitForeach {
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
                 "set", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
         mv.visitInsn(Opcodes.POP);
-
-        emitterVisitor.ctx.javaClassInfo.incrementStackLevel(1);
 
         Label redoLabel = new Label();
         mv.visitLabel(redoLabel);
@@ -572,9 +625,6 @@ public class EmitForeach {
         mv.visitJumpInsn(Opcodes.GOTO, loopStart);
 
         mv.visitLabel(loopEnd);
-
-        emitterVisitor.ctx.javaClassInfo.decrementStackLevel(1);
-        mv.visitInsn(Opcodes.POP);
 
         if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
             // Foreach loop returns empty string when it completes normally

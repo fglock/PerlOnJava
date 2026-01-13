@@ -71,6 +71,17 @@ public class EmitterContext {
     public boolean quoteMetaEnabled;
 
     /**
+     * Captured environment array for eval - stores the exact variable names array
+     * from compile-time so runtime constructor generation matches
+     */
+    public String[] capturedEnv;
+
+    /**
+     * Flag indicating if this is an evalbytes context - prevents Unicode source detection
+     */
+    public boolean isEvalbytes;
+
+    /**
      * Constructs a new EmitterContext with the specified parameters.
      *
      * @param javaClassInfo   the name of the Java class being generated
@@ -148,6 +159,10 @@ public class EmitterContext {
         if (this.compilerOptions.debugEnabled) { // Use ctx.debugEnabled
             System.out.println(message);
         }
+    }
+
+    public void clearContextCache() {
+        contextCache.clear();
     }
 
     @Override

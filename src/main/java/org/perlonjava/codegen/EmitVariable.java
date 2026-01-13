@@ -49,6 +49,63 @@ import static org.perlonjava.perlmodule.Strict.HINT_STRICT_VARS;
  */
 public class EmitVariable {
 
+    private static boolean isBuiltinSpecialLengthOneVar(String sigil, String name) {
+        if (!"$".equals(sigil) || name == null || name.length() != 1) {
+            return false;
+        }
+        char c = name.charAt(0);
+        // In Perl, many single-character non-identifier variables (punctuation/digits)
+        // are built-in special vars and are exempt from strict 'vars'.
+        return !Character.isLetter(c);
+    }
+
+    private static boolean isBuiltinSpecialScalarVar(String sigil, String name) {
+        if (!"$".equals(sigil) || name == null || name.isEmpty()) {
+            return false;
+        }
+        // ${^FOO} variables are encoded as a leading ASCII control character.
+        // (e.g. ${^GLOBAL_PHASE} -> "\aLOBAL_PHASE"). These are built-in and strict-safe.
+        if (name.charAt(0) < 32) {
+            return true;
+        }
+        return name.equals("ARGV")
+                || name.equals("ARGVOUT")
+                || name.equals("ENV")
+                || name.equals("INC")
+                || name.equals("SIG")
+                || name.equals("STDIN")
+                || name.equals("STDOUT")
+                || name.equals("STDERR");
+    }
+
+    private static boolean isNonAsciiLengthOneScalarAllowedUnderNoUtf8(EmitterContext ctx, String sigil, String name) {
+        if (!"$".equals(sigil) || name == null || name.length() != 1) {
+            return false;
+        }
+        char c = name.charAt(0);
+        return c > 127 && !ctx.symbolTable.isStrictOptionEnabled(org.perlonjava.perlmodule.Strict.HINT_UTF8);
+    }
+
+    private static boolean isBuiltinSpecialContainerVar(String sigil, String name) {
+        if (name == null) {
+            return false;
+        }
+        if ("%".equals(sigil)) {
+            return name.equals("SIG")
+                    || name.equals("ENV")
+                    || name.equals("INC")
+                    || name.equals("+")
+                    || name.equals("-");
+        }
+        if ("@".equals(sigil)) {
+            return name.equals("ARGV")
+                    || name.equals("INC")
+                    || name.equals("+")
+                    || name.equals("-");
+        }
+        return false;
+    }
+
     /**
      * Emits bytecode to fetch a global (package) variable.
      * 
@@ -87,7 +144,20 @@ public class EmitVariable {
         String var = NameNormalizer.normalizeVariableName(varName, ctx.symbolTable.getCurrentPackage());
         ctx.logDebug("GETVAR lookup global " + sigil + varName + " normalized to " + var + " createIfNotExists:" + createIfNotExists);
 
-        if (sigil.equals("$") && (createIfNotExists || GlobalVariable.existsGlobalVariable(var))) {
+        // Perl creates package symbols at compile time when they are referenced.
+        // Our emitter runs before the program executes, so we pre-vivify globals here
+        // when creation is allowed. This makes stash enumeration (keys %pkg::) match Perl.
+        if (createIfNotExists) {
+            if (sigil.equals("$")) {
+                GlobalVariable.getGlobalVariable(var);
+            } else if (sigil.equals("@")) {
+                GlobalVariable.getGlobalArray(var);
+            } else if (sigil.equals("%") && !var.endsWith("::")) {
+                GlobalVariable.getGlobalHash(var);
+            }
+        }
+
+        if (sigil.equals("$") && createIfNotExists) {
             // fetch a global variable
             ctx.mv.visitLdcInsn(var);
             ctx.mv.visitMethodInsn(
@@ -99,7 +169,7 @@ public class EmitVariable {
             return;
         }
 
-        if (sigil.equals("@") && (createIfNotExists || GlobalVariable.existsGlobalArray(var))) {
+        if (sigil.equals("@") && createIfNotExists) {
             // fetch a global variable
             ctx.mv.visitLdcInsn(var);
             ctx.mv.visitMethodInsn(
@@ -125,7 +195,7 @@ public class EmitVariable {
             return;
         }
 
-        if (sigil.equals("%") && (createIfNotExists || GlobalVariable.existsGlobalHash(var))) {
+        if (sigil.equals("%") && createIfNotExists) {
             // fetch a global variable
             ctx.mv.visitLdcInsn(var);
             ctx.mv.visitMethodInsn(
@@ -262,10 +332,26 @@ public class EmitVariable {
                 String normalizedName = NameNormalizer.normalizeVariableName(name, emitterVisitor.ctx.symbolTable.getCurrentPackage());
                 boolean isSpecialSortVar = sigil.equals("$") && ("main::a".equals(normalizedName) || "main::b".equals(normalizedName));
 
+                boolean allowIfAlreadyExists = false;
+                if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_VARS)) {
+                    if (sigil.equals("$")) {
+                        allowIfAlreadyExists = GlobalVariable.existsGlobalVariable(normalizedName);
+                    } else if (sigil.equals("@")) {
+                        allowIfAlreadyExists = GlobalVariable.existsGlobalArray(normalizedName);
+                    } else if (sigil.equals("%") && !normalizedName.endsWith("::")) {
+                        allowIfAlreadyExists = GlobalVariable.existsGlobalHash(normalizedName);
+                    }
+                }
+
                 // Compute createIfNotExists flag - determines if variable can be auto-vivified
                 boolean createIfNotExists = name.contains("::")  // Fully qualified: $Package::var
                         || ScalarUtils.isInteger(name)           // Regex capture: $1, $2, etc.
                         || isSpecialSortVar                      // Sort variables: $a, $b
+                        || isBuiltinSpecialLengthOneVar(sigil, name) // $%, $-, $[, $}, etc.
+                        || isBuiltinSpecialScalarVar(sigil, name) // ${^GLOBAL_PHASE}, $ARGV, $ENV, etc.
+                        || isBuiltinSpecialContainerVar(sigil, name) // %SIG, %ENV, @ARGV, etc.
+                        || isNonAsciiLengthOneScalarAllowedUnderNoUtf8(emitterVisitor.ctx, sigil, name)
+                        || allowIfAlreadyExists
                         || !emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_VARS)  // no strict 'vars'
                         || (isDeclared && isLexical);            // Lexically declared (my/our/state)
                 
@@ -335,7 +421,19 @@ public class EmitVariable {
             case "*":
                 // `*$a`
                 emitterVisitor.ctx.logDebug("GETVAR `*$a`");
-                if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_REFS)) {
+                boolean isPostfixDeref = Boolean.TRUE.equals(node.getAnnotation("postfixDeref"));
+                boolean postfixLiteralSymbol = isPostfixDeref
+                        && (node.operand instanceof StringNode || node.operand instanceof IdentifierNode);
+
+                if (postfixLiteralSymbol) {
+                    node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    emitterVisitor.pushCurrentPackage();
+                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                            "org/perlonjava/runtime/RuntimeScalar",
+                            "globDerefPostfix",
+                            "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeGlob;",
+                            false);
+                } else if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_REFS)) {
                     node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "globDeref", "()Lorg/perlonjava/runtime/RuntimeGlob;", false);
                 } else {
@@ -393,6 +491,8 @@ public class EmitVariable {
                         "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeArray;I)Lorg/perlonjava/runtime/RuntimeList;",
                         false); // generate an .apply() call
 
+                emitterVisitor.ctx.javaClassInfo.incrementStackLevel(1);
+
                 // Handle context conversion: RuntimeCode.apply() always returns RuntimeList
                 // but we need to convert based on the calling context
                 if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
@@ -441,6 +541,10 @@ public class EmitVariable {
 
                 node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));   // emit the value
 
+                boolean spillRhs = true;
+                int rhsSlot = -1;
+                boolean pooledRhs = false;
+
                 if (isLocalAssignment) {
                     // Clone the scalar before calling local()
                     if (right instanceof OperatorNode operatorNode && operatorNode.operator.equals("*")) {
@@ -456,7 +560,14 @@ public class EmitVariable {
                     }
                 }
 
-                node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));   // emit the variable
+                if (spillRhs) {
+                    rhsSlot = ctx.javaClassInfo.acquireSpillSlot();
+                    pooledRhs = rhsSlot >= 0;
+                    if (!pooledRhs) {
+                        rhsSlot = ctx.symbolTable.allocateLocalVariable();
+                    }
+                    mv.visitVarInsn(Opcodes.ASTORE, rhsSlot);
+                }
 
                 OperatorNode nodeLeft = null;
                 if (node.left instanceof OperatorNode operatorNode) {
@@ -467,30 +578,44 @@ public class EmitVariable {
 
                     if (nodeLeft.operator.equals("keys")) {
                         // `keys %x = $number`  - preallocate hash capacity
-                        // The left side has evaluated keys %x, but we need the hash itself
-                        // Stack before: nothing (we'll emit both sides fresh)
-                        // Emit the hash operand directly instead of calling keys
+                        // Emit the hash operand directly instead of calling keys.
                         if (nodeLeft.operand != null) {
                             nodeLeft.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
                         }
                         // Stack: [hash]
-                        node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                        mv.visitVarInsn(Opcodes.ALOAD, rhsSlot);
                         // Stack: [hash, value]
                         mv.visitInsn(Opcodes.DUP2);  // Stack: [hash, value, hash, value]
-                        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, 
-                            "org/perlonjava/runtime/RuntimeScalar",
-                            "getInt", "()I", false); // Stack: [hash, value, hash, int]
                         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                            "org/perlonjava/runtime/RuntimeHash",
-                            "preallocateCapacity", "(I)V", false); // Stack: [hash, value]
+                                "org/perlonjava/runtime/RuntimeScalar",
+                                "getInt", "()I", false); // Stack: [hash, value, hash, int]
+                        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                                "org/perlonjava/runtime/RuntimeHash",
+                                "preallocateCapacity", "(I)V", false); // Stack: [hash, value]
                         mv.visitInsn(Opcodes.SWAP); // Stack: [value, hash]
                         mv.visitInsn(Opcodes.POP);  // Stack: [value]
-                        // value is left on stack as the result of the assignment
+
+                        if (ctx.contextType == RuntimeContextType.VOID) {
+                            mv.visitInsn(Opcodes.POP);
+                        }
+
+                        if (pooledRhs) {
+                            ctx.javaClassInfo.releaseSpillSlot();
+                        }
                         return;  // Skip normal assignment processing
                     }
+                }
 
+                node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));   // emit the variable
+
+                if (spillRhs) {
+                    mv.visitVarInsn(Opcodes.ALOAD, rhsSlot);
+                    mv.visitInsn(Opcodes.SWAP);
+                }
+
+                if (nodeLeft != null) {
                     if (nodeLeft.operator.equals("\\")) {
-                        // `\$b = \$a` requires "refaliasing"
+                        // `\\$b = \\$a` requires "refaliasing"
                         if (!ctx.symbolTable.isFeatureCategoryEnabled("refaliasing")) {
                             throw new PerlCompilerException(node.tokenIndex, "Experimental aliasing via reference not enabled", ctx.errorUtil);
                         }
@@ -517,6 +642,10 @@ public class EmitVariable {
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, leftDescriptor, "set", rightDescriptor, false);
                 } else {
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "addToScalar", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                }
+
+                if (pooledRhs) {
+                    ctx.javaClassInfo.releaseSpillSlot();
                 }
                 break;
             case RuntimeContextType.LIST:
@@ -546,11 +675,24 @@ public class EmitVariable {
                     );
                 }
 
+                // Spill RHS list before evaluating the LHS so LHS evaluation can safely propagate
+                // non-local control flow without leaving RHS values on the operand stack.
+                int rhsListSlot = ctx.javaClassInfo.acquireSpillSlot();
+                boolean pooledRhsList = rhsListSlot >= 0;
+                if (!pooledRhsList) {
+                    rhsListSlot = ctx.symbolTable.allocateLocalVariable();
+                }
+                mv.visitVarInsn(Opcodes.ASTORE, rhsListSlot);
+
                 // For declared references, we need special handling
                 // The my operator needs to be processed to create the variables first
-                node.left.accept(emitterVisitor.with(RuntimeContextType.LIST));   // emit the variable
-                mv.visitInsn(Opcodes.SWAP); // move the target first
+                node.left.accept(emitterVisitor.with(RuntimeContextType.LIST));   // emit the variable (target)
+                mv.visitVarInsn(Opcodes.ALOAD, rhsListSlot);                      // reload RHS list
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "setFromList", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeArray;", false);
+
+                if (pooledRhsList) {
+                    ctx.javaClassInfo.releaseSpillSlot();
+                }
                 EmitOperator.handleScalarContext(emitterVisitor, node);
                 break;
             default:

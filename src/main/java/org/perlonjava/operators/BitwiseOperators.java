@@ -24,22 +24,25 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the bitwise AND operation.
      */
     public static RuntimeScalar bitwiseAnd(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
+        // Fetch tied scalars once to avoid redundant FETCH calls
+        RuntimeScalar val1 = runtimeScalar.type == RuntimeScalarType.TIED_SCALAR ? runtimeScalar.tiedFetch() : runtimeScalar;
+        RuntimeScalar val2 = arg2.type == RuntimeScalarType.TIED_SCALAR ? arg2.tiedFetch() : arg2;
+
         // Check for uninitialized values and generate warnings
-        // Use getDefinedBoolean() to handle tied scalars correctly
-        if (!runtimeScalar.getDefinedBoolean()) {
+        if (!val1.getDefinedBoolean()) {
             WarnDie.warn(new RuntimeScalar("Use of uninitialized value in bitwise and (&)"),
                     RuntimeScalarCache.scalarEmptyString);
         }
-        if (!arg2.getDefinedBoolean()) {
+        if (!val2.getDefinedBoolean()) {
             WarnDie.warn(new RuntimeScalar("Use of uninitialized value in bitwise and (&)"),
                     RuntimeScalarCache.scalarEmptyString);
         }
 
         // In Perl, if either operand is a reference or doesn't look like a number, use string operations
-        if (!ScalarUtils.looksLikeNumber(runtimeScalar) || !ScalarUtils.looksLikeNumber(arg2)) {
-            return bitwiseAndDot(runtimeScalar, arg2);
+        if (!ScalarUtils.looksLikeNumber(val1) || !ScalarUtils.looksLikeNumber(val2)) {
+            return bitwiseAndDot(val1, val2);
         }
-        return bitwiseAndBinary(runtimeScalar, arg2);
+        return bitwiseAndBinary(val1, val2);
     }
 
     /**
@@ -70,11 +73,15 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the bitwise OR operation.
      */
     public static RuntimeScalar bitwiseOr(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
+        // Fetch tied scalars once to avoid redundant FETCH calls
+        RuntimeScalar val1 = runtimeScalar.type == RuntimeScalarType.TIED_SCALAR ? runtimeScalar.tiedFetch() : runtimeScalar;
+        RuntimeScalar val2 = arg2.type == RuntimeScalarType.TIED_SCALAR ? arg2.tiedFetch() : arg2;
+
         // In Perl, if either operand is a reference or doesn't look like a number, use string operations
-        if (!ScalarUtils.looksLikeNumber(runtimeScalar) || !ScalarUtils.looksLikeNumber(arg2)) {
-            return bitwiseOrDot(runtimeScalar, arg2);
+        if (!ScalarUtils.looksLikeNumber(val1) || !ScalarUtils.looksLikeNumber(val2)) {
+            return bitwiseOrDot(val1, val2);
         }
-        return bitwiseOrBinary(runtimeScalar, arg2);
+        return bitwiseOrBinary(val1, val2);
     }
 
     /**
@@ -109,14 +116,18 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the bitwise XOR operation.
      */
     public static RuntimeScalar bitwiseXor(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
+        // Fetch tied scalars once to avoid redundant FETCH calls
+        RuntimeScalar val1 = runtimeScalar.type == RuntimeScalarType.TIED_SCALAR ? runtimeScalar.tiedFetch() : runtimeScalar;
+        RuntimeScalar val2 = arg2.type == RuntimeScalarType.TIED_SCALAR ? arg2.tiedFetch() : arg2;
+
         // Use numeric XOR only if BOTH operands look like numbers
         // For everything else (strings, blessed objects, references, etc.), use string XOR
-        if (ScalarUtils.looksLikeNumber(runtimeScalar) && ScalarUtils.looksLikeNumber(arg2)) {
+        if (ScalarUtils.looksLikeNumber(val1) && ScalarUtils.looksLikeNumber(val2)) {
             // Both are pure numbers (INTEGER or DOUBLE), use numeric XOR
-            return bitwiseXorBinary(runtimeScalar, arg2);
+            return bitwiseXorBinary(val1, val2);
         }
         // At least one is a string, reference, or blessed object, use string XOR
-        return bitwiseXorDot(runtimeScalar, arg2);
+        return bitwiseXorDot(val1, val2);
     }
 
     /**
@@ -146,11 +157,14 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the bitwise NOT operation.
      */
     public static RuntimeScalar bitwiseNot(RuntimeScalar runtimeScalar) {
+        // Fetch tied scalar once to avoid redundant FETCH calls
+        RuntimeScalar val = runtimeScalar.type == RuntimeScalarType.TIED_SCALAR ? runtimeScalar.tiedFetch() : runtimeScalar;
+
         // In Perl, if the operand is a reference or doesn't look like a number, use string operations
-        if (!ScalarUtils.looksLikeNumber(runtimeScalar)) {
-            return bitwiseNotDot(runtimeScalar);
+        if (!ScalarUtils.looksLikeNumber(val)) {
+            return bitwiseNotDot(val);
         }
-        return bitwiseNotBinary(runtimeScalar);
+        return bitwiseNotBinary(val);
     }
 
     /**
@@ -172,6 +186,28 @@ public class BitwiseOperators {
         // Apply bitwise NOT and mask to 32 bits
         long result = (~masked32bit) & 0xFFFFFFFFL;
 
+        return new RuntimeScalar(result);
+    }
+
+    /**
+     * Performs a bitwise NOT operation with signed (integer) semantics.
+     * This is used when "use integer" pragma is in effect.
+     *
+     * @param runtimeScalar The operand.
+     * @return A new RuntimeScalar with the result of the integer bitwise NOT operation.
+     */
+    public static RuntimeScalar integerBitwiseNot(RuntimeScalar runtimeScalar) {
+        // Fetch tied scalar once to avoid redundant FETCH calls
+        RuntimeScalar val = runtimeScalar.type == RuntimeScalarType.TIED_SCALAR ? runtimeScalar.tiedFetch() : runtimeScalar;
+
+        // In Perl, if the operand is a reference or doesn't look like a number, use string operations
+        if (!ScalarUtils.looksLikeNumber(val)) {
+            return bitwiseNotDot(val);
+        }
+
+        // Use signed 32-bit integer semantics
+        int value = val.getInt();
+        int result = ~value;
         return new RuntimeScalar(result);
     }
 

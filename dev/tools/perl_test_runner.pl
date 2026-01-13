@@ -251,6 +251,8 @@ sub run_single_test {
         | op/sprintf.t
         | base/lex.t }x
         ? "warn" : "";
+    local $ENV{JPERL_LARGECODE} = $test_file =~ m{opbasic/concat\.t$}
+        ? "refactor" : "";
     local $ENV{JPERL_OPTS} = $test_file =~ m{
           re/pat.t
         | op/repeat.t
@@ -315,6 +317,7 @@ sub run_single_test {
     # Capture output with timeout
     my $output = '';
     my $exit_code = 0;
+    my $raw_output_path;
 
     if ($timeout_cmd) {
         # Use external timeout
@@ -334,6 +337,12 @@ sub run_single_test {
         }
     }
 
+    $raw_output_path = "/tmp/perl_test_output_$$" . "_" . time() . "_" . int(rand(1000)) . ".log";
+    if (open my $fh, '>', $raw_output_path) {
+        print $fh $output;
+        close $fh;
+    }
+
     # Restore directory
     chdir($old_dir);
 
@@ -345,10 +354,13 @@ sub run_single_test {
             planned_tests => 0, actual_tests_run => 0, incomplete_tests => 0,
             skip_count => 0, todo_count => 0,
             errors => ['Test timed out'], missing_features => []
+            , raw_output_path => $raw_output_path
         };
     }
 
-    return parse_tap_output($output, $exit_code);
+    my $result = parse_tap_output($output, $exit_code);
+    $result->{raw_output_path} = $raw_output_path;
+    return $result;
 }
 
 sub start_test_job {

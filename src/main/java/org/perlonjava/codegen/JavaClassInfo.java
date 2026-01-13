@@ -1,6 +1,9 @@
 package org.perlonjava.codegen;
 
 import org.objectweb.asm.Label;
+import org.objectweb.asm.MethodVisitor;
+import org.objectweb.asm.Opcodes;
+import org.perlonjava.symbols.ScopedSymbolTable;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -39,6 +42,19 @@ public class JavaClassInfo {
 
     public int controlFlowActionSlot;
 
+    public int[] spillSlots;
+    public int spillTop;
+
+    public static final class SpillRef {
+        public final int slot;
+        public final boolean pooled;
+
+        public SpillRef(int slot, boolean pooled) {
+            this.slot = slot;
+            this.pooled = pooled;
+        }
+    }
+
     /**
      * Manages the stack level for the class.
      */
@@ -61,6 +77,51 @@ public class JavaClassInfo {
         this.stackLevelManager = new StackLevelManager();
         this.loopLabelStack = new ArrayDeque<>();
         this.gotoLabelStack = new ArrayDeque<>();
+        this.spillSlots = new int[0];
+        this.spillTop = 0;
+    }
+
+    public int acquireSpillSlot() {
+        if (spillTop >= spillSlots.length) {
+            return -1;
+        }
+        return spillSlots[spillTop++];
+    }
+
+    public void releaseSpillSlot() {
+        if (spillTop > 0) {
+            spillTop--;
+        }
+    }
+
+    public SpillRef tryAcquirePooledSpillRef() {
+        int slot = acquireSpillSlot();
+        if (slot < 0) {
+            return null;
+        }
+        return new SpillRef(slot, true);
+    }
+
+    public SpillRef acquireSpillRefOrAllocate(ScopedSymbolTable symbolTable) {
+        int slot = acquireSpillSlot();
+        if (slot >= 0) {
+            return new SpillRef(slot, true);
+        }
+        return new SpillRef(symbolTable.allocateLocalVariable(), false);
+    }
+
+    public void storeSpillRef(MethodVisitor mv, SpillRef ref) {
+        mv.visitVarInsn(Opcodes.ASTORE, ref.slot);
+    }
+
+    public void loadSpillRef(MethodVisitor mv, SpillRef ref) {
+        mv.visitVarInsn(Opcodes.ALOAD, ref.slot);
+    }
+
+    public void releaseSpillRef(SpillRef ref) {
+        if (ref.pooled) {
+            releaseSpillSlot();
+        }
     }
 
     /**

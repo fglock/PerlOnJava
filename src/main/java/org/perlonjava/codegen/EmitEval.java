@@ -130,6 +130,13 @@ public class EmitEval {
                 compilerOptions,
                 new RuntimeArray());
 
+        // Store the captured environment array in the context
+        // This ensures runtime uses the exact same array structure as compile-time
+        evalCtx.capturedEnv = newEnv;
+        
+        // Mark if this is evalbytes - needed to prevent Unicode source detection
+        evalCtx.isEvalbytes = node.operator.equals("evalbytes");
+
         // Store the context in a static map, indexed by evalTag
         // This allows the runtime compilation to access the compile-time environment
         RuntimeCode.evalContext.put(evalTag, evalCtx);
@@ -173,13 +180,14 @@ public class EmitEval {
         int skipVariables = EmitterMethodCreator.skipVariables;
 
         // Create array of parameter types for the constructor
-        // Each captured variable becomes a constructor parameter
+        // Each captured variable becomes a constructor parameter (including null gaps)
         mv.visitIntInsn(Opcodes.BIPUSH, newEnv.length - skipVariables);
         mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Class");
         // Stack: [Class, Class[]]
 
         // Fill the parameter types array based on variable types
         // Variables starting with @ are RuntimeArray, % are RuntimeHash, others are RuntimeScalar
+        // getVariableDescriptor handles nulls gracefully (returns RuntimeScalar descriptor)
         for (int i = 0; i < newEnv.length - skipVariables; i++) {
             mv.visitInsn(Opcodes.DUP);
             mv.visitIntInsn(Opcodes.BIPUSH, i);

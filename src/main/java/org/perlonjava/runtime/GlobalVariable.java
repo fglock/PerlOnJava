@@ -34,6 +34,12 @@ public class GlobalVariable {
     static final Map<String, RuntimeGlob> globalIORefs = new HashMap<>();
     static final Map<String, RuntimeFormat> globalFormatRefs = new HashMap<>();
 
+    // Stash aliasing: `*{Dst::} = *{Src::}` effectively makes Dst:: symbol table
+    // behave like Src:: for method lookup and stash operations.
+    // We keep this separate from globalCodeRefs/globalVariables so existing references
+    // to Dst:: symbols can still point to their original objects.
+    static final Map<String, String> stashAliases = new HashMap<>();
+
     // Flags used by operator override
     // globalGlobs: Tracks typeglob assignments (e.g., *CORE::GLOBAL::hex = sub {...})
     // Used to detect when built-in operators have been globally overridden
@@ -59,6 +65,7 @@ public class GlobalVariable {
         globalFormatRefs.clear();
         globalGlobs.clear();
         isSubs.clear();
+        stashAliases.clear();
         clearPackageCache();
 
         RuntimeCode.clearCaches();
@@ -66,6 +73,30 @@ public class GlobalVariable {
         // Destroy the old classloader and create a new one
         // This allows the old generated classes to be garbage collected
         globalClassLoader = new CustomClassLoader(GlobalVariable.class.getClassLoader());
+    }
+
+    public static void setStashAlias(String dstNamespace, String srcNamespace) {
+        String dst = dstNamespace.endsWith("::") ? dstNamespace : dstNamespace + "::";
+        String src = srcNamespace.endsWith("::") ? srcNamespace : srcNamespace + "::";
+        stashAliases.put(dst, src);
+    }
+
+    public static void clearStashAlias(String namespace) {
+        String key = namespace.endsWith("::") ? namespace : namespace + "::";
+        stashAliases.remove(key);
+    }
+
+    public static String resolveStashAlias(String namespace) {
+        String key = namespace.endsWith("::") ? namespace : namespace + "::";
+        String aliased = stashAliases.get(key);
+        if (aliased == null) {
+            return namespace;
+        }
+        // Preserve trailing :: if caller passed it.
+        if (!namespace.endsWith("::") && aliased.endsWith("::")) {
+            return aliased.substring(0, aliased.length() - 2);
+        }
+        return aliased;
     }
 
     /**

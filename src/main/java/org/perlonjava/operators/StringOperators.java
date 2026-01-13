@@ -4,6 +4,7 @@ import com.ibm.icu.lang.UCharacter;
 import com.ibm.icu.text.CaseMap;
 import com.ibm.icu.text.Normalizer2;
 import org.perlonjava.parser.NumberParser;
+import org.perlonjava.perlmodule.Warnings;
 import org.perlonjava.runtime.*;
 
 import java.nio.charset.StandardCharsets;
@@ -276,7 +277,103 @@ public class StringOperators {
     }
 
     public static RuntimeScalar stringConcat(RuntimeScalar runtimeScalar, RuntimeScalar b) {
-        return new RuntimeScalar(runtimeScalar + b.toString());
+        String aStr = runtimeScalar.toString();
+        String bStr = b.toString();
+
+        boolean aIsString = runtimeScalar.type == RuntimeScalarType.STRING || runtimeScalar.type == RuntimeScalarType.BYTE_STRING;
+        boolean bIsString = b.type == RuntimeScalarType.STRING || b.type == RuntimeScalarType.BYTE_STRING;
+
+        // Preserve Perl-like UTF-8 flag semantics only for string scalars.
+        // For other types, keep legacy behavior to avoid wide behavioral changes.
+        if (aIsString && bIsString) {
+            // If either operand is explicitly STRING type, return STRING
+            if (runtimeScalar.type == RuntimeScalarType.STRING || b.type == RuntimeScalarType.STRING) {
+                return new RuntimeScalar(aStr + bStr);
+            }
+
+            // Both are BYTE_STRING - check if they actually contain only bytes 0-255
+            boolean hasUnicode = false;
+            for (int i = 0; i < aStr.length(); i++) {
+                if (aStr.charAt(i) > 255) {
+                    hasUnicode = true;
+                    break;
+                }
+            }
+            if (!hasUnicode) {
+                for (int i = 0; i < bStr.length(); i++) {
+                    if (bStr.charAt(i) > 255) {
+                        hasUnicode = true;
+                        break;
+                    }
+                }
+            }
+
+            // If Unicode present, upgrade to STRING to preserve characters
+            if (hasUnicode) {
+                return new RuntimeScalar(aStr + bStr);
+            }
+
+            // Pure byte strings - concatenate as bytes
+            byte[] aBytes = aStr.getBytes(StandardCharsets.ISO_8859_1);
+            byte[] bBytes = bStr.getBytes(StandardCharsets.ISO_8859_1);
+            byte[] out = new byte[aBytes.length + bBytes.length];
+            System.arraycopy(aBytes, 0, out, 0, aBytes.length);
+            System.arraycopy(bBytes, 0, out, aBytes.length, bBytes.length);
+            return new RuntimeScalar(out);
+        }
+
+        return new RuntimeScalar(runtimeScalar + bStr);
+    }
+
+    public static RuntimeScalar stringConcatWarnUninitialized(RuntimeScalar runtimeScalar, RuntimeScalar b) {
+        if (!runtimeScalar.getDefinedBoolean() || !b.getDefinedBoolean()) {
+            WarnDie.warn(new RuntimeScalar("Use of uninitialized value in concatenation (.)"),
+                    RuntimeScalarCache.scalarEmptyString);
+        }
+        String aStr = runtimeScalar.toString();
+        String bStr = b.toString();
+
+        boolean aIsString = runtimeScalar.type == RuntimeScalarType.STRING || runtimeScalar.type == RuntimeScalarType.BYTE_STRING;
+        boolean bIsString = b.type == RuntimeScalarType.STRING || b.type == RuntimeScalarType.BYTE_STRING;
+
+        if (aIsString && bIsString) {
+            // If either operand is explicitly STRING type, return STRING
+            if (runtimeScalar.type == RuntimeScalarType.STRING || b.type == RuntimeScalarType.STRING) {
+                return new RuntimeScalar(aStr + bStr);
+            }
+
+            // Both are BYTE_STRING - check if they actually contain only bytes 0-255
+            boolean hasUnicode = false;
+            for (int i = 0; i < aStr.length(); i++) {
+                if (aStr.charAt(i) > 255) {
+                    hasUnicode = true;
+                    break;
+                }
+            }
+            if (!hasUnicode) {
+                for (int i = 0; i < bStr.length(); i++) {
+                    if (bStr.charAt(i) > 255) {
+                        hasUnicode = true;
+                        break;
+                    }
+                }
+            }
+
+            // If Unicode present, upgrade to STRING to preserve characters
+            if (hasUnicode) {
+                return new RuntimeScalar(aStr + bStr);
+            }
+
+            // Pure byte strings - concatenate as bytes
+            byte[] aBytes = aStr.getBytes(StandardCharsets.ISO_8859_1);
+            byte[] bBytes = bStr.getBytes(StandardCharsets.ISO_8859_1);
+            byte[] out = new byte[aBytes.length + bBytes.length];
+            System.arraycopy(aBytes, 0, out, 0, aBytes.length);
+            System.arraycopy(bBytes, 0, out, aBytes.length, bBytes.length);
+            return new RuntimeScalar(out);
+        }
+
+        return new RuntimeScalar(runtimeScalar + bStr);
     }
 
     public static RuntimeScalar chompScalar(RuntimeScalar runtimeScalar) {
@@ -516,16 +613,16 @@ public class StringOperators {
      * Each byte becomes a character in the result string.
      */
     private static RuntimeScalar toUtf8Bytes(RuntimeScalar runtimeScalar) {
+        // Under 'use bytes', BYTE_STRING already represents a sequence of octets.
+        // Converting it to UTF-8 would expand bytes >= 0x80 into multi-byte sequences,
+        // which breaks Perl's byte-semantics for lc/uc/fc/etc.
+        if (runtimeScalar.type == BYTE_STRING) {
+            return runtimeScalar;
+        }
+
         String str = runtimeScalar.toString();
         byte[] utf8Bytes = str.getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        
-        // Convert bytes to a string where each byte becomes a character
-        StringBuilder result = new StringBuilder(utf8Bytes.length);
-        for (byte b : utf8Bytes) {
-            result.append((char) (b & 0xFF));
-        }
-        
-        return new RuntimeScalar(result.toString());
+        return new RuntimeScalar(utf8Bytes);
     }
 
     /**
@@ -546,7 +643,9 @@ public class StringOperators {
             }
         }
         
-        return new RuntimeScalar(result.toString());
+        RuntimeScalar out = new RuntimeScalar(result.toString());
+        out.type = BYTE_STRING;
+        return out;
     }
 
     /**
@@ -567,7 +666,9 @@ public class StringOperators {
             }
         }
         
-        return new RuntimeScalar(result.toString());
+        RuntimeScalar out = new RuntimeScalar(result.toString());
+        out.type = BYTE_STRING;
+        return out;
     }
 
     /**
@@ -592,7 +693,9 @@ public class StringOperators {
         // Only lowercase first byte if it's ASCII A-Z
         char first = str.charAt(0);
         if (first >= 'A' && first <= 'Z') {
-            return new RuntimeScalar((char)(first + 32) + str.substring(1));
+            RuntimeScalar out = new RuntimeScalar((char) (first + 32) + str.substring(1));
+            out.type = BYTE_STRING;
+            return out;
         }
         return asBytes;
     }
@@ -610,7 +713,9 @@ public class StringOperators {
         // Only uppercase first byte if it's ASCII a-z
         char first = str.charAt(0);
         if (first >= 'a' && first <= 'z') {
-            return new RuntimeScalar((char)(first - 32) + str.substring(1));
+            RuntimeScalar out = new RuntimeScalar((char) (first - 32) + str.substring(1));
+            out.type = BYTE_STRING;
+            return out;
         }
         return asBytes;
     }

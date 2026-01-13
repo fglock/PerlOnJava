@@ -102,8 +102,13 @@ public class DataSection {
             return tokens.size();
         }
 
-        if (token.text.equals("__DATA__") || (token.text.equals("__END__") && parser.isTopLevelScript)) {
+        if (token.text.equals("__DATA__") || token.text.equals("__END__")) {
             processedPackages.add(handleName);
+
+            // __END__ should always stop parsing, but only top-level scripts (and __DATA__) should
+            // populate the DATA handle content.
+            boolean populateData = token.text.equals("__DATA__") || parser.isTopLevelScript;
+
             tokenIndex++;
 
             // Skip any whitespace immediately after __DATA__
@@ -116,21 +121,23 @@ public class DataSection {
                 tokenIndex++;
             }
 
-            // Capture all remaining content until end marker
-            StringBuilder dataContent = new StringBuilder();
-            while (tokenIndex < tokens.size()) {
-                LexerToken currentToken = tokens.get(tokenIndex);
+            if (populateData) {
+                // Capture all remaining content until end marker
+                StringBuilder dataContent = new StringBuilder();
+                while (tokenIndex < tokens.size()) {
+                    LexerToken currentToken = tokens.get(tokenIndex);
 
-                // Stop if we hit an end marker
-                if (isEndMarker(currentToken)) {
-                    break;
+                    // Stop if we hit an end marker
+                    if (isEndMarker(currentToken)) {
+                        break;
+                    }
+
+                    dataContent.append(currentToken.text);
+                    tokenIndex++;
                 }
 
-                dataContent.append(currentToken.text);
-                tokenIndex++;
+                createDataHandle(parser, dataContent.toString());
             }
-
-            createDataHandle(parser, dataContent.toString());
         }
         // Return tokens.size() to indicate we've consumed everything
         return tokens.size();

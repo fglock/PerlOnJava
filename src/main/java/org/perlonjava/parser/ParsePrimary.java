@@ -414,6 +414,23 @@ public class ParsePrimary {
             nextToken = peek(parser);
         }
 
+        // File tests accept bareword filehandles; parse them before generic expression parsing
+        // can turn them into subroutine calls. But '_' is special: it refers to the last stat buffer.
+        if (nextToken.type == LexerTokenType.IDENTIFIER) {
+            String name = nextToken.text;
+            if (!name.equals("_") && name.matches("^[A-Z_][A-Z0-9_]*$")) {
+                TokenUtils.consume(parser);
+                // autovivify filehandle and convert to globref
+                GlobalVariable.getGlobalIO(FileHandle.normalizeBarewordHandle(parser, name));
+                Node fh = FileHandle.parseBarewordHandle(parser, name);
+                operand = fh != null ? fh : new IdentifierNode(name, parser.tokenIndex);
+                if (hasParenthesis) {
+                    TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
+                }
+                return new OperatorNode(operator, operand, parser.tokenIndex);
+            }
+        }
+
         if (nextToken.text.equals("_")) {
             // Special case: -f _ uses the stat buffer from the last file test
             TokenUtils.consume(parser);

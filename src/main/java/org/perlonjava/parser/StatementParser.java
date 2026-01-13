@@ -95,7 +95,36 @@ public class StatementParser {
         // Parse optional loop variable
         Node varNode = null;
         LexerToken token = TokenUtils.peek(parser); // "my" "$" "(" "CORE::my"
-        if (token.text.equals("my") || token.text.equals("our") || token.text.equals("CORE") || token.text.equals("$")) {
+        if (token.type == LexerTokenType.IDENTIFIER &&
+                (token.text.equals("my") || token.text.equals("our") || token.text.equals("state"))) {
+            // Ensure `for my $x (...)` is parsed as a variable declaration, not as `$x`.
+            // This is critical for strict-vars correctness inside the loop body.
+            int declIndex = parser.tokenIndex;
+            parser.parsingForLoopVariable = true;
+            TokenUtils.consume(parser, LexerTokenType.IDENTIFIER);
+            varNode = OperatorParser.parseVariableDeclaration(parser, token.text, declIndex);
+            parser.parsingForLoopVariable = false;
+        } else if (token.type == LexerTokenType.IDENTIFIER && token.text.equals("CORE")
+                && parser.tokens.get(parser.tokenIndex).text.equals("CORE")
+                && parser.tokens.size() > parser.tokenIndex + 1
+                && parser.tokens.get(parser.tokenIndex + 1).text.equals("::")) {
+            // Handle CORE::my/our/state
+            TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // CORE
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "::");
+            LexerToken coreOp = TokenUtils.peek(parser);
+            if (coreOp.type == LexerTokenType.IDENTIFIER &&
+                    (coreOp.text.equals("my") || coreOp.text.equals("our") || coreOp.text.equals("state"))) {
+                int declIndex = parser.tokenIndex;
+                parser.parsingForLoopVariable = true;
+                TokenUtils.consume(parser, LexerTokenType.IDENTIFIER);
+                varNode = OperatorParser.parseVariableDeclaration(parser, coreOp.text, declIndex);
+                parser.parsingForLoopVariable = false;
+            } else {
+                parser.parsingForLoopVariable = true;
+                varNode = ParsePrimary.parsePrimary(parser);
+                parser.parsingForLoopVariable = false;
+            }
+        } else if (token.text.equals("$")) {
             parser.parsingForLoopVariable = true;
             varNode = ParsePrimary.parsePrimary(parser);
             parser.parsingForLoopVariable = false;
@@ -485,11 +514,9 @@ public class StatementParser {
                 }
             }
             if (packageName == null) {
-                // `use` statement can terminate after Version
-                token = TokenUtils.peek(parser);
-                if (token.type == LexerTokenType.EOF || token.text.equals("}") || token.text.equals(";")) {
-                    return new ListNode(parser.tokenIndex);
-                }
+                // `use` statement can terminate after Version.
+                // Do not early-return here; we still want to consume an optional statement terminator
+                // and return a CompilerFlagNode so lexical flag changes are applied during codegen.
             }
         }
 
@@ -558,6 +585,7 @@ public class StatementParser {
                             ctx.logDebug("Use call : " + importMethod + "(" + args + ")");
                             RuntimeArray importArgs = args.getArrayOfAlias();
                             RuntimeArray.unshift(importArgs, new RuntimeScalar(packageName));
+                            setCurrentScope(parser.ctx.symbolTable);
                             RuntimeCode.apply(code, importArgs, RuntimeContextType.SCALAR);
                         }
                     }
@@ -570,7 +598,7 @@ public class StatementParser {
 
         // return the current compiler flags
         return new CompilerFlagNode(
-                ctx.symbolTable.warningFlagsStack.getLast(),
+                (java.util.BitSet) ctx.symbolTable.warningFlagsStack.getLast().clone(),
                 ctx.symbolTable.featureFlagsStack.getLast(),
                 ctx.symbolTable.strictOptionsStack.getLast(),
                 parser.tokenIndex);
@@ -895,7 +923,7 @@ public class StatementParser {
         if (token.type == LexerTokenType.NUMBER) {
             return parseNumber(parser, TokenUtils.consume(parser));
         }
-        if (token.type == LexerTokenType.IDENTIFIER && token.text.matches("v\\d+")) {
+        if (token.type == LexerTokenType.IDENTIFIER && token.text.matches("v\\d+(\\.\\d+)*")) {
             return parseVstring(parser, TokenUtils.consume(parser).text, parser.tokenIndex);
         }
         return null;

@@ -2,6 +2,7 @@ package org.perlonjava.codegen;
 
 import org.perlonjava.astnode.OperatorNode;
 import org.perlonjava.astvisitor.EmitterVisitor;
+import org.perlonjava.perlmodule.Strict;
 import org.perlonjava.runtime.PerlCompilerException;
 
 /**
@@ -48,9 +49,17 @@ public class EmitOperatorNode {
 
             // Unary operators
             case "unaryMinus" -> EmitOperator.handleUnaryDefaultCase(node, "unaryMinus", emitterVisitor);
-            case "~" -> EmitOperator.handleUnaryDefaultCase(node, "bitwiseNot", emitterVisitor);
-            case "binary~" -> EmitOperator.handleUnaryDefaultCase(node, "bitwiseNotBinary", emitterVisitor);
-            case "~." -> EmitOperator.handleUnaryDefaultCase(node, "bitwiseNotDot", emitterVisitor);
+            case "~" -> {
+                // Use integer bitwise NOT when "use integer" is in effect
+                if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_INTEGER)) {
+                    EmitOperator.handleUnaryDefaultCase(node, "integerBitwiseNot", emitterVisitor);
+                } else {
+                    // Use the operator key "~" for OperatorHandler lookup
+                    EmitOperator.handleUnaryDefaultCase(node, "~", emitterVisitor);
+                }
+            }
+            case "binary~" -> EmitOperator.handleUnaryDefaultCase(node, "binary~", emitterVisitor);
+            case "~." -> EmitOperator.handleUnaryDefaultCase(node, "~.", emitterVisitor);
             case "!", "not" -> EmitOperator.handleUnaryDefaultCase(node, "not", emitterVisitor);
             case "int" -> EmitOperator.handleUnaryDefaultCase(node, "int", emitterVisitor);
 

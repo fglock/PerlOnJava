@@ -10,7 +10,7 @@ use Symbol;
 our @EXPORT = ("bootstrap");
 
 sub bootstrap {
-    # placeholder
+    die "DynaLoader::bootstrap not implemented\n";
 }
 
 # Perl tests use this:

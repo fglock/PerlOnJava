@@ -43,6 +43,8 @@ test_*.pl
 *.tmp
 test_*.tmp
 pack_test_*.log
+*.log
+make_repro_asm.log
 out.json
 test_results.json
 logs/
@@ -51,6 +53,10 @@ logs/
 *.patch
 # But allow patch files in import-perl5/patches/
 !dev/import-perl5/patches/*.patch
+
+skip_control_flow.t
+dev/design/CONTROL_FLOW_FIX_RESULTS.md
+dev/prompts/CONTROL_FLOW_FIX_INSTRUCTIONS.md
 
 # Ignore test artifact files (numbered .txt and .pod files)
 [0-9][0-9][0-9][0-9][0-9][0-9].txt

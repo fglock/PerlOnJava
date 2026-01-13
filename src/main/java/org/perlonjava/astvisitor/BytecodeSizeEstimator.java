@@ -49,6 +49,14 @@ public class BytecodeSizeEstimator implements Visitor {
     private static final int UNBOXED_VALUE = LDC_INSTRUCTION;                                    // 3 bytes
     private static final int METHOD_CALL_OVERHEAD = INVOKE_VIRTUAL + SIMPLE_INSTRUCTION;        // 4 bytes
     private static final int OBJECT_CREATION = NEW_INSTRUCTION + DUP_INSTRUCTION + INVOKE_SPECIAL; // 7 bytes
+
+    // Subroutine calls via RuntimeCode.apply() have substantial fixed overhead (spill slots,
+    // args array creation, call-context push, and post-call tagged-list control-flow handling).
+    // This overhead increased when tagged-list control flow propagation was added after calls.
+    // These constants are intentionally conservative to prevent JVM "method too large" errors.
+    private static final int APPLY_FIXED_OVERHEAD = 70;
+    private static final int APPLY_PER_ARG_OVERHEAD = 10;
+    private static final int APPLY_TAGGED_CONTROL_FLOW_OVERHEAD = 80;
     // SCIENTIFICALLY DERIVED CALIBRATION: Perfect linear correlation (R² = 1.0000)
     // Formula: actual = 1.035 × estimated + 1950 (derived from neutral baseline data)
     // Provides optimal accuracy across all file sizes (small to large methods)
@@ -86,9 +94,9 @@ public class BytecodeSizeEstimator implements Visitor {
     public static int estimateSnippetSize(Node ast) {
         // Check cache first
         if (ast instanceof AbstractNode abstractNode) {
-            Object cached = abstractNode.getAnnotation("cachedBytecodeSize");
-            if (cached instanceof Integer) {
-                return (Integer) cached;
+            Integer cached = abstractNode.getCachedBytecodeSize();
+            if (cached != null) {
+                return cached;
             }
         }
         
@@ -98,7 +106,7 @@ public class BytecodeSizeEstimator implements Visitor {
         
         // Cache the result
         if (ast instanceof AbstractNode abstractNode) {
-            abstractNode.setAnnotation("cachedBytecodeSize", size);
+            abstractNode.setCachedBytecodeSize(size);
         }
         
         return size;
@@ -176,6 +184,32 @@ public class BytecodeSizeEstimator implements Visitor {
 
     @Override
     public void visit(BinaryOperatorNode node) {
+        // Special-case subroutine apply operator: EmitSubroutine.handleApplyOperator()
+        // does not behave like a generic binary operator.
+        if ("(".equals(node.operator)) {
+            if (node.left != null) node.left.accept(this);
+
+            int argCount = 0;
+            if (node.right != null) {
+                if (node.right instanceof ListNode listNode) {
+                    argCount = listNode.elements.size();
+                    for (Node arg : listNode.elements) {
+                        if (arg != null) {
+                            arg.accept(this);
+                        }
+                    }
+                } else {
+                    argCount = 1;
+                    node.right.accept(this);
+                }
+            }
+
+            estimatedSize += APPLY_FIXED_OVERHEAD;
+            estimatedSize += APPLY_PER_ARG_OVERHEAD * argCount;
+            estimatedSize += APPLY_TAGGED_CONTROL_FLOW_OVERHEAD;
+            return;
+        }
+
         // Mirror EmitBinaryOperator.handleBinaryOperator() patterns
         // Two operand evaluations + method call
         if (node.left != null) node.left.accept(this);

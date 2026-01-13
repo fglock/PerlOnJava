@@ -7,6 +7,7 @@ import org.perlonjava.regex.RuntimeRegex;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.regex.Pattern;
 
 import static org.perlonjava.runtime.RuntimeArray.*;
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
@@ -28,6 +29,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     // Static stack to store saved "local" states of RuntimeScalar instances
     private static final Stack<RuntimeScalar> dynamicStateStack = new Stack<>();
+
+    // Pre-compiled regex patterns for numification fast-paths
+    // These are used to avoid StackOverflowError from repeated Pattern.compile() calls
+    private static final Pattern INTEGER_PATTERN = Pattern.compile("^-?\\d+$");
+    private static final Pattern DECIMAL_PATTERN = Pattern.compile("^[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?$");
 
     // Type map for scalar types to their corresponding enum
     private static final Map<Class<?>, Integer> typeMap = new HashMap<>();
@@ -227,8 +233,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     private void initializeWithLong(Long value) {
         if (value > Integer.MAX_VALUE || value < Integer.MIN_VALUE) {
-            this.type = DOUBLE;
-            this.value = (double) value;
+            // Java double can only exactly represent integers up to 2^53.
+            // Beyond that, storing as DOUBLE loses precision and breaks exact pack/unpack
+            // semantics for 64-bit formats (q/Q/j/J) and BER compression (w).
+            long lv = value;
+            if (Math.abs(lv) <= 9007199254740992L) { // 2^53
+                this.type = DOUBLE;
+                this.value = (double) lv;
+            } else {
+                this.type = RuntimeScalarType.STRING;
+                this.value = Long.toString(lv);
+            }
         } else {
             this.type = RuntimeScalarType.INTEGER;
             this.value = value.intValue();
@@ -272,6 +287,23 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         };
     }
 
+    /**
+     * Postfix glob dereference helper used by the parser for `->**` and `->*{...}`.
+     *
+     * <p>In Perl, postfix glob deref is allowed to resolve plain strings as symbol names
+     * even when strict refs is enabled (see perl5_t/t/op/postfixderef.t), but should still
+     * reject non-glob references.
+     */
+    public RuntimeGlob globDerefPostfix(String packageName) {
+        return switch (type) {
+            case STRING, BYTE_STRING -> {
+                String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
+                yield GlobalVariable.getGlobalIO(varName);
+            }
+            default -> globDeref();
+        };
+    }
+
     // Inlineable fast path for getInt()
     public int getInt() {
         if (type == INTEGER ) {
@@ -286,7 +318,25 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return switch (type) {
             case INTEGER -> (int) value;
             case DOUBLE -> (int) ((double) value);
-            case STRING, BYTE_STRING -> NumberParser.parseNumber(this).getInt();
+            case STRING, BYTE_STRING -> {
+                // Avoid recursion when NumberParser.parseNumber() returns a cached scalar
+                // that is also STRING. Add fast-path for plain integer strings.
+                String s = (String) value;
+                if (s != null) {
+                    String t = s.trim();
+                    if (!t.isEmpty() && INTEGER_PATTERN.matcher(t).matches()) {
+                        try {
+                            // Parse as long first so we can handle values outside 32-bit range
+                            // (Perl IV is commonly 64-bit). getInt() is used for array indices
+                            // and similar contexts, which should behave like (int)getLong().
+                            yield (int) Long.parseLong(t);
+                        } catch (NumberFormatException ignored) {
+                            // Fall through to full numification.
+                        }
+                    }
+                }
+                yield NumberParser.parseNumber(this).getInt();
+            }
             case UNDEF -> 0;
             case VSTRING -> 0;
             case BOOLEAN -> (boolean) value ? 1 : 0;
@@ -441,7 +491,23 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return switch (type) {
             case INTEGER -> (int) value;
             case DOUBLE -> (long) ((double) value);
-            case STRING, BYTE_STRING -> NumberParser.parseNumber(this).getLong();
+            case STRING, BYTE_STRING -> {
+                // Avoid recursion when large integer strings are preserved as STRING to keep
+                // precision (e.g. values > 2^53). NumberParser.parseNumber() may return a scalar
+                // that is also STRING, and calling getLong() on it would recurse indefinitely.
+                String s = (String) value;
+                if (s != null) {
+                    String t = s.trim();
+                    if (!t.isEmpty() && INTEGER_PATTERN.matcher(t).matches()) {
+                        try {
+                            yield Long.parseLong(t);
+                        } catch (NumberFormatException ignored) {
+                            // Fall through to full numification.
+                        }
+                    }
+                }
+                yield NumberParser.parseNumber(this).getLong();
+            }
             case UNDEF -> 0L;
             case VSTRING -> 0L;
             case BOOLEAN -> (boolean) value ? 1L : 0L;
@@ -467,7 +533,23 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return switch (type) {
             case INTEGER -> (int) value;
             case DOUBLE -> (double) value;
-            case STRING, BYTE_STRING -> NumberParser.parseNumber(this).getDouble();
+            case STRING, BYTE_STRING -> {
+                // Avoid recursion when numeric values are preserved as STRING and also stored in
+                // NumberParser's numification cache. If parseNumber() returns a scalar whose
+                // conversion path leads back to getDouble(), this can recurse indefinitely.
+                String s = (String) value;
+                if (s != null) {
+                    String t = s.trim();
+                    if (!t.isEmpty() && DECIMAL_PATTERN.matcher(t).matches()) {
+                        try {
+                            yield Double.parseDouble(t);
+                        } catch (NumberFormatException ignored) {
+                            // Fall through to full numification.
+                        }
+                    }
+                }
+                yield NumberParser.parseNumber(this).getDouble();
+            }
             case UNDEF -> 0.0;
             case VSTRING -> 0.0;
             case BOOLEAN -> (boolean) value ? 1.0 : 0.0;
@@ -866,7 +948,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case BOOLEAN -> // 6
                     throw new PerlCompilerException("Not an ARRAY reference");
             case GLOB -> { // 7
-                // When dereferencing a typeglob as an array, return the array slot
+                // When dereferencing a typeglob as an array, return the array slot.
+                // PVIO (e.g. *STDOUT{IO}) is also represented with type GLOB but holds a RuntimeIO.
+                if (value instanceof RuntimeIO) {
+                    throw new PerlCompilerException("Not an ARRAY reference");
+                }
                 RuntimeGlob glob = (RuntimeGlob) value;
                 yield GlobalVariable.getGlobalArray(glob.globName);
             }
@@ -944,7 +1030,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case BOOLEAN -> // 6
                     throw new PerlCompilerException("Not a HASH reference");
             case GLOB -> { // 7
-                // When dereferencing a typeglob as a hash, return the hash slot
+                // When dereferencing a typeglob as a hash, return the hash slot.
+                // PVIO (e.g. *STDOUT{IO}) is also represented with type GLOB but holds a RuntimeIO.
+                if (value instanceof RuntimeIO) {
+                    throw new PerlCompilerException("Not a HASH reference");
+                }
                 RuntimeGlob glob = (RuntimeGlob) value;
                 yield GlobalVariable.getGlobalHash(glob.globName);
             }
@@ -1172,10 +1262,21 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
         return switch (type) {
             case UNDEF -> throw new PerlCompilerException("Can't use an undefined value as a GLOB reference");
-            case GLOB, GLOBREFERENCE -> (RuntimeGlob) value;
+            case GLOBREFERENCE -> (RuntimeGlob) value;
+            case GLOB -> {
+                // PVIO (like *STDOUT{IO}) is stored as type GLOB with a RuntimeIO value.
+                // Perl allows postfix glob deref (->**) of PVIO by creating a temporary glob
+                // with the IO slot set to that handle.
+                if (value instanceof RuntimeIO io) {
+                    RuntimeGlob tmp = new RuntimeGlob("__ANON__");
+                    tmp.setIO(io);
+                    yield tmp;
+                }
+                yield (RuntimeGlob) value;
+            }
             case STRING, BYTE_STRING ->
                     throw new PerlCompilerException("Can't use string (\"" + this + "\") as a symbol ref while \"strict refs\" in use");
-            default -> throw new PerlCompilerException("Variable does not contain a glob reference");
+            default -> throw new PerlCompilerException("Not a GLOB reference");
         };
     }
 
@@ -1200,7 +1301,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case GLOB, GLOBREFERENCE -> (RuntimeGlob) value;
             default -> {
                 String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
-                yield new RuntimeGlob(varName);
+                // Use the canonical glob object for this symbol name.
+                // This ensures the IO slot is shared/visible across operations like:
+                //   *{"\3"} = *DATA; readline v3
+                // where readline resolves the handle via GlobalVariable.getGlobalIO("main::\x03").
+                yield GlobalVariable.getGlobalIO(varName);
             }
         };
     }

@@ -73,6 +73,10 @@ public class UnpackState {
     private ByteOrder currentByteOrder = ByteOrder.LITTLE_ENDIAN; // Default to little-endian
 
     public UnpackState(String dataString, boolean startsWithU) {
+        this(dataString, startsWithU, false);
+    }
+
+    public UnpackState(String dataString, boolean startsWithU, boolean utf8Flagged) {
         this.dataString = dataString;
         this.characterMode = !startsWithU;
 
@@ -119,8 +123,11 @@ public class UnpackState {
             }
         }
 
-        // If we have Unicode characters beyond Latin-1, use extended UTF-8 (Perl semantics)
-        this.isUTF8Data = hasHighUnicode || hasSurrogates || hasBeyondUnicode;
+        // If we have Unicode characters beyond Latin-1, use extended UTF-8 (Perl semantics).
+        // Also, if the original scalar was UTF-8 flagged, treat it as UTF-8 data even when
+        // all code points are <= 255. This matches Perl behavior and is required for
+        // A* trimming of Unicode whitespace.
+        this.isUTF8Data = utf8Flagged || hasHighUnicode || hasSurrogates || hasBeyondUnicode;
         if (isUTF8Data) {
             this.originalBytes = encodeUtf8Extended(this.codePoints);
         } else {

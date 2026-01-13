@@ -22,17 +22,17 @@ public class WarningFlags {
         warningHierarchy.put("severe", new String[]{"severe::debugging", "severe::inplace", "severe::internal", "severe::malloc"});
         warningHierarchy.put("syntax", new String[]{"syntax::ambiguous", "syntax::bareword", "syntax::digit", "syntax::illegalproto", "syntax::parenthesis", "syntax::precedence", "syntax::printf", "syntax::prototype", "syntax::qw", "syntax::reserved", "syntax::semicolon"});
         warningHierarchy.put("utf8", new String[]{"utf8::non_unicode", "utf8::nonchar", "utf8::surrogate"});
-        warningHierarchy.put("layer", new String[]{});
-        warningHierarchy.put("syscalls", new String[]{});
-        warningHierarchy.put("pipe", new String[]{});
-        warningHierarchy.put("unopened", new String[]{});
+        warningHierarchy.put("layer", new String[]{"io::layer"});
+        warningHierarchy.put("syscalls", new String[]{"io::syscalls"});
+        warningHierarchy.put("pipe", new String[]{"io::pipe"});
+        warningHierarchy.put("unopened", new String[]{"io::unopened"});
         warningHierarchy.put("FATAL", new String[]{});
         warningHierarchy.put("illegalproto", new String[]{});
         warningHierarchy.put("digit", new String[]{});
-        warningHierarchy.put("closed", new String[]{});
+        warningHierarchy.put("closed", new String[]{"io::closed"});
         warningHierarchy.put("reserved", new String[]{});
         warningHierarchy.put("prototype", new String[]{});
-        warningHierarchy.put("newline", new String[]{});
+        warningHierarchy.put("newline", new String[]{"io::newline"});
         warningHierarchy.put("NONFATAL", new String[]{});
         warningHierarchy.put("non_unicode", new String[]{});
         warningHierarchy.put("surrogate", new String[]{});
@@ -84,6 +84,9 @@ public class WarningFlags {
         enableWarning("experimental::try");
         enableWarning("experimental::uniprop_wildcards");
         enableWarning("experimental::vlb");
+
+        // Enable IO warnings
+        enableWarning("io");
 
         // Enable other warnings
         enableWarning("glob");

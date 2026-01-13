@@ -8,9 +8,10 @@ import org.perlonjava.codegen.EmitterMethodCreator;
 import org.perlonjava.codegen.JavaClassInfo;
 import org.perlonjava.lexer.Lexer;
 import org.perlonjava.lexer.LexerToken;
+import org.perlonjava.parser.Parser;
 import org.perlonjava.mro.InheritanceResolver;
 import org.perlonjava.operators.ModuleOperators;
-import org.perlonjava.parser.Parser;
+import org.perlonjava.scriptengine.PerlLanguageProvider;
 import org.perlonjava.symbols.ScopedSymbolTable;
 
 import java.lang.invoke.MethodHandle;
@@ -21,10 +22,13 @@ import java.lang.reflect.InvocationTargetException;
 import java.util.*;
 import java.util.function.Supplier;
 
+import static org.perlonjava.Configuration.getPerlVersionNoV;
 import static org.perlonjava.parser.ParserTables.CORE_PROTOTYPES;
-import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
+import static org.perlonjava.runtime.GlobalVariable.*;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 import static org.perlonjava.runtime.RuntimeScalarType.*;
+import static org.perlonjava.runtime.SpecialBlock.runEndBlocks;
+import static org.perlonjava.parser.SpecialBlockParser.setCurrentScope;
 import static org.perlonjava.runtime.SpecialBlock.runUnitcheckBlocks;
 
 /**
@@ -135,21 +139,36 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         // Check if the eval string contains non-ASCII characters
         // If so, treat it as Unicode source to preserve Unicode characters during parsing
+        // EXCEPT for evalbytes, which must treat everything as bytes
         String evalString = code.toString();
         boolean hasUnicode = false;
-        for (int i = 0; i < evalString.length(); i++) {
-            if (evalString.charAt(i) > 127) {
-                hasUnicode = true;
-                break;
+        if (!ctx.isEvalbytes && code.type != RuntimeScalarType.BYTE_STRING) {
+            for (int i = 0; i < evalString.length(); i++) {
+                if (evalString.charAt(i) > 127) {
+                    hasUnicode = true;
+                    break;
+                }
             }
         }
 
         // Clone compiler options and set isUnicodeSource if needed
         // This only affects string parsing, not symbol table or method resolution
         CompilerOptions evalCompilerOptions = ctx.compilerOptions;
-        if (hasUnicode) {
+        // The eval string can originate from either a Perl STRING or BYTE_STRING scalar.
+        // For BYTE_STRING source we must treat the source as raw bytes (latin-1-ish) and
+        // NOT re-encode characters to UTF-8 when simulating 'non-unicode source'.
+        boolean isByteStringSource = !ctx.isEvalbytes && code.type == RuntimeScalarType.BYTE_STRING;
+        if (hasUnicode || ctx.isEvalbytes || isByteStringSource) {
             evalCompilerOptions = (CompilerOptions) ctx.compilerOptions.clone();
-            evalCompilerOptions.isUnicodeSource = true;
+            if (hasUnicode) {
+                evalCompilerOptions.isUnicodeSource = true;
+            }
+            if (ctx.isEvalbytes) {
+                evalCompilerOptions.isEvalbytes = true;
+            }
+            if (isByteStringSource) {
+                evalCompilerOptions.isByteStringSource = true;
+            }
         }
 
         // Check $^P to determine if we should use caching
@@ -165,9 +184,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
         }
         
-        // Check if the result is already cached (include hasUnicode in cache key)
+        // Check if the result is already cached (include hasUnicode, isEvalbytes, byte-string-source, and feature flags in cache key)
         // Skip caching when $^P is set, so each eval gets a unique filename
-        String cacheKey = code.toString() + '\0' + evalTag + '\0' + hasUnicode;
+        int featureFlags = ctx.symbolTable.featureFlagsStack.peek();
+        String cacheKey = code.toString() + '\0' + evalTag + '\0' + hasUnicode + '\0' + ctx.isEvalbytes + '\0' + isByteStringSource + '\0' + featureFlags;
         Class<?> cachedClass = null;
         if (!isDebugging) {
             synchronized (evalCache) {
@@ -181,11 +201,27 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
         }
 
-        ScopedSymbolTable symbolTable = ctx.symbolTable.snapShot();
+        // IMPORTANT: The eval call site (EmitEval) computes the constructor signature from
+        // ctx.symbolTable (captured at compile-time). We must use that exact symbol table for
+        // codegen, otherwise the generated <init>(...) descriptor may not match what the
+        // call site is looking up via reflection.
+        ScopedSymbolTable capturedSymbolTable = ctx.symbolTable;
+
+        // eval may include lexical pragmas (use strict/warnings/features). We need those flags
+        // during codegen of the eval body, but they must NOT leak back into the caller scope.
+        BitSet savedWarningFlags = (BitSet) capturedSymbolTable.warningFlagsStack.peek().clone();
+        int savedFeatureFlags = capturedSymbolTable.featureFlagsStack.peek();
+        int savedStrictOptions = capturedSymbolTable.strictOptionsStack.peek();
+
+        // Parse using a mutable clone so lexical declarations inside the eval do not
+        // change the captured environment / constructor signature.
+        // IMPORTANT: The parseSymbolTable starts with the captured flags so that
+        // the eval code is parsed with the correct feature/strict/warning context
+        ScopedSymbolTable parseSymbolTable = capturedSymbolTable.snapShot();
 
         EmitterContext evalCtx = new EmitterContext(
                 new JavaClassInfo(),  // internal java class name
-                ctx.symbolTable.snapShot(), // symbolTable
+                parseSymbolTable, // symbolTable
                 null, // method visitor
                 null, // class writer
                 ctx.contextType, // call context
@@ -212,7 +248,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             // Create a new instance of ErrorMessageUtil, resetting the line counter
             evalCtx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
-            evalCtx.symbolTable = symbolTable.snapShot(); // reset the symboltable
+            ScopedSymbolTable postParseSymbolTable = evalCtx.symbolTable;
+            evalCtx.symbolTable = capturedSymbolTable;
+            evalCtx.symbolTable.copyFlagsFrom(postParseSymbolTable);
+            setCurrentScope(evalCtx.symbolTable);
+            
+            // Use the captured environment array from compile-time to ensure
+            // constructor signature matches what EmitEval generated bytecode for
+            if (ctx.capturedEnv != null) {
+                evalCtx.capturedEnv = ctx.capturedEnv;
+            }
+            
             generatedClass = EmitterMethodCreator.createClassWithMethod(
                     evalCtx,
                     ast,
@@ -228,12 +274,25 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // In case of error return an "undef" ast and class
             ast = new OperatorNode("undef", null, 1);
             evalCtx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
-            evalCtx.symbolTable = symbolTable.snapShot(); // reset the symboltable
+            evalCtx.symbolTable = capturedSymbolTable;
+            setCurrentScope(evalCtx.symbolTable);
             generatedClass = EmitterMethodCreator.createClassWithMethod(
                     evalCtx,
                     ast,
                     false
             );
+        } finally {
+            // Restore caller lexical flags (do not leak eval pragmas).
+            capturedSymbolTable.warningFlagsStack.pop();
+            capturedSymbolTable.warningFlagsStack.push((BitSet) savedWarningFlags.clone());
+
+            capturedSymbolTable.featureFlagsStack.pop();
+            capturedSymbolTable.featureFlagsStack.push(savedFeatureFlags);
+
+            capturedSymbolTable.strictOptionsStack.pop();
+            capturedSymbolTable.strictOptionsStack.push(savedStrictOptions);
+
+            setCurrentScope(capturedSymbolTable);
         }
 
         // Cache the result (unless debugging is enabled)
@@ -495,6 +554,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
         } else {
             // Regular method lookup through inheritance
+            if ("__ANON__".equals(perlClassName)) {
+                throw new PerlCompilerException("Can't use anonymous symbol table for method lookup");
+            }
             method = InheritanceResolver.findMethodInHierarchy(methodName, perlClassName, null, 0);
         }
 

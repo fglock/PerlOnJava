@@ -42,6 +42,9 @@ our @EXPORT_OK = qw(
     # Locale functions
     localeconv setlocale
 
+    # Constants - locale categories
+    LC_ALL LC_COLLATE LC_CTYPE LC_MESSAGES LC_MONETARY LC_NUMERIC LC_TIME
+
     # Constants - errno
     E2BIG EACCES EADDRINUSE EADDRNOTAVAIL EAFNOSUPPORT EAGAIN EALREADY
     EBADF EBADMSG EBUSY ECANCELED ECHILD ECONNABORTED ECONNREFUSED
@@ -262,9 +265,28 @@ for my $const (qw(
     SIGSTOP SIGTSTP
 
     WNOHANG WUNTRACED
+
+    LC_ALL LC_COLLATE LC_CTYPE LC_MESSAGES LC_MONETARY LC_NUMERIC LC_TIME
 )) {
     no strict 'refs';
     *{$const} = eval "sub () { POSIX::_const_$const() }";
+}
+
+# Locale category constants fallback (in case XS constants are not available)
+BEGIN {
+    my %lc = (
+        LC_ALL      => 0,
+        LC_COLLATE  => 1,
+        LC_CTYPE    => 2,
+        LC_MONETARY => 3,
+        LC_NUMERIC  => 4,
+        LC_TIME     => 5,
+        LC_MESSAGES => 6,
+    );
+    no strict 'refs';
+    for my $name (keys %lc) {
+        *{$name} = sub () { $lc{$name} };
+    }
 }
 
 # Exit status macros

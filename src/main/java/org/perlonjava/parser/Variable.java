@@ -98,13 +98,19 @@ public class Variable {
      */
     public static Node parseVariable(Parser parser, String sigil) {
         Node operand;
-        var nextToken = peek(parser);
+        LexerToken nextToken = parser.tokenIndex < parser.tokens.size()
+                ? parser.tokens.get(parser.tokenIndex)
+                : new LexerToken(LexerTokenType.EOF, "");
 
         // Special case 1: $${...} - nested scalar dereference
         // Example: $${ref} means dereference $ref to get a scalar reference, then dereference that
-        if (nextToken.text.equals("$")) {
+        int nextNonWsIndex = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
+        LexerToken nextNonWsToken = nextNonWsIndex < parser.tokens.size()
+                ? parser.tokens.get(nextNonWsIndex)
+                : new LexerToken(LexerTokenType.EOF, "");
+        if (nextNonWsToken.text.equals("$")) {
             // Check if we have ${...} pattern
-            if (parser.tokens.get(parser.tokenIndex + 1).text.equals("{")) {
+            if (nextNonWsIndex + 1 < parser.tokens.size() && parser.tokens.get(nextNonWsIndex + 1).text.equals("{")) {
                 // This is ${...}, parse as dereference of ${...}
                 // Don't consume the $ token, let it be parsed as part of the variable
                 operand = parser.parseExpression(parser.getPrecedence("$") + 1);
@@ -114,7 +120,7 @@ public class Variable {
 
         // Special case 2: $#[...] - deprecated syntax that returns empty string
         // This is mentioned in t/base/lex.t as a special edge case
-        if (sigil.equals("$#") && nextToken.text.equals("[")) {
+        if (sigil.equals("$#") && nextNonWsToken.text.equals("[")) {
             // This is $#[...] which is mentioned in t/base/lex.t and it returns an empty string
             parsePrimary(parser);
             return new StringNode("", parser.tokenIndex);
@@ -135,6 +141,9 @@ public class Variable {
         parser.ctx.logDebug("Parsing variable: " + varName);
 
         if (varName != null) {
+            if (varName.isEmpty()) {
+                parser.throwError("syntax error");
+            }
             IdentifierParser.validateIdentifier(parser, varName, startIndex);
 
             // Variable name is valid.
@@ -787,6 +796,9 @@ public class Variable {
                         parser.tokenIndex = savedIndex;
                     }
                 } catch (Exception e) {
+                    if (e instanceof org.perlonjava.runtime.PerlParserException) {
+                        throw (org.perlonjava.runtime.PerlParserException) e;
+                    }
                     parser.tokenIndex = savedIndex;
                 }
             }

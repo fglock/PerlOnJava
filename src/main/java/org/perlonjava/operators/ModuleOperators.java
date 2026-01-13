@@ -587,6 +587,11 @@ public class ModuleOperators {
         }
         parsedArgs.code = code;
 
+        String requireDebugPre = System.getenv("JPERL_REQUIRE_DEBUG");
+        if (requireDebugPre != null && !requireDebugPre.isEmpty()) {
+            System.err.println((isRequire ? "require" : "do") + " loading " + fileName + " => " + parsedArgs.fileName);
+        }
+
         // Set %INC if requested (before execution)
         if (setINC) {
             // Check if the hook already set %INC to a custom value
@@ -728,6 +733,14 @@ public class ModuleOperators {
         // require always runs in scalar context
         RuntimeBase baseResult = doFile(runtimeScalar, true, true, RuntimeContextType.SCALAR);
         RuntimeScalar result = baseResult.scalar();
+
+        String requireDebug = System.getenv("JPERL_REQUIRE_DEBUG");
+        if (requireDebug != null && !requireDebug.isEmpty()) {
+            // Keep this terse to avoid overwhelming logs.
+            boolean defined = result.defined().getBoolean();
+            boolean boolValue = defined && result.getBoolean();
+            System.err.println("require(" + fileName + ") => defined=" + defined + ", bool=" + boolValue + ", type=" + result.type + ", str=" + result);
+        }
 
         // Check if `do` returned undef (file not found or I/O error)
         if (!result.defined().getBoolean()) {

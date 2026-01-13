@@ -126,7 +126,22 @@ public class ErrorMessageUtil {
             }
 
             StackTraceElement[] stackTrace = rootCause.getStackTrace();
-            for (int i = 0; i < Math.min(stackTrace.length, 5); i++) {
+            int firstPerlOnJava = -1;
+            for (int i = 0; i < stackTrace.length; i++) {
+                if (stackTrace[i] != null && stackTrace[i].getClassName().startsWith("org.perlonjava")) {
+                    firstPerlOnJava = i;
+                    break;
+                }
+            }
+
+            int start = 0;
+            int end = Math.min(stackTrace.length, 80);
+            if (firstPerlOnJava >= 0) {
+                start = Math.max(0, firstPerlOnJava - 10);
+                end = Math.min(stackTrace.length, firstPerlOnJava + 80);
+            }
+
+            for (int i = start; i < end; i++) {
                 StackTraceElement element = stackTrace[i];
                 sb.append("        ")
                         .append(element.getClassName())

@@ -89,6 +89,7 @@ public class IOOperator {
                     whence = runtimeList.elements.get(1).scalar().getInt();
                 }
 
+                RuntimeIO.lastAccesseddHandle = runtimeIO;
                 return runtimeIO.ioHandle.seek(position, whence);
             } else {
                 return RuntimeIO.handleIOError("No file handle available for seek");
@@ -119,30 +120,33 @@ public class IOOperator {
     }
 
     public static RuntimeScalar tell(RuntimeScalar fileHandle) {
+        boolean argless = !fileHandle.getDefinedBoolean();
         RuntimeIO fh = fileHandle.getRuntimeIO();
         
         // If no explicit filehandle was provided (tell with no args),
         // fall back to the last accessed handle like Perl does.
         if (fh == null) {
-            RuntimeIO last = RuntimeIO.lastAccesseddHandle;
-            if (last != null) {
-                return last.tell();
+            if (argless) {
+                RuntimeIO last = RuntimeIO.lastAccesseddHandle;
+                if (last != null) {
+                    return last.tell();
+                }
+                GlobalVariable.getGlobalVariable("main::!").set(9);
+                return new RuntimeScalar(-1);
             }
-            // Set $! to EBADF (9) and return undef
             GlobalVariable.getGlobalVariable("main::!").set(9);
-            return RuntimeScalarCache.scalarUndef;
+            return new RuntimeScalar(-1);
         }
 
         if (fh instanceof TieHandle tieHandle) {
             return TieHandle.tiedTell(tieHandle);
         }
 
-        if (fh.ioHandle != null) {
-            return fh.ioHandle.tell();
+        if (fh.ioHandle == null || fh.ioHandle instanceof ClosedIOHandle) {
+            GlobalVariable.getGlobalVariable("main::!").set(9);
+            return new RuntimeScalar(-1);
         }
-        // Set $! to EBADF (9) and return undef if no underlying handle
-        GlobalVariable.getGlobalVariable("main::!").set(9);
-        return RuntimeScalarCache.scalarUndef;
+        return fh.tell();
     }
 
     public static RuntimeScalar binmode(RuntimeScalar fileHandle, RuntimeList runtimeList) {
@@ -199,6 +203,8 @@ public class IOOperator {
 //        open FILEHANDLE,EXPR
 //        open FILEHANDLE
 
+        boolean ioDebug = System.getenv("JPERL_IO_DEBUG") != null;
+
         // Get the filehandle - this should be an lvalue RuntimeScalar
         // For array/hash elements like $fh0[0], this is the actual lvalue that can be modified
         // We assert it's a RuntimeScalar rather than calling .scalar() which would create a copy
@@ -218,12 +224,20 @@ public class IOOperator {
             // 3-argument open
             RuntimeScalar secondArg = args[2].scalar();
 
-            // Check for filehandle duplication modes (<&, >&, +<&, <&=, >&=, +<&=)
-            if (mode.equals("<&") || mode.equals(">&") || mode.equals("+<&") ||
-                    mode.equals("<&=") || mode.equals(">&=") || mode.equals("+<&=")) {
+            // Check for filehandle duplication modes (<&, >&, >>&, +<&, +>&, +>>& and &= variants)
+            if (mode.equals("<&") || mode.equals(">&") || mode.equals(">>&") ||
+                    mode.equals("+<&") || mode.equals("+>&") || mode.equals("+>>&") ||
+                    mode.equals("<&=") || mode.equals(">&=") || mode.equals(">>&=") ||
+                    mode.equals("+<&=") || mode.equals("+>&=") || mode.equals("+>>&=")) {
                 // Handle filehandle duplication
                 String argStr = secondArg.toString();
                 boolean isParsimonious = mode.endsWith("="); // &= modes reuse file descriptor
+
+                if (ioDebug) {
+                    System.err.println("[JPERL_IO_DEBUG] open dup-mode: mode=" + mode + " argStr=" + argStr +
+                            " argType=" + secondArg.type);
+                    System.err.flush();
+                }
 
                 // Check if it's a numeric file descriptor
                 if (argStr.matches("^\\d+$")) {
@@ -247,6 +261,18 @@ public class IOOperator {
                     try {
                         RuntimeIO sourceHandle = secondArg.getRuntimeIO();
                         if (sourceHandle != null && sourceHandle.ioHandle != null) {
+                            if (ioDebug) {
+                                String srcFileno;
+                                try {
+                                    srcFileno = sourceHandle.ioHandle.fileno().toString();
+                                } catch (Throwable t) {
+                                    srcFileno = "<err>";
+                                }
+                                System.err.println("[JPERL_IO_DEBUG] open dup-mode sourceHandle ioHandle=" +
+                                        sourceHandle.ioHandle.getClass().getName() + " fileno=" + srcFileno +
+                                        " ioHandleId=" + System.identityHashCode(sourceHandle.ioHandle));
+                                System.err.flush();
+                            }
                             if (isParsimonious) {
                                 // &= mode: reuse the same file descriptor (parsimonious)
                                 fh = sourceHandle;
@@ -304,8 +330,39 @@ public class IOOperator {
         }
 
         // Check if the filehandle already contains a GLOB
+        RuntimeGlob targetGlob = null;
         if ((fileHandle.type == RuntimeScalarType.GLOB || fileHandle.type == RuntimeScalarType.GLOBREFERENCE) && fileHandle.value instanceof RuntimeGlob glob) {
-            glob.setIO(fh);
+            targetGlob = glob;
+        } else if ((fileHandle.type == RuntimeScalarType.STRING || fileHandle.type == RuntimeScalarType.BYTE_STRING) && fileHandle.value instanceof String name) {
+            // Symbolic filehandle: open($fh, ...) where $fh contains "TST" should open main::TST
+            // so later bareword usage like <TST> resolves to the correct global handle.
+            if (!name.isEmpty() && name.matches("^[A-Za-z_][A-Za-z0-9_]*(::[A-Za-z_][A-Za-z0-9_]*)*$")) {
+                String fullName = name.contains("::") ? name : ("main::" + name);
+                targetGlob = GlobalVariable.getGlobalIO(fullName);
+
+                // Store a reference to the named glob in the scalar lvalue
+                RuntimeScalar newGlob = new RuntimeScalar();
+                newGlob.type = RuntimeScalarType.GLOBREFERENCE;
+                newGlob.value = targetGlob;
+                fileHandle.set(newGlob);
+            }
+        }
+
+        if (targetGlob != null) {
+            if (ioDebug && targetGlob.globName != null && (targetGlob.globName.equals("main::STDOUT") || targetGlob.globName.equals("main::STDERR") || targetGlob.globName.equals("main::STDIN"))) {
+                String ioHandleClass = fh != null && fh.ioHandle != null ? fh.ioHandle.getClass().getName() : "null";
+                String filenoStr;
+                try {
+                    filenoStr = fh != null && fh.ioHandle != null ? fh.ioHandle.fileno().toString() : "undef";
+                } catch (Throwable t) {
+                    filenoStr = "<err>";
+                }
+                System.err.println("[JPERL_IO_DEBUG] open assign " + targetGlob.globName + " mode=" + mode +
+                        " ioHandle=" + ioHandleClass + " fileno=" + filenoStr +
+                        " ioHandleId=" + (fh != null && fh.ioHandle != null ? System.identityHashCode(fh.ioHandle) : 0));
+                System.err.flush();
+            }
+            targetGlob.setIO(fh);
         } else {
             // Create a new anonymous GLOB and assign it to the lvalue
             RuntimeScalar newGlob = new RuntimeScalar();
@@ -389,6 +446,11 @@ public class IOOperator {
             return TieHandle.tiedPrint(tieHandle, runtimeList);
         }
 
+        if (fh == null || ((fh.ioHandle == null || fh.ioHandle instanceof ClosedIOHandle) && fh.directoryIO == null)) {
+            getGlobalVariable("main::!").set(9);
+            return scalarFalse;
+        }
+
         StringBuilder sb = new StringBuilder();
         String separator = getGlobalVariable("main::,").toString(); // fetch $,
         String newline = getGlobalVariable("main::\\").toString();  // fetch $\
@@ -423,6 +485,14 @@ public class IOOperator {
      * @return A RuntimeScalar indicating the result of the write operation.
      */
     public static RuntimeScalar say(RuntimeList runtimeList, RuntimeScalar fileHandle) {
+        RuntimeIO fh = fileHandle.getRuntimeIO();
+        if (fh instanceof TieHandle tieHandle) {
+            RuntimeList args = new RuntimeList();
+            args.elements.addAll(runtimeList.elements);
+            args.elements.add(new RuntimeScalar("\n"));
+            return TieHandle.tiedPrint(tieHandle, args);
+        }
+
         StringBuilder sb = new StringBuilder();
         String separator = getGlobalVariable("main::,").toString(); // fetch $,
         boolean first = true;
@@ -441,7 +511,10 @@ public class IOOperator {
 
         try {
             // Write the content to the file handle
-            RuntimeIO fh = fileHandle.getRuntimeIO();
+            if (fh == null || ((fh.ioHandle == null || fh.ioHandle instanceof ClosedIOHandle) && fh.directoryIO == null)) {
+                getGlobalVariable("main::!").set(9);
+                return scalarFalse;
+            }
             return fh.write(sb.toString());
         } catch (Exception e) {
             getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
@@ -456,11 +529,23 @@ public class IOOperator {
      * @return A RuntimeScalar with the flag.
      */
     public static RuntimeScalar eof(RuntimeScalar fileHandle) {
+        boolean argless = !fileHandle.getDefinedBoolean();
         RuntimeIO fh = fileHandle.getRuntimeIO();
 
         // Handle undefined or invalid filehandle
         if (fh == null) {
-            // Set $! to EBADF (Bad file descriptor) - errno 9
+            if (argless) {
+                RuntimeIO last = RuntimeIO.lastAccesseddHandle;
+                if (last != null) {
+                    return last.eof();
+                }
+                // Perl's eof() defaults to ARGV if ${^LAST_FH} is unset
+                RuntimeIO argv = new RuntimeScalar("main::ARGV").getRuntimeIO();
+                if (argv == null || argv.ioHandle == null || argv.ioHandle instanceof ClosedIOHandle) {
+                    return RuntimeScalarCache.scalarTrue;
+                }
+                return argv.eof();
+            }
             GlobalVariable.getGlobalVariable("main::!")
                     .set(new RuntimeScalar(9));
             return RuntimeScalarCache.scalarUndef;
@@ -474,11 +559,22 @@ public class IOOperator {
     }
 
     public static RuntimeScalar eof(RuntimeList runtimeList, RuntimeScalar fileHandle) {
+        boolean argless = !fileHandle.getDefinedBoolean();
         RuntimeIO fh = fileHandle.getRuntimeIO();
 
         // Handle undefined or invalid filehandle
         if (fh == null) {
-            // Set $! to EBADF (Bad file descriptor) - errno 9
+            if (argless) {
+                RuntimeIO last = RuntimeIO.lastAccesseddHandle;
+                if (last != null) {
+                    return last.eof();
+                }
+                RuntimeIO argv = new RuntimeScalar("main::ARGV").getRuntimeIO();
+                if (argv == null || argv.ioHandle == null || argv.ioHandle instanceof ClosedIOHandle) {
+                    return RuntimeScalarCache.scalarTrue;
+                }
+                return argv.eof();
+            }
             GlobalVariable.getGlobalVariable("main::!")
                     .set(new RuntimeScalar(9));
             return RuntimeScalarCache.scalarUndef;
@@ -1902,6 +1998,20 @@ public class IOOperator {
         RuntimeIO duplicate = new RuntimeIO();
         duplicate.ioHandle = original.ioHandle;
         duplicate.currentLineNumber = original.currentLineNumber;
+
+        if (System.getenv("JPERL_IO_DEBUG") != null) {
+            String origFileno;
+            try {
+                origFileno = original.ioHandle.fileno().toString();
+            } catch (Throwable t) {
+                origFileno = "<err>";
+            }
+            System.err.println("[JPERL_IO_DEBUG] duplicateFileHandle: origIoHandle=" + original.ioHandle.getClass().getName() +
+                    " origFileno=" + origFileno +
+                    " origIoHandleId=" + System.identityHashCode(original.ioHandle) +
+                    " dupIoHandleId=" + System.identityHashCode(duplicate.ioHandle));
+            System.err.flush();
+        }
 
         return duplicate;
     }

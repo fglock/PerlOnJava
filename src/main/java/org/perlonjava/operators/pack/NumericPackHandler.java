@@ -210,11 +210,14 @@ public class NumericPackHandler implements PackFormatHandler {
                     // BER compressed integer - validate input represents a valid unsigned integer
                     // Note: We call getNumber() first to handle blessed objects like Math::BigInt
                     // which have numeric overloading but don't pass looksLikeNumber() check
-                    RuntimeScalar numericValue = value.getNumber();
+                    RuntimeScalar numericValue = value;
+                    if (value.isBlessed()) {
+                        // For blessed objects, explicitly invoke numeric overload (0+) if available.
+                        numericValue = value.getNumber();
+                    }
                     double doubleValue = numericValue.getDouble();
-                    // IMPORTANT: Use numericValue.toString(), not value.toString()!
-                    // For blessed objects like Math::BigInt, value.toString() returns the hash representation
-                    // but numericValue.toString() returns the actual number after numeric overload
+                    // IMPORTANT: do NOT stringify blessed objects via value.toString() (would call "" overload)
+                    // Use numericValue.toString() which reflects numeric overload result when applicable.
                     String stringValue = numericValue.toString();
 
                     if (TRACE_PACK) {
