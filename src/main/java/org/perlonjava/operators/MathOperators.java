@@ -482,7 +482,12 @@ public class MathOperators {
         if (arg1.type == RuntimeScalarType.DOUBLE) {
             return new RuntimeScalar(Math.abs(arg1.getDouble()));
         } else {
-            return new RuntimeScalar(Math.abs(arg1.getInt()));
+            long v = arg1.getLong();
+            if (v == Long.MIN_VALUE) {
+                // Can't represent abs(Long.MIN_VALUE) as a signed long; Perl falls back to NV.
+                return new RuntimeScalar(Math.abs((double) v));
+            }
+            return new RuntimeScalar(Math.abs(v));
         }
     }
 
