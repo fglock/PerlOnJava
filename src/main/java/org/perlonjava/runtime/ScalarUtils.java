@@ -199,8 +199,17 @@ public class ScalarUtils {
             long longValue = Long.parseLong(str);
             try {
                 // Try to increment with overflow detection
-                runtimeScalar.type = INTEGER;
-                runtimeScalar.value = Math.addExact(longValue, 1);
+                long result = Math.addExact(longValue, 1);
+                // Check if result fits in an int - if so, store as INTEGER with Integer object
+                // Otherwise, store as DOUBLE to match Perl semantics
+                if (result >= Integer.MIN_VALUE && result <= Integer.MAX_VALUE) {
+                    runtimeScalar.type = INTEGER;
+                    runtimeScalar.value = (int) result;
+                } else {
+                    // Value doesn't fit in int - promote to double
+                    runtimeScalar.type = RuntimeScalarType.DOUBLE;
+                    runtimeScalar.value = (double) result;
+                }
                 return runtimeScalar;
             } catch (ArithmeticException ignored) {
                 // Overflow: promote to double (Perl NV semantics)
