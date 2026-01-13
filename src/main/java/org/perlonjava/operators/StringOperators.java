@@ -613,16 +613,16 @@ public class StringOperators {
      * Each byte becomes a character in the result string.
      */
     private static RuntimeScalar toUtf8Bytes(RuntimeScalar runtimeScalar) {
+        // Under 'use bytes', BYTE_STRING already represents a sequence of octets.
+        // Converting it to UTF-8 would expand bytes >= 0x80 into multi-byte sequences,
+        // which breaks Perl's byte-semantics for lc/uc/fc/etc.
+        if (runtimeScalar.type == BYTE_STRING) {
+            return runtimeScalar;
+        }
+
         String str = runtimeScalar.toString();
         byte[] utf8Bytes = str.getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        
-        // Convert bytes to a string where each byte becomes a character
-        StringBuilder result = new StringBuilder(utf8Bytes.length);
-        for (byte b : utf8Bytes) {
-            result.append((char) (b & 0xFF));
-        }
-        
-        return new RuntimeScalar(result.toString());
+        return new RuntimeScalar(utf8Bytes);
     }
 
     /**
@@ -643,7 +643,9 @@ public class StringOperators {
             }
         }
         
-        return new RuntimeScalar(result.toString());
+        RuntimeScalar out = new RuntimeScalar(result.toString());
+        out.type = BYTE_STRING;
+        return out;
     }
 
     /**
@@ -664,7 +666,9 @@ public class StringOperators {
             }
         }
         
-        return new RuntimeScalar(result.toString());
+        RuntimeScalar out = new RuntimeScalar(result.toString());
+        out.type = BYTE_STRING;
+        return out;
     }
 
     /**
@@ -689,7 +693,9 @@ public class StringOperators {
         // Only lowercase first byte if it's ASCII A-Z
         char first = str.charAt(0);
         if (first >= 'A' && first <= 'Z') {
-            return new RuntimeScalar((char)(first + 32) + str.substring(1));
+            RuntimeScalar out = new RuntimeScalar((char) (first + 32) + str.substring(1));
+            out.type = BYTE_STRING;
+            return out;
         }
         return asBytes;
     }
@@ -707,7 +713,9 @@ public class StringOperators {
         // Only uppercase first byte if it's ASCII a-z
         char first = str.charAt(0);
         if (first >= 'a' && first <= 'z') {
-            return new RuntimeScalar((char)(first - 32) + str.substring(1));
+            RuntimeScalar out = new RuntimeScalar((char) (first - 32) + str.substring(1));
+            out.type = BYTE_STRING;
+            return out;
         }
         return asBytes;
     }

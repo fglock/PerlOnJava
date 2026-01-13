@@ -60,6 +60,7 @@ public class CompilerOptions implements Cloneable {
     public boolean discardLeadingGarbage = false; // For -x
     public boolean isUnicodeSource = false; // Set to true for UTF-16/UTF-32 source files
     public boolean isEvalbytes = false; // Set to true for evalbytes context - treats strings as raw bytes
+    public boolean isByteStringSource = false; // Set to true when parsing source that originates from a BYTE_STRING scalar (raw bytes)
     public boolean taintMode = false; // For -T
     public boolean allowUnsafeOperations = false; // For -U
     public boolean runUnderDebugger = false; // For -d

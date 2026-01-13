@@ -154,13 +154,20 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Clone compiler options and set isUnicodeSource if needed
         // This only affects string parsing, not symbol table or method resolution
         CompilerOptions evalCompilerOptions = ctx.compilerOptions;
-        if (hasUnicode || ctx.isEvalbytes) {
+        // The eval string can originate from either a Perl STRING or BYTE_STRING scalar.
+        // For BYTE_STRING source we must treat the source as raw bytes (latin-1-ish) and
+        // NOT re-encode characters to UTF-8 when simulating 'non-unicode source'.
+        boolean isByteStringSource = !ctx.isEvalbytes && code.type == RuntimeScalarType.BYTE_STRING;
+        if (hasUnicode || ctx.isEvalbytes || isByteStringSource) {
             evalCompilerOptions = (CompilerOptions) ctx.compilerOptions.clone();
             if (hasUnicode) {
                 evalCompilerOptions.isUnicodeSource = true;
             }
             if (ctx.isEvalbytes) {
                 evalCompilerOptions.isEvalbytes = true;
+            }
+            if (isByteStringSource) {
+                evalCompilerOptions.isByteStringSource = true;
             }
         }
 
@@ -177,10 +184,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
         }
         
-        // Check if the result is already cached (include hasUnicode, isEvalbytes, and feature flags in cache key)
+        // Check if the result is already cached (include hasUnicode, isEvalbytes, byte-string-source, and feature flags in cache key)
         // Skip caching when $^P is set, so each eval gets a unique filename
         int featureFlags = ctx.symbolTable.featureFlagsStack.peek();
-        String cacheKey = code.toString() + '\0' + evalTag + '\0' + hasUnicode + '\0' + ctx.isEvalbytes + '\0' + featureFlags;
+        String cacheKey = code.toString() + '\0' + evalTag + '\0' + hasUnicode + '\0' + ctx.isEvalbytes + '\0' + isByteStringSource + '\0' + featureFlags;
         Class<?> cachedClass = null;
         if (!isDebugging) {
             synchronized (evalCache) {
