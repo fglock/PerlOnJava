@@ -7,6 +7,7 @@ import org.perlonjava.regex.RuntimeRegex;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.regex.Pattern;
 
 import static org.perlonjava.runtime.RuntimeArray.*;
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
@@ -28,6 +29,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     // Static stack to store saved "local" states of RuntimeScalar instances
     private static final Stack<RuntimeScalar> dynamicStateStack = new Stack<>();
+
+    // Pre-compiled regex patterns for numification fast-paths
+    // These are used to avoid StackOverflowError from repeated Pattern.compile() calls
+    private static final Pattern INTEGER_PATTERN = Pattern.compile("^-?\\d+$");
+    private static final Pattern DECIMAL_PATTERN = Pattern.compile("^[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?$");
 
     // Type map for scalar types to their corresponding enum
     private static final Map<Class<?>, Integer> typeMap = new HashMap<>();
@@ -312,7 +318,25 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return switch (type) {
             case INTEGER -> (int) value;
             case DOUBLE -> (int) ((double) value);
-            case STRING, BYTE_STRING -> NumberParser.parseNumber(this).getInt();
+            case STRING, BYTE_STRING -> {
+                // Avoid recursion when NumberParser.parseNumber() returns a cached scalar
+                // that is also STRING. Add fast-path for plain integer strings.
+                String s = (String) value;
+                if (s != null) {
+                    String t = s.trim();
+                    if (!t.isEmpty() && INTEGER_PATTERN.matcher(t).matches()) {
+                        try {
+                            // Parse as long first so we can handle values outside 32-bit range
+                            // (Perl IV is commonly 64-bit). getInt() is used for array indices
+                            // and similar contexts, which should behave like (int)getLong().
+                            yield (int) Long.parseLong(t);
+                        } catch (NumberFormatException ignored) {
+                            // Fall through to full numification.
+                        }
+                    }
+                }
+                yield NumberParser.parseNumber(this).getInt();
+            }
             case UNDEF -> 0;
             case VSTRING -> 0;
             case BOOLEAN -> (boolean) value ? 1 : 0;
@@ -474,7 +498,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 String s = (String) value;
                 if (s != null) {
                     String t = s.trim();
-                    if (!t.isEmpty() && t.matches("^-?\\d+$")) {
+                    if (!t.isEmpty() && INTEGER_PATTERN.matcher(t).matches()) {
                         try {
                             yield Long.parseLong(t);
                         } catch (NumberFormatException ignored) {
@@ -516,7 +540,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 String s = (String) value;
                 if (s != null) {
                     String t = s.trim();
-                    if (!t.isEmpty() && t.matches("^[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?$")) {
+                    if (!t.isEmpty() && DECIMAL_PATTERN.matcher(t).matches()) {
                         try {
                             yield Double.parseDouble(t);
                         } catch (NumberFormatException ignored) {
