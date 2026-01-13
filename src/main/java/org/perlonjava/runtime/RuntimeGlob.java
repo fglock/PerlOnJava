@@ -86,7 +86,10 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                         // `*foo = \%bar` assigns to the HASH slot.
                         GlobalVariable.globalHashes.put(this.globName, hash);
                     } else {
-                        GlobalVariable.getGlobalVariable(this.globName).set(deref);
+                        // `*foo = \$bar` (or `*foo = \1`) aliases the SCALAR slot.
+                        // This must replace the scalar container (alias) rather than storing into
+                        // the existing scalar, otherwise tied scalars would invoke STORE.
+                        GlobalVariable.aliasGlobalVariable(this.globName, (RuntimeScalar) value.value);
                     }
                 }
                 return value;
