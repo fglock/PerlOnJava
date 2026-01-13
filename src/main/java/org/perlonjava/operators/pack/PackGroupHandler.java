@@ -1,5 +1,6 @@
 package org.perlonjava.operators.pack;
 
+import org.perlonjava.operators.Pack;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeList;
 import org.perlonjava.runtime.RuntimeScalar;
@@ -47,12 +48,15 @@ public class PackGroupHandler {
      * @param values       The list of values to pack
      * @param output       The output stream
      * @param valueIndex   The current index in the values list
-     * @param packFunction Function to call for recursive packing
+     * @param byteMode     The current byte mode
+     * @param byteModeUsed Whether byte mode has been used
+     * @param hasUnicodeInNormalMode Whether Unicode has been used in normal mode
      * @return GroupResult containing the position after the group and updated value index
      * @throws PerlCompilerException if parentheses are unmatched or endianness conflicts
      */
     public static GroupResult handleGroup(String template, int openPos, List<RuntimeScalar> values,
-                                          PackBuffer output, int valueIndex, PackFunction packFunction) {
+                                          PackBuffer output, int valueIndex,
+                                          boolean byteMode, boolean byteModeUsed, boolean hasUnicodeInNormalMode) {
         /**
          * Track recursion depth to prevent stack overflow from deeply nested groups.
          * 
@@ -83,7 +87,7 @@ public class PackGroupHandler {
         nestingDepth.set(currentDepth);
         
         try {
-            return handleGroupInternal(template, openPos, values, output, valueIndex, packFunction);
+            return handleGroupInternal(template, openPos, values, output, valueIndex, byteMode, byteModeUsed, hasUnicodeInNormalMode);
         } finally {
             // Always decrement depth when exiting, even if an exception occurred
             nestingDepth.set(currentDepth - 1);
@@ -91,7 +95,8 @@ public class PackGroupHandler {
     }
     
     private static GroupResult handleGroupInternal(String template, int openPos, List<RuntimeScalar> values,
-                                          PackBuffer output, int valueIndex, PackFunction packFunction) {
+                                          PackBuffer output, int valueIndex,
+                                          boolean byteMode, boolean byteModeUsed, boolean hasUnicodeInNormalMode) {
         // Find matching closing parenthesis
         int closePos = PackHelper.findMatchingParen(template, openPos);
         if (closePos == -1) {
@@ -126,79 +131,74 @@ public class PackGroupHandler {
 
         // Process the group content repeatedly
         for (int rep = 0; rep < groupInfo.repeatCount; rep++) {
-            // Special case: if group starts with X, handle it directly on parent buffer
-            if (groupContent.startsWith("X")) {
-                // Handle X directly on the parent's output
-                int xCount = 1;
-                int xPos = 1;
+            Pack.pushGroupBase(output.size());
+            try {
+                // Special case: if group starts with X, handle it directly on parent buffer
+                if (groupContent.startsWith("X")) {
+                    // Handle X directly on the parent's output
+                    int xCount = 1;
+                    int xPos = 1;
 
-                // Check for count after X
-                if (xPos < groupContent.length() && Character.isDigit(groupContent.charAt(xPos))) {
-                    int j = xPos;
-                    while (j < groupContent.length() && Character.isDigit(groupContent.charAt(j))) {
-                        j++;
-                    }
-                    xCount = Integer.parseInt(groupContent.substring(xPos, j));
-                    xPos = j;
-                }
-
-                // Backup in parent buffer using ControlPackHandler
-                ControlPackHandler backupHandler = new ControlPackHandler('X');
-                backupHandler.pack(values, valueIndex, xCount, false, new ParsedModifiers(), output);
-
-                // Process the rest of the group normally
-                if (xPos < groupContent.length()) {
-                    String remainingContent = groupContent.substring(xPos);
-                    RuntimeList groupArgs = new RuntimeList();
-                    groupArgs.add(new RuntimeScalar(remainingContent));
-
-                    // Collect values for remaining content
-                    int remainingValueCount = PackHelper.countValuesNeeded(remainingContent);
-                    for (int v = 0; v < remainingValueCount && valueIndex < values.size(); v++) {
-                        groupArgs.add(values.get(valueIndex++));
+                    // Check for count after X
+                    if (xPos < groupContent.length() && Character.isDigit(groupContent.charAt(xPos))) {
+                        int j = xPos;
+                        while (j < groupContent.length() && Character.isDigit(groupContent.charAt(j))) {
+                            j++;
+                        }
+                        xCount = Integer.parseInt(groupContent.substring(xPos, j));
+                        xPos = j;
                     }
 
-                    RuntimeScalar groupResult = packFunction.pack(groupArgs);
-                    byte[] groupBytes = groupResult.toString().getBytes(StandardCharsets.ISO_8859_1);
-                    output.write(groupBytes, 0, groupBytes.length);
-                }
-            } else {
-                // Normal group processing
-                RuntimeList groupArgs = new RuntimeList();
+                    // Backup in parent buffer using ControlPackHandler
+                    ControlPackHandler backupHandler = new ControlPackHandler('X');
+                    backupHandler.pack(values, valueIndex, xCount, false, new ParsedModifiers(), output);
 
-                // Apply group-level endianness to the content if specified
-                String effectiveContent = groupContent;
-                if (groupInfo.endian != ' ') {
-                    // Apply endianness modifier to each format in the group
-                    // This ensures the group's endianness applies to all formats inside
-                    effectiveContent = GroupEndiannessHelper.applyGroupEndianness(groupContent, groupInfo.endian);
-                }
-
-                groupArgs.add(new RuntimeScalar(effectiveContent));
-
-                // Collect values for this group iteration
-                int groupValueCount = PackHelper.countValuesNeeded(groupContent);
-                // DEBUG: group '" + groupContent + "' needs " + groupValueCount + " values, valueIndex=" + valueIndex + ", remaining=" + (values.size() - valueIndex)
-
-                // Handle * groups
-                if (groupInfo.repeatCount == Integer.MAX_VALUE) {
-                    if (groupValueCount == Integer.MAX_VALUE || values.size() - valueIndex < groupValueCount) {
-                        break;
+                    // Process the rest of the group normally
+                    if (xPos < groupContent.length()) {
+                        String remainingContent = groupContent.substring(xPos);
+                        
+                        // Pack directly into the parent buffer
+                        Pack.PackResult result = Pack.packInto(remainingContent, values, valueIndex, output, byteMode, hasUnicodeInNormalMode);
+                        valueIndex = result.valueIndex();
+                        byteMode = result.byteMode();
+                        byteModeUsed = byteModeUsed || result.byteModeUsed();
+                        hasUnicodeInNormalMode = result.hasUnicodeInNormalMode();
                     }
-                }
+                } else {
+                    // Normal group processing
+                    // Apply group-level endianness to the content if specified
+                    String effectiveContent = groupContent;
+                    if (groupInfo.endian != ' ') {
+                        // Apply endianness modifier to each format in the group
+                        // This ensures the group's endianness applies to all formats inside
+                        effectiveContent = GroupEndiannessHelper.applyGroupEndianness(groupContent, groupInfo.endian);
+                    }
 
-                for (int v = 0; v < groupValueCount && valueIndex < values.size(); v++) {
-                    groupArgs.add(values.get(valueIndex++));
-                }
+                    // Collect values for this group iteration
+                    int groupValueCount = PackHelper.countValuesNeeded(groupContent);
+                    // DEBUG: group '" + groupContent + "' needs " + groupValueCount + " values, valueIndex=" + valueIndex + ", remaining=" + (values.size() - valueIndex)
 
-                // Recursively pack the group
-                RuntimeScalar groupResult = packFunction.pack(groupArgs);
-                byte[] groupBytes = groupResult.toString().getBytes(StandardCharsets.ISO_8859_1);
-                output.write(groupBytes, 0, groupBytes.length);
+                    // Handle * groups
+                    if (groupInfo.repeatCount == Integer.MAX_VALUE) {
+                        if (groupValueCount == Integer.MAX_VALUE || values.size() - valueIndex < groupValueCount) {
+                            break;
+                        }
+                    }
+
+                    // Pack directly into the parent buffer instead of creating a new buffer.
+                    // This allows '.' and '@' inside groups to operate on the parent buffer's position.
+                    Pack.PackResult result = Pack.packInto(effectiveContent, values, valueIndex, output, byteMode, hasUnicodeInNormalMode);
+                    valueIndex = result.valueIndex();
+                    byteMode = result.byteMode();
+                    byteModeUsed = byteModeUsed || result.byteModeUsed();
+                    hasUnicodeInNormalMode = result.hasUnicodeInNormalMode();
+                }
+            } finally {
+                Pack.popGroupBase();
             }
         }
 
-        return new GroupResult(groupInfo.endPosition - 1, valueIndex); // -1 because loop will increment
+        return new GroupResult(groupInfo.endPosition - 1, valueIndex, byteMode, byteModeUsed, hasUnicodeInNormalMode); // -1 because loop will increment
     }
 
     /**
@@ -259,14 +259,16 @@ public class PackGroupHandler {
      * @param valueIndex   The current index in the values list
      * @param output       The output stream
      * @param modifiers    The modifiers for the format
-     * @param packFunction Function to call for recursive packing
+     * @param byteMode     The current byte mode
+     * @param byteModeUsed Whether byte mode has been used
+     * @param hasUnicodeInNormalMode Whether Unicode has been used in normal mode
      * @return GroupResult containing template position and updated value index
      * @throws PerlCompilerException if slash construct is malformed
      */
     public static GroupResult handleSlashConstruct(String template, int position, int slashPos, char format,
                                                    List<RuntimeScalar> values, int valueIndex,
                                                    PackBuffer output, ParsedModifiers modifiers,
-                                                   PackFunction packFunction) {
+                                                   boolean byteMode, boolean byteModeUsed, boolean hasUnicodeInNormalMode) {
         // DEBUG: handling " + format + "/ construct at position " + position
 
         // Skip whitespace after '/'
@@ -332,27 +334,26 @@ public class PackGroupHandler {
                 lengthToWrite = str.length();
             }
         } else if (stringFormat == 'a' || stringFormat == 'A' || stringFormat == 'Z') {
-            // Handle string formats (a, A, Z)
+            // Handle string formats (a, A, Z).
+            // Use PackWriter.writeString() so fixed-width Z<count> correctly reserves space for
+            // a trailing NUL within the field (e.g. Z3 -> 2 bytes + "\0").
+            int effectiveCount;
             if (stringCount >= 0) {
-                // Specific count requested
-                byte[] strBytes = str.getBytes(StandardCharsets.UTF_8);
-                int actualCount = Math.min(stringCount, strBytes.length);
-                dataToWrite = new byte[stringCount];
-                System.arraycopy(strBytes, 0, dataToWrite, 0, actualCount);
-                // Pad with nulls or spaces depending on format
-                byte padByte = (stringFormat == 'A') ? (byte) ' ' : (byte) 0;
-                for (int k = actualCount; k < stringCount; k++) {
-                    dataToWrite[k] = padByte;
-                }
-                lengthToWrite = stringCount;
+                effectiveCount = stringCount;
             } else {
-                // Use full string
-                dataToWrite = str.getBytes(StandardCharsets.UTF_8);
-                lengthToWrite = dataToWrite.length;
+                byte[] strBytes = byteMode
+                        ? str.getBytes(StandardCharsets.ISO_8859_1)
+                        : str.getBytes(StandardCharsets.UTF_8);
+                effectiveCount = strBytes.length;
                 if (stringFormat == 'Z') {
-                    lengthToWrite++; // Include null terminator in count
+                    effectiveCount++; // Include null terminator in count
                 }
             }
+
+            PackBuffer tmp = new PackBuffer();
+            PackWriter.writeString(tmp, str, effectiveCount, stringFormat, byteMode);
+            dataToWrite = tmp.toByteArray();
+            lengthToWrite = tmp.size();
         } else {
             // For non-string formats after '/', we need to handle them differently
             // The format after '/' specifies what to pack, and we pack that many items
@@ -373,18 +374,17 @@ public class PackGroupHandler {
 
             // Now pack the items using the specified format
             for (int j = 0; j < itemsToWrite && valueIndex < values.size(); j++) {
-                // Create a sub-pack for each item
-                RuntimeList itemArgs = new RuntimeList();
-                itemArgs.add(new RuntimeScalar(String.valueOf(stringFormat)));
-                itemArgs.add(values.get(valueIndex++));
-
-                RuntimeScalar itemResult = packFunction.pack(itemArgs);
-                byte[] itemBytes = itemResult.toString().getBytes(StandardCharsets.ISO_8859_1);
-                output.write(itemBytes, 0, itemBytes.length);
+                // Pack each item directly into the parent buffer
+                String itemTemplate = String.valueOf(stringFormat);
+                Pack.PackResult result = Pack.packInto(itemTemplate, values, valueIndex, output, byteMode, hasUnicodeInNormalMode);
+                valueIndex = result.valueIndex();
+                byteMode = result.byteMode();
+                byteModeUsed = byteModeUsed || result.byteModeUsed();
+                hasUnicodeInNormalMode = result.hasUnicodeInNormalMode();
             }
 
             // Return the position after consuming the correct number of values
-            return new GroupResult(endPos, valueIndex);
+            return new GroupResult(endPos, valueIndex, byteMode, byteModeUsed, hasUnicodeInNormalMode);
         }
 
         // Pack the length using the numeric format
@@ -392,26 +392,14 @@ public class PackGroupHandler {
 
         // Write the string data
         output.write(dataToWrite, 0, dataToWrite.length);
-        if (stringFormat == 'Z' && stringCount < 0) {
-            output.write(0); // null terminator
-        }
 
         // For string formats, we consumed exactly 1 value
-        return new GroupResult(endPos, valueIndex + 1);
-    }
-
-    /**
-     * Interface for pack operations to avoid circular dependencies.
-     * This allows PackGroupHandler to call back to the main pack method.
-     */
-    @FunctionalInterface
-    public interface PackFunction {
-        RuntimeScalar pack(RuntimeList args);
+        return new GroupResult(endPos, valueIndex + 1, byteMode, byteModeUsed, hasUnicodeInNormalMode);
     }
 
     /**
      * Result of processing a group, containing both the template position and updated value index.
      */
-    public record GroupResult(int position, int valueIndex) {
+    public record GroupResult(int position, int valueIndex, boolean byteMode, boolean byteModeUsed, boolean hasUnicodeInNormalMode) {
     }
 }

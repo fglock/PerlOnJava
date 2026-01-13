@@ -409,14 +409,11 @@ public class PackWriter {
     public static void writeString(PackBuffer output, String str, int count, char format, boolean byteMode) {
         byte[] bytes;
 
-        if (byteMode) {
-            // In byte mode (C0), use ISO_8859_1 to preserve raw byte values
-            // This prevents UTF-8 encoding of high bytes (128-255)
-            bytes = str.getBytes(StandardCharsets.ISO_8859_1);
-        } else {
-            // In character mode, use UTF-8 encoding
-            bytes = str.getBytes(StandardCharsets.UTF_8);
-        }
+        // For a/A/Z formats, always use ISO_8859_1 to preserve byte values 0-255.
+        // Perl's pack treats these formats as byte-oriented even when the input string
+        // is UTF-8 upgraded: pack("a*", "\xfeb") produces "\xfe\x62" not UTF-8 "\xc3\xbe\x62".
+        // Only characters > 255 would need special handling, but those get truncated to 0-255 range.
+        bytes = str.getBytes(StandardCharsets.ISO_8859_1);
 
         // For Z format, null terminator must be within count bytes
         if (format == 'Z') {

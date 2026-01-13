@@ -227,8 +227,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     private void initializeWithLong(Long value) {
         if (value > Integer.MAX_VALUE || value < Integer.MIN_VALUE) {
-            this.type = DOUBLE;
-            this.value = (double) value;
+            // Java double can only exactly represent integers up to 2^53.
+            // Beyond that, storing as DOUBLE loses precision and breaks exact pack/unpack
+            // semantics for 64-bit formats (q/Q/j/J) and BER compression (w).
+            long lv = value;
+            if (Math.abs(lv) <= 9007199254740992L) { // 2^53
+                this.type = DOUBLE;
+                this.value = (double) lv;
+            } else {
+                this.type = RuntimeScalarType.STRING;
+                this.value = Long.toString(lv);
+            }
         } else {
             this.type = RuntimeScalarType.INTEGER;
             this.value = value.intValue();
@@ -458,7 +467,23 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return switch (type) {
             case INTEGER -> (int) value;
             case DOUBLE -> (long) ((double) value);
-            case STRING, BYTE_STRING -> NumberParser.parseNumber(this).getLong();
+            case STRING, BYTE_STRING -> {
+                // Avoid recursion when large integer strings are preserved as STRING to keep
+                // precision (e.g. values > 2^53). NumberParser.parseNumber() may return a scalar
+                // that is also STRING, and calling getLong() on it would recurse indefinitely.
+                String s = (String) value;
+                if (s != null) {
+                    String t = s.trim();
+                    if (!t.isEmpty() && t.matches("^-?\\d+$")) {
+                        try {
+                            yield Long.parseLong(t);
+                        } catch (NumberFormatException ignored) {
+                            // Fall through to full numification.
+                        }
+                    }
+                }
+                yield NumberParser.parseNumber(this).getLong();
+            }
             case UNDEF -> 0L;
             case VSTRING -> 0L;
             case BOOLEAN -> (boolean) value ? 1L : 0L;
@@ -484,7 +509,23 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return switch (type) {
             case INTEGER -> (int) value;
             case DOUBLE -> (double) value;
-            case STRING, BYTE_STRING -> NumberParser.parseNumber(this).getDouble();
+            case STRING, BYTE_STRING -> {
+                // Avoid recursion when numeric values are preserved as STRING and also stored in
+                // NumberParser's numification cache. If parseNumber() returns a scalar whose
+                // conversion path leads back to getDouble(), this can recurse indefinitely.
+                String s = (String) value;
+                if (s != null) {
+                    String t = s.trim();
+                    if (!t.isEmpty() && t.matches("^[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?$")) {
+                        try {
+                            yield Double.parseDouble(t);
+                        } catch (NumberFormatException ignored) {
+                            // Fall through to full numification.
+                        }
+                    }
+                }
+                yield NumberParser.parseNumber(this).getDouble();
+            }
             case UNDEF -> 0.0;
             case VSTRING -> 0.0;
             case BOOLEAN -> (boolean) value ? 1.0 : 0.0;
