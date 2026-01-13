@@ -151,7 +151,14 @@ public class MathOperators {
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() * arg2.getDouble());
         } else {
-            return getScalarInt((long) arg1.getInt() * (long) arg2.getInt());
+            long a = arg1.getLong();
+            long b = arg2.getLong();
+            try {
+                return getScalarInt(Math.multiplyExact(a, b));
+            } catch (ArithmeticException ignored) {
+                // Overflow: promote to double (Perl NV semantics)
+                return new RuntimeScalar((double) a * (double) b);
+            }
         }
     }
 
