@@ -1,5 +1,6 @@
 package org.perlonjava.operators.pack;
 
+import org.perlonjava.operators.Pack;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeScalar;
 
@@ -119,6 +120,29 @@ public class ControlPackHandler implements PackFormatHandler {
             System.arraycopy(output.toByteArray(), 0, truncated, 0, targetPosition);
             output.reset();
             output.write(truncated, 0, targetPosition);
+
+            Pack.adjustGroupBasesAfterTruncate(targetPosition);
+        }
+    }
+
+    /**
+     * Handles absolute positioning for Unicode strings (character-based).
+     *
+     * @param targetPosition The target character position
+     * @param output         The output stream
+     */
+    private static void handleAbsolutePositionUnicode(int targetPosition, PackBuffer output) {
+        int currentPosition = output.sizeInCharacters();
+
+        if (targetPosition > currentPosition) {
+            // Pad with null characters to reach target position
+            for (int k = currentPosition; k < targetPosition; k++) {
+                output.writeCharacter(0);
+            }
+        } else if (targetPosition < currentPosition) {
+            // Truncate to target character position
+            output.truncateToCharacter(targetPosition);
+            Pack.adjustGroupBasesAfterTruncate(targetPosition);
         }
     }
 
@@ -145,6 +169,8 @@ public class ControlPackHandler implements PackFormatHandler {
             if (newSize > 0) {
                 output.write(currentData, 0, newSize);
             }
+
+            Pack.adjustGroupBasesAfterTruncate(newSize);
         }
         // DEBUG: handleBackup finished, new size=" + output.size()
     }
@@ -169,6 +195,8 @@ public class ControlPackHandler implements PackFormatHandler {
             if (alignedPosition > 0) {
                 output.write(currentData, 0, alignedPosition);
             }
+
+            Pack.adjustGroupBasesAfterTruncate(alignedPosition);
         }
     }
 
@@ -195,12 +223,22 @@ public class ControlPackHandler implements PackFormatHandler {
                 }
                 break;
             case '@':
-                handleAbsolutePosition(count, output);
+                // Absolute positioning is relative to the current group base.
+                // At top-level, the group base is 0 so this matches Perl's normal semantics.
+                // For UTF-8 strings (with W format), work in character mode.
+                int targetPosition = Pack.getCurrentGroupBase() + count;
+                if (output.hasUnicodeCharacters()) {
+                    handleAbsolutePositionUnicode(targetPosition, output);
+                } else {
+                    handleAbsolutePosition(targetPosition, output);
+                }
                 break;
             case '.':
                 // . means null-fill or truncate to position specified by value
-                // .  (no count or count > 0): absolute positioning
-                // .0 (count == 0): relative positioning (current + offset)
+                // .0 (count == 0): relative to current position
+                // .1 or . (count == 1 or hasStar == false): relative to innermost group
+                // .2 (count == 2): relative to parent group
+                // .* (hasStar == true): absolute position from start
                 if (valueIndex >= values.size()) {
                     throw new PerlCompilerException("pack: '.' requires a position value");
                 }
@@ -208,15 +246,22 @@ public class ControlPackHandler implements PackFormatHandler {
                 valueIndex++;
                 int offset = (int) posValue.getDouble();
 
-                int currentSize = output.size();
+                // For UTF-8 strings (with W format), work in character mode
+                boolean isUnicode = output.hasUnicodeCharacters();
+                int currentSize = isUnicode ? output.sizeInCharacters() : output.size();
                 int targetPos;
-                
+
                 if (count == 0) {
                     // .0 means relative to current position
                     targetPos = currentSize + offset;
-                } else {
-                    // . means absolute position
+                } else if (hasStar) {
+                    // .* means absolute position from start (level 0)
                     targetPos = offset;
+                } else {
+                    // .N means relative to the Nth group level
+                    // .1 or . = innermost group, .2 = parent group, etc.
+                    int groupBase = Pack.getGroupBaseAtLevel(count);
+                    targetPos = groupBase + offset;
                 }
 
                 // Handle negative target positions: throw error (can't position before string start)
@@ -227,13 +272,23 @@ public class ControlPackHandler implements PackFormatHandler {
                 if (targetPos > currentSize) {
                     // Null-fill to reach the target position
                     for (int k = currentSize; k < targetPos; k++) {
-                        output.write(0);
+                        if (isUnicode) {
+                            output.writeCharacter(0);
+                        } else {
+                            output.write(0);
+                        }
                     }
                 } else if (targetPos < currentSize) {
                     // Truncate to the target position
-                    byte[] currentData = output.toByteArray();
-                    output.reset();
-                    output.write(currentData, 0, targetPos);
+                    if (isUnicode) {
+                        output.truncateToCharacter(targetPos);
+                    } else {
+                        byte[] currentData = output.toByteArray();
+                        output.reset();
+                        output.write(currentData, 0, targetPos);
+                    }
+
+                    Pack.adjustGroupBasesAfterTruncate(targetPos);
                 }
                 // If targetPos == currentSize, do nothing
                 break;
