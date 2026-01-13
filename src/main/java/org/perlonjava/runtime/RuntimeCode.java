@@ -139,9 +139,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         // Check if the eval string contains non-ASCII characters
         // If so, treat it as Unicode source to preserve Unicode characters during parsing
+        // EXCEPT for evalbytes, which must treat everything as bytes
         String evalString = code.toString();
         boolean hasUnicode = false;
-        if (code.type != RuntimeScalarType.BYTE_STRING) {
+        if (!ctx.isEvalbytes && code.type != RuntimeScalarType.BYTE_STRING) {
             for (int i = 0; i < evalString.length(); i++) {
                 if (evalString.charAt(i) > 127) {
                     hasUnicode = true;
@@ -153,9 +154,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Clone compiler options and set isUnicodeSource if needed
         // This only affects string parsing, not symbol table or method resolution
         CompilerOptions evalCompilerOptions = ctx.compilerOptions;
-        if (hasUnicode) {
+        if (hasUnicode || ctx.isEvalbytes) {
             evalCompilerOptions = (CompilerOptions) ctx.compilerOptions.clone();
-            evalCompilerOptions.isUnicodeSource = true;
+            if (hasUnicode) {
+                evalCompilerOptions.isUnicodeSource = true;
+            }
+            if (ctx.isEvalbytes) {
+                evalCompilerOptions.isEvalbytes = true;
+            }
         }
 
         // Check $^P to determine if we should use caching
@@ -171,9 +177,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
         }
         
-        // Check if the result is already cached (include hasUnicode in cache key)
+        // Check if the result is already cached (include hasUnicode and isEvalbytes in cache key)
         // Skip caching when $^P is set, so each eval gets a unique filename
-        String cacheKey = code.toString() + '\0' + evalTag + '\0' + hasUnicode;
+        String cacheKey = code.toString() + '\0' + evalTag + '\0' + hasUnicode + '\0' + ctx.isEvalbytes;
         Class<?> cachedClass = null;
         if (!isDebugging) {
             synchronized (evalCache) {

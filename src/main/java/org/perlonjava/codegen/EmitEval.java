@@ -133,6 +133,9 @@ public class EmitEval {
         // Store the captured environment array in the context
         // This ensures runtime uses the exact same array structure as compile-time
         evalCtx.capturedEnv = newEnv;
+        
+        // Mark if this is evalbytes - needed to prevent Unicode source detection
+        evalCtx.isEvalbytes = node.operator.equals("evalbytes");
 
         // Store the context in a static map, indexed by evalTag
         // This allows the runtime compilation to access the compile-time environment
