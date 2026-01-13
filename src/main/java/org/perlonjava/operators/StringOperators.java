@@ -277,7 +277,28 @@ public class StringOperators {
     }
 
     public static RuntimeScalar stringConcat(RuntimeScalar runtimeScalar, RuntimeScalar b) {
-        return new RuntimeScalar(runtimeScalar + b.toString());
+        String aStr = runtimeScalar.toString();
+        String bStr = b.toString();
+
+        boolean aIsString = runtimeScalar.type == RuntimeScalarType.STRING || runtimeScalar.type == RuntimeScalarType.BYTE_STRING;
+        boolean bIsString = b.type == RuntimeScalarType.STRING || b.type == RuntimeScalarType.BYTE_STRING;
+
+        // Preserve Perl-like UTF-8 flag semantics only for string scalars.
+        // For other types, keep legacy behavior to avoid wide behavioral changes.
+        if (aIsString && bIsString) {
+            if (runtimeScalar.type == RuntimeScalarType.STRING || b.type == RuntimeScalarType.STRING) {
+                return new RuntimeScalar(aStr + bStr);
+            }
+
+            byte[] aBytes = aStr.getBytes(StandardCharsets.ISO_8859_1);
+            byte[] bBytes = bStr.getBytes(StandardCharsets.ISO_8859_1);
+            byte[] out = new byte[aBytes.length + bBytes.length];
+            System.arraycopy(aBytes, 0, out, 0, aBytes.length);
+            System.arraycopy(bBytes, 0, out, aBytes.length, bBytes.length);
+            return new RuntimeScalar(out);
+        }
+
+        return new RuntimeScalar(runtimeScalar + bStr);
     }
 
     public static RuntimeScalar stringConcatWarnUninitialized(RuntimeScalar runtimeScalar, RuntimeScalar b) {
@@ -285,7 +306,26 @@ public class StringOperators {
             WarnDie.warn(new RuntimeScalar("Use of uninitialized value in concatenation (.)"),
                     RuntimeScalarCache.scalarEmptyString);
         }
-        return new RuntimeScalar(runtimeScalar + b.toString());
+        String aStr = runtimeScalar.toString();
+        String bStr = b.toString();
+
+        boolean aIsString = runtimeScalar.type == RuntimeScalarType.STRING || runtimeScalar.type == RuntimeScalarType.BYTE_STRING;
+        boolean bIsString = b.type == RuntimeScalarType.STRING || b.type == RuntimeScalarType.BYTE_STRING;
+
+        if (aIsString && bIsString) {
+            if (runtimeScalar.type == RuntimeScalarType.STRING || b.type == RuntimeScalarType.STRING) {
+                return new RuntimeScalar(aStr + bStr);
+            }
+
+            byte[] aBytes = aStr.getBytes(StandardCharsets.ISO_8859_1);
+            byte[] bBytes = bStr.getBytes(StandardCharsets.ISO_8859_1);
+            byte[] out = new byte[aBytes.length + bBytes.length];
+            System.arraycopy(aBytes, 0, out, 0, aBytes.length);
+            System.arraycopy(bBytes, 0, out, aBytes.length, bBytes.length);
+            return new RuntimeScalar(out);
+        }
+
+        return new RuntimeScalar(runtimeScalar + bStr);
     }
 
     public static RuntimeScalar chompScalar(RuntimeScalar runtimeScalar) {

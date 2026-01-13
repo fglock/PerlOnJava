@@ -243,7 +243,7 @@ public class Pack {
 
     public static RuntimeScalar pack(RuntimeList args) {
         if (args.isEmpty()) {
-            throw new PerlCompilerException("pack: not enough arguments");
+            return RuntimeScalarCache.scalarEmptyString;
         }
 
         RuntimeScalar templateScalar = args.getFirst();
@@ -272,11 +272,13 @@ public class Pack {
 
         PackResult result = packInto(template, values, valueIndex, output, false, false);
 
-        if (!result.byteModeUsed() && result.hasUnicodeInNormalMode()) {
+        boolean shouldUpgrade = !result.byteModeUsed()
+                && (result.hasUnicodeInNormalMode() || output.hasUnicodeCharacters());
+
+        if (shouldUpgrade) {
             return new RuntimeScalar(output.toUpgradedString());
-        } else {
-            return new RuntimeScalar(output.toByteArray());
         }
+        return new RuntimeScalar(output.toByteArray());
     }
 
     public static PackResult packInto(String template, List<RuntimeScalar> values, int startValueIndex,
@@ -287,6 +289,10 @@ public class Pack {
         // If C0 appears anywhere, start in byte mode from the beginning
         boolean byteMode = initialByteMode || template.contains("C0");  // Start in byte mode if C0 is present
         boolean byteModeUsed = byteMode;  // Track if byte mode was ever used
+
+        // U0/C0 also act as a scoped switch for how string formats (a/A/Z) interpret their input.
+        // In particular, U0 triggers Perl's UTF-8 byte decoding semantics for a/A/Z.
+        boolean utf8StringMode = false;
 
         // Track if 'U' was used in normal mode (not byte mode)
         boolean hasUnicodeInNormalMode = initialHasUnicode;
@@ -385,12 +391,14 @@ public class Pack {
 
             // Check for mode modifiers C0 and U0
             if (format == 'C' && i + 1 < template.length() && template.charAt(i + 1) == '0') {
-                byteMode = true;  // C0 switches to byte mode
-                byteModeUsed = true;  // Mark that byte mode was used
+                byteMode = true;        // C0 switches to byte mode
+                byteModeUsed = true;    // Mark that byte mode was used
+                utf8StringMode = false; // C0 disables UTF-8 byte decoding semantics for a/A/Z
                 i++; // Skip the '0'
                 continue;
             } else if (format == 'U' && i + 1 < template.length() && template.charAt(i + 1) == '0') {
-                byteMode = false;  // U0 switches to normal mode
+                byteMode = false;       // U0 switches to normal mode
+                utf8StringMode = true;  // U0 enables UTF-8 byte decoding semantics for a/A/Z
                 i++; // Skip the '0'
                 continue;
             }
@@ -463,7 +471,7 @@ public class Pack {
                     case 'A':
                     case 'Z':
                         // These still use PackHelper due to byteMode dependency
-                        valueIndex = PackHelper.handleStringFormat(valueIndex, values, hasStar, format, count, byteMode, output);
+                        valueIndex = PackHelper.handleStringFormat(valueIndex, values, hasStar, format, count, utf8StringMode, output);
                         break;
                     case '/':
                         // In Perl, '/' can appear after any format, but requires code after it

@@ -71,11 +71,15 @@ public class Unpack {
         String template = templateScalar.toString();
         String dataString = packedData.toString();
 
+        // Preserve Perl's UTF-8 flag from the scalar type. This matters for formats like
+        // A* which trim Unicode whitespace only for UTF-8-flagged strings.
+        boolean utf8Flagged = packedData.type == org.perlonjava.runtime.RuntimeScalarType.STRING;
+
         // Default mode is always C0 (character mode)
         boolean startsWithU = template.startsWith("U") && !template.startsWith("U0");
 
         // Create state object - always starts in character mode
-        UnpackState state = new UnpackState(dataString, false);
+        UnpackState state = new UnpackState(dataString, false, utf8Flagged);
 
         // Check if template starts with U0 to switch to byte mode
         if (template.startsWith("U0")) {
@@ -291,7 +295,11 @@ public class Unpack {
                 }
 
                 if (format == '@') {
-                    // DEBUG: Calling @ handler with count=" + count
+                    // Special handling for '@' with '!' modifier
+                    if (hasShriek) {
+                        // @! means byte offset instead of character offset
+                        handler = new AtShriekFormatHandler();
+                    }
                 } else if (format == '.') {
                     // Special handling for '.' with '!' modifier
                     if (hasShriek) {

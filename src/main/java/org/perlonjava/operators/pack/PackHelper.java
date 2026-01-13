@@ -192,20 +192,23 @@ public class PackHelper {
      * @throws PerlCompilerException if the value is infinite or NaN
      */
     public static void handleInfinity(RuntimeScalar value, char format) {
-        String strValue = value.toString().trim();
-        if (strValue.equalsIgnoreCase("Inf") || strValue.equalsIgnoreCase("+Inf") || strValue.equalsIgnoreCase("Infinity")) {
-            if (format == 'w') {
-                throw new PerlCompilerException("Cannot compress Inf");
+        // Use getDouble() to check for Inf/NaN without triggering string overload
+        double dval = value.getDouble();
+        if (Double.isInfinite(dval)) {
+            if (dval > 0) {
+                if (format == 'w') {
+                    throw new PerlCompilerException("Cannot compress Inf");
+                } else {
+                    throw new PerlCompilerException("Cannot pack Inf");
+                }
             } else {
-                throw new PerlCompilerException("Cannot pack Inf");
+                if (format == 'w') {
+                    throw new PerlCompilerException("Cannot compress -Inf");
+                } else {
+                    throw new PerlCompilerException("Cannot pack -Inf");
+                }
             }
-        } else if (strValue.equalsIgnoreCase("-Inf") || strValue.equalsIgnoreCase("-Infinity")) {
-            if (format == 'w') {
-                throw new PerlCompilerException("Cannot compress -Inf");
-            } else {
-                throw new PerlCompilerException("Cannot pack -Inf");
-            }
-        } else if (strValue.equalsIgnoreCase("NaN")) {
+        } else if (Double.isNaN(dval)) {
             if (format == 'w') {
                 throw new PerlCompilerException("Cannot compress NaN");
             } else {

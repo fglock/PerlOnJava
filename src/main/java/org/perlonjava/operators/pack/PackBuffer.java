@@ -19,6 +19,19 @@ public class PackBuffer {
     private final List<Integer> values = new ArrayList<>();
     private final List<Boolean> isCharacter = new ArrayList<>();
 
+    private static int utf8Length(int codePoint) {
+        if (codePoint <= 0x7F) {
+            return 1;
+        }
+        if (codePoint <= 0x7FF) {
+            return 2;
+        }
+        if (codePoint <= 0xFFFF) {
+            return 3;
+        }
+        return 4;
+    }
+
     /**
      * Write a raw byte value (from binary formats like N, V, s, etc.)
      */
@@ -135,6 +148,61 @@ public class PackBuffer {
      */
     public int sizeInCharacters() {
         return values.size();
+    }
+
+    public int sizeInUtf8Bytes() {
+        int total = 0;
+        for (int i = 0; i < values.size(); i++) {
+            int value = values.get(i);
+            if (isCharacter.get(i)) {
+                total += utf8Length(value);
+            } else {
+                total += 1;
+            }
+        }
+        return total;
+    }
+
+    public int utf8ByteOffsetAtIndex(int index) {
+        int limit = Math.max(0, Math.min(index, values.size()));
+        int total = 0;
+        for (int i = 0; i < limit; i++) {
+            int value = values.get(i);
+            if (isCharacter.get(i)) {
+                total += utf8Length(value);
+            } else {
+                total += 1;
+            }
+        }
+        return total;
+    }
+
+    public void truncateToUtf8BytePos(int bytePos) {
+        if (bytePos <= 0) {
+            reset();
+            return;
+        }
+
+        int total = 0;
+        int keep = 0;
+        while (keep < values.size()) {
+            int value = values.get(keep);
+            int len = isCharacter.get(keep) ? utf8Length(value) : 1;
+            if (total + len > bytePos) {
+                break;
+            }
+            total += len;
+            keep++;
+        }
+
+        if (keep >= values.size()) {
+            return;
+        }
+
+        while (values.size() > keep) {
+            values.remove(values.size() - 1);
+            isCharacter.remove(isCharacter.size() - 1);
+        }
     }
 
     /**
