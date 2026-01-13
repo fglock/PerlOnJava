@@ -56,7 +56,62 @@ public class Pack {
      * Set to true to debug pack template processing.
      */
     private static final boolean TRACE_PACK = false;
-    
+
+    private static final ThreadLocal<Stack<Integer>> groupBaseStack = ThreadLocal.withInitial(() -> {
+        Stack<Integer> stack = new Stack<>();
+        stack.push(0);
+        return stack;
+    });
+
+    public static void pushGroupBase(int base) {
+        groupBaseStack.get().push(base);
+    }
+
+    public static void popGroupBase() {
+        Stack<Integer> stack = groupBaseStack.get();
+        if (stack.size() > 1) {
+            stack.pop();
+        }
+    }
+
+    public static int getCurrentGroupBase() {
+        Stack<Integer> stack = groupBaseStack.get();
+        return stack.isEmpty() ? 0 : stack.peek();
+    }
+
+    /**
+     * Get the group base at a specific level.
+     * Level 1 = innermost group (same as getCurrentGroupBase)
+     * Level 2 = parent group
+     * Level 0 or beyond stack depth = absolute position (0)
+     *
+     * @param level The group level (1-based, or 0 for absolute)
+     * @return The group base at the specified level
+     */
+    public static int getGroupBaseAtLevel(int level) {
+        Stack<Integer> stack = groupBaseStack.get();
+        if (level == 0 || stack.size() <= 1) {
+            // Level 0 or no groups: absolute position
+            return 0;
+        }
+        // Level 1 = top of stack (innermost), level 2 = one below, etc.
+        int index = stack.size() - level;
+        if (index < 0) {
+            // Level exceeds depth: return absolute position
+            return 0;
+        }
+        return stack.get(index);
+    }
+
+    public static void adjustGroupBasesAfterTruncate(int newSize) {
+        Stack<Integer> stack = groupBaseStack.get();
+        for (int i = 0; i < stack.size(); i++) {
+            if (stack.get(i) > newSize) {
+                stack.set(i, newSize);
+            }
+        }
+    }
+
     public static final Map<Character, PackFormatHandler> handlers = new HashMap<>();
 
     static {
@@ -193,7 +248,7 @@ public class Pack {
 
         RuntimeScalar templateScalar = args.getFirst();
         String template = templateScalar.toString();
-        
+
         if (TRACE_PACK) {
             System.err.println("TRACE Pack.pack() called:");
             System.err.println("  template: [" + template + "]");
@@ -215,28 +270,41 @@ public class Pack {
         PackBuffer output = new PackBuffer();
         int valueIndex = 0;
 
+        PackResult result = packInto(template, values, valueIndex, output, false, false);
+
+        if (!result.byteModeUsed() && result.hasUnicodeInNormalMode()) {
+            return new RuntimeScalar(output.toUpgradedString());
+        } else {
+            return new RuntimeScalar(output.toByteArray());
+        }
+    }
+
+    public static PackResult packInto(String template, List<RuntimeScalar> values, int startValueIndex,
+                                      PackBuffer output, boolean initialByteMode, boolean initialHasUnicode) {
+        int valueIndex = startValueIndex;
+
         // Pre-scan template for C0 to determine initial mode
         // If C0 appears anywhere, start in byte mode from the beginning
-        boolean byteMode = template.contains("C0");  // Start in byte mode if C0 is present
+        boolean byteMode = initialByteMode || template.contains("C0");  // Start in byte mode if C0 is present
         boolean byteModeUsed = byteMode;  // Track if byte mode was ever used
 
         // Track if 'U' was used in normal mode (not byte mode)
-        boolean hasUnicodeInNormalMode = false;
+        boolean hasUnicodeInNormalMode = initialHasUnicode;
 
         /**
          * Main parsing loop - process template character by character
-         * 
+         *
          * The template is processed left-to-right. Each character determines:
          * 1. What type of data to pack (format character like 's', 'i', 'a', etc.)
          * 2. How many values to consume (repeat count)
          * 3. How to modify the operation (modifiers like '<', '>', '!')
-         * 
+         *
          * Key concepts:
          * - Groups (): Allow applying repeat counts to multiple formats
-         * - Slash constructs (n/a*): Pack length-prefixed data  
+         * - Slash constructs (n/a*): Pack length-prefixed data
          * - Mode switches (C0/U0): Change between byte and character mode
          * - Repeat counts: *, digits, or [n] notation
-         * 
+         *
          * The loop variable 'i' tracks current position. Some operations advance
          * 'i' beyond the current character to skip processed content.
          */
@@ -266,24 +334,24 @@ public class Pack {
             if (format == ',') {
                 // Emit warning like Perl does
                 WarnDie.warn(
-                    new RuntimeScalar("Invalid type ',' in pack"),
-                    RuntimeScalarCache.scalarEmptyString
+                        new RuntimeScalar("Invalid type ',' in pack"),
+                        RuntimeScalarCache.scalarEmptyString
                 );
                 continue;
             }
 
             /**
              * Handle groups - RECURSIVE PROCESSING
-             * 
+             *
              * Format: (template)count or (template)[count]
              * Example: (si)3 packs 3 short-int pairs
-             * 
+             *
              * Processing:
-             * 1. handleGroup finds the matching ')' 
+             * 1. handleGroup finds the matching ')'
              * 2. Extracts the group content
              * 3. Recursively calls Pack.pack() for the group content
              * 4. Repeats for the specified count
-             * 
+             *
              * NESTING: Each group recursion should increment depth counter.
              * Deep nesting (>100 levels) should throw "Too deeply nested ()-groups"
              */
@@ -293,9 +361,21 @@ public class Pack {
                     System.err.println("  Calling PackGroupHandler.handleGroup");
                     System.err.flush();
                 }
-                PackGroupHandler.GroupResult result = PackGroupHandler.handleGroup(template, i, values, output, valueIndex, Pack::pack);
+                PackGroupHandler.GroupResult result = PackGroupHandler.handleGroup(
+                        template,
+                        i,
+                        values,
+                        output,
+                        valueIndex,
+                        byteMode,
+                        byteModeUsed,
+                        hasUnicodeInNormalMode
+                );
                 i = result.position();
                 valueIndex = result.valueIndex();
+                byteMode = result.byteMode();
+                byteModeUsed = result.byteModeUsed();
+                hasUnicodeInNormalMode = result.hasUnicodeInNormalMode();
                 if (TRACE_PACK) {
                     System.err.println("TRACE Pack: Group processed, new position: " + i);
                     System.err.flush();
@@ -332,9 +412,24 @@ public class Pack {
                 int slashPos = PackHelper.checkForSlashConstruct(template, i);
                 if (slashPos != -1) {
                     // DEBUG: Detected slash construct for format '" + format + "' at position " + i
-                    PackGroupHandler.GroupResult result = PackGroupHandler.handleSlashConstruct(template, i, slashPos, format, values, valueIndex, output, modifiers, Pack::pack);
+                    PackGroupHandler.GroupResult result = PackGroupHandler.handleSlashConstruct(
+                            template,
+                            i,
+                            slashPos,
+                            format,
+                            values,
+                            valueIndex,
+                            output,
+                            modifiers,
+                            byteMode,
+                            byteModeUsed,
+                            hasUnicodeInNormalMode
+                    );
                     i = result.position();
                     valueIndex = result.valueIndex();
+                    byteMode = result.byteMode();
+                    byteModeUsed = result.byteModeUsed();
+                    hasUnicodeInNormalMode = result.hasUnicodeInNormalMode();
                     continue;
                 }
             }
@@ -414,14 +509,13 @@ public class Pack {
             }
         }
 
-        // Convert buffer to string based on whether UTF-8 flag should be set
-        if (!byteModeUsed && hasUnicodeInNormalMode) {
-            // UTF-8 flag set: interpret all values as Latin-1 characters
-            // This matches Perl's utf8::upgrade behavior where each byte becomes a character
-            return new RuntimeScalar(output.toUpgradedString());
-        } else {
-            // No UTF-8 flag: return as byte string
-            return new RuntimeScalar(output.toByteArray());
-        }
+        // Return the packing result with final state
+        return new PackResult(valueIndex, byteMode, byteModeUsed, hasUnicodeInNormalMode);
+    }
+
+    /**
+     * Result of packing operation, containing final state.
+     */
+    public static record PackResult(int valueIndex, boolean byteMode, boolean byteModeUsed, boolean hasUnicodeInNormalMode) {
     }
 }

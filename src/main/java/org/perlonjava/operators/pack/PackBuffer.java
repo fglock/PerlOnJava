@@ -117,6 +117,43 @@ public class PackBuffer {
     }
 
     /**
+     * Check if the buffer contains any Unicode characters (> 255).
+     * This determines whether . and @ formats should work in character mode.
+     */
+    public boolean hasUnicodeCharacters() {
+        for (int i = 0; i < values.size(); i++) {
+            if (isCharacter.get(i) && values.get(i) > 255) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Get the size in characters (for UTF-8 strings with W format).
+     * Same as size() since we store one value per character.
+     */
+    public int sizeInCharacters() {
+        return values.size();
+    }
+
+    /**
+     * Truncate the buffer to the specified character position.
+     * For UTF-8 strings, this truncates at character boundaries.
+     *
+     * @param charPos The character position to truncate to
+     */
+    public void truncateToCharacter(int charPos) {
+        if (charPos < 0) charPos = 0;
+        if (charPos >= values.size()) return;
+        
+        while (values.size() > charPos) {
+            values.remove(values.size() - 1);
+            isCharacter.remove(isCharacter.size() - 1);
+        }
+    }
+
+    /**
      * Reset the buffer (clear all data)
      * ByteArrayOutputStream compatibility method
      */
