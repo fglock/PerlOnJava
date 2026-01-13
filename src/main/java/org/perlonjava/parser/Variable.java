@@ -796,6 +796,9 @@ public class Variable {
                         parser.tokenIndex = savedIndex;
                     }
                 } catch (Exception e) {
+                    if (e instanceof org.perlonjava.runtime.PerlParserException) {
+                        throw (org.perlonjava.runtime.PerlParserException) e;
+                    }
                     parser.tokenIndex = savedIndex;
                 }
             }
