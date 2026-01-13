@@ -226,10 +226,27 @@ public class ControlPackHandler implements PackFormatHandler {
                 // Absolute positioning is relative to the current group base.
                 // At top-level, the group base is 0 so this matches Perl's normal semantics.
                 // For UTF-8 strings (with W format), work in character mode.
-                int targetPosition = Pack.getCurrentGroupBase() + count;
                 if (output.hasUnicodeCharacters()) {
-                    handleAbsolutePositionUnicode(targetPosition, output);
+                    if (modifiers.nativeSize) {
+                        int groupBaseCharIndex = Pack.getCurrentGroupBase();
+                        int groupBaseBytePos = output.utf8ByteOffsetAtIndex(groupBaseCharIndex);
+                        int targetBytePos = groupBaseBytePos + count;
+
+                        int currentByteSize = output.sizeInUtf8Bytes();
+                        if (targetBytePos > currentByteSize) {
+                            for (int k = currentByteSize; k < targetBytePos; k++) {
+                                output.writeCharacter(0);
+                            }
+                        } else if (targetBytePos < currentByteSize) {
+                            output.truncateToUtf8BytePos(targetBytePos);
+                            Pack.adjustGroupBasesAfterTruncate(output.sizeInCharacters());
+                        }
+                    } else {
+                        int targetPosition = Pack.getCurrentGroupBase() + count;
+                        handleAbsolutePositionUnicode(targetPosition, output);
+                    }
                 } else {
+                    int targetPosition = Pack.getCurrentGroupBase() + count;
                     handleAbsolutePosition(targetPosition, output);
                 }
                 break;
@@ -246,49 +263,60 @@ public class ControlPackHandler implements PackFormatHandler {
                 valueIndex++;
                 int offset = (int) posValue.getDouble();
 
-                // For UTF-8 strings (with W format), work in character mode
                 boolean isUnicode = output.hasUnicodeCharacters();
-                int currentSize = isUnicode ? output.sizeInCharacters() : output.size();
-                int targetPos;
+                boolean bytePosMode = isUnicode && modifiers.nativeSize;
 
-                if (count == 0) {
-                    // .0 means relative to current position
-                    targetPos = currentSize + offset;
-                } else if (hasStar) {
-                    // .* means absolute position from start (level 0)
-                    targetPos = offset;
+                int targetPos;
+                int currentPos;
+
+                if (bytePosMode) {
+                    currentPos = output.sizeInUtf8Bytes();
+                    if (count == 0) {
+                        targetPos = currentPos + offset;
+                    } else if (hasStar) {
+                        targetPos = offset;
+                    } else {
+                        int groupBaseCharIndex = Pack.getGroupBaseAtLevel(count);
+                        int groupBaseBytePos = output.utf8ByteOffsetAtIndex(groupBaseCharIndex);
+                        targetPos = groupBaseBytePos + offset;
+                    }
                 } else {
-                    // .N means relative to the Nth group level
-                    // .1 or . = innermost group, .2 = parent group, etc.
-                    int groupBase = Pack.getGroupBaseAtLevel(count);
-                    targetPos = groupBase + offset;
+                    currentPos = isUnicode ? output.sizeInCharacters() : output.size();
+                    if (count == 0) {
+                        targetPos = currentPos + offset;
+                    } else if (hasStar) {
+                        targetPos = offset;
+                    } else {
+                        int groupBase = Pack.getGroupBaseAtLevel(count);
+                        targetPos = groupBase + offset;
+                    }
                 }
 
-                // Handle negative target positions: throw error (can't position before string start)
                 if (targetPos < 0) {
                     throw new PerlCompilerException("'.' outside of string in pack");
                 }
 
-                if (targetPos > currentSize) {
-                    // Null-fill to reach the target position
-                    for (int k = currentSize; k < targetPos; k++) {
+                if (targetPos > currentPos) {
+                    for (int k = currentPos; k < targetPos; k++) {
                         if (isUnicode) {
                             output.writeCharacter(0);
                         } else {
                             output.write(0);
                         }
                     }
-                } else if (targetPos < currentSize) {
-                    // Truncate to the target position
-                    if (isUnicode) {
+                } else if (targetPos < currentPos) {
+                    if (bytePosMode) {
+                        output.truncateToUtf8BytePos(targetPos);
+                        Pack.adjustGroupBasesAfterTruncate(output.sizeInCharacters());
+                    } else if (isUnicode) {
                         output.truncateToCharacter(targetPos);
+                        Pack.adjustGroupBasesAfterTruncate(targetPos);
                     } else {
                         byte[] currentData = output.toByteArray();
                         output.reset();
                         output.write(currentData, 0, targetPos);
+                        Pack.adjustGroupBasesAfterTruncate(targetPos);
                     }
-
-                    Pack.adjustGroupBasesAfterTruncate(targetPos);
                 }
                 // If targetPos == currentSize, do nothing
                 break;
