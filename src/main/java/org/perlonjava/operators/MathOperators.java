@@ -33,8 +33,14 @@ public class MathOperators {
         if (arg1.type == RuntimeScalarType.DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() + arg2);
         } else {
-            // Note: do not cache, because the result of addition is mutable - t/comp/fold.t
-            return new RuntimeScalar(arg1.getLong() + arg2);
+            long a = arg1.getLong();
+            try {
+                // Note: do not cache, because the result of addition is mutable - t/comp/fold.t
+                return new RuntimeScalar(Math.addExact(a, arg2));
+            } catch (ArithmeticException ignored) {
+                // Overflow: promote to double (Perl NV semantics)
+                return new RuntimeScalar((double) a + (double) arg2);
+            }
         }
     }
 
@@ -61,7 +67,14 @@ public class MathOperators {
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() + arg2.getDouble());
         } else {
-            return getScalarInt(arg1.getLong() + arg2.getLong());
+            long a = arg1.getLong();
+            long b = arg2.getLong();
+            try {
+                return getScalarInt(Math.addExact(a, b));
+            } catch (ArithmeticException ignored) {
+                // Overflow: promote to double (Perl NV semantics)
+                return new RuntimeScalar((double) a + (double) b);
+            }
         }
     }
 
@@ -86,7 +99,13 @@ public class MathOperators {
         if (arg1.type == RuntimeScalarType.DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() - arg2);
         } else {
-            return getScalarInt(arg1.getLong() - arg2);
+            long a = arg1.getLong();
+            try {
+                return getScalarInt(Math.subtractExact(a, arg2));
+            } catch (ArithmeticException ignored) {
+                // Overflow: promote to double (Perl NV semantics)
+                return new RuntimeScalar((double) a - (double) arg2);
+            }
         }
     }
 
@@ -113,7 +132,14 @@ public class MathOperators {
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() - arg2.getDouble());
         } else {
-            return getScalarInt(arg1.getLong() - arg2.getLong());
+            long a = arg1.getLong();
+            long b = arg2.getLong();
+            try {
+                return getScalarInt(Math.subtractExact(a, b));
+            } catch (ArithmeticException ignored) {
+                // Overflow: promote to double (Perl NV semantics)
+                return new RuntimeScalar((double) a - (double) b);
+            }
         }
     }
 
