@@ -77,6 +77,11 @@ public class EmitterContext {
     public String[] capturedEnv;
 
     /**
+     * Flag indicating if this is an evalbytes context - prevents Unicode source detection
+     */
+    public boolean isEvalbytes;
+
+    /**
      * Constructs a new EmitterContext with the specified parameters.
      *
      * @param javaClassInfo   the name of the Java class being generated
