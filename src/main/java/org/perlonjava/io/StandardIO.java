@@ -78,7 +78,11 @@ public class StandardIO implements IOHandle {
                             flushLock.notifyAll();
                         }
                     } catch (IOException e) {
-
+                        if (System.getenv("JPERL_IO_DEBUG") != null) {
+                            System.err.println("[JPERL_IO_DEBUG] StandardIO write IOException fileno=" + fileno +
+                                    " message=" + e.getMessage());
+                            System.err.flush();
+                        }
                     }
                 }
             } catch (InterruptedException e) {
@@ -119,6 +123,12 @@ public class StandardIO implements IOHandle {
     }
 
     private void queueWrite(byte[] data) {
+        if (data.length == 0) {
+            return;
+        }
+        if (printThread == null) {
+            return;
+        }
         int seq = sequence.getAndIncrement();
 
         printQueue.offer(new QueueItem(data.clone(), seq));
@@ -126,6 +136,11 @@ public class StandardIO implements IOHandle {
 
     @Override
     public RuntimeScalar flush() {
+        boolean debug = System.getenv("JPERL_STDIO_DEBUG") != null;
+        if (printThread == null || bufferedOutputStream == null) {
+            return RuntimeScalarCache.scalarTrue;
+        }
+
         synchronized (localBuffer) {
             if (bufferPosition > 0) {
                 byte[] data = new byte[bufferPosition];
@@ -140,7 +155,17 @@ public class StandardIO implements IOHandle {
             synchronized (flushLock) {
                 while (lastPrinted.get() < currentSeq) {
                     try {
-                        flushLock.wait();
+                        if (debug) {
+                            System.err.println("[JPERL_STDIO_DEBUG] flush wait: fileno=" + fileno +
+                                    " currentSeq=" + currentSeq +
+                                    " lastPrinted=" + lastPrinted.get() +
+                                    " queueSize=" + printQueue.size() +
+                                    " shutdownRequested=" + shutdownRequested);
+                            System.err.flush();
+                            flushLock.wait(1000);
+                        } else {
+                            flushLock.wait();
+                        }
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                         break;

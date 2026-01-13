@@ -12,12 +12,15 @@ import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
 import org.perlonjava.runtime.RuntimeDescriptorConstants;
+import org.perlonjava.symbols.ScopedSymbolTable;
 
 /**
  * The EmitOperator class is responsible for handling various operators
  * and generating the corresponding bytecode using ASM.
  */
 public class EmitOperator {
+
+    private static final boolean ENABLE_SPILL_BINARY_LHS = System.getenv("JPERL_NO_SPILL_BINARY_LHS") == null;
 
     static void emitOperator(Node node, EmitterVisitor emitterVisitor) {
         // Extract operator string from the node
@@ -30,6 +33,34 @@ public class EmitOperator {
             throw new PerlCompilerException(node.getIndex(), "Node must be OperatorNode or BinaryOperatorNode", emitterVisitor.ctx.errorUtil);
         }
 
+        // Invoke the method for the operator.
+        OperatorHandler operatorHandler = OperatorHandler.get(operator);
+        if (operatorHandler == null) {
+            throw new PerlCompilerException(node.getIndex(), "Operator \"" + operator + "\" doesn't have a defined JVM descriptor", emitterVisitor.ctx.errorUtil);
+        }
+        emitterVisitor.ctx.logDebug("emitOperator " +
+                operatorHandler.methodType() + " " +
+                operatorHandler.className() + " " +
+                operatorHandler.methodName() + " " +
+                operatorHandler.descriptor()
+        );
+        emitterVisitor.ctx.mv.visitMethodInsn(
+                operatorHandler.methodType(),
+                operatorHandler.className(),
+                operatorHandler.methodName(),
+                operatorHandler.descriptor(),
+                false
+        );
+
+        // Handle context
+        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+            handleVoidContext(emitterVisitor);
+        } else if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+            handleScalarContext(emitterVisitor, node);
+        }
+    }
+
+    static void emitOperatorWithKey(String operator, Node node, EmitterVisitor emitterVisitor) {
         // Invoke the method for the operator.
         OperatorHandler operatorHandler = OperatorHandler.get(operator);
         if (operatorHandler == null) {
@@ -79,6 +110,12 @@ public class EmitOperator {
     static void handleOpWithList(EmitterVisitor emitterVisitor, OperatorNode node) {
         // Accept the operand in LIST context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
+
+        // keys() depends on context (scalar/list/void), so pass call context.
+        if (node.operator.equals("keys")) {
+            emitterVisitor.pushCallContext();
+        }
+
         emitOperator(node, emitterVisitor);
     }
 
@@ -112,8 +149,22 @@ public class EmitOperator {
         // Emit the File Handle
         emitFileHandle(emitterVisitor.with(RuntimeContextType.SCALAR), node.left);
 
+        int handleSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+        boolean pooledHandle = handleSlot >= 0;
+        if (!pooledHandle) {
+            handleSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        }
+        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, handleSlot);
+
         // Accept the right operand in LIST context
         node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
+
+        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, handleSlot);
+        emitterVisitor.ctx.mv.visitInsn(Opcodes.SWAP);
+
+        if (pooledHandle) {
+            emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+        }
 
         // Emit the operator
         emitOperator(node, emitterVisitor);
@@ -158,17 +209,53 @@ public class EmitOperator {
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
         if (node.operand instanceof ListNode operand) {
             if (!operand.elements.isEmpty()) {
-                // Accept the first two elements in SCALAR context.
+                MethodVisitor mv = emitterVisitor.ctx.mv;
+
+                int arg0Slot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+                boolean pooledArg0 = arg0Slot >= 0;
+                if (!pooledArg0) {
+                    arg0Slot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                }
+
+                int arg1Slot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+                boolean pooledArg1 = arg1Slot >= 0;
+                if (!pooledArg1) {
+                    arg1Slot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                }
+
+                int arg2Slot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+                boolean pooledArg2 = arg2Slot >= 0;
+                if (!pooledArg2) {
+                    arg2Slot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                }
+
                 operand.elements.get(0).accept(scalarVisitor);
+                mv.visitVarInsn(Opcodes.ASTORE, arg0Slot);
+
                 operand.elements.get(1).accept(scalarVisitor);
+                mv.visitVarInsn(Opcodes.ASTORE, arg1Slot);
+
                 if (operand.elements.size() == 3) {
-                    // Accept the third element if it exists.
                     operand.elements.get(2).accept(scalarVisitor);
                 } else {
-                    // Otherwise, use 'undef' as the third element.
                     new OperatorNode("undef", null, node.tokenIndex).accept(scalarVisitor);
                 }
-                // Invoke the virtual method for the operator.
+                mv.visitVarInsn(Opcodes.ASTORE, arg2Slot);
+
+                mv.visitVarInsn(Opcodes.ALOAD, arg0Slot);
+                mv.visitVarInsn(Opcodes.ALOAD, arg1Slot);
+                mv.visitVarInsn(Opcodes.ALOAD, arg2Slot);
+
+                if (pooledArg2) {
+                    emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+                }
+                if (pooledArg1) {
+                    emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+                }
+                if (pooledArg0) {
+                    emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+                }
+
                 emitOperator(node, emitterVisitor);
             }
         }
@@ -192,6 +279,9 @@ public class EmitOperator {
             // Push context
             emitterVisitor.pushCallContext();
 
+            int callContextSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ISTORE, callContextSlot);
+
             // Create array for varargs operators
             MethodVisitor mv = emitterVisitor.ctx.mv;
 
@@ -199,12 +289,16 @@ public class EmitOperator {
             mv.visitIntInsn(Opcodes.SIPUSH, operand.elements.size());
             mv.visitTypeInsn(Opcodes.ANEWARRAY, "org/perlonjava/runtime/RuntimeBase");
 
+            int argsArraySlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+            boolean pooledArgsArray = argsArraySlot >= 0;
+            if (!pooledArgsArray) {
+                argsArraySlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            }
+            mv.visitVarInsn(Opcodes.ASTORE, argsArraySlot);
+
             // Populate the array with arguments
             int index = 0;
             for (Node arg : operand.elements) {
-                mv.visitInsn(Opcodes.DUP); // Duplicate array reference
-                mv.visitIntInsn(Opcodes.SIPUSH, index);
-
                 // Generate code for argument
                 String argContext = (String) arg.getAnnotation("context");
                 if (argContext != null && argContext.equals("SCALAR")) {
@@ -213,11 +307,32 @@ public class EmitOperator {
                     arg.accept(listVisitor);
                 }
 
+                int argSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+                boolean pooledArg = argSlot >= 0;
+                if (!pooledArg) {
+                    argSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                }
+                mv.visitVarInsn(Opcodes.ASTORE, argSlot);
+
+                mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
+                mv.visitIntInsn(Opcodes.SIPUSH, index);
+                mv.visitVarInsn(Opcodes.ALOAD, argSlot);
                 mv.visitInsn(Opcodes.AASTORE); // Store in array
+
+                if (pooledArg) {
+                    emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+                }
                 index++;
             }
 
+            mv.visitVarInsn(Opcodes.ILOAD, callContextSlot);
+            mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
+
             emitOperator(node, emitterVisitor);
+
+            if (pooledArgsArray) {
+                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+            }
         }
     }
 
@@ -272,19 +387,69 @@ public class EmitOperator {
         // Handle:  splice @array, LIST
         emitterVisitor.ctx.logDebug("handleSpliceBuiltin " + node);
         Node args = node.operand;
-        // Remove the first element from the list and accept it in LIST context.
-        Node operand = ((ListNode) args).elements.removeFirst();
-        operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
-        // Accept the remaining arguments in LIST context.
-        args.accept(emitterVisitor.with(RuntimeContextType.LIST));
+        if (args instanceof ListNode listArgs) {
+            if (!listArgs.elements.isEmpty()) {
+                // Remove the first element from the list and accept it in LIST context.
+                // Restore the list afterwards to avoid mutating the AST.
+                Node first;
+                try {
+                    first = listArgs.elements.removeFirst();
+                } catch (java.util.NoSuchElementException e) {
+                    // Defensive: treat as no args.
+                    first = null;
+                }
+
+                if (first != null) {
+                    try {
+                        first.accept(emitterVisitor.with(RuntimeContextType.LIST));
+                        // Accept the remaining arguments in LIST context.
+                        args.accept(emitterVisitor.with(RuntimeContextType.LIST));
+                    } finally {
+                        listArgs.elements.addFirst(first);
+                    }
+                } else {
+                    // Accept all arguments in LIST context.
+                    args.accept(emitterVisitor.with(RuntimeContextType.LIST));
+                }
+            } else {
+                // Accept all arguments in LIST context.
+                args.accept(emitterVisitor.with(RuntimeContextType.LIST));
+            }
+        } else {
+            // Accept all arguments in LIST context.
+            args.accept(emitterVisitor.with(RuntimeContextType.LIST));
+        }
         emitOperator(node, emitterVisitor);
     }
 
     // Handles the 'push' operator, which adds elements to an array.
     static void handlePushOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
-        // Accept both left and right operands in LIST context.
-        node.left.accept(emitterVisitor.with(RuntimeContextType.LIST));
-        node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
+        // Spill the left operand before evaluating the right side so non-local control flow
+        // propagation can't jump to returnLabel with an extra value on the JVM operand stack.
+        if (ENABLE_SPILL_BINARY_LHS) {
+            MethodVisitor mv = emitterVisitor.ctx.mv;
+            node.left.accept(emitterVisitor.with(RuntimeContextType.LIST));
+
+            int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+            boolean pooled = leftSlot >= 0;
+            if (!pooled) {
+                leftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            }
+            mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
+
+            node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
+
+            mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+            mv.visitInsn(Opcodes.SWAP);
+
+            if (pooled) {
+                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+            }
+        } else {
+            // Accept both left and right operands in LIST context.
+            node.left.accept(emitterVisitor.with(RuntimeContextType.LIST));
+            node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
+        }
         emitOperator(node, emitterVisitor);
     }
 
@@ -352,10 +517,18 @@ public class EmitOperator {
         // Generate unique IDs for this glob instance
         int globId = ScalarGlobOperator.currentId++;
 
-        // public static RuntimeBase evaluate(id, patternArg, ctx)
+        int globIdSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
         mv.visitLdcInsn(globId);
+        mv.visitVarInsn(Opcodes.ISTORE, globIdSlot);
+
         // Accept the operand in SCALAR context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        int patternSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        mv.visitVarInsn(Opcodes.ASTORE, patternSlot);
+
+        // public static RuntimeBase evaluate(id, patternArg, ctx)
+        mv.visitVarInsn(Opcodes.ILOAD, globIdSlot);
+        mv.visitVarInsn(Opcodes.ALOAD, patternSlot);
         emitterVisitor.pushCallContext();
         emitOperator(node, emitterVisitor);
     }
@@ -371,16 +544,81 @@ public class EmitOperator {
     // Handles the 'substr' operator, which extracts a substring from a string.
     static void handleSubstr(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         // Accept the left operand in SCALAR context and the right operand in LIST context.
-        node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
+        // Spill the left operand before evaluating the right side so non-local control flow
+        // propagation can't jump to returnLabel with an extra value on the JVM operand stack.
+        boolean isBytes = emitterVisitor.ctx.symbolTable != null &&
+                emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_BYTES);
+        if (ENABLE_SPILL_BINARY_LHS) {
+            MethodVisitor mv = emitterVisitor.ctx.mv;
+            node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+
+            int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+            boolean pooled = leftSlot >= 0;
+            if (!pooled) {
+                leftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            }
+            mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
+
+            node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
+
+            mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+            mv.visitInsn(Opcodes.SWAP);
+
+            if (pooled) {
+                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+            }
+        } else {
+            node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+            node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
+        }
+
+        if (node.operator.equals("sprintf") && isBytes) {
+            emitterVisitor.ctx.mv.visitMethodInsn(
+                    Opcodes.INVOKESTATIC,
+                    "org/perlonjava/operators/SprintfOperator",
+                    "sprintfBytes",
+                    "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                    false);
+
+            if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                handleVoidContext(emitterVisitor);
+            } else if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+                handleScalarContext(emitterVisitor, node);
+            }
+            return;
+        }
+
         emitOperator(node, emitterVisitor);
     }
 
     // Handles the 'split' operator
     static void handleSplit(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         // Accept the left operand in SCALAR context and the right operand in LIST context.
-        node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
+        // Spill the left operand before evaluating the right side so non-local control flow
+        // propagation can't jump to returnLabel with an extra value on the JVM operand stack.
+        if (ENABLE_SPILL_BINARY_LHS) {
+            MethodVisitor mv = emitterVisitor.ctx.mv;
+            node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+
+            int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+            boolean pooled = leftSlot >= 0;
+            if (!pooled) {
+                leftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            }
+            mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
+
+            node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
+
+            mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+            mv.visitInsn(Opcodes.SWAP);
+
+            if (pooled) {
+                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+            }
+        } else {
+            node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+            node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
+        }
         emitterVisitor.pushCallContext();
         emitOperator(node, emitterVisitor);
     }
@@ -417,8 +655,42 @@ public class EmitOperator {
         EmitterVisitor scalarVisitor =
                 emitterVisitor.with(RuntimeContextType.SCALAR); // execute operands in scalar context
         // Accept both left and right operands in SCALAR context.
-        node.left.accept(scalarVisitor); // target - left parameter
-        node.right.accept(scalarVisitor); // right parameter
+        if (ENABLE_SPILL_BINARY_LHS) {
+            MethodVisitor mv = emitterVisitor.ctx.mv;
+            node.left.accept(scalarVisitor); // target - left parameter
+            int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+            boolean pooled = leftSlot >= 0;
+            if (!pooled) {
+                leftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            }
+            mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
+            node.right.accept(scalarVisitor); // right parameter
+            mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+            mv.visitInsn(Opcodes.SWAP);
+            if (pooled) {
+                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+            }
+        } else {
+            node.left.accept(scalarVisitor); // target - left parameter
+            node.right.accept(scalarVisitor); // right parameter
+        }
+
+        ScopedSymbolTable symbolTable = emitterVisitor.ctx.symbolTable;
+        boolean warnUninitialized = symbolTable != null && symbolTable.isWarningCategoryEnabled("uninitialized");
+        if (warnUninitialized) {
+            emitterVisitor.ctx.mv.visitMethodInsn(
+                    Opcodes.INVOKESTATIC,
+                    "org/perlonjava/operators/StringOperators",
+                    "stringConcatWarnUninitialized",
+                    "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                    false);
+
+            if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                handleVoidContext(emitterVisitor);
+            }
+            return;
+        }
+
         emitOperator(node, emitterVisitor);
     }
 
@@ -645,9 +917,9 @@ public class EmitOperator {
                                        EmitterVisitor emitterVisitor) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        OperatorHandler operatorHandler = OperatorHandler.get(node.operator);
+        OperatorHandler operatorHandler = OperatorHandler.get(operator);
         if (operatorHandler != null) {
-            emitOperator(node, emitterVisitor);
+            emitOperatorWithKey(operator, node, emitterVisitor);
         } else {
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                     "org/perlonjava/runtime/RuntimeScalar",

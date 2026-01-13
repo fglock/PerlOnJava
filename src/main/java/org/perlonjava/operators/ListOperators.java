@@ -25,38 +25,40 @@ public class ListOperators {
 
         RuntimeScalar saveValue = getGlobalVariable("main::_");
 
-        RuntimeArray mapArgs = new RuntimeArray();
+        try {
+            RuntimeArray mapArgs = new RuntimeArray();
 
-        // Iterate over each element in the current RuntimeArray
-        for (RuntimeScalar element : runtimeList) {
-            // Create $_ argument for the map subroutine
-            GlobalVariable.aliasGlobalVariable("main::_", element);
+            // Iterate over each element in the current RuntimeArray
+            for (RuntimeScalar element : runtimeList) {
+                // Create $_ argument for the map subroutine
+                GlobalVariable.aliasGlobalVariable("main::_", element);
 
-            // Apply the Perl map subroutine with the argument
-            RuntimeList result = RuntimeCode.apply(perlMapClosure, mapArgs, RuntimeContextType.LIST);
+                // Apply the Perl map subroutine with the argument
+                RuntimeList result = RuntimeCode.apply(perlMapClosure, mapArgs, RuntimeContextType.LIST);
 
-            // `result` list contains aliases to the original array;
-            // We need to make copies of the result elements
-            RuntimeArray arr = new RuntimeArray();
-            result.addToArray(arr);
+                // `result` list contains aliases to the original array;
+                // We need to make copies of the result elements
+                RuntimeArray arr = new RuntimeArray();
+                result.addToArray(arr);
 
-            // Add all elements of the result list to the transformed list
-            transformedElements.addAll(arr.elements);
-        }
+                // Add all elements of the result list to the transformed list
+                transformedElements.addAll(arr.elements);
+            }
 
-        // Create a new RuntimeList to hold the transformed elements
-        RuntimeList transformedList = new RuntimeList();
-        transformedList.elements = transformedElements;
+            // Create a new RuntimeList to hold the transformed elements
+            RuntimeList transformedList = new RuntimeList();
+            transformedList.elements = transformedElements;
 
-        GlobalVariable.aliasGlobalVariable("main::_", saveValue);
-
-        // Return based on context
-        if (ctx == RuntimeContextType.SCALAR) {
-            // Scalar context - return count of matching elements
-            return new RuntimeList(new RuntimeScalar(transformedList.countElements()));
-        } else {
-            // List context - return the filtered RuntimeList
-            return transformedList;
+            // Return based on context
+            if (ctx == RuntimeContextType.SCALAR) {
+                // Scalar context - return count of matching elements
+                return new RuntimeList(new RuntimeScalar(transformedList.countElements()));
+            } else {
+                // List context - return the filtered RuntimeList
+                return transformedList;
+            }
+        } finally {
+            GlobalVariable.aliasGlobalVariable("main::_", saveValue);
         }
     }
 
@@ -121,42 +123,44 @@ public class ListOperators {
 
         RuntimeScalar saveValue = getGlobalVariable("main::_");
 
-        RuntimeArray filterArgs = new RuntimeArray();
+        try {
+            RuntimeArray filterArgs = new RuntimeArray();
 
-        // Iterate over each element in the current RuntimeArray
-        for (RuntimeScalar element : runtimeList) {
-            try {
-                // Create $_ argument for the filter subroutine
-                GlobalVariable.aliasGlobalVariable("main::_", element);
+            // Iterate over each element in the current RuntimeArray
+            for (RuntimeScalar element : runtimeList) {
+                try {
+                    // Create $_ argument for the filter subroutine
+                    GlobalVariable.aliasGlobalVariable("main::_", element);
 
-                // Apply the Perl filter subroutine with the argument
-                RuntimeList result = RuntimeCode.apply(perlFilterClosure, filterArgs, RuntimeContextType.SCALAR);
+                    // Apply the Perl filter subroutine with the argument
+                    RuntimeList result = RuntimeCode.apply(perlFilterClosure, filterArgs, RuntimeContextType.SCALAR);
 
-                // Check the result of the filter subroutine
-                if (result.getFirst().getBoolean()) {
-                    // If the result is non-zero, add the element to the filtered list
-                    // We need to clone, otherwise we would be adding an alias to the original element
-                    filteredElements.add(element.clone());
+                    // Check the result of the filter subroutine
+                    if (result.getFirst().getBoolean()) {
+                        // If the result is non-zero, add the element to the filtered list
+                        // We need to clone, otherwise we would be adding an alias to the original element
+                        filteredElements.add(element.clone());
+                    }
+                } catch (Exception e) {
+                    // Wrap any exceptions thrown by the filter subroutine in a RuntimeException
+                    throw new RuntimeException(e);
                 }
-            } catch (Exception e) {
-                // Wrap any exceptions thrown by the filter subroutine in a RuntimeException
-                throw new RuntimeException(e);
             }
-        }
 
-        // Create a new RuntimeList to hold the filtered elements
-        RuntimeList filteredList = new RuntimeList();
-        filteredList.elements = filteredElements;
+            // Create a new RuntimeList to hold the filtered elements
+            RuntimeList filteredList = new RuntimeList();
+            filteredList.elements = filteredElements;
 
-        GlobalVariable.aliasGlobalVariable("main::_", saveValue);
-
-        // Return based on context
-        if (ctx == RuntimeContextType.SCALAR) {
-            // Scalar context - return count of matching elements
-            return new RuntimeList(new RuntimeScalar(filteredList.countElements()));
-        } else {
-            // List context - return the filtered RuntimeList
-            return filteredList;
+            // Return based on context
+            if (ctx == RuntimeContextType.SCALAR) {
+                // Scalar context - return count of matching elements
+                return new RuntimeList(new RuntimeScalar(filteredList.countElements()));
+            } else {
+                // List context - return the filtered RuntimeList
+                return filteredList;
+            }
+        } finally {
+            GlobalVariable.aliasGlobalVariable("main::_", saveValue);
         }
     }
 
@@ -172,30 +176,32 @@ public class ListOperators {
 
         RuntimeScalar saveValue = getGlobalVariable("main::_");
 
-        RuntimeArray filterArgs = new RuntimeArray();
+        try {
+            RuntimeArray filterArgs = new RuntimeArray();
 
-        // Iterate over each element in the current RuntimeArray
-        for (RuntimeScalar element : runtimeList) {
-            try {
-                // Create $_ argument for the filter subroutine
-                GlobalVariable.aliasGlobalVariable("main::_", element);
+            // Iterate over each element in the current RuntimeArray
+            for (RuntimeScalar element : runtimeList) {
+                try {
+                    // Create $_ argument for the filter subroutine
+                    GlobalVariable.aliasGlobalVariable("main::_", element);
 
-                // Apply the Perl filter subroutine with the argument
-                RuntimeList result = RuntimeCode.apply(perlFilterClosure, filterArgs, RuntimeContextType.SCALAR);
+                    // Apply the Perl filter subroutine with the argument
+                    RuntimeList result = RuntimeCode.apply(perlFilterClosure, filterArgs, RuntimeContextType.SCALAR);
 
-                // Check the result of the filter subroutine
-                if (!result.getFirst().getBoolean()) {
-                    return scalarFalse.getList();
+                    // Check the result of the filter subroutine
+                    if (!result.getFirst().getBoolean()) {
+                        return scalarFalse.getList();
+                    }
+                } catch (Exception e) {
+                    // Wrap any exceptions thrown by the filter subroutine in a RuntimeException
+                    throw new RuntimeException(e);
                 }
-            } catch (Exception e) {
-                // Wrap any exceptions thrown by the filter subroutine in a RuntimeException
-                throw new RuntimeException(e);
             }
+
+            return scalarTrue.getList();
+        } finally {
+            GlobalVariable.aliasGlobalVariable("main::_", saveValue);
         }
-
-        GlobalVariable.aliasGlobalVariable("main::_", saveValue);
-
-        return scalarTrue.getList();
     }
 
     /**
@@ -210,29 +216,31 @@ public class ListOperators {
 
         RuntimeScalar saveValue = getGlobalVariable("main::_");
 
-        RuntimeArray filterArgs = new RuntimeArray();
+        try {
+            RuntimeArray filterArgs = new RuntimeArray();
 
-        // Iterate over each element in the current RuntimeArray
-        for (RuntimeScalar element : runtimeList) {
-            try {
-                // Create $_ argument for the filter subroutine
-                GlobalVariable.aliasGlobalVariable("main::_", element);
+            // Iterate over each element in the current RuntimeArray
+            for (RuntimeScalar element : runtimeList) {
+                try {
+                    // Create $_ argument for the filter subroutine
+                    GlobalVariable.aliasGlobalVariable("main::_", element);
 
-                // Apply the Perl filter subroutine with the argument
-                RuntimeList result = RuntimeCode.apply(perlFilterClosure, filterArgs, RuntimeContextType.SCALAR);
+                    // Apply the Perl filter subroutine with the argument
+                    RuntimeList result = RuntimeCode.apply(perlFilterClosure, filterArgs, RuntimeContextType.SCALAR);
 
-                // Check the result of the filter subroutine
-                if (result.getFirst().getBoolean()) {
-                    return scalarTrue.getList();
+                    // Check the result of the filter subroutine
+                    if (result.getFirst().getBoolean()) {
+                        return scalarTrue.getList();
+                    }
+                } catch (Exception e) {
+                    // Wrap any exceptions thrown by the filter subroutine in a RuntimeException
+                    throw new RuntimeException(e);
                 }
-            } catch (Exception e) {
-                // Wrap any exceptions thrown by the filter subroutine in a RuntimeException
-                throw new RuntimeException(e);
             }
+
+            return scalarFalse.getList();
+        } finally {
+            GlobalVariable.aliasGlobalVariable("main::_", saveValue);
         }
-
-        GlobalVariable.aliasGlobalVariable("main::_", saveValue);
-
-        return scalarFalse.getList();
     }
 }

@@ -35,6 +35,14 @@ public class SprintfOperator {
      * @return A RuntimeScalar containing the formatted string
      */
     public static RuntimeScalar sprintf(RuntimeScalar runtimeScalar, RuntimeList list) {
+        return sprintfInternal(runtimeScalar, list, false);
+    }
+
+    public static RuntimeScalar sprintfBytes(RuntimeScalar runtimeScalar, RuntimeList list) {
+        return sprintfInternal(runtimeScalar, list, true);
+    }
+
+    private static RuntimeScalar sprintfInternal(RuntimeScalar runtimeScalar, RuntimeList list, boolean bytesMode) {
         charsWritten = 0;  // Reset counter
         // Expand the list to ensure all elements are available
         list = new RuntimeList((RuntimeBase) list);
@@ -83,7 +91,7 @@ public class SprintfOperator {
 
                 // Check if spec is invalid FIRST
                 if (!spec.isValid) {
-                    String formatted = processFormatSpecifier(spec, list, argIndex, formatter);
+                    String formatted = processFormatSpecifier(spec, list, argIndex, formatter, -1, bytesMode);
                     result.append(formatted);
                     charsWritten += formatted.length();
                     hasInvalidSpecifier = true;
@@ -119,7 +127,7 @@ public class SprintfOperator {
                     // Don't add anything to result or charsWritten
                     continue;  // Skip to next format element
                 } else {
-                    ProcessResult processResult = processFormatSpecifierTracked(spec, list, argIndex, formatter);
+                    ProcessResult processResult = processFormatSpecifierTracked(spec, list, argIndex, formatter, bytesMode);
                     result.append(processResult.formatted);
                     charsWritten += processResult.formatted.length();
 
@@ -204,7 +212,16 @@ public class SprintfOperator {
             RuntimeList list,
             int sepArgIndex,
             SprintfValueFormatter formatter) {
-        String formatted = processFormatSpecifier(spec, list, sepArgIndex, formatter, -1);
+        return processFormatSpecifierTracked(spec, list, sepArgIndex, formatter, false);
+    }
+
+    private static ProcessResult processFormatSpecifierTracked(
+            FormatSpecifier spec,
+            RuntimeList list,
+            int sepArgIndex,
+            SprintfValueFormatter formatter,
+            boolean bytesMode) {
+        String formatted = processFormatSpecifier(spec, list, sepArgIndex, formatter, -1, bytesMode);
 
         // Calculate max arg index used
         int maxUsed = -1;
@@ -309,7 +326,8 @@ public class SprintfOperator {
             RuntimeList list,
             int sepArgIndex,
             SprintfValueFormatter formatter,
-            int maxArgIndexUsed) {
+            int maxArgIndexUsed,
+            boolean bytesMode) {
 
         // Handle invalid specifiers FIRST (before %% check)
         if (!spec.isValid) {
@@ -352,6 +370,10 @@ public class SprintfOperator {
                     separator = list.elements.get(sepIndex).toString();
                 }
 
+                if (bytesMode) {
+                    return formatter.formatVectorStringBytes(value, spec.flags, args.width,
+                            args.precision, spec.conversionChar, separator);
+                }
                 return formatter.formatVectorString(value, spec.flags, args.width,
                         args.precision, spec.conversionChar, separator);
             } else if (spec.widthFromArg && spec.raw.matches(".*\\*v.*")) {
@@ -383,15 +405,27 @@ public class SprintfOperator {
                 }
                 value = (RuntimeScalar) list.elements.get(valueIndex);
 
+                if (bytesMode) {
+                    return formatter.formatVectorStringBytes(value, spec.flags, actualWidth,
+                            args.precision, spec.conversionChar, separator);
+                }
                 return formatter.formatVectorString(value, spec.flags, actualWidth,
                         args.precision, spec.conversionChar, separator);
             } else if (spec.widthFromArg) {
                 // %v*d format - * is for width, not separator
                 // Use default separator and get width from args
+                if (bytesMode) {
+                    return formatter.formatVectorStringBytes(value, spec.flags, args.width,
+                            args.precision, spec.conversionChar);
+                }
                 return formatter.formatVectorString(value, spec.flags, args.width,
                         args.precision, spec.conversionChar);
             } else {
                 // Regular vector format
+                if (bytesMode) {
+                    return formatter.formatVectorStringBytes(value, spec.flags, args.width,
+                            args.precision, spec.conversionChar);
+                }
                 return formatter.formatVectorString(value, spec.flags, args.width,
                         args.precision, spec.conversionChar);
             }
@@ -410,7 +444,16 @@ public class SprintfOperator {
             RuntimeList list,
             int sepArgIndex,
             SprintfValueFormatter formatter) {
-        return processFormatSpecifier(spec, list, sepArgIndex, formatter, -1);
+        return processFormatSpecifier(spec, list, sepArgIndex, formatter, -1, false);
+    }
+
+    private static String processFormatSpecifier(
+            FormatSpecifier spec,
+            RuntimeList list,
+            int sepArgIndex,
+            SprintfValueFormatter formatter,
+            int maxArgIndexUsed) {
+        return processFormatSpecifier(spec, list, sepArgIndex, formatter, maxArgIndexUsed, false);
     }
 
     /**

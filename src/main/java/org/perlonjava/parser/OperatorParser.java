@@ -687,6 +687,23 @@ public class OperatorParser {
             nextToken = peek(parser);
             paren = true;
         }
+
+        // stat/lstat: bareword filehandle (typically ALLCAPS) should be treated as a typeglob.
+        // Consume it here, before generic expression parsing can turn it into a subroutine call.
+        if (nextToken.type == IDENTIFIER) {
+            String name = nextToken.text;
+            if (name.matches("^[A-Z_][A-Z0-9_]*$")) {
+                TokenUtils.consume(parser);
+                // autovivify filehandle and convert to globref
+                GlobalVariable.getGlobalIO(FileHandle.normalizeBarewordHandle(parser, name));
+                Node fh = FileHandle.parseBarewordHandle(parser, name);
+                Node operand = fh != null ? fh : new IdentifierNode(name, parser.tokenIndex);
+                if (paren) {
+                    TokenUtils.consume(parser, OPERATOR, ")");
+                }
+                return new OperatorNode(token.text, operand, currentIndex);
+            }
+        }
         if (nextToken.text.equals("_")) {
             // Handle `stat _`
             TokenUtils.consume(parser);
@@ -696,8 +713,29 @@ public class OperatorParser {
             return new OperatorNode(token.text,
                     new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex);
         }
-        parser.tokenIndex = currentIndex;
-        return parseOperatorWithOneOptionalArgument(parser, token);
+
+        // Parse optional single argument (or default to $_)
+        // If we've already consumed '(', we must parse a full expression up to ')'.
+        // Using parseZeroOrOneList here would parse without parentheses and may stop
+        // at low-precedence operators like the ternary ?:, leading to parse errors.
+        ListNode listNode;
+        if (paren) {
+            listNode = new ListNode(ListParser.parseList(parser, ")", 0), parser.tokenIndex);
+        } else {
+            listNode = ListParser.parseZeroOrOneList(parser, 0);
+        }
+        Node operand;
+        if (listNode.elements.isEmpty()) {
+            // No arg: default to $_ (matches existing behavior of parseOperatorWithOneOptionalArgument)
+            operand = ParserNodeUtils.scalarUnderscore(parser);
+        } else if (listNode.elements.size() == 1) {
+            operand = listNode.elements.getFirst();
+        } else {
+            parser.throwError("syntax error");
+            return null; // unreachable
+        }
+
+        return new OperatorNode(token.text, operand, currentIndex);
     }
 
     static BinaryOperatorNode parseReadline(Parser parser, LexerToken token, int currentIndex) {
@@ -708,16 +746,30 @@ public class OperatorParser {
         if (operand.elements.isEmpty()) {
             String defaultHandle = switch (operator) {
                 case "readline" -> "main::ARGV";
-                case "eof" -> "main::STDIN";
-                case "tell" -> "main::^LAST_FH";
+                case "eof", "tell" -> null;
                 case "truncate" ->
                         throw new PerlCompilerException(parser.tokenIndex, "Not enough arguments for " + token.text, parser.ctx.errorUtil);
                 default ->
                         throw new PerlCompilerException(parser.tokenIndex, "Unexpected value: " + token.text, parser.ctx.errorUtil);
             };
-            handle = new IdentifierNode(defaultHandle, currentIndex);
+            if (defaultHandle == null) {
+                handle = new OperatorNode("undef", null, currentIndex);
+            } else {
+                handle = new IdentifierNode(defaultHandle, currentIndex);
+            }
         } else {
             handle = operand.elements.removeFirst();
+
+            if (handle instanceof IdentifierNode idNode) {
+                String name = idNode.name;
+                if (name.matches("^[A-Z_][A-Z0-9_]*$")) {
+                    GlobalVariable.getGlobalIO(FileHandle.normalizeBarewordHandle(parser, name));
+                    Node fh = FileHandle.parseBarewordHandle(parser, name);
+                    if (fh != null) {
+                        handle = fh;
+                    }
+                }
+            }
         }
         return new BinaryOperatorNode(operator, handle, operand, currentIndex);
     }

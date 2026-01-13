@@ -1,6 +1,7 @@
 package org.perlonjava.codegen;
 
 import org.perlonjava.astnode.LabelNode;
+import org.objectweb.asm.Label;
 import org.perlonjava.runtime.PerlCompilerException;
 
 /**
@@ -19,14 +20,15 @@ public class EmitLabel {
         // Search for the label definition in the current compilation scope
         GotoLabels targetLabel = ctx.javaClassInfo.findGotoLabelsByName(node.label);
 
-        // Validate label existence
+        // If the label is not pre-registered, treat it as a standalone label.
+        // Perl tests frequently use labeled blocks (e.g. SKIP: { ... }) without any goto.
+        // In that case we still need to emit a valid bytecode label as a join point.
         if (targetLabel == null) {
-            throw new PerlCompilerException(node.tokenIndex,
-                    "Can't find label " + node.label, ctx.errorUtil);
+            ctx.mv.visitLabel(new Label());
+        } else {
+            // Generate the actual label in the bytecode
+            ctx.mv.visitLabel(targetLabel.gotoLabel);
         }
-
-        // Generate the actual label in the bytecode
-        ctx.mv.visitLabel(targetLabel.gotoLabel);
 
         EmitterContext.fixupContext(ctx);
     }

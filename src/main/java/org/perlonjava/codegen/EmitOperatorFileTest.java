@@ -93,6 +93,7 @@ public class EmitOperatorFileTest {
             }
         }
 
+        // File test operators return a RuntimeScalar; only pop it in VOID context.
         EmitOperator.handleVoidContext(emitterVisitor);
     }
 }

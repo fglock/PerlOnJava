@@ -74,7 +74,23 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 return value;
             case REFERENCE:
                 if (value.value instanceof RuntimeScalar) {
-                    GlobalVariable.getGlobalVariable(this.globName).set(value.scalarDeref());
+                    RuntimeScalar deref = value.scalarDeref();
+                    // `*foo = \&bar` assigns to the CODE slot.
+                    if (deref.type == RuntimeScalarType.CODE) {
+                        GlobalVariable.getGlobalCodeRef(this.globName).set(deref);
+                        InheritanceResolver.invalidateCache();
+                    } else if (deref.type == RuntimeScalarType.ARRAYREFERENCE && deref.value instanceof RuntimeArray arr) {
+                        // `*foo = \@bar` assigns to the ARRAY slot.
+                        GlobalVariable.globalArrays.put(this.globName, arr);
+                    } else if (deref.type == RuntimeScalarType.HASHREFERENCE && deref.value instanceof RuntimeHash hash) {
+                        // `*foo = \%bar` assigns to the HASH slot.
+                        GlobalVariable.globalHashes.put(this.globName, hash);
+                    } else {
+                        // `*foo = \$bar` (or `*foo = \1`) aliases the SCALAR slot.
+                        // This must replace the scalar container (alias) rather than storing into
+                        // the existing scalar, otherwise tied scalars would invoke STORE.
+                        GlobalVariable.aliasGlobalVariable(this.globName, (RuntimeScalar) value.value);
+                    }
                 }
                 return value;
             case UNDEF:
@@ -114,6 +130,15 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * @return The scalar value associated with the provided RuntimeGlob.
      */
     public RuntimeScalar set(RuntimeGlob value) {
+        markGlobAsAssigned();
+
+        if (this.globName.endsWith("::") && value.globName.endsWith("::")) {
+            GlobalVariable.setStashAlias(this.globName, value.globName);
+            InheritanceResolver.invalidateCache();
+            GlobalVariable.clearPackageCache();
+            return value.scalar();
+        }
+
         // Retrieve the RuntimeScalar value associated with the provided RuntimeGlob.
         RuntimeScalar result = value.scalar();
 
@@ -131,7 +156,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
 
         // Alias the IO slot: both names point to the same IO object
         RuntimeGlob sourceIO = GlobalVariable.getGlobalIO(globName);
-        GlobalVariable.globalIORefs.put(this.globName, sourceIO);
+        this.IO = sourceIO.IO;
 
         // Alias the ARRAY slot: both names point to the same RuntimeArray object
         RuntimeArray sourceArray = GlobalVariable.getGlobalArray(globName);
@@ -209,13 +234,21 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 }
                 yield new RuntimeScalar(); // Return undef if code doesn't exist
             }
+            case "PACKAGE" -> {
+                // Return the package that owns this glob. If the package has been undefined,
+                // its bless id will have been anonymized to "__ANON__".
+                int lastColonIndex = this.globName.lastIndexOf("::");
+                String pkg = lastColonIndex >= 0 ? this.globName.substring(0, lastColonIndex) : "main";
+                yield new RuntimeScalar(NameNormalizer.getBlessStrForClassName(pkg));
+            }
             case "IO" -> {
-                // In Perl, accessing the IO slot returns a GLOB reference that can be blessed
-                // Convert GLOB type to GLOBREFERENCE so it behaves like other references
-                if (IO.type == RuntimeScalarType.GLOB && IO.value instanceof RuntimeIO) {
+                // Accessing the IO slot yields a blessable reference-like value.
+                // We model this by returning a GLOBREFERENCE wrapper around the RuntimeIO.
+                if (IO != null && IO.type == RuntimeScalarType.GLOB && IO.value instanceof RuntimeIO) {
                     RuntimeScalar ioRef = new RuntimeScalar();
                     ioRef.type = RuntimeScalarType.GLOBREFERENCE;
                     ioRef.value = IO.value;
+                    ioRef.blessId = IO.blessId;
                     yield ioRef;
                 }
                 yield IO;
@@ -461,6 +494,10 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * @return The current RuntimeGlob instance after undefining its elements.
      */
     public RuntimeGlob undefine() {
+        if (this.globName.endsWith("::")) {
+            new RuntimeStash(this.globName).undefine();
+            return this;
+        }
         // Undefine CODE
         GlobalVariable.getGlobalCodeRef(this.globName).set(new RuntimeScalar());
 

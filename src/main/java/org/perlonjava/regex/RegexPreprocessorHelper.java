@@ -304,9 +304,26 @@ public class RegexPreprocessorHelper {
             int endBrace = s.indexOf('}', offset);
             if (endBrace != -1) {
                 String property = s.substring(offset, endBrace).trim();
-                String translatedProperty = translateUnicodeProperty(property, negated);
-                sb.setLength(sb.length() - 1); // Remove the backslash
-                sb.append(translatedProperty);
+                try {
+                    String translatedProperty = translateUnicodeProperty(property, negated);
+                    sb.setLength(sb.length() - 1); // Remove the backslash
+                    sb.append(translatedProperty);
+                } catch (IllegalArgumentException e) {
+                    // Perl allows user-defined properties (InFoo/IsFoo) to be unknown at compile time;
+                    // they are resolved at runtime when the property sub is available.
+                    // If it's currently undefined, emit a placeholder that compiles in Java and mark for recompilation.
+                    // But if the error already contains "in expansion of", it is a real user-property definition error
+                    // that should be reported (not deferred).
+                    String msg = e.getMessage();
+                    if (property.matches("^(.*::)?(Is|In)[A-Z].*") && (msg == null || !msg.contains("in expansion of"))) {
+                        RegexPreprocessor.markDeferredUnicodePropertyEncountered();
+                        sb.setLength(sb.length() - 1); // Remove the backslash
+                        // Placeholder: match any single character, including newline
+                        sb.append("[\\s\\S]");
+                    } else {
+                        RegexPreprocessor.regexError(s, offset, msg == null ? "Invalid Unicode property" : msg);
+                    }
+                }
                 offset = endBrace;
             } else {
                 RegexPreprocessor.regexError(s, offset, "Missing right brace on \\\\p{}");

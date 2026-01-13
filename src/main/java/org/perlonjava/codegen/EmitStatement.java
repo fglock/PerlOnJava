@@ -297,6 +297,16 @@ public class EmitStatement {
 
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
+        // To keep ASM frame computation stable, ensure try/catch paths merge into finally
+        // with identical operand stack state. We do this by storing the result of the
+        // try or catch block into a temporary local slot and reloading it after finally.
+        int resultSlot = -1;
+        if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
+            resultSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            EmitOperator.emitUndef(mv);
+            mv.visitVarInsn(Opcodes.ASTORE, resultSlot);
+        }
+
         // Labels for try-catch-finally
         Label tryStart = new Label();
         Label tryEnd = new Label();
@@ -304,9 +314,15 @@ public class EmitStatement {
         Label finallyStart = new Label();
         Label finallyEnd = new Label();
 
+        // Define the try-catch block before visiting labels for maximum ASM compatibility
+        mv.visitTryCatchBlock(tryStart, tryEnd, catchBlock, "java/lang/Throwable");
+
         // Start of try block
         mv.visitLabel(tryStart);
         node.tryBlock.accept(emitterVisitor);
+        if (resultSlot >= 0) {
+            mv.visitVarInsn(Opcodes.ASTORE, resultSlot);
+        }
         mv.visitLabel(tryEnd);
 
         // Jump to finally block if try completes without exception
@@ -320,7 +336,7 @@ public class EmitStatement {
         mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/ErrorMessageUtil",
                 "stringifyException",
-                "(Ljava/lang/Exception;)Ljava/lang/String;", false);
+                "(Ljava/lang/Throwable;)Ljava/lang/String;", false);
         // Transform catch parameter to 'my'
         OperatorNode catchParameter = new OperatorNode("my", node.catchParameter, node.tokenIndex);
         // Create the lexical variable for the catch parameter, push it to the stack
@@ -337,6 +353,10 @@ public class EmitStatement {
 
         node.catchBlock.accept(emitterVisitor);
 
+        if (resultSlot >= 0) {
+            mv.visitVarInsn(Opcodes.ASTORE, resultSlot);
+        }
+
         // Finally block
         mv.visitLabel(finallyStart);
         if (node.finallyBlock != null) {
@@ -344,11 +364,9 @@ public class EmitStatement {
         }
         mv.visitLabel(finallyEnd);
 
-        // Define the try-catch block
-        mv.visitTryCatchBlock(tryStart, tryEnd, catchBlock, "java/lang/Exception");
-
-        // If the context is VOID, clear the stack
-        EmitOperator.handleVoidContext(emitterVisitor);
+        if (resultSlot >= 0) {
+            mv.visitVarInsn(Opcodes.ALOAD, resultSlot);
+        }
 
         emitterVisitor.ctx.logDebug("emitTryCatch end");
     }

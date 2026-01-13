@@ -13,7 +13,7 @@ import static org.perlonjava.runtime.RuntimeScalarType.TIED_SCALAR;
  * class tries to mimic this behavior using a map of string keys to RuntimeScalar objects, which can hold
  * any type of Perl scalar value.
  */
-public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, DynamicState {
+public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, DynamicState, Iterable<RuntimeScalar> {
     public static final int PLAIN_HASH = 0;
     public static final int AUTOVIVIFY_HASH = 1;
     public static final int TIED_HASH = 2;
@@ -25,6 +25,12 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     public Map<String, RuntimeScalar> elements;
     // Iterator for traversing the hash elements
     Iterator<RuntimeScalar> hashIterator;
+
+    private static final RuntimeArray EMPTY_KEYS = new RuntimeArray();
+
+    static {
+        EMPTY_KEYS.scalarContextSize = 0;
+    }
 
     /**
      * Constructor for RuntimeHash.
@@ -548,6 +554,11 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             AutovivificationHash.vivify(this);
         }
 
+        if (this.elements.isEmpty()) {
+            hashIterator = null;
+            return EMPTY_KEYS;
+        }
+
         RuntimeArray list = new RuntimeArray();
         for (String key : elements.keySet()) {
             RuntimeArray.push(list, new RuntimeScalar(key));
@@ -556,6 +567,18 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         // Set scalarContextSize so that keys() in scalar context returns the count
         list.scalarContextSize = list.elements.size();
         return list;
+    }
+
+    @Override
+    public RuntimeBase keys(int ctx) {
+        // keys() resets the iterator
+        hashIterator = null;
+
+        if (ctx == RuntimeContextType.SCALAR) {
+            // In scalar context, return the key count without materializing the key list.
+            return new RuntimeScalar(this.size());
+        }
+        return keys();
     }
 
     /**

@@ -12,6 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.regex.Pattern;
 
 import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
 
@@ -28,6 +29,10 @@ public class NumberParser {
             return size() > MAX_NUMIFICATION_CACHE_SIZE;
         }
     };
+
+    private static final Pattern WINDOWS_INF_PATTERN = Pattern.compile("1\\.?#INF.*");
+    private static final Pattern WINDOWS_NAN_PATTERN = Pattern.compile("\\+?1\\.?#(QNAN|NANQ|NAN|IND|SNAN).*"
+    );
     private static final NumberFormat BINARY_FORMAT = new NumberFormat(
             2,
             str -> str.matches("[01_]*"),
@@ -388,7 +393,12 @@ public class NumberParser {
 
         RuntimeScalar result = numificationCache.get(str);
         if (result != null) {
-            return result;
+            if (result.type == org.perlonjava.runtime.RuntimeScalarType.STRING
+                    || result.type == org.perlonjava.runtime.RuntimeScalarType.BYTE_STRING) {
+                numificationCache.remove(str);
+            } else {
+                return result;
+            }
         }
 
         int length = str.length();
@@ -472,7 +482,7 @@ public class NumberParser {
                 String remaining = str.substring(start, end);
 
                 // Check for Windows-style Inf: 1.#INF, 1#INF, 1.#INF00, etc.
-                if (remaining.matches("1\\.?#INF.*")) {
+                if (WINDOWS_INF_PATTERN.matcher(remaining).matches()) {
                     result = new RuntimeScalar(isNegative ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY);
                     // Check if there are non-digit characters after INF
                     int infPos = remaining.indexOf("INF") + 3;
@@ -484,7 +494,7 @@ public class NumberParser {
                     }
                 }
                 // Check for Windows-style NaN: 1.#QNAN, 1.#NAN, 1.#IND, 1.#IND00, etc.
-                else if (remaining.matches("\\+?1\\.?#(QNAN|NANQ|NAN|IND|SNAN).*")) {
+                else if (WINDOWS_NAN_PATTERN.matcher(remaining).matches()) {
                     result = new RuntimeScalar(Double.NaN);
                     // Check if there are non-digit characters after the NaN variant
                     int nanPos = remaining.indexOf('#') + 1;
@@ -569,7 +579,10 @@ public class NumberParser {
             }
         }
 
-        numificationCache.put(str, result);
+        if (result.type != org.perlonjava.runtime.RuntimeScalarType.STRING
+                && result.type != org.perlonjava.runtime.RuntimeScalarType.BYTE_STRING) {
+            numificationCache.put(str, result);
+        }
         return result;
     }
 

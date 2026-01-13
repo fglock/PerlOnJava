@@ -63,7 +63,7 @@ public class EmitControlFlow {
         }
         
         if (loopLabels == null) {
-            // Non-local control flow: register in RuntimeControlFlowRegistry and return normally
+            // Non-local control flow: return tagged RuntimeControlFlowList
             ctx.logDebug("visit(next): Non-local control flow for " + operator + " " + labelStr);
             
             // Determine control flow type
@@ -71,8 +71,8 @@ public class EmitControlFlow {
                     : operator.equals("last") ? ControlFlowType.LAST
                     : ControlFlowType.REDO;
             
-            // Create ControlFlowMarker: new ControlFlowMarker(type, label, fileName, lineNumber)
-            ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/ControlFlowMarker");
+            // Create RuntimeControlFlowList: new RuntimeControlFlowList(type, label, fileName, lineNumber)
+            ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeControlFlowList");
             ctx.mv.visitInsn(Opcodes.DUP);
             ctx.mv.visitFieldInsn(Opcodes.GETSTATIC, 
                     "org/perlonjava/runtime/ControlFlowType", 
@@ -89,27 +89,12 @@ public class EmitControlFlow {
             int lineNumber = ctx.errorUtil != null ? ctx.errorUtil.getLineNumber(node.tokenIndex) : 0;
             ctx.mv.visitLdcInsn(lineNumber);
             ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
-                    "org/perlonjava/runtime/ControlFlowMarker",
+                    "org/perlonjava/runtime/RuntimeControlFlowList",
                     "<init>",
                     "(Lorg/perlonjava/runtime/ControlFlowType;Ljava/lang/String;Ljava/lang/String;I)V",
                     false);
             
-            // Register the marker: RuntimeControlFlowRegistry.register(marker)
-            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/RuntimeControlFlowRegistry",
-                    "register",
-                    "(Lorg/perlonjava/runtime/ControlFlowMarker;)V",
-                    false);
-            
-            // Return empty list (marker is in registry, will be checked by loop)
-            // We MUST NOT jump to returnLabel as it breaks ASM frame computation
-            ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
-            ctx.mv.visitInsn(Opcodes.DUP);
-            ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL, 
-                    "org/perlonjava/runtime/RuntimeList", 
-                    "<init>", 
-                    "()V", 
-                    false);
+            // Return the tagged list (will be detected at subroutine return boundary)
             ctx.mv.visitInsn(Opcodes.ARETURN);
             return;
         }
@@ -118,7 +103,7 @@ public class EmitControlFlow {
         ctx.logDebug("visit(next): asmStackLevel: " + ctx.javaClassInfo.stackLevelManager.getStackLevel());
 
         // Clean up the stack before jumping by popping values up to the loop's stack level
-        ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, loopLabels.asmStackLevel);
+        ctx.javaClassInfo.resetStackLevel();
 
         // Handle return values based on context
         if (loopLabels.context != RuntimeContextType.VOID) {
@@ -174,22 +159,27 @@ public class EmitControlFlow {
             }
         }
 
-        // Clean up stack before return
-        ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, 0);
+        // Clean up tracked stack before return
+        ctx.javaClassInfo.resetStackLevel();
 
-        // Handle special case for single-element return lists
-        if (node.operand instanceof ListNode list) {
-            if (list.elements.size() == 1) {
-                // Optimize single-value returns
-                list.elements.getFirst().accept(emitterVisitor.with(RuntimeContextType.RUNTIME));
-                emitterVisitor.ctx.mv.visitJumpInsn(Opcodes.GOTO, emitterVisitor.ctx.javaClassInfo.returnLabel);
-                return;
-            }
+        boolean hasOperand = !(node.operand == null || (node.operand instanceof ListNode list && list.elements.isEmpty()));
+
+        if (!hasOperand) {
+            ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
+            ctx.mv.visitInsn(Opcodes.DUP);
+            ctx.mv.visitMethodInsn(
+                    Opcodes.INVOKESPECIAL,
+                    "org/perlonjava/runtime/RuntimeList",
+                    "<init>",
+                    "()V",
+                    false);
+        } else if (node.operand instanceof ListNode list && list.elements.size() == 1) {
+            list.elements.getFirst().accept(emitterVisitor.with(RuntimeContextType.RUNTIME));
+        } else {
+            node.operand.accept(emitterVisitor.with(RuntimeContextType.RUNTIME));
         }
 
-        // Process the return value(s) and jump to the subroutine's return point
-        node.operand.accept(emitterVisitor.with(RuntimeContextType.RUNTIME));
-        emitterVisitor.ctx.mv.visitJumpInsn(Opcodes.GOTO, emitterVisitor.ctx.javaClassInfo.returnLabel);
+        ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
     }
     
     /**
@@ -205,47 +195,54 @@ public class EmitControlFlow {
         
         ctx.logDebug("visit(goto &sub): Emitting TAILCALL marker");
         
-        // Clean up stack before creating the marker
-        ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, 0);
+        // Clean up tracked stack before creating the marker
+        ctx.javaClassInfo.resetStackLevel();
         
-        // Create new RuntimeControlFlowList for tail call
-        ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeControlFlowList");
-        ctx.mv.visitInsn(Opcodes.DUP);
-        
-        // Evaluate the coderef (&NAME) in scalar context
         subNode.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        
-        // Evaluate the arguments and convert to RuntimeArray
-        // The arguments are typically @_ which needs to be evaluated and converted
+        int codeRefSlot = ctx.javaClassInfo.acquireSpillSlot();
+        boolean pooledCodeRef = codeRefSlot >= 0;
+        if (!pooledCodeRef) {
+            codeRefSlot = ctx.symbolTable.allocateLocalVariable();
+        }
+        ctx.mv.visitVarInsn(Opcodes.ASTORE, codeRefSlot);
+
         argsNode.accept(emitterVisitor.with(RuntimeContextType.LIST));
-        
-        // getList() returns RuntimeList, then call getArrayOfAlias()
         ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                 "org/perlonjava/runtime/RuntimeBase",
                 "getList",
                 "()Lorg/perlonjava/runtime/RuntimeList;",
                 false);
-        
         ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                 "org/perlonjava/runtime/RuntimeList",
                 "getArrayOfAlias",
                 "()Lorg/perlonjava/runtime/RuntimeArray;",
                 false);
-        
-        // Push fileName
+        int argsSlot = ctx.javaClassInfo.acquireSpillSlot();
+        boolean pooledArgs = argsSlot >= 0;
+        if (!pooledArgs) {
+            argsSlot = ctx.symbolTable.allocateLocalVariable();
+        }
+        ctx.mv.visitVarInsn(Opcodes.ASTORE, argsSlot);
+
+        ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeControlFlowList");
+        ctx.mv.visitInsn(Opcodes.DUP);
+        ctx.mv.visitVarInsn(Opcodes.ALOAD, codeRefSlot);
+        ctx.mv.visitVarInsn(Opcodes.ALOAD, argsSlot);
         ctx.mv.visitLdcInsn(ctx.compilerOptions.fileName != null ? ctx.compilerOptions.fileName : "(eval)");
-        
-        // Push lineNumber
         int lineNumber = ctx.errorUtil != null ? ctx.errorUtil.getLineNumber(subNode.tokenIndex) : 0;
         ctx.mv.visitLdcInsn(lineNumber);
-        
-        // Call RuntimeControlFlowList constructor for tail call
-        // Signature: (RuntimeScalar codeRef, RuntimeArray args, String fileName, int lineNumber)
         ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
                 "org/perlonjava/runtime/RuntimeControlFlowList",
                 "<init>",
                 "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeArray;Ljava/lang/String;I)V",
                 false);
+
+        if (pooledArgs) {
+            ctx.javaClassInfo.releaseSpillSlot();
+        }
+        if (pooledCodeRef) {
+            ctx.javaClassInfo.releaseSpillSlot();
+        }
         
         // Jump to returnLabel (trampoline will handle it)
         ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
@@ -324,9 +321,20 @@ public class EmitControlFlow {
                         "<init>",
                         "(Lorg/perlonjava/runtime/ControlFlowType;Ljava/lang/String;Ljava/lang/String;I)V",
                         false);
-                
-                // Clean stack and jump to returnLabel
-                ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, 0);
+
+                int markerSlot = ctx.javaClassInfo.acquireSpillSlot();
+                boolean pooledMarker = markerSlot >= 0;
+                if (!pooledMarker) {
+                    markerSlot = ctx.symbolTable.allocateLocalVariable();
+                }
+                ctx.mv.visitVarInsn(Opcodes.ASTORE, markerSlot);
+
+                // Clean stack and jump to returnLabel with the marker on stack.
+                ctx.javaClassInfo.resetStackLevel();
+                ctx.mv.visitVarInsn(Opcodes.ALOAD, markerSlot);
+                if (pooledMarker) {
+                    ctx.javaClassInfo.releaseSpillSlot();
+                }
                 ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
                 return;
             }
@@ -361,16 +369,27 @@ public class EmitControlFlow {
                     "<init>",
                     "(Lorg/perlonjava/runtime/ControlFlowType;Ljava/lang/String;Ljava/lang/String;I)V",
                     false);
-            
-            // Clean stack and jump to returnLabel
-            ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, 0);
+
+            int markerSlot = ctx.javaClassInfo.acquireSpillSlot();
+            boolean pooledMarker = markerSlot >= 0;
+            if (!pooledMarker) {
+                markerSlot = ctx.symbolTable.allocateLocalVariable();
+            }
+            ctx.mv.visitVarInsn(Opcodes.ASTORE, markerSlot);
+
+            // Clean stack and jump to returnLabel with the marker on stack.
+            ctx.javaClassInfo.resetStackLevel();
+            ctx.mv.visitVarInsn(Opcodes.ALOAD, markerSlot);
+            if (pooledMarker) {
+                ctx.javaClassInfo.releaseSpillSlot();
+            }
             ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
             return;
         }
 
         // Local goto: use fast GOTO (existing code)
         // Clean up stack before jumping to maintain stack consistency
-        ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, targetLabel.asmStackLevel);
+        ctx.javaClassInfo.resetStackLevel();
 
         // Emit the goto instruction
         ctx.mv.visitJumpInsn(Opcodes.GOTO, targetLabel.gotoLabel);

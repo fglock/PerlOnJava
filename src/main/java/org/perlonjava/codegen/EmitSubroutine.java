@@ -23,6 +23,18 @@ import static org.perlonjava.perlmodule.Strict.HINT_STRICT_REFS;
 public class EmitSubroutine {
     // Feature flags for control flow implementation
     // 
+    // IMPORTANT:
+    // These flags are intentionally conservative and are part of perl5 test-suite stability.
+    // In particular, many core tests rely on SKIP/TODO blocks implemented via test.pl:
+    //   sub skip { ...; last SKIP; }
+    // which requires non-local control flow (LAST/NEXT/REDO/GOTO) to propagate across
+    // subroutine boundaries correctly.
+    //
+    // Historically, toggling these flags has caused large test regressions (e.g. op/pack.t collapsing)
+    // and JVM verifier/ASM frame computation failures due to stack-map frame merge issues.
+    // Do not change these settings unless you also re-run the perl5 test suite and verify
+    // both semantics and bytecode verification.
+    // 
     // WHAT THIS WOULD DO IF ENABLED:
     // After every subroutine call, check if the returned RuntimeList is a RuntimeControlFlowList
     // (marked with last/next/redo/goto), and if so, immediately propagate it to returnLabel
@@ -224,6 +236,15 @@ public class EmitSubroutine {
         emitterVisitor.ctx.logDebug("handleApplyElementOperator " + node + " in context " + emitterVisitor.ctx.contextType);
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
+        // Capture the call context into a local slot early.
+        // IMPORTANT: Do not leave the context int on the JVM operand stack while evaluating
+        // subroutine arguments. Argument evaluation may trigger non-local control flow
+        // propagation (e.g. last/next/redo) which jumps out of the expression; any stray
+        // stack items would then break ASM frame merging.
+        int callContextSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        emitterVisitor.pushCallContext();
+        mv.visitVarInsn(Opcodes.ISTORE, callContextSlot);
+
         String subroutineName = "";
         if (node.left instanceof OperatorNode operatorNode && operatorNode.operator.equals("&")) {
             if (operatorNode.operand instanceof IdentifierNode identifierNode) {
@@ -259,14 +280,32 @@ public class EmitSubroutine {
                         false);
             }
         }
-        
+
+        int codeRefSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+        boolean pooledCodeRef = codeRefSlot >= 0;
+        if (!pooledCodeRef) {
+            codeRefSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        }
+        mv.visitVarInsn(Opcodes.ASTORE, codeRefSlot);
+
+        int nameSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+        boolean pooledName = nameSlot >= 0;
+        if (!pooledName) {
+            nameSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        }
         mv.visitLdcInsn(subroutineName);
+        mv.visitVarInsn(Opcodes.ASTORE, nameSlot);
 
         // Generate native RuntimeBase[] array for parameters instead of RuntimeList
         ListNode paramList = ListNode.makeList(node.right);
         int argCount = paramList.elements.size();
 
-        // Create array of RuntimeBase with size equal to number of arguments
+        int argsArraySlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+        boolean pooledArgsArray = argsArraySlot >= 0;
+        if (!pooledArgsArray) {
+            argsArraySlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        }
+
         if (argCount <= 5) {
             mv.visitInsn(Opcodes.ICONST_0 + argCount);
         } else if (argCount <= 127) {
@@ -275,11 +314,20 @@ public class EmitSubroutine {
             mv.visitIntInsn(Opcodes.SIPUSH, argCount);
         }
         mv.visitTypeInsn(Opcodes.ANEWARRAY, "org/perlonjava/runtime/RuntimeBase");
+        mv.visitVarInsn(Opcodes.ASTORE, argsArraySlot);
 
-        // Populate the array with arguments
         EmitterVisitor listVisitor = emitterVisitor.with(RuntimeContextType.LIST);
         for (int index = 0; index < argCount; index++) {
-            mv.visitInsn(Opcodes.DUP); // Duplicate array reference
+            int argSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+            boolean pooledArg = argSlot >= 0;
+            if (!pooledArg) {
+                argSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            }
+
+            paramList.elements.get(index).accept(listVisitor);
+            mv.visitVarInsn(Opcodes.ASTORE, argSlot);
+
+            mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
             if (index <= 5) {
                 mv.visitInsn(Opcodes.ICONST_0 + index);
             } else if (index <= 127) {
@@ -287,101 +335,191 @@ public class EmitSubroutine {
             } else {
                 mv.visitIntInsn(Opcodes.SIPUSH, index);
             }
+            mv.visitVarInsn(Opcodes.ALOAD, argSlot);
+            mv.visitInsn(Opcodes.AASTORE);
 
-            // Generate code for argument in LIST context
-            paramList.elements.get(index).accept(listVisitor);
-
-            mv.visitInsn(Opcodes.AASTORE); // Store in array
+            if (pooledArg) {
+                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+            }
         }
 
-        emitterVisitor.pushCallContext();   // Push call context to stack
+        mv.visitVarInsn(Opcodes.ALOAD, codeRefSlot);
+        mv.visitVarInsn(Opcodes.ALOAD, nameSlot);
+        mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
+        mv.visitVarInsn(Opcodes.ILOAD, callContextSlot);   // Push call context to stack
         mv.visitMethodInsn(
                 Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/RuntimeCode",
                 "apply",
                 "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;[Lorg/perlonjava/runtime/RuntimeBase;I)Lorg/perlonjava/runtime/RuntimeList;",
                 false); // Generate an .apply() call
-        
-        // Check for control flow (last/next/redo/goto/tail calls)
-        // NOTE: Call-site control flow is handled in VOID context below (after the call result is on stack).
-        // Do not call emitControlFlowCheck here, as it can clear the registry and/or require returning.
-        
+
+        emitterVisitor.ctx.javaClassInfo.incrementStackLevel(1);
+
+        if (pooledArgsArray) {
+            emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+        }
+        if (pooledName) {
+            emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+        }
+        if (pooledCodeRef) {
+            emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+        }
+
+        // Tagged returns control-flow handling:
+        // If RuntimeCode.apply() returned a RuntimeControlFlowList marker, handle it here.
+        if (ENABLE_CONTROL_FLOW_CHECKS
+                && emitterVisitor.ctx.javaClassInfo.returnLabel != null
+                && emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot >= 0
+                && emitterVisitor.ctx.javaClassInfo.stackLevelManager.getStackLevel() <= 1) {
+
+            Label notControlFlow = new Label();
+            Label propagateToCaller = new Label();
+            Label checkLoopLabels = new Label();
+
+            int belowResultStackLevel = 0;
+            JavaClassInfo.SpillRef[] baseSpills = new JavaClassInfo.SpillRef[0];
+
+            // Store result in temp slot
+            mv.visitVarInsn(Opcodes.ASTORE, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+
+            // If the caller kept values on the JVM operand stack below the call result (e.g. a left operand),
+            // spill them now so control-flow propagation can jump to returnLabel with an empty stack.
+            for (int i = belowResultStackLevel - 1; i >= 0; i--) {
+                baseSpills[i] = emitterVisitor.ctx.javaClassInfo.acquireSpillRefOrAllocate(emitterVisitor.ctx.symbolTable);
+                emitterVisitor.ctx.javaClassInfo.storeSpillRef(mv, baseSpills[i]);
+            }
+
+            // We just removed the entire base stack from the JVM operand stack via ASTORE.
+            // Keep StackLevelManager in sync; otherwise later emitPopInstructions() may POP the wrong values
+            // (including control-flow markers), producing invalid stackmap frames.
+            emitterVisitor.ctx.javaClassInfo.resetStackLevel();
+
+            // Load and check if it's a control flow marker
+            mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/RuntimeList",
+                    "isNonLocalGoto",
+                    "()Z",
+                    false);
+            mv.visitJumpInsn(Opcodes.IFEQ, notControlFlow);
+
+            // Marked: load control flow type ordinal into controlFlowActionSlot
+            mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+            mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeControlFlowList");
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/RuntimeControlFlowList",
+                    "getControlFlowType",
+                    "()Lorg/perlonjava/runtime/ControlFlowType;",
+                    false);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/ControlFlowType",
+                    "ordinal",
+                    "()I",
+                    false);
+            mv.visitVarInsn(Opcodes.ISTORE, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
+
+            // Only handle LAST/NEXT/REDO locally (ordinals 0/1/2). Others propagate.
+            mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
+            mv.visitInsn(Opcodes.ICONST_2);
+            mv.visitJumpInsn(Opcodes.IF_ICMPGT, propagateToCaller);
+
+            mv.visitLabel(checkLoopLabels);
+            for (LoopLabels loopLabels : emitterVisitor.ctx.javaClassInfo.loopLabelStack) {
+                Label nextLoopCheck = new Label();
+
+                // if (!marked.matchesLabel(loopLabels.labelName)) continue;
+                mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+                mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeControlFlowList");
+                if (loopLabels.labelName != null) {
+                    mv.visitLdcInsn(loopLabels.labelName);
+                } else {
+                    mv.visitInsn(Opcodes.ACONST_NULL);
+                }
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/RuntimeControlFlowList",
+                        "matchesLabel",
+                        "(Ljava/lang/String;)Z",
+                        false);
+                mv.visitJumpInsn(Opcodes.IFEQ, nextLoopCheck);
+
+                // Match found: jump based on type
+                Label checkNext = new Label();
+                Label checkRedo = new Label();
+
+                // if (type == LAST (0)) goto lastLabel
+                mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
+                mv.visitInsn(Opcodes.ICONST_0);
+                mv.visitJumpInsn(Opcodes.IF_ICMPNE, checkNext);
+                if (loopLabels.lastLabel == emitterVisitor.ctx.javaClassInfo.returnLabel) {
+                    mv.visitJumpInsn(Opcodes.GOTO, propagateToCaller);
+                } else {
+                    emitterVisitor.ctx.javaClassInfo.stackLevelManager.emitPopInstructions(mv, loopLabels.asmStackLevel);
+                    if (loopLabels.context != RuntimeContextType.VOID) {
+                        EmitOperator.emitUndef(mv);
+                    }
+                    mv.visitJumpInsn(Opcodes.GOTO, loopLabels.lastLabel);
+                }
+
+                // if (type == NEXT (1)) goto nextLabel
+                mv.visitLabel(checkNext);
+                mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
+                mv.visitInsn(Opcodes.ICONST_1);
+                mv.visitJumpInsn(Opcodes.IF_ICMPNE, checkRedo);
+                if (loopLabels.nextLabel == emitterVisitor.ctx.javaClassInfo.returnLabel) {
+                    mv.visitJumpInsn(Opcodes.GOTO, propagateToCaller);
+                } else {
+                    emitterVisitor.ctx.javaClassInfo.stackLevelManager.emitPopInstructions(mv, loopLabels.asmStackLevel);
+                    if (loopLabels.context != RuntimeContextType.VOID) {
+                        EmitOperator.emitUndef(mv);
+                    }
+                    mv.visitJumpInsn(Opcodes.GOTO, loopLabels.nextLabel);
+                }
+
+                // if (type == REDO (2)) goto redoLabel
+                mv.visitLabel(checkRedo);
+                if (loopLabels.redoLabel == emitterVisitor.ctx.javaClassInfo.returnLabel) {
+                    mv.visitJumpInsn(Opcodes.GOTO, propagateToCaller);
+                } else {
+                    emitterVisitor.ctx.javaClassInfo.stackLevelManager.emitPopInstructions(mv, loopLabels.asmStackLevel);
+                    mv.visitJumpInsn(Opcodes.GOTO, loopLabels.redoLabel);
+                }
+
+                mv.visitLabel(nextLoopCheck);
+            }
+
+            // No loop match; propagate
+            mv.visitJumpInsn(Opcodes.GOTO, propagateToCaller);
+
+            // Propagate: jump to returnLabel with the marked list
+            mv.visitLabel(propagateToCaller);
+            for (JavaClassInfo.SpillRef ref : baseSpills) {
+                if (ref != null) {
+                    emitterVisitor.ctx.javaClassInfo.releaseSpillRef(ref);
+                }
+            }
+            mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+            mv.visitJumpInsn(Opcodes.GOTO, emitterVisitor.ctx.javaClassInfo.returnLabel);
+
+            // Not a control flow marker - load it back and continue
+            mv.visitLabel(notControlFlow);
+            for (JavaClassInfo.SpillRef ref : baseSpills) {
+                if (ref != null) {
+                    emitterVisitor.ctx.javaClassInfo.loadSpillRef(mv, ref);
+                    emitterVisitor.ctx.javaClassInfo.releaseSpillRef(ref);
+                }
+            }
+            if (belowResultStackLevel > 0) {
+                emitterVisitor.ctx.javaClassInfo.incrementStackLevel(belowResultStackLevel);
+            }
+            mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+            emitterVisitor.ctx.javaClassInfo.incrementStackLevel(1);
+        }
+
         if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
             // Transform the value in the stack to RuntimeScalar
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
         } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            if (ENABLE_CONTROL_FLOW_CHECKS) {
-                LoopLabels innermostLoop = null;
-                for (LoopLabels loopLabels : emitterVisitor.ctx.javaClassInfo.loopLabelStack) {
-                    if (loopLabels.isTrueLoop && loopLabels.context == RuntimeContextType.VOID) {
-                        innermostLoop = loopLabels;
-                        break;
-                    }
-                }
-                if (innermostLoop != null) {
-                    Label noAction = new Label();
-                    Label noMarker = new Label();
-                    Label checkNext = new Label();
-                    Label checkRedo = new Label();
-
-                    // action = checkLoopAndGetAction(loopLabel)
-                    if (innermostLoop.labelName != null) {
-                        mv.visitLdcInsn(innermostLoop.labelName);
-                    } else {
-                        mv.visitInsn(Opcodes.ACONST_NULL);
-                    }
-                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                            "org/perlonjava/runtime/RuntimeControlFlowRegistry",
-                            "checkLoopAndGetAction",
-                            "(Ljava/lang/String;)I",
-                            false);
-                    mv.visitVarInsn(Opcodes.ISTORE, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
-
-                    // if (action == 0) goto noAction
-                    mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
-                    mv.visitJumpInsn(Opcodes.IFEQ, noAction);
-
-                    // action != 0: pop call result, clean stack, jump to next/last/redo
-                    mv.visitInsn(Opcodes.POP);
-
-                    // if (action == 1) last
-                    mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
-                    mv.visitInsn(Opcodes.ICONST_1);
-                    mv.visitJumpInsn(Opcodes.IF_ICMPNE, checkNext);
-                    mv.visitJumpInsn(Opcodes.GOTO, innermostLoop.lastLabel);
-
-                    // if (action == 2) next
-                    mv.visitLabel(checkNext);
-                    mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
-                    mv.visitInsn(Opcodes.ICONST_2);
-                    mv.visitJumpInsn(Opcodes.IF_ICMPNE, checkRedo);
-                    mv.visitJumpInsn(Opcodes.GOTO, innermostLoop.nextLabel);
-
-                    // if (action == 3) redo
-                    mv.visitLabel(checkRedo);
-                    mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
-                    mv.visitInsn(Opcodes.ICONST_3);
-                    mv.visitJumpInsn(Opcodes.IF_ICMPEQ, innermostLoop.redoLabel);
-
-                    // Unknown action: unwind this loop (do NOT fall through to noMarker)
-                    mv.visitJumpInsn(Opcodes.GOTO, innermostLoop.lastLabel);
-
-                    // action == 0: if marker still present, unwind this loop (label targets outer)
-                    mv.visitLabel(noAction);
-                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                            "org/perlonjava/runtime/RuntimeControlFlowRegistry",
-                            "hasMarker",
-                            "()Z",
-                            false);
-                    mv.visitJumpInsn(Opcodes.IFEQ, noMarker);
-
-                    mv.visitInsn(Opcodes.POP);
-                    mv.visitJumpInsn(Opcodes.GOTO, innermostLoop.lastLabel);
-
-                    mv.visitLabel(noMarker);
-                }
-            }
-
             mv.visitInsn(Opcodes.POP);
         }
     }

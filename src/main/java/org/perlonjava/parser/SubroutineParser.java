@@ -6,6 +6,7 @@ import org.perlonjava.codegen.EmitterMethodCreator;
 import org.perlonjava.codegen.JavaClassInfo;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
+import org.perlonjava.mro.InheritanceResolver;
 import org.perlonjava.runtime.*;
 import org.perlonjava.symbols.SymbolTable;
 
@@ -162,18 +163,25 @@ public class SubroutineParser {
         // Otherwise, check that the subroutine exists in the global namespace - then fetch prototype and attributes
         // Special case: For method calls to 'new', don't require existence check (for generated constructors)
         boolean isNewMethod = isMethod && subName.equals("new");
-        boolean subExists = isNewMethod || (!isMethod && GlobalVariable.existsGlobalCodeRef(fullName));
+        boolean subExists = isNewMethod;
         String prototype = null;
         List<String> attributes = null;
-        if (!isNewMethod && subExists) {
-            // Fetch the subroutine reference
+        if (!isNewMethod && !isMethod && GlobalVariable.existsGlobalCodeRef(fullName)) {
             RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName);
-            if (codeRef.value == null) {
-                // subExists = false;
-            } else {
-                prototype = ((RuntimeCode) codeRef.value).prototype;
-                attributes = ((RuntimeCode) codeRef.value).attributes;
+            if (codeRef.value instanceof RuntimeCode runtimeCode) {
+                prototype = runtimeCode.prototype;
+                attributes = runtimeCode.attributes;
+                subExists = runtimeCode.methodHandle != null
+                        || runtimeCode.compilerSupplier != null
+                        || runtimeCode.isBuiltin
+                        || prototype != null
+                        // Forward declarations like `sub foo;` create a RuntimeCode with a non-null
+                        // attributes list (possibly empty). Placeholders created implicitly use null.
+                        || attributes != null;
             }
+        }
+        if (!subExists && !isNewMethod && !isMethod) {
+            subExists = GlobalVariable.existsGlobalCodeRefAsScalar(fullName).getBoolean();
         }
         parser.ctx.logDebug("SubroutineCall exists " + subExists + " prototype `" + prototype + "` attributes " + attributes);
 
@@ -194,7 +202,17 @@ public class SubroutineParser {
             LexerToken token = peek(parser);
             String fullName1 = NameNormalizer.normalizeVariableName(packageName, parser.ctx.symbolTable.getCurrentPackage());
             boolean isLexicalSub = parser.ctx.symbolTable.getSymbolEntry("&" + packageName) != null;
-            boolean isKnownSub = GlobalVariable.existsGlobalCodeRef(fullName1);
+            boolean isKnownSub = false;
+            if (GlobalVariable.existsGlobalCodeRef(fullName1)) {
+                RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName1);
+                if (codeRef.value instanceof RuntimeCode runtimeCode) {
+                    isKnownSub = runtimeCode.methodHandle != null
+                            || runtimeCode.compilerSupplier != null
+                            || runtimeCode.isBuiltin
+                            || runtimeCode.prototype != null
+                            || runtimeCode.attributes != null;
+                }
+            }
             
             // Reject if:
             // 1. Explicitly marked as non-package (false in cache), OR
@@ -246,6 +264,37 @@ public class SubroutineParser {
         // Check if the subroutine call has parentheses
         boolean hasParentheses = peek(parser).text.equals("(");
         if (!subExists && !hasParentheses) {
+            // Perl allows calling not-yet-declared subs without parentheses when the
+            // following token is not an identifier (e.g. `skip "msg", 2;`).
+            // This is heavily used by the perl5 test harness (test.pl) inside SKIP/TODO blocks.
+            // Keep indirect method call disambiguation for the identifier-followed case.
+            // IMPORTANT: do not apply this heuristic for method calls (`->method`) because
+            // it can misparse expressions like `$obj->method ? 0 : 1`.
+            if (isMethod) {
+                return parseIndirectMethodCall(parser, nameNode);
+            }
+            LexerToken nextTok = peek(parser);
+            boolean terminator = nextTok.text.equals(";")
+                    || nextTok.text.equals("}")
+                    || nextTok.text.equals(")")
+                    || nextTok.text.equals("]")
+                    || nextTok.text.equals(",")
+                    || nextTok.type == LexerTokenType.EOF;
+            boolean infixOp = nextTok.type == LexerTokenType.OPERATOR
+                    && (INFIX_OP.contains(nextTok.text)
+                        || nextTok.text.equals("?")
+                        || nextTok.text.equals(":"));
+            if (!terminator
+                    && !infixOp
+                    && nextTok.type != LexerTokenType.IDENTIFIER
+                    && !nextTok.text.equals("->")
+                    && !nextTok.text.equals("=>")) {
+                ListNode arguments = consumeArgsWithPrototype(parser, "@");
+                return new BinaryOperatorNode("(",
+                        new OperatorNode("&", nameNode, currentIndex),
+                        arguments,
+                        currentIndex);
+            }
             return parseIndirectMethodCall(parser, nameNode);
         }
 
@@ -404,6 +453,10 @@ public class SubroutineParser {
             return new ListNode(parser.tokenIndex);
         }
 
+        if (!wantName && !peek(parser).text.equals("{")) {
+            parser.throwCleanError("Illegal declaration of anonymous subroutine");
+        }
+
         // After parsing name, prototype, and attributes, we expect an opening curly brace '{' to denote the start of the subroutine block.
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
 
@@ -479,6 +532,10 @@ public class SubroutineParser {
         String lexicalKey = "&" + subName;
         org.perlonjava.symbols.SymbolTable.SymbolEntry lexicalEntry = parser.ctx.symbolTable.getSymbolEntry(lexicalKey);
         String packageToUse = parser.ctx.symbolTable.getCurrentPackage();
+
+        // If the package stash has been aliased (e.g. via `*{Pkg::} = *{Other::}`), then
+        // new symbols defined in this package should land in the effective stash.
+        packageToUse = GlobalVariable.resolveStashAlias(packageToUse);
         
         if (lexicalEntry != null && lexicalEntry.ast() instanceof OperatorNode varNode) {
             // Check if this is an "our sub" forward declaration
@@ -539,6 +596,7 @@ public class SubroutineParser {
         // - register the subroutine in the namespace
         String fullName = NameNormalizer.normalizeVariableName(subName, packageToUse);
         RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName);
+        InheritanceResolver.invalidateCache();
         if (codeRef.value == null) {
             codeRef.type = RuntimeScalarType.CODE;
             codeRef.value = new RuntimeCode(subName, attributes);

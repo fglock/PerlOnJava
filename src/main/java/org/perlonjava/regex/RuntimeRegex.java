@@ -65,6 +65,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     // Tracks if a match has occurred: this is used as a counter for m?PAT?
     private boolean matched = false;
     private boolean hasCodeBlockCaptures = false;  // True if regex has (?{...}) code blocks
+    private boolean deferredUserDefinedUnicodeProperties = false;
 
     public RuntimeRegex() {
         this.regexFlags = null;
@@ -100,6 +101,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             String javaPattern = null;
             try {
                 javaPattern = preProcessRegex(patternString, regex.regexFlags);
+
+                // Track if preprocessing deferred user-defined Unicode properties.
+                // These need to be resolved later, once the corresponding Perl subs are defined.
+                regex.deferredUserDefinedUnicodeProperties = RegexPreprocessor.hadDeferredUnicodePropertyEncountered();
 
                 regex.patternString = patternString;
 
@@ -145,6 +150,23 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 regexCache.put(cacheKey, regex);
             }
         }
+        return regex;
+    }
+
+    private static RuntimeRegex ensureCompiledForRuntime(RuntimeRegex regex) {
+        if (!regex.deferredUserDefinedUnicodeProperties) {
+            return regex;
+        }
+
+        // Recompile once, now that runtime may have defined user properties.
+        // To avoid infinite loops if recompilation still can't resolve, clear the flag first.
+        regex.deferredUserDefinedUnicodeProperties = false;
+        RuntimeRegex recompiled = compile(regex.patternString, regex.regexFlags == null ? "" : regex.regexFlags.toFlagString());
+        regex.pattern = recompiled.pattern;
+        regex.patternFlags = recompiled.patternFlags;
+        regex.regexFlags = recompiled.regexFlags;
+        // Keep patternString, replacement, etc.
+        regex.deferredUserDefinedUnicodeProperties = recompiled.deferredUserDefinedUnicodeProperties;
         return regex;
     }
 
@@ -321,6 +343,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      */
     public static RuntimeBase matchRegex(RuntimeScalar quotedRegex, RuntimeScalar string, int ctx) {
         RuntimeRegex regex = resolveRegex(quotedRegex);
+        regex = ensureCompiledForRuntime(regex);
         if (regex.replacement != null) {
             return replaceRegex(quotedRegex, string, ctx);
         }
@@ -342,6 +365,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      */
     private static RuntimeBase matchRegexDirect(RuntimeScalar quotedRegex, RuntimeScalar string, int ctx) {
         RuntimeRegex regex = resolveRegex(quotedRegex);
+        regex = ensureCompiledForRuntime(regex);
 
         if (regex.regexFlags.isMatchExactlyOnce() && regex.matched) {
             // m?PAT? already matched once; now return false

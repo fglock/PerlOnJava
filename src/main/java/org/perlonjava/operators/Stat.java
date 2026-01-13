@@ -18,14 +18,22 @@ import java.nio.file.attribute.PosixFileAttributes;
 import java.nio.file.attribute.PosixFilePermission;
 import java.util.Set;
 
+import static org.perlonjava.operators.FileTestOperator.lastBasicAttr;
 import static org.perlonjava.operators.FileTestOperator.lastFileHandle;
+import static org.perlonjava.operators.FileTestOperator.lastPosixAttr;
+import static org.perlonjava.operators.FileTestOperator.updateLastStat;
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeIO.resolvePath;
 import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
-
+/**
+ * stat with context awareness
+ * @param arg the file or filehandle to stat
+ * @param ctx the calling context (SCALAR, LIST, VOID, or RUNTIME)
+ * @return RuntimeScalar in scalar context, RuntimeList otherwise
+ */
 public class Stat {
 
     // Helper method to get permissions in octal format
@@ -55,12 +63,6 @@ public class Stat {
         return permissions;
     }
 
-    // Helper method to check if a string looks like a filehandle name
-    private static boolean looksLikeFilehandle(String name) {
-        // Check if it's a typical filehandle name (all caps, starts with letter, no path separators)
-        return name.matches("^[A-Z_][A-Z0-9_]*$") && !name.contains("/") && !name.contains("\\");
-    }
-
     public static RuntimeList statLastHandle() {
         return stat(lastFileHandle);
     }
@@ -68,7 +70,7 @@ public class Stat {
     public static RuntimeList lstatLastHandle() {
         return lstat(lastFileHandle);
     }
-    
+
     /**
      * stat with context awareness
      * @param arg the file or filehandle to stat
@@ -83,7 +85,7 @@ public class Stat {
         }
         return result;
     }
-    
+
     /**
      * lstat with context awareness
      * @param arg the file or filehandle to lstat
@@ -111,6 +113,7 @@ public class Stat {
             if (fh == null) {
                 // Set $! to EBADF (Bad file descriptor) = 9
                 getGlobalVariable("main::!").set(9);
+                updateLastStat(arg, false, 9, false);
                 return res; // Return empty list
             }
 
@@ -119,36 +122,19 @@ public class Stat {
                     fh.directoryIO == null) {
                 // Set $! to EBADF (Bad file descriptor) = 9
                 getGlobalVariable("main::!").set(9);
+                updateLastStat(arg, false, 9, false);
                 return res; // Return empty list
             }
 
             // For in-memory file handles (like PerlIO::scalar), we can't stat them
             // They should return EBADF
             getGlobalVariable("main::!").set(9);
+            updateLastStat(arg, false, 9, false);
             return res;
         }
 
         // Handle string arguments
         String filename = arg.toString();
-
-        // Check if it looks like a filehandle name but isn't actually a filehandle
-        if (looksLikeFilehandle(filename)) {
-            // Try to get it as a global variable (filehandle)
-            RuntimeScalar globVar = null;
-            try {
-                globVar = getGlobalVariable("main::" + filename);
-                if (globVar != null && (globVar.type == RuntimeScalarType.GLOB || globVar.type == RuntimeScalarType.GLOBREFERENCE)) {
-                    // It's actually a filehandle, recursively call stat with it
-                    return stat(globVar);
-                }
-            } catch (Exception e) {
-                // Ignore, treat as filename
-            }
-
-            // It looks like a filehandle but isn't one, return EBADF
-            getGlobalVariable("main::!").set(9);
-            return res;
-        }
 
         // Handle regular filenames
         try {
@@ -160,16 +146,22 @@ public class Stat {
             // POSIX file attributes (for Unix-like systems)
             PosixFileAttributes posixAttr = Files.readAttributes(path, PosixFileAttributes.class);
 
+            lastBasicAttr = basicAttr;
+            lastPosixAttr = posixAttr;
+
             statInternal(res, basicAttr, posixAttr);
             // Clear $! on success
             getGlobalVariable("main::!").set(0);
+            updateLastStat(arg, true, 0, false);
         } catch (NoSuchFileException e) {
             // Set $! to ENOENT (No such file or directory) = 2
             getGlobalVariable("main::!").set(2);
+            updateLastStat(arg, false, 2, false);
         } catch (IOException e) {
             // Returns the empty list if "stat" fails.
             // Set a generic error code for other IO errors
             getGlobalVariable("main::!").set(5); // EIO (Input/output error)
+            updateLastStat(arg, false, 5, false);
         }
         return res;
     }
@@ -186,6 +178,7 @@ public class Stat {
             if (fh == null) {
                 // Set $! to EBADF (Bad file descriptor) = 9
                 getGlobalVariable("main::!").set(9);
+                updateLastStat(arg, false, 9, true);
                 return res; // Return empty list
             }
 
@@ -194,36 +187,19 @@ public class Stat {
                     fh.directoryIO == null) {
                 // Set $! to EBADF (Bad file descriptor) = 9
                 getGlobalVariable("main::!").set(9);
+                updateLastStat(arg, false, 9, true);
                 return res; // Return empty list
             }
 
             // For in-memory file handles (like PerlIO::scalar), we can't lstat them
             // They should return EBADF
             getGlobalVariable("main::!").set(9);
+            updateLastStat(arg, false, 9, true);
             return res;
         }
 
         // Handle string arguments
         String filename = arg.toString();
-
-        // Check if it looks like a filehandle name but isn't actually a filehandle
-        if (looksLikeFilehandle(filename)) {
-            // Try to get it as a global variable (filehandle)
-            RuntimeScalar globVar = null;
-            try {
-                globVar = getGlobalVariable("main::" + filename);
-                if (globVar != null && (globVar.type == RuntimeScalarType.GLOB || globVar.type == RuntimeScalarType.GLOBREFERENCE)) {
-                    // It's actually a filehandle, recursively call lstat with it
-                    return lstat(globVar);
-                }
-            } catch (Exception e) {
-                // Ignore, treat as filename
-            }
-
-            // It looks like a filehandle but isn't one, return EBADF
-            getGlobalVariable("main::!").set(9);
-            return res;
-        }
 
         // Handle regular filenames
         try {
@@ -237,16 +213,22 @@ public class Stat {
             PosixFileAttributes posixAttr = Files.readAttributes(path,
                     PosixFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
 
+            lastBasicAttr = basicAttr;
+            lastPosixAttr = posixAttr;
+
             statInternal(res, basicAttr, posixAttr);
             // Clear $! on success
             getGlobalVariable("main::!").set(0);
+            updateLastStat(arg, true, 0, true);
         } catch (NoSuchFileException e) {
             // Set $! to ENOENT (No such file or directory) = 2
             getGlobalVariable("main::!").set(2);
+            updateLastStat(arg, false, 2, true);
         } catch (IOException e) {
             // Returns the empty list if "lstat" fails.
             // Set a generic error code for other IO errors
             getGlobalVariable("main::!").set(5); // EIO (Input/output error)
+            updateLastStat(arg, false, 5, true);
         }
         return res;
     }

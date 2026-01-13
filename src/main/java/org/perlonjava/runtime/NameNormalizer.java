@@ -53,6 +53,23 @@ public class NameNormalizer {
         return blessStrCache.get(id);
     }
 
+    public static void anonymizeBlessId(String className) {
+        Integer id = blessIdCache.get(className);
+        if (id == null) {
+            // Ensure subsequent blesses into this name also become anonymous.
+            id = getBlessId(className);
+        }
+        blessStrCache.set(id, "__ANON__");
+    }
+
+    public static String getBlessStrForClassName(String className) {
+        Integer id = blessIdCache.get(className);
+        if (id == null) {
+            return className;
+        }
+        return getBlessStr(id);
+    }
+
     /**
      * Normalizes a Perl variable name by ensuring it includes the default package if not already specified.
      *
@@ -92,7 +109,7 @@ public class NameNormalizer {
         StringBuilder normalized = new StringBuilder(variable.length() + defaultPackage.length() + 2);
         if (variable.startsWith("::")) {
             // $::x
-            normalized.append(defaultPackage).append(variable);
+            normalized.append("main").append(variable);
         } else if (variable.contains("::")) {
             // If already in a package, return as-is
             normalized.append(variable);

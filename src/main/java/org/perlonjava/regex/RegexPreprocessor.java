@@ -1,8 +1,11 @@
 package org.perlonjava.regex;
 
+import com.ibm.icu.lang.UCharacter;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.PerlJavaUnimplementedException;
 
+import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -40,6 +43,25 @@ public class RegexPreprocessor {
     // named capture (?<one> ... ) replace underscore in name
 
     static int captureGroupCount;
+    static boolean deferredUnicodePropertyEncountered;
+    private static final Map<Integer, Integer> SPECIAL_SINGLE_CHAR_FOLDS = Map.of(
+            0x00B5, 0x03BC,
+            0x212A, 0x006B,
+            0x212B, 0x00E5
+    );
+    private static final Map<Integer, Integer> SPECIAL_SINGLE_CHAR_REVERSE_FOLDS = Map.of(
+            0x03BC, 0x00B5,
+            0x006B, 0x212A,
+            0x00E5, 0x212B
+    );
+
+    static void markDeferredUnicodePropertyEncountered() {
+        deferredUnicodePropertyEncountered = true;
+    }
+
+    static boolean hadDeferredUnicodePropertyEncountered() {
+        return deferredUnicodePropertyEncountered;
+    }
 
     /**
      * Preprocesses a given regex string to make it compatible with Java's regex engine.
@@ -53,6 +75,7 @@ public class RegexPreprocessor {
      */
     static String preProcessRegex(String s, RegexFlags regexFlags) {
         captureGroupCount = 0;
+        deferredUnicodePropertyEncountered = false;
 
         s = convertPythonStyleGroups(s);
         s = transformSimpleConditionals(s);
@@ -104,6 +127,16 @@ public class RegexPreprocessor {
             
             // If this is an escaped character or we're in a char class, don't expand
             if (escaped || inCharClass) {
+                if (!escaped && inCharClass) {
+                    int codePoint = pattern.codePointAt(i);
+                    String specialClassExpansion = expandSpecialSingleCharFoldInCharClass(codePoint);
+                    if (specialClassExpansion != null) {
+                        result.append(specialClassExpansion);
+                        i += Character.charCount(codePoint);
+                        continue;
+                    }
+                }
+
                 result.append(ch);
                 escaped = false;
                 i++;
@@ -139,7 +172,12 @@ public class RegexPreprocessor {
                 }
                 
                 if (!foundReverseFold) {
-                    result.appendCodePoint(codePoint);
+                    String specialExpansion = expandSpecialSingleCharFold(codePoint);
+                    if (specialExpansion != null) {
+                        result.append(specialExpansion);
+                    } else {
+                        result.appendCodePoint(codePoint);
+                    }
                     i += Character.charCount(codePoint);
                 }
             }
@@ -148,6 +186,99 @@ public class RegexPreprocessor {
         }
         
         return result.toString();
+    }
+
+    private static String expandSpecialSingleCharFold(int codePoint) {
+        // Compute full case fold for this code point.
+        int folded = UCharacter.foldCase(codePoint, true);
+
+        // Trigger expansion only if this code point participates in one of the known problematic folds.
+        // We key off the folded form so that e.g. 'k' and 'K' will match Kelvin sign under /i.
+        if (!SPECIAL_SINGLE_CHAR_FOLDS.containsKey(codePoint)
+                && !SPECIAL_SINGLE_CHAR_REVERSE_FOLDS.containsKey(folded)
+                && !SPECIAL_SINGLE_CHAR_REVERSE_FOLDS.containsKey(codePoint)) {
+            return null;
+        }
+
+        LinkedHashSet<Integer> variants = new LinkedHashSet<>();
+        variants.add(codePoint);
+        variants.add(folded);
+
+        Integer reverse = SPECIAL_SINGLE_CHAR_REVERSE_FOLDS.get(folded);
+        if (reverse != null) {
+            variants.add(reverse);
+        }
+        Integer reverse2 = SPECIAL_SINGLE_CHAR_REVERSE_FOLDS.get(codePoint);
+        if (reverse2 != null) {
+            variants.add(reverse2);
+        }
+
+        // Include upper/lower variants of all participating code points.
+        // This keeps behavior stable even if the Java regex engine doesn't map the special ones.
+        LinkedHashSet<Integer> expanded = new LinkedHashSet<>();
+        for (Integer cp : variants) {
+            expanded.add(cp);
+            expanded.add(UCharacter.toLowerCase(cp));
+            expanded.add(UCharacter.toUpperCase(cp));
+            expanded.add(UCharacter.foldCase(cp, true));
+        }
+
+        StringBuilder sb = new StringBuilder("(?:");
+        boolean first = true;
+        for (Integer cp : expanded) {
+            if (!first) {
+                sb.append("|");
+            }
+            first = false;
+            sb.append(Pattern.quote(new String(Character.toChars(cp))));
+        }
+        sb.append(")");
+        return sb.toString();
+    }
+
+    private static String expandSpecialSingleCharFoldInCharClass(int codePoint) {
+        int folded = UCharacter.foldCase(codePoint, true);
+
+        if (!SPECIAL_SINGLE_CHAR_FOLDS.containsKey(codePoint)
+                && !SPECIAL_SINGLE_CHAR_REVERSE_FOLDS.containsKey(folded)
+                && !SPECIAL_SINGLE_CHAR_REVERSE_FOLDS.containsKey(codePoint)) {
+            return null;
+        }
+
+        LinkedHashSet<Integer> variants = new LinkedHashSet<>();
+        variants.add(codePoint);
+        variants.add(folded);
+
+        Integer reverse = SPECIAL_SINGLE_CHAR_REVERSE_FOLDS.get(folded);
+        if (reverse != null) {
+            variants.add(reverse);
+        }
+        Integer reverse2 = SPECIAL_SINGLE_CHAR_REVERSE_FOLDS.get(codePoint);
+        if (reverse2 != null) {
+            variants.add(reverse2);
+        }
+
+        LinkedHashSet<Integer> expanded = new LinkedHashSet<>();
+        for (Integer cp : variants) {
+            expanded.add(cp);
+            expanded.add(UCharacter.toLowerCase(cp));
+            expanded.add(UCharacter.toUpperCase(cp));
+            expanded.add(UCharacter.foldCase(cp, true));
+        }
+
+        StringBuilder sb = new StringBuilder();
+        for (Integer cp : expanded) {
+            appendCharClassLiteral(sb, cp);
+        }
+        return sb.toString();
+    }
+
+    private static void appendCharClassLiteral(StringBuilder sb, int codePoint) {
+        // Escape only the few metacharacters with special meaning inside [...].
+        if (codePoint == '\\' || codePoint == ']' || codePoint == '-') {
+            sb.append('\\');
+        }
+        sb.appendCodePoint(codePoint);
     }
     
     /**

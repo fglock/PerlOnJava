@@ -66,7 +66,7 @@ public class GlobalContext {
         GlobalVariable.getGlobalVariable("main::b");    // initialize $b to "undef"
         GlobalVariable.getGlobalVariable("main::!");    // initialize $! to "undef"
         GlobalVariable.getGlobalVariable("main::,").set("");    // initialize $, to ""
-        GlobalVariable.getGlobalVariable("main::|").set(0);     // initialize $| to 0
+        GlobalVariable.globalVariables.put("main::|", new OutputAutoFlushVariable());
         GlobalVariable.getGlobalVariable("main::\\").set(compilerOptions.outputRecordSeparator);    // initialize $\
         GlobalVariable.getGlobalVariable("main::$").set(ProcessHandle.current().pid()); // initialize `$$` to process id
         GlobalVariable.getGlobalVariable("main::?");

@@ -558,8 +558,6 @@ public class StatementResolver {
 
                         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
                         BlockNode block = ParseBlock.parseBlock(parser);
-                        block.isLoop = true;
-                        block.labelName = label;
                         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
                         Node continueNode = null;

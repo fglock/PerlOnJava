@@ -181,6 +181,31 @@ public class StringParser {
             buffers.add(buffer.toString());
 
             // System.out.println("buffers utf8: " + buffer.toString().length() + " " + buffer.toString());
+        } else if (ctx.compilerOptions.isEvalbytes) {
+            // evalbytes context - treat each character as a raw byte value
+            // Characters <= 255 represent byte values directly
+            String str = buffer.toString();
+            StringBuilder octetString = new StringBuilder();
+
+            for (int i = 0; i < str.length(); i++) {
+                char ch = str.charAt(i);
+                if (ch <= 255) {
+                    // Treat as raw byte value
+                    octetString.append(ch);
+                } else {
+                    // Character outside byte range - UTF-8 encode it
+                    byte[] utf8Bytes = Character.toString(ch).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                    for (byte b : utf8Bytes) {
+                        octetString.append((char) (b & 0xFF));
+                    }
+                }
+            }
+
+            buffers.add(octetString.toString());
+        } else if (ctx.compilerOptions.isByteStringSource) {
+            // Source code originated from a BYTE_STRING scalar (e.g. eval STRING where STRING is bytes).
+            // In this case buffer already represents raw bytes as chars 0..255.
+            buffers.add(buffer.toString());
         } else {
             // utf8 source code is false - convert to octets
             String str = buffer.toString();

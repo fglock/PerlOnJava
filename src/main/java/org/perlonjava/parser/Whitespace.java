@@ -87,10 +87,6 @@ public class Whitespace {
                     break;
 
                 case STRING:
-                    if (token.text.equals(String.valueOf((char) 4)) || token.text.equals(String.valueOf((char) 26))) {
-                        // Handle ^D (EOT, ASCII 4) or ^Z (SUB, ASCII 26)
-                        tokenIndex = tokens.size();
-                    }
                     return tokenIndex; // Stop processing and return current index
 
                 case IDENTIFIER:

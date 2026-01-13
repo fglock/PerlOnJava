@@ -4,6 +4,8 @@ import org.perlonjava.operators.ReferenceOperators;
 import org.perlonjava.runtime.RuntimeHash;
 import org.perlonjava.runtime.RuntimeScalar;
 
+ import java.nio.charset.StandardCharsets;
+
 /**
  * Handles vector string formatting for sprintf operations.
  *
@@ -31,6 +33,16 @@ public class SprintfVectorFormatter {
      */
     public String formatVectorString(RuntimeScalar value, String flags, int width,
                                      int precision, char conversionChar, String separator) {
+        return formatVectorStringInternal(value, flags, width, precision, conversionChar, separator, false);
+    }
+
+    public String formatVectorStringBytes(RuntimeScalar value, String flags, int width,
+                                          int precision, char conversionChar, String separator) {
+        return formatVectorStringInternal(value, flags, width, precision, conversionChar, separator, true);
+    }
+
+    private String formatVectorStringInternal(RuntimeScalar value, String flags, int width,
+                                              int precision, char conversionChar, String separator, boolean bytesMode) {
         // Handle version objects specially
         if (value.isBlessed()) {
             String className = ReferenceOperators.ref(value).toString();
@@ -65,13 +77,18 @@ public class SprintfVectorFormatter {
         }
 
         // Handle regular strings (byte-by-byte)
-        return formatByteVector(str, flags, width, precision, conversionChar, separator);
+        return formatByteVector(str, flags, width, precision, conversionChar, separator, bytesMode);
     }
 
     // Keep the original method for backward compatibility
     public String formatVectorString(RuntimeScalar value, String flags, int width,
                                      int precision, char conversionChar) {
         return formatVectorString(value, flags, width, precision, conversionChar, ".");
+    }
+
+    public String formatVectorStringBytes(RuntimeScalar value, String flags, int width,
+                                          int precision, char conversionChar) {
+        return formatVectorStringBytes(value, flags, width, precision, conversionChar, ".");
     }
 
     /**
@@ -134,10 +151,29 @@ public class SprintfVectorFormatter {
      * @return The formatted byte vector
      */
     private String formatByteVector(String str, String flags, int width,
-                                    int precision, char conversionChar, String separator) {
+                                    int precision, char conversionChar, String separator, boolean bytesMode) {
         if (str.isEmpty()) return "";
 
         StringBuilder result = new StringBuilder();
+        if (bytesMode) {
+            byte[] bytes = str.getBytes(StandardCharsets.UTF_8);
+            for (int i = 0; i < bytes.length; i++) {
+                if (i > 0) result.append(separator);
+
+                int value = bytes[i] & 0xFF;
+
+                // For vector formats, + and space flags only apply to first element
+                String elementFlags = flags;
+                if (i > 0) {
+                    elementFlags = flags.replace("+", "").replace(" ", "");
+                }
+
+                String formatted = formatVectorValue(value, elementFlags, width, precision, conversionChar);
+                result.append(formatted);
+            }
+            return result.toString();
+        }
+
         int[] codePoints = str.codePoints().toArray();
 
         for (int i = 0; i < codePoints.length; i++) {
@@ -150,8 +186,6 @@ public class SprintfVectorFormatter {
             if (i > 0) {
                 elementFlags = flags.replace("+", "").replace(" ", "");
             }
-
-            //
 
             String formatted = formatVectorValue(value, elementFlags, width, precision, conversionChar);
             result.append(formatted);

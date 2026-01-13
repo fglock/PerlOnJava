@@ -186,6 +186,13 @@ public class Dereference {
                 emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) $var{} ");
                 varNode.accept(emitterVisitor.with(RuntimeContextType.LIST)); // target - left parameter
 
+                int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+                boolean pooledLeft = leftSlot >= 0;
+                if (!pooledLeft) {
+                    leftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                }
+                emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
+
                 // emit the {x} as a RuntimeList
                 ListNode nodeRight = ((HashLiteralNode) node.right).asListNode();
 
@@ -201,29 +208,64 @@ public class Dereference {
                 // Optimization: if there's only one element and it's a string literal
                 if (nodeRight.elements.size() == 1 && nodeZero instanceof StringNode) {
                     // Special case: string literal - use get(String) directly
+                    emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
                     emitterVisitor.ctx.mv.visitLdcInsn(((StringNode) nodeZero).value);
                     emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeHash",
                             hashOperation, "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
                 } else if (nodeRight.elements.size() == 1) {
                     // Single element but not a string literal
                     Node elem = nodeRight.elements.getFirst();
-                    elem.accept(scalarVisitor);
+                    elem.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+
+                    int keySlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+                    boolean pooledKey = keySlot >= 0;
+                    if (!pooledKey) {
+                        keySlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                    }
+                    emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, keySlot);
+
+                    emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+                    emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, keySlot);
                     emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeHash",
                             hashOperation, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+
+                    if (pooledKey) {
+                        emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+                    }
                 } else {
                     // Multiple elements: join them with $; (SUBSEP)
                     // Get the $; global variable (SUBSEP)
                     emitterVisitor.ctx.mv.visitLdcInsn("main::;");
                     emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/GlobalVariable",
                             "getGlobalVariable", "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+
+                    int sepSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+                    boolean pooledSep = sepSlot >= 0;
+                    if (!pooledSep) {
+                        sepSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                    }
+                    emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, sepSlot);
+
                     // Emit the list of elements
                     nodeRight.accept(emitterVisitor.with(RuntimeContextType.LIST));
+                    emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, sepSlot);
+                    emitterVisitor.ctx.mv.visitInsn(Opcodes.SWAP);
                     // Call join(separator, list)
                     emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/operators/StringOperators",
                             "join", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
                     // Use the joined string as the hash key
+                    emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+                    emitterVisitor.ctx.mv.visitInsn(Opcodes.SWAP);
                     emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeHash",
                             hashOperation, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+
+                    if (pooledSep) {
+                        emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+                    }
+                }
+
+                if (pooledLeft) {
+                    emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
                 }
 
                 EmitOperator.handleVoidContext(emitterVisitor);
@@ -306,6 +348,13 @@ public class Dereference {
                 emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) @var{} " + varNode);
                 varNode.accept(emitterVisitor.with(RuntimeContextType.LIST)); // target - left parameter
 
+                int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+                boolean pooledLeft = leftSlot >= 0;
+                if (!pooledLeft) {
+                    leftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                }
+                emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
+
                 // emit the {x} as a RuntimeList
                 ListNode nodeRight = ((HashLiteralNode) node.right).asListNode();
                 emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) @var{} as listNode: " + nodeRight);
@@ -321,8 +370,26 @@ public class Dereference {
                 emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) $var{}  autoquote " + node.right);
                 nodeRight.accept(emitterVisitor.with(RuntimeContextType.LIST));
 
+                int keyListSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+                boolean pooledKeyList = keyListSlot >= 0;
+                if (!pooledKeyList) {
+                    keyListSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                }
+                emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, keyListSlot);
+
+                emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+                emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, keyListSlot);
+
                 emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeHash",
                         hashOperation + "Slice", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
+
+                if (pooledKeyList) {
+                    emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+                }
+
+                if (pooledLeft) {
+                    emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+                }
 
                 // Handle context conversion for hash slices
                 if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
@@ -349,6 +416,13 @@ public class Dereference {
                 emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) @var{} " + varNode);
                 varNode.accept(emitterVisitor.with(RuntimeContextType.LIST)); // target - left parameter
 
+                int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+                boolean pooledLeft = leftSlot >= 0;
+                if (!pooledLeft) {
+                    leftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                }
+                emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
+
                 // emit the {x} as a RuntimeList
                 ListNode nodeRight = ((HashLiteralNode) node.right).asListNode();
                 emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) @var{} as listNode: " + nodeRight);
@@ -364,8 +438,26 @@ public class Dereference {
                 emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) $var{}  autoquote " + node.right);
                 nodeRight.accept(emitterVisitor.with(RuntimeContextType.LIST));
 
+                int keyListSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+                boolean pooledKeyList = keyListSlot >= 0;
+                if (!pooledKeyList) {
+                    keyListSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                }
+                emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, keyListSlot);
+
+                emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+                emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, keyListSlot);
+
                 emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeHash",
                         "getKeyValueSlice", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
+
+                if (pooledKeyList) {
+                    emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+                }
+
+                if (pooledLeft) {
+                    emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+                }
 
                 // Handle context conversion for key/value slice
                 if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
@@ -436,9 +528,36 @@ public class Dereference {
             // Push __SUB__
             handleSelfCallOperator(emitterVisitor.with(RuntimeContextType.SCALAR), null);
 
+            int subSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+            boolean pooledSub = subSlot >= 0;
+            if (!pooledSub) {
+                subSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            }
+            mv.visitVarInsn(Opcodes.ASTORE, subSlot);
+
+            int methodSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+            boolean pooledMethod = methodSlot >= 0;
+            if (!pooledMethod) {
+                methodSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            }
+            mv.visitVarInsn(Opcodes.ASTORE, methodSlot);
+
+            int objectSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+            boolean pooledObject = objectSlot >= 0;
+            if (!pooledObject) {
+                objectSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            }
+            mv.visitVarInsn(Opcodes.ASTORE, objectSlot);
+
             // Generate native RuntimeBase[] array for parameters instead of RuntimeList
             ListNode paramList = ListNode.makeList(arguments);
             int argCount = paramList.elements.size();
+
+            int argsArraySlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+            boolean pooledArgsArray = argsArraySlot >= 0;
+            if (!pooledArgsArray) {
+                argsArraySlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            }
 
             // Create array of RuntimeBase with size equal to number of arguments
             if (argCount <= 5) {
@@ -450,10 +569,21 @@ public class Dereference {
             }
             mv.visitTypeInsn(Opcodes.ANEWARRAY, "org/perlonjava/runtime/RuntimeBase");
 
+            mv.visitVarInsn(Opcodes.ASTORE, argsArraySlot);
+
             // Populate the array with arguments
             EmitterVisitor listVisitor = emitterVisitor.with(RuntimeContextType.LIST);
             for (int index = 0; index < argCount; index++) {
-                mv.visitInsn(Opcodes.DUP); // Duplicate array reference
+                int argSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+                boolean pooledArg = argSlot >= 0;
+                if (!pooledArg) {
+                    argSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                }
+
+                paramList.elements.get(index).accept(listVisitor);
+                mv.visitVarInsn(Opcodes.ASTORE, argSlot);
+
+                mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
                 if (index <= 5) {
                     mv.visitInsn(Opcodes.ICONST_0 + index);
                 } else if (index <= 127) {
@@ -461,13 +591,18 @@ public class Dereference {
                 } else {
                     mv.visitIntInsn(Opcodes.SIPUSH, index);
                 }
+                mv.visitVarInsn(Opcodes.ALOAD, argSlot);
+                mv.visitInsn(Opcodes.AASTORE);
 
-                // Generate code for argument in LIST context
-                paramList.elements.get(index).accept(listVisitor);
-
-                mv.visitInsn(Opcodes.AASTORE); // Store in array
+                if (pooledArg) {
+                    emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+                }
             }
 
+            mv.visitVarInsn(Opcodes.ALOAD, objectSlot);
+            mv.visitVarInsn(Opcodes.ALOAD, methodSlot);
+            mv.visitVarInsn(Opcodes.ALOAD, subSlot);
+            mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
             mv.visitLdcInsn(emitterVisitor.ctx.contextType);   // push call context to stack
             mv.visitMethodInsn(
                     Opcodes.INVOKESTATIC,
@@ -475,6 +610,19 @@ public class Dereference {
                     "call",
                     "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;[Lorg/perlonjava/runtime/RuntimeBase;I)Lorg/perlonjava/runtime/RuntimeList;",
                     false); // generate an .call()
+
+            if (pooledArgsArray) {
+                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+            }
+            if (pooledSub) {
+                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+            }
+            if (pooledMethod) {
+                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+            }
+            if (pooledObject) {
+                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+            }
             if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
                 // Transform the value in the stack to RuntimeScalar
                 emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
@@ -492,11 +640,28 @@ public class Dereference {
 
         node.left.accept(scalarVisitor); // target - left parameter
 
+        int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+        boolean pooledLeft = leftSlot >= 0;
+        if (!pooledLeft) {
+            leftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        }
+        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
+
         ArrayLiteralNode right = (ArrayLiteralNode) node.right;
         if (right.elements.size() == 1) {
             // Single index: use get/delete/exists methods
             Node elem = right.elements.getFirst();
             elem.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+
+            int indexSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+            boolean pooledIndex = indexSlot >= 0;
+            if (!pooledIndex) {
+                indexSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            }
+            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, indexSlot);
+
+            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, indexSlot);
 
             // Check if strict refs is enabled at compile time
             if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_REFS)) {
@@ -524,6 +689,10 @@ public class Dereference {
                 emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
                         methodName, "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
             }
+
+            if (pooledIndex) {
+                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+            }
         } else {
             // Multiple indices: use slice method (only for get operation)
             if (!arrayOperation.equals("get")) {
@@ -534,8 +703,22 @@ public class Dereference {
             ListNode nodeRight = right.asListNode();
             nodeRight.accept(emitterVisitor.with(RuntimeContextType.LIST));
 
+            int indexListSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+            boolean pooledIndexList = indexListSlot >= 0;
+            if (!pooledIndexList) {
+                indexListSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            }
+            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, indexListSlot);
+
+            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, indexListSlot);
+
             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
                     "arrayDerefGetSlice", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
+
+            if (pooledIndexList) {
+                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+            }
 
             // Context conversion: list slice in scalar/void contexts
             if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
@@ -547,6 +730,10 @@ public class Dereference {
             }
         }
 
+        if (pooledLeft) {
+            emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+        }
+
         EmitOperator.handleVoidContext(emitterVisitor);
     }
 
@@ -556,6 +743,13 @@ public class Dereference {
                 emitterVisitor.with(RuntimeContextType.SCALAR); // execute operands in scalar context
 
         node.left.accept(scalarVisitor); // target - left parameter
+
+        int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+        boolean pooledLeft = leftSlot >= 0;
+        if (!pooledLeft) {
+            leftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        }
+        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
 
         // emit the {0} as a RuntimeList
         ListNode nodeRight = ((HashLiteralNode) node.right).asListNode();
@@ -570,6 +764,16 @@ public class Dereference {
 
         emitterVisitor.ctx.logDebug("visit -> (HashLiteralNode) autoquote " + node.right);
         nodeRight.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+
+        int keySlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+        boolean pooledKey = keySlot >= 0;
+        if (!pooledKey) {
+            keySlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        }
+        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, keySlot);
+
+        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, keySlot);
 
         // Check if strict refs is enabled at compile time
         if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_REFS)) {
@@ -596,6 +800,14 @@ public class Dereference {
             emitterVisitor.pushCurrentPackage();
             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
                     methodName, "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        }
+
+        if (pooledKey) {
+            emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+        }
+
+        if (pooledLeft) {
+            emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
         }
         EmitOperator.handleVoidContext(emitterVisitor);
     }
