@@ -286,10 +286,34 @@ public class StringOperators {
         // Preserve Perl-like UTF-8 flag semantics only for string scalars.
         // For other types, keep legacy behavior to avoid wide behavioral changes.
         if (aIsString && bIsString) {
+            // If either operand is explicitly STRING type, return STRING
             if (runtimeScalar.type == RuntimeScalarType.STRING || b.type == RuntimeScalarType.STRING) {
                 return new RuntimeScalar(aStr + bStr);
             }
 
+            // Both are BYTE_STRING - check if they actually contain only bytes 0-255
+            boolean hasUnicode = false;
+            for (int i = 0; i < aStr.length(); i++) {
+                if (aStr.charAt(i) > 255) {
+                    hasUnicode = true;
+                    break;
+                }
+            }
+            if (!hasUnicode) {
+                for (int i = 0; i < bStr.length(); i++) {
+                    if (bStr.charAt(i) > 255) {
+                        hasUnicode = true;
+                        break;
+                    }
+                }
+            }
+
+            // If Unicode present, upgrade to STRING to preserve characters
+            if (hasUnicode) {
+                return new RuntimeScalar(aStr + bStr);
+            }
+
+            // Pure byte strings - concatenate as bytes
             byte[] aBytes = aStr.getBytes(StandardCharsets.ISO_8859_1);
             byte[] bBytes = bStr.getBytes(StandardCharsets.ISO_8859_1);
             byte[] out = new byte[aBytes.length + bBytes.length];
@@ -313,10 +337,34 @@ public class StringOperators {
         boolean bIsString = b.type == RuntimeScalarType.STRING || b.type == RuntimeScalarType.BYTE_STRING;
 
         if (aIsString && bIsString) {
+            // If either operand is explicitly STRING type, return STRING
             if (runtimeScalar.type == RuntimeScalarType.STRING || b.type == RuntimeScalarType.STRING) {
                 return new RuntimeScalar(aStr + bStr);
             }
 
+            // Both are BYTE_STRING - check if they actually contain only bytes 0-255
+            boolean hasUnicode = false;
+            for (int i = 0; i < aStr.length(); i++) {
+                if (aStr.charAt(i) > 255) {
+                    hasUnicode = true;
+                    break;
+                }
+            }
+            if (!hasUnicode) {
+                for (int i = 0; i < bStr.length(); i++) {
+                    if (bStr.charAt(i) > 255) {
+                        hasUnicode = true;
+                        break;
+                    }
+                }
+            }
+
+            // If Unicode present, upgrade to STRING to preserve characters
+            if (hasUnicode) {
+                return new RuntimeScalar(aStr + bStr);
+            }
+
+            // Pure byte strings - concatenate as bytes
             byte[] aBytes = aStr.getBytes(StandardCharsets.ISO_8859_1);
             byte[] bBytes = bStr.getBytes(StandardCharsets.ISO_8859_1);
             byte[] out = new byte[aBytes.length + bBytes.length];
