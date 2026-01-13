@@ -193,9 +193,26 @@ public class ScalarUtils {
             return runtimeScalar; // Return the current instance after increment
         }
 
-        // Handle numeric increment: parse the number and increment it
-        runtimeScalar.set(NumberParser.parseNumber(runtimeScalar)); // parseNumber parses the current string to a number
-        return runtimeScalar.preAutoIncrement(); // preAutoIncrement handles the actual incrementing logic
+        // Handle numeric increment: try to parse as long first to avoid recursion issues
+        // with large integers like Long.MAX_VALUE
+        try {
+            long longValue = Long.parseLong(str);
+            try {
+                // Try to increment with overflow detection
+                runtimeScalar.type = INTEGER;
+                runtimeScalar.value = Math.addExact(longValue, 1);
+                return runtimeScalar;
+            } catch (ArithmeticException ignored) {
+                // Overflow: promote to double (Perl NV semantics)
+                runtimeScalar.type = RuntimeScalarType.DOUBLE;
+                runtimeScalar.value = (double) longValue + 1.0;
+                return runtimeScalar;
+            }
+        } catch (NumberFormatException ignored) {
+            // Not a simple long, fall back to full number parsing
+            runtimeScalar.set(NumberParser.parseNumber(runtimeScalar));
+            return runtimeScalar.preAutoIncrement();
+        }
     }
 
     /**
