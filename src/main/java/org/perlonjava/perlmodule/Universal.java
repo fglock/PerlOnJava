@@ -4,6 +4,12 @@ import org.perlonjava.mro.InheritanceResolver;
 import org.perlonjava.operators.VersionHelper;
 import org.perlonjava.runtime.*;
 
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CharsetDecoder;
+import java.nio.charset.CodingErrorAction;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import static org.perlonjava.runtime.RuntimeScalarCache.getScalarBoolean;
@@ -15,6 +21,45 @@ import static org.perlonjava.runtime.RuntimeScalarType.*;
  * It extends PerlModuleBase to leverage module initialization and method registration.
  */
 public class Universal extends PerlModuleBase {
+
+    private static String tryDecodeUtf8Octets(String maybeOctets) {
+        if (maybeOctets == null || maybeOctets.isEmpty()) {
+            return null;
+        }
+        // Only attempt decoding when the string looks like a byte string (0..255).
+        for (int i = 0; i < maybeOctets.length(); i++) {
+            if (maybeOctets.charAt(i) > 0xFF) {
+                return null;
+            }
+        }
+
+        byte[] bytes = new byte[maybeOctets.length()];
+        for (int i = 0; i < maybeOctets.length(); i++) {
+            bytes[i] = (byte) maybeOctets.charAt(i);
+        }
+
+        CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT);
+        try {
+            CharBuffer decoded = decoder.decode(ByteBuffer.wrap(bytes));
+            return decoded.toString();
+        } catch (CharacterCodingException e) {
+            return null;
+        }
+    }
+
+    private static String toUtf8OctetString(String unicodeString) {
+        if (unicodeString == null || unicodeString.isEmpty()) {
+            return null;
+        }
+        byte[] bytes = unicodeString.getBytes(StandardCharsets.UTF_8);
+        StringBuilder out = new StringBuilder(bytes.length);
+        for (byte b : bytes) {
+            out.append((char) (b & 0xFF));
+        }
+        return out.toString();
+    }
 
     /**
      * Constructor for Universal.
@@ -84,6 +129,32 @@ public class Universal extends PerlModuleBase {
         if (method != null) {
             return method.getList();
         }
+
+        // Fallback: if either the class name or method name was stored as UTF-8 octets
+        // (common when source/strings are treated as raw bytes), retry using a decoded form.
+        String decodedMethodName = tryDecodeUtf8Octets(methodName);
+        String decodedClassName = tryDecodeUtf8Octets(perlClassName);
+        if (decodedMethodName != null || decodedClassName != null) {
+            String effectiveMethodName = decodedMethodName != null ? decodedMethodName : methodName;
+            String effectiveClassName = decodedClassName != null ? decodedClassName : perlClassName;
+            method = InheritanceResolver.findMethodInHierarchy(effectiveMethodName, effectiveClassName, null, 0);
+            if (method != null) {
+                return method.getList();
+            }
+        }
+
+        // Fallback 2: if identifiers were stored internally as UTF-8 octets (each byte as a char 0..255),
+        // try resolving using that representation.
+        String methodNameAsOctets = toUtf8OctetString(methodName);
+        String classNameAsOctets = toUtf8OctetString(perlClassName);
+        if (methodNameAsOctets != null || classNameAsOctets != null) {
+            String effectiveMethodName = methodNameAsOctets != null ? methodNameAsOctets : methodName;
+            String effectiveClassName = classNameAsOctets != null ? classNameAsOctets : perlClassName;
+            method = InheritanceResolver.findMethodInHierarchy(effectiveMethodName, effectiveClassName, null, 0);
+            if (method != null) {
+                return method.getList();
+            }
+        }
         return new RuntimeList();
     }
 
@@ -131,6 +202,19 @@ public class Universal extends PerlModuleBase {
                 if (perlClassName.endsWith("::")) {
                     perlClassName = perlClassName.substring(0, perlClassName.length() - 2);
                 }
+        }
+
+        // Perl also allows *blessed* references to report their underlying ref type via isa().
+        // Example: bless({}, "Pkg")->isa("HASH") is true.
+        // IMPORTANT: do NOT apply this to unblessed references, because UNIVERSAL::isa($ref, ...)
+        // has special truth tables (see uni/universal.t matrix tests).
+        if (object.value instanceof RuntimeBase baseValue && baseValue.blessId != 0) {
+            if ((argString.equals("HASH") && baseValue instanceof RuntimeHash)
+                    || (argString.equals("ARRAY") && baseValue instanceof RuntimeArray)
+                    || (argString.equals("SCALAR") && baseValue instanceof RuntimeScalar)
+                    || (argString.equals("FORMAT") && baseValue instanceof RuntimeFormat)) {
+                return getScalarBoolean(true).getList();
+            }
         }
 
         // Get the linearized inheritance hierarchy using C3

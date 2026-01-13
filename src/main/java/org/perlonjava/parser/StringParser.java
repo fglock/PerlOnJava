@@ -202,6 +202,10 @@ public class StringParser {
             }
 
             buffers.add(octetString.toString());
+        } else if (ctx.compilerOptions.isByteStringSource) {
+            // Source code originated from a BYTE_STRING scalar (e.g. eval STRING where STRING is bytes).
+            // In this case buffer already represents raw bytes as chars 0..255.
+            buffers.add(buffer.toString());
         } else {
             // utf8 source code is false - convert to octets
             String str = buffer.toString();
