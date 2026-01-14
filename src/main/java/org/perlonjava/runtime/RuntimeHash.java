@@ -220,7 +220,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 while (iter.hasNext()) {
                     String key = iter.next().toString();
                     // Create a new RuntimeScalar to properly handle aliasing and avoid read-only issues
-                    RuntimeScalar val = iter.hasNext() ? new RuntimeScalar(iter.next()) : new RuntimeScalar();
+                    RuntimeScalar nextVal = iter.hasNext() ? iter.next() : null;
+                    RuntimeScalar val = nextVal != null ? new RuntimeScalar(nextVal) : new RuntimeScalar();
                     this.elements.put(key, val);
                 }
 

@@ -198,6 +198,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return newScalar;
     }
 
+    // Canonical undef scalar instance. Kept here as a stable API used widely across runtime/codegen.
+    public static final RuntimeScalar scalarUndef = RuntimeScalarCache.scalarUndef;
+
     public static RuntimeScalar undef() {
         return scalarUndef;
     }

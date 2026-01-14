@@ -315,24 +315,30 @@ public class InheritanceResolver {
             }
 
             // Check if method exists in current class
+            boolean foundUndefinedForwardDeclaration = false;
             if (GlobalVariable.existsGlobalCodeRef(normalizedClassMethodName)) {
                 RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(normalizedClassMethodName);
-                // Perl method lookup should ignore undefined CODE slots (e.g. after `undef *pkg::method`).
-                if (!codeRef.getDefinedBoolean()) {
-                    continue;
+                // Perl method lookup should ignore undefined CODE slots (e.g. after `undef *pkg::method` or forward declarations).
+                if (codeRef.getDefinedBoolean()) {
+                    // Cache the found method
+                    cacheMethod(cacheKey, codeRef);
+                    
+                    if (TRACE_METHOD_RESOLUTION) {
+                        System.err.println("  FOUND method!");
+                        System.err.flush();
+                    }
+                    
+                    return codeRef;
+                } else {
+                    // In real-world modules (e.g. Exporter-style forward declarations + AUTOLOAD),
+                    // a CODE slot may exist but be undefined. Perl still checks AUTOLOAD in the
+                    // current package before walking @ISA.
+                    // Found an undefined forward declaration - check AUTOLOAD in this class before moving to parent classes
+                    foundUndefinedForwardDeclaration = true;
                 }
-                // Cache the found method
-                cacheMethod(cacheKey, codeRef);
-                
-                if (TRACE_METHOD_RESOLUTION) {
-                    System.err.println("  FOUND method!");
-                    System.err.flush();
-                }
-                
-                return codeRef;
             }
 
-            // Method not found in current class, check AUTOLOAD
+            // Method not found in current class (or found as undefined forward declaration), check AUTOLOAD
             if (!autoloadEnabled || methodName.startsWith("(")) {
                 // refuse to AUTOLOAD tie() flags and overload markers (all start with "(")
             } else {
@@ -353,6 +359,11 @@ public class InheritanceResolver {
                         return autoload;
                     }
                 }
+            }
+            
+            // If we found an undefined forward declaration but no AUTOLOAD, continue to parent classes
+            if (foundUndefinedForwardDeclaration) {
+                continue;
             }
         }
 

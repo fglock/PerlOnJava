@@ -1191,7 +1191,27 @@ public class EmitOperator {
             if (node.operand instanceof OperatorNode operatorNode &&
                     operatorNode.operator.equals("&")) {
                 emitterVisitor.ctx.logDebug("Handle \\& " + operatorNode.operand);
-                if (operatorNode.operand instanceof OperatorNode ||
+                if (operatorNode.operand instanceof IdentifierNode identifierNode) {
+                    // Perl `\&NAME` creates a CODE ref. We must not emit `&NAME` (which would execute
+                    // the subroutine). ExifTool builds large tag tables using `\&Image::ExifTool::...`.
+                    new StringNode(identifierNode.name, identifierNode.tokenIndex)
+                            .accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    emitterVisitor.pushCurrentPackage();
+                    emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/RuntimeCode",
+                            "createCodeReference",
+                            "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                            false);
+                } else if (operatorNode.operand instanceof StringNode stringNode) {
+                    // Same as above, but `\&"NAME"`.
+                    stringNode.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    emitterVisitor.pushCurrentPackage();
+                    emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/RuntimeCode",
+                            "createCodeReference",
+                            "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                            false);
+                } else if (operatorNode.operand instanceof OperatorNode ||
                         operatorNode.operand instanceof BlockNode) {
                     operatorNode.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
                     emitterVisitor.pushCurrentPackage();

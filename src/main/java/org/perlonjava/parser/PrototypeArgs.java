@@ -161,7 +161,7 @@ public class PrototypeArgs {
 //                element.setAnnotation("context", "LIST");
 //            }
         } else {
-            parsePrototypeArguments(parser, args, prototype);
+            parsePrototypeArguments(parser, args, prototype, hasParentheses);
 
             // Check for too many arguments without parentheses only if prototype expects 2+ args
             if (!hasParentheses && countPrototypeArgs(prototype) >= 2) {
@@ -269,7 +269,7 @@ public class PrototypeArgs {
      * @param args      The argument list to populate
      * @param prototype The prototype string to parse
      */
-    private static void parsePrototypeArguments(Parser parser, ListNode args, String prototype) {
+    private static void parsePrototypeArguments(Parser parser, ListNode args, String prototype, boolean outerHasParentheses) {
         boolean isOptional = false;
         boolean needComma = false;
 
@@ -303,7 +303,7 @@ public class PrototypeArgs {
                     needComma = true;
                 }
                 case '@', '%' -> {
-                    handleListOrHashArgument(parser, args, needComma);
+                    handleListOrHashArgument(parser, args, needComma, outerHasParentheses);
                     needComma = true;
                 }
                 case '&' -> needComma = handleCodeReferenceArgument(parser, args, isOptional, needComma);
@@ -451,7 +451,7 @@ public class PrototypeArgs {
         }
     }
 
-    private static void handleListOrHashArgument(Parser parser, ListNode args, boolean needComma) {
+    private static void handleListOrHashArgument(Parser parser, ListNode args, boolean needComma, boolean outerHasParentheses) {
         if (needComma && !isComma(TokenUtils.peek(parser))) {
             return;
         }
@@ -482,7 +482,14 @@ public class PrototypeArgs {
             parser.tokenIndex = saveIndex;
         }
 
-        ListNode argList = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
+        // If consumeArgsWithPrototype() already consumed the call parentheses, do NOT treat a leading
+        // '(' as an argument-list wrapper here. This fixes cases seen in ExifTool where a prototyped
+        // call contains nested parentheses that are part of an expression, e.g.:
+        //   Set64u((...)+...)*1e7)
+        // Without this, the inner (...) would be parsed as "the" argument list and leave '* 1e7'
+        // dangling, triggering "Too many arguments".
+        boolean obeyParentheses = !outerHasParentheses;
+        ListNode argList = ListParser.parseZeroOrMoreList(parser, 0, false, obeyParentheses, false, false);
         // @ and % consume remaining arguments in LIST context
 //        for (Node element : argList.elements) {
 //            element.setAnnotation("context", "LIST");
