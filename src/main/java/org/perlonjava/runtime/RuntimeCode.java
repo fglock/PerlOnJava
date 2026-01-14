@@ -651,17 +651,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // Try to find AUTOLOAD for this subroutine
                 String subroutineName = code.packageName + "::" + code.subName;
                 if (code.packageName != null && code.subName != null && !subroutineName.isEmpty()) {
-                    // First check if AUTOLOAD exists in the current package
-                    String autoloadString = code.packageName + "::AUTOLOAD";
-                    RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(autoloadString);
-                    if (autoload.getDefinedBoolean()) {
-                        // Set $AUTOLOAD name
-                        getGlobalVariable(autoloadString).set(subroutineName);
-                        // Call AUTOLOAD
-                        return apply(autoload, a, callContext);
-                    }
-                    
-                    // If this is an imported forward declaration, check AUTOLOAD in the source package
+                    // If this is an imported forward declaration, check AUTOLOAD in the source package FIRST
+                    // This matches Perl semantics where imported subs resolve via the exporting package's AUTOLOAD
                     if (code.sourcePackage != null && !code.sourcePackage.equals(code.packageName)) {
                         String sourceAutoloadString = code.sourcePackage + "::AUTOLOAD";
                         RuntimeScalar sourceAutoload = GlobalVariable.getGlobalCodeRef(sourceAutoloadString);
@@ -672,6 +663,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             // Call AUTOLOAD from the source package
                             return apply(sourceAutoload, a, callContext);
                         }
+                    }
+                    
+                    // Then check if AUTOLOAD exists in the current package
+                    String autoloadString = code.packageName + "::AUTOLOAD";
+                    RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(autoloadString);
+                    if (autoload.getDefinedBoolean()) {
+                        // Set $AUTOLOAD name
+                        getGlobalVariable(autoloadString).set(subroutineName);
+                        // Call AUTOLOAD
+                        return apply(autoload, a, callContext);
                     }
                 }
                 throw new PerlCompilerException("Undefined subroutine &" + subroutineName + " called at ");
@@ -746,12 +747,24 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             
             if (!fullSubName.isEmpty()) {
-                // Check if AUTOLOAD exists
+                // If this is an imported forward declaration, check AUTOLOAD in the source package FIRST
+                // This matches Perl semantics where imported subs resolve via the exporting package's AUTOLOAD
+                if (code.sourcePackage != null && !code.sourcePackage.isEmpty()) {
+                    String sourceAutoloadString = code.sourcePackage + "::AUTOLOAD";
+                    RuntimeScalar sourceAutoload = GlobalVariable.getGlobalCodeRef(sourceAutoloadString);
+                    if (sourceAutoload.getDefinedBoolean()) {
+                        // Set $AUTOLOAD name to the original package function name
+                        String sourceSubroutineName = code.sourcePackage + "::" + code.subName;
+                        getGlobalVariable(sourceAutoloadString).set(sourceSubroutineName);
+                        // Call AUTOLOAD from the source package
+                        return apply(sourceAutoload, a, callContext);
+                    }
+                }
+                
+                // Then check if AUTOLOAD exists in the current package
                 String autoloadString = fullSubName.substring(0, fullSubName.lastIndexOf("::") + 2) + "AUTOLOAD";
-                // System.err.println("AUTOLOAD: " + fullName);
                 RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(autoloadString);
                 if (autoload.getDefinedBoolean()) {
-                    // System.err.println("AUTOLOAD exists: " + fullName);
                     // Set $AUTOLOAD name
                     getGlobalVariable(autoloadString).set(fullSubName);
                     // Call AUTOLOAD
