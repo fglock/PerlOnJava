@@ -414,7 +414,18 @@ public class RuntimeList extends RuntimeBase {
                 List<RuntimeScalar> remaining = (rhsIndex < rhsSize)
                         ? new ArrayList<>(rhsElements.subList(rhsIndex, rhsSize))
                         : new ArrayList<>();
-                runtimeArray.elements = remaining;
+
+                // For tied arrays, we must assign through the tied interface.
+                // Overwriting `elements` would discard the TieArray wrapper while leaving
+                // `type == TIED_ARRAY`, leading to ClassCastException when tie operations
+                // cast `array.elements` back to TieArray.
+                if (runtimeArray.type == RuntimeArray.TIED_ARRAY) {
+                    RuntimeList remainingList = new RuntimeList();
+                    remainingList.elements.addAll(remaining);
+                    runtimeArray.setFromList(remainingList);
+                } else {
+                    runtimeArray.elements = remaining;
+                }
                 result.elements.addAll(remaining);  // Use original references
                 rhsIndex = rhsSize; // Consume the rest
             } else if (elem instanceof RuntimeHash runtimeHash) {
