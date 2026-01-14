@@ -37,6 +37,13 @@ public class Dereference {
                 emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) $var[] ");
                 varNode.accept(emitterVisitor.with(RuntimeContextType.LIST)); // target - left parameter
 
+                int arraySlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+                boolean pooledArray = arraySlot >= 0;
+                if (!pooledArray) {
+                    arraySlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                }
+                emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, arraySlot);
+
                 ArrayLiteralNode right = (ArrayLiteralNode) node.right;
                 if (right.elements.size() == 1) {
                     Node elem = right.elements.getFirst();
@@ -45,18 +52,23 @@ public class Dereference {
                     if (elem instanceof NumberNode numberNode && numberNode.value.indexOf('.') == -1) {
                         try {
                             int index = Integer.parseInt(numberNode.value);
+                            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, arraySlot);
                             emitterVisitor.ctx.mv.visitLdcInsn(index);
                             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray",
                                     arrayOperation, "(I)Lorg/perlonjava/runtime/RuntimeScalar;", false);
                         } catch (NumberFormatException e) {
                             // Fall back to RuntimeScalar if the number is too large
                             elem.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, arraySlot);
+                            emitterVisitor.ctx.mv.visitInsn(Opcodes.SWAP);
                             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray",
                                     arrayOperation, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
                         }
                     } else {
                         // Single element but not an integer literal
                         elem.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, arraySlot);
+                        emitterVisitor.ctx.mv.visitInsn(Opcodes.SWAP);
                         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray",
                                 arrayOperation, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
                     }
@@ -64,8 +76,14 @@ public class Dereference {
                     // emit the [0] as a RuntimeList
                     ListNode nodeRight = right.asListNode();
                     nodeRight.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, arraySlot);
+                    emitterVisitor.ctx.mv.visitInsn(Opcodes.SWAP);
                     emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray",
                             arrayOperation, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                }
+
+                if (pooledArray) {
+                    emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
                 }
 
                 EmitOperator.handleVoidContext(emitterVisitor);
@@ -87,18 +105,29 @@ public class Dereference {
                 
                 // Evaluate the block expression to get a RuntimeScalar (might be array/hash ref)
                 sigilNode.operand.accept(scalarVisitor);
+
+                int baseSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+                boolean pooledBase = baseSlot >= 0;
+                if (!pooledBase) {
+                    baseSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                }
+                emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, baseSlot);
                 
                 // Now apply the subscript using arrayDerefGet method
                 ArrayLiteralNode right = (ArrayLiteralNode) node.right;
                 if (right.elements.size() == 1) {
                     Node elem = right.elements.getFirst();
                     elem.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, baseSlot);
+                    emitterVisitor.ctx.mv.visitInsn(Opcodes.SWAP);
                     emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
                             "arrayDerefGet", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
                 } else {
                     // Multiple indices - use slice
                     ListNode nodeRight = right.asListNode();
                     nodeRight.accept(emitterVisitor.with(RuntimeContextType.LIST));
+                    emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, baseSlot);
+                    emitterVisitor.ctx.mv.visitInsn(Opcodes.SWAP);
                     emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
                             "arrayDerefGetSlice", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
                     
@@ -109,6 +138,10 @@ public class Dereference {
                     } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
                         emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
                     }
+                }
+
+                if (pooledBase) {
+                    emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
                 }
                 
                 EmitOperator.handleVoidContext(emitterVisitor);
@@ -126,12 +159,26 @@ public class Dereference {
                 emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) @var[] ");
                 sigilNode.accept(emitterVisitor.with(RuntimeContextType.LIST)); // target - left parameter
 
+                int arraySlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+                boolean pooledArray = arraySlot >= 0;
+                if (!pooledArray) {
+                    arraySlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                }
+                emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, arraySlot);
+
                 // emit the [10, 20] as a RuntimeList
                 ListNode nodeRight = ((ArrayLiteralNode) node.right).asListNode();
                 nodeRight.accept(emitterVisitor.with(RuntimeContextType.LIST));
 
+                emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, arraySlot);
+                emitterVisitor.ctx.mv.visitInsn(Opcodes.SWAP);
+
                 emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray",
                         arrayOperation + "Slice", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
+
+                if (pooledArray) {
+                    emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+                }
 
                 // Handle context conversion for array slices
                 if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
