@@ -153,6 +153,11 @@ public class Exporter extends PerlModuleBase {
         // Determine the caller's namespace
         RuntimeList callerList = RuntimeCode.caller(new RuntimeList(exportLevel), SCALAR);
         String caller = callerList.scalar().toString();
+        if (caller == null || caller.isEmpty()) {
+            // In standard Perl, missing/empty caller context behaves like package 'main'.
+            // This is critical for `use Some::Module qw(...)` at top-level.
+            caller = "main";
+        }
 
         // Retrieve the export lists and tags from the package
         RuntimeArray export = GlobalVariable.getGlobalArray(packageName + "::EXPORT");
@@ -278,12 +283,24 @@ public class Exporter extends PerlModuleBase {
         if (exportSymbol.type == RuntimeScalarType.CODE) {
             String fullName = caller + "::" + functionName;
             RuntimeScalar importedRef = GlobalVariable.getGlobalCodeRef(fullName);
-            importedRef.set(exportSymbol);
             
-            // If the exported symbol is a forward declaration (undefined), annotate it with the source package
-            // so that AUTOLOAD can be resolved from the original package
-            if (exportSymbol.value instanceof RuntimeCode code && !code.defined()) {
-                code.sourcePackage = packageName;
+            if (exportSymbol.value instanceof RuntimeCode exportedCode) {
+                if (exportedCode.defined()) {
+                    // Fully defined sub: import by aliasing the CODE ref.
+                    importedRef.set(exportSymbol);
+                } else {
+                    // Forward declaration: standard Perl semantics allow this to be called and
+                    // resolved via AUTOLOAD in the defining package.
+                    //
+                    // The importedRef and exportSymbol point to DIFFERENT RuntimeCode objects
+                    // (one for main::GetAllTags, one for Package::GetAllTags).
+                    // We need to make the imported one resolve via the exporting package's AUTOLOAD.
+                    if (importedRef.value instanceof RuntimeCode importedCode) {
+                        importedCode.sourcePackage = packageName;
+                        // Also copy the subName to ensure it's set correctly
+                        importedCode.subName = functionName;
+                    }
+                }
             }
             
             // If this function name is an overridable operator (like 'time'), mark it in isSubs
