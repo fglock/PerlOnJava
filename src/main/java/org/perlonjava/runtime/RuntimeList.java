@@ -387,12 +387,31 @@ public class RuntimeList extends RuntimeBase {
      */
     public RuntimeArray setFromList(RuntimeList value) {
 
+        boolean hasUndefPlaceholderLhs = false;
+        for (RuntimeBase elem : elements) {
+            if (elem instanceof RuntimeScalarReadOnly runtimeScalarReadOnly
+                    && !runtimeScalarReadOnly.getDefinedBoolean()) {
+                hasUndefPlaceholderLhs = true;
+                break;
+            }
+        }
+
         // Preserve RHS aliases before consuming `value`.
-        // This is needed for Perl's odd-but-established behavior where an `undef` placeholder on the LHS
-        // uses the corresponding RHS element as an lvalue in the return list.
-        RuntimeArray rhsAliases = new RuntimeArray();
-        value.setArrayOfAlias(rhsAliases);
-        List<RuntimeScalar> rhsAliasElements = rhsAliases.elements;
+        // Only needed when the LHS contains `undef` placeholders.
+        List<RuntimeScalar> rhsAliasElements = null;
+        IdentityHashMap<RuntimeScalar, Boolean> lhsScalars = null;
+        if (hasUndefPlaceholderLhs) {
+            RuntimeArray rhsAliases = new RuntimeArray();
+            value.setArrayOfAlias(rhsAliases);
+            rhsAliasElements = rhsAliases.elements;
+
+            lhsScalars = new IdentityHashMap<>();
+            for (RuntimeBase elem : elements) {
+                if (elem instanceof RuntimeScalar s && !(s instanceof RuntimeScalarReadOnly)) {
+                    lhsScalars.put(s, Boolean.TRUE);
+                }
+            }
+        }
 
         // Materialize the RHS once into a flat list.
         // Avoids O(n^2) from repeated RuntimeArray.shift() which does removeFirst() on ArrayList.
@@ -402,13 +421,6 @@ public class RuntimeList extends RuntimeBase {
         List<RuntimeScalar> rhsElements = rhs.elements;
         int rhsSize = rhsElements.size();
         int rhsIndex = 0;
-
-        IdentityHashMap<RuntimeScalar, Boolean> lhsScalars = new IdentityHashMap<>();
-        for (RuntimeBase elem : elements) {
-            if (elem instanceof RuntimeScalar s && !(s instanceof RuntimeScalarReadOnly)) {
-                lhsScalars.put(s, Boolean.TRUE);
-            }
-        }
 
         // Build result with assigned values (including undef for unassigned scalars)
         RuntimeArray result = new RuntimeArray();
@@ -420,11 +432,13 @@ public class RuntimeList extends RuntimeBase {
                 // `undef` placeholder on LHS: consume one RHS value, but return something for this position.
                 // When safe, return the RHS element as an lvalue (alias). Otherwise return the pre-assignment value.
                 RuntimeScalar rhsValue = (rhsIndex < rhsSize) ? rhsElements.get(rhsIndex) : new RuntimeScalar();
-                RuntimeScalar rhsAlias = (rhsIndex < rhsAliasElements.size()) ? rhsAliasElements.get(rhsIndex) : null;
+                RuntimeScalar rhsAlias = (rhsAliasElements != null && rhsIndex < rhsAliasElements.size())
+                        ? rhsAliasElements.get(rhsIndex)
+                        : null;
 
                 // If the RHS element is also assigned on the LHS, it must not be returned as an alias
                 // (it would reflect the post-assignment value rather than the pre-assignment value).
-                boolean useAlias = rhsAlias != null && !lhsScalars.containsKey(rhsAlias);
+                boolean useAlias = rhsAlias != null && lhsScalars != null && !lhsScalars.containsKey(rhsAlias);
 
                 result.elements.add(useAlias ? rhsAlias : rhsValue);
 
