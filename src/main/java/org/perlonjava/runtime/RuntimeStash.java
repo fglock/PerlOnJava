@@ -89,10 +89,7 @@ public class RuntimeStash extends RuntimeHash {
      * @return The value associated with the key, or a proxy for lazy autovivification if the key does not exist.
      */
     public RuntimeScalar get(String key) {
-        if (!elements.containsKey(key)) {
-            return new RuntimeStashEntry(namespace + key, false);
-        }
-        return new RuntimeStashEntry(namespace + key, true);
+        return elements.get(key);
     }
 
     /**
@@ -112,7 +109,14 @@ public class RuntimeStash extends RuntimeHash {
      * @return A RuntimeScalar indicating whether the key exists.
      */
     public RuntimeScalar exists(RuntimeScalar key) {
-        return new RuntimeScalar(elements.containsKey(key.toString()));
+        RuntimeScalar v = get(key);
+        return new RuntimeScalar(v != null && v.getDefinedBoolean());
+    }
+
+    @Override
+    public RuntimeScalar exists(String key) {
+        RuntimeScalar v = get(key);
+        return new RuntimeScalar(v != null && v.getDefinedBoolean());
     }
 
     /**

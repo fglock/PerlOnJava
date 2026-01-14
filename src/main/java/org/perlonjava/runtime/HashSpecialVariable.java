@@ -1,7 +1,7 @@
 package org.perlonjava.runtime;
 
 import org.perlonjava.regex.RuntimeRegex;
- import org.perlonjava.mro.InheritanceResolver;
+import org.perlonjava.mro.InheritanceResolver;
 
 import java.util.AbstractMap;
 import java.util.HashSet;
@@ -158,7 +158,8 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                 }
             }
         } else if (this.mode == Id.STASH) {
-            String prefix = namespace + key;
+            String keyStr = String.valueOf(key);
+            String prefix = namespace + keyStr;
             // System.out.println("Get Key " + prefix);
             if (containsNamespace(GlobalVariable.globalVariables, prefix) ||
                     containsNamespace(GlobalVariable.globalArrays, prefix) ||
@@ -175,6 +176,16 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
 
     @Override
     public boolean containsKey(Object key) {
+        if (this.mode == Id.STASH) {
+            String keyStr = String.valueOf(key);
+            String prefix = namespace + keyStr;
+            return containsNamespace(GlobalVariable.globalVariables, prefix) ||
+                    containsNamespace(GlobalVariable.globalArrays, prefix) ||
+                    containsNamespace(GlobalVariable.globalHashes, prefix) ||
+                    containsNamespace(GlobalVariable.globalCodeRefs, prefix) ||
+                    containsNamespace(GlobalVariable.globalIORefs, prefix) ||
+                    containsNamespace(GlobalVariable.globalFormatRefs, prefix);
+        }
         return super.containsKey(key);
     }
 

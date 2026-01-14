@@ -2,24 +2,22 @@ use strict;
 use warnings;
 use Test::More;
 
-# Regression test: dereferencing an undefined scalar as a hash reference
-# must throw an error in rvalue context.
+# Regression test: ExifTool frequently does:
+#   my $dataPt = $$dirInfo{DataPt};
+# where $dirInfo is a hash reference and DataPt is expected to be a SCALAR ref.
+# This must remain true, otherwise later code like `length $$dataPt` will die.
 
-my $h;
-my %h = ( DataPt => \"abc" );
+my $buff = "abc";
+my %dirInfo = ( DataPt => \$buff );
+my $dirInfo = \%dirInfo;
 
-my $ok = eval {
-    my $y = $$h{DataPt};
-    1;
-};
+is(ref($dirInfo), 'HASH', '$dirInfo is a HASH ref');
 
-ok(!$ok, 'rvalue $$h{DataPt} on undef scalar $h dies');
-like($@, qr/(undefined value as a HASH reference|Not a HASH reference|HASH ref)/i,
-    'error message mentions HASH reference');
+my $dataPt = $$dirInfo{DataPt};
 
-# But lvalue usage must autovivify.
-$h->{a} = 1;
-is($h->{a}, 1, 'lvalue $h->{a}=1 autovivifies hashref');
-is($$h{a}, 1, 'after vivify, $$h{a} works');
+ok(defined $dataPt, '$dataPt is defined');
+is(ref($dataPt), 'SCALAR', '$dataPt is a SCALAR ref');
+is($$dataPt, 'abc', 'dereferencing $dataPt yields the expected string');
+is(length $$dataPt, 3, 'length $$dataPt works');
 
 done_testing();
