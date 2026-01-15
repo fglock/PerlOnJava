@@ -234,6 +234,15 @@ public class ErrorMessageUtil {
             }
             if (tok.type == LexerTokenType.NEWLINE) {
                 lastLineNumber++;
+            } else if (tok.text != null && tok.text.indexOf('\n') >= 0) {
+                // Newlines inside quote-like operators (q{}, qq{}, heredocs) and other
+                // multi-line tokens are not emitted as separate NEWLINE tokens.
+                // Count them here so tokenIndex->line mapping stays accurate.
+                for (int j = 0; j < tok.text.length(); j++) {
+                    if (tok.text.charAt(j) == '\n') {
+                        lastLineNumber++;
+                    }
+                }
             }
         }
 

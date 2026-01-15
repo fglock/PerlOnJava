@@ -273,11 +273,29 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     public void put(String key, RuntimeScalar value) {
         switch (type) {
             case PLAIN_HASH -> {
-                elements.put(key, value);
+                RuntimeScalar existing = elements.get(key);
+                if (existing != null) {
+                    if (existing instanceof RuntimeScalarReadOnly) {
+                        elements.put(key, value);
+                    } else {
+                        existing.set(value);
+                    }
+                } else {
+                    elements.put(key, value);
+                }
             }
             case AUTOVIVIFY_HASH -> {
                 AutovivificationHash.vivify(this);
-                elements.put(key, value);
+                RuntimeScalar existing = elements.get(key);
+                if (existing != null) {
+                    if (existing instanceof RuntimeScalarReadOnly) {
+                        elements.put(key, value);
+                    } else {
+                        existing.set(value);
+                    }
+                } else {
+                    elements.put(key, value);
+                }
             }
             case TIED_HASH -> {
                 TieHash.tiedStore(this, new RuntimeScalar(key), value);

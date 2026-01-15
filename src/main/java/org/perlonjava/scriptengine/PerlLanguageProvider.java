@@ -20,6 +20,8 @@ import java.lang.reflect.Constructor;
 import java.util.List;
 
 import static org.perlonjava.runtime.GlobalVariable.resetAllGlobals;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
+import static org.perlonjava.runtime.ScalarUtils.printable;
 import static org.perlonjava.runtime.SpecialBlock.*;
 
 /**
@@ -127,7 +129,10 @@ public class PerlLanguageProvider {
         if (ctx.compilerOptions.tokenizeOnly) {
             // Printing the tokens
             for (LexerToken token : tokens) {
-                System.out.println(token);
+                System.out.println("LexerToken{" +
+                        "type=" + token.type +
+                        ", text=" + printable(token.text) +
+                        "}");
             }
             RuntimeIO.closeAllHandles();
             return null; // success

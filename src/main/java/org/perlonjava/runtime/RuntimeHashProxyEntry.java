@@ -28,6 +28,14 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
         // Note: this.type is RuntimeScalarType.UNDEF
     }
 
+     @Override
+     public RuntimeScalar createReference() {
+         // Perl: \$h{key} returns a reference to the actual hash element scalar.
+         // If the key doesn't exist yet, taking a reference autovivifies it.
+         vivify();
+         return lvalue.createReference();
+     }
+
     /**
      * Vivifies (initializes) the element in the parent hash if it does not exist.
      * If the element associated with the key is not present, it creates a new
