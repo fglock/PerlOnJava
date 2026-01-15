@@ -525,6 +525,11 @@ public class EmitterMethodCreator implements Opcodes {
             // Generate the subroutine block
             mv.visitCode();
 
+            // Ensure the generated method always has at least one line number entry.
+            // Some code paths (or empty blocks) may not emit statement-level line numbers,
+            // which causes JVM stack traces to show line -1 and breaks source mapping.
+            ByteCodeSourceMapper.setDebugInfoLineNumber(ctx, ast != null ? ast.getIndex() : 1);
+
             // Initialize local variables with closure values from instance fields
             // Skip some indices because they are reserved for special arguments (this, "@_" and call
             // context)

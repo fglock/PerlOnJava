@@ -594,10 +594,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         ArrayList<ArrayList<String>> stackTrace = ExceptionFormatter.formatException(t);
         int stackTraceSize = stackTrace.size();
 
-        // Skip the first frame which is the caller() builtin itself
-        if (stackTraceSize > 0) {
-            frame++;
-        }
+        // Perl semantics: caller(N) returns information about the caller of the current frame.
+        // So caller(0) must skip the frame where caller() itself is invoked.
+        // Our formatted stack already contains Perl-level frames, so we only need to apply
+        // this logical skip (not a JVM-frame skip).
+        int lookupFrame = frame >= 0 ? frame + 1 : frame;
 
 //        // Show debug info
 //        System.err.println("# Runtime stack trace: frame=" + frame + " size=" + stackTraceSize);
@@ -608,12 +609,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 //        }
 //        System.err.println();
 
-        if (frame >= 0 && frame < stackTraceSize) {
+        if (lookupFrame >= 0 && lookupFrame < stackTraceSize) {
             // Runtime stack trace
             if (ctx == RuntimeContextType.SCALAR) {
-                res.add(new RuntimeScalar(stackTrace.get(frame).getFirst()));
+                res.add(new RuntimeScalar(stackTrace.get(lookupFrame).getFirst()));
             } else {
-                ArrayList<String> frameInfo = stackTrace.get(frame);
+                ArrayList<String> frameInfo = stackTrace.get(lookupFrame);
                 res.add(new RuntimeScalar(frameInfo.get(0)));  // package
                 res.add(new RuntimeScalar(frameInfo.get(1)));  // filename
                 res.add(new RuntimeScalar(frameInfo.get(2)));  // line
@@ -621,8 +622,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // The subroutine name at frame N is actually stored at frame N-1
                 // because it represents the sub that IS CALLING frame N
                 String subName = null;
-                if (frame > 0 && frame - 1 < stackTraceSize) {
-                    ArrayList<String> prevFrame = stackTrace.get(frame - 1);
+                if (lookupFrame > 0 && lookupFrame - 1 < stackTraceSize) {
+                    ArrayList<String> prevFrame = stackTrace.get(lookupFrame - 1);
                     if (prevFrame.size() > 3) {
                         subName = prevFrame.get(3);
                     }

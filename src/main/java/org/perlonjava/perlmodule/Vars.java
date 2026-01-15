@@ -36,8 +36,14 @@ public class Vars extends PerlModuleBase {
         RuntimeArray.shift(args);
 
         // Determine the caller's namespace
-        RuntimeList callerList = RuntimeCode.caller(new RuntimeList(), RuntimeContextType.SCALAR);
-        String caller = callerList.scalar().toString();
+        String caller;
+        var callerInfo = CallerStack.peek(0);
+        if (callerInfo != null && callerInfo.packageName() != null && !callerInfo.packageName().isEmpty()) {
+            caller = callerInfo.packageName();
+        } else {
+            RuntimeList callerList = RuntimeCode.caller(new RuntimeList(), RuntimeContextType.SCALAR);
+            caller = callerList.scalar().toString();
+        }
 
         // Create the specified variables in the caller's namespace
         for (RuntimeScalar variableObj : args.elements) {

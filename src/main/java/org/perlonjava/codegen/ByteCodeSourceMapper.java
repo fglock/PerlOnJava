@@ -84,7 +84,25 @@ public class ByteCodeSourceMapper {
      * @param ctx        The current emitter context
      * @param tokenIndex The index of the token in the source
      */
-    static void setDebugInfoLineNumber(EmitterContext ctx, int tokenIndex) {
+    public static void setDebugInfoLineNumber(EmitterContext ctx, int tokenIndex) {
+        // JVM line numbers must be positive. If we ever propagate 0/-1 here, the JVM stack trace
+        // will report line -1 for frames without a valid LineNumberTable entry.
+        //
+        // Note: we intentionally use tokenIndex as the emitted "line" so we can map it back to
+        // true source locations via saveSourceLocation() + parseStackTraceElement().
+        if (tokenIndex < 1) {
+            tokenIndex = 1;
+        }
+
+        // Ensure this token index is also present in our tokenIndex->(line,package,sub) map.
+        // Without this, parseStackTraceElement() falls back to the nearest earlier entry,
+        // which can misreport runtime failures to an unrelated earlier statement.
+        try {
+            saveSourceLocation(ctx, tokenIndex);
+        } catch (Throwable ignored) {
+            // Best-effort only: if tokenIndex is out of bounds for the current file's token list,
+            // just skip source mapping and still emit a JVM line number.
+        }
         Label thisLabel = new Label();
         ctx.mv.visitLabel(thisLabel);
         ctx.mv.visitLineNumber(tokenIndex, thisLabel);

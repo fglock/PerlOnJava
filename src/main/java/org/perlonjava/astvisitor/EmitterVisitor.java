@@ -86,91 +86,109 @@ public class EmitterVisitor implements Visitor {
      */
     @Override
     public void visit(NumberNode node) {
+        ByteCodeSourceMapper.setDebugInfoLineNumber(ctx, node.getIndex());
         EmitLiteral.emitNumber(ctx, node);
     }
 
     @Override
     public void visit(IdentifierNode node) {
+        ByteCodeSourceMapper.setDebugInfoLineNumber(ctx, node.getIndex());
         EmitLiteral.emitIdentifier(this, ctx, node);
     }
 
     @Override
     public void visit(BinaryOperatorNode node) {
+        ByteCodeSourceMapper.setDebugInfoLineNumber(ctx, node.getIndex());
         EmitBinaryOperatorNode.emitBinaryOperatorNode(this, node);
     }
 
     @Override
     public void visit(OperatorNode node) {
+        ByteCodeSourceMapper.setDebugInfoLineNumber(ctx, node.getIndex());
         EmitOperatorNode.emitOperatorNode(this, node);
     }
 
     @Override
     public void visit(TryNode node) {
+        ByteCodeSourceMapper.setDebugInfoLineNumber(ctx, node.getIndex());
         EmitStatement.emitTryCatch(this, node);
     }
 
     @Override
     public void visit(SubroutineNode node) {
+        ByteCodeSourceMapper.setDebugInfoLineNumber(ctx, node.getIndex());
         EmitSubroutine.emitSubroutine(ctx, node);
     }
 
     @Override
     public void visit(For1Node node) {
+        ByteCodeSourceMapper.setDebugInfoLineNumber(ctx, node.getIndex());
         EmitForeach.emitFor1(this, node);
     }
 
     @Override
     public void visit(For3Node node) {
+        ByteCodeSourceMapper.setDebugInfoLineNumber(ctx, node.getIndex());
         EmitStatement.emitFor3(this, node);
     }
 
     @Override
     public void visit(IfNode node) {
+        ByteCodeSourceMapper.setDebugInfoLineNumber(ctx, node.getIndex());
         EmitStatement.emitIf(this, node);
     }
 
     @Override
     public void visit(TernaryOperatorNode node) {
+        ByteCodeSourceMapper.setDebugInfoLineNumber(ctx, node.getIndex());
         EmitLogicalOperator.emitTernaryOperator(this, node);
     }
 
     @Override
     public void visit(BlockNode node) {
+        ByteCodeSourceMapper.setDebugInfoLineNumber(ctx, node.getIndex());
         EmitBlock.emitBlock(this, node);
     }
 
     @Override
     public void visit(ListNode node) {
+        ByteCodeSourceMapper.setDebugInfoLineNumber(ctx, node.getIndex());
         EmitLiteral.emitList(this, node);
     }
 
     @Override
     public void visit(StringNode node) {
+        ByteCodeSourceMapper.setDebugInfoLineNumber(ctx, node.getIndex());
         EmitLiteral.emitString(ctx, node);
     }
 
     @Override
     public void visit(HashLiteralNode node) {
+        ByteCodeSourceMapper.setDebugInfoLineNumber(ctx, node.getIndex());
         EmitLiteral.emitHashLiteral(this, node);
     }
 
     @Override
     public void visit(ArrayLiteralNode node) {
+        ByteCodeSourceMapper.setDebugInfoLineNumber(ctx, node.getIndex());
         EmitLiteral.emitArrayLiteral(this, node);
     }
 
     @Override
     public void visit(LabelNode node) {
+        ByteCodeSourceMapper.setDebugInfoLineNumber(ctx, node.getIndex());
         EmitLabel.emitLabel(ctx, node);
     }
 
     @Override
     public void visit(CompilerFlagNode node) {
+        ByteCodeSourceMapper.setDebugInfoLineNumber(ctx, node.getIndex());
         EmitCompilerFlag.emitCompilerFlag(ctx, node);
     }
 
     @Override
     public void visit(FormatNode node) {
+        ByteCodeSourceMapper.setDebugInfoLineNumber(ctx, node.getIndex());
         EmitFormat.emitFormat(this, node);
     }
 

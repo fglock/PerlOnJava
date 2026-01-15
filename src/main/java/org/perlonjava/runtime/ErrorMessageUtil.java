@@ -208,14 +208,26 @@ public class ErrorMessageUtil {
      * @return the line number
      */
     public int getLineNumber(int index) {
-        // Start from the last processed index and line number
+        // Start from the last processed index and line number.
+        //
+        // IMPORTANT: This utility is used both by the parser (monotonic tokenIndex lookups)
+        // and by codegen/debug mapping (non-monotonic lookups). The previous implementation
+        // assumed monotonic access and returned a cached value for index <= tokenIndex,
+        // which becomes incorrect when lookups go backwards.
+        if (index < 0) {
+            return 1;
+        }
 
-        if (index <= tokenIndex) {
-            return lastLineNumber;
+        // If the caller requests a token index earlier than the last one we processed,
+        // reset the scan state and recompute from the start.
+        if (index < tokenIndex) {
+            tokenIndex = -1;
+            lastLineNumber = 1;
         }
 
         // Count newlines from the last processed index to the current index
-        for (int i = tokenIndex + 1; i <= index; i++) {
+        int end = Math.min(index, tokens.size() - 1);
+        for (int i = tokenIndex + 1; i <= end; i++) {
             LexerToken tok = tokens.get(i);
             if (tok.type == LexerTokenType.EOF) {
                 break;
@@ -226,7 +238,7 @@ public class ErrorMessageUtil {
         }
 
         // Update the cache with the current index and line number
-        tokenIndex = index;
+        tokenIndex = end;
         return lastLineNumber;
     }
 }
