@@ -26,9 +26,9 @@ public class StringOperators {
      * @return a {@link RuntimeScalar} containing the length of the input as an integer
      */
     public static RuntimeScalar length(RuntimeScalar runtimeScalar) {
-        // If the scalar is undefined, return undef
+        // Perl: length(undef) returns 0 (and warns about uninitialized value).
         if (!runtimeScalar.getDefinedBoolean()) {
-            return RuntimeScalarCache.scalarUndef;
+            return getScalarInt(0);
         }
         // Convert the RuntimeScalar to a string and return its length in codepoints
         String str = runtimeScalar.toString();
@@ -43,9 +43,9 @@ public class StringOperators {
      * @return a {@link RuntimeScalar} containing the byte length of the input
      */
     public static RuntimeScalar lengthBytes(RuntimeScalar runtimeScalar) {
-        // If the scalar is undefined, return undef
+        // Perl: length(undef) returns 0 (and warns about uninitialized value).
         if (!runtimeScalar.getDefinedBoolean()) {
-            return RuntimeScalarCache.scalarUndef;
+            return getScalarInt(0);
         }
         // Convert the RuntimeScalar to a string and return its byte length
         String str = runtimeScalar.toString();

@@ -49,8 +49,18 @@ public class EmitterMethodCreator implements Opcodes {
     public static int classCounter = 0;
 
     // Generate a unique internal class name
-    public static String generateClassName() {
+    public static synchronized String generateClassName() {
         return "org/perlonjava/anon" + classCounter++;
+    }
+
+    public static synchronized String peekNextClassName() {
+        return "org/perlonjava/anon" + classCounter;
+    }
+
+    public static synchronized String generateClassName(String prefix) {
+        String p = (prefix == null || prefix.isEmpty()) ? "anon" : prefix;
+        p = p.replaceAll("[^A-Za-z0-9_]", "_");
+        return "org/perlonjava/" + p + classCounter++;
     }
 
     private static String insnToString(AbstractInsnNode n) {
@@ -433,6 +443,25 @@ public class EmitterMethodCreator implements Opcodes {
                 || asmDebugClassFilter.isEmpty()
                 || className.contains(asmDebugClassFilter)
                 || className.replace('/', '.').contains(asmDebugClassFilter);
+
+        boolean astDump = System.getenv("JPERL_AST_DUMP") != null;
+        String astDumpClassFilter = System.getenv("JPERL_AST_DUMP_CLASS");
+        boolean astDumpClassMatches = astDumpClassFilter == null
+                || astDumpClassFilter.isEmpty()
+                || className.contains(astDumpClassFilter)
+                || className.replace('/', '.').contains(astDumpClassFilter);
+        if (astDump && astDumpClassMatches) {
+            try {
+                String astText = String.valueOf(ast);
+                int maxLen = 20000;
+                if (astText.length() > maxLen) {
+                    astText = astText.substring(0, maxLen) + "\n... (truncated, totalLen=" + astText.length() + ")";
+                }
+                System.err.println("[JPERL_AST_DUMP] class=" + className.replace('/', '.') + " rootTokenIndex=" + (ast != null ? ast.getIndex() : -1));
+                System.err.println("[JPERL_AST_DUMP] ast=<<<\n" + astText + "\n>>>");
+            } catch (Throwable ignored) {
+            }
+        }
         
         try {
             // Use capturedEnv if available (for eval), otherwise get from symbol table

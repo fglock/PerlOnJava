@@ -410,11 +410,13 @@ public class EmitVariable {
                 emitterVisitor.ctx.logDebug("GETVAR `$$a`");
                 if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_REFS)) {
                     node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, node.getIndex());
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "scalarDeref", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
                 } else {
                     // no strict refs
                     node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
                     emitterVisitor.pushCurrentPackage();
+                    ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, node.getIndex());
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "scalarDerefNonStrict", "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
                 }
                 return;

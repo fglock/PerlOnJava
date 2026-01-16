@@ -20,6 +20,7 @@ import java.lang.invoke.MethodType;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 import static org.perlonjava.Configuration.getPerlVersionNoV;
@@ -47,6 +48,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             return size() > CLASS_CACHE_SIZE;
         }
     };
+
+    static final Map<String, String> evalDebugClassToSource = new ConcurrentHashMap<>();
+
+    static String getEvalDebugSourceForClass(String className) {
+        return evalDebugClassToSource.get(className);
+    }
     // Cache for method handles with eviction policy
     private static final int METHOD_HANDLE_CACHE_SIZE = 100;
     private static final Map<Class<?>, MethodHandle> methodHandleCache = new LinkedHashMap<Class<?>, MethodHandle>(METHOD_HANDLE_CACHE_SIZE, 0.75f, true) {
@@ -141,6 +148,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // If so, treat it as Unicode source to preserve Unicode characters during parsing
         // EXCEPT for evalbytes, which must treat everything as bytes
         String evalString = code.toString();
+        String evalDebugEnv = System.getenv("JPERL_EVAL_DEBUG");
+        boolean evalDebug = evalDebugEnv != null;
         boolean hasUnicode = false;
         if (!ctx.isEvalbytes && code.type != RuntimeScalarType.BYTE_STRING) {
             for (int i = 0; i < evalString.length(); i++) {
@@ -150,6 +159,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
             }
         }
+
+        boolean evalDebugAll = evalDebug && evalDebugEnv != null && evalDebugEnv.equalsIgnoreCase("all");
+        boolean shouldPrintEval = evalDebugAll || (evalDebug && evalString.contains("$$"));
 
         // Clone compiler options and set isUnicodeSource if needed
         // This only affects string parsing, not symbol table or method resolution
@@ -183,6 +195,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 actualFileName = "(eval " + runtimeEvalCounter++ + ")";
             }
         }
+
+        if (shouldPrintEval) {
+            try {
+                int max = Math.min(evalString.length(), 4000);
+                String preview = evalString.substring(0, max);
+                System.err.println("[JPERL_EVAL_DEBUG] evalTag=" + evalTag +
+                        " file=" + actualFileName +
+                        " len=" + evalString.length() +
+                        " hasUnicode=" + hasUnicode +
+                        " isEvalbytes=" + ctx.isEvalbytes +
+                        " isByteStringSource=" + (!ctx.isEvalbytes && code.type == RuntimeScalarType.BYTE_STRING));
+                System.err.println("[JPERL_EVAL_DEBUG] source_preview=<<<" + preview + ">>>");
+            } catch (Throwable ignored) {
+            }
+        }
         
         // Check if the result is already cached (include hasUnicode, isEvalbytes, byte-string-source, and feature flags in cache key)
         // Skip caching when $^P is set, so each eval gets a unique filename
@@ -197,6 +224,20 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             
             if (cachedClass != null) {
+                if (evalDebug) {
+                    try {
+                        int max = Math.min(evalString.length(), 4000);
+                        String preview = evalString.substring(0, max);
+                        evalDebugClassToSource.put(cachedClass.getName(), "evalTag=" + evalTag + " len=" + evalString.length() + " source_preview=<<<" + preview + ">>>");
+                    } catch (Throwable ignored) {
+                    }
+                }
+                if (shouldPrintEval) {
+                    try {
+                        System.err.println("[JPERL_EVAL_DEBUG] cache_hit evalTag=" + evalTag + " class=" + cachedClass.getName());
+                    } catch (Throwable ignored) {
+                    }
+                }
                 return cachedClass;
             }
         }
@@ -219,8 +260,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // the eval code is parsed with the correct feature/strict/warning context
         ScopedSymbolTable parseSymbolTable = capturedSymbolTable.snapShot();
 
+        // Keep anonNNN naming scheme intact (stack trace mapping may rely on it).
+        // Reserve the next anon class name deterministically so we can correlate evalTag/source
+        // with the generated class.
+        String evalClassName = org.perlonjava.codegen.EmitterMethodCreator.generateClassName();
         EmitterContext evalCtx = new EmitterContext(
-                new JavaClassInfo(),  // internal java class name
+                new JavaClassInfo(evalClassName),  // internal java class name
                 parseSymbolTable, // symbolTable
                 null, // method visitor
                 null, // class writer
@@ -247,7 +292,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // ast = ConstantFoldingVisitor.foldConstants(ast);
 
             // Create a new instance of ErrorMessageUtil, resetting the line counter
-            evalCtx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
+            evalCtx.errorUtil = new ErrorMessageUtil(actualFileName, tokens);
             ScopedSymbolTable postParseSymbolTable = evalCtx.symbolTable;
             evalCtx.symbolTable = capturedSymbolTable;
             evalCtx.symbolTable.copyFlagsFrom(postParseSymbolTable);
@@ -264,16 +309,42 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     ast,
                     true  // use try-catch
             );
+
+            if (evalDebug) {
+                try {
+                    int max = Math.min(evalString.length(), 4000);
+                    String preview = evalString.substring(0, max);
+                    evalDebugClassToSource.put(generatedClass.getName(), "evalTag=" + evalTag + " len=" + evalString.length() + " source_preview=<<<" + preview + ">>>");
+                } catch (Throwable ignored) {
+                }
+            }
+
+            if (shouldPrintEval) {
+                try {
+                    System.err.println("[JPERL_EVAL_DEBUG] compiled evalTag=" + evalTag + " class=" + generatedClass.getName());
+                } catch (Throwable ignored) {
+                }
+            }
             runUnitcheckBlocks(ctx.unitcheckBlocks);
         } catch (Exception e) {
             // Compilation error in eval-string
+
+            if (evalDebug) {
+                try {
+                    int max = Math.min(evalString.length(), 4000);
+                    String preview = evalString.substring(0, max);
+                    System.err.println("[JPERL_EVAL_DEBUG] eval compile error evalTag=" + evalTag + " message=" + e.getMessage());
+                    System.err.println("[JPERL_EVAL_DEBUG] source_preview=<<<" + preview + ">>>");
+                } catch (Throwable ignored) {
+                }
+            }
 
             // Set the global error variable "$@" using GlobalContext.setGlobalVariable(key, value)
             GlobalVariable.getGlobalVariable("main::@").set(e.getMessage());
 
             // In case of error return an "undef" ast and class
             ast = new OperatorNode("undef", null, 1);
-            evalCtx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
+            evalCtx.errorUtil = new ErrorMessageUtil(actualFileName, tokens);
             evalCtx.symbolTable = capturedSymbolTable;
             setCurrentScope(evalCtx.symbolTable);
             generatedClass = EmitterMethodCreator.createClassWithMethod(
@@ -281,6 +352,22 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     ast,
                     false
             );
+
+            if (evalDebug) {
+                try {
+                    int max = Math.min(evalString.length(), 4000);
+                    String preview = evalString.substring(0, max);
+                    evalDebugClassToSource.put(generatedClass.getName(), "evalTag=" + evalTag + " len=" + evalString.length() + " source_preview=<<<" + preview + ">>>");
+                } catch (Throwable ignored) {
+                }
+            }
+
+            if (shouldPrintEval) {
+                try {
+                    System.err.println("[JPERL_EVAL_DEBUG] compiled_error_fallback evalTag=" + evalTag + " class=" + generatedClass.getName());
+                } catch (Throwable ignored) {
+                }
+            }
         } finally {
             // Restore caller lexical flags (do not leak eval pragmas).
             capturedSymbolTable.warningFlagsStack.pop();

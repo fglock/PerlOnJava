@@ -81,6 +81,18 @@ public class JavaClassInfo {
         this.spillTop = 0;
     }
 
+    public JavaClassInfo(String javaClassName) {
+        this.javaClassName = javaClassName != null && !javaClassName.isEmpty()
+                ? javaClassName
+                : EmitterMethodCreator.generateClassName();
+        this.returnLabel = null;
+        this.stackLevelManager = new StackLevelManager();
+        this.loopLabelStack = new ArrayDeque<>();
+        this.gotoLabelStack = new ArrayDeque<>();
+        this.spillSlots = new int[0];
+        this.spillTop = 0;
+    }
+
     public int acquireSpillSlot() {
         if (spillTop >= spillSlots.length) {
             return -1;

@@ -90,7 +90,10 @@ public class EmitSubroutine {
 
         // Retrieve closure variable list
         // Alternately, scan the AST for variables and capture only the ones that are used
-        Map<Integer, SymbolTable.SymbolEntry> visibleVariables = ctx.symbolTable.getAllVisibleVariables();
+        // Copy: getAllVisibleVariables() may return a cached map owned by the symbol table.
+        // We must not mutate it while filtering, otherwise later compilation steps can observe
+        // a corrupted cache.
+        Map<Integer, SymbolTable.SymbolEntry> visibleVariables = new java.util.TreeMap<>(ctx.symbolTable.getAllVisibleVariables());
         
         // IMPORTANT: Package-level subs (named subs) should NOT capture closure variables from their 
         // definition context. Only anonymous subs (my sub, state sub, or true anonymous subs) should
@@ -174,12 +177,11 @@ public class EmitSubroutine {
         mv.visitInsn(Opcodes.DUP);
 
         // 2. Load all captured variables for the constructor
-        int newIndex = 0;
         for (Integer currentIndex : visibleVariables.keySet()) {
-            if (newIndex >= skipVariables) {
+            // Skip (this, @_, wantarray) which are method parameters, not captured closure vars.
+            if (currentIndex >= skipVariables) {
                 mv.visitVarInsn(Opcodes.ALOAD, currentIndex); // Load the captured variable
             }
-            newIndex++;
         }
 
         // 3. Build the constructor descriptor

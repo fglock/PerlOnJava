@@ -643,6 +643,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
         this.type = value.type;
         this.value = value.value;
+        this.blessId = value.blessId;
         return this;
     }
 
@@ -1071,7 +1072,31 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
 
         return switch (type) {
-            case UNDEF -> throw new PerlCompilerException("Can't use an undefined value as a SCALAR reference");
+            case UNDEF -> {
+                String derefDebug = System.getenv("JPERL_DEREF_DEBUG");
+                if (derefDebug != null && !derefDebug.isEmpty()) {
+                    try {
+                        StackTraceElement[] st = new Throwable().getStackTrace();
+                        System.err.println("[JPERL_DEREF_DEBUG] scalarDeref UNDEF: type=" + this.type + " blessId=" + this.blessId);
+                        int max = Math.min(st.length, 20);
+                        for (int i = 0; i < max; i++) {
+                            StackTraceElement el = st[i];
+                            System.err.println("[JPERL_DEREF_DEBUG]  #" + i + " " + el + " (jvmLine/tokenIndex=" + el.getLineNumber() + ")");
+                        }
+
+                        for (int i = 0; i < max; i++) {
+                            String cn = st[i].getClassName();
+                            String evalSrc = RuntimeCode.getEvalDebugSourceForClass(cn);
+                            if (evalSrc != null) {
+                                System.err.println("[JPERL_DEREF_DEBUG] eval_source_for_frame #" + i + " " + cn + " " + evalSrc);
+                            }
+                        }
+                    } catch (Throwable ignored) {
+                        // Never let debug interfere with runtime behavior
+                    }
+                }
+                throw new PerlCompilerException("Can't use an undefined value as a SCALAR reference");
+            }
             case REFERENCE -> (RuntimeScalar) value;
             case STRING, BYTE_STRING ->
                     throw new PerlCompilerException("Can't use string (\"" + this + "\") as a SCALAR ref while \"strict refs\" in use");
