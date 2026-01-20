@@ -632,6 +632,18 @@ public class ModuleOperators {
             }
 
             Throwable cause = findInnermostCause(t);
+            String oomDebug = System.getenv("JPERL_OOM_DEBUG");
+            if (oomDebug != null && !oomDebug.isEmpty() && !oomDebug.equals("0")) {
+                try {
+                    if (cause instanceof OutOfMemoryError) {
+                        System.err.println("[JPERL_OOM_DEBUG] OutOfMemoryError while "
+                                + (isRequire ? "require" : "do")
+                                + " file=" + fileName + " resolved=" + parsedArgs.fileName);
+                        cause.printStackTrace(System.err);
+                    }
+                } catch (Throwable ignored) {
+                }
+            }
             String message = null;
             try {
                 message = cause.getMessage();

@@ -75,6 +75,10 @@ public abstract class AbstractNode implements Node {
         annotations.put(key, value);
     }
 
+    public int getCachedBytecodeSizeRaw() {
+        return cachedBytecodeSize;
+    }
+
     public Integer getCachedBytecodeSize() {
         return cachedBytecodeSize == Integer.MIN_VALUE ? null : cachedBytecodeSize;
     }

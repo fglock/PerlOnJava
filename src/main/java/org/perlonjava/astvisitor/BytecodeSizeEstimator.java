@@ -92,10 +92,10 @@ public class BytecodeSizeEstimator implements Visitor {
      * @return Estimated bytecode size in bytes (calibration factor only, no base overhead)
      */
     public static int estimateSnippetSize(Node ast) {
-        // Check cache first
+        // Check cache first (avoid Integer boxing in hot paths)
         if (ast instanceof AbstractNode abstractNode) {
-            Integer cached = abstractNode.getCachedBytecodeSize();
-            if (cached != null) {
+            int cached = abstractNode.getCachedBytecodeSizeRaw();
+            if (cached != Integer.MIN_VALUE) {
                 return cached;
             }
         }

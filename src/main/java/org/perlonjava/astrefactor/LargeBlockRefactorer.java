@@ -32,9 +32,38 @@ public class LargeBlockRefactorer {
     private static final ThreadLocal<ControlFlowFinder> controlFlowFinderTl = ThreadLocal.withInitial(ControlFlowFinder::new);
 
     private static final int FORCE_REFACTOR_ELEMENT_COUNT = 50000;
-    private static final int TARGET_CHUNK_BYTECODE_SIZE = LARGE_BYTECODE_SIZE / 2;
+
+    // Target size for extracted chunks.
+    // Larger values reduce the number of generated anon-sub chunks (and therefore classes),
+    // which is important for very large modules under JPERL_LARGECODE=refactor (e.g. ExifTool).
+    // Keep this meaningfully below LARGE_BYTECODE_SIZE to allow headroom for estimator error and
+    // for the wrapper call overhead.
+    private static final int TARGET_CHUNK_BYTECODE_SIZE;
+
+    static {
+        int defaultTarget = Math.max(8_000, (int) (LARGE_BYTECODE_SIZE * 0.80));
+        int v = parseEnvInt("JPERL_TARGET_CHUNK_BYTECODE_SIZE", defaultTarget);
+        TARGET_CHUNK_BYTECODE_SIZE = Math.max(4_000, Math.min(LARGE_BYTECODE_SIZE - 1_000, v));
+    }
 
     private static final int MAX_REFACTOR_ATTEMPTS = 3;
+
+    // Cap on how many statements we pack into a single extracted block chunk.
+    // This is separate from LargeNodeRefactorer.MAX_CHUNK_SIZE (which applies to list literals).
+    private static final int MAX_BLOCK_CHUNK_SIZE = Math.max(16, Math.min(50_000,
+            parseEnvInt("JPERL_MAX_BLOCK_CHUNK_SIZE", 2000)));
+
+    private static final boolean PARSE_REFACTOR_AGGRESSIVE = System.getenv("JPERL_PARSE_REFACTOR_AGGRESSIVE") != null;
+
+    // Parse-time max nesting budget for LargeBlockRefactorer.
+    // Cache this value to avoid repeated System.getenv() calls while constructing many BlockNodes.
+    private static final int PARSE_REFACTOR_MAX_NESTED;
+
+    static {
+        int defaultBudget = PARSE_REFACTOR_AGGRESSIVE ? 1024 : 512;
+        int parseBudget = parseEnvInt("JPERL_PARSE_REFACTOR_MAX_NESTED", defaultBudget);
+        PARSE_REFACTOR_MAX_NESTED = Math.max(1, Math.min(2048, parseBudget));
+    }
 
     private static int parseEnvInt(String name, int defaultValue) {
         String raw = System.getenv(name);
@@ -46,6 +75,27 @@ public class LargeBlockRefactorer {
         } catch (NumberFormatException ignored) {
             return defaultValue;
         }
+    }
+
+    private static boolean containsScopeDeclarations(List<Node> elements) {
+        if (elements == null || elements.isEmpty()) {
+            return false;
+        }
+        for (Node element : elements) {
+            if (element == null) {
+                continue;
+            }
+            if (org.perlonjava.astvisitor.FindDeclarationVisitor.findOperator(element, "my") != null) {
+                return true;
+            }
+            if (org.perlonjava.astvisitor.FindDeclarationVisitor.findOperator(element, "state") != null) {
+                return true;
+            }
+            if (org.perlonjava.astvisitor.FindDeclarationVisitor.findOperator(element, "local") != null) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean chunkBlockLikelyTooLarge(BlockNode block) {
@@ -75,7 +125,8 @@ public class LargeBlockRefactorer {
                                                     int safeRunStart,
                                                     int safeRunEndExclusive,
                                                     long suffixEstimatedSize,
-                                                    int minChunkSize) {
+                                                    int minChunkSize,
+                                                    int targetChunkBytecodeSize) {
         int chunkStart = safeRunEndExclusive;
         long chunkEstimatedSize = 0;
         while (chunkStart > safeRunStart) {
@@ -87,7 +138,7 @@ public class LargeBlockRefactorer {
                 chunkEstimatedSize += candidateSize;
                 continue;
             }
-            if (chunkEstimatedSize + candidateSize + suffixEstimatedSize <= TARGET_CHUNK_BYTECODE_SIZE) {
+            if (chunkEstimatedSize + candidateSize + suffixEstimatedSize <= targetChunkBytecodeSize) {
                 chunkStart--;
                 chunkEstimatedSize += candidateSize;
                 continue;
@@ -155,7 +206,7 @@ public class LargeBlockRefactorer {
         // More aggressive than parse-time: allow deeper nesting to ensure we get under the JVM limit.
         // This may be tuned down to avoid excessive nesting depth (which can cause StackOverflowError
         // during compilation due to deeply nested anonymous sub calls).
-        int maxNested = parseEnvInt("JPERL_FORCE_REFACTOR_MAX_NESTED", 256);
+        int maxNested = parseEnvInt("JPERL_FORCE_REFACTOR_MAX_NESTED", 1024);
         maxNested = Math.max(1, Math.min(2048, maxNested));
         trySmartChunking(node, null, maxNested);
         processPendingRefactors();
@@ -215,11 +266,7 @@ public class LargeBlockRefactorer {
         // Default parse-time budget is conservative. If this budget is too low, codegen can still
         // hit MethodTooLargeException and require an emit-time retry pass which re-emits the same AST.
         // Increasing this budget at parse time can avoid the need for a second emission pass.
-        boolean aggressiveParse = System.getenv("JPERL_PARSE_REFACTOR_AGGRESSIVE") != null;
-        int parseBudget = parseEnvInt("JPERL_PARSE_REFACTOR_MAX_NESTED", aggressiveParse ? 256 : 64);
-        // Clamp to a reasonable range to avoid pathological nesting.
-        parseBudget = Math.max(1, Math.min(2048, parseBudget));
-        trySmartChunking(node, parser, parseBudget);
+        trySmartChunking(node, parser, PARSE_REFACTOR_MAX_NESTED);
 
         // Refactor any blocks created during this pass (iteratively, not recursively).
         processPendingRefactors();
@@ -329,9 +376,18 @@ public class LargeBlockRefactorer {
 
         int effectiveMinChunkSize = MIN_CHUNK_SIZE;
 
+        // If the block contains scope-affecting declarations (my/state/local), we must preserve
+        // lexical visibility across chunk boundaries. In practice this means we often need fewer,
+        // larger chunks to avoid exhausting the nesting budget (which can otherwise force a giant
+        // suffix into a single closure and OOM).
+        boolean needsScopePreservation = containsScopeDeclarations(node.elements);
+        int targetChunkBytecodeSizeEffective = needsScopePreservation
+                ? Math.max(TARGET_CHUNK_BYTECODE_SIZE, (int) (LARGE_BYTECODE_SIZE * 0.92))
+                : TARGET_CHUNK_BYTECODE_SIZE;
+
         int maxNestedClosuresEffective = (int) Math.min(
                 maxNestedClosures,
-                Math.max(1L, (estimatedSizeWithSafetyMargin + TARGET_CHUNK_BYTECODE_SIZE - 1) / TARGET_CHUNK_BYTECODE_SIZE)
+                Math.max(1L, (estimatedSizeWithSafetyMargin + targetChunkBytecodeSizeEffective - 1) / targetChunkBytecodeSizeEffective)
         );
 
         int closuresCreated = 0;
@@ -365,10 +421,198 @@ public class LargeBlockRefactorer {
         boolean hasAnyControlFlowInBlock = blockFinder.foundControlFlow;
         boolean treatAllElementsAsSafe = !hasLabelElement && !hasAnyControlFlowInBlock;
 
+        if (!needsScopePreservation) {
+            // If there are no scope-affecting declarations (my/state/local), we can split safe
+            // runs into independent chunk closures without nesting. This avoids the nested
+            // tail strategy which can allocate very large intermediate lists when the suffix
+            // is repeatedly copied into chunk bodies.
+            List<Node> rewritten = new ArrayList<>(node.elements.size());
+            int i = 0;
+            int closuresEmitted = 0;
+            while (i < node.elements.size()) {
+                Node element = node.elements.get(i);
+                if (element == null || shouldBreakChunk(element)) {
+                    rewritten.add(element);
+                    i++;
+                    continue;
+                }
+
+                int runStart = i;
+                while (i < node.elements.size()) {
+                    Node el = node.elements.get(i);
+                    if (el == null || shouldBreakChunk(el)) {
+                        break;
+                    }
+                    i++;
+                }
+                int runEndExclusive = i;
+                int runLen = runEndExclusive - runStart;
+
+                if (runLen < effectiveMinChunkSize) {
+                    for (int j = runStart; j < runEndExclusive; j++) {
+                        rewritten.add(node.elements.get(j));
+                    }
+                    continue;
+                }
+
+                long runningSize = 0;
+                int chunkStart = runStart;
+                while (chunkStart < runEndExclusive) {
+                    if (closuresEmitted >= maxNestedClosuresEffective) {
+                        for (int j = chunkStart; j < runEndExclusive; j++) {
+                            rewritten.add(node.elements.get(j));
+                        }
+                        break;
+                    }
+
+                    int chunkEndExclusive = chunkStart;
+                    int chunkLen = 0;
+                    runningSize = 0;
+                    while (chunkEndExclusive < runEndExclusive) {
+                        Node el = node.elements.get(chunkEndExclusive);
+                        long elSize = el == null ? 0 : BytecodeSizeEstimator.estimateSnippetSize(el);
+                        if (chunkLen >= effectiveMinChunkSize && runningSize + elSize > targetChunkBytecodeSizeEffective) {
+                            break;
+                        }
+                        if (chunkLen >= MAX_BLOCK_CHUNK_SIZE) {
+                            break;
+                        }
+                        runningSize += elSize;
+                        chunkEndExclusive++;
+                        chunkLen++;
+                    }
+
+                    if (chunkEndExclusive <= chunkStart) {
+                        rewritten.add(node.elements.get(chunkStart));
+                        chunkStart++;
+                        continue;
+                    }
+
+                    if (chunkLen < effectiveMinChunkSize) {
+                        for (int j = chunkStart; j < chunkEndExclusive; j++) {
+                            rewritten.add(node.elements.get(j));
+                        }
+                        chunkStart = chunkEndExclusive;
+                        continue;
+                    }
+
+                    List<Node> blockElements = new ArrayList<>(chunkLen);
+                    for (int j = chunkStart; j < chunkEndExclusive; j++) {
+                        blockElements.add(node.elements.get(j));
+                    }
+                    BlockNode block = createBlockNode(blockElements, node.tokenIndex, skipRefactoring);
+                    if (chunkBlockLikelyTooLarge(block)) {
+                        enqueueForRefactor(block);
+                    }
+                    rewritten.add(createAnonSubCall(node.tokenIndex, block));
+                    closuresEmitted++;
+                    chunkStart = chunkEndExclusive;
+                }
+            }
+
+            boolean didChange = rewritten.size() < node.elements.size();
+            if (didChange) {
+                long rewrittenSize = estimateTotalBytecodeSizeCapped(rewritten, (long) LARGE_BYTECODE_SIZE * maxNestedClosures);
+                long half = rewrittenSize / 2;
+                long rewrittenWithMargin = rewrittenSize > Long.MAX_VALUE - half ? Long.MAX_VALUE : rewrittenSize + half;
+                if (rewrittenWithMargin <= LARGE_BYTECODE_SIZE) {
+                    node.elements = rewritten;
+                    node.setAnnotation("blockAlreadyRefactored", true);
+                    if (parser != null || node.annotations != null) {
+                        node.setAnnotation("refactorSkipReason", "Successfully refactored (flat no-scope): closures=" + closuresEmitted);
+                        node.setAnnotation("refactoredBytecodeSize", rewrittenSize);
+                    }
+                    return;
+                }
+            }
+        }
+
         if (treatAllElementsAsSafe) {
-            safeRunActive = true;
-            safeRunLen = node.elements.size();
-            safeRunEndExclusive = node.elements.size();
+            // All elements are safe to chunk: avoid suffix duplication.
+            // The generic tail-chunking algorithm copies the growing suffix into each closure body,
+            // which can allocate huge intermediate lists and OOM on very large safe blocks.
+            //
+            // Build a chunk-only nested chain:
+            //   sub { chunk1; sub { chunk2; sub { chunk3; ... }->(@_) }->(@_) }->(@_)
+            // Each chunk appears exactly once, and lexical declarations are preserved because
+            // later chunks execute inside the same closure scope.
+            List<Node> originalElements = node.elements;
+            int endExclusive = originalElements.size();
+            Node tail = null;
+            long suffixSize = 0;
+            int safeClosuresCreated = 0;
+
+            while (endExclusive > 0 && safeClosuresCreated < maxNestedClosuresEffective) {
+                int chunkStart = findChunkStartByEstimatedSize(
+                        originalElements,
+                        0,
+                        endExclusive,
+                        suffixSize,
+                        effectiveMinChunkSize,
+                        targetChunkBytecodeSizeEffective
+                );
+                int chunkLen = endExclusive - chunkStart;
+                if (chunkLen <= 0) {
+                    break;
+                }
+
+                // Stop if the remaining prefix is too small to justify another closure.
+                // We'll keep it as direct elements before the final tail closure.
+                if (chunkLen < effectiveMinChunkSize && tail != null) {
+                    break;
+                }
+
+                List<Node> blockElements = new ArrayList<>(chunkLen + (tail != null ? 1 : 0));
+                for (int i = chunkStart; i < endExclusive; i++) {
+                    blockElements.add(originalElements.get(i));
+                }
+                if (tail != null) {
+                    blockElements.add(tail);
+                }
+
+                BlockNode block = createBlockNode(blockElements, node.tokenIndex, skipRefactoring);
+                if (chunkBlockLikelyTooLarge(block)) {
+                    enqueueForRefactor(block);
+                }
+                tail = createAnonSubCall(node.tokenIndex, block);
+                suffixSize = BytecodeSizeEstimator.estimateSnippetSize(tail);
+                safeClosuresCreated++;
+                endExclusive = chunkStart;
+            }
+
+            if (tail == null) {
+                if (parser != null || node.annotations != null) {
+                    node.setAnnotation("refactorSkipReason", "No chunk >= effective min chunk size " + effectiveMinChunkSize);
+                }
+                return;
+            }
+
+            List<Node> processedElements = new ArrayList<>(endExclusive + 1);
+            for (int i = 0; i < endExclusive; i++) {
+                processedElements.add(originalElements.get(i));
+            }
+            processedElements.add(tail);
+
+            long finalEstimatedSize = estimateTotalBytecodeSizeCapped(processedElements, (long) LARGE_BYTECODE_SIZE * maxNestedClosures);
+            long finalEstimatedHalf = finalEstimatedSize / 2;
+            long finalEstimatedSizeWithSafetyMargin = finalEstimatedSize > Long.MAX_VALUE - finalEstimatedHalf
+                    ? Long.MAX_VALUE
+                    : finalEstimatedSize + finalEstimatedHalf;
+
+            if (finalEstimatedSizeWithSafetyMargin > LARGE_BYTECODE_SIZE) {
+                if (parser != null || node.annotations != null) {
+                    node.setAnnotation("refactorSkipReason", "Refactoring failed: size " + finalEstimatedSize + " still > threshold " + LARGE_BYTECODE_SIZE);
+                }
+                return;
+            }
+
+            node.elements = processedElements;
+            node.setAnnotation("blockAlreadyRefactored", true);
+            if (parser != null || node.annotations != null) {
+                node.setAnnotation("refactorSkipReason", "Successfully refactored (safe chunk-only chain): closures=" + safeClosuresCreated);
+                node.setAnnotation("refactoredBytecodeSize", finalEstimatedSize);
+            }
+            return;
         } else {
 
             for (int i = node.elements.size() - 1; i >= 0; i--) {
@@ -394,7 +638,8 @@ public class LargeBlockRefactorer {
                                 safeRunStart,
                                 safeRunEndExclusive,
                                 suffixEstimatedSize,
-                                effectiveMinChunkSize
+                                effectiveMinChunkSize,
+                                targetChunkBytecodeSizeEffective
                         );
                         int chunkLen = safeRunEndExclusive - chunkStart;
 
@@ -402,12 +647,28 @@ public class LargeBlockRefactorer {
                             break;
                         }
 
-                        List<Node> blockElements = new ArrayList<>(chunkLen + suffixReversed.size() + (tailClosure != null ? 1 : 0));
+                        // Avoid repeatedly copying the growing suffix into every new chunk closure.
+                        // Instead, wrap the current suffix into a single tail closure once.
+                        if (!suffixReversed.isEmpty()) {
+                            List<Node> tailElements = new ArrayList<>(suffixReversed.size() + (tailClosure != null ? 1 : 0));
+                            for (int k = suffixReversed.size() - 1; k >= 0; k--) {
+                                tailElements.add(suffixReversed.get(k));
+                            }
+                            if (tailClosure != null) {
+                                tailElements.add(tailClosure);
+                            }
+                            BlockNode tailBlock = createBlockNode(tailElements, node.tokenIndex, skipRefactoring);
+                            if (chunkBlockLikelyTooLarge(tailBlock)) {
+                                enqueueForRefactor(tailBlock);
+                            }
+                            tailClosure = createAnonSubCall(node.tokenIndex, tailBlock);
+                            suffixEstimatedSize = BytecodeSizeEstimator.estimateSnippetSize(tailClosure);
+                            suffixReversed.clear();
+                        }
+
+                        List<Node> blockElements = new ArrayList<>(chunkLen + (tailClosure != null ? 1 : 0));
                         for (int j = chunkStart; j < safeRunEndExclusive; j++) {
                             blockElements.add(node.elements.get(j));
-                        }
-                        for (int k = suffixReversed.size() - 1; k >= 0; k--) {
-                            blockElements.add(suffixReversed.get(k));
                         }
                         if (tailClosure != null) {
                             blockElements.add(tailClosure);
@@ -459,7 +720,8 @@ public class LargeBlockRefactorer {
                         safeRunStart,
                         safeRunEndExclusive,
                         suffixEstimatedSize,
-                        effectiveMinChunkSize
+                        effectiveMinChunkSize,
+                        targetChunkBytecodeSizeEffective
                 );
                 int chunkLen = safeRunEndExclusive - chunkStart;
 
@@ -467,12 +729,28 @@ public class LargeBlockRefactorer {
                     break;
                 }
 
-                List<Node> blockElements = new ArrayList<>(chunkLen + suffixReversed.size() + (tailClosure != null ? 1 : 0));
+                // Avoid repeatedly copying the growing suffix into every new chunk closure.
+                // Instead, wrap the current suffix into a single tail closure once.
+                if (!suffixReversed.isEmpty()) {
+                    List<Node> tailElements = new ArrayList<>(suffixReversed.size() + (tailClosure != null ? 1 : 0));
+                    for (int k = suffixReversed.size() - 1; k >= 0; k--) {
+                        tailElements.add(suffixReversed.get(k));
+                    }
+                    if (tailClosure != null) {
+                        tailElements.add(tailClosure);
+                    }
+                    BlockNode tailBlock = createBlockNode(tailElements, node.tokenIndex, skipRefactoring);
+                    if (chunkBlockLikelyTooLarge(tailBlock)) {
+                        enqueueForRefactor(tailBlock);
+                    }
+                    tailClosure = createAnonSubCall(node.tokenIndex, tailBlock);
+                    suffixEstimatedSize = BytecodeSizeEstimator.estimateSnippetSize(tailClosure);
+                    suffixReversed.clear();
+                }
+
+                List<Node> blockElements = new ArrayList<>(chunkLen + (tailClosure != null ? 1 : 0));
                 for (int j = chunkStart; j < safeRunEndExclusive; j++) {
                     blockElements.add(node.elements.get(j));
-                }
-                for (int k = suffixReversed.size() - 1; k >= 0; k--) {
-                    blockElements.add(suffixReversed.get(k));
                 }
                 if (tailClosure != null) {
                     blockElements.add(tailClosure);

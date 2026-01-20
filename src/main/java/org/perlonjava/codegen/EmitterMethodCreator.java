@@ -50,6 +50,18 @@ public class EmitterMethodCreator {
     // which can exceed the limit for large/sparse symbol tables (e.g. large-block refactoring).
     private static final int MAX_CLOSURE_CONSTRUCTOR_ARGS = 200;
 
+    private static int parseEnvInt(String name, int defaultValue) {
+        try {
+            String v = System.getenv(name);
+            if (v == null || v.isEmpty()) {
+                return defaultValue;
+            }
+            return Integer.parseInt(v);
+        } catch (Throwable ignored) {
+            return defaultValue;
+        }
+    }
+
     public static boolean shouldUsePackedEnvConstructor(String[] env) {
         if (env == null) {
             return false;
@@ -60,6 +72,12 @@ public class EmitterMethodCreator {
 
     // Counter for generating unique class names
     public static int classCounter = 0;
+
+    // Diagnostic counters for tracking class generation volume.
+    // Enable with JPERL_CLASSGEN_DEBUG=1.
+    private static final boolean CLASSGEN_DEBUG = System.getenv("JPERL_CLASSGEN_DEBUG") != null;
+    private static final int CLASSGEN_DEBUG_EVERY = parseEnvInt("JPERL_CLASSGEN_DEBUG_EVERY", 500);
+    private static final java.util.concurrent.atomic.AtomicLong CLASSGEN_LOADED_COUNT = new java.util.concurrent.atomic.AtomicLong();
 
     // Generate a unique internal class name
     public static synchronized String generateClassName() {
@@ -1448,7 +1466,19 @@ public class EmitterMethodCreator {
         String javaClassNameDot = ctx.javaClassInfo.javaClassName.replace('/', '.');
 
         // Define the class using the global class loader
-        return loader.defineClass(javaClassNameDot, classData);
+        Class<?> c = loader.defineClass(javaClassNameDot, classData);
+        if (CLASSGEN_DEBUG) {
+            long n = CLASSGEN_LOADED_COUNT.incrementAndGet();
+            if (CLASSGEN_DEBUG_EVERY > 0 && (n % CLASSGEN_DEBUG_EVERY) == 0) {
+                Runtime rt = Runtime.getRuntime();
+                long usedMb = (rt.totalMemory() - rt.freeMemory()) / (1024L * 1024L);
+                long totalMb = rt.totalMemory() / (1024L * 1024L);
+                long maxMb = rt.maxMemory() / (1024L * 1024L);
+                System.err.println("[JPERL_CLASSGEN] loaded=" + n + " last=" + javaClassNameDot
+                        + " mem(MB) used=" + usedMb + " total=" + totalMb + " max=" + maxMb);
+            }
+        }
+        return c;
     }
 
     public static void debugInspectClass(Class<?> generatedClass) {

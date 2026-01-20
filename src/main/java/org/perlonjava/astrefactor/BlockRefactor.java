@@ -15,11 +15,28 @@ import static org.perlonjava.parser.ParserNodeUtils.variableAst;
 public class BlockRefactor {
     // Shared configuration thresholds for both LargeBlockRefactorer and LargeNodeRefactorer
     public static final int LARGE_ELEMENT_COUNT = 200;     // Deprecated: kept for MIN_CHUNK_SIZE compatibility
-    public static final int LARGE_BYTECODE_SIZE = 40000;   // Maximum bytecode size before refactoring
+
+    // Maximum bytecode size before refactoring.
+    // This must stay meaningfully below the JVM method bytecode limit (65535) to account for
+    // estimator error and wrapper overhead. Keep the default conservative to avoid generating
+    // methods that are still too large.
+    public static final int LARGE_BYTECODE_SIZE = parseEnvInt("JPERL_LARGE_BYTECODE_SIZE", 40_000);
     public static final int MIN_CHUNK_SIZE = 4;            // Minimum statements to extract as a chunk
 
     // Reusable visitor for control flow detection
     private static final ControlFlowDetectorVisitor controlFlowDetector = new ControlFlowDetectorVisitor();
+
+    private static int parseEnvInt(String name, int defaultValue) {
+        String raw = System.getenv(name);
+        if (raw == null || raw.isEmpty()) {
+            return defaultValue;
+        }
+        try {
+            return Integer.parseInt(raw);
+        } catch (NumberFormatException ignored) {
+            return defaultValue;
+        }
+    }
     /**
      * Creates an anonymous subroutine call node that invokes a subroutine with the @_ array as arguments.
      *
@@ -30,10 +47,16 @@ public class BlockRefactor {
     public static BinaryOperatorNode createAnonSubCall(int tokenIndex, BlockNode nestedBlock) {
         ArrayList<Node> args = new ArrayList<>(1);
         args.add(variableAst("@", "_", tokenIndex));
+        // IMPORTANT: avoid ListNode(List<Node>, ...) here.
+        // That constructor runs LargeNodeRefactorer.maybeRefactorElements(), which in turn
+        // calls BytecodeSizeEstimator over and over. For huge refactored blocks this method
+        // can be invoked thousands of times; keeping this lightweight prevents OOM.
+        ListNode argList = new ListNode(tokenIndex);
+        argList.elements = args;
         return new BinaryOperatorNode(
                 "->",
                 new SubroutineNode(null, null, null, nestedBlock, false, tokenIndex),
-                new ListNode(args, tokenIndex),
+                argList,
                 tokenIndex
         );
     }
