@@ -3,11 +3,13 @@ package org.perlonjava.codegen;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
+import org.perlonjava.astnode.BlockNode;
 import org.perlonjava.astnode.For3Node;
 import org.perlonjava.astnode.IfNode;
 import org.perlonjava.astnode.OperatorNode;
 import org.perlonjava.astnode.TryNode;
 import org.perlonjava.astvisitor.EmitterVisitor;
+import org.perlonjava.astvisitor.FindDeclarationVisitor;
 import org.perlonjava.runtime.RuntimeContextType;
 
 /**
@@ -62,36 +64,89 @@ public class EmitStatement {
         Label elseLabel = new Label();
         Label endLabel = new Label();
 
-        // Visit the condition node in scalar context
-        node.condition.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-
-        // Convert the result to a boolean
-        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "getBoolean", "()Z", false);
-
-        // Jump to the else label if the condition is false
-        emitterVisitor.ctx.mv.visitJumpInsn(node.operator.equals("unless") ? Opcodes.IFNE : Opcodes.IFEQ, elseLabel);
-
-        // Visit the then branch
-        node.thenBranch.accept(emitterVisitor);
-
-        // Jump to the end label after executing the then branch
-        emitterVisitor.ctx.mv.visitJumpInsn(Opcodes.GOTO, endLabel);
-
-        // Visit the else label
-        emitterVisitor.ctx.mv.visitLabel(elseLabel);
-
-        // Visit the else branch if it exists
-        if (node.elseBranch != null) {
-            node.elseBranch.accept(emitterVisitor);
-        } else {
-            // If the context is not VOID, push "undef" to the stack
-            if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
-                EmitOperator.emitUndef(emitterVisitor.ctx.mv);
-            }
+        record SavedRewrite(OperatorNode node, String operator, org.perlonjava.astnode.Node operand) {
         }
 
-        // Visit the end label
-        emitterVisitor.ctx.mv.visitLabel(endLabel);
+        java.util.ArrayList<SavedRewrite> rewrites = new java.util.ArrayList<>();
+        try {
+            // If the condition contains a `my` declaration (e.g. `if ($x && (my $y = ...))`),
+            // declare it before evaluating the condition so the lexical's local slot is initialized
+            // even when short-circuit control flow skips the assignment expression.
+            OperatorNode declaration = FindDeclarationVisitor.findOperator(node.condition, "my");
+            if (declaration != null && declaration.operand instanceof OperatorNode operatorNode) {
+                rewrites.add(new SavedRewrite(declaration, declaration.operator, declaration.operand));
+
+                declaration.accept(emitterVisitor.with(RuntimeContextType.VOID));
+                declaration.operator = operatorNode.operator;
+                declaration.operand = operatorNode.operand;
+            }
+
+            // Statement-modifier form can place `my` inside the then/else branch without braces:
+            // `my $x = expr if cond;`.
+            // In that case the assignment may be skipped, but the lexical must still be initialized.
+            if (node.thenBranch != null && !(node.thenBranch instanceof BlockNode)) {
+                OperatorNode declThen = FindDeclarationVisitor.findOperator(node.thenBranch, "my");
+                if (declThen != null && declThen.operand instanceof OperatorNode opNode) {
+                    rewrites.add(new SavedRewrite(declThen, declThen.operator, declThen.operand));
+                    declThen.accept(emitterVisitor.with(RuntimeContextType.VOID));
+                    declThen.operator = opNode.operator;
+                    declThen.operand = opNode.operand;
+                }
+            }
+            if (node.elseBranch != null
+                    && !(node.elseBranch instanceof BlockNode)
+                    && !(node.elseBranch instanceof IfNode)) {
+                // IMPORTANT: Do not scan nested elsif chains for `my` declarations.
+                // Else-branches represented as IfNode are emitted as separate if/elsif nodes with
+                // their own conditional evaluation. Predeclaring `my` from inside those branches
+                // here would execute them unconditionally and can clobber lexicals initialized
+                // earlier in the current block.
+                OperatorNode declElse = FindDeclarationVisitor.findOperator(node.elseBranch, "my");
+                if (declElse != null && declElse.operand instanceof OperatorNode opNode) {
+                    rewrites.add(new SavedRewrite(declElse, declElse.operator, declElse.operand));
+                    declElse.accept(emitterVisitor.with(RuntimeContextType.VOID));
+                    declElse.operator = opNode.operator;
+                    declElse.operand = opNode.operand;
+                }
+            }
+
+            // Visit the condition node in scalar context
+            node.condition.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+
+            // Convert the result to a boolean
+            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "getBoolean", "()Z", false);
+
+            // Jump to the else label if the condition is false
+            emitterVisitor.ctx.mv.visitJumpInsn(node.operator.equals("unless") ? Opcodes.IFNE : Opcodes.IFEQ, elseLabel);
+
+            // Visit the then branch
+            node.thenBranch.accept(emitterVisitor);
+
+            // Jump to the end label after executing the then branch
+            emitterVisitor.ctx.mv.visitJumpInsn(Opcodes.GOTO, endLabel);
+
+            // Visit the else label
+            emitterVisitor.ctx.mv.visitLabel(elseLabel);
+
+            // Visit the else branch if it exists
+            if (node.elseBranch != null) {
+                node.elseBranch.accept(emitterVisitor);
+            } else {
+                // If the context is not VOID, push "undef" to the stack
+                if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
+                    EmitOperator.emitUndef(emitterVisitor.ctx.mv);
+                }
+            }
+
+            // Visit the end label
+            emitterVisitor.ctx.mv.visitLabel(endLabel);
+        } finally {
+            for (int i = rewrites.size() - 1; i >= 0; i--) {
+                SavedRewrite r = rewrites.get(i);
+                r.node.operator = r.operator;
+                r.node.operand = r.operand;
+            }
+        }
 
         // Exit the scope in the symbol table
         emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);

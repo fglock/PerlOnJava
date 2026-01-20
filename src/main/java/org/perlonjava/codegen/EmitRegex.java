@@ -30,8 +30,18 @@ public class EmitRegex {
                 && !right.operator.equals("quoteRegex")) {
             // Regex operator: $v =~ /regex/; (but NOT qr//)
             // Bind the variable to the regex operation
-            listNode.elements.add(node.left);
-            right.accept(emitterVisitor);  // Use caller's context for regex operations
+            // IMPORTANT: Do not mutate the original AST.
+            // Codegen may retry after MethodTooLargeException (refactor mode), and any AST mutation
+            // can leak into the retry pass and corrupt semantics.
+            java.util.List<Node> newElements = new java.util.ArrayList<>(listNode.elements);
+            newElements.add(node.left);
+            ListNode newListNode = new ListNode(newElements, listNode.tokenIndex);
+            OperatorNode newRight = new OperatorNode(right.operator, newListNode, right.tokenIndex);
+            newRight.id = right.id;
+            if (right.annotations != null) {
+                newRight.annotations = new java.util.HashMap<>(right.annotations);
+            }
+            newRight.accept(emitterVisitor);  // Use caller's context for regex operations
             return;
         }
 

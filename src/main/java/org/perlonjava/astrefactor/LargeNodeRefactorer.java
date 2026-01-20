@@ -7,6 +7,8 @@ import org.perlonjava.parser.Parser;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.perlonjava.astrefactor.BlockRefactor.createAnonSubCall;
+
 import static org.perlonjava.astrefactor.BlockRefactor.*;
 
 /**
@@ -36,12 +38,24 @@ public class LargeNodeRefactorer {
      * When JPERL_LARGECODE=refactor, large literals will be automatically split.
      */
     static final boolean IS_REFACTORING_ENABLED = "refactor".equals(System.getenv("JPERL_LARGECODE"));
+
+    private static int parseEnvInt(String name, int defaultValue) {
+        String raw = System.getenv(name);
+        if (raw == null || raw.isEmpty()) {
+            return defaultValue;
+        }
+        try {
+            return Integer.parseInt(raw);
+        } catch (NumberFormatException ignored) {
+            return defaultValue;
+        }
+    }
     
     /**
      * Maximum elements per chunk. Limits chunk size even if bytecode estimates
      * suggest larger chunks would fit.
      */
-    private static final int MAX_CHUNK_SIZE = 200;
+    private static final int MAX_CHUNK_SIZE = parseEnvInt("JPERL_MAX_NODE_CHUNK_SIZE", 2000);
 
     /**
      * Thread-local flag to prevent recursion when creating nested blocks.
@@ -89,12 +103,62 @@ public class LargeNodeRefactorer {
             return elements;
         }
 
-        // For LIST nodes, create nested closures for proper lexical scoping
-        List<Node> result = createNestedListClosures(chunks, tokenIndex);
+        // If there are no lexical declarations within the element list, we can avoid
+        // deeply nesting closures (which can cause StackOverflowError at runtime for
+        // huge generated tables like ExifTool) by emitting a flat sequence of chunk calls.
+        // If there ARE lexical declarations (my/state), we keep the nested structure
+        // to preserve Perl's lexical visibility across the rest of the list.
+        boolean needsLexicalScopePreservation = containsLexicalDeclarations(elements);
+        List<Node> result = needsLexicalScopePreservation
+                ? createNestedListClosures(chunks, tokenIndex)
+                : createFlatListChunkCalls(chunks, tokenIndex);
         // Check if refactoring was successful by estimating bytecode size
         long estimatedSize = BlockRefactor.estimateTotalBytecodeSizeExact(result);
         if (estimatedSize > LARGE_BYTECODE_SIZE) {
             errorCantRefactorLargeBlock(tokenIndex, parser, estimatedSize);
+        }
+        return result;
+    }
+
+    private static boolean containsLexicalDeclarations(List<Node> elements) {
+        for (Node element : elements) {
+            if (element == null) {
+                continue;
+            }
+            if (org.perlonjava.astvisitor.FindDeclarationVisitor.findOperator(element, "my") != null) {
+                return true;
+            }
+            if (org.perlonjava.astvisitor.FindDeclarationVisitor.findOperator(element, "state") != null) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Builds a flat sequence of chunk calls: sub{ (chunk1...) }->(@_), sub{ (chunk2...) }->(@_), ...
+     *
+     * This preserves evaluation order without creating a deep call stack.
+     */
+    private static List<Node> createFlatListChunkCalls(List<Node> chunks, int tokenIndex) {
+        List<Node> result = new ArrayList<>();
+        for (Node chunk : chunks) {
+            if (!(chunk instanceof ListNode listChunk)) {
+                result.add(chunk);
+                continue;
+            }
+
+            if (listChunk.elements.size() < MIN_CHUNK_SIZE) {
+                result.addAll(listChunk.elements);
+                continue;
+            }
+
+            // Wrap chunk elements in a ListNode so the closure returns a list, not just
+            // a sequence of statements.
+            ListNode listNode = new ListNode(tokenIndex);
+            listNode.elements = listChunk.elements;
+            BlockNode block = new BlockNode(List.of(listNode), tokenIndex);
+            result.add(createAnonSubCall(tokenIndex, block));
         }
         return result;
     }

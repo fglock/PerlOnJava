@@ -71,6 +71,13 @@ public class EmitSubroutine {
     // Set to true to enable debug output for control flow checks
     private static final boolean DEBUG_CONTROL_FLOW = false;
 
+    private static String nodeSummary(Node node) {
+        if (node == null) {
+            return "<null>";
+        }
+        return node.getClass().getSimpleName() + "@" + node.getIndex();
+    }
+
     /**
      * Emits bytecode for a subroutine, including handling of closure variables.
      *
@@ -122,9 +129,14 @@ public class EmitSubroutine {
         ScopedSymbolTable newSymbolTable = new ScopedSymbolTable();
         newSymbolTable.enterScope();
         
-        // Add only the filtered visible variables (excluding 'our sub' entries)
-        for (SymbolTable.SymbolEntry entry : visibleVariables.values()) {
-            newSymbolTable.addVariable(entry.name(), entry.decl(), entry.ast());
+        // Add only the filtered visible variables (excluding 'our sub' entries).
+        // IMPORTANT: Preserve the original local-variable slot indices.
+        // The refactorer wraps parts of a single block into anonymous subs, and those subs must
+        // access the *same* lexical slots as the surrounding code.
+        for (Map.Entry<Integer, SymbolTable.SymbolEntry> visibleEntry : visibleVariables.entrySet()) {
+            int originalIndex = visibleEntry.getKey();
+            SymbolTable.SymbolEntry entry = visibleEntry.getValue();
+            newSymbolTable.addVariableAtIndex(entry.name(), entry.decl(), entry.perlPackage(), entry.ast(), originalIndex);
         }
         
         // Copy package, subroutine, and flags from the current context
@@ -170,35 +182,86 @@ public class EmitSubroutine {
 
         int skipVariables = EmitterMethodCreator.skipVariables; // Skip (this, @_, wantarray)
 
+        boolean packedEnvConstructor = EmitterMethodCreator.shouldUsePackedEnvConstructor(newEnv);
+
         // Direct instantiation approach - no reflection needed!
 
         // 1. NEW - Create new instance
         mv.visitTypeInsn(Opcodes.NEW, subCtx.javaClassInfo.javaClassName);
         mv.visitInsn(Opcodes.DUP);
 
-        // 2. Load all captured variables for the constructor
-        for (Integer currentIndex : visibleVariables.keySet()) {
-            // Skip (this, @_, wantarray) which are method parameters, not captured closure vars.
-            if (currentIndex >= skipVariables) {
-                mv.visitVarInsn(Opcodes.ALOAD, currentIndex); // Load the captured variable
+        if (packedEnvConstructor) {
+            // Packed constructor: <init>(Object[])
+            // Build Object[] containing captured values in env-slot order (including null gaps).
+            int argCount = newEnv.length - skipVariables;
+            if (argCount <= 5) {
+                mv.visitInsn(Opcodes.ICONST_0 + argCount);
+            } else if (argCount <= 127) {
+                mv.visitIntInsn(Opcodes.BIPUSH, argCount);
+            } else if (argCount <= 32767) {
+                mv.visitIntInsn(Opcodes.SIPUSH, argCount);
+            } else {
+                mv.visitLdcInsn(argCount);
             }
-        }
+            mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object");
+            for (int i = skipVariables; i < newEnv.length; i++) {
+                mv.visitInsn(Opcodes.DUP);
+                int arrayIndex = i - skipVariables;
+                if (arrayIndex <= 5) {
+                    mv.visitInsn(Opcodes.ICONST_0 + arrayIndex);
+                } else if (arrayIndex <= 127) {
+                    mv.visitIntInsn(Opcodes.BIPUSH, arrayIndex);
+                } else if (arrayIndex <= 32767) {
+                    mv.visitIntInsn(Opcodes.SIPUSH, arrayIndex);
+                } else {
+                    mv.visitLdcInsn(arrayIndex);
+                }
 
-        // 3. Build the constructor descriptor
-        StringBuilder constructorDescriptor = new StringBuilder("(");
-        for (int i = skipVariables; i < newEnv.length; i++) {
-            String descriptor = EmitterMethodCreator.getVariableDescriptor(newEnv[i]);
-            constructorDescriptor.append(descriptor);
-        }
-        constructorDescriptor.append(")V");
+                if (newEnv[i] == null || newEnv[i].isEmpty()) {
+                    mv.visitInsn(Opcodes.ACONST_NULL);
+                } else {
+                    // Use the original index (env slot) to load the captured value.
+                    mv.visitVarInsn(Opcodes.ALOAD, i);
+                }
+                mv.visitInsn(Opcodes.AASTORE);
+            }
 
-        // 4. INVOKESPECIAL - Call the constructor
-        mv.visitMethodInsn(
-                Opcodes.INVOKESPECIAL,
-                subCtx.javaClassInfo.javaClassName,
-                "<init>",
-                constructorDescriptor.toString(),
-                false);
+            mv.visitMethodInsn(
+                    Opcodes.INVOKESPECIAL,
+                    subCtx.javaClassInfo.javaClassName,
+                    "<init>",
+                    "([Ljava/lang/Object;)V",
+                    false);
+        } else {
+            // 2. Load all captured variables for the constructor.
+            // IMPORTANT: The generated constructor signature is derived from env slots in
+            // EmitterMethodCreator (one parameter per env index >= skipVariables, including gaps).
+            // Therefore we must load arguments by env slot order and explicitly pass null for gaps.
+            for (int i = skipVariables; i < newEnv.length; i++) {
+                if (newEnv[i] == null || newEnv[i].isEmpty()) {
+                    mv.visitInsn(Opcodes.ACONST_NULL);
+                    continue;
+                }
+                // Use the original index (env slot) to load the captured value.
+                mv.visitVarInsn(Opcodes.ALOAD, i);
+            }
+
+            // 3. Build the constructor descriptor
+            StringBuilder constructorDescriptor = new StringBuilder("(");
+            for (int i = skipVariables; i < newEnv.length; i++) {
+                String descriptor = EmitterMethodCreator.getVariableDescriptor(newEnv[i]);
+                constructorDescriptor.append(descriptor);
+            }
+            constructorDescriptor.append(")V");
+
+            // 4. INVOKESPECIAL - Call the constructor
+            mv.visitMethodInsn(
+                    Opcodes.INVOKESPECIAL,
+                    subCtx.javaClassInfo.javaClassName,
+                    "<init>",
+                    constructorDescriptor.toString(),
+                    false);
+        }
 
         // 5. Create a CODE variable using RuntimeCode.makeCodeObject
         if (node.prototype != null) {
@@ -235,7 +298,7 @@ public class EmitSubroutine {
      * @param node           The binary operator node representing the apply operation.
      */
     static void handleApplyOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
-        emitterVisitor.ctx.logDebug("handleApplyElementOperator " + node + " in context " + emitterVisitor.ctx.contextType);
+        emitterVisitor.ctx.logDebug("handleApplyElementOperator " + nodeSummary(node) + " in context " + emitterVisitor.ctx.contextType);
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
         // Capture the call context into a local slot early.
@@ -533,7 +596,7 @@ public class EmitSubroutine {
      * @param node           The operator node representing the `__SUB__` operation.
      */
     static void handleSelfCallOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
-        emitterVisitor.ctx.logDebug("handleSelfCallOperator " + node + " in context " + emitterVisitor.ctx.contextType);
+        emitterVisitor.ctx.logDebug("handleSelfCallOperator " + nodeSummary(node) + " in context " + emitterVisitor.ctx.contextType);
 
         MethodVisitor mv = emitterVisitor.ctx.mv;
 

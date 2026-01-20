@@ -1,5 +1,6 @@
 package org.perlonjava.runtime;
 
+import org.perlonjava.codegen.ByteCodeSourceMapper;
 import org.perlonjava.operators.StringOperators;
 import org.perlonjava.parser.NumberParser;
 import org.perlonjava.regex.RuntimeRegex;
@@ -1082,6 +1083,23 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                         for (int i = 0; i < max; i++) {
                             StackTraceElement el = st[i];
                             System.err.println("[JPERL_DEREF_DEBUG]  #" + i + " " + el + " (jvmLine/tokenIndex=" + el.getLineNumber() + ")");
+                        }
+
+                        try {
+                            var locationToClassName = new HashMap<ByteCodeSourceMapper.SourceLocation, String>();
+                            for (int i = 0; i < max; i++) {
+                                StackTraceElement el = st[i];
+                                var loc = ByteCodeSourceMapper.parseStackTraceElement(el, locationToClassName);
+                                if (loc != null) {
+                                    System.err.println(
+                                            "[JPERL_DEREF_DEBUG]  #" + i + " source=" + loc.sourceFileName() +
+                                                    " line=" + loc.lineNumber() +
+                                                    " package=" + loc.packageName() +
+                                                    (loc.subroutineName() != null ? " sub=" + loc.subroutineName() : "") +
+                                                    " (tokenIndex=" + el.getLineNumber() + ")");
+                                }
+                            }
+                        } catch (Throwable ignored) {
                         }
 
                         for (int i = 0; i < max; i++) {

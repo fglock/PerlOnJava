@@ -23,6 +23,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
     }
 
     private static final Stack<InputLineState> inputLineStateStack = new Stack<>();
+    private static final Stack<RegexState> regexStateStack = new Stack<>();
 
     // The type of special variable, represented by an enum.
     final Id variableId;
@@ -257,29 +258,38 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
             inputLineStateStack.push(new InputLineState(handle, lineNumber, localValue));
             return;
         }
+        if (variableId == Id.CAPTURE || variableId == Id.MATCH || variableId == Id.PREMATCH
+                || variableId == Id.POSTMATCH || variableId == Id.LAST_PAREN_MATCH
+                || variableId == Id.LAST_SUCCESSFUL_PATTERN || variableId == Id.LAST_REGEXP_CODE_RESULT) {
+            // IMPORTANT (Perl semantics): localizing any regex special variable must preserve
+            // the full regex match state (captures, $&, $`, $', etc.).
+            // ScalarSpecialVariable does not store its value in (type,value) fields; it is computed
+            // on demand from RuntimeRegex static state. Therefore we must snapshot RuntimeRegex state.
+            regexStateStack.push(new RegexState());
+            return;
+        }
         super.dynamicSaveState();
     }
 
-    /**
-     * Restores the most recently saved state of the RuntimeScalar instance.
-     *
-     * <p>This method pops the most recent state from the static stack and restores
-     * the type and value to the current scalar. If no state is saved, it does nothing.
-     */
     @Override
     public void dynamicRestoreState() {
         if (variableId == Id.INPUT_LINE_NUMBER) {
             if (!inputLineStateStack.isEmpty()) {
-                InputLineState previous = inputLineStateStack.pop();
-                RuntimeIO.lastAccesseddHandle = previous.lastHandle;
-                if (previous.lastHandle != null) {
-                    previous.lastHandle.currentLineNumber = previous.lastLineNumber;
+                InputLineState st = inputLineStateStack.pop();
+                RuntimeIO.lastAccesseddHandle = st.lastHandle();
+                if (RuntimeIO.lastAccesseddHandle != null) {
+                    RuntimeIO.lastAccesseddHandle.currentLineNumber = st.lastLineNumber();
                 }
-                lvalue = previous.localValue;
-                if (lvalue != null) {
-                    this.type = lvalue.type;
-                    this.value = lvalue.value;
-                }
+                lvalue = st.localValue();
+            }
+            return;
+        }
+        if (variableId == Id.CAPTURE || variableId == Id.MATCH || variableId == Id.PREMATCH
+                || variableId == Id.POSTMATCH || variableId == Id.LAST_PAREN_MATCH
+                || variableId == Id.LAST_SUCCESSFUL_PATTERN || variableId == Id.LAST_REGEXP_CODE_RESULT) {
+            if (!regexStateStack.isEmpty()) {
+                RegexState st = regexStateStack.pop();
+                st.restore();
             }
             return;
         }

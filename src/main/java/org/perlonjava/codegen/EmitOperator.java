@@ -764,6 +764,16 @@ public class EmitOperator {
 
         // Set the current package in the symbol table.
         emitterVisitor.ctx.symbolTable.setCurrentPackage(name, node.getBooleanAnnotation("isClass"));
+
+        // Also update the runtime current package so caller()/Exporter work even when
+        // stack-trace source mapping is disabled.
+        emitterVisitor.ctx.mv.visitLdcInsn(name);
+        emitterVisitor.ctx.mv.visitMethodInsn(
+                Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/GlobalVariable",
+                "setRuntimeCurrentPackage",
+                "(Ljava/lang/String;)V",
+                false);
         // Set debug information for the file name.
         ByteCodeSourceMapper.setDebugInfoFileName(emitterVisitor.ctx);
         if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {

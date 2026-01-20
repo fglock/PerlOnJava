@@ -116,6 +116,18 @@ public class ScopedSymbolTable {
         packageVersions.clear();
     }
 
+    private static int parseEnvInt(String name, int defaultValue) {
+        try {
+            String v = System.getenv(name);
+            if (v == null || v.isEmpty()) {
+                return defaultValue;
+            }
+            return Integer.parseInt(v);
+        } catch (Throwable ignored) {
+            return defaultValue;
+        }
+    }
+
     /**
      * Enters a new scope by pushing a new SymbolTable onto the stack.
      * Copies the current state of warnings, features, and strict options to the new scope.
@@ -126,7 +138,8 @@ public class ScopedSymbolTable {
         clearVisibleVariablesCache();
 
         // Push a new SymbolTable onto the stack and set its index
-        symbolTableStack.push(new SymbolTable(symbolTableStack.peek().index));
+        SymbolTable prev = symbolTableStack.peek();
+        symbolTableStack.push(new SymbolTable(prev.lexicalIndex, prev.localIndex));
         // Push a copy of the current package name onto the stack
         packageStack.push(packageStack.peek());
         // Push a copy of the current subroutine name onto the stack
@@ -152,15 +165,37 @@ public class ScopedSymbolTable {
      */
     public void exitScope(int scopeIndex) {
         clearVisibleVariablesCache();
+        int maxLocalIndex = symbolTableStack.peek().localIndex;
+        int maxLexicalIndex = symbolTableStack.peek().lexicalIndex;
         // Pop entries from the stacks until reaching the specified scope index
         while (symbolTableStack.size() > scopeIndex) {
-            symbolTableStack.pop();
+            SymbolTable popped = symbolTableStack.pop();
+            if (popped.localIndex > maxLocalIndex) {
+                maxLocalIndex = popped.localIndex;
+            }
+            if (popped.lexicalIndex > maxLexicalIndex) {
+                maxLexicalIndex = popped.lexicalIndex;
+            }
             packageStack.pop();
             subroutineStack.pop();
             inSubroutineBodyStack.pop();
             warningFlagsStack.pop();
             featureFlagsStack.pop();
             strictOptionsStack.pop();
+        }
+        if (!symbolTableStack.isEmpty()) {
+            // IMPORTANT: keep lexical indices monotonic across scopes.
+            // Reusing a JVM local slot number for different lexical variables can lead to
+            // verifier errors when ASM computes frames across complex control flow.
+            if (symbolTableStack.peek().lexicalIndex < maxLexicalIndex) {
+                symbolTableStack.peek().lexicalIndex = maxLexicalIndex;
+            }
+            if (symbolTableStack.peek().localIndex < maxLocalIndex) {
+                symbolTableStack.peek().localIndex = maxLocalIndex;
+            }
+            if (symbolTableStack.peek().localIndex < symbolTableStack.peek().lexicalIndex) {
+                symbolTableStack.peek().localIndex = symbolTableStack.peek().lexicalIndex;
+            }
         }
     }
 
@@ -216,6 +251,32 @@ public class ScopedSymbolTable {
     public int addVariable(String name, String variableDeclType, OperatorNode ast) {
         clearVisibleVariablesCache();
         return symbolTableStack.peek().addVariable(name, variableDeclType, getCurrentPackage(), ast);
+    }
+
+    /**
+     * Adds (or replaces) a variable in the current scope at a specific local-variable slot index.
+     *
+     * This is required for closure/refactor compilation where we must preserve the original lexical
+     * slot indices (including gaps) so that captured variables line up between the caller and the
+     * generated anonymous subroutine class.
+     */
+    public void addVariableAtIndex(String name,
+                                   String variableDeclType,
+                                   String perlPackage,
+                                   OperatorNode ast,
+                                   int index) {
+        clearVisibleVariablesCache();
+
+        SymbolTable current = symbolTableStack.peek();
+        current.variableIndex.put(name, new SymbolTable.SymbolEntry(index, name, variableDeclType, perlPackage, ast));
+
+        // Ensure future allocations don't overlap this explicit slot.
+        if (current.lexicalIndex < index + 1) {
+            current.lexicalIndex = index + 1;
+        }
+        if (current.localIndex < current.lexicalIndex) {
+            current.localIndex = current.lexicalIndex;
+        }
     }
 
     /**
@@ -340,13 +401,45 @@ public class ScopedSymbolTable {
         // We need to find the maximum slot index to properly size the array
         int maxIndex = -1;
         for (Integer index : visibleVariables.keySet()) {
+            SymbolTable.SymbolEntry entry = visibleVariables.get(index);
+            if (entry != null && "our".equals(entry.decl())) {
+                // `our` declares a package global, not a lexical; do not include it in the
+                // closure/env slot array.
+                continue;
+            }
             if (index > maxIndex) {
                 maxIndex = index;
             }
         }
+
+        // Safety guard: if slot indices grow without bound, allocating a sparse env array will OOM.
+        // This can happen when temporary local slot allocation accidentally influences lexical slot
+        // numbering, or when indices fail to reset between compiled units.
+        int maxEnvSlots = parseEnvInt("JPERL_MAX_ENV_SLOTS", 1_000_000);
+        if (maxIndex > maxEnvSlots) {
+            throw new PerlCompilerException(
+                    "Internal error: lexical slot index too large (maxIndex=" + maxIndex
+                            + ", visibleVars=" + visibleVariables.size()
+                            + ", limit=" + maxEnvSlots + "). "
+                            + "This would allocate an enormous sparse environment array. "
+                            + "Try setting JPERL_MAX_ENV_SLOTS higher for diagnostics, "
+                            + "or fix slot index growth.");
+        }
+
+        if (System.getenv("JPERL_ENV_DEBUG") != null) {
+            try {
+                System.err.println("[JPERL_ENV_DEBUG] visibleVars=" + visibleVariables.size() + " maxIndex=" + maxIndex);
+            } catch (Throwable ignored) {
+            }
+        }
         String[] vars = new String[maxIndex + 1];
         for (Integer index : visibleVariables.keySet()) {
-            vars[index] = visibleVariables.get(index).name();
+            SymbolTable.SymbolEntry entry = visibleVariables.get(index);
+            if (entry != null && "our".equals(entry.decl())) {
+                // Package global, not a lexical
+                continue;
+            }
+            vars[index] = entry.name();
         }
         return vars;
     }
@@ -484,7 +577,7 @@ public class ScopedSymbolTable {
      */
     public int allocateLocalVariable() {
         // Allocate a new index in the current scope by incrementing the index counter
-        return symbolTableStack.peek().index++;
+        return symbolTableStack.peek().localIndex++;
     }
 
     /**
@@ -493,7 +586,7 @@ public class ScopedSymbolTable {
      * @return The current index value.
      */
     public int getCurrentLocalVariableIndex() {
-        return symbolTableStack.peek().index;
+        return symbolTableStack.peek().localIndex;
     }
 
     /**
@@ -504,7 +597,7 @@ public class ScopedSymbolTable {
      * @param newIndex The new starting index for local variable allocation.
      */
     public void resetLocalVariableIndex(int newIndex) {
-        symbolTableStack.peek().index = newIndex;
+        symbolTableStack.peek().localIndex = newIndex;
     }
 
     /**

@@ -12,11 +12,20 @@ public class SymbolTable {
     // A map to store variable names and their corresponding indices
     public Map<String, SymbolEntry> variableIndex = new HashMap<>();
 
-    // A counter to generate unique indices for variables
-    public int index;
+    // Counter to generate unique indices for lexical variables (pad slots)
+    public int lexicalIndex;
+
+    // Counter to allocate temporary JVM local variable slots during code emission
+    public int localIndex;
 
     public SymbolTable(int index) {
-        this.index = index;
+        this.lexicalIndex = index;
+        this.localIndex = index;
+    }
+
+    public SymbolTable(int lexicalIndex, int localIndex) {
+        this.lexicalIndex = lexicalIndex;
+        this.localIndex = localIndex;
     }
 
     /**
@@ -29,8 +38,16 @@ public class SymbolTable {
         // Check if the variable is not already in the table
         // XXX TODO under 'no strict', we may need to allow variable redeclaration
         if (!variableIndex.containsKey(name)) {
-            // Add the variable with a unique index
-            variableIndex.put(name, new SymbolEntry(index++, name, variableDeclType, perlPackage, ast));
+            // Add the variable with a unique index.
+            // IMPORTANT: lexical variables and compiler-generated temporaries live in the same
+            // JVM local slot namespace. If we allocate temporaries first (advancing localIndex)
+            // and later allocate a lexical with a lower index (from lexicalIndex), we will
+            // reuse the same JVM local slot for different types and trigger verifier errors.
+            int slot = Math.max(lexicalIndex, localIndex);
+            variableIndex.put(name, new SymbolEntry(slot, name, variableDeclType, perlPackage, ast));
+
+            lexicalIndex = slot + 1;
+            localIndex = slot + 1;
         }
         // Return the index of the variable
         return variableIndex.get(name).index;
@@ -63,7 +80,9 @@ public class SymbolTable {
         }
         sb.append("  },\n");
 
-        sb.append("  index: ").append(index).append("\n");
+        sb.append("  lexicalIndex: ").append(lexicalIndex).append("\n");
+        sb.append("  localIndex: ").append(localIndex).append("\n");
+
         sb.append("}");
         return sb.toString();
     }

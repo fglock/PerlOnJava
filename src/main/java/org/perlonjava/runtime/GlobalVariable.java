@@ -51,6 +51,24 @@ public class GlobalVariable {
     // Regular expression for regex variables like $main::1
     static Pattern regexVariablePattern = Pattern.compile("^main::(\\d+)$");
 
+    // Track the current Perl package at runtime.
+    // This is needed for features like Exporter that rely on caller() during execution.
+    // When source mapping is disabled (e.g. JPERL_NO_SOURCE_MAP=1), caller() cannot reliably
+    // reconstruct the package from stack traces, so we fall back to this runtime value.
+    private static final ThreadLocal<String> runtimeCurrentPackage = ThreadLocal.withInitial(() -> "main");
+
+    public static void setRuntimeCurrentPackage(String packageName) {
+        if (packageName == null || packageName.isEmpty()) {
+            runtimeCurrentPackage.set("main");
+        } else {
+            runtimeCurrentPackage.set(packageName);
+        }
+    }
+
+    public static String getRuntimeCurrentPackage() {
+        return runtimeCurrentPackage.get();
+    }
+
     /**
      * Resets all global variables, arrays, hashes, code references, and IO references.
      * Also destroys and recreates the global class loader to allow GC of old classes.

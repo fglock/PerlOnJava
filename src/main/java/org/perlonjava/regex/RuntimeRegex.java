@@ -412,12 +412,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         int capture = 1;
         int previousPos = startPos; // Track the previous position  
         int previousMatchEnd = -1;  // Track end of previous match
-        // System.err.println("DEBUG: Resetting globalMatcher to null at start of matchRegex");
-        globalMatcher = null;
-        // Reset stored match information (but preserve last successful match info)
-        lastMatchedString = null;
-        lastMatchStart = -1;
-        lastMatchEnd = -1;
+        // IMPORTANT (Perl semantics): do not clear globalMatcher/capture variables on a failed match.
+        // Capture variables ($1, $2, $&, etc.) should retain their previous values if a later match fails.
+        // We only update match state when a match succeeds.
 
         while (matcher.find()) {
             // If \G is used, ensure the match starts at the expected position
@@ -500,15 +497,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // Reset pos() on failed match with /g, unless /c is set
         if (!found && regex.regexFlags.isGlobalMatch() && !regex.regexFlags.keepCurrentPosition()) {
             posScalar.set(scalarUndef);
-        }
-
-        // Reset special variables on failed match (Perl behavior)
-        if (!found) {
-            lastSuccessfulPattern = null;
-            lastSuccessfulMatchedString = null;
-            lastSuccessfulMatchStart = -1;
-            lastSuccessfulMatchEnd = -1;
-            lastSuccessfulMatchString = null;
         }
 
         if (found) {

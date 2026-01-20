@@ -14,6 +14,8 @@ import org.perlonjava.operators.ModuleOperators;
 import org.perlonjava.scriptengine.PerlLanguageProvider;
 import org.perlonjava.symbols.ScopedSymbolTable;
 
+import static org.perlonjava.parser.SpecialBlockParser.getCurrentScope;
+
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
@@ -477,6 +479,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Retrieve the class of the provided code object
         Class<?> clazz = codeObject.getClass();
 
+        // anonSubs is a temporary cache used during CODE object creation.
+        // Large-block refactoring and large modules (e.g. ExifTool/Writer.pl) can generate
+        // thousands of anonymous sub classes; if we never evict these entries we retain
+        // all generated Class objects and their metadata unnecessarily, leading to OOM.
+        //
+        // The class itself remains loaded by the global class loader; we only drop this
+        // extra strong reference.
+        String internalClassName = clazz.getName().replace('.', '/');
+        anonSubs.remove(internalClassName);
+
         // Check if the method handle is already cached
         MethodHandle methodHandle;
         synchronized (methodHandleCache) {
@@ -635,9 +647,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             } else {
                 // Fully qualified method name - call the exact subroutine
                 method = GlobalVariable.getGlobalCodeRef(methodName);
-                if (!method.getDefinedBoolean()) {
-                    throw new PerlCompilerException("Undefined subroutine &" + methodName + " called");
-                }
+                // IMPORTANT:
+                // Do NOT throw here when the CODE slot exists but is undefined.
+                // Many real-world modules rely on forward declarations + AUTOLOAD, or delayed
+                // loading via an AUTOLOAD (e.g. ExifTool loads Writer.pl through AUTOLOAD).
+                // RuntimeCode.apply() already implements Perl-like AUTOLOAD resolution for
+                // undefined RuntimeCode objects, so defer the error handling to apply().
             }
         } else {
             // Regular method lookup through inheritance
@@ -698,11 +713,34 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         if (lookupFrame >= 0 && lookupFrame < stackTraceSize) {
             // Runtime stack trace
+            ArrayList<String> frameInfo = stackTrace.get(lookupFrame);
+
+            // With source mapping disabled (e.g. JPERL_NO_SOURCE_MAP=1), stack trace entries
+            // may lose package information. This breaks Exporter, which relies on caller().
+            String packageName = frameInfo.isEmpty() ? null : frameInfo.get(0);
+            if (packageName == null || packageName.isEmpty()) {
+                try {
+                    packageName = GlobalVariable.getRuntimeCurrentPackage();
+                } catch (Throwable ignored) {
+                }
+            }
+            if (packageName == null || packageName.isEmpty()) {
+                try {
+                    ScopedSymbolTable scope = getCurrentScope();
+                    if (scope != null) {
+                        packageName = scope.getCurrentPackage();
+                    }
+                } catch (Throwable ignored) {
+                }
+            }
+            if (packageName == null || packageName.isEmpty()) {
+                packageName = "main";
+            }
+
             if (ctx == RuntimeContextType.SCALAR) {
-                res.add(new RuntimeScalar(stackTrace.get(lookupFrame).getFirst()));
+                res.add(new RuntimeScalar(packageName));
             } else {
-                ArrayList<String> frameInfo = stackTrace.get(lookupFrame);
-                res.add(new RuntimeScalar(frameInfo.get(0)));  // package
+                res.add(new RuntimeScalar(packageName));  // package
                 res.add(new RuntimeScalar(frameInfo.get(1)));  // filename
                 res.add(new RuntimeScalar(frameInfo.get(2)));  // line
                 
@@ -1034,6 +1072,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Alternative way to create constants like: `$constant::{_CAN_PCS} = \$const`
             return new RuntimeList(constantValue);
         }
+        // IMPORTANT (Perl semantics): regex match variables ($1, $&, etc.) are dynamically scoped
+        // and must be restored after returning from a subroutine call.
+        // Save the current regex state so callee-side regexes (including inside require/eval)
+        // don't clobber the caller's match variables.
+        RegexState savedRegexState = new RegexState();
         try {
             // Wait for the compilerThread to finish if it exists
             if (this.compilerSupplier != null) {
@@ -1066,6 +1109,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             throw (RuntimeException) targetException;
         } catch (Throwable e) {
             throw new RuntimeException(e);
+        } finally {
+            savedRegexState.restore();
         }
     }
 
@@ -1074,6 +1119,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Alternative way to create constants like: `$constant::{_CAN_PCS} = \$const`
             return new RuntimeList(constantValue);
         }
+        // See apply(RuntimeArray,...): preserve caller regex match variables across the call.
+        RegexState savedRegexState = new RegexState();
         try {
             // Wait for the compilerThread to finish if it exists
             if (this.compilerSupplier != null) {
@@ -1096,6 +1143,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             throw (RuntimeException) targetException;
         } catch (Throwable e) {
             throw new RuntimeException(e);
+        } finally {
+            savedRegexState.restore();
         }
     }
 

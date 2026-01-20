@@ -31,10 +31,130 @@ public class FindDeclarationVisitor implements Visitor {
      * @return The found OperatorNode, or null if not found
      */
     public static OperatorNode findOperator(Node blockNode, String operatorName) {
-        FindDeclarationVisitor visitor = new FindDeclarationVisitor();
-        visitor.operatorName = operatorName;
-        blockNode.accept(visitor);
-        return visitor.operatorNode;
+        if (blockNode == null || operatorName == null) {
+            return null;
+        }
+
+        // IMPORTANT: This must be iterative, not recursive.
+        // Deeply nested closure/refactor ASTs can overflow the JVM stack when traversed via accept()/visit().
+        java.util.ArrayDeque<Node> stack = new java.util.ArrayDeque<>();
+        stack.push(blockNode);
+
+        while (!stack.isEmpty()) {
+            Node node = stack.pop();
+            if (node == null) {
+                continue;
+            }
+
+            if (node instanceof OperatorNode opNode) {
+                if (operatorName.equals(opNode.operator)) {
+                    return opNode;
+                }
+                if (opNode.operand != null) {
+                    stack.push(opNode.operand);
+                }
+                continue;
+            }
+
+            if (node instanceof BlockNode block) {
+                for (int i = block.elements.size() - 1; i >= 0; i--) {
+                    stack.push(block.elements.get(i));
+                }
+                continue;
+            }
+
+            if (node instanceof BinaryOperatorNode bin) {
+                stack.push(bin.right);
+                stack.push(bin.left);
+                continue;
+            }
+
+            if (node instanceof IfNode ifNode) {
+                if (ifNode.elseBranch != null) {
+                    stack.push(ifNode.elseBranch);
+                }
+                stack.push(ifNode.thenBranch);
+                stack.push(ifNode.condition);
+                continue;
+            }
+
+            if (node instanceof TernaryOperatorNode ternary) {
+                stack.push(ternary.falseExpr);
+                stack.push(ternary.trueExpr);
+                stack.push(ternary.condition);
+                continue;
+            }
+
+            if (node instanceof For1Node for1) {
+                if (for1.continueBlock != null) {
+                    stack.push(for1.continueBlock);
+                }
+                stack.push(for1.body);
+                stack.push(for1.list);
+                stack.push(for1.variable);
+                continue;
+            }
+
+            if (node instanceof For3Node for3) {
+                stack.push(for3.body);
+                if (for3.increment != null) {
+                    stack.push(for3.increment);
+                }
+                if (for3.condition != null) {
+                    stack.push(for3.condition);
+                }
+                if (for3.initialization != null) {
+                    stack.push(for3.initialization);
+                }
+                continue;
+            }
+
+            if (node instanceof SubroutineNode sub) {
+                stack.push(sub.block);
+                continue;
+            }
+
+            if (node instanceof TryNode tryNode) {
+                if (tryNode.finallyBlock != null) {
+                    stack.push(tryNode.finallyBlock);
+                }
+                if (tryNode.catchBlock != null) {
+                    stack.push(tryNode.catchBlock);
+                }
+                if (tryNode.tryBlock != null) {
+                    stack.push(tryNode.tryBlock);
+                }
+                continue;
+            }
+
+            if (node instanceof ListNode list) {
+                for (int i = list.elements.size() - 1; i >= 0; i--) {
+                    stack.push(list.elements.get(i));
+                }
+                if (list.handle != null) {
+                    stack.push(list.handle);
+                }
+                continue;
+            }
+
+            if (node instanceof ArrayLiteralNode arr) {
+                for (int i = arr.elements.size() - 1; i >= 0; i--) {
+                    stack.push(arr.elements.get(i));
+                }
+                continue;
+            }
+
+            if (node instanceof HashLiteralNode hash) {
+                for (int i = hash.elements.size() - 1; i >= 0; i--) {
+                    stack.push(hash.elements.get(i));
+                }
+                continue;
+            }
+
+            // Leaf nodes: NumberNode, IdentifierNode, StringNode, LabelNode, CompilerFlagNode, FormatLine, FormatNode
+        }
+
+        return null;
     }
 
     @Override
@@ -73,6 +193,11 @@ public class FindDeclarationVisitor implements Visitor {
         if (this.operatorName.equals(node.operator)) {
             containsLocalOperator = true;
             operatorNode = node;
+            return;
+        }
+
+        if (!containsLocalOperator && node.operand != null) {
+            node.operand.accept(this);
         }
     }
 

@@ -16,6 +16,9 @@ public class ByteCodeSourceMapper {
     // Maps source files to their debug information
     private static final Map<Integer, SourceFileInfo> sourceFiles = new HashMap<>();
 
+    private static final boolean DISABLE_SOURCE_MAP = System.getenv("JPERL_NO_SOURCE_MAP") != null;
+    private static final int MAX_SOURCE_MAP_ENTRIES = parseEnvInt("JPERL_MAX_SOURCE_MAP_ENTRIES", 200_000);
+
     // Pool of package names to optimize memory usage
     private static final ArrayList<String> packageNamePool = new ArrayList<>();
     private static final Map<String, Integer> packageNameToId = new HashMap<>();
@@ -27,6 +30,18 @@ public class ByteCodeSourceMapper {
     // Pool of subroutine names to optimize memory usage
     private static final ArrayList<String> subroutineNamePool = new ArrayList<>();
     private static final Map<String, Integer> subroutineNameToId = new HashMap<>();
+
+    private static int parseEnvInt(String name, int defaultValue) {
+        try {
+            String v = System.getenv(name);
+            if (v == null || v.isEmpty()) {
+                return defaultValue;
+            }
+            return Integer.parseInt(v);
+        } catch (Throwable ignored) {
+            return defaultValue;
+        }
+    }
 
     /**
      * Gets or creates a unique identifier for a package name.
@@ -85,27 +100,25 @@ public class ByteCodeSourceMapper {
      * @param tokenIndex The index of the token in the source
      */
     public static void setDebugInfoLineNumber(EmitterContext ctx, int tokenIndex) {
-        // JVM line numbers must be positive. If we ever propagate 0/-1 here, the JVM stack trace
-        // will report line -1 for frames without a valid LineNumberTable entry.
-        //
-        // Note: we intentionally use tokenIndex as the emitted "line" so we can map it back to
-        // true source locations via saveSourceLocation() + parseStackTraceElement().
-        if (tokenIndex < 1) {
-            tokenIndex = 1;
+        // JVM line numbers are stored as u2 (0..65535). Using tokenIndex directly overflows for
+        // large sources (e.g. ExifTool), producing incorrect stack trace locations.
+        // Emit the real source line number instead.
+        int lineNumber = 1;
+        try {
+            lineNumber = ctx.errorUtil.getLineNumber(tokenIndex);
+        } catch (Throwable ignored) {
+        }
+        if (lineNumber < 1) {
+            lineNumber = 1;
         }
 
-        // Ensure this token index is also present in our tokenIndex->(line,package,sub) map.
-        // Without this, parseStackTraceElement() falls back to the nearest earlier entry,
-        // which can misreport runtime failures to an unrelated earlier statement.
         try {
-            saveSourceLocation(ctx, tokenIndex);
+            saveSourceLocation(ctx, lineNumber);
         } catch (Throwable ignored) {
-            // Best-effort only: if tokenIndex is out of bounds for the current file's token list,
-            // just skip source mapping and still emit a JVM line number.
         }
         Label thisLabel = new Label();
         ctx.mv.visitLabel(thisLabel);
-        ctx.mv.visitLineNumber(tokenIndex, thisLabel);
+        ctx.mv.visitLineNumber(lineNumber, thisLabel);
     }
 
     /**
@@ -117,12 +130,22 @@ public class ByteCodeSourceMapper {
      * @param ctx        The current emitter context containing compilation details
      * @param tokenIndex The index of the token in the source code
      */
-    public static void saveSourceLocation(EmitterContext ctx, int tokenIndex) {
+    public static void saveSourceLocation(EmitterContext ctx, int lineNumber) {
+        if (DISABLE_SOURCE_MAP) {
+            return;
+        }
         // Retrieve or create a unique identifier for the source file
         int fileId = getOrCreateFileId(ctx.errorUtil.getFileName());
 
         // Get or create the SourceFileInfo object for the file
         SourceFileInfo info = sourceFiles.computeIfAbsent(fileId, SourceFileInfo::new);
+
+        // Cap entries per source file to prevent unbounded growth during large compilations.
+        // When the cap is hit, we keep emitting JVM line numbers but stop recording the extra
+        // mapping data used for source reconstruction.
+        if (info.tokenToLineInfo.size() >= MAX_SOURCE_MAP_ENTRIES) {
+            return;
+        }
 
         // Get current subroutine name (empty string for main code)
         String subroutineName = ctx.symbolTable.getCurrentSubroutine();
@@ -130,9 +153,9 @@ public class ByteCodeSourceMapper {
             subroutineName = "";  // Use empty string for main code
         }
 
-        // Map the token index to a LineInfo object containing the line number, package ID, and subroutine ID
-        info.tokenToLineInfo.put(tokenIndex, new LineInfo(
-                ctx.errorUtil.getLineNumber(tokenIndex), // Get the line number for the token
+        // Map the emitted JVM line number to a LineInfo object containing package ID, and subroutine ID
+        info.tokenToLineInfo.put(lineNumber, new LineInfo(
+                lineNumber,
                 getOrCreatePackageId(ctx.symbolTable.getCurrentPackage()), // Get or create the package ID
                 getOrCreateSubroutineId(subroutineName) // Get or create the subroutine ID
         ));

@@ -14,6 +14,11 @@ public class RuntimeScalarCache {
     // Dynamic string cache
     private static final int INITIAL_STRING_CACHE_SIZE = 256;
     private static final int MAX_CACHED_STRING_LENGTH = 100;
+    private static final int DEFAULT_MAX_STRING_CACHE_ENTRIES = 200_000;
+    private static final int DEFAULT_MAX_BYTE_STRING_CACHE_ENTRIES = 200_000;
+
+    private static final int MAX_STRING_CACHE_ENTRIES = parseEnvInt("JPERL_MAX_STRING_CACHE", DEFAULT_MAX_STRING_CACHE_ENTRIES);
+    private static final int MAX_BYTE_STRING_CACHE_ENTRIES = parseEnvInt("JPERL_MAX_BYTE_STRING_CACHE", DEFAULT_MAX_BYTE_STRING_CACHE_ENTRIES);
     private static final AtomicInteger nextStringIndex = new AtomicInteger(0);
     private static final ConcurrentHashMap<String, Integer> stringToIndex = new ConcurrentHashMap<>();
     private static final Object stringCacheLock = new Object();
@@ -35,6 +40,18 @@ public class RuntimeScalarCache {
     // Array to store cached RuntimeScalarReadOnly objects for integers
     static RuntimeScalarReadOnly[] scalarInt = new RuntimeScalarReadOnly[maxInt - minInt + 1];
     private static volatile RuntimeScalarReadOnly[] scalarString = new RuntimeScalarReadOnly[INITIAL_STRING_CACHE_SIZE];
+
+    private static int parseEnvInt(String name, int defaultValue) {
+        try {
+            String v = System.getenv(name);
+            if (v == null || v.isEmpty()) {
+                return defaultValue;
+            }
+            return Integer.parseInt(v);
+        } catch (Throwable ignored) {
+            return defaultValue;
+        }
+    }
 
     // Static block to initialize the cache
     static {
@@ -79,7 +96,17 @@ public class RuntimeScalarCache {
                 return existingIndex;
             }
 
+            // Cache is full - fall back to uncached literals
+            if (nextByteStringIndex.get() >= MAX_BYTE_STRING_CACHE_ENTRIES) {
+                return -1;
+            }
+
             int index = nextByteStringIndex.getAndIncrement();
+
+            // Double-check after increment to avoid overshooting in races
+            if (index >= MAX_BYTE_STRING_CACHE_ENTRIES) {
+                return -1;
+            }
 
             // Grow array if needed
             if (index >= scalarByteString.length) {
@@ -133,7 +160,17 @@ public class RuntimeScalarCache {
                 return existingIndex;
             }
 
+            // Cache is full - fall back to uncached literals
+            if (nextStringIndex.get() >= MAX_STRING_CACHE_ENTRIES) {
+                return -1;
+            }
+
             int index = nextStringIndex.getAndIncrement();
+
+            // Double-check after increment to avoid overshooting in races
+            if (index >= MAX_STRING_CACHE_ENTRIES) {
+                return -1;
+            }
 
             // Grow array if needed
             if (index >= scalarString.length) {

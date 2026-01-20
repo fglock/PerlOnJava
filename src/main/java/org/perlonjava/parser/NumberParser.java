@@ -114,6 +114,7 @@ public class NumberParser {
         StringBuilder numberStr = new StringBuilder();
         boolean hasFractionalPart = false;
         String exponentStr = "";
+        boolean sawHexExponentMarker = false;
 
         // Check if the initialPart already contains 'p' (exponent)
         int pIndex = initialPart.toLowerCase().indexOf('p');
@@ -121,6 +122,7 @@ public class NumberParser {
             String actualNumberPart = initialPart.substring(0, pIndex);
             exponentStr = initialPart.substring(pIndex + 1);
             numberStr.append(cleanUnderscores(actualNumberPart));
+            sawHexExponentMarker = true;
         } else {
             numberStr.append(cleanUnderscores(initialPart));
         }
@@ -156,6 +158,7 @@ public class NumberParser {
                         }
                         exponentStr = currentToken.substring(tokenPIndex + 1);
                         TokenUtils.consume(parser);
+                        sawHexExponentMarker = true;
                         break;
                     } else if (format.digitValidator.test(currentToken.replaceAll("_", ""))) {
                         String digitStr = cleanUnderscores(TokenUtils.consume(parser).text);
@@ -165,6 +168,7 @@ public class NumberParser {
                     }
                 } else if (currentToken.equalsIgnoreCase("p")) {
                     TokenUtils.consume(parser);
+                    sawHexExponentMarker = true;
                     break;
                 } else {
                     break;
@@ -181,7 +185,11 @@ public class NumberParser {
                     exponentStr = String.valueOf(exponent);
                 }
             } else {
-                exponentStr = parseHexExponentTokens(parser);
+                // Only parse a hex-float exponent if we saw an explicit 'p' marker.
+                // Without a 'p' marker, the next '-'/'+' belongs to the surrounding expression.
+                if (sawHexExponentMarker) {
+                    exponentStr = parseHexExponentTokens(parser);
+                }
             }
         }
 

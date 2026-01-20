@@ -310,10 +310,10 @@ public class EmitVariable {
             boolean isLexical = isDeclared && (
                     symbolEntry.decl().equals("my")
                             || symbolEntry.decl().equals("state")
-                            || symbolEntry.decl().equals("our")
-                    // Note: @_ special handling is disabled as it breaks some tests
-                    // || (symbolEntry.decl().equals("our") && symbolEntry.name().equals("@_"))
             );
+
+            // Perl semantics: `our` declares a package global, not a lexical.
+            boolean isOur = isDeclared && symbolEntry.decl().equals("our");
 
             if (!isLexical) {
                 // ===== GLOBAL VARIABLE ACCESS =====
@@ -353,7 +353,8 @@ public class EmitVariable {
                         || isNonAsciiLengthOneScalarAllowedUnderNoUtf8(emitterVisitor.ctx, sigil, name)
                         || allowIfAlreadyExists
                         || !emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_VARS)  // no strict 'vars'
-                        || (isDeclared && isLexical);            // Lexically declared (my/our/state)
+                        || isLexical                             // Lexically declared (my/state)
+                        || isOur;                                // Declared package global (our)
                 
                 // Fetch the global variable (may throw exception if strict and not allowed)
                 fetchGlobalVariable(emitterVisitor.ctx, createIfNotExists, sigil, name, node.getIndex());
@@ -526,6 +527,14 @@ public class EmitVariable {
 
         Node left = node.left;
         Node right = node.right;
+
+        if (lvalueContext == RuntimeContextType.SCALAR
+                && left instanceof OperatorNode op
+                && (op.operator.equals("my") || op.operator.equals("our"))
+                && op.operand instanceof OperatorNode sigilNode
+                && (sigilNode.operator.equals("%") || sigilNode.operator.equals("@"))) {
+            lvalueContext = RuntimeContextType.LIST;
+        }
 
         boolean isLocalAssignment = left instanceof OperatorNode operatorNode && operatorNode.operator.equals("local");
 
@@ -1049,24 +1058,40 @@ public class EmitVariable {
                         // Create and fetch a global variable
                         fetchGlobalVariable(emitterVisitor.ctx, true, sigil, name, node.getIndex());
                     }
-                    // Store the variable in a JVM local variable
-                    emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, varIndex);
-                    
-                    // For declared references in non-void context, return a reference to the variable
-                    if (isDeclaredReference && emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
-                        // Load the variable back from the local variable slot
-                        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, varIndex);
-                        // Create a reference to it
-                        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                                "org/perlonjava/runtime/RuntimeBase",
-                                "createReference",
-                                "()Lorg/perlonjava/runtime/RuntimeScalar;",
-                                false);
-                    } else {
-                        // Normal handling for non-declared references
-                        if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
-                            // Load the variable back for the return value
+                    if (!operator.equals("our")) {
+                        // Store the variable in a JVM local variable
+                        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, varIndex);
+
+                        // For declared references in non-void context, return a reference to the variable
+                        if (isDeclaredReference && emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
+                            // Load the variable back from the local variable slot
                             emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, varIndex);
+                            // Create a reference to it
+                            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                                    "org/perlonjava/runtime/RuntimeBase",
+                                    "createReference",
+                                    "()Lorg/perlonjava/runtime/RuntimeScalar;",
+                                    false);
+                        } else {
+                            // Normal handling for non-declared references
+                            if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
+                                // Load the variable back for the return value
+                                emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, varIndex);
+                            }
+                        }
+                    } else {
+                        // Perl semantics: `our` declares a package global. Do NOT store this in a
+                        // JVM local slot, otherwise package globals like @EXPORT_OK/%EXPORT_TAGS
+                        // become invisible to Exporter.
+
+                        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
+                        } else if (isDeclaredReference) {
+                            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                                    "org/perlonjava/runtime/RuntimeBase",
+                                    "createReference",
+                                    "()Lorg/perlonjava/runtime/RuntimeScalar;",
+                                    false);
                         }
                     }
 

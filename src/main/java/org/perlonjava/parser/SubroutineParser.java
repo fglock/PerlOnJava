@@ -621,6 +621,12 @@ public class SubroutineParser {
                     continue;
                 }
 
+                // Perl semantics: `our` variables are package globals. Do not capture them as
+                // closure constructor parameters.
+                if (entry.decl().equals("our")) {
+                    continue;
+                }
+
                 String sigil = entry.name().substring(0, 1);
                 
                 // Skip code references (subroutines/methods) - they are not captured as closure variables
@@ -639,12 +645,7 @@ public class SubroutineParser {
                 }
                 
                 String variableName = null;
-                if (entry.decl().equals("our")) {
-                    // Normalize variable name for 'our' declarations
-                    variableName = NameNormalizer.normalizeVariableName(
-                            entry.name().substring(1),
-                            entry.perlPackage());
-                } else {
+                {
                     // Handle "my" or "state" variables which live in a special BEGIN package
                     // Retrieve the variable id from the AST; create a new id if needed
                     OperatorNode ast = entry.ast();
@@ -735,12 +736,90 @@ public class SubroutineParser {
             Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(newCtx, block, false);
 
             try {
-                // Prepare constructor with the captured variable types
-                Class<?>[] parameterTypes = classList.toArray(new Class<?>[0]);
-                Constructor<?> constructor = generatedClass.getConstructor(parameterTypes);
+                // Instantiate the subroutine with captured lexical variables.
+                // IMPORTANT: this must match the constructor shape emitted by EmitterMethodCreator,
+                // including padding for sparse env slots and the packed Object[] constructor.
+                String[] env = filteredSnapshot.getVariableNames();
+                boolean packedEnvConstructor = EmitterMethodCreator.shouldUsePackedEnvConstructor(env);
+                int skipVariables = EmitterMethodCreator.skipVariables;
 
-                // Instantiate the subroutine with the captured variables
-                Object[] parameters = paramList.toArray();
+                Class<?>[] parameterTypes;
+                Object[] parameters;
+                if (packedEnvConstructor) {
+                    parameterTypes = new Class<?>[]{Object[].class};
+                    Object[] packed = new Object[Math.max(0, env.length - skipVariables)];
+                    for (int i = skipVariables; i < env.length; i++) {
+                        String varName = env[i];
+                        if (varName == null || varName.isEmpty()) {
+                            packed[i - skipVariables] = null;
+                            continue;
+                        }
+                        SymbolTable.SymbolEntry entry = filteredSnapshot.getSymbolEntry(varName);
+                        if (entry == null) {
+                            packed[i - skipVariables] = null;
+                            continue;
+                        }
+                        String sigil = varName.substring(0, 1);
+                        OperatorNode ast = entry.ast();
+                        if (ast != null && ast.id == 0) {
+                            ast.id = EmitterMethodCreator.classCounter++;
+                        }
+                        String variableName = NameNormalizer.normalizeVariableName(
+                                entry.name().substring(1),
+                                PersistentVariable.beginPackage(ast != null ? ast.id : 0));
+                        Object capturedVar = switch (sigil) {
+                            case "$" -> GlobalVariable.getGlobalVariable(variableName);
+                            case "%" -> GlobalVariable.getGlobalHash(variableName);
+                            case "@" -> GlobalVariable.getGlobalArray(variableName);
+                            default -> null;
+                        };
+                        packed[i - skipVariables] = capturedVar;
+                    }
+                    parameters = new Object[]{packed};
+                } else {
+                    int argCount = Math.max(0, env.length - skipVariables);
+                    parameterTypes = new Class<?>[argCount];
+                    parameters = new Object[argCount];
+                    for (int i = skipVariables; i < env.length; i++) {
+                        int argIndex = i - skipVariables;
+                        String varName = env[i];
+                        if (varName == null || varName.isEmpty()) {
+                            // EmitterMethodCreator.getVariableDescriptor(null) => RuntimeScalar
+                            // so gaps are typed as RuntimeScalar in the generated constructor.
+                            parameterTypes[argIndex] = RuntimeScalar.class;
+                            parameters[argIndex] = null;
+                            continue;
+                        }
+                        String sigil = varName.substring(0, 1);
+                        parameterTypes[argIndex] = switch (sigil) {
+                            case "$" -> RuntimeScalar.class;
+                            case "%" -> RuntimeHash.class;
+                            case "@" -> RuntimeArray.class;
+                            default -> Object.class;
+                        };
+
+                        SymbolTable.SymbolEntry entry = filteredSnapshot.getSymbolEntry(varName);
+                        if (entry == null) {
+                            parameters[argIndex] = null;
+                            continue;
+                        }
+                        OperatorNode ast = entry.ast();
+                        if (ast != null && ast.id == 0) {
+                            ast.id = EmitterMethodCreator.classCounter++;
+                        }
+                        String variableName = NameNormalizer.normalizeVariableName(
+                                entry.name().substring(1),
+                                PersistentVariable.beginPackage(ast != null ? ast.id : 0));
+                        parameters[argIndex] = switch (sigil) {
+                            case "$" -> GlobalVariable.getGlobalVariable(variableName);
+                            case "%" -> GlobalVariable.getGlobalHash(variableName);
+                            case "@" -> GlobalVariable.getGlobalArray(variableName);
+                            default -> null;
+                        };
+                    }
+                }
+
+                Constructor<?> constructor = generatedClass.getConstructor(parameterTypes);
                 code.codeObject = constructor.newInstance(parameters);
 
                 // Retrieve the 'apply' method from the generated class
@@ -751,7 +830,7 @@ public class SubroutineParser {
                 field.set(code.codeObject, codeRef);
             } catch (Exception e) {
                 // Handle any exceptions during subroutine creation
-                throw new PerlCompilerException("Subroutine error: " + e.getMessage());
+                throw new PerlCompilerException("Subroutine error: " + e);
             }
 
             // Clear the compilerThread once done

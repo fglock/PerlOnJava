@@ -33,7 +33,7 @@ import java.lang.reflect.*;
  * classes with specific methods. It is designed to create classes with methods that can be used for
  * runtime evaluation of expressions or statements in a simulated Perl environment.
  */
-public class EmitterMethodCreator implements Opcodes {
+public class EmitterMethodCreator {
 
     // Feature flags for control flow implementation
     // Set to true to enable tail call trampoline (Phase 3)
@@ -44,6 +44,19 @@ public class EmitterMethodCreator implements Opcodes {
 
     // Number of local variables to skip when processing a closure (this, @_, wantarray)
     public static int skipVariables = 3;
+
+    // JVM limitation: methods/constructors may have at most 255 parameters.
+    // Our closure constructor used to generate one parameter per captured env slot (including gaps),
+    // which can exceed the limit for large/sparse symbol tables (e.g. large-block refactoring).
+    private static final int MAX_CLOSURE_CONSTRUCTOR_ARGS = 200;
+
+    public static boolean shouldUsePackedEnvConstructor(String[] env) {
+        if (env == null) {
+            return false;
+        }
+        int argCount = env.length - skipVariables;
+        return argCount > MAX_CLOSURE_CONSTRUCTOR_ARGS;
+    }
 
     // Counter for generating unique class names
     public static int classCounter = 0;
@@ -358,13 +371,86 @@ public class EmitterMethodCreator implements Opcodes {
 
     public static byte[] getBytecode(EmitterContext ctx, Node ast, boolean useTryCatch) {
         boolean asmDebug = System.getenv("JPERL_ASM_DEBUG") != null;
+
+        // Diagnostic switch: disable all codegen-time "method too large" refactoring.
+        // This leaves only parse-time refactoring (BlockNode/ListNode constructors) active.
+        // When enabled, any remaining oversized methods will fail fast with MethodTooLargeException.
+        String noCodegenRefactorEnv = System.getenv("JPERL_NO_CODEGEN_REFACTOR");
+        boolean noCodegenRefactor = noCodegenRefactorEnv != null && !noCodegenRefactorEnv.isEmpty() && !noCodegenRefactorEnv.equals("0");
+
+        String traceClassFilter = System.getenv("JPERL_REFACTOR_TRACE_CLASS");
+        String classNameForTrace = (ctx != null && ctx.javaClassInfo != null) ? ctx.javaClassInfo.javaClassName : null;
+        boolean traceRefactor = traceClassFilter != null && !traceClassFilter.isEmpty()
+                && classNameForTrace != null && classNameForTrace.contains(traceClassFilter);
+
+        if (traceRefactor && ast instanceof BlockNode blockAst) {
+            // Ensure annotations are enabled so LargeBlockRefactorer will record details.
+            blockAst.setAnnotation("refactorTraceEnabled", true);
+            System.err.println("[JPERL_REFACTOR_TRACE] class=" + classNameForTrace.replace('/', '.')
+                    + " elements=" + blockAst.elements.size()
+                    + " blockIsSubroutine=" + blockAst.getBooleanAnnotation("blockIsSubroutine")
+                    + " blockAlreadyRefactored=" + blockAst.getBooleanAnnotation("blockAlreadyRefactored")
+                    + " refactorAttempts=" + blockAst.getAnnotation("refactorAttempts"));
+        }
+
+        // Optional: refactor BEFORE the first emission attempt.
+        // This avoids the "emit -> MethodTooLargeException -> refactor -> retry emit" flow,
+        // which re-emits the same AST and can be impacted by any emitter that mutates the AST.
+        String preflightRefactorEnv = System.getenv("JPERL_PREFLIGHT_REFACTOR");
+        boolean preflightRefactor = preflightRefactorEnv != null && !preflightRefactorEnv.isEmpty() && !preflightRefactorEnv.equals("0");
+        String largecode = System.getenv("JPERL_LARGECODE");
+        boolean refactorEnabled = largecode != null && largecode.equalsIgnoreCase("refactor");
+        if (!noCodegenRefactor && preflightRefactor && refactorEnabled && ast instanceof BlockNode blockAst) {
+            // IMPORTANT: Do NOT preflight-refactor blocks that are already subroutine bodies.
+            // Large-block refactoring creates nested anonymous sub calls, and those sub bodies are
+            // compiled recursively. Preflight-refactoring them again can create excessive nesting
+            // and trigger StackOverflowError during compilation.
+            String preflightSubsEnv = System.getenv("JPERL_PREFLIGHT_REFACTOR_SUBROUTINES");
+            boolean preflightSubroutines = preflightSubsEnv != null && !preflightSubsEnv.isEmpty() && !preflightSubsEnv.equals("0");
+
+            boolean isSubroutineBlock = blockAst.getBooleanAnnotation("blockIsSubroutine");
+            boolean alreadyRefactored = blockAst.getBooleanAnnotation("blockAlreadyRefactored");
+            boolean shouldSkipBecauseSubroutine = isSubroutineBlock && !(preflightSubroutines || traceRefactor);
+            if (!shouldSkipBecauseSubroutine && !alreadyRefactored) {
+                LargeBlockRefactorer.forceRefactorForCodegen(blockAst);
+
+                if (traceRefactor) {
+                    System.err.println("[JPERL_REFACTOR_TRACE] after preflight class=" + classNameForTrace.replace('/', '.')
+                            + " elements=" + blockAst.elements.size()
+                            + " refactorSkipReason=" + blockAst.getAnnotation("refactorSkipReason")
+                            + " estimatedBytecodeSize=" + blockAst.getAnnotation("estimatedBytecodeSize")
+                            + " estimatedBytecodeSizeWithSafetyMargin=" + blockAst.getAnnotation("estimatedBytecodeSizeWithSafetyMargin")
+                            + " refactorEffectiveMinChunkSize=" + blockAst.getAnnotation("refactorEffectiveMinChunkSize")
+                            + " refactoredBytecodeSize=" + blockAst.getAnnotation("refactoredBytecodeSize")
+                            + " refactorAttempts=" + blockAst.getAnnotation("refactorAttempts"));
+                }
+            }
+        }
         try {
             return getBytecodeInternal(ctx, ast, useTryCatch, false);
         } catch (MethodTooLargeException tooLarge) {
+            if (traceRefactor && ast instanceof BlockNode blockAst) {
+                System.err.println("[JPERL_REFACTOR_TRACE] MethodTooLargeException class=" + classNameForTrace.replace('/', '.')
+                        + " elements=" + blockAst.elements.size()
+                        + " refactorSkipReason=" + blockAst.getAnnotation("refactorSkipReason")
+                        + " estimatedBytecodeSize=" + blockAst.getAnnotation("estimatedBytecodeSize")
+                        + " estimatedBytecodeSizeWithSafetyMargin=" + blockAst.getAnnotation("estimatedBytecodeSizeWithSafetyMargin")
+                        + " refactorEffectiveMinChunkSize=" + blockAst.getAnnotation("refactorEffectiveMinChunkSize")
+                        + " refactoredBytecodeSize=" + blockAst.getAnnotation("refactoredBytecodeSize")
+                        + " refactorAttempts=" + blockAst.getAnnotation("refactorAttempts")
+                        + " blockAlreadyRefactored=" + blockAst.getBooleanAnnotation("blockAlreadyRefactored"));
+            }
+
+            if (noCodegenRefactor) {
+                throw tooLarge;
+            }
+            String disableRetryEnv = System.getenv("JPERL_NO_TOO_LARGE_RETRY");
+            boolean disableRetry = disableRetryEnv != null && !disableRetryEnv.isEmpty() && !disableRetryEnv.equals("0");
+            if (disableRetry) {
+                throw tooLarge;
+            }
             // Best-effort: try a more aggressive large-block refactor pass, then retry once.
             // This is only enabled when refactoring is explicitly requested.
-            String largecode = System.getenv("JPERL_LARGECODE");
-            boolean refactorEnabled = largecode != null && largecode.equalsIgnoreCase("refactor");
             if (refactorEnabled && ast instanceof BlockNode blockAst) {
                 try {
                     LargeBlockRefactorer.forceRefactorForCodegen(blockAst);
@@ -504,17 +590,27 @@ public class EmitterMethodCreator implements Opcodes {
             // Add instance field for __SUB__ code reference
             cw.visitField(Opcodes.ACC_PUBLIC, "__SUB__", "Lorg/perlonjava/runtime/RuntimeScalar;", null, null).visitEnd();
 
-            // Add a constructor with parameters for initializing the fields
-            // Include ALL env slots (even nulls) so signature matches caller expectations
-            StringBuilder constructorDescriptor = new StringBuilder("(");
-            for (int i = skipVariables; i < env.length; i++) {
-                String descriptor = getVariableDescriptor(env[i]);  // handles nulls gracefully
-                constructorDescriptor.append(descriptor);
+            // Add a constructor with parameters for initializing the fields.
+            // For small envs we generate one parameter per env slot (including gaps).
+            // For large/sparse envs we generate a packed constructor taking a single Object[],
+            // to avoid exceeding the JVM 255-parameter limit.
+            boolean packedEnvConstructor = shouldUsePackedEnvConstructor(env);
+
+            String constructorDescriptor;
+            if (packedEnvConstructor) {
+                constructorDescriptor = "([Ljava/lang/Object;)V";
+            } else {
+                StringBuilder descriptorBuilder = new StringBuilder("(");
+                for (int i = skipVariables; i < env.length; i++) {
+                    String descriptor = getVariableDescriptor(env[i]);  // handles nulls gracefully
+                    descriptorBuilder.append(descriptor);
+                }
+                descriptorBuilder.append(")V");
+                constructorDescriptor = descriptorBuilder.toString();
             }
-            constructorDescriptor.append(")V");
+
             ctx.logDebug("constructorDescriptor: " + constructorDescriptor);
-            ctx.mv =
-                    cw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", constructorDescriptor.toString(), null, null);
+            ctx.mv = cw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", constructorDescriptor, null, null);
             MethodVisitor mv = ctx.mv;
             mv.visitCode();
             mv.visitVarInsn(Opcodes.ALOAD, 0); // Load 'this'
@@ -524,18 +620,50 @@ public class EmitterMethodCreator implements Opcodes {
                     "<init>",
                     "()V",
                     false); // Call the superclass constructor
-            for (int i = skipVariables; i < env.length; i++) {
-                // Skip null entries (gaps in sparse symbol table)
-                if (env[i] == null || env[i].isEmpty()) {
-                    continue;
-                }
-                String descriptor = getVariableDescriptor(env[i]);
 
-                mv.visitVarInsn(Opcodes.ALOAD, 0); // Load 'this'
-                mv.visitVarInsn(Opcodes.ALOAD, i - 2); // Load the constructor argument
-                mv.visitFieldInsn(
-                        Opcodes.PUTFIELD, ctx.javaClassInfo.javaClassName, env[i], descriptor); // Set the instance field
+            if (packedEnvConstructor) {
+                // param[0] is Object[] env values (one element per env slot >= skipVariables)
+                // Slots may contain null for gaps.
+                for (int i = skipVariables; i < env.length; i++) {
+                    if (env[i] == null || env[i].isEmpty()) {
+                        continue;
+                    }
+                    String descriptor = getVariableDescriptor(env[i]);
+
+                    mv.visitVarInsn(Opcodes.ALOAD, 0); // this
+                    mv.visitVarInsn(Opcodes.ALOAD, 1); // Object[]
+
+                    int arrayIndex = i - skipVariables;
+                    if (arrayIndex <= 5) {
+                        mv.visitInsn(Opcodes.ICONST_0 + arrayIndex);
+                    } else if (arrayIndex <= 127) {
+                        mv.visitIntInsn(Opcodes.BIPUSH, arrayIndex);
+                    } else if (arrayIndex <= 32767) {
+                        mv.visitIntInsn(Opcodes.SIPUSH, arrayIndex);
+                    } else {
+                        mv.visitLdcInsn(arrayIndex);
+                    }
+
+                    mv.visitInsn(Opcodes.AALOAD);
+                    // Cast to the specific runtime type expected by the field
+                    mv.visitTypeInsn(Opcodes.CHECKCAST, descriptor.substring(1, descriptor.length() - 1));
+                    mv.visitFieldInsn(Opcodes.PUTFIELD, ctx.javaClassInfo.javaClassName, env[i], descriptor);
+                }
+            } else {
+                for (int i = skipVariables; i < env.length; i++) {
+                    // Skip null entries (gaps in sparse symbol table)
+                    if (env[i] == null || env[i].isEmpty()) {
+                        continue;
+                    }
+                    String descriptor = getVariableDescriptor(env[i]);
+
+                    mv.visitVarInsn(Opcodes.ALOAD, 0); // Load 'this'
+                    mv.visitVarInsn(Opcodes.ALOAD, i - 2); // Load the constructor argument
+                    mv.visitFieldInsn(
+                            Opcodes.PUTFIELD, ctx.javaClassInfo.javaClassName, env[i], descriptor); // Set the instance field
+                }
             }
+
             mv.visitInsn(Opcodes.RETURN); // Return void
             mv.visitMaxs(0, 0); // Automatically computed
             mv.visitEnd();
@@ -595,22 +723,12 @@ public class EmitterMethodCreator implements Opcodes {
             // instance across many eval invocations. If we don't reset the counter for each
             // generated method, the local slot numbers will grow without bound (eventually
             // producing invalid stack map frames / VerifyError).
-            ctx.symbolTable.resetLocalVariableIndex(env.length);
-
-            // Pre-initialize temporary local slots to avoid VerifyError
-            // Temporaries are allocated dynamically during bytecode emission via
-            // ctx.symbolTable.allocateLocalVariable(). We pre-initialize slots to ensure
-            // they're not in TOP state when accessed. Use a visitor to estimate the
-            // actual number needed based on AST structure rather than a fixed count.
-            int preInitTempLocalsStart = ctx.symbolTable.getCurrentLocalVariableIndex();
-            org.perlonjava.astvisitor.TempLocalCountVisitor tempCountVisitor = 
-                new org.perlonjava.astvisitor.TempLocalCountVisitor();
-            ast.accept(tempCountVisitor);
-            int preInitTempLocalsCount = Math.max(128, tempCountVisitor.getMaxTempCount() + 64);  // Add buffer
-            for (int i = preInitTempLocalsStart; i < preInitTempLocalsStart + preInitTempLocalsCount; i++) {
-                mv.visitInsn(Opcodes.ACONST_NULL);
-                mv.visitVarInsn(Opcodes.ASTORE, i);
-            }
+            // Reset the temporary local variable allocator for *this* generated method.
+            // The symbol table object may be reused across many compilations (e.g. large modules
+            // and eval), so carrying over the previous localIndex would make local slot indices
+            // grow without bound, eventually causing huge sparse ranges and OOM.
+            int resetTo = env.length;
+            ctx.symbolTable.resetLocalVariableIndex(resetTo);
 
             // Allocate slots for tail call trampoline (codeRef and args)
             // These are used at returnLabel for TAILCALL handling

@@ -630,7 +630,21 @@ public class ModuleOperators {
                 // Remove the entry we just added, we'll handle this in require() method
                 getGlobalHash("main::INC").elements.remove(fileName);
             }
-            GlobalVariable.setGlobalVariable("main::@", findInnermostCause(t).getMessage());
+
+            Throwable cause = findInnermostCause(t);
+            String message = null;
+            try {
+                message = cause.getMessage();
+            } catch (Throwable ignored) {
+            }
+            if (message == null || message.isEmpty()) {
+                try {
+                    message = cause.toString();
+                } catch (Throwable ignored) {
+                    message = "Unknown error";
+                }
+            }
+            GlobalVariable.setGlobalVariable("main::@", message);
             return new RuntimeScalar(); // return undef
         } finally {
             featureManager = outerFeature;

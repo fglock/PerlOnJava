@@ -21,9 +21,13 @@ public class EmitBlock {
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
         // Try to refactor large blocks using the helper class
-        if (LargeBlockRefactorer.processBlock(emitterVisitor, node)) {
-            // Block was refactored and emitted by the helper
-            return;
+        String noCodegenRefactorEnv = System.getenv("JPERL_NO_CODEGEN_REFACTOR");
+        boolean noCodegenRefactor = noCodegenRefactorEnv != null && !noCodegenRefactorEnv.isEmpty() && !noCodegenRefactorEnv.equals("0");
+        if (!noCodegenRefactor) {
+            if (LargeBlockRefactorer.processBlock(emitterVisitor, node)) {
+                // Block was refactored and emitted by the helper
+                return;
+            }
         }
 
         emitterVisitor.ctx.logDebug("generateCodeBlock start context:" + emitterVisitor.ctx.contextType);
@@ -99,11 +103,14 @@ public class EmitBlock {
             // Emit the statement with current context
             if (i == lastNonNullIndex) {
                 // Special case for the last element
-                emitterVisitor.ctx.logDebug("Last element: " + element);
+                // Avoid element.toString() here: it can be extremely deep (or cyclic after refactoring),
+                // and logging it during compilation can trigger StackOverflowError.
+                emitterVisitor.ctx.logDebug("Last element: " + element.getClass().getSimpleName() + "@" + element.getIndex());
                 element.accept(emitterVisitor);
             } else {
                 // General case for all other elements
-                emitterVisitor.ctx.logDebug("Element: " + element);
+                // Avoid element.toString() here for the same reason as above.
+                emitterVisitor.ctx.logDebug("Element: " + element.getClass().getSimpleName() + "@" + element.getIndex());
                 element.accept(voidVisitor);
             }
             

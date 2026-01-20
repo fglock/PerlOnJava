@@ -36,6 +36,27 @@ public class LargeBlockRefactorer {
 
     private static final int MAX_REFACTOR_ATTEMPTS = 3;
 
+    private static int parseEnvInt(String name, int defaultValue) {
+        String raw = System.getenv(name);
+        if (raw == null || raw.isEmpty()) {
+            return defaultValue;
+        }
+        try {
+            return Integer.parseInt(raw);
+        } catch (NumberFormatException ignored) {
+            return defaultValue;
+        }
+    }
+
+    private static boolean chunkBlockLikelyTooLarge(BlockNode block) {
+        if (block == null) {
+            return false;
+        }
+        // Use a capped estimate to avoid spending too much time on huge blocks.
+        long estimated = estimateTotalBytecodeSizeCapped(block.elements, LARGE_BYTECODE_SIZE);
+        return estimated > LARGE_BYTECODE_SIZE;
+    }
+
     private static long estimateTotalBytecodeSizeCapped(List<Node> nodes, long capInclusive) {
         long total = 0;
         for (Node node : nodes) {
@@ -122,11 +143,21 @@ public class LargeBlockRefactorer {
         }
         node.setAnnotation("refactorAttempts", attempts + 1);
 
+        // Force refactor regardless of estimated bytecode size.
+        // This entry point is used after we already hit MethodTooLargeException, and the estimator
+        // can under-estimate (especially for complex nodes). If we keep trusting the estimate here,
+        // we may incorrectly skip refactoring and repeatedly fail codegen (e.g. anon* chunk bodies).
+        node.setAnnotation("forceRefactorForCodegen", true);
+
         // The estimator can under-estimate; if we reached codegen overflow, we must allow another pass.
         node.setAnnotation("blockAlreadyRefactored", false);
 
         // More aggressive than parse-time: allow deeper nesting to ensure we get under the JVM limit.
-        trySmartChunking(node, null, 256);
+        // This may be tuned down to avoid excessive nesting depth (which can cause StackOverflowError
+        // during compilation due to deeply nested anonymous sub calls).
+        int maxNested = parseEnvInt("JPERL_FORCE_REFACTOR_MAX_NESTED", 256);
+        maxNested = Math.max(1, Math.min(2048, maxNested));
+        trySmartChunking(node, null, maxNested);
         processPendingRefactors();
     }
 
@@ -181,7 +212,14 @@ public class LargeBlockRefactorer {
         }
 
         // Apply smart chunking
-        trySmartChunking(node, parser, 64);
+        // Default parse-time budget is conservative. If this budget is too low, codegen can still
+        // hit MethodTooLargeException and require an emit-time retry pass which re-emits the same AST.
+        // Increasing this budget at parse time can avoid the need for a second emission pass.
+        boolean aggressiveParse = System.getenv("JPERL_PARSE_REFACTOR_AGGRESSIVE") != null;
+        int parseBudget = parseEnvInt("JPERL_PARSE_REFACTOR_MAX_NESTED", aggressiveParse ? 256 : 64);
+        // Clamp to a reasonable range to avoid pathological nesting.
+        parseBudget = Math.max(1, Math.min(2048, parseBudget));
+        trySmartChunking(node, parser, parseBudget);
 
         // Refactor any blocks created during this pass (iteratively, not recursively).
         processPendingRefactors();
@@ -270,6 +308,8 @@ public class LargeBlockRefactorer {
             return;
         }
 
+        boolean forceRefactor = node.getBooleanAnnotation("forceRefactorForCodegen");
+
         // Check bytecode size - skip if under threshold.
         // IMPORTANT: use a larger cap here so we can compute a meaningful maxNestedClosuresEffective.
         long estimatedSize = estimateTotalBytecodeSizeCapped(node.elements, (long) LARGE_BYTECODE_SIZE * maxNestedClosures);
@@ -280,7 +320,7 @@ public class LargeBlockRefactorer {
             node.setAnnotation("estimatedBytecodeSizeWithSafetyMargin", estimatedSizeWithSafetyMargin);
         }
         boolean forceRefactorByElementCount = node.elements.size() >= FORCE_REFACTOR_ELEMENT_COUNT;
-        if (!forceRefactorByElementCount && estimatedSizeWithSafetyMargin <= LARGE_BYTECODE_SIZE) {
+        if (!forceRefactor && !forceRefactorByElementCount && estimatedSizeWithSafetyMargin <= LARGE_BYTECODE_SIZE) {
             if (parser != null || node.annotations != null) {
                 node.setAnnotation("refactorSkipReason", "Bytecode size " + estimatedSize + " <= threshold " + LARGE_BYTECODE_SIZE);
             }
@@ -374,6 +414,12 @@ public class LargeBlockRefactorer {
                         }
 
                         BlockNode block = createBlockNode(blockElements, node.tokenIndex, skipRefactoring);
+                        // The BlockNode constructor skips refactoring when invoked from createBlockNode
+                        // (skipRefactoring=true). Only enqueue chunk blocks that are still likely too large,
+                        // otherwise we can create an excessive number of refactor tasks and blow memory.
+                        if (chunkBlockLikelyTooLarge(block)) {
+                            enqueueForRefactor(block);
+                        }
                         tailClosure = createAnonSubCall(node.tokenIndex, block);
                         suffixEstimatedSize = BytecodeSizeEstimator.estimateSnippetSize(tailClosure);
                         suffixReversed.clear();
@@ -433,6 +479,10 @@ public class LargeBlockRefactorer {
                 }
 
                 BlockNode block = createBlockNode(blockElements, node.tokenIndex, skipRefactoring);
+                // See comment above: only enqueue chunk blocks that still look too large.
+                if (chunkBlockLikelyTooLarge(block)) {
+                    enqueueForRefactor(block);
+                }
                 tailClosure = createAnonSubCall(node.tokenIndex, block);
                 suffixEstimatedSize = BytecodeSizeEstimator.estimateSnippetSize(tailClosure);
                 suffixReversed.clear();
