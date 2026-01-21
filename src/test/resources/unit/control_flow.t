@@ -48,6 +48,113 @@ subtest 'local next - labeled' => sub {
               'labeled next continues correct loop');
 };
 
+subtest 'non-local next - unlabeled (inside sub)' => sub {
+    my @output;
+    my $do_next = sub {
+        my ($i, $j) = @_;
+        push @output, "in-sub-$i,$j";
+        next;
+        push @output, "after-next-$i,$j";
+    };
+
+    for my $i (1..2) {
+        for my $j (1..3) {
+            push @output, "before-$i,$j";
+            if ($j == 2) {
+                $do_next->($i, $j);
+            }
+            push @output, "after-$i,$j";
+        }
+    }
+
+    is_deeply(
+        \@output,
+        [
+            'before-1,1', 'after-1,1',
+            'before-1,2', 'in-sub-1,2',
+            'before-1,3', 'after-1,3',
+            'before-2,1', 'after-2,1',
+            'before-2,2', 'in-sub-2,2',
+            'before-2,3', 'after-2,3',
+        ],
+        'next from inside sub continues the innermost loop',
+    );
+};
+
+subtest 'non-local next - labeled (inside sub)' => sub {
+    my @output;
+    my $do_next_outer = sub {
+        my ($i, $j) = @_;
+        push @output, "in-sub-$i,$j";
+        next OUTER;
+        push @output, "after-next-$i,$j";
+    };
+
+    OUTER: for my $i (1..3) {
+        for my $j (1..3) {
+            push @output, "before-$i,$j";
+            if ($j == 2) {
+                $do_next_outer->($i, $j);
+            }
+            push @output, "after-$i,$j";
+        }
+    }
+
+    is_deeply(
+        \@output,
+        [
+            'before-1,1', 'after-1,1',
+            'before-1,2', 'in-sub-1,2',
+            'before-2,1', 'after-2,1',
+            'before-2,2', 'in-sub-2,2',
+            'before-3,1', 'after-3,1',
+            'before-3,2', 'in-sub-3,2',
+        ],
+        'labeled next from inside sub continues the correct labeled loop',
+    );
+};
+
+subtest 'non-local next - labeled (A->B->C calls)' => sub {
+    my @output;
+    my $C = sub {
+        my ($i, $j) = @_;
+        push @output, "in-C-$i,$j";
+        next OUTER;
+        push @output, "after-next-$i,$j";
+    };
+    my $B = sub {
+        my ($i, $j) = @_;
+        $C->($i, $j);
+    };
+    my $A = sub {
+        my ($i, $j) = @_;
+        $B->($i, $j);
+    };
+
+    OUTER: for my $i (1..3) {
+        for my $j (1..3) {
+            push @output, "before-$i,$j";
+            if ($j == 2) {
+                $A->($i, $j);
+            }
+            push @output, "after-$i,$j";
+        }
+    }
+
+    is_deeply(
+        \@output,
+        [
+            'before-1,1', 'after-1,1',
+            'before-1,2', 'in-C-1,2',
+            'before-2,1', 'after-2,1',
+            'before-2,2', 'in-C-2,2',
+            'before-3,1', 'after-3,1',
+            'before-3,2', 'in-C-3,2',
+        ],
+        'labeled next propagates through A->B->C and continues the correct labeled loop',
+    );
+};
+
 subtest 'local redo - unlabeled' => sub {
     my @output;
     my $count = 0;
