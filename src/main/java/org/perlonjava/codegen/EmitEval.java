@@ -214,15 +214,23 @@ public class EmitEval {
         // Stack: [Constructor, Object[]]
 
         // Fill the arguments array with actual variable values from local variables
-        for (Integer index : newSymbolTable.getAllVisibleVariables().keySet()) {
-            if (index >= skipVariables) {
-                String varName = newEnv[index];
-                mv.visitInsn(Opcodes.DUP);
-                mv.visitIntInsn(Opcodes.BIPUSH, index - skipVariables);
-                mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.symbolTable.getVariableIndex(varName));
-                mv.visitInsn(Opcodes.AASTORE);
-                emitterVisitor.ctx.logDebug("Put variable " + emitterVisitor.ctx.symbolTable.getVariableIndex(varName) + " at parameter #" + (index - skipVariables) + " " + varName);
+        // IMPORTANT: iterate over the captured env array, not the symbol table indices.
+        // ScopedSymbolTable.getVariableNames() may filter out entries (e.g. `our`), which means
+        // getAllVisibleVariables() can contain indices that are out-of-bounds for newEnv.
+        for (int index = skipVariables; index < newEnv.length; index++) {
+            String varName = newEnv[index];
+            if (varName == null) {
+                continue;
             }
+            int varIndex = emitterVisitor.ctx.symbolTable.getVariableIndex(varName);
+            if (varIndex < 0) {
+                continue;
+            }
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitIntInsn(Opcodes.BIPUSH, index - skipVariables);
+            mv.visitVarInsn(Opcodes.ALOAD, varIndex);
+            mv.visitInsn(Opcodes.AASTORE);
+            emitterVisitor.ctx.logDebug("Put variable " + varIndex + " at parameter #" + (index - skipVariables) + " " + varName);
         }
         // Stack: [Constructor, Object[]]
 

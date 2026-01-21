@@ -85,7 +85,7 @@ public class PerlLanguageProvider {
         // Enter a new scope in the symbol table and add special Perl variables
         globalSymbolTable.enterScope();
         globalSymbolTable.addVariable("this", "", null); // anon sub instance is local variable 0
-        globalSymbolTable.addVariable("@_", "our", null); // Argument list is local variable 1
+        globalSymbolTable.addVariable("@_", "my", null); // Argument list is local variable 1
         globalSymbolTable.addVariable("wantarray", "", null); // Call context is local variable 2
 
         if (compilerOptions.codeHasEncoding) {
@@ -204,10 +204,18 @@ public class PerlLanguageProvider {
                                              List<LexerToken> tokens,
                                              CompilerOptions compilerOptions) throws Exception {
 
+        return executePerlAST(ast, tokens, compilerOptions, RuntimeContextType.VOID);
+    }
+
+    public static RuntimeList executePerlAST(Node ast,
+                                             List<LexerToken> tokens,
+                                             CompilerOptions compilerOptions,
+                                             int callerContext) throws Exception {
+
         ScopedSymbolTable globalSymbolTable = new ScopedSymbolTable();
         globalSymbolTable.enterScope();
         globalSymbolTable.addVariable("this", "", null);
-        globalSymbolTable.addVariable("@_", "our", null);
+        globalSymbolTable.addVariable("@_", "my", null);
         globalSymbolTable.addVariable("wantarray", "", null);
 
         EmitterContext ctx = new EmitterContext(
@@ -242,8 +250,7 @@ public class PerlLanguageProvider {
                 false
         );
 
-        // executePerlAST is always called from BEGIN blocks which use VOID context
-        return executeGeneratedClass(generatedClass, ctx, false, RuntimeContextType.VOID);
+        return executeGeneratedClass(generatedClass, ctx, false, callerContext);
     }
 
     /**

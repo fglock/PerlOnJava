@@ -89,6 +89,15 @@ public class GlobalContext {
         GlobalVariable.globalVariables.put("main::'", new ScalarSpecialVariable(ScalarSpecialVariable.Id.POSTMATCH));
         GlobalVariable.globalVariables.put("main::.", new ScalarSpecialVariable(ScalarSpecialVariable.Id.INPUT_LINE_NUMBER)); // $.
         GlobalVariable.globalVariables.put("main::+", new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_PAREN_MATCH));
+
+        // Regex capture variables: $1, $2, ...
+        // Perl exposes these as read-only special variables backed by the most recent successful match.
+        // They are not regular package globals, but PerlOnJava resolves them via GlobalVariable,
+        // so we pre-register them here.
+        for (int i = 1; i <= 9; i++) {
+            GlobalVariable.globalVariables.put("main::" + i, new ScalarSpecialVariable(ScalarSpecialVariable.Id.CAPTURE, i));
+        }
+
         GlobalVariable.globalVariables.put(encodeSpecialVar("LAST_SUCCESSFUL_PATTERN"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_SUCCESSFUL_PATTERN));
         GlobalVariable.globalVariables.put(encodeSpecialVar("LAST_FH"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_FH)); // $^LAST_FH
         // $^R is writable, not read-only - initialize as regular variable instead of ScalarSpecialVariable

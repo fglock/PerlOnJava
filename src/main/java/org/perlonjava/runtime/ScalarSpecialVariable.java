@@ -159,6 +159,14 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
         }
     }
 
+    @Override
+    public RuntimeScalar materializeScalar() {
+        // ScalarSpecialVariable values are computed on demand from RuntimeRegex / runtime state.
+        // When Perl code copies the value (assignment/return), it should copy the current
+        // computed scalar value, not the proxy object's own (type,value) fields.
+        return new RuntimeScalar(getValueAsScalar());
+    }
+
     public RuntimeScalar getNumber() {
         return this.getValueAsScalar().getNumber();
     }

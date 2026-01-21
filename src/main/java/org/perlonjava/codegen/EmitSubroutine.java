@@ -102,26 +102,16 @@ public class EmitSubroutine {
         // a corrupted cache.
         Map<Integer, SymbolTable.SymbolEntry> visibleVariables = new java.util.TreeMap<>(ctx.symbolTable.getAllVisibleVariables());
         
-        // IMPORTANT: Package-level subs (named subs) should NOT capture closure variables from their 
-        // definition context. Only anonymous subs (my sub, state sub, or true anonymous subs) should
-        // capture variables. This prevents issues like defining 'sub bar::foo' inside a block with
-        // 'our sub foo' from incorrectly capturing the 'our sub' as a closure variable.
-        boolean isPackageSub = node.name != null && !node.name.equals("<anon>");
-        if (isPackageSub) {
-            // Package subs should not capture any closure variables
-            // They can only access global variables and their parameters
-            visibleVariables.clear();
-        } else {
-            // For anonymous/lexical subs, filter out 'our sub' declarations only
-            visibleVariables.entrySet().removeIf(entry -> {
-                SymbolTable.SymbolEntry symbolEntry = entry.getValue();
-                if (symbolEntry.name().startsWith("&") && symbolEntry.ast() instanceof OperatorNode operatorNode) {
-                    Boolean isOurSub = (Boolean) operatorNode.getAnnotation("isOurSub");
-                    return isOurSub != null && isOurSub;
-                }
-                return false;
-            });
-        }
+        // Filter out 'our sub' declarations from closure capture.
+        // (These are package entries that should not be treated as closure variables.)
+        visibleVariables.entrySet().removeIf(entry -> {
+            SymbolTable.SymbolEntry symbolEntry = entry.getValue();
+            if (symbolEntry.name().startsWith("&") && symbolEntry.ast() instanceof OperatorNode operatorNode) {
+                Boolean isOurSub = (Boolean) operatorNode.getAnnotation("isOurSub");
+                return isOurSub != null && isOurSub;
+            }
+            return false;
+        });
         
         ctx.logDebug("AnonSub ctx.symbolTable.getAllVisibleVariables");
 

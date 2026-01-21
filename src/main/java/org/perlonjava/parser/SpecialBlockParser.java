@@ -10,6 +10,7 @@ import org.perlonjava.symbols.ScopedSymbolTable;
 import org.perlonjava.symbols.SymbolTable;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -102,6 +103,10 @@ public class SpecialBlockParser {
      * @return A RuntimeList containing the result of the execution.
      */
     static RuntimeList runSpecialBlock(Parser parser, String blockPhase, Node block) {
+        return runSpecialBlock(parser, blockPhase, block, RuntimeContextType.VOID);
+    }
+
+    static RuntimeList runSpecialBlock(Parser parser, String blockPhase, Node block, int callerContext) {
         int tokenIndex = parser.tokenIndex;
 
         // Create AST nodes for setting up the capture variables and package declaration
@@ -124,7 +129,28 @@ public class SpecialBlockParser {
         }
 
         // Declare capture variables
+        //
+        // IMPORTANT: At the point where we execute a special block, ParseBlock has already
+        // exited the special block's own scope, so the current scope here is the surrounding
+        // scope (e.g. file scope). We must include that scope so BEGIN can see/update outer
+        // lexicals (e.g. `my $x; BEGIN { $x = 1 }`).
+        //
+        // We also use runSpecialBlock("BEGIN", <expr>) to evaluate `use/no` argument lists;
+        // those expressions likewise need access to the current lexical scope.
         Map<Integer, SymbolTable.SymbolEntry> outerVars = parser.ctx.symbolTable.getAllVisibleVariables();
+
+        // When a BEGIN block (or a BEGIN-time evaluation such as `use Module LIST`) reads/writes
+        // an outer lexical, we need those effects to persist into runtime. Perl achieves this
+        // because BEGIN runs in the same lexical pad as the surrounding scope.
+        //
+        // Our runtime model uses PersistentVariable + a special BEGIN package to carry values
+        // from compile-time into runtime.
+        //
+        // To bridge the gap we rewrite variable references *inside the BEGIN-time AST* so that
+        // captured `my/state` variables are accessed via the BEGIN package globals.
+        // This keeps runtime semantics unchanged (runtime still uses lexicals), while BEGIN-time
+        // evaluation can observe and modify the persistent storage.
+        Map<String, String> beginLexicalRewrite = new HashMap<>();
         for (SymbolTable.SymbolEntry entry : outerVars.values()) {
             if (!entry.name().equals("@_") && !entry.decl().isEmpty()) {
                 // Skip lexical subs (entries starting with &) - they are stored as hidden variables
@@ -146,6 +172,12 @@ public class SpecialBlockParser {
                     if (ast.id == 0) {
                         ast.id = EmitterMethodCreator.classCounter++;
                     }
+
+                    // Record rewrite mapping for BEGIN-time execution: $x -> $PerlOnJava::_BEGIN_<id>::x
+                    String sigil = entry.name().substring(0, 1);
+                    String bare = entry.name().substring(1);
+                    beginLexicalRewrite.put(sigil + bare, PersistentVariable.beginPackage(ast.id) + "::" + bare);
+
                     // Emit: package BEGIN_PKG
                     nodes.add(
                             new OperatorNode("package",
@@ -161,6 +193,10 @@ public class SpecialBlockParser {
                                         tokenIndex),
                                 tokenIndex));
             }
+        }
+
+        if (blockPhase.equals("BEGIN") && !beginLexicalRewrite.isEmpty()) {
+            rewriteBeginCapturedLexicals(block, beginLexicalRewrite);
         }
         // Emit: package PKG
         nodes.add(
@@ -201,7 +237,8 @@ public class SpecialBlockParser {
             result = PerlLanguageProvider.executePerlAST(
                     new BlockNode(nodes, tokenIndex),
                     parser.tokens,
-                    parsedArgs);
+                    parsedArgs,
+                    callerContext);
         } catch (Throwable t) {
             if (parsedArgs.debugEnabled) {
                 // Print full JVM stack
@@ -232,5 +269,72 @@ public class SpecialBlockParser {
         }
 
         return result;
+    }
+
+    private static void rewriteBeginCapturedLexicals(Node node, Map<String, String> rewrite) {
+        if (node == null) {
+            return;
+        }
+
+        // Rewrite simple variable nodes: $x, @x, %x
+        if (node instanceof OperatorNode op
+                && op.operand instanceof IdentifierNode ident
+                && op.operator != null
+                && "$@%".contains(op.operator)
+                && ident.name != null
+                && !ident.name.contains("::")) {
+            String key = op.operator + ident.name;
+            String replacement = rewrite.get(key);
+            if (replacement != null) {
+                op.operand = new IdentifierNode(replacement, ident.tokenIndex);
+            }
+        }
+
+        // Recurse into child nodes. Keep this conservative; we only need to walk the nodes
+        // that commonly appear in BEGIN and use/no argument lists.
+        if (node instanceof BlockNode block) {
+            for (Node elem : block.elements) {
+                rewriteBeginCapturedLexicals(elem, rewrite);
+            }
+            return;
+        }
+
+        if (node instanceof ListNode list) {
+            for (Node elem : list.elements) {
+                rewriteBeginCapturedLexicals(elem, rewrite);
+            }
+            return;
+        }
+
+        if (node instanceof ArrayLiteralNode arr) {
+            for (Node elem : arr.elements) {
+                rewriteBeginCapturedLexicals(elem, rewrite);
+            }
+            return;
+        }
+
+        if (node instanceof HashLiteralNode hash) {
+            for (Node elem : hash.elements) {
+                rewriteBeginCapturedLexicals(elem, rewrite);
+            }
+            return;
+        }
+
+        if (node instanceof BinaryOperatorNode bin) {
+            rewriteBeginCapturedLexicals(bin.left, rewrite);
+            rewriteBeginCapturedLexicals(bin.right, rewrite);
+            return;
+        }
+
+        if (node instanceof TernaryOperatorNode tri) {
+            rewriteBeginCapturedLexicals(tri.condition, rewrite);
+            rewriteBeginCapturedLexicals(tri.trueExpr, rewrite);
+            rewriteBeginCapturedLexicals(tri.falseExpr, rewrite);
+            return;
+        }
+
+        if (node instanceof SubroutineNode sub) {
+            rewriteBeginCapturedLexicals(sub.block, rewrite);
+        }
     }
 }

@@ -16,6 +16,19 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
     RuntimeScalar lvalue;
 
     /**
+     * Materialize the proxy to a concrete {@link RuntimeScalar} for operations that
+     * copy values by reading {@code (type,value)} (e.g. assignment, return values,
+     * array pushes that clone scalars).
+     *
+     * <p>Default behavior is to use the proxy object's own current {@code (type,value)}.
+     * Subclasses with computed values (e.g. regex special vars like $1) should override
+     * to return a fresh scalar representing the current value.</p>
+     */
+    public RuntimeScalar materializeScalar() {
+        return this;
+    }
+
+    /**
      * "Blesses" a Perl reference into an object by associating it with a class name.
      * This method is used to convert a Perl reference into an object of a specified class.
      *

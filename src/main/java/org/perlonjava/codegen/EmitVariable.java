@@ -789,6 +789,37 @@ public class EmitVariable {
         if (node.operand instanceof ListNode listNode) { // my ($a, $b)  our ($a, $b)
             // process each item of the list; then returns the list
             ctx.logDebug("handleMyOperator: ListNode operand, contextType=" + ctx.contextType + ", annotations=" + node.annotations);
+
+            // For `my (...)` inside dynamic scopes (map/grep/for/foreach blocks), Perl clones the
+            // pad per iteration. Closures created during each iteration must capture distinct
+            // lexical containers. To model this, ensure the `my (...)` execution creates fresh
+            // variable objects in the JVM local slots each time it runs.
+            if (operator.equals("my")) {
+                for (Node element : listNode.elements) {
+                    if (element instanceof OperatorNode elemOp
+                            && "$@%".contains(elemOp.operator)
+                            && elemOp.operand instanceof IdentifierNode ident) {
+                        String sigil = elemOp.operator;
+                        String var = sigil + ident.name;
+
+                        int varIndex = emitterVisitor.ctx.symbolTable.getVariableIndex(var);
+                        if (varIndex == -1) {
+                            varIndex = emitterVisitor.ctx.symbolTable.addVariable(var, operator, elemOp);
+                        }
+
+                        String className = EmitterMethodCreator.getVariableClassName(sigil);
+                        emitterVisitor.ctx.mv.visitTypeInsn(Opcodes.NEW, className);
+                        emitterVisitor.ctx.mv.visitInsn(Opcodes.DUP);
+                        emitterVisitor.ctx.mv.visitMethodInsn(
+                                Opcodes.INVOKESPECIAL,
+                                className,
+                                "<init>",
+                                "()V",
+                                false);
+                        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, varIndex);
+                    }
+                }
+            }
             for (Node element : listNode.elements) {
                 if (element instanceof OperatorNode && "undef".equals(((OperatorNode) element).operator)) {
                     continue; // skip "undef"
@@ -834,47 +865,87 @@ public class EmitVariable {
                         }
                     } else {
                         // Unknown structure, fall through to default handling
-                        OperatorNode myNode = new OperatorNode(operator, element, listNode.tokenIndex);
-                        myNode.accept(emitterVisitor.with(RuntimeContextType.VOID));
                     }
-                } else {
-                    OperatorNode myNode = new OperatorNode(operator, element, listNode.tokenIndex);
-                    myNode.accept(emitterVisitor.with(RuntimeContextType.VOID));
                 }
             }
-            if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
-                // Check if this is a declared reference (my \($b, $c))
-                boolean isDeclaredReference = node.annotations != null &&
-                        Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"));
+
+            // Check if this is a declared reference list (my \($x, $y))
+            boolean isDeclaredReference = node.annotations != null &&
+                    Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"));
                 
-                if (isDeclaredReference) {
-                    // For declared references, return a list of references to the variables
-                    emitterVisitor.ctx.logDebug("handleMyOperator: isDeclaredReference=true, emitting references for list elements");
+            if (isDeclaredReference) {
+                // For declared references, return a list of references to the variables
+                emitterVisitor.ctx.logDebug("handleMyOperator: isDeclaredReference=true, emitting references for list elements");
+                MethodVisitor mv = emitterVisitor.ctx.mv;
+                
+                // Create a new RuntimeList
+                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "()V", false);
+                
+                // For each element in the list, emit the variable and create a reference
+                for (Node element : listNode.elements) {
+                    ctx.logDebug("handleMyOperator: processing element: " + element + ", class=" + element.getClass().getSimpleName());
+                    if (element instanceof OperatorNode elemOpNode && "$@%".contains(elemOpNode.operator)
+                            && elemOpNode.operand instanceof IdentifierNode ident) {
+                        ctx.logDebug("handleMyOperator: emitting createReference for " + elemOpNode.operator);
+                        mv.visitInsn(Opcodes.DUP);  // Dup the RuntimeList
+                        
+                        // Emit the variable in SCALAR context
+                        element.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                        
+                        // Create a reference to the variable
+                        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                                "org/perlonjava/runtime/RuntimeBase",
+                                "createReference",
+                                "()Lorg/perlonjava/runtime/RuntimeScalar;",
+                                false);
+                        
+                        // Add to the list
+                        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                                "org/perlonjava/runtime/RuntimeList",
+                                "add",
+                                "(Lorg/perlonjava/runtime/RuntimeScalar;)V",
+                                false);
+                    }
+                }
+            } else {
+                // Check if any element has isDeclaredReference annotation
+                boolean hasAnyDeclaredRef = false;
+                for (Node element : listNode.elements) {
+                    if (element instanceof OperatorNode elemOpNode &&
+                            elemOpNode.annotations != null &&
+                            Boolean.TRUE.equals(elemOpNode.annotations.get("isDeclaredReference"))) {
+                        hasAnyDeclaredRef = true;
+                        break;
+                    }
+                }
+
+                if (hasAnyDeclaredRef) {
+                    // Mixed case: some elements are declared refs, some are not
+                    // Build the list manually, emitting references only for declared refs
+                    emitterVisitor.ctx.logDebug("handleMyOperator: hasAnyDeclaredRef=true, building mixed list");
                     MethodVisitor mv = emitterVisitor.ctx.mv;
-                    
-                    // Create a new RuntimeList
+
                     mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
                     mv.visitInsn(Opcodes.DUP);
                     mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "()V", false);
-                    
-                    // For each element in the list, emit the variable and create a reference
+
                     for (Node element : listNode.elements) {
-                        ctx.logDebug("handleMyOperator: processing element: " + element + ", class=" + element.getClass().getSimpleName());
                         if (element instanceof OperatorNode elemOpNode && "$@%".contains(elemOpNode.operator)) {
-                            ctx.logDebug("handleMyOperator: emitting createReference for " + elemOpNode.operator);
-                            mv.visitInsn(Opcodes.DUP);  // Dup the RuntimeList
-                            
-                            // Emit the variable in SCALAR context
+                            mv.visitInsn(Opcodes.DUP);
                             element.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-                            
-                            // Create a reference to the variable
-                            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                                    "org/perlonjava/runtime/RuntimeBase",
-                                    "createReference",
-                                    "()Lorg/perlonjava/runtime/RuntimeScalar;",
-                                    false);
-                            
-                            // Add to the list
+
+                            // If this element has isDeclaredReference, create a reference
+                            if (elemOpNode.annotations != null &&
+                                    Boolean.TRUE.equals(elemOpNode.annotations.get("isDeclaredReference"))) {
+                                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                                        "org/perlonjava/runtime/RuntimeBase",
+                                        "createReference",
+                                        "()Lorg/perlonjava/runtime/RuntimeScalar;",
+                                        false);
+                            }
+
                             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                                     "org/perlonjava/runtime/RuntimeList",
                                     "add",
@@ -883,53 +954,8 @@ public class EmitVariable {
                         }
                     }
                 } else {
-                    // Check if any element has isDeclaredReference annotation
-                    boolean hasAnyDeclaredRef = false;
-                    for (Node element : listNode.elements) {
-                        if (element instanceof OperatorNode elemOpNode && 
-                            elemOpNode.annotations != null && 
-                            Boolean.TRUE.equals(elemOpNode.annotations.get("isDeclaredReference"))) {
-                            hasAnyDeclaredRef = true;
-                            break;
-                        }
-                    }
-                    
-                    if (hasAnyDeclaredRef) {
-                        // Mixed case: some elements are declared refs, some are not
-                        // Build the list manually, emitting references for declared refs
-                        emitterVisitor.ctx.logDebug("handleMyOperator: hasAnyDeclaredRef=true, building mixed list");
-                        MethodVisitor mv = emitterVisitor.ctx.mv;
-                        
-                        mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
-                        mv.visitInsn(Opcodes.DUP);
-                        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "()V", false);
-                        
-                        for (Node element : listNode.elements) {
-                            if (element instanceof OperatorNode elemOpNode && "$@%".contains(elemOpNode.operator)) {
-                                mv.visitInsn(Opcodes.DUP);
-                                element.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-                                
-                                // If this element has isDeclaredReference, create a reference
-                                if (elemOpNode.annotations != null && 
-                                    Boolean.TRUE.equals(elemOpNode.annotations.get("isDeclaredReference"))) {
-                                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                                            "org/perlonjava/runtime/RuntimeBase",
-                                            "createReference",
-                                            "()Lorg/perlonjava/runtime/RuntimeScalar;",
-                                            false);
-                                }
-                                
-                                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                                        "org/perlonjava/runtime/RuntimeList",
-                                        "add",
-                                        "(Lorg/perlonjava/runtime/RuntimeScalar;)V",
-                                        false);
-                            }
-                        }
-                    } else {
-                        emitterVisitor.ctx.logDebug("handleMyOperator: isDeclaredReference=false, emitting listNode directly");
-                        listNode.accept(emitterVisitor);
-                    }
+                    emitterVisitor.ctx.logDebug("handleMyOperator: isDeclaredReference=false, emitting listNode directly");
+                    listNode.accept(emitterVisitor);
                 }
             }
             return;
@@ -976,9 +1002,23 @@ public class EmitVariable {
                     // Determine the class name based on the sigil
                     String className = EmitterMethodCreator.getVariableClassName(sigil);
 
+                    // BEGIN blocks can mark a lexical as persistent by assigning an id to the
+                    // symbol table's declaration node. Depending on how the AST is transformed,
+                    // the `my` node we are emitting here may not be the same instance as the one
+                    // stored in the symbol table. If the symbol table has a persistent id, copy it.
+                    if (sigilNode.id == 0) {
+                        SymbolTable.SymbolEntry declEntry = ctx.symbolTable.getSymbolEntry(var);
+                        if (declEntry != null && declEntry.ast() != null && declEntry.ast().id != 0) {
+                            sigilNode.id = declEntry.ast().id;
+                        }
+                    }
+
+                    ctx.logDebug("handleMyOperator: init var=" + var + " decl=" + operator + " sigilNode.id=" + sigilNode.id + " className=" + className + " isDeclaredReference=" + isDeclaredReference + " contextType=" + emitterVisitor.ctx.contextType);
+
                     if (operator.equals("my")) {
                         // "my":
                         if (sigilNode.id == 0) {
+                            ctx.logDebug("handleMyOperator: initializing new lexical variable instance");
                             // Create a new instance of the determined class
                             ctx.mv.visitTypeInsn(Opcodes.NEW, className);
                             ctx.mv.visitInsn(Opcodes.DUP);
@@ -989,6 +1029,7 @@ public class EmitVariable {
                                     "()V",
                                     false);
                         } else {
+                            ctx.logDebug("handleMyOperator: initializing variable from PersistentVariable (BEGIN capture) id=" + sigilNode.id);
                             // The variable was initialized by a BEGIN block
 
                             // Determine the method to call and its descriptor based on the sigil

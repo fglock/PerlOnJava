@@ -604,14 +604,18 @@ public class StatementResolver {
                     TokenUtils.consume(parser);
                     Node modifierExpression = parser.parseExpression(0);
                     parseStatementTerminator(parser);
-                    yield new BinaryOperatorNode("&&", modifierExpression, expression, parser.tokenIndex);
+                    IfNode ifNode = new IfNode("if", modifierExpression, expression, null, parser.tokenIndex);
+                    ifNode.setAnnotation("statementModifier", true);
+                    yield ifNode;
                 }
 
                 case "unless" -> {
                     TokenUtils.consume(parser);
                     Node modifierExpression = parser.parseExpression(0);
                     parseStatementTerminator(parser);
-                    yield new BinaryOperatorNode("||", modifierExpression, expression, parser.tokenIndex);
+                    IfNode unlessNode = new IfNode("unless", modifierExpression, expression, null, parser.tokenIndex);
+                    unlessNode.setAnnotation("statementModifier", true);
+                    yield unlessNode;
                 }
 
                 case "for", "foreach" -> {

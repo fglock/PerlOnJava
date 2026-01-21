@@ -57,8 +57,10 @@ public class EmitStatement {
     public static void emitIf(EmitterVisitor emitterVisitor, IfNode node) {
         emitterVisitor.ctx.logDebug("IF start: " + node.operator);
 
+        boolean isStatementModifier = node.getBooleanAnnotation("statementModifier");
+
         // Enter a new scope in the symbol table
-        int scopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
+        int scopeIndex = isStatementModifier ? -1 : emitterVisitor.ctx.symbolTable.enterScope();
 
         // Create labels for the else and end branches
         Label elseLabel = new Label();
@@ -149,7 +151,9 @@ public class EmitStatement {
         }
 
         // Exit the scope in the symbol table
-        emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
+        if (!isStatementModifier) {
+            emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
+        }
 
         emitterVisitor.ctx.logDebug("IF end");
     }

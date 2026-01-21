@@ -1072,11 +1072,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Alternative way to create constants like: `$constant::{_CAN_PCS} = \$const`
             return new RuntimeList(constantValue);
         }
-        // IMPORTANT (Perl semantics): regex match variables ($1, $&, etc.) are dynamically scoped
-        // and must be restored after returning from a subroutine call.
-        // Save the current regex state so callee-side regexes (including inside require/eval)
-        // don't clobber the caller's match variables.
-        RegexState savedRegexState = new RegexState();
+        // IMPORTANT (Perl semantics): regex match variables ($1, $&, etc.) are dynamically scoped.
+        // A match inside a subroutine updates the caller-visible match variables after returning.
+        // Only `local $1` (and friends) should snapshot/restore the full regex state.
+        // That behavior is implemented in ScalarSpecialVariable.dynamicSaveState()/dynamicRestoreState().
         try {
             // Wait for the compilerThread to finish if it exists
             if (this.compilerSupplier != null) {
@@ -1109,8 +1108,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             throw (RuntimeException) targetException;
         } catch (Throwable e) {
             throw new RuntimeException(e);
-        } finally {
-            savedRegexState.restore();
         }
     }
 
@@ -1119,8 +1116,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Alternative way to create constants like: `$constant::{_CAN_PCS} = \$const`
             return new RuntimeList(constantValue);
         }
-        // See apply(RuntimeArray,...): preserve caller regex match variables across the call.
-        RegexState savedRegexState = new RegexState();
+        // See apply(RuntimeArray,...): do not snapshot/restore regex match variables across sub calls.
         try {
             // Wait for the compilerThread to finish if it exists
             if (this.compilerSupplier != null) {
@@ -1143,8 +1139,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             throw (RuntimeException) targetException;
         } catch (Throwable e) {
             throw new RuntimeException(e);
-        } finally {
-            savedRegexState.restore();
         }
     }
 

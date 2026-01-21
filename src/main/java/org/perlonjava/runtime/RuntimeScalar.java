@@ -109,6 +109,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (scalar.type == TIED_SCALAR) {
             scalar = scalar.tiedFetch();
         }
+        if (scalar instanceof RuntimeBaseProxy proxy) {
+            scalar = proxy.materializeScalar();
+        }
         this.type = scalar.type;
         this.value = scalar.value;
     }
@@ -638,6 +641,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public RuntimeScalar set(RuntimeScalar value) {
         if (value.type == TIED_SCALAR) {
             return set(value.tiedFetch());
+        }
+        if (value instanceof RuntimeBaseProxy proxy) {
+            value = proxy.materializeScalar();
         }
         if (this.type == TIED_SCALAR) {
             return this.tiedStore(value);

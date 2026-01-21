@@ -387,11 +387,33 @@ public class ScopedSymbolTable {
             }
         }
 
-        // Cache the result
+        // Cache the result before returning
         visibleVariablesCache = visibleVariables;
-
-        // Return the TreeMap containing all visible variables sorted by their indices.
         return visibleVariables;
+    }
+
+    /**
+     * Retrieves all visible variables excluding the current (innermost) scope.
+     *
+     * This is primarily used by BEGIN/INIT/CHECK/UNITCHECK special-block execution logic
+     * to capture only outer lexicals. Lexicals declared inside the special block itself
+     * must not be treated as persistent BEGIN-captured variables.
+     */
+    public Map<Integer, SymbolTable.SymbolEntry> getAllVisibleVariablesExcludingCurrentScope() {
+        TreeMap<Integer, SymbolTable.SymbolEntry> result = new TreeMap<>();
+        Set<String> seenVariables = new HashSet<>();
+
+        // Skip the innermost scope (current block scope).
+        for (int i = symbolTableStack.size() - 2; i >= 0; i--) {
+            Map<String, SymbolTable.SymbolEntry> scope = symbolTableStack.get(i).variableIndex;
+            for (Map.Entry<String, SymbolTable.SymbolEntry> entry : scope.entrySet()) {
+                if (!seenVariables.contains(entry.getKey())) {
+                    seenVariables.add(entry.getKey());
+                    result.put(entry.getValue().index(), entry.getValue());
+                }
+            }
+        }
+        return result;
     }
 
     // XXX TODO cache this

@@ -557,7 +557,7 @@ public class StatementParser {
                 // or Module->unimport( LIST )
 
                 // Execute the argument list immediately
-                RuntimeList args = runSpecialBlock(parser, "BEGIN", list);
+                RuntimeList args = runSpecialBlock(parser, "BEGIN", list, RuntimeContextType.LIST);
 
                 ctx.logDebug("Use statement list: " + args);
                 if (hasParentheses && args.isEmpty()) {
