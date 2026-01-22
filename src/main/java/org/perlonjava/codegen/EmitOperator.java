@@ -916,6 +916,9 @@ public class EmitOperator {
     static void handleUnaryDefaultCase(OperatorNode node, String operator,
                                        EmitterVisitor emitterVisitor) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
+        if (node.operand == null) {
+            throw new PerlCompilerException(node.tokenIndex, "syntax error", emitterVisitor.ctx.errorUtil);
+        }
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         OperatorHandler operatorHandler = OperatorHandler.get(operator);
         if (operatorHandler != null) {

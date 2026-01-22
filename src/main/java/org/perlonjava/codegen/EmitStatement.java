@@ -154,12 +154,27 @@ public class EmitStatement {
             if (node.useNewScope) {
                 // Register next/redo/last labels
                 emitterVisitor.ctx.logDebug("FOR3 label: " + node.labelName);
-                emitterVisitor.ctx.javaClassInfo.pushLoopLabels(
-                        node.labelName,
-                        continueLabel,
-                        redoLabel,
-                        endLabel,
-                        RuntimeContextType.VOID);
+                if (node.isSimpleBlock) {
+                    // Bare blocks are lowered to a For3Node with isSimpleBlock=true.
+                    // In Perl, `last` can exit a bare block, but `next`/`redo` must not bind to it.
+                    // Model it as a pseudo-loop (isTrueLoop=false) so EmitControlFlow can skip it
+                    // for `next`/`redo` resolution while still allowing `last`.
+                    emitterVisitor.ctx.javaClassInfo.pushLoopLabels(
+                            node.labelName,
+                            continueLabel,
+                            redoLabel,
+                            endLabel,
+                            emitterVisitor.ctx.javaClassInfo.stackLevelManager.getStackLevel(),
+                            RuntimeContextType.VOID,
+                            false);
+                } else {
+                    emitterVisitor.ctx.javaClassInfo.pushLoopLabels(
+                            node.labelName,
+                            continueLabel,
+                            redoLabel,
+                            endLabel,
+                            RuntimeContextType.VOID);
+                }
 
                 // Visit the loop body
                 node.body.accept(voidVisitor);
