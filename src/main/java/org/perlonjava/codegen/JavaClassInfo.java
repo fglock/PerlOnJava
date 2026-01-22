@@ -15,6 +15,9 @@ import java.util.Deque;
  */
 public class JavaClassInfo {
 
+     private static final boolean LABEL_DEBUG = System.getenv("JPERL_LABEL_DEBUG") != null;
+     private static final boolean SPILL_DEBUG = System.getenv("JPERL_SPILL_DEBUG") != null;
+
     /**
      * The name of the Java class.
      */
@@ -81,16 +84,41 @@ public class JavaClassInfo {
         this.spillTop = 0;
     }
 
+     public Label newLabel(String kind) {
+         return newLabel(kind, null);
+     }
+
+     public Label newLabel(String kind, String name) {
+         Label l = new Label();
+         if (LABEL_DEBUG) {
+             StackTraceElement[] stack = Thread.currentThread().getStackTrace();
+             String caller = "?";
+             if (stack.length > 3) {
+                 StackTraceElement e = stack[3];
+                 caller = e.getClassName() + "." + e.getMethodName() + ":" + e.getLineNumber();
+             }
+             System.err.println("LABEL new kind=" + kind + (name != null ? (" name=" + name) : "") + " label=" + l + " caller=" + caller);
+         }
+         return l;
+     }
+
     public int acquireSpillSlot() {
         if (spillTop >= spillSlots.length) {
             return -1;
         }
-        return spillSlots[spillTop++];
+        int slot = spillSlots[spillTop++];
+        if (SPILL_DEBUG) {
+            System.err.println("SPILL acquire slot=" + slot + " top=" + spillTop + "/" + spillSlots.length);
+        }
+        return slot;
     }
 
     public void releaseSpillSlot() {
         if (spillTop > 0) {
             spillTop--;
+            if (SPILL_DEBUG) {
+                System.err.println("SPILL release top=" + spillTop + "/" + spillSlots.length);
+            }
         }
     }
 
@@ -107,7 +135,7 @@ public class JavaClassInfo {
         if (slot >= 0) {
             return new SpillRef(slot, true);
         }
-        return new SpillRef(symbolTable.allocateLocalVariable(), false);
+        return new SpillRef(symbolTable.allocateLocalVariable("spillRef"), false);
     }
 
     public void storeSpillRef(MethodVisitor mv, SpillRef ref) {
@@ -121,6 +149,16 @@ public class JavaClassInfo {
     public void releaseSpillRef(SpillRef ref) {
         if (ref.pooled) {
             releaseSpillSlot();
+        }
+    }
+
+    public void emitClearSpillSlots(MethodVisitor mv) {
+        if (spillSlots == null) {
+            return;
+        }
+        for (int slot : spillSlots) {
+            mv.visitInsn(Opcodes.ACONST_NULL);
+            mv.visitVarInsn(Opcodes.ASTORE, slot);
         }
     }
 

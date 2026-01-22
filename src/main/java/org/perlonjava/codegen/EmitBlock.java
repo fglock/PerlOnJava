@@ -8,6 +8,7 @@ import org.perlonjava.astrefactor.LargeBlockRefactorer;import org.perlonjava.ast
 import org.perlonjava.runtime.RuntimeContextType;
 
 import java.util.List;
+import java.util.HashSet;
 
 public class EmitBlock {
 
@@ -41,12 +42,19 @@ public class EmitBlock {
         }
 
         // Create labels for the block as a loop, like `L1: {...}`
-        Label redoLabel = new Label();
-        Label nextLabel = new Label();
+        Label redoLabel = emitterVisitor.ctx.javaClassInfo.newLabel("blockRedo", node.labelName);
+        Label nextLabel = emitterVisitor.ctx.javaClassInfo.newLabel("blockNext", node.labelName);
 
         // Create labels used inside the block, like `{ L1: ... }`
+        int pushedGotoLabels = 0;
+        HashSet<String> uniqueGotoLabels = new HashSet<>();
         for (int i = 0; i < node.labels.size(); i++) {
-            emitterVisitor.ctx.javaClassInfo.pushGotoLabels(node.labels.get(i), new Label());
+            String labelName = node.labels.get(i);
+            if (!uniqueGotoLabels.add(labelName)) {
+                continue;
+            }
+            emitterVisitor.ctx.javaClassInfo.pushGotoLabels(labelName, emitterVisitor.ctx.javaClassInfo.newLabel("gotoLabel", labelName));
+            pushedGotoLabels++;
         }
 
         // Setup 'local' environment if needed
@@ -74,7 +82,7 @@ public class EmitBlock {
             list.get(1) instanceof For1Node forNode && forNode.needsArrayOfAlias) {
             
             // Pre-evaluate the For1Node's list to array of aliases before localizing $_
-            int tempArrayIndex = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            int tempArrayIndex = emitterVisitor.ctx.symbolTable.allocateLocalVariable("blockPreEvalArray");
             forNode.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "getArrayOfAlias", "()Lorg/perlonjava/runtime/RuntimeArray;", false);
             mv.visitVarInsn(Opcodes.ASTORE, tempArrayIndex);
@@ -120,7 +128,7 @@ public class EmitBlock {
                 }
                 
                 if (!hasLoopConstruct) {
-                    Label continueBlock = new Label();
+                    Label continueBlock = emitterVisitor.ctx.javaClassInfo.newLabel("continueBlock", node.labelName);
                     
                     // if (!RuntimeControlFlowRegistry.hasMarker()) continue
                     mv.visitMethodInsn(Opcodes.INVOKESTATIC,
@@ -161,7 +169,7 @@ public class EmitBlock {
         }
 
         // Pop labels used inside the block
-        for (int i = 0; i < node.labels.size(); i++) {
+        for (int i = 0; i < pushedGotoLabels; i++) {
             emitterVisitor.ctx.javaClassInfo.popGotoLabels();
         }
 

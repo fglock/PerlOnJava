@@ -53,9 +53,9 @@ public class EmitForeach {
         }
 
         MethodVisitor mv = emitterVisitor.ctx.mv;
-        Label loopStart = new Label();
-        Label loopEnd = new Label();
-        Label continueLabel = new Label();
+        Label loopStart = emitterVisitor.ctx.javaClassInfo.newLabel("foreachLoopStart", node.labelName);
+        Label loopEnd = emitterVisitor.ctx.javaClassInfo.newLabel("foreachLoopEnd", node.labelName);
+        Label continueLabel = emitterVisitor.ctx.javaClassInfo.newLabel("foreachContinue", node.labelName);
 
         int scopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
 
@@ -149,7 +149,7 @@ public class EmitForeach {
         // Allocate variable to track dynamic variable stack level for our localization
         int dynamicIndex = -1;
         if (needLocalizeUnderscore) {
-            dynamicIndex = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            dynamicIndex = emitterVisitor.ctx.symbolTable.allocateLocalVariable("foreachDynamicIndex");
             // Get the current level of the dynamic variable stack and store it
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/DynamicVariableManager",
@@ -161,7 +161,7 @@ public class EmitForeach {
         
         Local.localRecord localRecord = Local.localSetup(emitterVisitor.ctx, node, mv);
 
-        int iteratorIndex = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        int iteratorIndex = emitterVisitor.ctx.symbolTable.allocateLocalVariable("foreachIterator");
 
         // Check if the list was pre-evaluated by EmitBlock (for nested for loops with local $_)
         if (node.preEvaluatedArrayIndex >= 0) {
@@ -202,8 +202,8 @@ public class EmitForeach {
             // IMPORTANT: avoid materializing huge ranges.
             // PerlRange.setArrayOfAlias() currently expands to a full list, which can OOM
             // in Benchmark.pm (for (1..$n) with large $n).
-            Label notRangeLabel = new Label();
-            Label afterIterLabel = new Label();
+            Label notRangeLabel = emitterVisitor.ctx.javaClassInfo.newLabel("foreachNotRange", node.labelName);
+            Label afterIterLabel = emitterVisitor.ctx.javaClassInfo.newLabel("foreachAfterIter", node.labelName);
             mv.visitInsn(Opcodes.DUP);
             mv.visitTypeInsn(Opcodes.INSTANCEOF, "org/perlonjava/runtime/PerlRange");
             mv.visitJumpInsn(Opcodes.IFEQ, notRangeLabel);
@@ -228,6 +228,7 @@ public class EmitForeach {
         }
 
         mv.visitLabel(loopStart);
+        emitterVisitor.ctx.javaClassInfo.emitClearSpillSlots(mv);
 
         // Check for pending signals (alarm, etc.) at loop entry
         EmitStatement.emitSignalCheck(mv);
@@ -291,11 +292,12 @@ public class EmitForeach {
             }
         }
 
-        Label redoLabel = new Label();
+        Label redoLabel = emitterVisitor.ctx.javaClassInfo.newLabel("foreachRedo", node.labelName);
         mv.visitLabel(redoLabel);
+        emitterVisitor.ctx.javaClassInfo.emitClearSpillSlots(mv);
 
         // Create control flow handler label
-        Label controlFlowHandler = new Label();
+        Label controlFlowHandler = emitterVisitor.ctx.javaClassInfo.newLabel("foreachControlFlowHandler", node.labelName);
 
         LoopLabels currentLoopLabels = new LoopLabels(
                 node.labelName,
@@ -316,6 +318,7 @@ public class EmitForeach {
         LoopLabels poppedLabels = emitterVisitor.ctx.javaClassInfo.popLoopLabels();
 
         mv.visitLabel(continueLabel);
+        emitterVisitor.ctx.javaClassInfo.emitClearSpillSlots(mv);
 
         if (node.continueBlock != null) {
             node.continueBlock.accept(emitterVisitor.with(RuntimeContextType.VOID));
@@ -326,6 +329,7 @@ public class EmitForeach {
         mv.visitJumpInsn(Opcodes.GOTO, loopStart);
 
         mv.visitLabel(loopEnd);
+        emitterVisitor.ctx.javaClassInfo.emitClearSpillSlots(mv);
         
         // Emit control flow handler (if enabled)
         if (ENABLE_LOOP_HANDLERS) {

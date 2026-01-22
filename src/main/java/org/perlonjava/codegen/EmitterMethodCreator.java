@@ -420,6 +420,46 @@ public class EmitterMethodCreator implements Opcodes {
                             "Original error: " + frameComputeCrash.getMessage(),
                     ctx.errorUtil,
                     frameComputeCrash);
+        } catch (NullPointerException frameComputeCrash) {
+            // ASM may throw NPE during frame computation when a jump target Label was never visited
+            // (dstFrame == null). Treat this the same as other frame compute crashes.
+            frameComputeCrash.printStackTrace();
+            try {
+                String failingClass = (ctx != null && ctx.javaClassInfo != null)
+                        ? ctx.javaClassInfo.javaClassName
+                        : "<unknown>";
+                int failingIndex = ast != null ? ast.getIndex() : -1;
+                String fileName = (ctx != null && ctx.errorUtil != null) ? ctx.errorUtil.getFileName() : "<unknown>";
+                int lineNumber = -1;
+                if (ctx != null && ctx.errorUtil != null && failingIndex >= 0) {
+                    ctx.errorUtil.setTokenIndex(-1);
+                    ctx.errorUtil.setLineNumber(1);
+                    lineNumber = ctx.errorUtil.getLineNumber(failingIndex);
+                }
+                String at = lineNumber >= 0 ? (fileName + ":" + lineNumber) : fileName;
+                System.err.println("ASM frame compute crash in generated class: " + failingClass + " (astIndex=" + failingIndex + ", at " + at + ")");
+            } catch (Throwable ignored) {
+            }
+            if (asmDebug) {
+                try {
+                    if (ctx != null && ctx.javaClassInfo != null) {
+                        String previousName = ctx.javaClassInfo.javaClassName;
+                        ctx.javaClassInfo = new JavaClassInfo();
+                        ctx.javaClassInfo.javaClassName = previousName;
+                        ctx.clearContextCache();
+                    }
+                    getBytecodeInternal(ctx, ast, useTryCatch, true);
+                } catch (Throwable diagErr) {
+                    diagErr.printStackTrace();
+                }
+            }
+            throw new PerlCompilerException(
+                    ast.getIndex(),
+                    "Internal compiler error: ASM frame computation failed. " +
+                            "Re-run with JPERL_ASM_DEBUG=1 to print disassembly and analysis. " +
+                            "Original error: " + frameComputeCrash.getMessage(),
+                    ctx.errorUtil,
+                    frameComputeCrash);
         }
     }
 
@@ -572,16 +612,17 @@ public class EmitterMethodCreator implements Opcodes {
             org.perlonjava.astvisitor.TempLocalCountVisitor tempCountVisitor = 
                 new org.perlonjava.astvisitor.TempLocalCountVisitor();
             ast.accept(tempCountVisitor);
-            int preInitTempLocalsCount = Math.max(128, tempCountVisitor.getMaxTempCount() + 64);  // Add buffer
-            for (int i = preInitTempLocalsStart; i < preInitTempLocalsStart + preInitTempLocalsCount; i++) {
+            int preInitTempLocalsCount = Math.max(1024, tempCountVisitor.getMaxTempCount() + 512);  // Add buffer
+            for (int i = 0; i < preInitTempLocalsCount; i++) {
+                int slot = ctx.symbolTable.allocateLocalVariable("preInitTemp");
                 mv.visitInsn(Opcodes.ACONST_NULL);
-                mv.visitVarInsn(Opcodes.ASTORE, i);
+                mv.visitVarInsn(Opcodes.ASTORE, slot);
             }
 
             // Allocate slots for tail call trampoline (codeRef and args)
             // These are used at returnLabel for TAILCALL handling
-            int tailCallCodeRefSlot = ctx.symbolTable.allocateLocalVariable();
-            int tailCallArgsSlot = ctx.symbolTable.allocateLocalVariable();
+            int tailCallCodeRefSlot = ctx.symbolTable.allocateLocalVariable("tailCallCodeRef");
+            int tailCallArgsSlot = ctx.symbolTable.allocateLocalVariable("tailCallArgs");
             ctx.javaClassInfo.tailCallCodeRefSlot = tailCallCodeRefSlot;
             ctx.javaClassInfo.tailCallArgsSlot = tailCallArgsSlot;
             mv.visitInsn(Opcodes.ACONST_NULL);
@@ -591,12 +632,12 @@ public class EmitterMethodCreator implements Opcodes {
             
             // Allocate slot for control flow check temp storage
             // This is used at call sites to temporarily store marked RuntimeControlFlowList
-            int controlFlowTempSlot = ctx.symbolTable.allocateLocalVariable();
+            int controlFlowTempSlot = ctx.symbolTable.allocateLocalVariable("controlFlowTemp");
             ctx.javaClassInfo.controlFlowTempSlot = controlFlowTempSlot;
             mv.visitInsn(Opcodes.ACONST_NULL);
             mv.visitVarInsn(Opcodes.ASTORE, controlFlowTempSlot);
 
-            int controlFlowActionSlot = ctx.symbolTable.allocateLocalVariable();
+            int controlFlowActionSlot = ctx.symbolTable.allocateLocalVariable("controlFlowAction");
             ctx.javaClassInfo.controlFlowActionSlot = controlFlowActionSlot;
             mv.visitInsn(Opcodes.ICONST_0);
             mv.visitVarInsn(Opcodes.ISTORE, controlFlowActionSlot);
@@ -607,14 +648,14 @@ public class EmitterMethodCreator implements Opcodes {
             ctx.javaClassInfo.spillSlots = new int[spillSlotCount];
             ctx.javaClassInfo.spillTop = 0;
             for (int i = 0; i < spillSlotCount; i++) {
-                int slot = ctx.symbolTable.allocateLocalVariable();
+                int slot = ctx.symbolTable.allocateLocalVariable("spillSlot[" + i + "]");
                 ctx.javaClassInfo.spillSlots[i] = slot;
                 mv.visitInsn(Opcodes.ACONST_NULL);
                 mv.visitVarInsn(Opcodes.ASTORE, slot);
             }
             
             // Create a label for the return point
-            ctx.javaClassInfo.returnLabel = new Label();
+            ctx.javaClassInfo.returnLabel = ctx.javaClassInfo.newLabel("returnLabel");
 
             // Prepare to visit the AST to generate bytecode
             EmitterVisitor visitor = new EmitterVisitor(ctx);
@@ -629,15 +670,16 @@ public class EmitterMethodCreator implements Opcodes {
                 // Start of try-catch block
                 // --------------------------------
 
-                Label tryStart = new Label();
-                Label tryEnd = new Label();
-                Label catchBlock = new Label();
-                Label endCatch = new Label();
+                Label tryStart = ctx.javaClassInfo.newLabel("tryStart");
+                Label tryEnd = ctx.javaClassInfo.newLabel("tryEnd");
+                Label catchBlock = ctx.javaClassInfo.newLabel("catchBlock");
+                Label endCatch = ctx.javaClassInfo.newLabel("endCatch");
 
                 // Define the try-catch block
                 mv.visitTryCatchBlock(tryStart, tryEnd, catchBlock, "java/lang/Throwable");
 
                 mv.visitLabel(tryStart);
+                ctx.javaClassInfo.emitClearSpillSlots(mv);
                 // --------------------------------
                 // Start of the try block
                 // --------------------------------
@@ -656,6 +698,13 @@ public class EmitterMethodCreator implements Opcodes {
                 ctx.logDebug("Return the last value");
                 mv.visitLabel(ctx.javaClassInfo.returnLabel); // "return" from other places arrive here
 
+                mv.visitLdcInsn("main::@");
+                mv.visitLdcInsn("");
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/GlobalVariable",
+                        "setGlobalVariable",
+                        "(Ljava/lang/String;Ljava/lang/String;)V", false);
+
                 // --------------------------------
                 // End of the try block
                 // --------------------------------
@@ -666,6 +715,7 @@ public class EmitterMethodCreator implements Opcodes {
 
                 // Start of the catch block
                 mv.visitLabel(catchBlock);
+                ctx.javaClassInfo.emitClearSpillSlots(mv);
 
                 // The throwable object is on the stack
                 // Catch the throwable
@@ -674,8 +724,23 @@ public class EmitterMethodCreator implements Opcodes {
                         "catchEval",
                         "(Ljava/lang/Throwable;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
 
+                // On eval error, Perl returns undef in scalar context and an empty list in list context.
+                // Our method always returns a RuntimeList (via getList() at the return boundary).
+                // If we keep the RuntimeScalar on the stack here, getList() will turn it into a
+                // 1-element list [undef], which breaks list-context tests (e.g. +()=eval 'die').
+                // Discard the scalar and return an empty RuntimeList instead.
+                mv.visitInsn(Opcodes.POP);
+                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                        "org/perlonjava/runtime/RuntimeList",
+                        "<init>",
+                        "()V",
+                        false);
+
                 // End of the catch block
                 mv.visitLabel(endCatch);
+                ctx.javaClassInfo.emitClearSpillSlots(mv);
 
                 // --------------------------------
                 // End of try-catch block
@@ -699,9 +764,9 @@ public class EmitterMethodCreator implements Opcodes {
             
             if (ENABLE_TAILCALL_TRAMPOLINE) {
             // First, check if it's a TAILCALL (global trampoline)
-            Label tailcallLoop = new Label();
-            Label notTailcall = new Label();
-            Label normalReturn = new Label();
+            Label tailcallLoop = ctx.javaClassInfo.newLabel("tailcallLoop");
+            Label notTailcall = ctx.javaClassInfo.newLabel("notTailcall");
+            Label normalReturn = ctx.javaClassInfo.newLabel("normalReturn");
             
             mv.visitInsn(Opcodes.DUP);  // Duplicate for checking
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, 
@@ -1230,6 +1295,9 @@ public class EmitterMethodCreator implements Opcodes {
             // Let this propagate so getBytecode() can attempt large-code refactoring and retry.
             throw e;
         } catch (RuntimeException e) {
+            if (e instanceof NullPointerException && !disableFrames) {
+                throw e;
+            }
             // Enhanced error message with debugging information
             StringBuilder errorMsg = new StringBuilder();
             errorMsg.append(String.format(
