@@ -50,6 +50,8 @@ public class ScopedSymbolTable {
     // Cache for the getAllVisibleVariables method
     private Map<Integer, SymbolTable.SymbolEntry> visibleVariablesCache;
 
+     private static final boolean ALLOC_DEBUG = System.getenv("JPERL_ALLOC_DEBUG") != null;
+
     /**
      * Constructs a ScopedSymbolTable.
      * Initializes the warning, feature categories, and strict options stacks with default values for the global scope.
@@ -152,8 +154,10 @@ public class ScopedSymbolTable {
      */
     public void exitScope(int scopeIndex) {
         clearVisibleVariablesCache();
+        int maxIndex = symbolTableStack.peek().index;
         // Pop entries from the stacks until reaching the specified scope index
         while (symbolTableStack.size() > scopeIndex) {
+            maxIndex = Math.max(maxIndex, symbolTableStack.peek().index);
             symbolTableStack.pop();
             packageStack.pop();
             subroutineStack.pop();
@@ -162,6 +166,11 @@ public class ScopedSymbolTable {
             featureFlagsStack.pop();
             strictOptionsStack.pop();
         }
+
+        // Preserve the maximum index so JVM local slots are not reused across scopes.
+        // This avoids type conflicts in stackmap frames when control flow jumps across
+        // scope boundaries (e.g. via last/next/redo/goto through eval/bare blocks).
+        symbolTableStack.peek().index = Math.max(symbolTableStack.peek().index, maxIndex);
     }
 
     /**
@@ -483,9 +492,23 @@ public class ScopedSymbolTable {
      * @throws IllegalStateException if there is no current scope available for allocation.
      */
     public int allocateLocalVariable() {
-        // Allocate a new index in the current scope by incrementing the index counter
-        return symbolTableStack.peek().index++;
+        return allocateLocalVariable("untyped");
     }
+
+     public int allocateLocalVariable(String kind) {
+         // Allocate a new index in the current scope by incrementing the index counter
+         int slot = symbolTableStack.peek().index++;
+         if (ALLOC_DEBUG) {
+             StackTraceElement[] stack = Thread.currentThread().getStackTrace();
+             String caller = "?";
+             if (stack.length > 3) {
+                 StackTraceElement e = stack[3];
+                 caller = e.getClassName() + "." + e.getMethodName() + ":" + e.getLineNumber();
+             }
+             System.err.println("ALLOC local slot=" + slot + " kind=" + kind + " caller=" + caller);
+         }
+         return slot;
+     }
 
     /**
      * Gets the current local variable index counter.

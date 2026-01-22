@@ -1,8 +1,6 @@
 package org.perlonjava.codegen;
 
 import org.perlonjava.astnode.LabelNode;
-import org.objectweb.asm.Label;
-import org.perlonjava.runtime.PerlCompilerException;
 
 /**
  * EmitLabel handles the bytecode generation for Perl label statements.
@@ -24,7 +22,7 @@ public class EmitLabel {
         // Perl tests frequently use labeled blocks (e.g. SKIP: { ... }) without any goto.
         // In that case we still need to emit a valid bytecode label as a join point.
         if (targetLabel == null) {
-            ctx.mv.visitLabel(new Label());
+            ctx.mv.visitLabel(ctx.javaClassInfo.newLabel("standaloneLabel", node.label));
         } else {
             // Generate the actual label in the bytecode
             ctx.mv.visitLabel(targetLabel.gotoLabel);

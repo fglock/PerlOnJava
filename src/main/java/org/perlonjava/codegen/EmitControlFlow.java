@@ -1,6 +1,7 @@
 package org.perlonjava.codegen;
 
 import org.objectweb.asm.Label;
+import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.BinaryOperatorNode;
 import org.perlonjava.astnode.IdentifierNode;
@@ -52,14 +53,49 @@ public class EmitControlFlow {
 
         String operator = node.operator;
         // Find loop labels by name.
-        LoopLabels loopLabels = ctx.javaClassInfo.findLoopLabelsByName(labelStr);
+        // Note: Bare blocks are modeled as pseudo-loops so `last` can exit them.
+        // However, `next`/`redo` must bind to the nearest *true* loop, skipping pseudo-loops.
+        LoopLabels loopLabels;
+        if (labelStr == null) {
+            if (operator.equals("next") || operator.equals("redo")) {
+                loopLabels = null;
+                for (LoopLabels candidate : ctx.javaClassInfo.loopLabelStack) {
+                    if (candidate.isTrueLoop) {
+                        loopLabels = candidate;
+                        break;
+                    }
+                }
+            } else {
+                // last: may exit a bare block, so bind to innermost boundary
+                loopLabels = ctx.javaClassInfo.loopLabelStack.peek();
+            }
+        } else {
+            if (operator.equals("next") || operator.equals("redo")) {
+                loopLabels = null;
+                for (LoopLabels candidate : ctx.javaClassInfo.loopLabelStack) {
+                    if (candidate.isTrueLoop
+                            && candidate.labelName != null
+                            && candidate.labelName.equals(labelStr)) {
+                        loopLabels = candidate;
+                        break;
+                    }
+                }
+            } else {
+                // last LABEL: Perl allows labels on bare blocks too
+                loopLabels = ctx.javaClassInfo.findLoopLabelsByName(labelStr);
+            }
+        }
         ctx.logDebug("visit(next) operator: " + operator + " label: " + labelStr + " labels: " + loopLabels);
         
         // Check if we're trying to use next/last/redo in a pseudo-loop (do-while/bare block)
         if (loopLabels != null && !loopLabels.isTrueLoop) {
-            throw new PerlCompilerException(node.tokenIndex, 
-                "Can't \"" + operator + "\" outside a loop block", 
-                ctx.errorUtil);
+            // Perl allows `last` to exit a bare block `{ ... }`, but `next` and `redo`
+            // are only valid for true loops.
+            if (operator.equals("next") || operator.equals("redo")) {
+                throw new PerlCompilerException(node.tokenIndex,
+                        "Can't \"" + operator + "\" outside a loop block",
+                        ctx.errorUtil);
+            }
         }
         
         if (loopLabels == null) {
@@ -103,7 +139,7 @@ public class EmitControlFlow {
         ctx.logDebug("visit(next): asmStackLevel: " + ctx.javaClassInfo.stackLevelManager.getStackLevel());
 
         // Clean up the stack before jumping by popping values up to the loop's stack level
-        ctx.javaClassInfo.resetStackLevel();
+        ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, loopLabels.asmStackLevel);
 
         // Handle return values based on context
         if (loopLabels.context != RuntimeContextType.VOID) {
@@ -113,11 +149,223 @@ public class EmitControlFlow {
             }
         }
 
+        ctx.javaClassInfo.emitClearSpillSlots(ctx.mv);
+
         // Select the appropriate jump target based on the operator type
         Label label = operator.equals("next") ? loopLabels.nextLabel
                 : operator.equals("last") ? loopLabels.lastLabel
                 : loopLabels.redoLabel;
         ctx.mv.visitJumpInsn(Opcodes.GOTO, label);
+    }
+
+    static void emitTaggedControlFlowHandling(EmitterVisitor emitterVisitor) {
+        EmitterContext ctx = emitterVisitor.ctx;
+        MethodVisitor mv = ctx.mv;
+
+        Label notControlFlow = ctx.javaClassInfo.newLabel("notControlFlow");
+        Label propagateToCaller = ctx.javaClassInfo.newLabel("propagateToCaller");
+        Label checkGotoLabels = ctx.javaClassInfo.newLabel("checkGotoLabels");
+        Label checkLoopLabels = ctx.javaClassInfo.newLabel("checkLoopLabels");
+
+        int entryStackLevel = ctx.javaClassInfo.stackLevelManager.getStackLevel();
+        int spillCount = Math.max(0, entryStackLevel - 1);
+        JavaClassInfo.SpillRef[] spillRefs = null;
+        if (spillCount > 0) {
+            spillRefs = new JavaClassInfo.SpillRef[spillCount];
+        }
+
+        // Store the result into a temp slot so we can branch without keeping values on the operand stack.
+        mv.visitVarInsn(Opcodes.ASTORE, ctx.javaClassInfo.controlFlowTempSlot);
+        // Spill any extra stack intermediates that might be below the RuntimeList result.
+        // This keeps branch targets consistent for ASM frame computation.
+        for (int i = 0; i < spillCount; i++) {
+            JavaClassInfo.SpillRef ref = ctx.javaClassInfo.acquireSpillRefOrAllocate(ctx.symbolTable);
+            spillRefs[i] = ref;
+            ctx.javaClassInfo.storeSpillRef(mv, ref);
+        }
+        ctx.javaClassInfo.resetStackLevel();
+
+        // Load and check if it's a control flow marker
+        mv.visitVarInsn(Opcodes.ALOAD, ctx.javaClassInfo.controlFlowTempSlot);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/RuntimeList",
+                "isNonLocalGoto",
+                "()Z",
+                false);
+        mv.visitJumpInsn(Opcodes.IFEQ, notControlFlow);
+
+        // Marked: load control flow type ordinal into controlFlowActionSlot
+        mv.visitVarInsn(Opcodes.ALOAD, ctx.javaClassInfo.controlFlowTempSlot);
+        mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeControlFlowList");
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/RuntimeControlFlowList",
+                "getControlFlowType",
+                "()Lorg/perlonjava/runtime/ControlFlowType;",
+                false);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/ControlFlowType",
+                "ordinal",
+                "()I",
+                false);
+        mv.visitVarInsn(Opcodes.ISTORE, ctx.javaClassInfo.controlFlowActionSlot);
+
+        // Try to handle locally.
+        // - Ordinal 3 (GOTO): match against local goto labels
+        // - Ordinals 0/1/2 (LAST/NEXT/REDO): match against loop labels
+        // - Anything else (e.g. TAILCALL): propagate
+        mv.visitVarInsn(Opcodes.ILOAD, ctx.javaClassInfo.controlFlowActionSlot);
+        mv.visitInsn(Opcodes.ICONST_3);
+        mv.visitJumpInsn(Opcodes.IF_ICMPEQ, checkGotoLabels);
+
+        mv.visitVarInsn(Opcodes.ILOAD, ctx.javaClassInfo.controlFlowActionSlot);
+        mv.visitInsn(Opcodes.ICONST_2);
+        mv.visitJumpInsn(Opcodes.IF_ICMPGT, propagateToCaller);
+
+        mv.visitJumpInsn(Opcodes.GOTO, checkLoopLabels);
+
+        // Check local goto labels
+        mv.visitLabel(checkGotoLabels);
+        for (GotoLabels gotoLabels : ctx.javaClassInfo.gotoLabelStack) {
+            Label nextGotoCheck = ctx.javaClassInfo.newLabel("nextGotoCheck", gotoLabels.labelName);
+            Label nullLabel = ctx.javaClassInfo.newLabel("nullGotoLabel", gotoLabels.labelName);
+
+            // String label = marked.getControlFlowLabel();
+            mv.visitVarInsn(Opcodes.ALOAD, ctx.javaClassInfo.controlFlowTempSlot);
+            mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeControlFlowList");
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/RuntimeControlFlowList",
+                    "getControlFlowLabel",
+                    "()Ljava/lang/String;",
+                    false);
+
+            // if (label == null) continue;
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitJumpInsn(Opcodes.IFNULL, nullLabel);
+
+            // if (!label.equals(gotoLabels.labelName)) continue;
+            mv.visitLdcInsn(gotoLabels.labelName);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "java/lang/String",
+                    "equals",
+                    "(Ljava/lang/Object;)Z",
+                    false);
+            mv.visitJumpInsn(Opcodes.IFEQ, nextGotoCheck);
+
+            // Match found: jump
+            ctx.javaClassInfo.emitClearSpillSlots(mv);
+            ctx.javaClassInfo.stackLevelManager.emitPopInstructions(mv, gotoLabels.asmStackLevel);
+            mv.visitJumpInsn(Opcodes.GOTO, gotoLabels.gotoLabel);
+
+            mv.visitLabel(nullLabel);
+            mv.visitInsn(Opcodes.POP);
+            mv.visitLabel(nextGotoCheck);
+        }
+
+        // No goto match; propagate
+        ctx.javaClassInfo.emitClearSpillSlots(mv);
+        mv.visitJumpInsn(Opcodes.GOTO, propagateToCaller);
+
+        mv.visitLabel(checkLoopLabels);
+
+        for (LoopLabels loopLabels : ctx.javaClassInfo.loopLabelStack) {
+            Label nextLoopCheck = ctx.javaClassInfo.newLabel("nextLoopCheck", loopLabels.labelName);
+
+            // if (!marked.matchesLabel(loopLabels.labelName)) continue;
+            mv.visitVarInsn(Opcodes.ALOAD, ctx.javaClassInfo.controlFlowTempSlot);
+            mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeControlFlowList");
+            if (loopLabels.labelName != null) {
+                mv.visitLdcInsn(loopLabels.labelName);
+            } else {
+                mv.visitInsn(Opcodes.ACONST_NULL);
+            }
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/RuntimeControlFlowList",
+                    "matchesLabel",
+                    "(Ljava/lang/String;)Z",
+                    false);
+            mv.visitJumpInsn(Opcodes.IFEQ, nextLoopCheck);
+
+            // Match found: jump based on type
+            Label checkNext = ctx.javaClassInfo.newLabel("checkNext", loopLabels.labelName);
+            Label checkRedo = ctx.javaClassInfo.newLabel("checkRedo", loopLabels.labelName);
+
+            // if (type == LAST (0)) goto lastLabel
+            mv.visitVarInsn(Opcodes.ILOAD, ctx.javaClassInfo.controlFlowActionSlot);
+            mv.visitInsn(Opcodes.ICONST_0);
+            mv.visitJumpInsn(Opcodes.IF_ICMPNE, checkNext);
+            if (loopLabels.lastLabel == ctx.javaClassInfo.returnLabel) {
+                ctx.javaClassInfo.emitClearSpillSlots(mv);
+                mv.visitJumpInsn(Opcodes.GOTO, propagateToCaller);
+            } else {
+                ctx.javaClassInfo.emitClearSpillSlots(mv);
+                ctx.javaClassInfo.stackLevelManager.emitPopInstructions(mv, loopLabels.asmStackLevel);
+                if (loopLabels.context != RuntimeContextType.VOID) {
+                    EmitOperator.emitUndef(mv);
+                }
+                mv.visitJumpInsn(Opcodes.GOTO, loopLabels.lastLabel);
+            }
+
+            // if (type == NEXT (1)) goto nextLabel
+            mv.visitLabel(checkNext);
+            mv.visitVarInsn(Opcodes.ILOAD, ctx.javaClassInfo.controlFlowActionSlot);
+            mv.visitInsn(Opcodes.ICONST_1);
+            mv.visitJumpInsn(Opcodes.IF_ICMPNE, checkRedo);
+            if (loopLabels.nextLabel == ctx.javaClassInfo.returnLabel) {
+                ctx.javaClassInfo.emitClearSpillSlots(mv);
+                mv.visitJumpInsn(Opcodes.GOTO, propagateToCaller);
+            } else {
+                ctx.javaClassInfo.emitClearSpillSlots(mv);
+                ctx.javaClassInfo.stackLevelManager.emitPopInstructions(mv, loopLabels.asmStackLevel);
+                if (loopLabels.context != RuntimeContextType.VOID) {
+                    EmitOperator.emitUndef(mv);
+                }
+                mv.visitJumpInsn(Opcodes.GOTO, loopLabels.nextLabel);
+            }
+
+            // if (type == REDO (2)) goto redoLabel
+            mv.visitLabel(checkRedo);
+            if (loopLabels.redoLabel == ctx.javaClassInfo.returnLabel) {
+                ctx.javaClassInfo.emitClearSpillSlots(mv);
+                mv.visitJumpInsn(Opcodes.GOTO, propagateToCaller);
+            } else {
+                ctx.javaClassInfo.emitClearSpillSlots(mv);
+                ctx.javaClassInfo.stackLevelManager.emitPopInstructions(mv, loopLabels.asmStackLevel);
+                mv.visitJumpInsn(Opcodes.GOTO, loopLabels.redoLabel);
+            }
+
+            mv.visitLabel(nextLoopCheck);
+        }
+
+        // No loop match; propagate
+        ctx.javaClassInfo.emitClearSpillSlots(mv);
+        mv.visitJumpInsn(Opcodes.GOTO, propagateToCaller);
+
+        // Propagate: jump to returnLabel with the marked list
+        mv.visitLabel(propagateToCaller);
+        mv.visitVarInsn(Opcodes.ALOAD, ctx.javaClassInfo.controlFlowTempSlot);
+        mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
+
+        // Not a control flow marker - load it back and continue
+        mv.visitLabel(notControlFlow);
+        // Restore spilled intermediates (original stack order) and then the result.
+        for (int i = spillCount - 1; i >= 0; i--) {
+            ctx.javaClassInfo.loadSpillRef(mv, spillRefs[i]);
+        }
+        mv.visitVarInsn(Opcodes.ALOAD, ctx.javaClassInfo.controlFlowTempSlot);
+
+        // Restore tracked stack level.
+        ctx.javaClassInfo.incrementStackLevel(spillCount + 1);
+
+        // Release spill refs after the helper completes.
+        // This is a codegen-time resource release (not emitted bytecode) and must happen
+        // regardless of which runtime branch was taken.
+        if (spillRefs != null) {
+            for (JavaClassInfo.SpillRef ref : spillRefs) {
+                if (ref != null) {
+                    ctx.javaClassInfo.releaseSpillRef(ref);
+                }
+            }
+        }
     }
 
     /**
@@ -389,7 +637,8 @@ public class EmitControlFlow {
 
         // Local goto: use fast GOTO (existing code)
         // Clean up stack before jumping to maintain stack consistency
-        ctx.javaClassInfo.resetStackLevel();
+        ctx.javaClassInfo.emitClearSpillSlots(ctx.mv);
+        ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, targetLabel.asmStackLevel);
 
         // Emit the goto instruction
         ctx.mv.visitJumpInsn(Opcodes.GOTO, targetLabel.gotoLabel);
