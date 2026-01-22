@@ -1,5 +1,6 @@
 package org.perlonjava.codegen;
 
+import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
@@ -265,6 +266,14 @@ public class EmitEval {
                 "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeArray;I)Lorg/perlonjava/runtime/RuntimeList;",
                 false);
         // Stack: [RuntimeList]
+
+        // Tagged returns control-flow handling:
+        // If eval returned a RuntimeControlFlowList marker, handle it BEFORE any context conversion
+        // (scalar()/POP). This matches subroutine call semantics.
+        if (emitterVisitor.ctx.javaClassInfo.returnLabel != null
+                && emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot >= 0) {
+            EmitControlFlow.emitTaggedControlFlowHandling(emitterVisitor);
+        }
 
         // Convert result based on calling context
         if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {

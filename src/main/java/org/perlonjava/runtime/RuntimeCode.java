@@ -272,7 +272,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             GlobalVariable.getGlobalVariable("main::@").set(e.getMessage());
 
             // In case of error return an "undef" ast and class
-            ast = new OperatorNode("undef", null, 1);
+            ast = new org.perlonjava.astnode.ListNode(1);
             evalCtx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
             evalCtx.symbolTable = capturedSymbolTable;
             setCurrentScope(evalCtx.symbolTable);
