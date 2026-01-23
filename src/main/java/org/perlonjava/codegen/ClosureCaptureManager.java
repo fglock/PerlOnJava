@@ -4,7 +4,9 @@ import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.MethodVisitor;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Manager for handling closure capture variables with type consistency
@@ -28,6 +30,9 @@ public class ClosureCaptureManager {
     
     private final Map<String, CaptureDescriptor> captureTable = new HashMap<>();
     private int nextCaptureSlot = 3; // Start after 'this' and parameters
+    
+    // Known problematic slots that need special handling
+    private final Set<Integer> problematicSlots = Set.of(3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
     
     /**
      * Allocate a capture slot for a variable, ensuring type consistency.
@@ -61,9 +66,13 @@ public class ClosureCaptureManager {
     private final Map<Class<?>, Integer> typeSlotPools = new HashMap<>();
     
     private int getSlotForType(Class<?> type) {
+        // Skip problematic slots by starting from a higher index
         Integer slot = typeSlotPools.get(type);
-        if (slot == null) {
-            slot = nextCaptureSlot++;
+        if (slot == null || problematicSlots.contains(slot)) {
+            // Find the next available slot that's not problematic
+            do {
+                slot = nextCaptureSlot++;
+            } while (problematicSlots.contains(slot));
             typeSlotPools.put(type, slot);
         }
         return slot;
@@ -73,7 +82,11 @@ public class ClosureCaptureManager {
      * Initialize a capture slot with the correct type to prevent VerifyError.
      */
     public void initializeCaptureSlot(MethodVisitor mv, int slot, Class<?> type) {
-        // Initialize slot with null of correct type
+        // Initialize as integer first, then as reference (reference should be final)
+        mv.visitInsn(Opcodes.ICONST_0);
+        mv.visitVarInsn(Opcodes.ISTORE, slot);
+        
+        // Initialize slot with null of correct type (reference type should be final)
         mv.visitInsn(Opcodes.ACONST_NULL);
         mv.visitVarInsn(Opcodes.ASTORE, slot);
         
