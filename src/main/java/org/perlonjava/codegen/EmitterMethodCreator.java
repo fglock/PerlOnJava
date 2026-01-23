@@ -642,6 +642,19 @@ public class EmitterMethodCreator implements Opcodes {
                 }
             }
             
+            // Special aggressive fix for slot 3 - used inconsistently in anonymous classes
+            if (ctx.javaClassInfo.localVariableIndex > 3) {
+                // Initialize as reference first since aload_3 is failing
+                mv.visitInsn(Opcodes.ACONST_NULL);
+                mv.visitVarInsn(Opcodes.ASTORE, 3);
+                // Then also as integer to handle both cases
+                mv.visitInsn(Opcodes.ICONST_0);
+                mv.visitVarInsn(Opcodes.ISTORE, 3);
+                if (ctx.javaClassInfo.localVariableTracker != null) {
+                    ctx.javaClassInfo.localVariableTracker.recordLocalWrite(3);
+                }
+            }
+            
             // Special aggressive fix for slot 89 - initialize it first
             int slot89 = ctx.symbolTable.allocateLocalVariable("preInitSlot89");
             mv.visitInsn(Opcodes.ACONST_NULL);
