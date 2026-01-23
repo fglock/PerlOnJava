@@ -160,51 +160,10 @@ public class EmitControlFlow {
                 : loopLabels.redoLabel;
 
         // Ensure local variable consistency at merge point
-        if (ctx.javaClassInfo.localVariableTracker != null) {
-            ctx.javaClassInfo.localVariableTracker.emitMergePointInitialization(ctx.mv, label, ctx.javaClassInfo);
-            
-            // Direct initialization for known problematic slots based on actual test failures
-            // These are the slots that consistently cause VerifyError issues
-            int[] knownProblematicSlots = {3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 825, 925, 930, 950, 975, 1000, 1030, 1080, 1100, 1130, 1150, 1180};
-            for (int slot : knownProblematicSlots) {
-                if (slot < ctx.javaClassInfo.localVariableIndex) {
-                    // Initialize all slots as both types to handle inconsistent usage
-                    ctx.mv.visitInsn(Opcodes.ACONST_NULL);
-                    ctx.mv.visitVarInsn(Opcodes.ASTORE, slot);
-                    ctx.mv.visitInsn(Opcodes.ICONST_0);
-                    ctx.mv.visitVarInsn(Opcodes.ISTORE, slot);
-                    
-                    // Special case for slot 3 - ensure it's reference first
-                    if (slot == 3) {
-                        ctx.mv.visitInsn(Opcodes.ACONST_NULL);
-                        ctx.mv.visitVarInsn(Opcodes.ASTORE, 3);
-                    }
-                }
-            }
-            
-            // Specific fix for slot 825 VerifyError issue
-            ctx.javaClassInfo.localVariableTracker.forceInitializeSlot825(ctx.mv, ctx.javaClassInfo);
-            
-            // Specific fix for slot 925 VerifyError issue
-            ctx.javaClassInfo.localVariableTracker.forceInitializeSlot925(ctx.mv, ctx.javaClassInfo);
-            
-            // Specific fix for slot 89 VerifyError issue
-            ctx.javaClassInfo.localVariableTracker.forceInitializeSlot89(ctx.mv, ctx.javaClassInfo);
-            
-            // Specific fix for slot 90 VerifyError issue
-            ctx.javaClassInfo.localVariableTracker.forceInitializeSlot90(ctx.mv, ctx.javaClassInfo);
-            
-            // Targeted fix for problematic slots causing VerifyError
-            ctx.javaClassInfo.localVariableTracker.forceInitializeProblematicSlots(ctx.mv, ctx.javaClassInfo);
-            
-            // Minimal range initialization only for high-index slots that we haven't precisely tracked
-            for (int i = 800; i < 1100 && i < ctx.javaClassInfo.localVariableIndex; i++) {
-                // Initialize as reference first
-                ctx.javaClassInfo.localVariableTracker.forceInitializeLocal(ctx.mv, i, ctx.javaClassInfo);
-                // Also initialize as integer to handle integer slots
-                ctx.javaClassInfo.localVariableTracker.forceInitializeIntegerLocal(ctx.mv, i, ctx.javaClassInfo);
-            }
-        }
+        // Temporarily disabled to isolate type confusion issue
+        // if (ctx.javaClassInfo.localVariableTracker != null) {
+        //     ctx.javaClassInfo.ensureLocalVariableConsistencyBeforeJump(ctx.mv);
+        // }
 
         ctx.javaClassInfo.emitClearSpillSlots(ctx.mv);
 
@@ -384,22 +343,9 @@ public class EmitControlFlow {
                 ctx.javaClassInfo.emitClearSpillSlots(mv);
                 ctx.javaClassInfo.stackLevelManager.emitPopInstructions(mv, loopLabels.asmStackLevel);
                 
-                // Critical fix: Ensure local variable consistency before jump
-                // Don't initialize slot 0 (this) and slot 2 (context param) as they should always contain the correct types
-                if (ctx.javaClassInfo.localVariableTracker != null) {
-                    // Initialize all problematic reference slots EXCEPT slots 0 and 2
-                    Set<Integer> slotsToInitialize = new HashSet<>();
-                    for (int slot = 1; slot < Math.min(ctx.javaClassInfo.localVariableIndex, 200); slot++) {
-                        if (slot != 2) { // Skip slot 2 (int context parameter)
-                            slotsToInitialize.add(slot);
-                        }
-                    }
-                    
-                    for (int slot : slotsToInitialize) {
-                        mv.visitInsn(Opcodes.ACONST_NULL);
-                        mv.visitVarInsn(Opcodes.ASTORE, slot);
-                    }
-                }
+                // Ensure local variable consistency before jump
+                // Temporarily disabled to isolate type confusion issue
+                // ctx.javaClassInfo.ensureLocalVariableConsistencyBeforeJump(mv);
                 
                 mv.visitJumpInsn(Opcodes.GOTO, loopLabels.redoLabel);
             }
