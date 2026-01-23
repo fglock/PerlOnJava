@@ -32,7 +32,7 @@ public class ClosureCaptureManager {
     private int nextCaptureSlot = 3; // Start after 'this' and parameters
     
     // Known problematic slots that need special handling
-    private final Set<Integer> problematicSlots = Set.of(3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 22, 25);
+    private final Set<Integer> problematicSlots = Set.of(3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 22, 23, 24, 25);
     
     // Type mappings for problematic slots based on analysis
     private final Map<Integer, Class<?>> slotTypeMappings = new HashMap<>();
@@ -53,6 +53,8 @@ public class ClosureCaptureManager {
         slotTypeMappings.put(14, org.perlonjava.runtime.RuntimeScalar.class);
         slotTypeMappings.put(15, org.perlonjava.runtime.RuntimeScalar.class);
         slotTypeMappings.put(22, org.perlonjava.runtime.RuntimeScalar.class); // New problematic slot
+        slotTypeMappings.put(23, org.perlonjava.runtime.RuntimeScalar.class); // New problematic slot
+        slotTypeMappings.put(24, org.perlonjava.runtime.RuntimeScalar.class); // New problematic slot
         slotTypeMappings.put(25, org.perlonjava.runtime.RuntimeScalar.class); // New problematic slot
     }
     

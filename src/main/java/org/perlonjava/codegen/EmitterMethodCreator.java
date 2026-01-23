@@ -661,20 +661,54 @@ public class EmitterMethodCreator implements Opcodes {
             
             // Use capture manager to identify and pre-initialize problematic slots
             if (ctx.captureManager != null) {
-                // Comprehensive initialization for a broader range of slots
-                // This ensures we catch all problematic slots in one pass
-                for (int slot = 3; slot <= 50; slot++) {
+                // First, scan the symbol table to determine exact slot requirements
+                org.perlonjava.astvisitor.SlotAllocationScanner scanner = 
+                    new org.perlonjava.astvisitor.SlotAllocationScanner(ctx);
+                scanner.scanSymbolTable();
+                
+                scanner.printAllocationInfo();
+                
+                // Initialize slots based on exact allocation information
+                Map<Integer, org.perlonjava.astvisitor.SlotAllocationScanner.SlotInfo> allocatedSlots = scanner.getAllocatedSlots();
+                Set<Integer> problematicSlots = scanner.getProblematicSlots();
+                
+                ctx.logDebug("Initializing " + allocatedSlots.size() + " slots based on symbol table scan");
+                
+                for (Map.Entry<Integer, org.perlonjava.astvisitor.SlotAllocationScanner.SlotInfo> entry : allocatedSlots.entrySet()) {
+                    int slot = entry.getKey();
+                    org.perlonjava.astvisitor.SlotAllocationScanner.SlotInfo info = entry.getValue();
+                    
+                    // Check if this slot should be integer (slot 2 = wantarray parameter)
+                    if (slot == 2) {
+                        // Initialize as integer for wantarray parameter
+                        mv.visitInsn(Opcodes.ICONST_0);
+                        mv.visitVarInsn(Opcodes.ISTORE, slot);
+                        if (ctx.javaClassInfo.localVariableTracker != null) {
+                            ctx.javaClassInfo.localVariableTracker.recordLocalWrite(slot);
+                        }
+                        ctx.logDebug("Initialized slot " + slot + " as integer for wantarray parameter");
+                        continue;
+                    }
+                    
                     // Initialize as integer first, then reference (reference should be final)
                     mv.visitInsn(Opcodes.ICONST_0);
                     mv.visitVarInsn(Opcodes.ISTORE, slot);
                     
-                    // Initialize as reference type
-                    if (slot == 5 || slot == 22 || slot == 23 || slot == 25) {
-                        // Special handling for known problematic slots
+                    // Initialize as reference type with exact type information
+                    if (info.type == org.perlonjava.runtime.RuntimeScalar.class) {
                         mv.visitFieldInsn(Opcodes.GETSTATIC, "org/perlonjava/runtime/RuntimeScalarCache", "scalarUndef", "Lorg/perlonjava/runtime/RuntimeScalarReadOnly;");
                         mv.visitVarInsn(Opcodes.ASTORE, slot);
+                    } else if (info.type == org.perlonjava.runtime.RuntimeHash.class) {
+                        mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeHash");
+                        mv.visitInsn(Opcodes.DUP);
+                        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeHash", "<init>", "()V", false);
+                        mv.visitVarInsn(Opcodes.ASTORE, slot);
+                    } else if (info.type == org.perlonjava.runtime.RuntimeArray.class) {
+                        mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeArray");
+                        mv.visitInsn(Opcodes.DUP);
+                        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeArray", "<init>", "()V", false);
+                        mv.visitVarInsn(Opcodes.ASTORE, slot);
                     } else {
-                        // General reference initialization
                         mv.visitInsn(Opcodes.ACONST_NULL);
                         mv.visitVarInsn(Opcodes.ASTORE, slot);
                     }
@@ -682,9 +716,11 @@ public class EmitterMethodCreator implements Opcodes {
                     if (ctx.javaClassInfo.localVariableTracker != null) {
                         ctx.javaClassInfo.localVariableTracker.recordLocalWrite(slot);
                     }
+                    
+                    ctx.logDebug("Initialized slot " + slot + " as " + info.type.getSimpleName() + " for " + info.purpose);
                 }
                 
-                ctx.logDebug("Comprehensive initialization completed for slots 3-50");
+                ctx.logDebug("Exact slot allocation initialization completed");
             }
             org.perlonjava.astvisitor.TempLocalCountVisitor tempCountVisitor = 
                 new org.perlonjava.astvisitor.TempLocalCountVisitor();
