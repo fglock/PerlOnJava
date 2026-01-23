@@ -644,14 +644,27 @@ public class EmitterMethodCreator implements Opcodes {
             
             // Special aggressive fix for slot 3 - used inconsistently in anonymous classes
             if (ctx.javaClassInfo.localVariableIndex > 3) {
-                // Initialize as reference first since aload_3 is failing
-                mv.visitInsn(Opcodes.ACONST_NULL);
-                mv.visitVarInsn(Opcodes.ASTORE, 3);
-                // Then also as integer to handle both cases
+                // Initialize as integer first, then reference as final type
                 mv.visitInsn(Opcodes.ICONST_0);
                 mv.visitVarInsn(Opcodes.ISTORE, 3);
+                // Final initialization as reference (null is acceptable for reference types)
+                mv.visitInsn(Opcodes.ACONST_NULL);
+                mv.visitVarInsn(Opcodes.ASTORE, 3);
                 if (ctx.javaClassInfo.localVariableTracker != null) {
                     ctx.javaClassInfo.localVariableTracker.recordLocalWrite(3);
+                }
+            }
+            
+            // Special aggressive fix for slot 4 - now showing the same issue
+            if (ctx.javaClassInfo.localVariableIndex > 4) {
+                // Initialize as integer first, then reference as final type
+                mv.visitInsn(Opcodes.ICONST_0);
+                mv.visitVarInsn(Opcodes.ISTORE, 4);
+                // Final initialization as reference
+                mv.visitInsn(Opcodes.ACONST_NULL);
+                mv.visitVarInsn(Opcodes.ASTORE, 4);
+                if (ctx.javaClassInfo.localVariableTracker != null) {
+                    ctx.javaClassInfo.localVariableTracker.recordLocalWrite(4);
                 }
             }
             
