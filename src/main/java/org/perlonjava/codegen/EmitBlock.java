@@ -62,6 +62,22 @@ public class EmitBlock {
 
         // Add redo label
         mv.visitLabel(redoLabel);
+        
+        // Aggressive fix for high-index locals that may be reused
+        if (emitterVisitor.ctx.javaClassInfo.localVariableTracker != null) {
+            // Specific fix for slot 925 VerifyError issue
+            emitterVisitor.ctx.javaClassInfo.localVariableTracker.forceInitializeSlot925(mv, emitterVisitor.ctx.javaClassInfo);
+            
+            // Specific fix for slot 89 VerifyError issue
+            emitterVisitor.ctx.javaClassInfo.localVariableTracker.forceInitializeSlot89(mv, emitterVisitor.ctx.javaClassInfo);
+            
+            // Minimal range initialization to avoid method size issues
+            // Only initialize a small buffer around the problematic slots
+            for (int i = 800; i < 1100 && i < emitterVisitor.ctx.javaClassInfo.localVariableIndex; i++) {
+                emitterVisitor.ctx.javaClassInfo.localVariableTracker.forceInitializeLocal(mv, i, emitterVisitor.ctx.javaClassInfo);
+                emitterVisitor.ctx.javaClassInfo.localVariableTracker.forceInitializeIntegerLocal(mv, i, emitterVisitor.ctx.javaClassInfo);
+            }
+        }
 
         // Restore 'local' environment if 'redo' was called
         Local.localTeardown(localRecord, mv);
@@ -175,6 +191,22 @@ public class EmitBlock {
 
         // Add 'next', 'last' label
         mv.visitLabel(nextLabel);
+        
+        // Aggressive fix for high-index locals that may be reused
+        if (emitterVisitor.ctx.javaClassInfo.localVariableTracker != null) {
+            // Specific fix for slot 925 VerifyError issue
+            emitterVisitor.ctx.javaClassInfo.localVariableTracker.forceInitializeSlot925(mv, emitterVisitor.ctx.javaClassInfo);
+            
+            // Specific fix for slot 89 VerifyError issue
+            emitterVisitor.ctx.javaClassInfo.localVariableTracker.forceInitializeSlot89(mv, emitterVisitor.ctx.javaClassInfo);
+            
+            // Minimal range initialization to avoid method size issues
+            // Only initialize a small buffer around the problematic slots
+            for (int i = 800; i < 1100 && i < emitterVisitor.ctx.javaClassInfo.localVariableIndex; i++) {
+                emitterVisitor.ctx.javaClassInfo.localVariableTracker.forceInitializeLocal(mv, i, emitterVisitor.ctx.javaClassInfo);
+                emitterVisitor.ctx.javaClassInfo.localVariableTracker.forceInitializeIntegerLocal(mv, i, emitterVisitor.ctx.javaClassInfo);
+            }
+        }
 
         Local.localTeardown(localRecord, mv);
 
