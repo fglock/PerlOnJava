@@ -605,6 +605,11 @@ public class EmitterMethodCreator implements Opcodes {
             // producing invalid stack map frames / VerifyError).
             ctx.symbolTable.resetLocalVariableIndex(env.length);
             
+            // Skip slot 3 to avoid type conflicts in anonymous classes
+            if (ctx.symbolTable.getCurrentLocalVariableIndex() <= 3) {
+                ctx.symbolTable.resetLocalVariableIndex(4);
+            }
+            
             // Set up LocalVariableTracker integration
             ctx.symbolTable.javaClassInfo = ctx.javaClassInfo;
             ctx.javaClassInfo.localVariableIndex = ctx.symbolTable.getCurrentLocalVariableIndex();
@@ -642,12 +647,12 @@ public class EmitterMethodCreator implements Opcodes {
                 }
             }
             
-            // Special aggressive fix for slot 3 - used inconsistently in anonymous classes
+            // Special aggressive fix for slot 3 - used for different types in anonymous classes
             if (ctx.javaClassInfo.localVariableIndex > 3) {
                 // Initialize as integer first, then reference as final type
                 mv.visitInsn(Opcodes.ICONST_0);
                 mv.visitVarInsn(Opcodes.ISTORE, 3);
-                // Final initialization as reference (null is acceptable for reference types)
+                // Final initialization as null (let the bytecode generation handle the actual type)
                 mv.visitInsn(Opcodes.ACONST_NULL);
                 mv.visitVarInsn(Opcodes.ASTORE, 3);
                 if (ctx.javaClassInfo.localVariableTracker != null) {

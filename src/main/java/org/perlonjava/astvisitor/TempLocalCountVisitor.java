@@ -67,7 +67,8 @@ public class TempLocalCountVisitor implements Visitor {
         
         // Add known problematic slots based on actual test failures
         // Note: Skip slot 0 (this) and slot 1 (RuntimeArray parameter) as they are parameters
-        problematicSlots.add(3);   // Used inconsistently - sometimes integer, sometimes reference
+        // Note: Slot 3 is used for different types in different anonymous classes - handle carefully
+        problematicSlots.add(3);   // Used for different types - needs special handling
         problematicSlots.add(4);   // Moved from 3
         problematicSlots.add(5);   // Moved from 4
         problematicSlots.add(11);  // Moved from 5
