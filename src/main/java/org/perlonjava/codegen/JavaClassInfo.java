@@ -71,6 +71,16 @@ public class JavaClassInfo {
     public Deque<GotoLabels> gotoLabelStack;
 
     /**
+     * Tracks local variables that need consistent initialization at merge points.
+     */
+    public LocalVariableTracker localVariableTracker;
+
+    /**
+     * Current local variable index counter for tracking allocated slots.
+     */
+    public int localVariableIndex;
+
+    /**
      * Constructs a new JavaClassInfo object.
      * Initializes the class name, stack level manager, and loop label stack.
      */
@@ -82,6 +92,7 @@ public class JavaClassInfo {
         this.gotoLabelStack = new ArrayDeque<>();
         this.spillSlots = new int[0];
         this.spillTop = 0;
+        this.localVariableTracker = new LocalVariableTracker();
     }
 
      public Label newLabel(String kind) {

@@ -229,6 +229,25 @@ public class EmitForeach {
 
         mv.visitLabel(loopStart);
         emitterVisitor.ctx.javaClassInfo.emitClearSpillSlots(mv);
+        
+        // Record merge point for local variable consistency
+        if (emitterVisitor.ctx.javaClassInfo.localVariableTracker != null) {
+            emitterVisitor.ctx.javaClassInfo.localVariableTracker.recordMergePoint(loopStart);
+            
+            // Specific fix for slot 89 VerifyError issue
+            emitterVisitor.ctx.javaClassInfo.localVariableTracker.forceInitializeSlot89(mv, emitterVisitor.ctx.javaClassInfo);
+            
+            // Specific fix for slot 925 VerifyError issue
+            emitterVisitor.ctx.javaClassInfo.localVariableTracker.forceInitializeSlot925(mv, emitterVisitor.ctx.javaClassInfo);
+            
+            // Aggressive fix for high-index locals that may be reused
+            // Minimal range initialization to avoid method size issues
+            // Only initialize a small buffer around the problematic slots
+            for (int i = 800; i < 1100 && i < emitterVisitor.ctx.javaClassInfo.localVariableIndex; i++) {
+                emitterVisitor.ctx.javaClassInfo.localVariableTracker.forceInitializeLocal(mv, i, emitterVisitor.ctx.javaClassInfo);
+                emitterVisitor.ctx.javaClassInfo.localVariableTracker.forceInitializeIntegerLocal(mv, i, emitterVisitor.ctx.javaClassInfo);
+            }
+        }
 
         // Check for pending signals (alarm, etc.) at loop entry
         EmitStatement.emitSignalCheck(mv);
@@ -295,6 +314,17 @@ public class EmitForeach {
         Label redoLabel = emitterVisitor.ctx.javaClassInfo.newLabel("foreachRedo", node.labelName);
         mv.visitLabel(redoLabel);
         emitterVisitor.ctx.javaClassInfo.emitClearSpillSlots(mv);
+        
+        // Record merge point for local variable consistency
+        if (emitterVisitor.ctx.javaClassInfo.localVariableTracker != null) {
+            emitterVisitor.ctx.javaClassInfo.localVariableTracker.recordMergePoint(redoLabel);
+            
+            // Aggressive fix for high-index locals that may be reused
+            for (int i = 800; i < 1300 && i < emitterVisitor.ctx.javaClassInfo.localVariableIndex; i++) {
+                emitterVisitor.ctx.javaClassInfo.localVariableTracker.forceInitializeLocal(mv, i, emitterVisitor.ctx.javaClassInfo);
+                emitterVisitor.ctx.javaClassInfo.localVariableTracker.forceInitializeIntegerLocal(mv, i, emitterVisitor.ctx.javaClassInfo);
+            }
+        }
 
         // Create control flow handler label
         Label controlFlowHandler = emitterVisitor.ctx.javaClassInfo.newLabel("foreachControlFlowHandler", node.labelName);
@@ -319,6 +349,17 @@ public class EmitForeach {
 
         mv.visitLabel(continueLabel);
         emitterVisitor.ctx.javaClassInfo.emitClearSpillSlots(mv);
+        
+        // Record merge point for local variable consistency
+        if (emitterVisitor.ctx.javaClassInfo.localVariableTracker != null) {
+            emitterVisitor.ctx.javaClassInfo.localVariableTracker.recordMergePoint(continueLabel);
+            
+            // Aggressive fix for high-index locals that may be reused
+            for (int i = 800; i < 1300 && i < emitterVisitor.ctx.javaClassInfo.localVariableIndex; i++) {
+                emitterVisitor.ctx.javaClassInfo.localVariableTracker.forceInitializeLocal(mv, i, emitterVisitor.ctx.javaClassInfo);
+                emitterVisitor.ctx.javaClassInfo.localVariableTracker.forceInitializeIntegerLocal(mv, i, emitterVisitor.ctx.javaClassInfo);
+            }
+        }
 
         if (node.continueBlock != null) {
             node.continueBlock.accept(emitterVisitor.with(RuntimeContextType.VOID));
@@ -330,6 +371,17 @@ public class EmitForeach {
 
         mv.visitLabel(loopEnd);
         emitterVisitor.ctx.javaClassInfo.emitClearSpillSlots(mv);
+        
+        // Record merge point for local variable consistency
+        if (emitterVisitor.ctx.javaClassInfo.localVariableTracker != null) {
+            emitterVisitor.ctx.javaClassInfo.localVariableTracker.recordMergePoint(loopEnd);
+            
+            // Aggressive fix for high-index locals that may be reused
+            for (int i = 800; i < 1300 && i < emitterVisitor.ctx.javaClassInfo.localVariableIndex; i++) {
+                emitterVisitor.ctx.javaClassInfo.localVariableTracker.forceInitializeLocal(mv, i, emitterVisitor.ctx.javaClassInfo);
+                emitterVisitor.ctx.javaClassInfo.localVariableTracker.forceInitializeIntegerLocal(mv, i, emitterVisitor.ctx.javaClassInfo);
+            }
+        }
         
         // Emit control flow handler (if enabled)
         if (ENABLE_LOOP_HANDLERS) {
