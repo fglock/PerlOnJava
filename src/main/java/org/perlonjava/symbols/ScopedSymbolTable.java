@@ -570,6 +570,17 @@ public class ScopedSymbolTable {
      public int allocateLocalVariable(String kind) {
          // Allocate a new index in the current scope by incrementing the index counter
          int slot = symbolTableStack.peek().index++;
+         
+         // CRITICAL: Never allocate slots 0, 1, or 2 as they contain critical data:
+         // Slot 0 = 'this' reference, Slot 1 = RuntimeArray param, Slot 2 = int context param
+         // This prevents VerifyError due to wrong type in field access and parameter access
+         if (slot <= 2) {
+             slot = symbolTableStack.peek().index++; // Skip to next slot
+             if (slot <= 2) {
+                 slot = symbolTableStack.peek().index++; // Ensure we get past slot 2
+             }
+         }
+         
          if (ALLOC_DEBUG) {
              StackTraceElement[] stack = Thread.currentThread().getStackTrace();
              String caller = "?";

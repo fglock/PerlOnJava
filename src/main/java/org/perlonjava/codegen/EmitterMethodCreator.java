@@ -546,41 +546,19 @@ public class EmitterMethodCreator implements Opcodes {
             // Add instance field for __SUB__ code reference
             cw.visitField(Opcodes.ACC_PUBLIC, "__SUB__", "Lorg/perlonjava/runtime/RuntimeScalar;", null, null).visitEnd();
 
-            // Add a constructor with parameters for initializing the fields
-            // Include ALL env slots (even nulls) so signature matches caller expectations
-            StringBuilder constructorDescriptor = new StringBuilder("(");
-            for (int i = skipVariables; i < env.length; i++) {
-                String descriptor = getVariableDescriptor(env[i]);  // handles nulls gracefully
-                constructorDescriptor.append(descriptor);
-            }
-            constructorDescriptor.append(")V");
-            ctx.logDebug("constructorDescriptor: " + constructorDescriptor);
-            ctx.mv =
-                    cw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", constructorDescriptor.toString(), null, null);
-            MethodVisitor mv = ctx.mv;
-            mv.visitCode();
-            mv.visitVarInsn(Opcodes.ALOAD, 0); // Load 'this'
-            mv.visitMethodInsn(
+            // Add a simple no-arg constructor to avoid parameter matching issues
+            MethodVisitor noArgMv = cw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null);
+            noArgMv.visitCode();
+            noArgMv.visitVarInsn(Opcodes.ALOAD, 0); // Load 'this'
+            noArgMv.visitMethodInsn(
                     Opcodes.INVOKESPECIAL,
                     "java/lang/Object",
                     "<init>",
                     "()V",
                     false); // Call the superclass constructor
-            for (int i = skipVariables; i < env.length; i++) {
-                // Skip null entries (gaps in sparse symbol table)
-                if (env[i] == null || env[i].isEmpty()) {
-                    continue;
-                }
-                String descriptor = getVariableDescriptor(env[i]);
-
-                mv.visitVarInsn(Opcodes.ALOAD, 0); // Load 'this'
-                mv.visitVarInsn(Opcodes.ALOAD, i - 2); // Load the constructor argument
-                mv.visitFieldInsn(
-                        Opcodes.PUTFIELD, ctx.javaClassInfo.javaClassName, env[i], descriptor); // Set the instance field
-            }
-            mv.visitInsn(Opcodes.RETURN); // Return void
-            mv.visitMaxs(0, 0); // Automatically computed
-            mv.visitEnd();
+            noArgMv.visitInsn(Opcodes.RETURN);
+            noArgMv.visitMaxs(1, 1);
+            noArgMv.visitEnd();
 
             // Create the public "apply" method for the generated class
             ctx.logDebug("Create the method");
@@ -591,7 +569,7 @@ public class EmitterMethodCreator implements Opcodes {
                             "(Lorg/perlonjava/runtime/RuntimeArray;I)Lorg/perlonjava/runtime/RuntimeList;",
                             null,
                             new String[]{"java/lang/Exception"});
-            mv = ctx.mv;
+            MethodVisitor mv = ctx.mv;
 
             // Generate the subroutine block
             mv.visitCode();
@@ -640,7 +618,9 @@ public class EmitterMethodCreator implements Opcodes {
             // instance across many eval invocations. If we don't reset the counter for each
             // generated method, the local slot numbers will grow without bound (eventually
             // producing invalid stack map frames / VerifyError).
-            ctx.symbolTable.resetLocalVariableIndex(env.length);
+            // CRITICAL: Never start from slot 0 as it contains 'this' in non-static methods
+            int startIndex = Math.max(env.length, 2); // Slot 0=this, 1=RuntimeArray param
+            ctx.symbolTable.resetLocalVariableIndex(startIndex);
             
             // Skip slot 3 to avoid type conflicts in anonymous classes
             // Use slot isolation strategy: different types get different slot ranges
@@ -822,6 +802,12 @@ public class EmitterMethodCreator implements Opcodes {
             }
             
             for (int i = 0; i < preInitTempLocalsCount; i++) {
+                // CRITICAL: Skip i=0 and i=2 to prevent overwriting critical slots
+                // Slot 0 contains 'this', slot 2 contains int context parameter
+                if (i == 0 || i == 2) {
+                    continue;
+                }
+                
                 int slot = ctx.symbolTable.allocateLocalVariable("preInitTemp");
                 
                 // Initialize based on the type information from the visitor

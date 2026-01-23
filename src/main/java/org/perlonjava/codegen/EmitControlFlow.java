@@ -13,6 +13,8 @@ import org.perlonjava.runtime.ControlFlowType;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
 
+import java.util.HashSet;
+
 import java.util.Map;
 import java.util.Set;
 
@@ -381,6 +383,24 @@ public class EmitControlFlow {
             } else {
                 ctx.javaClassInfo.emitClearSpillSlots(mv);
                 ctx.javaClassInfo.stackLevelManager.emitPopInstructions(mv, loopLabels.asmStackLevel);
+                
+                // Critical fix: Ensure local variable consistency before jump
+                // Don't initialize slot 0 (this) and slot 2 (context param) as they should always contain the correct types
+                if (ctx.javaClassInfo.localVariableTracker != null) {
+                    // Initialize all problematic reference slots EXCEPT slots 0 and 2
+                    Set<Integer> slotsToInitialize = new HashSet<>();
+                    for (int slot = 1; slot < Math.min(ctx.javaClassInfo.localVariableIndex, 200); slot++) {
+                        if (slot != 2) { // Skip slot 2 (int context parameter)
+                            slotsToInitialize.add(slot);
+                        }
+                    }
+                    
+                    for (int slot : slotsToInitialize) {
+                        mv.visitInsn(Opcodes.ACONST_NULL);
+                        mv.visitVarInsn(Opcodes.ASTORE, slot);
+                    }
+                }
+                
                 mv.visitJumpInsn(Opcodes.GOTO, loopLabels.redoLabel);
             }
 

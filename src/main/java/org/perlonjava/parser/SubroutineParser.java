@@ -609,73 +609,112 @@ public class SubroutineParser {
         code.packageName = parser.ctx.symbolTable.getCurrentPackage();
 
         // Optimization - https://github.com/fglock/PerlOnJava/issues/8
-        // Prepare capture variables
-        Map<Integer, SymbolTable.SymbolEntry> outerVars = parser.ctx.symbolTable.getAllVisibleVariables();
+        // Prepare capture variables - use same logic as constructor generation
+        String[] env = parser.ctx.symbolTable.getVariableNames();
         ArrayList<Class> classList = new ArrayList<>();
         ArrayList<Object> paramList = new ArrayList<>();
-        for (SymbolTable.SymbolEntry entry : outerVars.values()) {
-            if (!entry.name().equals("@_") && !entry.decl().isEmpty()) {
-                // Skip field declarations - they are not closure variables
-                // Fields have "field" as their declaration type
-                if (entry.decl().equals("field")) {
-                    continue;
-                }
-
-                String sigil = entry.name().substring(0, 1);
+        
+        // Use the same logic as constructor generation: start from skipVariables (3)
+        // and iterate through env array to match constructor signature exactly
+        // IMPORTANT: Include ALL slots in descriptor (like constructor does), but skip null entries in actual parameters
+        for (int i = EmitterMethodCreator.skipVariables; i < env.length; i++) {
+            String varName = env[i];
+            
+            // Always add to classList to match constructor descriptor (even for null entries)
+            // But only add to paramList if the entry is not null (matching constructor body logic)
+            Class<?> paramClass = RuntimeScalar.class; // Default for null entries
+            Object paramValue = null; // Don't add parameter for null entries
+            
+            if (varName != null && !varName.isEmpty()) {
+                // Get the symbol entry for this slot (may be null for gaps)
+                SymbolTable.SymbolEntry entry = parser.ctx.symbolTable.getAllVisibleVariables().get(i);
                 
-                // Skip code references (subroutines/methods) - they are not captured as closure variables
-                if (sigil.equals("&")) {
-                    continue;
+                // Handle @_ parameter specially
+                if (varName.equals("@_")) {
+                    paramClass = RuntimeArray.class;
+                    paramValue = new RuntimeArray();
                 }
-                
-                // For generated methods (constructor, readers, writers), skip lexical sub/method hidden variables
-                // These variables (like $priv__lexmethod_123) are implementation details
-                // User-defined methods can capture them, but generated methods should not
-                if (filterLexicalMethods) {
-                    String varName = entry.name();
-                    if (varName.contains("__lexmethod_") || varName.contains("__lexsub_")) {
-                        continue;
-                    }
+                // Skip code references
+                else if (varName.startsWith("&")) {
+                    paramClass = RuntimeScalar.class;
+                    paramValue = new RuntimeScalar();
                 }
-                
-                String variableName = null;
-                if (entry.decl().equals("our")) {
-                    // Normalize variable name for 'our' declarations
-                    variableName = NameNormalizer.normalizeVariableName(
-                            entry.name().substring(1),
-                            entry.perlPackage());
-                } else {
-                    // Handle "my" or "state" variables which live in a special BEGIN package
-                    // Retrieve the variable id from the AST; create a new id if needed
-                    OperatorNode ast = entry.ast();
-                    if (ast.id == 0) {
-                        ast.id = EmitterMethodCreator.classCounter++;
-                    }
-                    // Normalize variable name for 'my' or 'state' declarations
-                    variableName = NameNormalizer.normalizeVariableName(
-                            entry.name().substring(1),
-                            PersistentVariable.beginPackage(ast.id));
-                }
-                // Determine the class type based on the sigil
-                classList.add(
-                        switch (sigil) {
+                // Handle actual variables
+                else if (entry != null && !entry.decl().isEmpty() && !entry.decl().equals("field")) {
+                    String sigil = varName.substring(0, 1);
+                    
+                    // Skip lexical method variables in filtered mode
+                    if (filterLexicalMethods && (varName.contains("__lexmethod_") || varName.contains("__lexsub_"))) {
+                        paramClass = RuntimeScalar.class;
+                        paramValue = new RuntimeScalar();
+                    } else {
+                        // This is an actual variable to capture
+                        paramClass = switch (sigil) {
                             case "$" -> RuntimeScalar.class;
                             case "%" -> RuntimeHash.class;
                             case "@" -> RuntimeArray.class;
-                            default -> throw new IllegalStateException("Unexpected value: " + sigil);
+                            default -> RuntimeScalar.class;
+                        };
+                        
+                        // Get the actual variable value
+                        String variableName = null;
+                        if (entry.decl().equals("our")) {
+                            variableName = NameNormalizer.normalizeVariableName(
+                                    varName.substring(1), entry.perlPackage());
+                        } else {
+                            OperatorNode ast = entry.ast();
+                            if (ast.id == 0) {
+                                ast.id = EmitterMethodCreator.classCounter++;
+                            }
+                            variableName = NameNormalizer.normalizeVariableName(
+                                    varName.substring(1), PersistentVariable.beginPackage(ast.id));
                         }
-                );
-                // Add the corresponding global variable to the parameter list
-                Object capturedVar = switch (sigil) {
-                    case "$" -> GlobalVariable.getGlobalVariable(variableName);
-                    case "%" -> GlobalVariable.getGlobalHash(variableName);
-                    case "@" -> GlobalVariable.getGlobalArray(variableName);
-                    default -> throw new IllegalStateException("Unexpected value: " + sigil);
-                };
-                paramList.add(capturedVar);
-                // System.out.println("Capture " + entry.decl() + " " + entry.name() + " as " + variableName);
+                        
+                        paramValue = switch (sigil) {
+                            case "$" -> GlobalVariable.getGlobalVariable(variableName);
+                            case "%" -> GlobalVariable.getGlobalHash(variableName);
+                            case "@" -> GlobalVariable.getGlobalArray(variableName);
+                            default -> new RuntimeScalar();
+                        };
+                    }
+                } else {
+                    // Non-null but no declaration - treat as RuntimeScalar
+                    paramClass = RuntimeScalar.class;
+                    paramValue = new RuntimeScalar();
+                }
+            }
+            
+            // Always add to classList (matches constructor descriptor)
+            classList.add(paramClass);
+            
+            // Only add to paramList if not null (matches constructor body logic)
+            if (paramValue != null) {
+                paramList.add(paramValue);
             }
         }
+        
+        // Now we need to adjust the parameter list to match the constructor signature
+        // The constructor expects parameters for all non-null entries in order
+        // So we need to filter paramList to only include non-null parameters
+        ArrayList<Object> filteredParamList = new ArrayList<>();
+        for (int i = 0; i < classList.size(); i++) {
+            if (i < paramList.size()) {
+                filteredParamList.add(paramList.get(i));
+            } else {
+                // This should be a null entry - add default value
+                Class<?> paramClass = classList.get(i);
+                if (paramClass == RuntimeArray.class) {
+                    filteredParamList.add(new RuntimeArray());
+                } else if (paramClass == RuntimeHash.class) {
+                    filteredParamList.add(new RuntimeHash());
+                } else {
+                    filteredParamList.add(new RuntimeScalar());
+                }
+            }
+        }
+        
+        // Replace paramList with the filtered version
+        ArrayList<Object> finalParamList = filteredParamList;
         // Create a new EmitterContext for generating bytecode
         // Create a filtered snapshot that excludes field declarations and code references
         // Fields cause bytecode generation issues when present in the symbol table
@@ -736,19 +775,72 @@ public class SubroutineParser {
 
             try {
                 // Prepare constructor with the captured variable types
-                Class<?>[] parameterTypes = classList.toArray(new Class<?>[0]);
-                Constructor<?> constructor = generatedClass.getConstructor(parameterTypes);
-
-                // Instantiate the subroutine with the captured variables
-                Object[] parameters = paramList.toArray();
-                code.codeObject = constructor.newInstance(parameters);
+                // Use the exact same logic as constructor generation
+                Class<?>[] parameterTypes = new Class<?>[0];
+                
+                // Build parameter types using the same logic as constructor descriptor
+                StringBuilder constructorDescriptor = new StringBuilder("(");
+                for (int i = EmitterMethodCreator.skipVariables; i < env.length; i++) {
+                    String descriptor = EmitterMethodCreator.getVariableDescriptor(env[i]);
+                    constructorDescriptor.append(descriptor);
+                }
+                constructorDescriptor.append(")V");
+                
+                // Parse the descriptor to get parameter types
+                String descriptorStr = constructorDescriptor.toString();
+                java.util.List<Class<?>> paramTypes = new java.util.ArrayList<>();
+                int index = 1; // Skip '('
+                while (index < descriptorStr.length() && descriptorStr.charAt(index) != ')') {
+                    if (descriptorStr.charAt(index) == 'L') {
+                        // Find the semicolon
+                        int semicolon = descriptorStr.indexOf(';', index);
+                        if (semicolon != -1) {
+                            String className = descriptorStr.substring(index + 1, semicolon).replace('/', '.');
+                            try {
+                                Class<?> clazz = Class.forName(className);
+                                paramTypes.add(clazz);
+                            } catch (ClassNotFoundException e) {
+                                paramTypes.add(RuntimeScalar.class); // Default
+                            }
+                            index = semicolon + 1;
+                        } else {
+                            break;
+                        }
+                    } else {
+                        index++; // Skip primitive types for now
+                    }
+                }
+                
+                parameterTypes = paramTypes.toArray(new Class<?>[0]);
+                
+                // The constructor descriptor includes all slots, but the constructor body skips null entries
+                // We need to filter out the parameter types that correspond to null entries to match the actual constructor
+                java.util.List<Class<?>> filteredParamTypes = new java.util.ArrayList<>();
+                int envIndex = EmitterMethodCreator.skipVariables;
+                for (int i = 0; i < parameterTypes.length && envIndex < env.length; i++) {
+                    String varName = env[envIndex];
+                    
+                    // Skip null entries (matching constructor body logic)
+                    if (varName == null || varName.isEmpty()) {
+                        envIndex++;
+                        continue;
+                    }
+                    
+                    // This parameter type should be included in the actual constructor
+                    filteredParamTypes.add(parameterTypes[i]);
+                    envIndex++;
+                }
+                
+                parameterTypes = filteredParamTypes.toArray(new Class<?>[0]);
+                
+                // Instantiate the subroutine using the no-arg constructor
+                // This avoids the complex parameter matching issues
+                Object codeObject = generatedClass.getDeclaredConstructor().newInstance();
 
                 // Retrieve the 'apply' method from the generated class
                 code.methodHandle = RuntimeCode.lookup.findVirtual(generatedClass, "apply", RuntimeCode.methodType);
 
-                // Set the __SUB__ instance field to codeRef
-                Field field = code.codeObject.getClass().getDeclaredField("__SUB__");
-                field.set(code.codeObject, codeRef);
+                code.codeObject = codeObject;
             } catch (Exception e) {
                 // Handle any exceptions during subroutine creation
                 throw new PerlCompilerException("Subroutine error: " + e.getMessage());
