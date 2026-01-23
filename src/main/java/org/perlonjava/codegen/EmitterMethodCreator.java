@@ -660,7 +660,7 @@ public class EmitterMethodCreator implements Opcodes {
             int preInitTempLocalsStart = ctx.symbolTable.getCurrentLocalVariableIndex();
             
             // Use capture manager to identify and pre-initialize problematic slots
-            if (ctx.captureManager != null) {
+            if (ctx.captureManager != null && false) { // Temporarily disabled for module loading
                 // First, scan the symbol table to determine exact slot requirements
                 org.perlonjava.astvisitor.SlotAllocationScanner scanner = 
                     new org.perlonjava.astvisitor.SlotAllocationScanner(ctx);
@@ -674,9 +674,15 @@ public class EmitterMethodCreator implements Opcodes {
                 
                 ctx.logDebug("Initializing " + allocatedSlots.size() + " slots based on symbol table scan");
                 
+                // Conservative approach: only initialize slots that are actually problematic
                 for (Map.Entry<Integer, org.perlonjava.astvisitor.SlotAllocationScanner.SlotInfo> entry : allocatedSlots.entrySet()) {
                     int slot = entry.getKey();
                     org.perlonjava.astvisitor.SlotAllocationScanner.SlotInfo info = entry.getValue();
+                    
+                    // Skip slots that are too high to avoid excessive initialization
+                    if (slot > 50) {
+                        continue;
+                    }
                     
                     // Check if this slot should be integer (slot 2 = wantarray parameter)
                     if (slot == 2) {
@@ -720,7 +726,7 @@ public class EmitterMethodCreator implements Opcodes {
                     ctx.logDebug("Initialized slot " + slot + " as " + info.type.getSimpleName() + " for " + info.purpose);
                 }
                 
-                ctx.logDebug("Exact slot allocation initialization completed");
+                ctx.logDebug("Conservative slot allocation initialization completed");
             }
             org.perlonjava.astvisitor.TempLocalCountVisitor tempCountVisitor = 
                 new org.perlonjava.astvisitor.TempLocalCountVisitor();
