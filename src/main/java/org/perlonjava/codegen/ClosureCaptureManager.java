@@ -32,7 +32,29 @@ public class ClosureCaptureManager {
     private int nextCaptureSlot = 3; // Start after 'this' and parameters
     
     // Known problematic slots that need special handling
-    private final Set<Integer> problematicSlots = Set.of(3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
+    private final Set<Integer> problematicSlots = Set.of(3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 22, 25);
+    
+    // Type mappings for problematic slots based on analysis
+    private final Map<Integer, Class<?>> slotTypeMappings = new HashMap<>();
+    
+    public ClosureCaptureManager() {
+        // Initialize known type mappings for problematic slots
+        slotTypeMappings.put(3, org.perlonjava.runtime.RuntimeScalar.class);
+        slotTypeMappings.put(4, org.perlonjava.runtime.RuntimeScalar.class);
+        slotTypeMappings.put(5, org.perlonjava.runtime.RuntimeScalar.class);
+        slotTypeMappings.put(6, org.perlonjava.runtime.RuntimeScalar.class);
+        slotTypeMappings.put(7, org.perlonjava.runtime.RuntimeScalar.class);
+        slotTypeMappings.put(8, org.perlonjava.runtime.RuntimeScalar.class);
+        slotTypeMappings.put(9, org.perlonjava.runtime.RuntimeScalar.class);
+        slotTypeMappings.put(10, org.perlonjava.runtime.RuntimeScalar.class);
+        slotTypeMappings.put(11, org.perlonjava.runtime.RuntimeScalar.class);
+        slotTypeMappings.put(12, org.perlonjava.runtime.RuntimeScalar.class);
+        slotTypeMappings.put(13, org.perlonjava.runtime.RuntimeScalar.class);
+        slotTypeMappings.put(14, org.perlonjava.runtime.RuntimeScalar.class);
+        slotTypeMappings.put(15, org.perlonjava.runtime.RuntimeScalar.class);
+        slotTypeMappings.put(22, org.perlonjava.runtime.RuntimeScalar.class); // New problematic slot
+        slotTypeMappings.put(25, org.perlonjava.runtime.RuntimeScalar.class); // New problematic slot
+    }
     
     /**
      * Allocate a capture slot for a variable, ensuring type consistency.
@@ -102,6 +124,13 @@ public class ClosureCaptureManager {
             mv.visitFieldInsn(Opcodes.GETSTATIC, "org/perlonjava/runtime/RuntimeScalarCache", "scalarUndef", "Lorg/perlonjava/runtime/RuntimeScalarReadOnly;");
             mv.visitVarInsn(Opcodes.ASTORE, slot);
         }
+    }
+    
+    /**
+     * Get the expected type for a problematic slot.
+     */
+    public Class<?> getExpectedTypeForSlot(int slot) {
+        return slotTypeMappings.getOrDefault(slot, org.perlonjava.runtime.RuntimeScalar.class);
     }
     
     /**
