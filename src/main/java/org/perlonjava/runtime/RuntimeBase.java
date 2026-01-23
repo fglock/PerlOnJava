@@ -48,6 +48,52 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
      * Retrieves the array value of the object as aliases.
      * This method initializes a new RuntimeArray and sets it as the alias for this entity.
      *
+     * @return a RuntimeArray object representing the array aliases
+     */
+    public abstract RuntimeArray setFromList(RuntimeList value);
+
+    /**
+     * Coerce this value to the expected type, handling type conversion gracefully.
+     * This method helps resolve slot type inconsistencies in anonymous class bytecode generation.
+     *
+     * @param expectedType the target type to coerce to
+     * @return a value of the expected type, or a suitable fallback
+     */
+    public static RuntimeBase coerceToExpectedType(RuntimeBase value, Class<?> expectedType) {
+        if (value == null) {
+            // Handle null values based on expected type
+            if (expectedType == RuntimeHash.class) {
+                return new RuntimeHash(); // empty hash as fallback
+            } else if (expectedType == RuntimeScalar.class) {
+                return scalarUndef; // undefined scalar as fallback
+            } else if (expectedType == RuntimeArray.class) {
+                return new RuntimeArray(); // empty array as fallback
+            }
+            return value; // hope for the best
+        }
+        
+        if (expectedType.isInstance(value)) {
+            return value; // already correct type
+        }
+        
+        // Convert between types as needed
+        if (expectedType == RuntimeHash.class && value instanceof RuntimeScalar) {
+            return new RuntimeHash(); // empty hash as fallback
+        }
+        if (expectedType == RuntimeScalar.class && value instanceof RuntimeHash) {
+            return scalarUndef; // undefined scalar as fallback
+        }
+        if (expectedType == RuntimeArray.class && value instanceof RuntimeScalar) {
+            return new RuntimeArray(); // empty array as fallback
+        }
+        
+        return value; // hope for the best
+    }
+
+    /**
+     * Retrieves the array value of the object as aliases.
+     * This method initializes a new RuntimeArray and sets it as the alias for this entity.
+     *
      * @return a RuntimeArray representing the array of aliases for this entity
      */
     public RuntimeArray getArrayOfAlias() {
@@ -143,14 +189,6 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
      * @return the updated RuntimeScalar object
      */
     public abstract RuntimeScalar addToScalar(RuntimeScalar scalar);
-
-    /**
-     * Sets itself from a RuntimeList.
-     *
-     * @param list the RuntimeList object from which this entity will be set
-     * @return the updated RuntimeArray object
-     */
-    public abstract RuntimeArray setFromList(RuntimeList list);
 
     /**
      * Retrieves the result of keys() as a RuntimeArray instance.

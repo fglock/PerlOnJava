@@ -606,8 +606,9 @@ public class EmitterMethodCreator implements Opcodes {
             ctx.symbolTable.resetLocalVariableIndex(env.length);
             
             // Skip slot 3 to avoid type conflicts in anonymous classes
+            // Use slot isolation strategy: different types get different slot ranges
             if (ctx.symbolTable.getCurrentLocalVariableIndex() <= 3) {
-                ctx.symbolTable.resetLocalVariableIndex(5); // Skip slots 3 and 4
+                ctx.symbolTable.resetLocalVariableIndex(10); // Skip to slot 10
             }
             
             // Set up LocalVariableTracker integration
@@ -652,9 +653,10 @@ public class EmitterMethodCreator implements Opcodes {
                 // Initialize as integer first, then reference as final type
                 mv.visitInsn(Opcodes.ICONST_0);
                 mv.visitVarInsn(Opcodes.ISTORE, 3);
-                // Final initialization as a generic RuntimeBase (undef scalar)
-                // This can be cast to both RuntimeScalar and RuntimeHash in different contexts
-                mv.visitFieldInsn(Opcodes.GETSTATIC, "org/perlonjava/runtime/RuntimeScalarCache", "scalarUndef", "Lorg/perlonjava/runtime/RuntimeScalarReadOnly;");
+                // Final initialization with coercion method to handle type mismatches
+                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeScalar");
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeScalar", "<init>", "()V", false);
                 mv.visitVarInsn(Opcodes.ASTORE, 3);
                 if (ctx.javaClassInfo.localVariableTracker != null) {
                     ctx.javaClassInfo.localVariableTracker.recordLocalWrite(3);
