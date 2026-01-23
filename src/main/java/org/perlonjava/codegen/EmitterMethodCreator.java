@@ -660,7 +660,7 @@ public class EmitterMethodCreator implements Opcodes {
             int preInitTempLocalsStart = ctx.symbolTable.getCurrentLocalVariableIndex();
             
             // Use capture manager to identify and pre-initialize problematic slots
-            if (ctx.captureManager != null && false) { // Temporarily disabled for module loading
+            if (ctx.captureManager != null) { // Re-enabled - local variable fix working
                 // First, scan the symbol table to determine exact slot requirements
                 org.perlonjava.astvisitor.SlotAllocationScanner scanner = 
                     new org.perlonjava.astvisitor.SlotAllocationScanner(ctx);
@@ -702,7 +702,10 @@ public class EmitterMethodCreator implements Opcodes {
                     
                     // Initialize as reference type with exact type information
                     if (info.type == org.perlonjava.runtime.RuntimeScalar.class) {
-                        mv.visitFieldInsn(Opcodes.GETSTATIC, "org/perlonjava/runtime/RuntimeScalarCache", "scalarUndef", "Lorg/perlonjava/runtime/RuntimeScalarReadOnly;");
+                        // Try regular RuntimeScalar instead of ReadOnly for module loading
+                        mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeScalar");
+                        mv.visitInsn(Opcodes.DUP);
+                        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeScalar", "<init>", "()V", false);
                         mv.visitVarInsn(Opcodes.ASTORE, slot);
                     } else if (info.type == org.perlonjava.runtime.RuntimeHash.class) {
                         mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeHash");
@@ -726,7 +729,7 @@ public class EmitterMethodCreator implements Opcodes {
                     ctx.logDebug("Initialized slot " + slot + " as " + info.type.getSimpleName() + " for " + info.purpose);
                 }
                 
-                ctx.logDebug("Conservative slot allocation initialization completed");
+                ctx.logDebug("Local variable slot allocation initialization completed");
             }
             org.perlonjava.astvisitor.TempLocalCountVisitor tempCountVisitor = 
                 new org.perlonjava.astvisitor.TempLocalCountVisitor();
