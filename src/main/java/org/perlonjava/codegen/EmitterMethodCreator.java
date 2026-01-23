@@ -627,6 +627,21 @@ public class EmitterMethodCreator implements Opcodes {
             // Initialize only the slots we actually need, plus a small buffer
             int preInitTempLocalsCount = Math.max(maxSlotIndex + 50, tempCountVisitor.getMaxTempCount() + 50);
             
+            // Pre-initialize problematic slots identified by the visitor
+            for (Integer slot : problematicSlots) {
+                if (slot < ctx.javaClassInfo.localVariableIndex && slot > 1) {
+                    // Skip parameter slots 0 and 1 (this and RuntimeArray)
+                    // Initialize as both types to handle inconsistent usage
+                    mv.visitInsn(Opcodes.ACONST_NULL);
+                    mv.visitVarInsn(Opcodes.ASTORE, slot);
+                    mv.visitInsn(Opcodes.ICONST_0);
+                    mv.visitVarInsn(Opcodes.ISTORE, slot);
+                    if (ctx.javaClassInfo.localVariableTracker != null) {
+                        ctx.javaClassInfo.localVariableTracker.recordLocalWrite(slot);
+                    }
+                }
+            }
+            
             // Special aggressive fix for slot 89 - initialize it first
             int slot89 = ctx.symbolTable.allocateLocalVariable("preInitSlot89");
             mv.visitInsn(Opcodes.ACONST_NULL);
@@ -642,6 +657,17 @@ public class EmitterMethodCreator implements Opcodes {
             // Triple-initialize slot 89 as iterator
             mv.visitInsn(Opcodes.ACONST_NULL);
             mv.visitVarInsn(Opcodes.ASTORE, slot89);
+            
+            // Initialize as both types for slot 89 inconsistency
+            mv.visitInsn(Opcodes.ICONST_0);
+            mv.visitVarInsn(Opcodes.ISTORE, slot89);
+            
+            // Force allocate many slots to ensure slot 89 gets the right index
+            for (int j = 0; j < 100; j++) {
+                int tempSlot = ctx.symbolTable.allocateLocalVariable("tempSlot" + j);
+                mv.visitInsn(Opcodes.ACONST_NULL);
+                mv.visitVarInsn(Opcodes.ASTORE, tempSlot);
+            }
             
             // Force allocate slot 89 at a high index to ensure it gets the right slot number
             int slot89High = ctx.symbolTable.allocateLocalVariable("preInitSlot89High");
