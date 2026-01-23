@@ -78,16 +78,21 @@ public class SlotAllocationScanner {
     
     private void addKnownTemporarySlots() {
         // Only add specific problematic slots that we know cause issues
-        // Avoid adding too many temporaries to prevent module loading issues
+        // Ultra-conservative approach to avoid any stack interference
         int[] knownProblematicSlots = {3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
         
         for (int slot : knownProblematicSlots) {
             // Only add slots that are actually used in the symbol table
+            // And only if we're not in a context that might interfere with field access
             if (ctx.symbolTable.getCurrentLocalVariableIndex() > slot) {
-                allocatedSlots.put(slot, new SlotInfo(slot, RuntimeScalar.class, "problematic_slot_" + slot, false, true));
-                slotTypes.put(slot, RuntimeScalar.class);
-                problematicSlots.add(slot);
-                ctx.logDebug("Added known problematic slot " + slot);
+                // Ultra-conservative: only initialize slots that are absolutely necessary
+                // Skip slots that could cause stack type mismatches with field access
+                if (slot <= 10) { // Very conservative: only initialize first few slots
+                    allocatedSlots.put(slot, new SlotInfo(slot, RuntimeScalar.class, "problematic_slot_" + slot, false, true));
+                    slotTypes.put(slot, RuntimeScalar.class);
+                    problematicSlots.add(slot);
+                    ctx.logDebug("Added ultra-conservative problematic slot " + slot);
+                }
             }
         }
     }
