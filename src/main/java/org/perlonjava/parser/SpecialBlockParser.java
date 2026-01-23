@@ -139,6 +139,16 @@ public class SpecialBlockParser {
                     nodes.add(
                             new OperatorNode("package",
                                     new IdentifierNode(entry.perlPackage(), tokenIndex), tokenIndex));
+                    // For our variables, we need to ensure they're accessible in the package
+                    // Emit: our $var (to ensure it's declared in the package)
+                    nodes.add(
+                            new OperatorNode(
+                                    "our",
+                                    new OperatorNode(
+                                            entry.name().substring(0, 1),
+                                            new IdentifierNode(entry.name().substring(1), tokenIndex),
+                                            tokenIndex),
+                                    tokenIndex));
                 } else {
                     // "my" or "state" variable live in a special BEGIN package
                     // Retrieve the variable id from the AST; create a new id if needed
@@ -151,15 +161,6 @@ public class SpecialBlockParser {
                             new OperatorNode("package",
                                     new IdentifierNode(PersistentVariable.beginPackage(ast.id), tokenIndex), tokenIndex));
                 }
-                // Emit: our $var
-                nodes.add(
-                        new OperatorNode(
-                                "our",
-                                new OperatorNode(
-                                        entry.name().substring(0, 1),
-                                        new IdentifierNode(entry.name().substring(1), tokenIndex),
-                                        tokenIndex),
-                                tokenIndex));
             }
         }
         // Emit: package PKG

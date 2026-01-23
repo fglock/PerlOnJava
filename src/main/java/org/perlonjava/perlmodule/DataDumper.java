@@ -21,7 +21,7 @@ public class DataDumper extends PerlModuleBase {
     public static void initialize() {
         DataDumper dataDumper = new DataDumper();
         try {
-            dataDumper.registerMethod("Dumpxs", null);
+            dataDumper.registerMethod("Dumpxs", "$");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Data::Dumper method: " + e.getMessage());
         }

@@ -986,6 +986,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Alternative way to create constants like: `$constant::{_CAN_PCS} = \$const`
             return new RuntimeList(constantValue);
         }
+
+        if (subroutineName == null || subroutineName.isEmpty()) {
+            // Try to construct subroutineName from this object's package and sub name
+            if (packageName != null && subName != null) {
+                subroutineName = packageName + "::" + subName;
+            } else {
+                subroutineName = "unknown_subroutine";
+            }
+        }
+
         try {
             // Wait for the compilerThread to finish if it exists
             if (this.compilerSupplier != null) {
