@@ -96,7 +96,7 @@ public class ClosureCaptureManager {
             // Find the next available slot that's not problematic
             do {
                 slot = nextCaptureSlot++;
-            } while (problematicSlots.contains(slot));
+            } while (problematicSlots.contains(slot) || slot <= 2); // Never use slots 0, 1, 2
             typeSlotPools.put(type, slot);
         }
         return slot;

@@ -59,6 +59,13 @@ public class SlotAllocationScanner {
             int slot = ctx.symbolTable.getVariableIndex(varName);
             
             if (slot >= 0) {
+                // CRITICAL: Never allocate slots 0, 1, or 2 as they contain critical data:
+                // Slot 0 = 'this' reference, Slot 1 = RuntimeArray param, Slot 2 = int context param
+                if (slot <= 2) {
+                    ctx.logDebug("Skipping critical slot " + slot + " for variable " + varName);
+                    continue;
+                }
+                
                 allocatedSlots.put(slot, new SlotInfo(slot, type, "variable:" + varName, false, false));
                 slotTypes.put(slot, type);
                 
@@ -87,7 +94,8 @@ public class SlotAllocationScanner {
             if (ctx.symbolTable.getCurrentLocalVariableIndex() > slot) {
                 // Ultra-conservative: only initialize slots that are absolutely necessary
                 // Skip slots that could cause stack type mismatches with field access
-                if (slot <= 10) { // Very conservative: only initialize first few slots
+                // CRITICAL: Never initialize slots 0, 1, or 2 as they contain critical method data
+                if (slot > 2 && slot <= 10) { // Very conservative: only initialize first few slots, but skip critical slots
                     allocatedSlots.put(slot, new SlotInfo(slot, RuntimeScalar.class, "problematic_slot_" + slot, false, true));
                     slotTypes.put(slot, RuntimeScalar.class);
                     problematicSlots.add(slot);

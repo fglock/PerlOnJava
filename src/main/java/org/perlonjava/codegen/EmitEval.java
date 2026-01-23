@@ -180,61 +180,29 @@ public class EmitEval {
         // We skip 'this', '@_', and 'wantarray' which are handled separately
         int skipVariables = EmitterMethodCreator.skipVariables;
 
-        // Create array of parameter types for the constructor
-        // Each captured variable becomes a constructor parameter (including null gaps)
-        mv.visitIntInsn(Opcodes.BIPUSH, newEnv.length - skipVariables);
-        mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Class");
-        // Stack: [Class, Class[]]
-
-        // Fill the parameter types array based on variable types
-        // Variables starting with @ are RuntimeArray, % are RuntimeHash, others are RuntimeScalar
-        // getVariableDescriptor handles nulls gracefully (returns RuntimeScalar descriptor)
-        for (int i = 0; i < newEnv.length - skipVariables; i++) {
-            mv.visitInsn(Opcodes.DUP);
-            mv.visitIntInsn(Opcodes.BIPUSH, i);
-            String descriptor = EmitterMethodCreator.getVariableDescriptor(newEnv[i + skipVariables]);
-            mv.visitLdcInsn(Type.getType(descriptor));
-            mv.visitInsn(Opcodes.AASTORE);
-        }
-        // Stack: [Class, Class[]]
-
-        // Use reflection to get the constructor
+        // Use reflection to get the no-arg constructor
         // Note: Direct instantiation (NEW/INVOKESPECIAL) isn't possible because
         // the class name is only known at runtime
         mv.visitMethodInsn(
                 Opcodes.INVOKEVIRTUAL,
                 "java/lang/Class",
                 "getConstructor",
-                "([Ljava/lang/Class;)Ljava/lang/reflect/Constructor;",
+                "()Ljava/lang/reflect/Constructor;",
                 false);
         // Stack: [Constructor]
 
-        // Create array for constructor arguments (captured variable values)
-        mv.visitIntInsn(Opcodes.BIPUSH, newEnv.length - skipVariables);
+        // Create empty array for constructor arguments (no-arg constructor)
+        mv.visitInsn(Opcodes.ICONST_0);
         mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object");
         // Stack: [Constructor, Object[]]
 
-        // Fill the arguments array with actual variable values from local variables
-        for (Integer index : newSymbolTable.getAllVisibleVariables().keySet()) {
-            if (index >= skipVariables) {
-                String varName = newEnv[index];
-                mv.visitInsn(Opcodes.DUP);
-                mv.visitIntInsn(Opcodes.BIPUSH, index - skipVariables);
-                mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.symbolTable.getVariableIndex(varName));
-                mv.visitInsn(Opcodes.AASTORE);
-                emitterVisitor.ctx.logDebug("Put variable " + emitterVisitor.ctx.symbolTable.getVariableIndex(varName) + " at parameter #" + (index - skipVariables) + " " + varName);
-            }
-        }
-        // Stack: [Constructor, Object[]]
-
-        // Create instance of the eval class with captured variables
-        // This is where the "closure" behavior happens - the new instance
-        // holds references to the captured variables
+        // Create instance of the eval class using no-arg constructor
+        // The closure variables are accessed via instance fields instead of constructor parameters
         mv.visitMethodInsn(
                 Opcodes.INVOKEVIRTUAL,
                 "java/lang/reflect/Constructor",
                 "newInstance",
-                "([Ljava/lang/Object;)Ljava/lang/Object;",
+                "()Ljava/lang/Object;",
                 false);
         mv.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Object");
         // Stack: [Object]
