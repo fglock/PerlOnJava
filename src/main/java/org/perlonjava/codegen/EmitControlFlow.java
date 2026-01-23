@@ -171,6 +171,12 @@ public class EmitControlFlow {
                     ctx.mv.visitVarInsn(Opcodes.ASTORE, slot);
                     ctx.mv.visitInsn(Opcodes.ICONST_0);
                     ctx.mv.visitVarInsn(Opcodes.ISTORE, slot);
+                    
+                    // Special case for slot 3 - ensure it's reference first
+                    if (slot == 3) {
+                        ctx.mv.visitInsn(Opcodes.ACONST_NULL);
+                        ctx.mv.visitVarInsn(Opcodes.ASTORE, 3);
+                    }
                 }
             }
             
