@@ -77,17 +77,15 @@ public class SlotAllocationScanner {
     }
     
     private void addKnownTemporarySlots() {
-        // Add known temporary slots based on common patterns
-        int currentSlot = ctx.symbolTable.getCurrentLocalVariableIndex();
+        // Only add specific problematic slots that we know cause issues
+        // Avoid adding too many temporaries to prevent module loading issues
+        int[] knownProblematicSlots = {3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
         
-        // Add temporaries for common operations
-        for (int i = currentSlot; i < currentSlot + 50; i++) {
-            if (isProblematicSlot(i)) {
-                allocatedSlots.put(i, new SlotInfo(i, RuntimeScalar.class, "temporary_slot_" + i, false, true));
-                slotTypes.put(i, RuntimeScalar.class);
-                problematicSlots.add(i);
-                ctx.logDebug("Added temporary slot " + i + " for common operations");
-            }
+        for (int slot : knownProblematicSlots) {
+            allocatedSlots.put(slot, new SlotInfo(slot, RuntimeScalar.class, "problematic_slot_" + slot, false, true));
+            slotTypes.put(slot, RuntimeScalar.class);
+            problematicSlots.add(slot);
+            ctx.logDebug("Added known problematic slot " + slot);
         }
     }
     
