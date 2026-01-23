@@ -82,10 +82,13 @@ public class SlotAllocationScanner {
         int[] knownProblematicSlots = {3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
         
         for (int slot : knownProblematicSlots) {
-            allocatedSlots.put(slot, new SlotInfo(slot, RuntimeScalar.class, "problematic_slot_" + slot, false, true));
-            slotTypes.put(slot, RuntimeScalar.class);
-            problematicSlots.add(slot);
-            ctx.logDebug("Added known problematic slot " + slot);
+            // Only add slots that are actually used in the symbol table
+            if (ctx.symbolTable.getCurrentLocalVariableIndex() > slot) {
+                allocatedSlots.put(slot, new SlotInfo(slot, RuntimeScalar.class, "problematic_slot_" + slot, false, true));
+                slotTypes.put(slot, RuntimeScalar.class);
+                problematicSlots.add(slot);
+                ctx.logDebug("Added known problematic slot " + slot);
+            }
         }
     }
     
