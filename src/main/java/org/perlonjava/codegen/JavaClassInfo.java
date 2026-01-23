@@ -29,6 +29,11 @@ public class JavaClassInfo {
     public Label returnLabel;
     
     /**
+     * Closure capture manager for handling type consistency across anonymous classes
+     */
+    public ClosureCaptureManager captureManager;
+    
+    /**
      * Local variable slot for tail call trampoline - stores codeRef.
      */
     public int tailCallCodeRefSlot;
@@ -93,6 +98,7 @@ public class JavaClassInfo {
         this.spillSlots = new int[0];
         this.spillTop = 0;
         this.localVariableTracker = new LocalVariableTracker();
+        this.captureManager = new ClosureCaptureManager();
     }
 
      public Label newLabel(String kind) {

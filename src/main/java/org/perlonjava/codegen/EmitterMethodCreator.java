@@ -285,6 +285,31 @@ public class EmitterMethodCreator implements Opcodes {
     }
 
     /**
+     * Determines the type of a captured variable based on its name.
+     */
+    private static Class<?> determineVariableType(String variableName) {
+        // Variable naming conventions in Perl:
+        // @array - RuntimeArray
+        // %hash - RuntimeHash  
+        // $scalar - RuntimeScalar
+        // *glob - RuntimeGlob
+        // &code - RuntimeCode
+        // Others default to RuntimeScalar
+        
+        if (variableName.startsWith("@")) {
+            return org.perlonjava.runtime.RuntimeArray.class;
+        } else if (variableName.startsWith("%")) {
+            return org.perlonjava.runtime.RuntimeHash.class;
+        } else if (variableName.startsWith("*")) {
+            return org.perlonjava.runtime.RuntimeGlob.class;
+        } else if (variableName.startsWith("&")) {
+            return org.perlonjava.runtime.RuntimeCode.class;
+        } else {
+            return org.perlonjava.runtime.RuntimeScalar.class;
+        }
+    }
+
+    /**
      * Generates a descriptor string based on the prefix of a Perl variable name.
      *
      * @param varName The Perl variable name, which typically starts with a special character
@@ -344,6 +369,10 @@ public class EmitterMethodCreator implements Opcodes {
      * @return The generated class.
      */
     public static Class<?> createClassWithMethod(EmitterContext ctx, Node ast, boolean useTryCatch) {
+        // Initialize closure capture manager for this compilation unit
+        ClosureCaptureManager captureManager = new ClosureCaptureManager();
+        ctx.captureManager = captureManager;
+        
         byte[] classData = getBytecode(ctx, ast, useTryCatch);
         return loadBytecode(ctx, classData);
     }
@@ -577,11 +606,19 @@ public class EmitterMethodCreator implements Opcodes {
                     mv.visitVarInsn(Opcodes.ASTORE, i);
                     continue;
                 }
+                
+                // Use capture manager to determine the correct slot and type
+                Class<?> variableType = determineVariableType(env[i]);
+                int captureSlot = ctx.captureManager.allocateCaptureSlot(env[i], variableType, ctx.javaClassInfo.javaClassName);
+                
                 String descriptor = getVariableDescriptor(env[i]);
                 mv.visitVarInsn(Opcodes.ALOAD, 0); // Load 'this'
-                ctx.logDebug("Init closure variable: " + descriptor);
+                ctx.logDebug("Init closure variable: " + descriptor + " -> slot " + captureSlot);
                 mv.visitFieldInsn(Opcodes.GETFIELD, ctx.javaClassInfo.javaClassName, env[i], descriptor);
-                mv.visitVarInsn(Opcodes.ASTORE, i);
+                mv.visitVarInsn(Opcodes.ASTORE, captureSlot);
+                
+                // Initialize the slot with the correct type
+                ctx.captureManager.initializeCaptureSlot(mv, captureSlot, variableType);
             }
 
             // IMPORTANT (JVM verifier): captured/lexical variables may live in *sparse* local slots,
@@ -621,6 +658,23 @@ public class EmitterMethodCreator implements Opcodes {
             // they're not in TOP state when accessed. Use a visitor to estimate the
             // actual number needed based on AST structure rather than a fixed count.
             int preInitTempLocalsStart = ctx.symbolTable.getCurrentLocalVariableIndex();
+            
+            // Use capture manager to identify and pre-initialize problematic slots
+            if (ctx.captureManager != null) {
+                // Pre-initialize all problematic slots with correct types
+                for (int slot = 3; slot <= 15; slot++) {
+                    Class<?> expectedType = ctx.captureManager.getCaptureType("slot" + slot, ctx.javaClassInfo.javaClassName);
+                    if (expectedType != null) {
+                        ctx.captureManager.initializeCaptureSlot(mv, slot, expectedType);
+                    } else {
+                        // Default initialization for unknown slots
+                        mv.visitInsn(Opcodes.ACONST_NULL);
+                        mv.visitVarInsn(Opcodes.ASTORE, slot);
+                        mv.visitInsn(Opcodes.ICONST_0);
+                        mv.visitVarInsn(Opcodes.ISTORE, slot);
+                    }
+                }
+            }
             org.perlonjava.astvisitor.TempLocalCountVisitor tempCountVisitor = 
                 new org.perlonjava.astvisitor.TempLocalCountVisitor();
             ast.accept(tempCountVisitor);

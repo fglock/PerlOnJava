@@ -38,6 +38,11 @@ public class EmitterContext {
      * The symbol table used for scoping symbols within the context.
      */
     public ScopedSymbolTable symbolTable;
+    
+    /**
+     * Closure capture manager for handling type consistency across anonymous classes
+     */
+    public ClosureCaptureManager captureManager;
 
     /**
      * The ClassWriter instance used to visit the method instructions.
