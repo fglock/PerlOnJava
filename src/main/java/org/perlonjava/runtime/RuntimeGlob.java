@@ -501,7 +501,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
 
     /**
      * Undefines the elements of the typeglob.
-     * This method clears the CODE reference and invalidates the method resolution cache.
+     * This method clears all slots (CODE, FORMAT, SCALAR, ARRAY, HASH) and invalidates the method resolution cache.
      *
      * @return The current RuntimeGlob instance after undefining its elements.
      */
@@ -519,7 +519,15 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // Undefine FORMAT
         GlobalVariable.getGlobalFormatRef(this.globName).undefineFormat();
 
-        // XXX TODO undefine scalar, array, hash
+        // Undefine SCALAR
+        GlobalVariable.getGlobalVariable(this.globName).set(new RuntimeScalar());
+
+        // Undefine ARRAY - create empty array
+        GlobalVariable.globalArrays.put(this.globName, new RuntimeArray());
+
+        // Undefine HASH - create empty hash
+        GlobalVariable.globalHashes.put(this.globName, new RuntimeHash());
+
         return this;
     }
 
