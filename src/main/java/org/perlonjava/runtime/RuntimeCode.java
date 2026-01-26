@@ -579,8 +579,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             return apply(method, args, callContext);
         }
 
-        // If the method is not found in any class, throw an exception
-        throw new PerlCompilerException("Can't locate object method \"" + methodName + "\" via package \"" + perlClassName + "\" (perhaps you forgot to load \"" + perlClassName + "\"?)");
+        // If the method is not found in any class, handle special cases
+        // 'import' is special in Perl - it should not throw an exception
+        if (methodName.equals("import")) {
+            return new RuntimeScalar().getList();
+        } else {
+            String errorMethodName = methodName;
+            // For SUPER:: calls, strip the prefix for error reporting to match Perl behavior
+            if (methodName.startsWith("SUPER::")) {
+                errorMethodName = methodName.substring(7);
+            }
+            throw new PerlCompilerException("Can't locate object method \"" + errorMethodName + "\" via package \"" + perlClassName + "\" (perhaps you forgot to load \"" + perlClassName + "\"?)");
+        }
     }
 
     public static RuntimeList caller(RuntimeList args, int ctx) {
