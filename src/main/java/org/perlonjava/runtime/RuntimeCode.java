@@ -879,10 +879,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // System.out.println("Creating code reference: " + name + " got: " + GlobalContext.getGlobalCodeRef(name));
         RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(name);
 
-        // Mark this as a symbolic reference created by \&{string} pattern
-        // This ensures defined(\&{nonexistent}) returns true to match standard Perl behavior
+        // Check if this is a constant subroutine
         if (codeRef.type == RuntimeScalarType.CODE && codeRef.value instanceof RuntimeCode runtimeCode) {
+            // Mark this as a symbolic reference created by \&{string} pattern
+            // This ensures defined(\&{nonexistent}) returns true to match standard Perl behavior
             runtimeCode.isSymbolicReference = true;
+            
+            // For constant subroutines, return a reference to the constant value
+            if (runtimeCode.constantValue != null && !runtimeCode.constantValue.isEmpty()) {
+                RuntimeScalar constValue = runtimeCode.constantValue.getFirst();
+                return constValue.createReference();
+            }
         }
 
         return codeRef;
