@@ -57,7 +57,41 @@ public class ReferenceOperators {
                 str = blessId == 0 ? "CODE" : NameNormalizer.getBlessStr(blessId);
                 break;
             case GLOB:
-                str = "";
+                // For globs, check what slots are filled
+                // If only one slot is filled, return the type of that slot
+                RuntimeGlob glob = (RuntimeGlob) runtimeScalar.value;
+                String globName = glob.globName;
+                
+                // Check various slots
+                boolean hasScalar = GlobalVariable.getGlobalVariable(globName).getDefinedBoolean();
+                boolean hasArray = GlobalVariable.getGlobalArray(globName).size() > 0;
+                boolean hasHash = GlobalVariable.getGlobalHash(globName).size() > 0;
+                boolean hasCode = GlobalVariable.getGlobalCodeRef(globName).getDefinedBoolean();
+                boolean hasFormat = GlobalVariable.getGlobalFormatRef(globName).getDefinedBoolean();
+                
+                // Special case: constant subroutine created from scalar should return SCALAR
+                if (hasScalar && hasCode) {
+                    RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(globName);
+                    if (codeRef.value instanceof RuntimeCode code && code.constantValue != null) {
+                        // This is a constant subroutine created from a scalar reference
+                        // Perl returns SCALAR in this case
+                        str = "SCALAR";
+                        break;
+                    }
+                }
+                
+                // Count filled slots
+                int filledSlots = 0;
+                String slotType = "";
+                if (hasScalar) { filledSlots++; slotType = "SCALAR"; }
+                if (hasArray) { filledSlots++; if (slotType.isEmpty()) slotType = "ARRAY"; }
+                if (hasHash) { filledSlots++; if (slotType.isEmpty()) slotType = "HASH"; }
+                if (hasCode) { filledSlots++; if (slotType.isEmpty()) slotType = "CODE"; }
+                if (hasFormat) { filledSlots++; if (slotType.isEmpty()) slotType = "FORMAT"; }
+                
+                // If exactly one slot is filled, return its type
+                // Otherwise return empty string (standard Perl behavior for multi-slot globs)
+                str = (filledSlots == 1) ? slotType : "";
                 break;
             case REGEX:
                 blessId = ((RuntimeBase) runtimeScalar.value).blessId;
