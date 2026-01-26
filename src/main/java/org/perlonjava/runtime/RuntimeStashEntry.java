@@ -76,6 +76,12 @@ public class RuntimeStashEntry extends RuntimeGlob {
                 } else if (deref.type == ARRAYREFERENCE && deref.value instanceof RuntimeArray arr) {
                     // `*foo = \@bar` assigns to the ARRAY slot.
                     GlobalVariable.globalArrays.put(this.globName, arr);
+                } else if (deref.type == GLOB) {
+                    // `*foo = \*bar` creates a constant subroutine returning the glob
+                    RuntimeCode code = new RuntimeCode("", null);
+                    code.constantValue = new RuntimeList(deref);
+                    GlobalVariable.getGlobalCodeRef(this.globName).set(
+                            new RuntimeScalar(code));
                 } else {
                     // Default: scalar slot.
                     GlobalVariable.globalVariables.put(this.globName, deref);
@@ -156,9 +162,12 @@ public class RuntimeStashEntry extends RuntimeGlob {
                 }
                 return value;
             case GLOBREFERENCE:
-                // `*foo = *bar` where bar is a glob reference
+                // `*foo = \*bar` creates a constant subroutine returning the glob
                 if (value.value instanceof RuntimeGlob glob) {
-                    this.set(glob);
+                    RuntimeCode code = new RuntimeCode("", null);
+                    code.constantValue = new RuntimeList(new RuntimeScalar(glob));
+                    GlobalVariable.getGlobalCodeRef(this.globName).set(
+                            new RuntimeScalar(code));
                 }
                 return value;
         }
@@ -239,7 +248,7 @@ public class RuntimeStashEntry extends RuntimeGlob {
 
     /**
      * Undefines the elements of the typeglob.
-     * This method clears the CODE reference and invalidates the method resolution cache.
+     * This method clears all slots (CODE, FORMAT, SCALAR, ARRAY, HASH) and invalidates the method resolution cache.
      *
      * @return The current RuntimeGlob instance after undefining its elements.
      */
@@ -250,12 +259,20 @@ public class RuntimeStashEntry extends RuntimeGlob {
         // Undefine FORMAT
         GlobalVariable.getGlobalFormatRef(this.globName).undefineFormat();
 
+        // Undefine SCALAR
+        GlobalVariable.getGlobalVariable(this.globName).set(new RuntimeScalar());
+
+        // Undefine ARRAY - create empty array
+        GlobalVariable.globalArrays.put(this.globName, new RuntimeArray());
+
+        // Undefine HASH - create empty hash
+        GlobalVariable.globalHashes.put(this.globName, new RuntimeHash());
+
         // Invalidate the method resolution cache
         InheritanceResolver.invalidateCache();
 
         type = RuntimeScalarType.UNDEF;
 
-        // XXX TODO undefine scalar, array, hash
         return this;
     }
 
