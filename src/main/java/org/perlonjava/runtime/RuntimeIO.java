@@ -682,7 +682,17 @@ public class RuntimeIO extends RuntimeScalar {
 
         // If this is a tied scalar, fetch the underlying value first
         if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR) {
-            runtimeScalar = runtimeScalar.tiedFetch();
+            // Check if this is a tied filehandle (TieHandle) or a regular tied scalar
+            if (runtimeScalar.value instanceof TieHandle tieHandle) {
+                // For tied filehandles, return the TieHandle directly
+                return tieHandle;
+            } else if (runtimeScalar.value instanceof TiedVariableBase) {
+                // For regular tied scalars, call tiedFetch()
+                runtimeScalar = runtimeScalar.tiedFetch();
+            } else {
+                // Unknown type, return null
+                return null;
+            }
         }
 
         if (runtimeScalar.isString()) {
