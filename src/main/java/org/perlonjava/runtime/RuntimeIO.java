@@ -680,6 +680,11 @@ public class RuntimeIO extends RuntimeScalar {
         // Handle: my $fh2 = \*STDOUT;
         // Handle: my $fh = *STDOUT;
 
+        // If this is a tied scalar, fetch the underlying value first
+        if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR) {
+            runtimeScalar = runtimeScalar.tiedFetch();
+        }
+
         if (runtimeScalar.isString()) {
             String name = runtimeScalar.toString();
             String packageName = "main";  // XXX TODO: get the current package name
@@ -697,6 +702,16 @@ public class RuntimeIO extends RuntimeScalar {
             RuntimeScalar ioScalar = runtimeGlob.getIO();
             if (ioScalar != null) {
                 fh = ioScalar.getRuntimeIO();
+            }
+            // If the glob's IO part is null, try to look up the global handle by name
+            if (fh == null && runtimeGlob.globName != null) {
+                RuntimeGlob globalGlob = GlobalVariable.getGlobalIO(runtimeGlob.globName);
+                if (globalGlob != null) {
+                    RuntimeScalar globalIoScalar = globalGlob.getIO();
+                    if (globalIoScalar != null) {
+                        fh = globalIoScalar.getRuntimeIO();
+                    }
+                }
             }
         } else if (runtimeScalar.value instanceof RuntimeIO runtimeIO) {
             // Direct I/O handle

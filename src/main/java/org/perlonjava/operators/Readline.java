@@ -17,6 +17,10 @@ public class Readline {
     public static RuntimeBase readline(RuntimeScalar fileHandle, int ctx) {
         RuntimeIO fh = fileHandle.getRuntimeIO();
 
+        if (fh == null) {
+            throw new PerlCompilerException("Cannot readline from undefined filehandle");
+        }
+
         if (fh instanceof TieHandle tieHandle) {
             return TieHandle.tiedReadline(tieHandle, ctx);
         }
