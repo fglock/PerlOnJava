@@ -75,9 +75,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             case REFERENCE:
                 if (value.value instanceof RuntimeScalar) {
                     RuntimeScalar deref = value.scalarDeref();
-                    // `*foo = \&bar` assigns to the CODE slot.
+                    // `*foo = \&bar` creates a constant subroutine returning the code reference
                     if (deref.type == RuntimeScalarType.CODE) {
-                        GlobalVariable.getGlobalCodeRef(this.globName).set(deref);
+                        RuntimeCode constSub = new RuntimeCode("", null);
+                        constSub.constantValue = deref.getList();
+                        GlobalVariable.getGlobalCodeRef(this.globName).set(new RuntimeScalar(constSub));
                         InheritanceResolver.invalidateCache();
                     } else if (deref.type == RuntimeScalarType.ARRAYREFERENCE && deref.value instanceof RuntimeArray arr) {
                         // `*foo = \@bar` assigns to the ARRAY slot.
@@ -96,6 +98,14 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                         RuntimeCode constSub = new RuntimeCode("", null);
                         constSub.constantValue = deref.getList();
                         GlobalVariable.getGlobalCodeRef(this.globName).set(new RuntimeScalar(constSub));
+                        InheritanceResolver.invalidateCache();
+                    } else if (deref.type == RuntimeScalarType.STRING || deref.type == RuntimeScalarType.BYTE_STRING) {
+                        // `*foo = \$bar` creates a constant subroutine returning the scalar value
+                        RuntimeCode constSub = new RuntimeCode("", null);
+                        constSub.constantValue = deref.getList();
+                        GlobalVariable.getGlobalCodeRef(this.globName).set(new RuntimeScalar(constSub));
+                        // Also set the SCALAR slot for direct access
+                        GlobalVariable.globalVariables.put(this.globName, deref);
                         InheritanceResolver.invalidateCache();
                     } else {
                         // `*foo = \$bar` (or `*foo = \1`) aliases the SCALAR slot.

@@ -55,8 +55,11 @@ public class RuntimeStashEntry extends RuntimeGlob {
             if (value.value instanceof RuntimeScalar) {
                 RuntimeScalar deref = value.scalarDeref();
                 if (deref.type == CODE) {
-                    // `*foo = \&bar` assigns to the CODE slot.
-                    GlobalVariable.getGlobalCodeRef(this.globName).set(deref);
+                    // `*foo = \&bar` creates a constant subroutine returning the code reference
+                    RuntimeCode code = new RuntimeCode("", null);
+                    code.constantValue = deref.getList();
+                    GlobalVariable.getGlobalCodeRef(this.globName).set(
+                            new RuntimeScalar(code));
                     InheritanceResolver.invalidateCache();
                 } else if (deref.type == HASHREFERENCE) {
                     // `*foo = \$hash_ref` creates a constant subroutine returning the hash reference
