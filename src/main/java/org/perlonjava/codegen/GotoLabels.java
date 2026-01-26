@@ -22,6 +22,8 @@ public class GotoLabels {
      */
     public int asmStackLevel;
 
+    public int asmLocalIndex;
+
     /**
      * Creates a new GotoLabels instance.
      *
@@ -30,9 +32,14 @@ public class GotoLabels {
      * @param asmStackLevel The stack level at label definition
      */
     public GotoLabels(String labelName, Label gotoLabel, int asmStackLevel) {
+        this(labelName, gotoLabel, asmStackLevel, -1);
+    }
+
+    public GotoLabels(String labelName, Label gotoLabel, int asmStackLevel, int asmLocalIndex) {
         this.labelName = labelName;
         this.gotoLabel = gotoLabel;
         this.asmStackLevel = asmStackLevel;
+        this.asmLocalIndex = asmLocalIndex;
     }
 
     /**
@@ -47,6 +54,7 @@ public class GotoLabels {
                 "labelName='" + labelName + '\'' +
                 ", gotoLabel=" + gotoLabel +
                 ", asmStackLevel=" + asmStackLevel +
+                ", asmLocalIndex=" + asmLocalIndex +
                 '}';
     }
 }

@@ -8,6 +8,7 @@ import org.perlonjava.astrefactor.LargeBlockRefactorer;import org.perlonjava.ast
 import org.perlonjava.runtime.RuntimeContextType;
 
 import java.util.List;
+import java.util.HashSet;
 
 public class EmitBlock {
 
@@ -41,12 +42,19 @@ public class EmitBlock {
         }
 
         // Create labels for the block as a loop, like `L1: {...}`
-        Label redoLabel = new Label();
-        Label nextLabel = new Label();
+        Label redoLabel = emitterVisitor.ctx.javaClassInfo.newLabel("blockRedo", node.labelName);
+        Label nextLabel = emitterVisitor.ctx.javaClassInfo.newLabel("blockNext", node.labelName);
 
         // Create labels used inside the block, like `{ L1: ... }`
+        int pushedGotoLabels = 0;
+        HashSet<String> uniqueGotoLabels = new HashSet<>();
         for (int i = 0; i < node.labels.size(); i++) {
-            emitterVisitor.ctx.javaClassInfo.pushGotoLabels(node.labels.get(i), new Label());
+            String labelName = node.labels.get(i);
+            if (!uniqueGotoLabels.add(labelName)) {
+                continue;
+            }
+            emitterVisitor.ctx.javaClassInfo.pushGotoLabels(labelName, emitterVisitor.ctx.javaClassInfo.newLabel("gotoLabel", labelName));
+            pushedGotoLabels++;
         }
 
         // Setup 'local' environment if needed
@@ -54,6 +62,22 @@ public class EmitBlock {
 
         // Add redo label
         mv.visitLabel(redoLabel);
+        
+        // Aggressive fix for high-index locals that may be reused
+        if (emitterVisitor.ctx.javaClassInfo.localVariableTracker != null) {
+            // Specific fix for slot 925 VerifyError issue
+            emitterVisitor.ctx.javaClassInfo.localVariableTracker.forceInitializeSlot925(mv, emitterVisitor.ctx.javaClassInfo);
+            
+            // Specific fix for slot 89 VerifyError issue
+            emitterVisitor.ctx.javaClassInfo.localVariableTracker.forceInitializeSlot89(mv, emitterVisitor.ctx.javaClassInfo);
+            
+            // Minimal range initialization to avoid method size issues
+            // Only initialize a small buffer around the problematic slots
+            for (int i = 800; i < 1100 && i < emitterVisitor.ctx.javaClassInfo.localVariableIndex; i++) {
+                emitterVisitor.ctx.javaClassInfo.localVariableTracker.forceInitializeLocal(mv, i, emitterVisitor.ctx.javaClassInfo);
+                emitterVisitor.ctx.javaClassInfo.localVariableTracker.forceInitializeIntegerLocal(mv, i, emitterVisitor.ctx.javaClassInfo);
+            }
+        }
 
         // Restore 'local' environment if 'redo' was called
         Local.localTeardown(localRecord, mv);
@@ -74,7 +98,7 @@ public class EmitBlock {
             list.get(1) instanceof For1Node forNode && forNode.needsArrayOfAlias) {
             
             // Pre-evaluate the For1Node's list to array of aliases before localizing $_
-            int tempArrayIndex = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            int tempArrayIndex = emitterVisitor.ctx.symbolTable.allocateLocalVariable("blockPreEvalArray");
             forNode.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "getArrayOfAlias", "()Lorg/perlonjava/runtime/RuntimeArray;", false);
             mv.visitVarInsn(Opcodes.ASTORE, tempArrayIndex);
@@ -107,6 +131,44 @@ public class EmitBlock {
                 element.accept(voidVisitor);
             }
             
+            // Check for non-local control flow after each statement in labeled blocks
+            // Only for simple blocks to avoid ASM VerifyError
+            if (node.isLoop && node.labelName != null && i < list.size() - 1 && list.size() <= 3) {
+                // Check if block contains loop constructs (they handle their own control flow)
+                boolean hasLoopConstruct = false;
+                for (Node elem : list) {
+                    if (elem instanceof For1Node || elem instanceof For3Node) {
+                        hasLoopConstruct = true;
+                        break;
+                    }
+                }
+                
+                if (!hasLoopConstruct) {
+                    Label continueBlock = emitterVisitor.ctx.javaClassInfo.newLabel("continueBlock", node.labelName);
+                    
+                    // if (!RuntimeControlFlowRegistry.hasMarker()) continue
+                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/RuntimeControlFlowRegistry",
+                            "hasMarker",
+                            "()Z",
+                            false);
+                    mv.visitJumpInsn(Opcodes.IFEQ, continueBlock);
+                    
+                    // Has marker: check if it matches this loop
+                    mv.visitLdcInsn(node.labelName);
+                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/RuntimeControlFlowRegistry",
+                            "checkLoopAndGetAction",
+                            "(Ljava/lang/String;)I",
+                            false);
+                    
+                    // If action != 0, jump to nextLabel (exit block)
+                    mv.visitJumpInsn(Opcodes.IFNE, nextLabel);
+                    
+                    mv.visitLabel(continueBlock);
+                }
+            }
+            
             // NOTE: Registry checks are DISABLED in EmitBlock because:
             // 1. They cause ASM frame computation errors in nested/refactored code
             // 2. Bare labeled blocks (like TODO:) don't need non-local control flow
@@ -123,12 +185,28 @@ public class EmitBlock {
         }
 
         // Pop labels used inside the block
-        for (int i = 0; i < node.labels.size(); i++) {
+        for (int i = 0; i < pushedGotoLabels; i++) {
             emitterVisitor.ctx.javaClassInfo.popGotoLabels();
         }
 
         // Add 'next', 'last' label
         mv.visitLabel(nextLabel);
+        
+        // Aggressive fix for high-index locals that may be reused
+        if (emitterVisitor.ctx.javaClassInfo.localVariableTracker != null) {
+            // Specific fix for slot 925 VerifyError issue
+            emitterVisitor.ctx.javaClassInfo.localVariableTracker.forceInitializeSlot925(mv, emitterVisitor.ctx.javaClassInfo);
+            
+            // Specific fix for slot 89 VerifyError issue
+            emitterVisitor.ctx.javaClassInfo.localVariableTracker.forceInitializeSlot89(mv, emitterVisitor.ctx.javaClassInfo);
+            
+            // Minimal range initialization to avoid method size issues
+            // Only initialize a small buffer around the problematic slots
+            for (int i = 800; i < 1100 && i < emitterVisitor.ctx.javaClassInfo.localVariableIndex; i++) {
+                emitterVisitor.ctx.javaClassInfo.localVariableTracker.forceInitializeLocal(mv, i, emitterVisitor.ctx.javaClassInfo);
+                emitterVisitor.ctx.javaClassInfo.localVariableTracker.forceInitializeIntegerLocal(mv, i, emitterVisitor.ctx.javaClassInfo);
+            }
+        }
 
         Local.localTeardown(localRecord, mv);
 

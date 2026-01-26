@@ -2,6 +2,8 @@ package org.perlonjava.runtime;
 
 import org.perlonjava.mro.InheritanceResolver;
 
+import java.util.ArrayList;
+
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarFalse;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
 import static org.perlonjava.runtime.RuntimeScalarType.*;
@@ -66,7 +68,7 @@ public class RuntimeStashEntry extends RuntimeGlob {
                     GlobalVariable.globalVariables.put(this.globName, deref);
 
                     // Also create a constant subroutine for bareword access
-                    RuntimeCode code = new RuntimeCode("", null);
+                    RuntimeCode code = new RuntimeCode("", new ArrayList<>());
                     code.constantValue = deref.getList();
                     GlobalVariable.getGlobalCodeRef(this.globName).set(
                             new RuntimeScalar(code));
@@ -81,7 +83,7 @@ public class RuntimeStashEntry extends RuntimeGlob {
                 GlobalVariable.globalArrays.put(this.globName, targetArray);
 
                 // Also create a constant subroutine for bareword access
-                RuntimeCode code = new RuntimeCode("", null);
+                RuntimeCode code = new RuntimeCode("", new ArrayList<>());
                 code.constantValue = targetArray.getList();
                 GlobalVariable.getGlobalCodeRef(this.globName).set(
                         new RuntimeScalar(code));
@@ -136,7 +138,7 @@ public class RuntimeStashEntry extends RuntimeGlob {
                     ((RuntimeCode) codeRef.value).prototype = value.toString();
                 } else {
                     // Create a new RuntimeCode with the prototype
-                    RuntimeCode code = new RuntimeCode(value.toString(), null);
+                    RuntimeCode code = new RuntimeCode(value.toString(), new ArrayList<>());
                     codeRef.set(new RuntimeScalar(code));
                 }
                 return value;

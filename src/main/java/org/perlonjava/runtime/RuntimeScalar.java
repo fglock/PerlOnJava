@@ -1367,7 +1367,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // just clear the code from the global symbol table
         if (type == RuntimeScalarType.CODE && value instanceof RuntimeCode) {
             // Clear the code value but keep the type as CODE
-            this.value = new RuntimeCode(null, null);
+            this.value = new RuntimeCode(null, new ArrayList<>());
             // Invalidate the method resolution cache
             org.perlonjava.mro.InheritanceResolver.invalidateCache();
             return this;

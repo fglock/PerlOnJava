@@ -55,6 +55,8 @@ public abstract class PerlModuleBase {
 
             RuntimeCode code = new RuntimeCode(methodHandle, this, signature);
             code.isStatic = true;
+            code.packageName = moduleName;
+            code.subName = perlMethodName;
 
             String fullMethodName = NameNormalizer.normalizeVariableName(perlMethodName, moduleName);
 

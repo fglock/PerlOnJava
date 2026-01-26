@@ -26,7 +26,7 @@ public class XSLoader extends PerlModuleBase {
     public static void initialize() {
         XSLoader xsLoader = new XSLoader();
         try {
-            xsLoader.registerMethod("load", null);
+            xsLoader.registerMethod("load", "$");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing XSLoader method: " + e.getMessage());
         }

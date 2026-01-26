@@ -272,7 +272,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             GlobalVariable.getGlobalVariable("main::@").set(e.getMessage());
 
             // In case of error return an "undef" ast and class
-            ast = new OperatorNode("undef", null, 1);
+            ast = new org.perlonjava.astnode.ListNode(1);
             evalCtx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
             evalCtx.symbolTable = capturedSymbolTable;
             setCurrentScope(evalCtx.symbolTable);
@@ -986,6 +986,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Alternative way to create constants like: `$constant::{_CAN_PCS} = \$const`
             return new RuntimeList(constantValue);
         }
+
+        if (subroutineName == null || subroutineName.isEmpty()) {
+            // Try to construct subroutineName from this object's package and sub name
+            if (packageName != null && subName != null) {
+                subroutineName = packageName + "::" + subName;
+            } else {
+                subroutineName = "unknown_subroutine";
+            }
+        }
+
         try {
             // Wait for the compilerThread to finish if it exists
             if (this.compilerSupplier != null) {
@@ -1093,7 +1103,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     public Iterator<RuntimeScalar> iterator() {
-        return this.scalar().iterator();
+        RuntimeScalar scalar = this.scalar();
+        if (scalar == null) {
+            // Return empty iterator if scalar is null
+            return Collections.<RuntimeScalar>emptyList().iterator();
+        }
+        return scalar.iterator();
     }
 
     public RuntimeArray setFromList(RuntimeList value) {

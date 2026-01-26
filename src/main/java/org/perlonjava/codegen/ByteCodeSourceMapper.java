@@ -85,7 +85,7 @@ public class ByteCodeSourceMapper {
      * @param tokenIndex The index of the token in the source
      */
     static void setDebugInfoLineNumber(EmitterContext ctx, int tokenIndex) {
-        Label thisLabel = new Label();
+        Label thisLabel = ctx.javaClassInfo.newLabel("lineNumber", String.valueOf(tokenIndex));
         ctx.mv.visitLabel(thisLabel);
         ctx.mv.visitLineNumber(tokenIndex, thisLabel);
     }
