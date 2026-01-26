@@ -160,10 +160,9 @@ public class EmitControlFlow {
                 : loopLabels.redoLabel;
 
         // Ensure local variable consistency at merge point
-        // Temporarily disabled to isolate type confusion issue
-        // if (ctx.javaClassInfo.localVariableTracker != null) {
-        //     ctx.javaClassInfo.ensureLocalVariableConsistencyBeforeJump(ctx.mv);
-        // }
+        if (ctx.javaClassInfo.localVariableTracker != null) {
+            ctx.javaClassInfo.ensureLocalVariableConsistencyBeforeJump(ctx.mv);
+        }
 
         ctx.javaClassInfo.emitClearSpillSlots(ctx.mv);
 
@@ -344,8 +343,9 @@ public class EmitControlFlow {
                 ctx.javaClassInfo.stackLevelManager.emitPopInstructions(mv, loopLabels.asmStackLevel);
                 
                 // Ensure local variable consistency before jump
-                // Temporarily disabled to isolate type confusion issue
-                // ctx.javaClassInfo.ensureLocalVariableConsistencyBeforeJump(mv);
+                if (ctx.javaClassInfo.localVariableTracker != null) {
+                    ctx.javaClassInfo.ensureLocalVariableConsistencyBeforeJump(mv);
+                }
                 
                 mv.visitJumpInsn(Opcodes.GOTO, loopLabels.redoLabel);
             }
