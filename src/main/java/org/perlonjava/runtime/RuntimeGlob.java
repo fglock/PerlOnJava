@@ -85,6 +85,18 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                     } else if (deref.type == RuntimeScalarType.HASHREFERENCE && deref.value instanceof RuntimeHash hash) {
                         // `*foo = \%bar` assigns to the HASH slot.
                         GlobalVariable.globalHashes.put(this.globName, hash);
+                    } else if (value.type == RuntimeScalarType.REFERENCE && deref.type == RuntimeScalarType.ARRAYREFERENCE) {
+                        // `*foo = \$array_ref` creates a constant subroutine returning the array reference
+                        RuntimeCode constSub = new RuntimeCode("", null);
+                        constSub.constantValue = deref.getList();
+                        GlobalVariable.getGlobalCodeRef(this.globName).set(new RuntimeScalar(constSub));
+                        InheritanceResolver.invalidateCache();
+                    } else if (value.type == RuntimeScalarType.REFERENCE && deref.type == RuntimeScalarType.HASHREFERENCE) {
+                        // `*foo = \$hash_ref` creates a constant subroutine returning the hash reference
+                        RuntimeCode constSub = new RuntimeCode("", null);
+                        constSub.constantValue = deref.getList();
+                        GlobalVariable.getGlobalCodeRef(this.globName).set(new RuntimeScalar(constSub));
+                        InheritanceResolver.invalidateCache();
                     } else {
                         // `*foo = \$bar` (or `*foo = \1`) aliases the SCALAR slot.
                         // This must replace the scalar container (alias) rather than storing into

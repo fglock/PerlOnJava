@@ -50,12 +50,27 @@ public class RuntimeStashEntry extends RuntimeGlob {
      * @throws IllegalStateException if the typeglob assignment is not implemented for the given type.
      */
     public RuntimeScalar set(RuntimeScalar value) {
-
         type = RuntimeScalarType.GLOB;
         if (value.type == REFERENCE) {
             if (value.value instanceof RuntimeScalar) {
                 RuntimeScalar deref = value.scalarDeref();
-                if (deref.type == HASHREFERENCE && deref.value instanceof RuntimeHash hash) {
+                if (deref.type == CODE) {
+                    // `*foo = \&bar` assigns to the CODE slot.
+                    GlobalVariable.getGlobalCodeRef(this.globName).set(deref);
+                    InheritanceResolver.invalidateCache();
+                } else if (deref.type == HASHREFERENCE) {
+                    // `*foo = \$hash_ref` creates a constant subroutine returning the hash reference
+                    RuntimeCode code = new RuntimeCode("", null);
+                    code.constantValue = deref.getList();
+                    GlobalVariable.getGlobalCodeRef(this.globName).set(
+                            new RuntimeScalar(code));
+                } else if (deref.type == ARRAYREFERENCE) {
+                    // `*foo = \$array_ref` creates a constant subroutine returning the array reference
+                    RuntimeCode code = new RuntimeCode("", null);
+                    code.constantValue = deref.getList();
+                    GlobalVariable.getGlobalCodeRef(this.globName).set(
+                            new RuntimeScalar(code));
+                } else if (deref.type == HASHREFERENCE && deref.value instanceof RuntimeHash hash) {
                     // `*foo = \%bar` assigns to the HASH slot.
                     GlobalVariable.globalHashes.put(this.globName, hash);
                 } else if (deref.type == ARRAYREFERENCE && deref.value instanceof RuntimeArray arr) {
@@ -138,6 +153,12 @@ public class RuntimeStashEntry extends RuntimeGlob {
                     // Create a new RuntimeCode with the prototype
                     RuntimeCode code = new RuntimeCode(value.toString(), null);
                     codeRef.set(new RuntimeScalar(code));
+                }
+                return value;
+            case GLOBREFERENCE:
+                // `*foo = *bar` where bar is a glob reference
+                if (value.value instanceof RuntimeGlob glob) {
+                    this.set(glob);
                 }
                 return value;
         }

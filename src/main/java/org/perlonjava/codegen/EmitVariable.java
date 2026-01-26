@@ -637,12 +637,10 @@ public class EmitVariable {
                     rightDescriptor = "(Lorg/perlonjava/runtime/RuntimeGlob;)Lorg/perlonjava/runtime/RuntimeScalar;";
                     isGlob = true;
                 }
-                if (isGlob) {
-                    mv.visitInsn(Opcodes.SWAP); // move the target first
-                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, leftDescriptor, "set", rightDescriptor, false);
-                } else {
-                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "addToScalar", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-                }
+                // For hash assignments, always call set on the target (left side)
+                // This ensures stash entries can handle special assignment logic
+                mv.visitInsn(Opcodes.SWAP); // move the target first
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, leftDescriptor, "set", rightDescriptor, false);
 
                 if (pooledRhs) {
                     ctx.javaClassInfo.releaseSpillSlot();
