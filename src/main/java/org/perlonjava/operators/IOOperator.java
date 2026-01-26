@@ -138,6 +138,9 @@ public class IOOperator {
             return new RuntimeScalar(-1);
         }
 
+        // Update the last accessed filehandle
+        RuntimeIO.lastAccesseddHandle = fh;
+
         if (fh instanceof TieHandle tieHandle) {
             return TieHandle.tiedTell(tieHandle);
         }

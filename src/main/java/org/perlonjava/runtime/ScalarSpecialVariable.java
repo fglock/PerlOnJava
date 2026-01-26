@@ -127,7 +127,35 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                     String postmatch = RuntimeRegex.postMatchString();
                     yield postmatch != null ? new RuntimeScalar(postmatch) : scalarUndef;
                 }
-                case LAST_FH -> new RuntimeScalar(RuntimeIO.lastAccesseddHandle);
+                case LAST_FH -> {
+                    if (RuntimeIO.lastAccesseddHandle == null) {
+                        yield scalarUndef;
+                    }
+                    String globName = RuntimeIO.lastAccesseddHandle.globName;
+                    if (globName != null) {
+                        // Extract package and name from the glob name
+                        String packageName;
+                        String name;
+                        int lastColon = globName.lastIndexOf("::");
+                        if (lastColon > 0) {
+                            packageName = globName.substring(0, lastColon);
+                            name = globName.substring(lastColon + 2);
+                        } else {
+                            packageName = "main";
+                            name = globName;
+                        }
+                        
+                        // Get the stash and access the glob
+                        RuntimeHash stash = HashSpecialVariable.getStash(packageName);
+                        RuntimeScalar glob = stash.get(name);
+                        if (glob.type == RuntimeScalarType.GLOB || glob.type == RuntimeScalarType.UNDEF) {
+                            // Return a reference to the glob
+                            yield glob.createReference();
+                        }
+                    }
+                    // Fallback to the RuntimeIO object if no glob name is available
+                    yield new RuntimeScalar(RuntimeIO.lastAccesseddHandle);
+                }
                 case INPUT_LINE_NUMBER -> {
                     if (RuntimeIO.lastAccesseddHandle == null) {
                         if (lvalue != null) {
