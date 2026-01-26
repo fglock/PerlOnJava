@@ -251,7 +251,7 @@ public class GlobalVariable {
         if (var == null) {
             var = new RuntimeScalar();
             var.type = RuntimeScalarType.CODE;  // value is null
-            RuntimeCode runtimeCode = new RuntimeCode(null, null);
+            RuntimeCode runtimeCode = new RuntimeCode(null, new ArrayList<>());
 
             // Parse the key to extract package and subroutine names
             // key format is typically "Package::SubroutineName"

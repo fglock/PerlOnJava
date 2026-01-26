@@ -709,7 +709,7 @@ public class ClassTransformer {
         // Initialize as a code reference if needed
         if (codeRef.value == null) {
             codeRef.type = RuntimeScalarType.CODE;
-            RuntimeCode code = new RuntimeCode("new", null);
+            RuntimeCode code = new RuntimeCode("new", new ArrayList<>());
             code.packageName = className;
             code.subName = "new";
             // No prototype for constructors - they accept any arguments

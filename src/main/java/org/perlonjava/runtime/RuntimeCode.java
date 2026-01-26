@@ -1103,7 +1103,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     public Iterator<RuntimeScalar> iterator() {
-        return this.scalar().iterator();
+        RuntimeScalar scalar = this.scalar();
+        if (scalar == null) {
+            // Return empty iterator if scalar is null
+            return Collections.<RuntimeScalar>emptyList().iterator();
+        }
+        return scalar.iterator();
     }
 
     public RuntimeArray setFromList(RuntimeList value) {

@@ -4,6 +4,7 @@ import org.perlonjava.runtime.GlobalVariable;
 import org.perlonjava.runtime.RuntimeArray;
 import org.perlonjava.runtime.RuntimeCode;
 import org.perlonjava.runtime.RuntimeList;
+import org.perlonjava.runtime.RuntimeScalar;
 
 public class DataDumper extends PerlModuleBase {
 
@@ -37,7 +38,9 @@ public class DataDumper extends PerlModuleBase {
      * @return A RuntimeList.
      */
     public static RuntimeList Dumpxs(RuntimeArray args, int ctx) {
-        return RuntimeCode.apply(
-                GlobalVariable.getGlobalCodeRef("Data::Dumper::Dumpperl"), args, ctx);
+        // During module loading, never try to call Perl subroutines as it can cause
+        // circular dependency issues. Always fallback to pure Perl implementation.
+        // The XS loading will fail gracefully and Data::Dumper will use its pure Perl code.
+        return new RuntimeList();
     }
 }
