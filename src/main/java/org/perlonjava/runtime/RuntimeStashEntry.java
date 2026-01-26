@@ -279,4 +279,25 @@ public class RuntimeStashEntry extends RuntimeGlob {
         return this;
     }
 
+    /**
+     * Returns a string representation of the stash entry.
+     * For constant subroutines, returns the prototype.
+     * For other cases, returns the glob representation.
+     *
+     * @return A string representation of the stash entry.
+     */
+    @Override
+    public String toString() {
+        // Check if this is a constant subroutine
+        RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(this.globName);
+        if (codeRef.type == RuntimeScalarType.CODE && codeRef.value instanceof RuntimeCode code) {
+            if (code.constantValue != null) {
+                // For constant subroutines, return the prototype
+                return code.prototype != null ? code.prototype : "";
+            }
+        }
+        // Default to glob representation
+        return "*" + this.globName;
+    }
+
 }

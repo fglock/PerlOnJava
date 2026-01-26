@@ -474,6 +474,12 @@ public class SubroutineParser {
             RuntimeCode codeRef = (RuntimeCode) GlobalVariable.getGlobalCodeRef(fullName).value;
             codeRef.prototype = prototype;
             codeRef.attributes = attributes;
+            
+            // If the prototype is empty, this is a constant subroutine
+            if (prototype != null && prototype.isEmpty()) {
+                codeRef.constantValue = new RuntimeList();
+            }
+            
             // return an empty AST list
             return new ListNode(parser.tokenIndex);
         }
