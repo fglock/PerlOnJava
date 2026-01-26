@@ -258,14 +258,29 @@ public class EmitSubroutine {
         // Dereference the scalar to get the CODE reference if needed
         // When we have &$x() the left side is OperatorNode("$") (the & is consumed by the parser)
         // We need to look up the CODE slot from the glob if the scalar contains a string.
-        // Check if the left side is a scalar variable
+        // Check if the left side is a scalar variable or a block containing a scalar variable
+        boolean isScalarVariable = false;
+        boolean isLexicalSub = false;
+        OperatorNode scalarOpNode = null;
+        
         if (node.left instanceof OperatorNode operatorNode && operatorNode.operator.equals("$")) {
-            // This is &$var() or $var->() syntax - check if we need to dereference
-            
+            // This is &$var() or $var->() syntax
+            isScalarVariable = true;
+            scalarOpNode = operatorNode;
+        } else if (node.left instanceof BlockNode blockNode && 
+                   blockNode.elements.size() == 1 &&
+                   blockNode.elements.get(0) instanceof OperatorNode opNode &&
+                   opNode.operator.equals("$")) {
+            // This is &{$var} syntax
+            isScalarVariable = true;
+            scalarOpNode = opNode;
+        }
+        
+        if (isScalarVariable && scalarOpNode != null) {
             // Check if the variable is a lexical subroutine (already a CODE reference)
             // Lexical subs have a "hiddenVarName" annotation and should not be dereferenced
-            String hiddenVarName = (String) operatorNode.getAnnotation("hiddenVarName");
-            boolean isLexicalSub = (hiddenVarName != null);
+            String hiddenVarName = (String) scalarOpNode.getAnnotation("hiddenVarName");
+            isLexicalSub = (hiddenVarName != null);
             
             // Only call codeDerefNonStrict when strict refs is disabled AND not a lexical sub
             // This allows symbolic references like: my $x = "main::test"; &$x()
