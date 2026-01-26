@@ -290,6 +290,22 @@ public class SubroutineParser {
                     && !nextTok.text.equals("->")
                     && !nextTok.text.equals("=>")) {
                 ListNode arguments = consumeArgsWithPrototype(parser, "@");
+                
+                // Check if this is indirect object syntax like "s2 $f"
+                if (arguments.elements.size() > 0) {
+                    Node firstArg = arguments.elements.get(0);
+                    if (firstArg instanceof OperatorNode opNode && opNode.operator.equals("$")) {
+                        Node object = firstArg;
+                        // Create method call: object->method()
+                        // Need to wrap the method name like other method calls do
+                        Node methodCall = new BinaryOperatorNode("(",
+                                new OperatorNode("&", nameNode, currentIndex),
+                                new ListNode(currentIndex),
+                                currentIndex);
+                        return new BinaryOperatorNode("->", object, methodCall, currentIndex);
+                    }
+                }
+                
                 return new BinaryOperatorNode("(",
                         new OperatorNode("&", nameNode, currentIndex),
                         arguments,
@@ -369,9 +385,18 @@ public class SubroutineParser {
              */
 
         if (peek(parser).text.equals("$")) {
-            // System.out.println("maybe indirect object call");
             ListNode arguments = consumeArgsWithPrototype(parser, "$");
             int index = parser.tokenIndex;
+            
+            // For indirect object syntax like "s2 $f", this should be treated as "$f->s2()"
+            // not as "s2($f)". The first argument becomes the object.
+            if (arguments.elements.size() > 0) {
+                Node object = arguments.elements.get(0);
+                // Create method call: object->method()
+                return new BinaryOperatorNode("->", object, nameNode, index);
+            }
+            
+            // Fallback to subroutine call if no arguments
             return new BinaryOperatorNode(
                     "(",
                     new OperatorNode("&", nameNode, index),
