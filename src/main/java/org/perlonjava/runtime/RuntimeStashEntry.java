@@ -22,6 +22,7 @@ public class RuntimeStashEntry extends RuntimeGlob {
         if (!isDefined) {
             type = RuntimeScalarType.UNDEF;
         }
+        // System.out.println("Stash Entry create: " + globName + " " + isDefined);
     }
 
 // Note on Stash Operations:
