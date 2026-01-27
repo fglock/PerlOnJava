@@ -27,9 +27,9 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      # Use Makefile targets which handle platform differences
+      # Use Makefile's 'ci' target which handles platform differences
       # Windows: builds without tests to avoid Gradle daemon socket errors
-      # Linux: full build with all tests (Java + Perl unit tests)
+      # Linux: full build with tests
       - name: Build with Make (Windows)
         if: runner.os == 'Windows'
         shell: cmd
@@ -39,7 +39,7 @@ jobs:
 
       - name: Build with Make (Linux)
         if: runner.os == 'Linux'
-        run: make build
+        run: make ci
 
       - name: Upload test results
         if: failure()
