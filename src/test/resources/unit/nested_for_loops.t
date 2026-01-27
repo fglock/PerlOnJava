@@ -7,15 +7,16 @@ subtest 'nested for loops with global $_' => sub {
     
     # Test nested for loops where both use default $_
     sub test_nested {
-        for (@_) {
-            push @output, "arg: $_";
+        my ($output_ref, @args) = @_;
+        for (@args) {
+            push @$output_ref, "arg: $_";
             for (split(//, $_)) {
-                push @output, "  part: $_";
+                push @$output_ref, "  part: $_";
             }
         }
     }
     
-    test_nested("ab", "cd");
+    test_nested(\@output, "ab", "cd");
     
     is_deeply(\@output, [
         "arg: ab",
