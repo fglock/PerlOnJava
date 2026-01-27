@@ -11,7 +11,7 @@
 use 5.32.0;
 use strict;
 use warnings;
-use Test::More tests => 6;
+use Test::More tests => 8;
 
 # Test Getopt::Long functionality that was broken by the regression
 BEGIN {
