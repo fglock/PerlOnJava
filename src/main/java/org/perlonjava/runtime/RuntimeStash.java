@@ -90,7 +90,28 @@ public class RuntimeStash extends RuntimeHash {
      */
     public RuntimeScalar get(String key) {
         if (!elements.containsKey(key)) {
-            return new RuntimeStashEntry(namespace + key, false);
+            // Check if any slots exist for this glob name
+            String fullKey = namespace + key;
+            
+            // Check if the variable exists by trying to get it and checking if it's defined
+            RuntimeScalar var = GlobalVariable.getGlobalVariable(fullKey);
+            boolean hasScalarSlot = var.getDefinedBoolean();
+            
+            boolean hasArraySlot = GlobalVariable.existsGlobalArray(fullKey);
+            boolean hasHashSlot = GlobalVariable.existsGlobalHash(fullKey);
+            
+            RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullKey);
+            boolean hasCodeSlot = codeRef.type == RuntimeScalarType.CODE && codeRef.getDefinedBoolean();
+            
+            RuntimeScalar ioRef = GlobalVariable.getGlobalIO(fullKey);
+            boolean hasIOSlot = ioRef.type == RuntimeScalarType.GLOB && ioRef.value instanceof RuntimeIO;
+            
+            RuntimeScalar formatRef = GlobalVariable.getGlobalFormatRef(fullKey);
+            boolean hasFormatSlot = formatRef.type == RuntimeScalarType.FORMAT && formatRef.getDefinedBoolean();
+            
+            boolean hasSlots = hasScalarSlot || hasArraySlot || hasHashSlot || hasCodeSlot || hasIOSlot || hasFormatSlot;
+            
+            return new RuntimeStashEntry(namespace + key, hasSlots);
         }
         return new RuntimeStashEntry(namespace + key, true);
     }

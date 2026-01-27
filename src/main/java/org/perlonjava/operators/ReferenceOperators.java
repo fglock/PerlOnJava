@@ -62,6 +62,13 @@ public class ReferenceOperators {
                 RuntimeGlob glob = (RuntimeGlob) runtimeScalar.value;
                 String globName = glob.globName;
                 
+                // Special case: stash entries (RuntimeStashEntry) should always return empty string
+                // because they represent stash entries, not regular globs
+                if (runtimeScalar.value instanceof RuntimeStashEntry) {
+                    str = "";
+                    break;
+                }
+                
                 // Special case: stash globs (ending with ::) should always return empty string
                 // because they represent the entire package stash, not a single slot
                 if (globName.endsWith("::")) {

@@ -279,4 +279,18 @@ public class RuntimeStashEntry extends RuntimeGlob {
         return this;
     }
 
+    /**
+     * Returns a string representation of the stash entry.
+     * For defined stash entries, returns the glob representation.
+     * For undefined stash entries, returns undef.
+     *
+     * @return A string representation of the stash entry.
+     */
+    @Override
+    public String toString() {
+        // For stash entries, always return the glob representation
+        // This matches Perl's behavior where stash entries stringify to "*PackageName::symbol"
+        return "*" + this.globName;
+    }
+
 }
