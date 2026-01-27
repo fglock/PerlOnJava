@@ -214,7 +214,12 @@ public class GlobalVariable {
     public static RuntimeHash getGlobalHash(String key) {
         RuntimeHash var = globalHashes.get(key);
         if (var == null) {
-            var = new RuntimeHash();
+            // Check if this is a package stash (ends with ::)
+            if (key.endsWith("::")) {
+                var = new RuntimeStash(key);
+            } else {
+                var = new RuntimeHash();
+            }
             globalHashes.put(key, var);
         }
         return var;

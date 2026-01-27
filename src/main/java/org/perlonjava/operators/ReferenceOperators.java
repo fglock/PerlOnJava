@@ -62,12 +62,20 @@ public class ReferenceOperators {
                 RuntimeGlob glob = (RuntimeGlob) runtimeScalar.value;
                 String globName = glob.globName;
                 
+                // Special case: stash globs (ending with ::) should always return empty string
+                // because they represent the entire package stash, not a single slot
+                if (globName.endsWith("::")) {
+                    str = "";
+                    break;
+                }
+                
                 // Check various slots
                 boolean hasScalar = GlobalVariable.getGlobalVariable(globName).getDefinedBoolean();
                 boolean hasArray = GlobalVariable.getGlobalArray(globName).size() > 0;
                 boolean hasHash = GlobalVariable.getGlobalHash(globName).size() > 0;
                 boolean hasCode = GlobalVariable.getGlobalCodeRef(globName).getDefinedBoolean();
                 boolean hasFormat = GlobalVariable.getGlobalFormatRef(globName).getDefinedBoolean();
+                boolean hasIO = GlobalVariable.getGlobalIO(globName).getRuntimeIO() != null;
                 
                 // Special case: constant subroutine created from scalar should return SCALAR
                 if (hasScalar && hasCode) {
@@ -88,6 +96,7 @@ public class ReferenceOperators {
                 if (hasHash) { filledSlots++; if (slotType.isEmpty()) slotType = "HASH"; }
                 if (hasCode) { filledSlots++; if (slotType.isEmpty()) slotType = "CODE"; }
                 if (hasFormat) { filledSlots++; if (slotType.isEmpty()) slotType = "FORMAT"; }
+                if (hasIO) { filledSlots++; if (slotType.isEmpty()) slotType = "IO"; }
                 
                 // If exactly one slot is filled, return its type
                 // Otherwise return empty string (standard Perl behavior for multi-slot globs)
