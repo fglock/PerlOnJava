@@ -22,7 +22,6 @@ public class RuntimeStashEntry extends RuntimeGlob {
         if (!isDefined) {
             type = RuntimeScalarType.UNDEF;
         }
-        // System.out.println("Stash Entry create: " + globName + " " + isDefined);
     }
 
 // Note on Stash Operations:
@@ -277,6 +276,20 @@ public class RuntimeStashEntry extends RuntimeGlob {
         type = RuntimeScalarType.UNDEF;
 
         return this;
+    }
+
+    /**
+     * Returns a string representation of the stash entry.
+     * For defined stash entries, returns the glob representation.
+     * For undefined stash entries, returns undef.
+     *
+     * @return A string representation of the stash entry.
+     */
+    @Override
+    public String toString() {
+        // For stash entries, always return the glob representation
+        // This matches Perl's behavior where stash entries stringify to "*PackageName::symbol"
+        return "*" + this.globName;
     }
 
 }
