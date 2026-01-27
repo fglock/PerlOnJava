@@ -18,6 +18,24 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
     private final int key;
 
     /**
+     * Gets the parent RuntimeArray.
+     *
+     * @return the parent RuntimeArray
+     */
+    public RuntimeArray getParent() {
+        return parent;
+    }
+
+    /**
+     * Gets the key (index) for this proxy entry.
+     *
+     * @return the index in the parent array
+     */
+    public int getKey() {
+        return key;
+    }
+
+    /**
      * Constructs a RuntimeArrayProxyEntry for a given index in the specified parent array.
      *
      * @param parent the parent RuntimeArray containing the elements
