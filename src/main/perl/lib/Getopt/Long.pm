@@ -127,6 +127,24 @@ sub import {
 
 ConfigDefaults();
 
+# Force variable assignment (workaround for PerlOnJava issue)
+# In PerlOnJava, our variables declared in modules may not be properly initialized
+# by subroutine assignments, so we ensure they have the correct default values
+$genprefix = "(--|-|\\+)" unless $genprefix;
+$longprefix = "(--)"; 
+$autoabbrev = 1 unless $autoabbrev;
+$ignorecase = 1 unless $ignorecase;
+$bundling = 0 unless $bundling;
+$getopt_compat = 1 unless $getopt_compat;
+$order = 1 unless $order; # PERMUTE
+$error = 0 unless $error;
+$debug = 0 unless $debug;
+$passthrough = 0 unless $passthrough;
+$gnu_compat = 0 unless $gnu_compat;
+$caller = undef unless $caller;
+$auto_help = 0 unless $auto_help;
+$auto_version = 0 unless $auto_version;
+
 # Store a copy of the default configuration. Since ConfigDefaults has
 # just been called, what we get from Configure is the default.
 my $default_config = do {
