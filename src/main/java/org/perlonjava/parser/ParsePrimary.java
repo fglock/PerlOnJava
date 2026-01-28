@@ -6,8 +6,6 @@ import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.GlobalVariable;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeGlob;
-import org.perlonjava.runtime.RuntimeScalar;
-import org.perlonjava.runtime.RuntimeScalarType;
 import org.perlonjava.symbols.SymbolTable;
 
 import static org.perlonjava.parser.ParserNodeUtils.scalarUnderscore;
@@ -369,9 +367,6 @@ public class ParsePrimary {
                     String testOp = nextToken.text;
                     if (isValidFileTestOperator(testOp)) {
                         return parseFileTestOperator(parser, nextToken, operand);
-                    } else {
-                        // Invalid filetest operator - this should be a syntax error
-                        parser.throwError("Invalid filetest operator: -" + testOp);
                     }
                 }
                 // Regular unary minus
