@@ -807,6 +807,13 @@ public abstract class StringSegmentParser {
     }
 
     /**
+     * Gets the original string content.
+     */
+    protected String getOriginalStringContent() {
+        return originalStringContent;
+    }
+
+    /**
      * Creates and throws an offset-aware error with correct context.
      * Matches Perl's actual error format for string interpolation errors.
      * Based on Test::More analysis: string errors are single line, no stack traces, no "near" context.
@@ -914,6 +921,11 @@ public abstract class StringSegmentParser {
 
         var nextToken = tokens.get(parser.tokenIndex);
         if (nextToken.type == LexerTokenType.EOF) {
+            // Special case: $ at EOF in double-quoted string should generate error
+            // But only for StringDoubleQuoted, not for other contexts like regex
+            if ("$".equals(sigil) && interpolateVariable && !isRegex && !isRegexReplacement) {
+                return true;
+            }
             return false;
         }
 
