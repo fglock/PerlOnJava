@@ -521,6 +521,11 @@ public class SubroutineParser {
             BlockNode block = ParseBlock.parseBlock(parser);
 
             // After the block, we expect a closing curly brace '}' to denote the end of the subroutine.
+            // Check if we reached EOF instead of finding the closing brace
+            if (parser.tokenIndex >= parser.tokens.size() || 
+                parser.tokens.get(parser.tokenIndex).type == LexerTokenType.EOF) {
+                parser.throwCleanError("Missing right curly");
+            }
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
             // Insert signature code in the block
