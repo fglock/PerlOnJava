@@ -696,17 +696,24 @@ public class Dereference {
 
         ArrayLiteralNode right = (ArrayLiteralNode) node.right;
         
-        // Check if all elements are literals (NumberNode, StringNode, etc.)
-        boolean allLiterals = true;
+        // Check if all elements are safe for single-element optimization
+        // (i.e., they can be evaluated in SCALAR context without needing LIST context expansion)
+        boolean allSafeForSingleElement = true;
         for (Node elem : right.elements) {
-            if (!(elem instanceof org.perlonjava.astnode.NumberNode) && 
-                !(elem instanceof org.perlonjava.astnode.StringNode)) {
-                allLiterals = false;
+            // Ranges (.. operator) need LIST context to expand to multiple indices
+            if (elem instanceof BinaryOperatorNode binOp && "..".equals(binOp.operator)) {
+                allSafeForSingleElement = false;
                 break;
             }
+            // Array slices need LIST context
+            if (elem instanceof OperatorNode opNode && opNode.operator.startsWith("@")) {
+                allSafeForSingleElement = false;
+                break;
+            }
+            // Most other nodes (NumberNode, StringNode, IdentifierNode, $var, $var[0], etc.) are safe
         }
         
-        if (allLiterals && right.elements.size() == 1) {
+        if (allSafeForSingleElement && right.elements.size() == 1) {
             // Single index: use get/delete/exists methods
             Node elem = right.elements.getFirst();
             elem.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
