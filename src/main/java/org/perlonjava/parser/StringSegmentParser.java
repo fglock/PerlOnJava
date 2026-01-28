@@ -391,6 +391,33 @@ public abstract class StringSegmentParser {
             }
 
             return new OperatorNode(sigil, new IdentifierNode(identifier, tokenIndex), tokenIndex);
+        } else {
+            // No identifier found after sigil
+            // For array sigils, check if next token starts with $ (e.g., @$b means array of $b)
+            if ("@".equals(sigil) && parser.tokenIndex < parser.tokens.size()) {
+                LexerToken nextToken = parser.tokens.get(parser.tokenIndex);
+                if (nextToken.text.startsWith("$")) {
+                    // This is @$var - array of scalar variable
+                    // Consume the $ token
+                    TokenUtils.consume(parser);
+                    // Now parse the rest of the identifier
+                    identifier = IdentifierParser.parseComplexIdentifier(parser);
+                    if (identifier == null || identifier.isEmpty()) {
+                        throw new PerlCompilerException(tokenIndex, "Missing identifier after $", ctx.errorUtil);
+                    }
+                    // Return the array of scalar variable
+                    return new OperatorNode(sigil, new OperatorNode("$", new IdentifierNode(identifier, tokenIndex), tokenIndex), tokenIndex);
+                }
+            }
+            if (!"$".equals(sigil)) {
+                throw new PerlCompilerException(tokenIndex, "Missing identifier after " + sigil, ctx.errorUtil);
+            }
+            
+            // For $ sigil with no identifier, check if we're at end of string
+            if (parser.tokenIndex >= parser.tokens.size() || 
+                parser.tokens.get(parser.tokenIndex).type == LexerTokenType.EOF) {
+                throw new PerlCompilerException(tokenIndex, "Final $ should be \\$ or $name", ctx.errorUtil);
+            }
         }
 
         // Handle dereferenced variables: ${$var}, ${${$var}}, etc.
@@ -934,16 +961,17 @@ public abstract class StringSegmentParser {
      */
     void handleControlCharacter() {
         var controlChar = TokenUtils.consumeChar(parser);
-        if (!controlChar.isEmpty()) {
-            var c = controlChar.charAt(0);
-            var result = (c >= 'A' && c <= 'Z') ? String.valueOf((char) (c - 'A' + 1))
-                    : (c >= 'a' && c <= 'z') ? String.valueOf((char) (c - 'a' + 1))
-                    : c == '@' ? String.valueOf((char) 0)
-                    : (c >= '[' && c <= '_') ? String.valueOf((char) (c - '[' + 27))
-                    : c == '?' ? String.valueOf((char) 127)
-                    : String.valueOf(c);
-            appendToCurrentSegment(result);
+        if (controlChar.isEmpty()) {
+            throw new PerlCompilerException(parser.tokenIndex, "Missing control char name in \\c", parser.ctx.errorUtil);
         }
+        var c = controlChar.charAt(0);
+        var result = (c >= 'A' && c <= 'Z') ? String.valueOf((char) (c - 'A' + 1))
+                : (c >= 'a' && c <= 'z') ? String.valueOf((char) (c - 'a' + 1))
+                : c == '@' ? String.valueOf((char) 0)
+                : (c >= '[' && c <= '_') ? String.valueOf((char) (c - '[' + 27))
+                : c == '?' ? String.valueOf((char) 127)
+                : String.valueOf(c);
+        appendToCurrentSegment(result);
     }
 
     /**
