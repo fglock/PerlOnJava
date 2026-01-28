@@ -440,6 +440,18 @@ public class SubroutineParser {
 
         // Initialize a list to store any attributes the subroutine might have.
         List<String> attributes = new ArrayList<>();
+        
+        // Check for invalid prototype-like constructs without parentheses
+        if (peek(parser).text.equals("<") || peek(parser).text.equals("__FILE__")) {
+            // This looks like a prototype but without parentheses - it's invalid
+            if (subName != null) {
+                String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
+                parser.throwCleanError("Illegal declaration of subroutine " + fullName);
+            } else {
+                parser.throwCleanError("Illegal declaration of anonymous subroutine");
+            }
+        }
+        
         // While there are attributes (denoted by a colon ':'), we keep parsing them.
         while (peek(parser).text.equals(":")) {
             prototype = consumeAttributes(parser, attributes);
@@ -460,6 +472,16 @@ public class SubroutineParser {
                 // If a prototype exists, we parse it using 'parseRawString' method which handles it like the 'q()' operator.
                 // This means it will take everything inside the parentheses as a literal string.
                 prototype = ((StringNode) StringParser.parseRawString(parser, "q")).value;
+                
+                // Validate prototype - certain characters are not allowed
+                if (prototype.contains("<>") || prototype.contains("__FILE__")) {
+                    if (subName != null) {
+                        String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
+                        parser.throwCleanError("Illegal declaration of subroutine " + fullName);
+                    } else {
+                        parser.throwCleanError("Illegal declaration of anonymous subroutine");
+                    }
+                }
 
                 // While there are attributes after the prototype (denoted by a colon ':'), we keep parsing them.
                 while (peek(parser).text.equals(":")) {
