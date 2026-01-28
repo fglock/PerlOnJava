@@ -390,9 +390,24 @@ public abstract class StringSegmentParser {
                 }
             }
 
+            // Special case: empty identifier for $ sigil (like $ at end of string)
+            if ("$".equals(sigil) && identifier.isEmpty()) {
+                // Check if we're at end of string
+                if (parser.tokenIndex >= parser.tokens.size() || 
+                    parser.tokens.get(parser.tokenIndex).type == LexerTokenType.EOF) {
+                    throw new PerlCompilerException(tokenIndex, "Final $ should be \\$ or $name", ctx.errorUtil);
+                }
+            }
+
             return new OperatorNode(sigil, new IdentifierNode(identifier, tokenIndex), tokenIndex);
         } else {
             // No identifier found after sigil
+            // Check if we're at end of string for $ sigil
+            if ("$".equals(sigil) && (parser.tokenIndex >= parser.tokens.size() || 
+                parser.tokens.get(parser.tokenIndex).type == LexerTokenType.EOF)) {
+                throw new PerlCompilerException(tokenIndex, "Final $ should be \\$ or $name", ctx.errorUtil);
+            }
+            
             // For array sigils, check if next token starts with $ (e.g., @$b means array of $b)
             if ("@".equals(sigil) && parser.tokenIndex < parser.tokens.size()) {
                 LexerToken nextToken = parser.tokens.get(parser.tokenIndex);
