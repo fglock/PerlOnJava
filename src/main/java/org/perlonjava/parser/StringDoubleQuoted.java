@@ -357,8 +357,13 @@ public class StringDoubleQuoted extends StringSegmentParser {
                 }
                 inQuotemeta = false;
             } else {
-                // Everything else is literal, including the backslash
-                currentSegment.append("\\");
+                // Everything else is literal, but \Q is ignored completely in quotemeta mode
+                if (!token.text.startsWith("Q")) {
+                    // For anything other than \Q, append the backslash literally
+                    currentSegment.append("\\");
+                }
+                // Always consume the character after the backslash
+                TokenUtils.consumeChar(parser);
             }
             return;
         }
@@ -398,8 +403,12 @@ public class StringDoubleQuoted extends StringSegmentParser {
             // Quotemeta modifier
             case "Q" -> {
                 flushCurrentSegment();
-                inQuotemeta = true;
-                caseModifiers.push(new CaseModifier("Q", false));
+                // \Q is idempotent - don't nest multiple \Q sequences
+                if (!inQuotemeta) {
+                    inQuotemeta = true;
+                    caseModifiers.push(new CaseModifier("Q", false));
+                }
+                // If already in quotemeta mode, just ignore additional \Q
             }
 
             // Unknown escape - treat as literal character
@@ -479,8 +488,12 @@ public class StringDoubleQuoted extends StringSegmentParser {
             // Quotemeta modifier
             case "Q" -> {
                 flushCurrentSegment();
-                inQuotemeta = true;
-                caseModifiers.push(new CaseModifier("Q", false));
+                // \Q is idempotent - don't nest multiple \Q sequences
+                if (!inQuotemeta) {
+                    inQuotemeta = true;
+                    caseModifiers.push(new CaseModifier("Q", false));
+                }
+                // If already in quotemeta mode, just ignore additional \Q
             }
 
             // Other escape sequences
