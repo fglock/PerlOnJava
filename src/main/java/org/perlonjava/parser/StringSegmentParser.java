@@ -1076,14 +1076,19 @@ public abstract class StringSegmentParser {
             }
 
             // Skip trailing non-digits
-            while (!"}".equals(chr)) {
+            while (!"}".equals(chr) && !chr.isEmpty()) {
                 TokenUtils.consumeChar(parser);
                 chr = TokenUtils.peekChar(parser);
             }
 
+            // Check for missing closing brace
+            if (chr.isEmpty()) {
+                parser.throwError("Missing right brace on \\o");
+            }
+
             TokenUtils.consumeChar(parser);
         } else {
-            parser.throwError("Missing braces on \\o{}");
+            parser.throwError("Missing braces on \\o");
         }
 
         if (!octStr.isEmpty()) {
