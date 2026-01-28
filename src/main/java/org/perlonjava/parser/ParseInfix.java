@@ -295,6 +295,21 @@ public class ParseInfix {
                     parser.tokenIndex--;
                     return left;
                 }
+                
+                // Special check: if we encounter ? after a sigil, it's likely a corrupted identifier
+                // from Unicode processing, not a legitimate infix operator
+                if (token.text.equals("?") && left instanceof OperatorNode leftOp) {
+                    String op = leftOp.operator;
+                    if (op.equals("$") || op.equals("@") || op.equals("%") || op.equals("&") || op.equals("*")) {
+                        IdentifierParser.throwCorruptedIdentifierError(parser);
+                    }
+                }
+                
+                // General check for ? tokens - they're likely corrupted identifiers
+                if (token.text.equals("?")) {
+                    IdentifierParser.throwCorruptedIdentifierError(parser);
+                }
+                
                 throw new PerlCompilerException(parser.tokenIndex, "Unexpected infix operator: " + token, parser.ctx.errorUtil);
         }
     }

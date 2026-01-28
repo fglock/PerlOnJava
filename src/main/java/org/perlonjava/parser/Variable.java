@@ -138,7 +138,15 @@ public class Variable {
         int startIndex = parser.tokenIndex;
 
         String varName = IdentifierParser.parseComplexIdentifier(parser);
-        parser.ctx.logDebug("Parsing variable: " + varName);
+
+        // Special check: if we parsed a single ? character, check if there are more ? characters
+        if (varName != null && varName.equals("?")) {
+            if (IdentifierParser.isCorruptedIdentifier(parser)) {
+                // There are multiple ? tokens - this is a corrupted identifier
+                IdentifierParser.throwCorruptedIdentifierError(parser);
+            }
+            // For single ? tokens, let normal validation handle it
+        }
 
         if (varName != null) {
             if (varName.isEmpty()) {
@@ -656,10 +664,9 @@ public class Variable {
         int startLineNumber = parser.ctx.errorUtil.getLineNumber(parser.tokenIndex - 1); // Save line number before peek() side effects
         TokenUtils.consume(parser); // Consume the '{'
 
-        // Check if this is an empty ${} construct
+        // Check if this is an empty ${} construct - this is a syntax error in Perl
         if (TokenUtils.peek(parser).text.equals("}")) {
-            TokenUtils.consume(parser); // Consume the '}'
-            return new OperatorNode(sigil, new StringNode("", parser.tokenIndex), parser.tokenIndex);
+            parser.throwError("syntax error");
         }
 
         // For string interpolation, preprocess \" sequences IN PLACE

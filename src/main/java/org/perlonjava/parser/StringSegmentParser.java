@@ -934,16 +934,17 @@ public abstract class StringSegmentParser {
      */
     void handleControlCharacter() {
         var controlChar = TokenUtils.consumeChar(parser);
-        if (!controlChar.isEmpty()) {
-            var c = controlChar.charAt(0);
-            var result = (c >= 'A' && c <= 'Z') ? String.valueOf((char) (c - 'A' + 1))
-                    : (c >= 'a' && c <= 'z') ? String.valueOf((char) (c - 'a' + 1))
-                    : c == '@' ? String.valueOf((char) 0)
-                    : (c >= '[' && c <= '_') ? String.valueOf((char) (c - '[' + 27))
-                    : c == '?' ? String.valueOf((char) 127)
-                    : String.valueOf(c);
-            appendToCurrentSegment(result);
+        if (controlChar.isEmpty()) {
+            throw new PerlCompilerException(parser.tokenIndex, "Missing control char name in \\c", parser.ctx.errorUtil);
         }
+        var c = controlChar.charAt(0);
+        var result = (c >= 'A' && c <= 'Z') ? String.valueOf((char) (c - 'A' + 1))
+                : (c >= 'a' && c <= 'z') ? String.valueOf((char) (c - 'a' + 1))
+                : c == '@' ? String.valueOf((char) 0)
+                : (c >= '[' && c <= '_') ? String.valueOf((char) (c - '[' + 27))
+                : c == '?' ? String.valueOf((char) 127)
+                : String.valueOf(c);
+        appendToCurrentSegment(result);
     }
 
     /**
@@ -968,7 +969,7 @@ public abstract class StringSegmentParser {
             chr = TokenUtils.peekChar(parser);
 
             // Skip leading whitespace
-            while (Character.isWhitespace(chr.charAt(0)) && !"}".equals(chr)) {
+            while (!chr.isEmpty() && Character.isWhitespace(chr.charAt(0)) && !"}".equals(chr)) {
                 TokenUtils.consumeChar(parser);
                 chr = TokenUtils.peekChar(parser);
             }
@@ -987,7 +988,7 @@ public abstract class StringSegmentParser {
                     TokenUtils.consumeChar(parser); // Consume but don't add to hexStr
                     lastWasUnderscore = true;
                     chr = TokenUtils.peekChar(parser);
-                } else if (Character.isWhitespace(chr.charAt(0))) {
+                } else if (!chr.isEmpty() && Character.isWhitespace(chr.charAt(0))) {
                     // Spaces not allowed between digits - break parsing
                     break;
                 } else {
@@ -995,10 +996,9 @@ public abstract class StringSegmentParser {
                 }
             }
 
-            // Skip trailing non-digits
-            while (!"}".equals(chr)) {
-                TokenUtils.consumeChar(parser);
-                chr = TokenUtils.peekChar(parser);
+            // Check for missing closing brace
+            if (chr.isEmpty() || !"}".equals(chr)) {
+                parser.throwError("Missing right brace on \\x");
             }
 
             TokenUtils.consumeChar(parser);
@@ -1048,7 +1048,7 @@ public abstract class StringSegmentParser {
             chr = TokenUtils.peekChar(parser);
 
             // Skip leading whitespace
-            while (Character.isWhitespace(chr.charAt(0)) && !"}".equals(chr)) {
+            while (!chr.isEmpty() && Character.isWhitespace(chr.charAt(0)) && !"}".equals(chr)) {
                 TokenUtils.consumeChar(parser);
                 chr = TokenUtils.peekChar(parser);
             }
@@ -1067,7 +1067,7 @@ public abstract class StringSegmentParser {
                     TokenUtils.consumeChar(parser); // Consume but don't add to octStr
                     lastWasUnderscore = true;
                     chr = TokenUtils.peekChar(parser);
-                } else if (Character.isWhitespace(chr.charAt(0))) {
+                } else if (!chr.isEmpty() && Character.isWhitespace(chr.charAt(0))) {
                     // Spaces not allowed between digits - break parsing
                     break;
                 } else {
@@ -1133,9 +1133,8 @@ public abstract class StringSegmentParser {
      */
     void handleUnicodeNameEscape() {
         if (!"{".equals(TokenUtils.peekChar(parser))) {
-            // Not a Unicode name escape, treat as literal
-            appendToCurrentSegment("N");
-            return;
+            // Missing braces on \N
+            parser.throwError("Missing braces on \\N");
         }
 
         TokenUtils.consumeChar(parser); // consume '{'
@@ -1168,8 +1167,8 @@ public abstract class StringSegmentParser {
                 appendToCurrentSegment("N{" + name + "}");
             }
         } else {
-            // Unclosed brace, preserve literal
-            appendToCurrentSegment("N{" + nameBuilder);
+            // Missing closing brace
+            parser.throwError("Missing right brace on \\N");
         }
     }
 }

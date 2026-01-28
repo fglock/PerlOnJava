@@ -14,6 +14,43 @@ import org.perlonjava.runtime.PerlCompilerException;
 public class IdentifierParser {
 
     /**
+     * Checks if the current token sequence represents a corrupted identifier (multiple ? tokens)
+     * that was likely caused by Unicode character corruption during string interpolation.
+     * This specifically checks for multiple consecutive ? tokens, not a single token containing multiple ? characters.
+     * 
+     * @param parser The parser instance
+     * @return true if this appears to be a corrupted identifier, false otherwise
+     */
+    public static boolean isCorruptedIdentifier(Parser parser) {
+        if (parser.tokenIndex >= parser.tokens.size()) {
+            return false;
+        }
+        
+        LexerToken token = parser.tokens.get(parser.tokenIndex);
+        if (!token.text.equals("?")) {
+            return false;
+        }
+        
+        // Check if there are multiple ? tokens in a row (not multiple ? characters in one token)
+        if (parser.tokenIndex + 1 < parser.tokens.size() 
+                && parser.tokens.get(parser.tokenIndex + 1).text.equals("?")) {
+            return true;
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Throws an "Identifier too long" error for corrupted identifiers.
+     * This is used when Unicode characters get corrupted to ? during string interpolation.
+     * 
+     * @param parser The parser instance
+     */
+    public static void throwCorruptedIdentifierError(Parser parser) {
+        throw new PerlCompilerException(parser.tokenIndex, "Identifier too long", parser.ctx.errorUtil);
+    }
+
+    /**
      * Parses a complex Perl identifier from the list of tokens, excluding the sigil.
      * This method handles identifiers that may be enclosed in braces.
      *
@@ -121,6 +158,15 @@ public class IdentifierParser {
 
         LexerToken token = parser.tokens.get(parser.tokenIndex);
         LexerToken nextToken = parser.tokens.get(parser.tokenIndex + 1);
+
+        // Special check: if the first token is ?, check if it's a corrupted identifier
+        if (token.text.equals("?")) {
+            // Check if there are multiple ? tokens in a row (tokenization corruption)
+            if (isCorruptedIdentifier(parser)) {
+                throwCorruptedIdentifierError(parser);
+            }
+            // For single ? tokens, let normal parsing handle it
+        }
 
         // Special case: Handle ellipsis inside braces - ${...} should be parsed as a block, not as ${.}
         if (insideBraces && token.type == LexerTokenType.OPERATOR && token.text.equals("...")) {
@@ -312,7 +358,18 @@ public class IdentifierParser {
                     continue;
                 }
                 if (!(token.type == LexerTokenType.NUMBER)) {
-                    // Not ::, not ', and not a number, so this is the end
+                    // Not ::, not ', and not a number, so check if this is a valid identifier character
+                    if (token.text.equals("?")) {
+                        // ? is not a valid identifier character
+                        // If we have no variable name yet, this is likely a corrupted identifier
+                        if (variableName.isEmpty()) {
+                            throw new PerlCompilerException(parser.tokenIndex, "Identifier too long", parser.ctx.errorUtil);
+                        } else {
+                            // ? after some identifier characters - end the identifier
+                            return variableName.toString();
+                        }
+                    }
+                    // This is the end of the identifier
                     variableName.append(token.text);
 
                     // Check identifier length limit (Perl's limit is around 251 characters)
@@ -356,6 +413,10 @@ public class IdentifierParser {
                 continue;
             } else if (token.type == LexerTokenType.WHITESPACE || token.type == LexerTokenType.EOF || token.type == LexerTokenType.NEWLINE) {
                 return variableName.toString();
+            } else if (token.text.equals("?")) {
+                // If we encounter a ? token, it's likely a corrupted identifier
+                // from Unicode processing (e.g., when Unicode chars get replaced with ?)
+                throwCorruptedIdentifierError(parser);
             } else {
                 // Any other token type ends the identifier
                 return variableName.toString();

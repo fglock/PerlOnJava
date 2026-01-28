@@ -207,6 +207,20 @@ public class EmitBinaryOperator {
 
     static void handleCompoundAssignment(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         // compound assignment operators like `+=`
+        
+        // Special check for repeat assignment (x=) - cannot modify hash dereferences
+        if (node.operator.equals("x=") && node.left instanceof org.perlonjava.astnode.OperatorNode leftOp) {
+            if (leftOp.operator.equals("%") && leftOp.operand instanceof org.perlonjava.astnode.IdentifierNode ident) {
+                if (ident.name.equals("@")) {
+                    throw new org.perlonjava.runtime.PerlCompilerException(
+                        node.tokenIndex, 
+                        "Can't modify hash dereference in repeat (x)", 
+                        emitterVisitor.ctx.errorUtil
+                    );
+                }
+            }
+        }
+        
         EmitterVisitor scalarVisitor =
                 emitterVisitor.with(RuntimeContextType.SCALAR); // execute operands in scalar context
         MethodVisitor mv = emitterVisitor.ctx.mv;
