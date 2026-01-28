@@ -115,6 +115,12 @@ public class GlobalVariable {
                 // Regex capture variable like $1
                 // Extract the numeric capture group as a string
                 String capturedNumber = matcher.group(1);
+                
+                // Validate that numeric variables with more than one digit don't start with '0'
+                if (capturedNumber.startsWith("0") && capturedNumber.length() > 1) {
+                    throw new RuntimeException("Numeric variables with more than one digit may not start with '0'");
+                }
+                
                 // Convert the capture group to an integer
                 int position = Integer.parseInt(capturedNumber);
                 // Initialize the regex capture variable
