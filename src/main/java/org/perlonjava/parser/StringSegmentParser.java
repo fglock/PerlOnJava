@@ -327,6 +327,7 @@ public abstract class StringSegmentParser {
         // Store the current position before parsing the identifier
         int startIndex = parser.tokenIndex;
 
+        try {
         // Check for ${...} pattern which should be parsed as ${${...}}
         // This handles cases like $var, $ $var, etc.
         if ("$".equals(sigil) && TokenUtils.peek(parser).text.equals("$")) {
@@ -353,7 +354,7 @@ public abstract class StringSegmentParser {
         // Continue with existing logic for other cases...
         var identifier = IdentifierParser.parseComplexIdentifier(parser);
 
-        if (identifier != null) {
+        if (identifier != null && !identifier.isEmpty()) {
             // Add validation that was missing - this fixes $01, $02 issues
             IdentifierParser.validateIdentifier(parser, identifier, startIndex);
 
@@ -391,6 +392,23 @@ public abstract class StringSegmentParser {
             }
 
             return new OperatorNode(sigil, new IdentifierNode(identifier, tokenIndex), tokenIndex);
+        } else {
+            // No identifier found after sigil - this is an error for $ at end of string
+            // But only in non-regex context
+            if ("$".equals(sigil) && !isRegex) {
+                // Special case: $ at end of string without identifier
+                // Check if we're at the end of the string content
+                if (parser.tokenIndex >= parser.tokens.size()) {
+                    throw new PerlCompilerException(tokenIndex, "Final $ should be \\$ or $name", ctx.errorUtil);
+                }
+                LexerToken nextToken = parser.tokens.get(parser.tokenIndex);
+                if (nextToken.type == LexerTokenType.EOF) {
+                    throw new PerlCompilerException(tokenIndex, "Final $ should be \\$ or $name", ctx.errorUtil);
+                }
+                // If we get here, there's more content after $, so continue to dereferenced variables check
+            } else if (!"$".equals(sigil)) {
+                throw new PerlCompilerException(tokenIndex, "Missing identifier after " + sigil, ctx.errorUtil);
+            }
         }
 
         // Handle dereferenced variables: ${$var}, ${${$var}}, etc.
@@ -416,6 +434,9 @@ public abstract class StringSegmentParser {
             return new OperatorNode(sigil, operand, tokenIndex);
         } else {
             throw new PerlCompilerException(tokenIndex, "Unexpected value after " + sigil + " in string", ctx.errorUtil);
+        }
+        } catch (Exception e) {
+            throw e;
         }
     }
 
@@ -887,7 +908,9 @@ public abstract class StringSegmentParser {
 
         var nextToken = tokens.get(parser.tokenIndex);
         if (nextToken.type == LexerTokenType.EOF) {
-            return false;
+            // For $ at end, we still want to attempt interpolation to throw proper error
+            // But only in non-regex context
+            return "$".equals(sigil) && !isRegex;
         }
 
         // Regex: don't interpolate "$" if followed by whitespace or newlines
@@ -895,6 +918,11 @@ public abstract class StringSegmentParser {
         // "$#" sigil: don't interpolate if followed by whitespace or newlines
         if ((isRegex || "@".equals(sigil) || "$#".equals(sigil)) && (nextToken.type == LexerTokenType.WHITESPACE || nextToken.type == LexerTokenType.NEWLINE)) {
             return false;
+        }
+
+        // For $ sigil, always attempt interpolation to check for missing identifier
+        if ("$".equals(sigil)) {
+            return true;
         }
 
         // Don't interpolate if followed by certain characters
@@ -934,16 +962,17 @@ public abstract class StringSegmentParser {
      */
     void handleControlCharacter() {
         var controlChar = TokenUtils.consumeChar(parser);
-        if (!controlChar.isEmpty()) {
-            var c = controlChar.charAt(0);
-            var result = (c >= 'A' && c <= 'Z') ? String.valueOf((char) (c - 'A' + 1))
-                    : (c >= 'a' && c <= 'z') ? String.valueOf((char) (c - 'a' + 1))
-                    : c == '@' ? String.valueOf((char) 0)
-                    : (c >= '[' && c <= '_') ? String.valueOf((char) (c - '[' + 27))
-                    : c == '?' ? String.valueOf((char) 127)
-                    : String.valueOf(c);
-            appendToCurrentSegment(result);
+        if (controlChar.isEmpty()) {
+            throw new PerlCompilerException(parser.tokenIndex, "Missing control char name in \\c", parser.ctx.errorUtil);
         }
+        var c = controlChar.charAt(0);
+        var result = (c >= 'A' && c <= 'Z') ? String.valueOf((char) (c - 'A' + 1))
+                : (c >= 'a' && c <= 'z') ? String.valueOf((char) (c - 'a' + 1))
+                : c == '@' ? String.valueOf((char) 0)
+                : (c >= '[' && c <= '_') ? String.valueOf((char) (c - '[' + 27))
+                : c == '?' ? String.valueOf((char) 127)
+                : String.valueOf(c);
+        appendToCurrentSegment(result);
     }
 
     /**
