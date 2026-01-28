@@ -726,9 +726,47 @@ public class StatementResolver {
                         hasBlockIndicator = true;
                     }
                     case "=" -> {
-                        // Assign is a block indicator
-                        parser.ctx.logDebug("isHashLiteral found = (block indicator)");
-                        hasBlockIndicator = true;
+                        // Assign is a block indicator, but be more conservative
+                        // Look at the tokens we've seen to determine if this might be a q-string pattern
+                        boolean isQStringDelimiter = false;
+                        // Look back at the tokens we've processed to see if we recently saw a quote-like operator
+                        int searchIndex = parser.tokenIndex - 1;
+                        while (searchIndex >= currentIndex && searchIndex < parser.tokens.size()) {
+                            LexerToken checkToken = parser.tokens.get(searchIndex);
+                            parser.ctx.logDebug("isHashLiteral checking token '" + checkToken.text + "' at index " + searchIndex);
+                            if (checkToken.type == LexerTokenType.IDENTIFIER && ParsePrimary.isIsQuoteLikeOperator(checkToken.text)) {
+                                parser.ctx.logDebug("isHashLiteral found = after quote-like operator '" + checkToken.text + "', treating as q-string delimiter");
+                                isQStringDelimiter = true;
+                                break;
+                            }
+                            // If we hit a meaningful token that's not a quote-like operator, stop searching
+                            if (checkToken.type != LexerTokenType.OPERATOR || !checkToken.text.equals("=")) {
+                                parser.ctx.logDebug("isHashLiteral stopping search at token '" + checkToken.text + "'");
+                                break;
+                            }
+                            searchIndex--;
+                        }
+                        
+                        // Also check if this looks like an assignment by looking at the next token
+                        boolean looksLikeAssignment = false;
+                        if (parser.tokenIndex < parser.tokens.size()) {
+                            LexerToken nextToken = parser.tokens.get(parser.tokenIndex);
+                            // Assignment would be followed by a variable, number, string, or expression
+                            if (nextToken.type == LexerTokenType.IDENTIFIER && 
+                                (nextToken.text.startsWith("$") || nextToken.text.startsWith("@") || nextToken.text.startsWith("%"))) {
+                                looksLikeAssignment = true;
+                            } else if (nextToken.type == LexerTokenType.NUMBER || nextToken.type == LexerTokenType.STRING) {
+                                looksLikeAssignment = true;
+                            }
+                        }
+                        
+                        if (!isQStringDelimiter && looksLikeAssignment) {
+                            // This looks like an assignment
+                            parser.ctx.logDebug("isHashLiteral found = (block indicator)");
+                            hasBlockIndicator = true;
+                        } else {
+                            parser.ctx.logDebug("isHashLiteral found = but not treating as block indicator (q-string or not assignment-like)");
+                        }
                     }
                     case "," -> {
                         // Comma alone is not definitive - could be function args or hash
