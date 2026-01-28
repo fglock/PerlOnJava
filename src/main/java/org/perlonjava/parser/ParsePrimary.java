@@ -370,9 +370,17 @@ public class ParsePrimary {
                     if (isValidFileTestOperator(testOp)) {
                         return parseFileTestOperator(parser, nextToken, operand);
                     } else {
-                        // For now, always treat invalid filetest operators as an error
-                        // The function call case will be handled by the regular parsing logic
-                        parser.throwError("Invalid filetest operator: -" + testOp);
+                        // Check if there's a function with this name
+                        String functionName = nextToken.text;
+                        String fullName = parser.ctx.symbolTable.getCurrentPackage() + "::" + functionName;
+                        RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName);
+                        if (codeRef.getDefinedBoolean()) {
+                            // There's a function with this name, treat as regular unary minus
+                            // Don't do anything special here, just fall through to regular unary minus handling
+                        } else {
+                            // Invalid filetest operator and no function with this name - syntax error
+                            parser.throwError("syntax error - Invalid filetest operator near \"" + testOp + " 1\"");
+                        }
                     }
                 }
                 // Regular unary minus
