@@ -695,7 +695,18 @@ public class Dereference {
         emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
 
         ArrayLiteralNode right = (ArrayLiteralNode) node.right;
-        if (right.elements.size() == 1) {
+        
+        // Check if all elements are literals (NumberNode, StringNode, etc.)
+        boolean allLiterals = true;
+        for (Node elem : right.elements) {
+            if (!(elem instanceof org.perlonjava.astnode.NumberNode) && 
+                !(elem instanceof org.perlonjava.astnode.StringNode)) {
+                allLiterals = false;
+                break;
+            }
+        }
+        
+        if (allLiterals && right.elements.size() == 1) {
             // Single index: use get/delete/exists methods
             Node elem = right.elements.getFirst();
             elem.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
@@ -741,7 +752,7 @@ public class Dereference {
                 emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
             }
         } else {
-            // Multiple indices: use slice method (only for get operation)
+            // Multiple indices or non-literal elements: use slice method (only for get operation)
             if (!arrayOperation.equals("get")) {
                 throw new PerlCompilerException(node.tokenIndex, "Array slice not supported for " + arrayOperation, emitterVisitor.ctx.errorUtil);
             }

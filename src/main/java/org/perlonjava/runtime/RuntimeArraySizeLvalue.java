@@ -35,4 +35,36 @@ public class RuntimeArraySizeLvalue extends RuntimeBaseProxy {
         parent.setLastElementIndex(value);
         return this;
     }
+
+    /**
+     * Performs pre-decrement on the array size ($#array--).
+     *
+     * @return The updated array size after decrement.
+     */
+    @Override
+    public RuntimeScalar preAutoDecrement() {
+        RuntimeArray parent = lvalue.arrayDeref();
+        RuntimeScalar currentSize = new RuntimeScalar(parent.lastElementIndex());
+        RuntimeScalar newSize = new RuntimeScalar(currentSize.getInt() - 1);
+        parent.setLastElementIndex(newSize);
+        this.value = newSize.value;
+        this.type = newSize.type;
+        return newSize;
+    }
+
+    /**
+     * Performs post-decrement on the array size ($#array--).
+     *
+     * @return The original array size before decrement.
+     */
+    @Override
+    public RuntimeScalar postAutoDecrement() {
+        RuntimeArray parent = lvalue.arrayDeref();
+        RuntimeScalar originalSize = new RuntimeScalar(parent.lastElementIndex());
+        RuntimeScalar newSize = new RuntimeScalar(originalSize.getInt() - 1);
+        parent.setLastElementIndex(newSize);
+        this.value = newSize.value;
+        this.type = newSize.type;
+        return originalSize;
+    }
 }
