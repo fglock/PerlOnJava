@@ -370,9 +370,37 @@ public class ParsePrimary {
                     if (isValidFileTestOperator(testOp)) {
                         return parseFileTestOperator(parser, nextToken, operand);
                     } else {
-                        // For now, always treat invalid filetest operators as an error
-                        // The function call case will be handled by the regular parsing logic
-                        parser.throwError("Invalid filetest operator: -" + testOp);
+                        // Not a valid filetest operator
+                        // Check if there's a function with this name
+                        String functionName = nextToken.text;
+                        String fullName = parser.ctx.symbolTable.getCurrentPackage() + "::" + functionName;
+                        RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName);
+                        if (codeRef.getDefinedBoolean()) {
+                            // There's a function with this name, treat as regular unary minus
+                            // Don't do anything special here, just fall through to regular unary minus handling
+                        } else {
+                            // Not a valid filetest operator and no function with this name
+                            // Check what comes after to decide how to handle
+                            // Skip whitespace to find the next meaningful token
+                            int afterIndex = parser.tokenIndex + 1;
+                            while (afterIndex < parser.tokens.size() && 
+                                   parser.tokens.get(afterIndex).type == LexerTokenType.WHITESPACE) {
+                                afterIndex++;
+                            }
+                            if (afterIndex < parser.tokens.size()) {
+                                LexerToken afterNext = parser.tokens.get(afterIndex);
+                                // If there's something after the identifier that looks like an operand,
+                                // it's probably an attempt to use a filetest operator, so give an error
+                                if (afterNext.type == LexerTokenType.NUMBER || 
+                                    afterNext.type == LexerTokenType.STRING ||
+                                    afterNext.type == LexerTokenType.IDENTIFIER ||
+                                    afterNext.text.equals("$") || afterNext.text.equals("@")) {
+                                    parser.throwError("syntax error - Invalid filetest operator near \"" + testOp + " 1\"");
+                                }
+                            }
+                            // Otherwise, fall through to regular unary minus handling (will treat as string)
+                            // This handles cases like -a in strict mode where it should be "-a"
+                        }
                     }
                 }
                 // Regular unary minus

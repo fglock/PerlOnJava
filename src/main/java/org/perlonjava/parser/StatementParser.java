@@ -446,10 +446,14 @@ public class StatementParser {
         String fullName = null;
         String packageName = null;
         if (token.type != LexerTokenType.NUMBER && !token.text.matches("^v\\d+")) {
+            if (token.type != LexerTokenType.IDENTIFIER) {
+                // Not a valid module name token
+                throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);
+            }
             ctx.logDebug("use module: " + token);
             packageName = IdentifierParser.parseSubroutineIdentifier(parser);
             if (packageName == null) {
-                throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
+                throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);
             }
             fullName = NameNormalizer.moduleToFilename(packageName);
             ctx.logDebug("use fullName: " + fullName);
