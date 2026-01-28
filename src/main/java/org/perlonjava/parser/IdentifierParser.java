@@ -453,6 +453,13 @@ public class IdentifierParser {
                 parser.tokenIndex++;
                 token = parser.tokens.get(parser.tokenIndex);
                 nextToken = parser.tokens.get(parser.tokenIndex + 1);
+                
+                // Validate that what follows :: is a valid identifier start
+                if (token.type != LexerTokenType.IDENTIFIER && token.type != LexerTokenType.NUMBER && 
+                    !token.text.equals("'") && !token.text.equals("::") && !token.text.equals("->")) {
+                    // Bad name after ::
+                    parser.throwCleanError("Bad name after " + variableName.toString() + "::");
+                }
                 continue;
             }
 
@@ -475,6 +482,9 @@ public class IdentifierParser {
                         token = parser.tokens.get(parser.tokenIndex);
                         nextToken = parser.tokens.get(parser.tokenIndex + 1);
                         continue;
+                    } else {
+                        // Bad name after '
+                        parser.throwCleanError("Bad name after " + variableName.toString() + "'");
                     }
                 }
 
