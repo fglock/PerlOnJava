@@ -41,6 +41,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     // Global matcher used for regex operations
     public static Matcher globalMatcher;    // Provides Perl regex variables like %+, %-
     public static String globalMatchString; // Provides Perl regex variables like $&
+    public static String[] preservedCaptureGroups; // Store preserved capture groups
     // Store match information to avoid IllegalStateException from Matcher
     public static String lastMatchedString = null;
     public static int lastMatchStart = -1;
@@ -412,8 +413,26 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         int capture = 1;
         int previousPos = startPos; // Track the previous position  
         int previousMatchEnd = -1;  // Track end of previous match
+        int captureCount = 0; // Declare outside the loop
+        
         // System.err.println("DEBUG: Resetting globalMatcher to null at start of matchRegex");
-        globalMatcher = null;
+        
+        // Save the old globalMatcher to preserve capture variables
+        Matcher oldGlobalMatcher = globalMatcher;
+        // Also save old capture groups separately
+        String[] oldCaptureGroups = null;
+        if (oldGlobalMatcher != null) {
+            int oldGroupCount = oldGlobalMatcher.groupCount();
+            oldCaptureGroups = new String[oldGroupCount + 1];
+            for (int i = 0; i <= oldGroupCount; i++) {
+                try {
+                    oldCaptureGroups[i] = oldGlobalMatcher.group(i);
+                } catch (Exception e) {
+                    oldCaptureGroups[i] = null;
+                }
+            }
+        }
+        
         // Reset stored match information (but preserve last successful match info)
         lastMatchedString = null;
         lastMatchStart = -1;
@@ -426,11 +445,14 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             }
 
             found = true;
-            int captureCount = matcher.groupCount();
+            captureCount = matcher.groupCount();
 
-            // Always initialize $1, $2, @+, @-, $`, $&, $' for every successful match
+            // Always set globalMatcher and globalMatchString for any successful match
+            // This preserves capture variables from previous regex operations
+            // when doing non-capture regex operations (like /[[:print:]]/a)
             globalMatcher = matcher;
             globalMatchString = inputStr;
+            
             // Store match information to avoid IllegalStateException later
             lastMatchedString = matcher.group(0);
             lastMatchStart = matcher.start();
@@ -532,8 +554,20 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             if (regex.regexFlags.isGlobalMatch() && ctx == RuntimeContextType.LIST) {
                 posScalar.set(scalarUndef);
             }
+            
+            // If this regex has no capture groups, preserve old capture variables
+            // but allow @- and @+ to work with current match
+            if (captureCount == 0 && oldGlobalMatcher != null) {
+                preservedCaptureGroups = oldCaptureGroups;
+            } else {
+                preservedCaptureGroups = null;
+            }
+            
             // System.err.println("DEBUG: Match completed, globalMatcher is " + (globalMatcher == null ? "null" : "set"));
         } else {
+            // No match found - restore the old globalMatcher
+            globalMatcher = oldGlobalMatcher;
+            preservedCaptureGroups = null;
             // System.err.println("DEBUG: No match found, globalMatcher is " + (globalMatcher == null ? "null" : "set"));
         }
 
@@ -813,10 +847,24 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     public static String captureString(int group) {
-        if (globalMatcher == null || group < 0 || group > globalMatcher.groupCount()) {
+        // If we have preserved capture groups, use them for capture variables ($1, $2, etc.)
+        if (preservedCaptureGroups != null && group > 0) {
+            if (group < preservedCaptureGroups.length) {
+                return preservedCaptureGroups[group];
+            }
             return null;
         }
-        return globalMatcher.group(group);
+        
+        // Normal case: use current globalMatcher
+        if (globalMatcher == null) {
+            return null;
+        }
+        int groupCount = globalMatcher.groupCount();
+        if (group < 0 || group > groupCount) {
+            return null;
+        }
+        String result = globalMatcher.group(group);
+        return result;
     }
 
     public static String lastCaptureString() {
@@ -825,6 +873,27 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
         int lastGroup = globalMatcher.groupCount();
         return globalMatcher.group(lastGroup);
+    }
+
+    // Debug method to check group count
+    public static String debugGroupCount() {
+        if (globalMatcher == null) {
+            return "globalMatcher is null";
+        }
+        int groupCount = globalMatcher.groupCount();
+        String result = "groupCount: " + groupCount;
+        
+        // Test each group
+        for (int i = 1; i <= groupCount; i++) {
+            try {
+                String group = globalMatcher.group(i);
+                result += ", group" + i + "='" + group + "'";
+            } catch (Exception e) {
+                result += ", group" + i + "=ERROR(" + e.getMessage() + ")";
+            }
+        }
+        
+        return result;
     }
 
     public static RuntimeScalar matcherStart(int group) {
