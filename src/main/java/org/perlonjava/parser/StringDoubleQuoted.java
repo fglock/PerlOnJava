@@ -5,6 +5,7 @@ import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.lexer.Lexer;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
+import org.perlonjava.runtime.PerlCompilerException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -457,7 +458,20 @@ public class StringDoubleQuoted extends StringSegmentParser {
             case "$" -> appendToCurrentSegment("$");
 
             // Control character: \cX
-            case "c" -> handleControlCharacter();
+            case "c" -> {
+                var controlChar = TokenUtils.consumeChar(parser);
+                if (controlChar.isEmpty()) {
+                    throw new PerlCompilerException(parser.tokenIndex, "Missing control char name in \\c", parser.ctx.errorUtil);
+                }
+                var c = controlChar.charAt(0);
+                var result = (c >= 'A' && c <= 'Z') ? String.valueOf((char) (c - 'A' + 1))
+                        : (c >= 'a' && c <= 'z') ? String.valueOf((char) (c - 'a' + 1))
+                        : c == '@' ? String.valueOf((char) 0)
+                        : (c >= '[' && c <= '_') ? String.valueOf((char) (c - '[' + 27))
+                        : c == '?' ? String.valueOf((char) 127)
+                        : String.valueOf(c);
+                appendToCurrentSegment(result);
+            }
 
             // Case modification end marker
             case "E" -> {
