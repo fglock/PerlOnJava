@@ -229,7 +229,7 @@ public class JavaClassInfo {
      */
     public LoopLabels findInnermostTrueLoopLabels() {
         for (LoopLabels loopLabels : loopLabelStack) {
-            if (loopLabels != null && loopLabels.isTrueLoop && loopLabels.isUnlabeledControlFlowTarget) {
+            if (loopLabels != null && loopLabels.isUnlabeledControlFlowTarget) {
                 return loopLabels;
             }
         }

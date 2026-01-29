@@ -8,8 +8,68 @@ import org.perlonjava.astrefactor.LargeBlockRefactorer;import org.perlonjava.ast
 import org.perlonjava.runtime.RuntimeContextType;
 
 import java.util.List;
+import java.util.Set;
+import java.util.LinkedHashSet;
 
 public class EmitBlock {
+
+    private static void collectStateDeclSigilNodes(Node node, Set<OperatorNode> out) {
+        if (node == null) {
+            return;
+        }
+        if (node instanceof OperatorNode op) {
+            if ("state".equals(op.operator) && op.operand instanceof OperatorNode sigilNode) {
+                if (sigilNode.operand instanceof IdentifierNode && "$@%".contains(sigilNode.operator)) {
+                    out.add(sigilNode);
+                }
+            }
+            collectStateDeclSigilNodes(op.operand, out);
+            return;
+        }
+        if (node instanceof BinaryOperatorNode bin) {
+            collectStateDeclSigilNodes(bin.left, out);
+            collectStateDeclSigilNodes(bin.right, out);
+            return;
+        }
+        if (node instanceof ListNode list) {
+            for (Node child : list.elements) {
+                collectStateDeclSigilNodes(child, out);
+            }
+            return;
+        }
+        if (node instanceof BlockNode block) {
+            for (Node child : block.elements) {
+                collectStateDeclSigilNodes(child, out);
+            }
+            return;
+        }
+        if (node instanceof For1Node for1) {
+            collectStateDeclSigilNodes(for1.variable, out);
+            collectStateDeclSigilNodes(for1.list, out);
+            collectStateDeclSigilNodes(for1.body, out);
+            collectStateDeclSigilNodes(for1.continueBlock, out);
+            return;
+        }
+        if (node instanceof For3Node for3) {
+            collectStateDeclSigilNodes(for3.initialization, out);
+            collectStateDeclSigilNodes(for3.condition, out);
+            collectStateDeclSigilNodes(for3.increment, out);
+            collectStateDeclSigilNodes(for3.body, out);
+            collectStateDeclSigilNodes(for3.continueBlock, out);
+            return;
+        }
+        if (node instanceof IfNode ifNode) {
+            collectStateDeclSigilNodes(ifNode.condition, out);
+            collectStateDeclSigilNodes(ifNode.thenBranch, out);
+            collectStateDeclSigilNodes(ifNode.elseBranch, out);
+            return;
+        }
+        if (node instanceof TryNode tryNode) {
+            collectStateDeclSigilNodes(tryNode.tryBlock, out);
+            collectStateDeclSigilNodes(tryNode.catchBlock, out);
+            collectStateDeclSigilNodes(tryNode.finallyBlock, out);
+        }
+    }
 
     /**
      * Emits bytecode for a block of statements.
@@ -31,6 +91,18 @@ public class EmitBlock {
         EmitterVisitor voidVisitor =
                 emitterVisitor.with(RuntimeContextType.VOID); // statements in the middle of the block have context VOID
         List<Node> list = node.elements;
+
+        // Hoist `state` declarations to the beginning of the block scope so that JVM local slots
+        // are initialized even if a `goto` skips the original declaration statement.
+        // This prevents NPEs when later code evaluates e.g. `defined $state_var`.
+        Set<OperatorNode> stateDeclSigilNodes = new LinkedHashSet<>();
+        for (Node element : list) {
+            collectStateDeclSigilNodes(element, stateDeclSigilNodes);
+        }
+        for (OperatorNode sigilNode : stateDeclSigilNodes) {
+            new OperatorNode("state", sigilNode, sigilNode.tokenIndex)
+                    .accept(voidVisitor);
+        }
 
         int lastNonNullIndex = -1;
         for (int i = list.size() - 1; i >= 0; i--) {
@@ -62,6 +134,11 @@ public class EmitBlock {
             // A labeled/bare block used as a loop target (e.g. SKIP: { ... }) is a
             // pseudo-loop: it supports labeled next/last/redo (e.g. next SKIP), but
             // an unlabeled next/last/redo must target the nearest enclosing true loop.
+            //
+            // However, a *bare* block with loop control (e.g. `{ ...; redo }` or
+            // `{ ... } continue { ... }`) is itself a valid target for *unlabeled*
+            // last/next/redo, matching Perl semantics.
+            boolean isBareBlock = node.labelName == null;
             emitterVisitor.ctx.javaClassInfo.pushLoopLabels(
                     node.labelName,
                     nextLabel,
@@ -69,8 +146,8 @@ public class EmitBlock {
                     nextLabel,
                     emitterVisitor.ctx.javaClassInfo.stackLevelManager.getStackLevel(),
                     emitterVisitor.ctx.contextType,
-                    false,
-                    false);
+                    isBareBlock,
+                    isBareBlock);
         }
 
         // Special case: detect pattern of `local $_` followed by `For1Node` with needsArrayOfAlias
