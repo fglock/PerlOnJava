@@ -8,6 +8,7 @@ import org.perlonjava.codegen.EmitterMethodCreator;
 import org.perlonjava.codegen.JavaClassInfo;
 import org.perlonjava.lexer.Lexer;
 import org.perlonjava.lexer.LexerToken;
+import org.perlonjava.operators.WarnDie;
 import org.perlonjava.parser.Parser;
 import org.perlonjava.mro.InheritanceResolver;
 import org.perlonjava.operators.ModuleOperators;
@@ -265,7 +266,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     true  // use try-catch
             );
             runUnitcheckBlocks(ctx.unitcheckBlocks);
-        } catch (Exception e) {
+        } catch (Throwable e) {
             // Compilation error in eval-string
 
             // Set the global error variable "$@" using GlobalContext.setGlobalVariable(key, value)
@@ -698,6 +699,23 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         // If the type is not CODE, throw an exception indicating an invalid state
         throw new PerlCompilerException("Not a CODE reference");
+    }
+
+    // Method to apply (execute) a subroutine reference for eval/evalbytes.
+    // Eval STRING must allow next/last/redo to propagate to the enclosing scope.
+    // The caller is responsible for handling RuntimeControlFlowList markers.
+    public static RuntimeList applyEval(RuntimeScalar runtimeScalar, RuntimeArray a, int callContext) {
+        try {
+            RuntimeList result = apply(runtimeScalar, a, callContext);
+            return result;
+        } catch (Throwable t) {
+            // Perl eval catches exceptions; set $@ and return undef / empty list.
+            WarnDie.catchEval(t);
+            if (callContext == RuntimeContextType.LIST) {
+                return new RuntimeList();
+            }
+            return new RuntimeList(new RuntimeScalar());
+        }
     }
 
     private static RuntimeScalar handleCodeOverload(RuntimeScalar runtimeScalar) {

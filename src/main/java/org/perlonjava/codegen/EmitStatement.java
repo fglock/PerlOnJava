@@ -154,12 +154,16 @@ public class EmitStatement {
             if (node.useNewScope) {
                 // Register next/redo/last labels
                 emitterVisitor.ctx.logDebug("FOR3 label: " + node.labelName);
+                boolean isUnlabeledTarget = !node.isSimpleBlock;
                 emitterVisitor.ctx.javaClassInfo.pushLoopLabels(
                         node.labelName,
                         continueLabel,
                         redoLabel,
                         endLabel,
-                        RuntimeContextType.VOID);
+                        emitterVisitor.ctx.javaClassInfo.stackLevelManager.getStackLevel(),
+                        RuntimeContextType.VOID,
+                        true,
+                        isUnlabeledTarget);
 
                 // Visit the loop body
                 node.body.accept(voidVisitor);

@@ -74,27 +74,31 @@ public class ControlFlowMarker {
      * 
      * @throws PerlCompilerException Always throws with contextual error message
      */
-    public void throwError() {
+    public String buildErrorMessage() {
         String location = " at " + fileName + " line " + lineNumber;
         
         if (type == ControlFlowType.TAILCALL) {
             // Tail call should have been handled by trampoline at returnLabel
-            throw new PerlCompilerException("Tail call escaped to top level (internal error)" + location);
+            return "Tail call escaped to top level (internal error)" + location;
         } else if (type == ControlFlowType.GOTO) {
             if (label != null) {
-                throw new PerlCompilerException("Can't find label " + label + location);
+                return "Can't find label " + label + location;
             } else {
-                throw new PerlCompilerException("goto must have a label" + location);
+                return "goto must have a label" + location;
             }
         } else {
             // last/next/redo
             String operation = type.name().toLowerCase();
             if (label != null) {
-                throw new PerlCompilerException("Label not found for \"" + operation + " " + label + "\"" + location);
+                return "Label not found for \"" + operation + " " + label + "\"" + location;
             } else {
-                throw new PerlCompilerException("Can't \"" + operation + "\" outside a loop block" + location);
+                return "Can't \"" + operation + "\" outside a loop block" + location;
             }
         }
+    }
+
+    public void throwError() {
+        throw new PerlCompilerException(buildErrorMessage());
     }
 }
 
