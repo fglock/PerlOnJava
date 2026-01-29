@@ -53,7 +53,7 @@ public class Lexer {
     }
 
     // Input characters to be tokenized
-    public char[] input;
+    public String input;
     // Current position in the input
     public int position;
     // Length of the input
@@ -61,9 +61,27 @@ public class Lexer {
 
     // Constructor to initialize the Lexer with input string
     public Lexer(String input) {
-        this.input = input.toCharArray();
-        this.length = this.input.length;
+        this.input = input;
+        this.length = this.input.length();
         this.position = 0;
+    }
+
+    private int getCurrentCodePoint() {
+        if (position >= length) {
+            return -1;
+        }
+        char c1 = input.charAt(position);
+        if (Character.isHighSurrogate(c1) && position + 1 < length) {
+            char c2 = input.charAt(position + 1);
+            if (Character.isLowSurrogate(c2)) {
+                return Character.toCodePoint(c1, c2);
+            }
+        }
+        return c1;
+    }
+
+    private void advanceCodePoint(int codePoint) {
+        position += Character.charCount(codePoint);
     }
 
     // Main method for testing the Lexer
@@ -116,7 +134,8 @@ public class Lexer {
             return null;
         }
 
-        char current = input[position];
+        char current = input.charAt(position);
+        int currentCp = getCurrentCodePoint();
 
         if (isAsciiWhitespace(current)) {
             if (current == '\n') {
@@ -131,315 +150,318 @@ public class Lexer {
             }
         } else if (current >= '0' && current <= '9') {
             return consumeNumber();
-        } else if (current == '_' || UCharacter.hasBinaryProperty(current, UProperty.XID_START)) {
+        } else if (currentCp == '_' || Character.isUnicodeIdentifierStart(currentCp)) {
             return consumeIdentifier();
         } else if (current < 128 && isOperator[current]) {
             return consumeOperator();
         } else {
-            position++;
-            return new LexerToken(LexerTokenType.STRING, String.valueOf(current));
+            int start = position;
+            advanceCodePoint(currentCp);
+            return new LexerToken(LexerTokenType.STRING, input.substring(start, position));
         }
     }
 
     public LexerToken consumeWhitespace() {
         int start = position;
         while (position < length
-                && input[position] != '\n'
-                && input[position] != '\r'
-                && (input[position] == ' ' || Character.isWhitespace(input[position]))) {
+                && input.charAt(position) != '\n'
+                && input.charAt(position) != '\r'
+                && (input.charAt(position) == ' ' || Character.isWhitespace(input.charAt(position)))) {
             position++;
         }
-        return new LexerToken(LexerTokenType.WHITESPACE, new String(input, start, position - start));
+        return new LexerToken(LexerTokenType.WHITESPACE, input.substring(start, position));
     }
 
     public LexerToken consumeNumber() {
         int start = position;
-        while (position < length && ((input[position] >= '0' && input[position] <= '9') || input[position] == '_')) {
+        while (position < length && ((input.charAt(position) >= '0' && input.charAt(position) <= '9') || input.charAt(position) == '_')) {
             position++;
         }
-        return new LexerToken(LexerTokenType.NUMBER, new String(input, start, position - start));
+        return new LexerToken(LexerTokenType.NUMBER, input.substring(start, position));
     }
 
     public LexerToken consumeIdentifier() {
         int start = position;
-        position++; // Move past the initial character we already validated
+        int cp = getCurrentCodePoint();
+        advanceCodePoint(cp); // Move past the initial character we already validated
 
         while (position < length) {
-            int current = input[position];
-            if (current == '_' || UCharacter.hasBinaryProperty(current, UProperty.XID_CONTINUE)) {
-                position++;
+            int curCp = getCurrentCodePoint();
+            if (curCp == '_' || Character.isUnicodeIdentifierPart(curCp)) {
+                advanceCodePoint(curCp);
             } else {
                 break;
             }
         }
-        return new LexerToken(LexerTokenType.IDENTIFIER, new String(input, start, position - start));
+        // Build token text using substring to preserve surrogate pairs correctly
+        return new LexerToken(LexerTokenType.IDENTIFIER, input.substring(start, position));
     }
 
     public LexerToken consumeOperator() {
         int start = position;
-        char current = input[position];
+        char current = input.charAt(position);
         if (position < length && (current < 128 && isOperator[current])) {
             switch (current) {
                 case '!':
-                    if (position + 2 <= input.length && input[position + 1] == '=') {
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == '=') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "!=");
                     }
-                    if (position + 2 <= input.length && input[position + 1] == '~') {
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == '~') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "!~");
                     }
                     break;
                 case '$':
-                    if (position + 2 <= input.length && input[position + 1] == '#') {
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == '#') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "$#");
                     }
-                    if (position + 2 <= input.length && input[position + 1] == '*') {
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == '*') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "$*");
                     }
                     break;
                 case '@':
-                    if (position + 2 <= input.length && input[position + 1] == '*') {
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == '*') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "@*");
                     }
                     break;
                 case '%':
-                    if (position + 2 <= input.length && input[position + 1] == '=') {
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == '=') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "%=");
                     }
-                    if (position + 2 <= input.length && input[position + 1] == '*') {
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == '*') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "%*");
                     }
                     break;
                 case '&':
-                    if (position + 3 <= input.length
-                            && input[position + 1] == '&'
-                            && input[position + 2] == '=') {
+                    if (position + 3 <= input.length()
+                            && input.charAt(position + 1) == '&'
+                            && input.charAt(position + 2) == '=') {
                         position += 3;
                         return new LexerToken(LexerTokenType.OPERATOR, "&&=");
                     }
-                    if (position + 3 <= input.length
-                            && input[position + 1] == '.'
-                            && input[position + 2] == '=') {
+                    if (position + 3 <= input.length()
+                            && input.charAt(position + 1) == '.'
+                            && input.charAt(position + 2) == '=') {
                         position += 3;
                         return new LexerToken(LexerTokenType.OPERATOR, "&.=");
                     }
-                    if (position + 2 <= input.length && input[position + 1] == '&') {
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == '&') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "&&");
                     }
-                    if (position + 2 <= input.length && input[position + 1] == '*') {
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == '*') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "&*");
                     }
-                    if (position + 2 <= input.length && input[position + 1] == '=') {
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == '=') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "&=");
                     }
-                    if (position + 2 <= input.length && input[position + 1] == '.') {
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == '.') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "&.");
                     }
                     break;
                 case '*':
-                    if (position + 3 <= input.length
-                            && input[position + 1] == '*'
-                            && input[position + 2] == '=') {
+                    if (position + 3 <= input.length()
+                            && input.charAt(position + 1) == '*'
+                            && input.charAt(position + 2) == '=') {
                         position += 3;
                         return new LexerToken(LexerTokenType.OPERATOR, "**=");
                     }
-                    if (position + 2 <= input.length && input[position + 1] == '*') {
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == '*') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "**");
                     }
-                    if (position + 2 <= input.length && input[position + 1] == '=') {
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == '=') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "*=");
                     }
                     break;
                 case '+':
-                    if (position + 2 <= input.length && input[position + 1] == '+') {
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == '+') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "++");
                     }
-                    if (position + 2 <= input.length && input[position + 1] == '=') {
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == '=') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "+=");
                     }
                     break;
                 case '-':
-                    if (position + 2 <= input.length && input[position + 1] == '-') {
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == '-') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "--");
                     }
-                    if (position + 2 <= input.length && input[position + 1] == '=') {
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == '=') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "-=");
                     }
-                    if (position + 2 <= input.length && input[position + 1] == '>') {
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == '>') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "->");
                     }
                     break;
                 case '.':
-                    if (position + 3 <= input.length
-                            && input[position + 1] == '.'
-                            && input[position + 2] == '.') {
+                    if (position + 3 <= input.length()
+                            && input.charAt(position + 1) == '.'
+                            && input.charAt(position + 2) == '.') {
                         position += 3;
                         return new LexerToken(LexerTokenType.OPERATOR, "...");
                     }
-                    if (position + 2 <= input.length && input[position + 1] == '.') {
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == '.') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "..");
                     }
-                    if (position + 2 <= input.length && input[position + 1] == '=') {
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == '=') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, ".=");
                     }
                     break;
                 case '/':
-                    if (position + 3 <= input.length
-                            && input[position + 1] == '/'
-                            && input[position + 2] == '=') {
+                    if (position + 3 <= input.length()
+                            && input.charAt(position + 1) == '/'
+                            && input.charAt(position + 2) == '=') {
                         position += 3;
                         return new LexerToken(LexerTokenType.OPERATOR, "//=");
                     }
-                    if (position + 2 <= input.length && input[position + 1] == '/') {
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == '/') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "//");
                     }
-                    if (position + 2 <= input.length && input[position + 1] == '=') {
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == '=') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "/=");
                     }
                     break;
                 case ':':
-                    if (position + 2 <= input.length && input[position + 1] == ':') {
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == ':') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "::");
                     }
                     break;
                 case '<':
-                    if (position + 3 <= input.length
-                            && input[position + 1] == '<'
-                            && input[position + 2] == '=') {
+                    if (position + 3 <= input.length()
+                            && input.charAt(position + 1) == '<'
+                            && input.charAt(position + 2) == '=') {
                         position += 3;
                         return new LexerToken(LexerTokenType.OPERATOR, "<<=");
                     }
-                    if (position + 3 <= input.length
-                            && input[position + 1] == '='
-                            && input[position + 2] == '>') {
+                    if (position + 3 <= input.length()
+                            && input.charAt(position + 1) == '='
+                            && input.charAt(position + 2) == '>') {
                         position += 3;
                         return new LexerToken(LexerTokenType.OPERATOR, "<=>");
                     }
-                    if (position + 2 <= input.length && input[position + 1] == '<') {
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == '<') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "<<");
                     }
-                    if (position + 2 <= input.length && input[position + 1] == '=') {
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == '=') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "<=");
                     }
                     break;
                 case '=':
-                    if (position + 2 <= input.length && input[position + 1] == '=') {
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == '=') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "==");
                     }
-                    if (position + 2 <= input.length && input[position + 1] == '>') {
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == '>') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "=>");
                     }
-                    if (position + 2 <= input.length && input[position + 1] == '~') {
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == '~') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "=~");
                     }
                     break;
                 case '>':
-                    if (position + 3 <= input.length
-                            && input[position + 1] == '>'
-                            && input[position + 2] == '=') {
+                    if (position + 3 <= input.length()
+                            && input.charAt(position + 1) == '>'
+                            && input.charAt(position + 2) == '=') {
                         position += 3;
                         return new LexerToken(LexerTokenType.OPERATOR, ">>=");
                     }
-                    if (position + 2 <= input.length && input[position + 1] == '=') {
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == '=') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, ">=");
                     }
-                    if (position + 2 <= input.length && input[position + 1] == '>') {
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == '>') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, ">>");
                     }
                     break;
                 case '^':
-                    if (position + 3 <= input.length
-                            && input[position + 1] == '^'
-                            && input[position + 2] == '=') {
+                    if (position + 3 <= input.length()
+                            && input.charAt(position + 1) == '^'
+                            && input.charAt(position + 2) == '=') {
                         position += 3;
                         return new LexerToken(LexerTokenType.OPERATOR, "^^=");
                     }
-                    if (position + 3 <= input.length
-                            && input[position + 1] == '.'
-                            && input[position + 2] == '=') {
+                    if (position + 3 <= input.length()
+                            && input.charAt(position + 1) == '.'
+                            && input.charAt(position + 2) == '=') {
                         position += 3;
                         return new LexerToken(LexerTokenType.OPERATOR, "^.=");
                     }
-                    if (position + 2 <= input.length && input[position + 1] == '=') {
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == '=') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "^=");
                     }
-                    if (position + 2 <= input.length && input[position + 1] == '^') {
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == '^') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "^^");
                     }
-                    if (position + 2 <= input.length && input[position + 1] == '.') {
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == '.') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "^.");
                     }
                     break;
                 case 'x':
-                    if (position + 2 <= input.length && input[position + 1] == '=') {
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == '=') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "x=");
                     }
                     break;
                 case '|':
-                    if (position + 3 <= input.length
-                            && input[position + 1] == '.'
-                            && input[position + 2] == '=') {
+                    if (position + 3 <= input.length()
+                            && input.charAt(position + 1) == '.'
+                            && input.charAt(position + 2) == '=') {
                         position += 3;
                         return new LexerToken(LexerTokenType.OPERATOR, "|.=");
                     }
-                    if (position + 3 <= input.length
-                            && input[position + 1] == '|'
-                            && input[position + 2] == '=') {
+                    if (position + 3 <= input.length()
+                            && input.charAt(position + 1) == '|'
+                            && input.charAt(position + 2) == '=') {
                         position += 3;
                         return new LexerToken(LexerTokenType.OPERATOR, "||=");
                     }
-                    if (position + 2 <= input.length && input[position + 1] == '=') {
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == '=') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "|=");
                     }
-                    if (position + 2 <= input.length && input[position + 1] == '|') {
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == '|') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "||");
                     }
-                    if (position + 2 <= input.length && input[position + 1] == '.') {
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == '.') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "|.");
                     }
                     break;
                 case '~':
-                    if (position + 2 <= input.length && input[position + 1] == '~') {
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == '~') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "~~");
                     }
-                    if (position + 2 <= input.length && input[position + 1] == '.') {
+                    if (position + 2 <= input.length() && input.charAt(position + 1) == '.') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "~.");
                     }
@@ -448,7 +470,7 @@ public class Lexer {
         }
 
         position++;
-        return new LexerToken(LexerTokenType.OPERATOR, new String(input, start, 1));
+        return new LexerToken(LexerTokenType.OPERATOR, input.substring(start, start + 1));
     }
 }
 

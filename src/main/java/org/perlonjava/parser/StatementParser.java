@@ -130,6 +130,16 @@ public class StatementParser {
             parser.parsingForLoopVariable = false;
         }
 
+        // If we didn't parse a loop variable, Perl expects the '(' of the for(..) header next.
+        // When something else appears (e.g. a bare identifier), perl5 reports:
+        //   Missing $ on loop variable ...
+        if (varNode == null) {
+            LexerToken afterVar = TokenUtils.peek(parser);
+            if (!afterVar.text.equals("(")) {
+                parser.throwCleanError("Missing $ on loop variable " + afterVar.text);
+            }
+        }
+
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
 
         // Parse the initialization part
