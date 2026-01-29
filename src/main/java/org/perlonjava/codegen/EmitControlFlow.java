@@ -52,7 +52,14 @@ public class EmitControlFlow {
 
         String operator = node.operator;
         // Find loop labels by name.
-        LoopLabels loopLabels = ctx.javaClassInfo.findLoopLabelsByName(labelStr);
+        LoopLabels loopLabels;
+        if (labelStr == null) {
+            // Unlabeled next/last/redo target the nearest enclosing true loop.
+            // This avoids mis-targeting bare/labeled blocks like SKIP: { ... }.
+            loopLabels = ctx.javaClassInfo.findInnermostTrueLoopLabels();
+        } else {
+            loopLabels = ctx.javaClassInfo.findLoopLabelsByName(labelStr);
+        }
         ctx.logDebug("visit(next) operator: " + operator + " label: " + labelStr + " labels: " + loopLabels);
         
         // Check if we're trying to use next/last/redo in a pseudo-loop (do-while/bare block)

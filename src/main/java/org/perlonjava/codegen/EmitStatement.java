@@ -154,12 +154,20 @@ public class EmitStatement {
             if (node.useNewScope) {
                 // Register next/redo/last labels
                 emitterVisitor.ctx.logDebug("FOR3 label: " + node.labelName);
+                // A simple-block For3Node (isSimpleBlock=true) is used to model bare/labeled
+                // blocks like `{ ... }` and `LABEL: { ... }` (including `... } continue { ... }`).
+                // Unlabeled next/last/redo must be allowed for *bare* blocks (no label), but
+                // must *not* accidentally target pseudo-loops like `SKIP: { ... }`.
+                boolean isUnlabeledTarget = !node.isSimpleBlock || node.labelName == null;
                 emitterVisitor.ctx.javaClassInfo.pushLoopLabels(
                         node.labelName,
                         continueLabel,
                         redoLabel,
                         endLabel,
-                        RuntimeContextType.VOID);
+                        emitterVisitor.ctx.javaClassInfo.stackLevelManager.getStackLevel(),
+                        RuntimeContextType.VOID,
+                        true,
+                        isUnlabeledTarget);
 
                 // Visit the loop body
                 node.body.accept(voidVisitor);

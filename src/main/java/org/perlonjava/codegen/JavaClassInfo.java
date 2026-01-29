@@ -150,6 +150,10 @@ public class JavaClassInfo {
     public void pushLoopLabels(String labelName, Label nextLabel, Label redoLabel, Label lastLabel, int stackLevel, int context, boolean isTrueLoop) {
         loopLabelStack.push(new LoopLabels(labelName, nextLabel, redoLabel, lastLabel, stackLevel, context, isTrueLoop));
     }
+
+    public void pushLoopLabels(String labelName, Label nextLabel, Label redoLabel, Label lastLabel, int stackLevel, int context, boolean isTrueLoop, boolean isUnlabeledControlFlowTarget) {
+        loopLabelStack.push(new LoopLabels(labelName, nextLabel, redoLabel, lastLabel, stackLevel, context, isTrueLoop, isUnlabeledControlFlowTarget));
+    }
     
     /**
      * Pushes a LoopLabels object onto the loop label stack.
@@ -207,6 +211,25 @@ public class JavaClassInfo {
         }
         for (LoopLabels loopLabels : loopLabelStack) {
             if (loopLabels.labelName != null && loopLabels.labelName.equals(labelName)) {
+                return loopLabels;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Finds the innermost "true" loop labels.
+     * This skips pseudo-loops like bare/labeled blocks (e.g. SKIP: { ... }) that
+     * may be present on the loop label stack to support redo/last/next on blocks.
+     *
+     * For unlabeled next/last/redo, Perl semantics target the nearest enclosing
+     * true loop, not a labeled block used for SKIP.
+     *
+     * @return the innermost LoopLabels with isTrueLoop=true, or null if none
+     */
+    public LoopLabels findInnermostTrueLoopLabels() {
+        for (LoopLabels loopLabels : loopLabelStack) {
+            if (loopLabels != null && loopLabels.isUnlabeledControlFlowTarget) {
                 return loopLabels;
             }
         }
