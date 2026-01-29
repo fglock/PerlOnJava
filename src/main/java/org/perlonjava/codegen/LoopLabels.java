@@ -52,6 +52,15 @@ public class LoopLabels {
     public boolean isTrueLoop;
 
     /**
+     * Whether this is a "real" loop construct (for/foreach/while/until).
+     *
+     * Perl semantics for *unlabeled* next/last/redo:
+     * - Prefer the nearest enclosing real loop.
+     * - Only when there is no real loop, a block can act as a loop target.
+     */
+    public boolean isRealLoop;
+
+    /**
      * Whether unlabeled next/last/redo should target this loop/block.
      *
      * Perl semantics:
@@ -101,6 +110,12 @@ public class LoopLabels {
         this.context = context;
         this.isTrueLoop = isTrueLoop;
         this.isUnlabeledControlFlowTarget = isUnlabeledControlFlowTarget;
+        this.isRealLoop = true;
+    }
+
+    public LoopLabels(String labelName, Label nextLabel, Label redoLabel, Label lastLabel, int asmStackLevel, int context, boolean isTrueLoop, boolean isUnlabeledControlFlowTarget, boolean isRealLoop) {
+        this(labelName, nextLabel, redoLabel, lastLabel, asmStackLevel, context, isTrueLoop, isUnlabeledControlFlowTarget);
+        this.isRealLoop = isRealLoop;
     }
 
     /**

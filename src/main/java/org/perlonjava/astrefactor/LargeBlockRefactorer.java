@@ -240,8 +240,27 @@ public class LargeBlockRefactorer {
             return false;
         }
 
-        // Check if we're in a context that allows refactoring
-        return refactorEnabled || !emitterVisitor.ctx.javaClassInfo.gotoLabelStack.isEmpty();
+        // Codegen-time refactoring must be conservative.
+        // Wrapping statements in extracted closures changes control-flow semantics by losing the
+        // enclosing loop label stack. Only refactor when explicitly enabled and the block is
+        // actually large enough to risk hitting JVM method-size limits.
+        //
+        // If you need to re-enable/extend codegen-time refactoring in the future, do NOT wrap
+        // arbitrary statements into closures inside a loop body. In particular, moving
+        // `next/last/redo/goto` into an extracted closure will make codegen see an empty
+        // loop-label stack and compile these as non-local control flow.
+        //
+        // Safe options (in order of preference):
+        // - Keep any loop-control statements in the original method (never move them into a closure).
+        // - If you must extract, add an explicit mechanism to propagate and handle loop control across
+        //   the extracted boundary (e.g. via RuntimeControlFlowRegistry + loop boundary checks, or by
+        //   implementing/turning on loop handlers/call-site checks).
+        if (!refactorEnabled) {
+            return false;
+        }
+
+        long estimatedSize = estimateTotalBytecodeSizeCapped(node.elements, LARGE_BYTECODE_SIZE);
+        return estimatedSize > LARGE_BYTECODE_SIZE;
     }
 
     /**
@@ -323,6 +342,20 @@ public class LargeBlockRefactorer {
         ControlFlowFinder blockFinder = controlFlowFinderTl.get();
         blockFinder.scan(node);
         boolean hasAnyControlFlowInBlock = blockFinder.foundControlFlow;
+
+        // IMPORTANT: Smart chunking wraps segments in extracted closures.
+        // Loop control operators (next/last/redo/goto) must remain in the original scope
+        // so codegen can resolve loop labels and emit local jumps.
+        // Even when chunk boundaries try to "break" on control flow, the suffix stitching
+        // can still place the control-flow node inside a generated closure.
+        //
+        // Be conservative: if the block contains ANY control flow, do not chunk it.
+        if (hasAnyControlFlowInBlock) {
+            if (parser != null || node.annotations != null) {
+                node.setAnnotation("refactorSkipReason", "Smart chunking skipped: block contains control flow");
+            }
+            return;
+        }
         boolean treatAllElementsAsSafe = !hasLabelElement && !hasAnyControlFlowInBlock;
 
         if (treatAllElementsAsSafe) {
@@ -527,11 +560,16 @@ public class LargeBlockRefactorer {
      * Try to refactor the entire block as a subroutine.
      */
     private static boolean tryWholeBlockRefactoring(EmitterVisitor emitterVisitor, BlockNode node) {
-        // Check for unsafe control flow using ControlFlowDetectorVisitor
-        // This properly handles loop depth - unlabeled next/last/redo inside loops are safe
-        controlFlowDetector.reset();
-        controlFlowDetector.scan(node);
-        if (controlFlowDetector.hasUnsafeControlFlow()) {
+        // IMPORTANT: wrapping a block in an extracted closure/subroutine loses the enclosing
+        // loop label stack. Even control flow that is "safe" in-place (e.g. unlabeled `next`
+        // inside a real loop) becomes unsafe when moved into a closure because codegen will
+        // not find loop labels and will emit non-local tagged returns.
+        //
+        // Therefore, be conservative here: if the block contains ANY control flow statement,
+        // do not refactor the whole block into a subroutine.
+        ControlFlowFinder finder = controlFlowFinderTl.get();
+        finder.scan(node);
+        if (finder.foundControlFlow) {
             return false;
         }
 
@@ -581,10 +619,12 @@ public class LargeBlockRefactorer {
      * @return true if unsafe control flow found
      */
     private static boolean chunkHasUnsafeControlFlow(List<Node> chunk) {
-        controlFlowDetector.reset();
+        // Same reasoning as tryWholeBlockRefactoring(): moving a chunk into a closure loses
+        // loop context, so ANY control flow statement makes the chunk unsafe.
+        ControlFlowFinder finder = controlFlowFinderTl.get();
         for (Node element : chunk) {
-            element.accept(controlFlowDetector);
-            if (controlFlowDetector.hasUnsafeControlFlow()) {
+            finder.scan(element);
+            if (finder.foundControlFlow) {
                 return true;
             }
         }
