@@ -155,6 +155,28 @@ public class IdentifierParser {
         LexerToken token = parser.tokens.get(parser.tokenIndex);
         LexerToken nextToken = parser.tokens.get(parser.tokenIndex + 1);
 
+        // In `no utf8` mode (or `evalbytes`), Perl still allows many non-ASCII bytes as length-1 variables,
+        // but it must reject whitespace-like bytes and format/control bytes. Additionally, for length-2+
+        // identifiers, non-ASCII bytes are not allowed.
+        boolean utf8Enabled = parser.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_UTF8)
+                && !parser.ctx.compilerOptions.isEvalbytes;
+
+        if (!utf8Enabled && token.type == LexerTokenType.IDENTIFIER) {
+            // The Lexer may have greedily consumed non-ASCII identifier parts into a single IDENTIFIER token.
+            // Under `no utf8` / `evalbytes`, those are not allowed for length-2+ variables.
+            String id = token.text;
+            if (id.length() > 1) {
+                for (int i = 0; i < id.length(); ) {
+                    int cp = id.codePointAt(i);
+                    if (cp > 127) {
+                        String hex = "\\x{" + Integer.toHexString(cp) + "}";
+                        throw new PerlCompilerException("Unrecognized character " + hex + ";");
+                    }
+                    i += Character.charCount(cp);
+                }
+            }
+        }
+
         if (skippedWhitespace) {
             // Perl allows "$ a" (whitespace before an identifier). But if whitespace is followed by
             // something that cannot start an identifier (e.g. "$\t = 4"), Perl reports a syntax error.
@@ -209,8 +231,6 @@ public class IdentifierParser {
 
             // Under 'no utf8', Perl allows many non-ASCII bytes as length-1 variables.
             // Only enforce XID_START there for multi-character identifiers.
-            boolean utf8Enabled = parser.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_UTF8)
-                    && !parser.ctx.compilerOptions.isEvalbytes;
             boolean hasMoreIdentifierContent = insideBraces
                     && (nextToken.type == LexerTokenType.IDENTIFIER || nextToken.type == LexerTokenType.NUMBER);
             boolean mustValidateStart = utf8Enabled || id.length() > 1 || hasMoreIdentifierContent;
@@ -220,19 +240,37 @@ public class IdentifierParser {
             // Also reject control characters (0x00-0x1F, 0x7F) as identifier starts.
             // Reject control characters and other non-graphic bytes that Perl treats as invalid variable names.
             // In particular, C1 controls (0x80-0x9F) must always be rejected.
+            // Under `no utf8` / `evalbytes`, reject whitespace-like and format/control characters even
+            // for length-1 variables.
+            boolean rejectEvenAsLengthOne = !utf8Enabled
+                    && id.length() == 1
+                    && (UCharacter.hasBinaryProperty(cp, UProperty.WHITE_SPACE)
+                    || UCharacter.getType(cp) == UCharacter.FORMAT
+                    || UCharacter.getType(cp) == UCharacter.CONTROL);
+
             if (cp == 0xFFFD
                     || cp < 32
                     || cp == 127
                     || (cp >= 0x80 && cp <= 0x9F)
+                    || rejectEvenAsLengthOne
                     || (mustValidateStart && !valid)) {
                 String hex;
                 // Special case: if we got the Unicode replacement character (0xFFFD),
                 // it likely means the original was an invalid UTF-8 byte sequence.
                 // For Perl compatibility, we should report a representative invalid byte.
                 if (cp == 0xFFFD) {
-                    hex = "\\xB6";
+                    hex = utf8Enabled ? "\\x{fffd}" : "\\xB6";
                 } else {
-                    if (cp <= 255) {
+                    if (cp < 32 || cp == 127) {
+                        // Perl formats control bytes differently depending on the syntactic form.
+                        // In ${...} contexts it commonly uses \xNN, while for bare length-1 identifiers
+                        // (e.g. \x{0}) it uses \x{n}.
+                        if (insideBraces) {
+                            hex = String.format("\\x%02x", cp);
+                        } else {
+                            hex = "\\x{" + Integer.toHexString(cp) + "}";
+                        }
+                    } else if (cp <= 255) {
                         // Perl tends to report non-ASCII bytes as \x{..} in these contexts
                         hex = "\\x{" + Integer.toHexString(cp) + "}";
                     } else {
@@ -253,8 +291,6 @@ public class IdentifierParser {
                 int cp = id.codePointAt(0);
                 boolean valid = cp == '_' || UCharacter.hasBinaryProperty(cp, UProperty.XID_START);
 
-                boolean utf8Enabled = parser.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_UTF8)
-                        && !parser.ctx.compilerOptions.isEvalbytes;
                 boolean mustValidateStart = utf8Enabled || id.length() > 1;
 
                 if (mustValidateStart && !valid) {
