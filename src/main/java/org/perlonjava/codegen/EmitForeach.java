@@ -305,8 +305,10 @@ public class EmitForeach {
                 emitterVisitor.ctx.javaClassInfo.stackLevelManager.getStackLevel(),
                 RuntimeContextType.VOID);
         currentLoopLabels.controlFlowHandler = controlFlowHandler;
-
+        emitterVisitor.ctx.logDebug("FOR1 pushLoopLabels label=" + node.labelName + " asmStackLevel=" + currentLoopLabels.asmStackLevel);
         emitterVisitor.ctx.javaClassInfo.pushLoopLabels(currentLoopLabels);
+
+        emitterVisitor.ctx.logDebug("FOR1 loopLabelStack depth after push=" + emitterVisitor.ctx.javaClassInfo.loopLabelStack.size());
 
         node.body.accept(emitterVisitor.with(RuntimeContextType.VOID));
         
@@ -314,6 +316,9 @@ public class EmitForeach {
         emitRegistryCheck(mv, currentLoopLabels, redoLabel, continueLabel, loopEnd);
 
         LoopLabels poppedLabels = emitterVisitor.ctx.javaClassInfo.popLoopLabels();
+
+        emitterVisitor.ctx.logDebug("FOR1 popLoopLabels label=" + (poppedLabels != null ? poppedLabels.labelName : null) +
+                " remainingDepth=" + emitterVisitor.ctx.javaClassInfo.loopLabelStack.size());
 
         mv.visitLabel(continueLabel);
 
