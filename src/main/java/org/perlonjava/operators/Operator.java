@@ -247,7 +247,7 @@ public class Operator {
      */
     public static RuntimeScalar substr(int ctx, RuntimeBase... args) {
         String str = args[0].toString();
-        int strLength = str.length();
+        int strLength = str.codePointCount(0, str.length());
 
         int size = args.length;
         int offset = ((RuntimeScalar) args[1]).getInt();
@@ -275,8 +275,10 @@ public class Operator {
         // Ensure length is non-negative and within bounds
         length = Math.max(0, Math.min(length, strLength - offset));
 
-        // Extract the substring
-        String result = str.substring(offset, offset + length);
+        // Extract the substring (offset/length are in Unicode code points)
+        int startIndex = str.offsetByCodePoints(0, offset);
+        int endIndex = str.offsetByCodePoints(startIndex, length);
+        String result = str.substring(startIndex, endIndex);
 
         // Return an LValue "RuntimeSubstrLvalue" that can be used to assign to the original string
         // This allows for in-place modification of the original string if needed
