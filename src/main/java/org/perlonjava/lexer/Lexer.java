@@ -80,6 +80,14 @@ public class Lexer {
         return c1;
     }
 
+    private static boolean isPerlIdentifierStart(int codePoint) {
+        return codePoint == '_' || UCharacter.hasBinaryProperty(codePoint, UProperty.XID_START);
+    }
+
+    private static boolean isPerlIdentifierPart(int codePoint) {
+        return codePoint == '_' || UCharacter.hasBinaryProperty(codePoint, UProperty.XID_CONTINUE);
+    }
+
     private void advanceCodePoint(int codePoint) {
         position += Character.charCount(codePoint);
     }
@@ -150,7 +158,7 @@ public class Lexer {
             }
         } else if (current >= '0' && current <= '9') {
             return consumeNumber();
-        } else if (currentCp == '_' || Character.isUnicodeIdentifierStart(currentCp)) {
+        } else if (isPerlIdentifierStart(currentCp)) {
             return consumeIdentifier();
         } else if (current < 128 && isOperator[current]) {
             return consumeOperator();
@@ -187,7 +195,7 @@ public class Lexer {
 
         while (position < length) {
             int curCp = getCurrentCodePoint();
-            if (curCp == '_' || Character.isUnicodeIdentifierPart(curCp)) {
+            if (isPerlIdentifierPart(curCp)) {
                 advanceCodePoint(curCp);
             } else {
                 break;

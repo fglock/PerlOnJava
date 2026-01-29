@@ -58,6 +58,14 @@ public class IdentifierParser {
             if (tokenAfter.type == LexerTokenType.EOF || tokenAfter.type == LexerTokenType.NEWLINE) {
                 parser.throwError("syntax error");
             }
+
+            // Perl does not allow whitespace to turn into a punctuation special variable.
+            // For example "$\t = 4" must be a syntax error, not "$= 4".
+            if (tokenAfter.type == LexerTokenType.OPERATOR
+                    && tokenAfter.text.length() == 1
+                    && "!|/*+-<>&~.=%'".indexOf(tokenAfter.text.charAt(0)) >= 0) {
+                parser.throwError("syntax error");
+            }
         }
 
         // Check if the identifier is enclosed in braces
@@ -201,7 +209,8 @@ public class IdentifierParser {
 
             // Under 'no utf8', Perl allows many non-ASCII bytes as length-1 variables.
             // Only enforce XID_START there for multi-character identifiers.
-            boolean utf8Enabled = parser.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_UTF8);
+            boolean utf8Enabled = parser.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_UTF8)
+                    && !parser.ctx.compilerOptions.isEvalbytes;
             boolean hasMoreIdentifierContent = insideBraces
                     && (nextToken.type == LexerTokenType.IDENTIFIER || nextToken.type == LexerTokenType.NUMBER);
             boolean mustValidateStart = utf8Enabled || id.length() > 1 || hasMoreIdentifierContent;
@@ -209,14 +218,18 @@ public class IdentifierParser {
             // Always reject the Unicode replacement character: it usually indicates an invalid byte sequence.
             // Perl reports these as unrecognized bytes (e.g. \xB6 in comp/parser_run.t test 66).
             // Also reject control characters (0x00-0x1F, 0x7F) as identifier starts.
-            if (cp == 0xFFFD || cp < 32 || cp == 127 || (mustValidateStart && !valid)) {
+            // Reject control characters and other non-graphic bytes that Perl treats as invalid variable names.
+            // In particular, C1 controls (0x80-0x9F) must always be rejected.
+            if (cp == 0xFFFD
+                    || cp < 32
+                    || cp == 127
+                    || (cp >= 0x80 && cp <= 0x9F)
+                    || (mustValidateStart && !valid)) {
                 String hex;
                 // Special case: if we got the Unicode replacement character (0xFFFD),
                 // it likely means the original was an invalid UTF-8 byte sequence.
-                // For Perl compatibility, we should report common invalid bytes like \xB6
-                if (cp == 0xFFFD || cp == 0x00B6) {
-                    // This is likely \xB6 (182) which gets converted to replacement char
-                    // For now, assume it's \xB6 to match the test expectation
+                // For Perl compatibility, we should report a representative invalid byte.
+                if (cp == 0xFFFD) {
                     hex = "\\xB6";
                 } else {
                     if (cp <= 255) {
@@ -240,7 +253,8 @@ public class IdentifierParser {
                 int cp = id.codePointAt(0);
                 boolean valid = cp == '_' || UCharacter.hasBinaryProperty(cp, UProperty.XID_START);
 
-                boolean utf8Enabled = parser.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_UTF8);
+                boolean utf8Enabled = parser.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_UTF8)
+                        && !parser.ctx.compilerOptions.isEvalbytes;
                 boolean mustValidateStart = utf8Enabled || id.length() > 1;
 
                 if (mustValidateStart && !valid) {
