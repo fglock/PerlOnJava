@@ -1,5 +1,6 @@
 package org.perlonjava.codegen;
 
+import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
@@ -146,6 +147,14 @@ public class EmitEval {
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         // Stack: [RuntimeScalar(String)]
 
+        // Perl clears $@ at entry to eval/evalbytes, before compilation/execution.
+        mv.visitLdcInsn("main::@");
+        mv.visitLdcInsn("");
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/GlobalVariable",
+                "setGlobalVariable",
+                "(Ljava/lang/String;Ljava/lang/String;)V", false);
+
         if (node.operator.equals("evalbytes")) {
             // For evalbytes, verify the string contains valid bytes
             ctx.mv.visitInsn(Opcodes.DUP);
@@ -261,10 +270,204 @@ public class EmitEval {
         mv.visitMethodInsn(
                 Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/RuntimeCode",
-                "apply",
+                "applyEval",
                 "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeArray;I)Lorg/perlonjava/runtime/RuntimeList;",
                 false);
         // Stack: [RuntimeList]
+
+        // If eval returned a non-local control flow marker (next/last/redo),
+        // it must apply to the enclosing scope, matching Perl semantics.
+        // We translate it into a local jump to the appropriate loop/block label.
+        Label evalNoControlFlow = new Label();
+        Label evalNotNextLastRedo = new Label();
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/RuntimeList",
+                "isNonLocalGoto",
+                "()Z",
+                false);
+        mv.visitJumpInsn(Opcodes.IFEQ, evalNoControlFlow);
+
+        int cfSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeControlFlowList");
+        mv.visitVarInsn(Opcodes.ASTORE, cfSlot);
+
+        // Load label (may be null)
+        int labelSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        mv.visitVarInsn(Opcodes.ALOAD, cfSlot);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/RuntimeControlFlowList",
+                "getControlFlowLabel",
+                "()Ljava/lang/String;",
+                false);
+        mv.visitVarInsn(Opcodes.ASTORE, labelSlot);
+
+        // Load type ordinal
+        int typeSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        mv.visitVarInsn(Opcodes.ALOAD, cfSlot);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/RuntimeControlFlowList",
+                "getControlFlowType",
+                "()Lorg/perlonjava/runtime/ControlFlowType;",
+                false);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/ControlFlowType",
+                "ordinal",
+                "()I",
+                false);
+        mv.visitVarInsn(Opcodes.ISTORE, typeSlot);
+
+        // If this is not NEXT/LAST/REDO (ordinals 0..2), keep it as a normal value.
+        // (e.g. GOTO/TAILCALL are not handled here)
+        mv.visitVarInsn(Opcodes.ILOAD, typeSlot);
+        mv.visitInsn(Opcodes.ICONST_2);
+        mv.visitJumpInsn(Opcodes.IF_ICMPGT, evalNotNextLastRedo);
+
+        // 1) Labeled control flow: compare against each enclosing loop/block label
+        Label checkUnlabeled = new Label();
+        mv.visitVarInsn(Opcodes.ALOAD, labelSlot);
+        mv.visitJumpInsn(Opcodes.IFNULL, checkUnlabeled);
+
+        for (LoopLabels loopLabels : emitterVisitor.ctx.javaClassInfo.loopLabelStack) {
+            if (loopLabels != null && loopLabels.labelName != null) {
+                Label nextLabel = new Label();
+                mv.visitVarInsn(Opcodes.ALOAD, labelSlot);
+                mv.visitLdcInsn(loopLabels.labelName);
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "java/lang/String",
+                        "equals",
+                        "(Ljava/lang/Object;)Z",
+                        false);
+                mv.visitJumpInsn(Opcodes.IFEQ, nextLabel);
+
+                // Matched label: jump based on type (0=LAST,1=NEXT,2=REDO)
+                Label isLast = new Label();
+                Label isNext = new Label();
+                Label isRedo = new Label();
+                mv.visitVarInsn(Opcodes.ILOAD, typeSlot);
+                mv.visitInsn(Opcodes.ICONST_0);
+                mv.visitJumpInsn(Opcodes.IF_ICMPEQ, isLast);
+                mv.visitVarInsn(Opcodes.ILOAD, typeSlot);
+                mv.visitInsn(Opcodes.ICONST_1);
+                mv.visitJumpInsn(Opcodes.IF_ICMPEQ, isNext);
+                mv.visitVarInsn(Opcodes.ILOAD, typeSlot);
+                mv.visitInsn(Opcodes.ICONST_2);
+                mv.visitJumpInsn(Opcodes.IF_ICMPEQ, isRedo);
+
+                // Other types are not handled here
+                mv.visitJumpInsn(Opcodes.GOTO, nextLabel);
+
+                mv.visitLabel(isLast);
+                mv.visitJumpInsn(Opcodes.GOTO, loopLabels.lastLabel);
+
+                mv.visitLabel(isNext);
+                mv.visitJumpInsn(Opcodes.GOTO, loopLabels.nextLabel);
+
+                mv.visitLabel(isRedo);
+                mv.visitJumpInsn(Opcodes.GOTO, loopLabels.redoLabel);
+
+                mv.visitLabel(nextLabel);
+            }
+        }
+
+        // No labeled target matched: throw the marker's error
+        mv.visitLdcInsn("main::@");
+        mv.visitVarInsn(Opcodes.ALOAD, cfSlot);
+        mv.visitFieldInsn(Opcodes.GETFIELD,
+                "org/perlonjava/runtime/RuntimeControlFlowList",
+                "marker",
+                "Lorg/perlonjava/runtime/ControlFlowMarker;");
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/ControlFlowMarker",
+                "buildErrorMessage",
+                "()Ljava/lang/String;",
+                false);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/GlobalVariable",
+                "setGlobalVariable",
+                "(Ljava/lang/String;Ljava/lang/String;)V",
+                false);
+        // Return undef/empty list from eval on error
+        if (emitterVisitor.ctx.contextType == RuntimeContextType.LIST) {
+            mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "()V", false);
+        } else {
+            mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeScalar");
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeScalar", "<init>", "()V", false);
+            mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "(Lorg/perlonjava/runtime/RuntimeScalar;)V", false);
+        }
+        mv.visitJumpInsn(Opcodes.GOTO, evalNoControlFlow);
+
+        // 2) Unlabeled control flow: target the innermost true loop
+        mv.visitLabel(checkUnlabeled);
+        LoopLabels unlabeledTarget = emitterVisitor.ctx.javaClassInfo.findInnermostTrueLoopLabels();
+        if (unlabeledTarget != null) {
+            Label isLast = new Label();
+            Label isNext = new Label();
+            Label isRedo = new Label();
+            mv.visitVarInsn(Opcodes.ILOAD, typeSlot);
+            mv.visitInsn(Opcodes.ICONST_0);
+            mv.visitJumpInsn(Opcodes.IF_ICMPEQ, isLast);
+            mv.visitVarInsn(Opcodes.ILOAD, typeSlot);
+            mv.visitInsn(Opcodes.ICONST_1);
+            mv.visitJumpInsn(Opcodes.IF_ICMPEQ, isNext);
+            mv.visitVarInsn(Opcodes.ILOAD, typeSlot);
+            mv.visitInsn(Opcodes.ICONST_2);
+            mv.visitJumpInsn(Opcodes.IF_ICMPEQ, isRedo);
+            // Any other control flow type was filtered out earlier; fall through.
+            mv.visitJumpInsn(Opcodes.GOTO, evalNotNextLastRedo);
+
+            mv.visitLabel(isLast);
+            mv.visitJumpInsn(Opcodes.GOTO, unlabeledTarget.lastLabel);
+
+            mv.visitLabel(isNext);
+            mv.visitJumpInsn(Opcodes.GOTO, unlabeledTarget.nextLabel);
+
+            mv.visitLabel(isRedo);
+            mv.visitJumpInsn(Opcodes.GOTO, unlabeledTarget.redoLabel);
+        } else {
+            // next/last/redo outside any loop
+            mv.visitLdcInsn("main::@");
+            mv.visitVarInsn(Opcodes.ALOAD, cfSlot);
+            mv.visitFieldInsn(Opcodes.GETFIELD,
+                    "org/perlonjava/runtime/RuntimeControlFlowList",
+                    "marker",
+                    "Lorg/perlonjava/runtime/ControlFlowMarker;");
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/ControlFlowMarker",
+                    "buildErrorMessage",
+                    "()Ljava/lang/String;",
+                    false);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/GlobalVariable",
+                    "setGlobalVariable",
+                    "(Ljava/lang/String;Ljava/lang/String;)V",
+                    false);
+            // Return undef/empty list from eval on error
+            if (emitterVisitor.ctx.contextType == RuntimeContextType.LIST) {
+                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "()V", false);
+            } else {
+                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeScalar");
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeScalar", "<init>", "()V", false);
+                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "(Lorg/perlonjava/runtime/RuntimeScalar;)V", false);
+            }
+            mv.visitJumpInsn(Opcodes.GOTO, evalNoControlFlow);
+        }
+
+        // Fallthrough for non NEXT/LAST/REDO control flow markers: treat as normal value
+        mv.visitLabel(evalNotNextLastRedo);
+        mv.visitVarInsn(Opcodes.ALOAD, cfSlot);
+
+        mv.visitLabel(evalNoControlFlow);
 
         // Convert result based on calling context
         if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
