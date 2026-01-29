@@ -327,10 +327,12 @@ public class EmitVariable {
                 // ===== STRICT VARS LOGIC =====
                 // Determine if this variable should be allowed under 'use strict "vars"'
                 
-                // Special case: $a and $b in main:: package are exempt from strict
+                // Special case: $a and $b are exempt from strict
                 // (they're used by sort() without declaration)
                 String normalizedName = NameNormalizer.normalizeVariableName(name, emitterVisitor.ctx.symbolTable.getCurrentPackage());
-                boolean isSpecialSortVar = sigil.equals("$") && ("main::a".equals(normalizedName) || "main::b".equals(normalizedName));
+                boolean isSpecialSortVar = sigil.equals("$")
+                        && !name.contains("::")
+                        && (name.equals("a") || name.equals("b"));
 
                 boolean allowIfAlreadyExists = false;
                 if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_VARS)) {
@@ -340,6 +342,18 @@ public class EmitVariable {
                         allowIfAlreadyExists = GlobalVariable.existsGlobalArray(normalizedName);
                     } else if (sigil.equals("%") && !normalizedName.endsWith("::")) {
                         allowIfAlreadyExists = GlobalVariable.existsGlobalHash(normalizedName);
+                    }
+
+                    // Perl's strict 'vars' requires declaration for unqualified globals like $A
+                    // even if they were previously created under 'no strict'.
+                    // Keep this narrow to avoid changing behavior for other globals.
+                    if (sigil.equals("$")
+                            && name != null
+                            && name.length() == 1
+                            && Character.isLetter(name.charAt(0))
+                            && !name.contains("::")
+                            && !isSpecialSortVar) {
+                        allowIfAlreadyExists = false;
                     }
                 }
 
