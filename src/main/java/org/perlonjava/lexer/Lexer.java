@@ -174,7 +174,7 @@ public class Lexer {
         while (position < length
                 && input.charAt(position) != '\n'
                 && input.charAt(position) != '\r'
-                && (input.charAt(position) == ' ' || Character.isWhitespace(input.charAt(position)))) {
+                && (input.charAt(position) == ' ' || input.charAt(position) == '\t' || input.charAt(position) == '\f')) {
             position++;
         }
         return new LexerToken(LexerTokenType.WHITESPACE, input.substring(start, position));
