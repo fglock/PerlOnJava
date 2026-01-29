@@ -59,12 +59,18 @@ public class EmitBlock {
         Local.localTeardown(localRecord, mv);
 
         if (node.isLoop) {
+            // A labeled/bare block used as a loop target (e.g. SKIP: { ... }) is a
+            // pseudo-loop: it supports labeled next/last/redo (e.g. next SKIP), but
+            // an unlabeled next/last/redo must target the nearest enclosing true loop.
             emitterVisitor.ctx.javaClassInfo.pushLoopLabels(
                     node.labelName,
                     nextLabel,
                     redoLabel,
                     nextLabel,
-                    emitterVisitor.ctx.contextType);
+                    emitterVisitor.ctx.javaClassInfo.stackLevelManager.getStackLevel(),
+                    emitterVisitor.ctx.contextType,
+                    false,
+                    false);
         }
 
         // Special case: detect pattern of `local $_` followed by `For1Node` with needsArrayOfAlias

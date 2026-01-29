@@ -52,6 +52,18 @@ public class LoopLabels {
     public boolean isTrueLoop;
 
     /**
+     * Whether unlabeled next/last/redo should target this loop/block.
+     *
+     * Perl semantics:
+     * - Unlabeled next/last/redo target the nearest enclosing true loop.
+     * - Labeled next/last/redo can target labeled blocks (e.g. next SKIP in SKIP: { ... }).
+     *
+     * We keep block loops on the stack so labeled control flow can find them,
+     * but prevent them from being selected as the target for unlabeled control flow.
+     */
+    public boolean isUnlabeledControlFlowTarget;
+
+    /**
      * Creates a new LoopLabels instance with all necessary label information.
      *
      * @param labelName     The name of the loop label in source code
@@ -62,7 +74,7 @@ public class LoopLabels {
      * @param context       The context type for this loop
      */
     public LoopLabels(String labelName, Label nextLabel, Label redoLabel, Label lastLabel, int asmStackLevel, int context) {
-        this(labelName, nextLabel, redoLabel, lastLabel, asmStackLevel, context, true);
+        this(labelName, nextLabel, redoLabel, lastLabel, asmStackLevel, context, true, true);
     }
     
     /**
@@ -77,6 +89,10 @@ public class LoopLabels {
      * @param isTrueLoop    Whether this is a true loop (for/while/until) or pseudo-loop (do-while/bare)
      */
     public LoopLabels(String labelName, Label nextLabel, Label redoLabel, Label lastLabel, int asmStackLevel, int context, boolean isTrueLoop) {
+        this(labelName, nextLabel, redoLabel, lastLabel, asmStackLevel, context, isTrueLoop, true);
+    }
+
+    public LoopLabels(String labelName, Label nextLabel, Label redoLabel, Label lastLabel, int asmStackLevel, int context, boolean isTrueLoop, boolean isUnlabeledControlFlowTarget) {
         this.labelName = labelName;
         this.nextLabel = nextLabel;
         this.redoLabel = redoLabel;
@@ -84,6 +100,7 @@ public class LoopLabels {
         this.asmStackLevel = asmStackLevel;
         this.context = context;
         this.isTrueLoop = isTrueLoop;
+        this.isUnlabeledControlFlowTarget = isUnlabeledControlFlowTarget;
     }
 
     /**
