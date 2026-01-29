@@ -295,7 +295,7 @@ public class ParseInfix {
                     parser.tokenIndex--;
                     return left;
                 }
-                throw new PerlCompilerException(parser.tokenIndex, "Unexpected infix operator: " + token, parser.ctx.errorUtil);
+                throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);
         }
     }
 
