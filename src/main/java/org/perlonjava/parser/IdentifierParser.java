@@ -7,11 +7,23 @@ import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.perlmodule.Strict;
 import org.perlonjava.runtime.PerlCompilerException;
 
+import java.nio.charset.StandardCharsets;
+
 /**
  * The IdentifierParser class is responsible for parsing complex Perl identifiers
  * from a list of tokens, excluding the sigil (e.g., $, @, %).
  */
 public class IdentifierParser {
+
+    private static boolean isIdentifierTooLong(StringBuilder variableName, boolean isTypeglob) {
+        // perl5_t/t/comp/parser.t builds boundary cases using UTF-8 byte length.
+        // With 4-byte UTF-8 identifier characters, the boundary is 255 * 4 = 1020 bytes.
+        // Perl has a slightly different boundary for typeglob identifiers:
+        //   - $ / @ / % / & / $# contexts: 1020 bytes is already too long
+        //   - * (typeglob) context: 1020 bytes is allowed; only > 1020 is too long
+        int byteLen = variableName.toString().getBytes(StandardCharsets.UTF_8).length;
+        return isTypeglob ? byteLen > 1020 : byteLen >= 1020;
+    }
 
     /**
      * Parses a complex Perl identifier from the list of tokens, excluding the sigil.
@@ -21,6 +33,10 @@ public class IdentifierParser {
      * @return The parsed identifier as a String, or null if there is no valid identifier.
      */
     public static String parseComplexIdentifier(Parser parser) {
+        return parseComplexIdentifier(parser, false);
+    }
+
+    public static String parseComplexIdentifier(Parser parser, boolean isTypeglob) {
         // Save the current token index to allow backtracking if needed
         int saveIndex = parser.tokenIndex;
 
@@ -52,7 +68,7 @@ public class IdentifierParser {
         }
 
         // Parse the identifier using the inner method
-        String identifier = parseComplexIdentifierInner(parser, insideBraces);
+        String identifier = parseComplexIdentifierInner(parser, insideBraces, isTypeglob);
 
         // If an identifier was found, and it was inside braces, ensure the braces are properly closed
         if (identifier != null && insideBraces) {
@@ -109,18 +125,38 @@ public class IdentifierParser {
      * @return The parsed identifier as a String, or null if there is no valid identifier.
      */
     public static String parseComplexIdentifierInner(Parser parser, boolean insideBraces) {
+        return parseComplexIdentifierInner(parser, insideBraces, false);
+    }
+
+    public static String parseComplexIdentifierInner(Parser parser, boolean insideBraces, boolean isTypeglob) {
+        // Perl allows whitespace between the sigil and the variable name (e.g. "$ a" parses as "$a").
+        // But if whitespace is skipped and the next token is not a valid identifier start (e.g. "$\t = 4"),
+        // the variable name is missing and we should trigger a plain "syntax error".
+        int wsStart = parser.tokenIndex;
         // Skip horizontal whitespace to find the start of the identifier.
         // Do not skip NEWLINE here: "$\n" is not a valid variable name.
         while (parser.tokenIndex < parser.tokens.size()
                 && parser.tokens.get(parser.tokenIndex).type == LexerTokenType.WHITESPACE) {
             parser.tokenIndex++;
         }
+        boolean skippedWhitespace = parser.tokenIndex != wsStart;
 
         boolean isFirstToken = true;
         StringBuilder variableName = new StringBuilder();
 
         LexerToken token = parser.tokens.get(parser.tokenIndex);
         LexerToken nextToken = parser.tokens.get(parser.tokenIndex + 1);
+
+        if (skippedWhitespace) {
+            // Perl allows "$ a" (whitespace before an identifier). But if whitespace is followed by
+            // something that cannot start an identifier (e.g. "$\t = 4"), Perl reports a syntax error.
+            // Signal "missing variable name" to the caller by returning the empty string.
+            if (token.type != LexerTokenType.IDENTIFIER
+                    && token.type != LexerTokenType.NUMBER
+                    && token.type != LexerTokenType.STRING) {
+                return "";
+            }
+        }
 
         // Special case: Handle ellipsis inside braces - ${...} should be parsed as a block, not as ${.}
         if (insideBraces && token.type == LexerTokenType.OPERATOR && token.text.equals("...")) {
@@ -172,7 +208,8 @@ public class IdentifierParser {
 
             // Always reject the Unicode replacement character: it usually indicates an invalid byte sequence.
             // Perl reports these as unrecognized bytes (e.g. \xB6 in comp/parser_run.t test 66).
-            if (cp == 0xFFFD || (mustValidateStart && !valid)) {
+            // Also reject control characters (0x00-0x1F, 0x7F) as identifier starts.
+            if (cp == 0xFFFD || cp < 32 || cp == 127 || (mustValidateStart && !valid)) {
                 String hex;
                 // Special case: if we got the Unicode replacement character (0xFFFD),
                 // it likely means the original was an invalid UTF-8 byte sequence.
@@ -313,10 +350,23 @@ public class IdentifierParser {
                 }
                 if (!(token.type == LexerTokenType.NUMBER)) {
                     // Not ::, not ', and not a number, so this is the end
+                    // Validate STRING tokens to reject control characters
+                    if (token.type == LexerTokenType.STRING) {
+                        String id = token.text;
+                        if (!id.isEmpty()) {
+                            int cp = id.codePointAt(0);
+                            // Reject control characters (0x00-0x1F, 0x7F) and replacement char
+                            if (cp < 32 || cp == 127 || cp == 0xFFFD) {
+                                String hex = cp <= 255 ? String.format("\\x{%02X}", cp) : "\\x{" + Integer.toHexString(cp) + "}";
+                                throw new PerlCompilerException("Unrecognized character " + hex + ";");
+                            }
+                        }
+                    }
+                    
                     variableName.append(token.text);
 
                     // Check identifier length limit (Perl's limit is around 251 characters)
-                    if (variableName.length() > 251) {
+                    if (isIdentifierTooLong(variableName, isTypeglob)) {
                         parser.throwCleanError("Identifier too long");
                     }
 
@@ -328,7 +378,7 @@ public class IdentifierParser {
                 variableName.append(token.text);
 
                 // Check identifier length limit (Perl's limit is around 251 characters)
-                if (variableName.length() > 251) {
+                if (isIdentifierTooLong(variableName, isTypeglob)) {
                     parser.throwCleanError("Identifier too long");
                 }
 
@@ -368,7 +418,7 @@ public class IdentifierParser {
                 variableName.append(token.text);
 
                 // Check identifier length limit (Perl's limit is around 251 characters)
-                if (variableName.length() > 251) {
+                if (isIdentifierTooLong(variableName, isTypeglob)) {
                     parser.throwCleanError("Identifier too long");
                 }
 
@@ -518,21 +568,13 @@ public class IdentifierParser {
 
         // Check for non-ASCII characters in variable names under 'no utf8'
         if (!parser.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_UTF8)) {
-            // Under 'no utf8', check if this is a multi-character identifier with non-ASCII
-            boolean hasNonAscii = false;
-            for (int i = 0; i < varName.length(); i++) {
-                if (varName.charAt(i) > 127) {
-                    hasNonAscii = true;
-                    break;
-                }
-            }
-
-            if (hasNonAscii && varName.length() > 1) {
-                // Multi-character identifier with non-ASCII under 'no utf8' is an error
-                // Reset parser position and throw error
+            // Under 'no utf8', perl5 still accepts valid Unicode identifiers when the source is
+            // already Unicode (e.g. eval() of a UTF-8 string). What must be rejected are invalid
+            // sequences that decode to U+FFFD (replacement character).
+            if (varName.length() > 1 && varName.indexOf('\uFFFD') >= 0) {
                 parser.tokenIndex = startIndex;
-                parser.throwError("Unrecognized character \\x{" +
-                        Integer.toHexString(varName.charAt(varName.length() - 1)) + "}");
+                int lastCp = varName.codePointBefore(varName.length());
+                parser.throwError("Unrecognized character \\x{" + Integer.toHexString(lastCp) + "}");
             }
         }
     }

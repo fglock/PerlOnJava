@@ -137,7 +137,7 @@ public class Variable {
         // Store the current position before parsing the identifier
         int startIndex = parser.tokenIndex;
 
-        String varName = IdentifierParser.parseComplexIdentifier(parser);
+        String varName = IdentifierParser.parseComplexIdentifier(parser, sigil.equals("*"));
         parser.ctx.logDebug("Parsing variable: " + varName);
 
         if (varName != null) {
