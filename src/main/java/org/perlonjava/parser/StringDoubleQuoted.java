@@ -357,6 +357,9 @@ public class StringDoubleQuoted extends StringSegmentParser {
                     applyCaseModifier(caseModifiers.pop());
                 }
                 inQuotemeta = false;
+            } else if (token.text.startsWith("Q")) {
+                // In quotemeta mode, \Q is idempotent and should be ignored.
+                TokenUtils.consumeChar(parser);
             } else {
                 // Everything else is literal, including the backslash
                 currentSegment.append("\\");
