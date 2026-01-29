@@ -154,6 +154,10 @@ public class JavaClassInfo {
     public void pushLoopLabels(String labelName, Label nextLabel, Label redoLabel, Label lastLabel, int stackLevel, int context, boolean isTrueLoop, boolean isUnlabeledControlFlowTarget) {
         loopLabelStack.push(new LoopLabels(labelName, nextLabel, redoLabel, lastLabel, stackLevel, context, isTrueLoop, isUnlabeledControlFlowTarget));
     }
+
+    public void pushLoopLabels(String labelName, Label nextLabel, Label redoLabel, Label lastLabel, int stackLevel, int context, boolean isTrueLoop, boolean isUnlabeledControlFlowTarget, boolean isRealLoop) {
+        loopLabelStack.push(new LoopLabels(labelName, nextLabel, redoLabel, lastLabel, stackLevel, context, isTrueLoop, isUnlabeledControlFlowTarget, isRealLoop));
+    }
     
     /**
      * Pushes a LoopLabels object onto the loop label stack.
@@ -228,11 +232,20 @@ public class JavaClassInfo {
      * @return the innermost LoopLabels with isTrueLoop=true, or null if none
      */
     public LoopLabels findInnermostTrueLoopLabels() {
+        // Prefer a real loop (for/foreach/while/until) if one exists.
+        for (LoopLabels loopLabels : loopLabelStack) {
+            if (loopLabels != null && loopLabels.isUnlabeledControlFlowTarget && loopLabels.isRealLoop) {
+                return loopLabels;
+            }
+        }
+
+        // Fallback: allow a block to act as a loop target only when there's no real loop.
         for (LoopLabels loopLabels : loopLabelStack) {
             if (loopLabels != null && loopLabels.isUnlabeledControlFlowTarget) {
                 return loopLabels;
             }
         }
+
         return null;
     }
 

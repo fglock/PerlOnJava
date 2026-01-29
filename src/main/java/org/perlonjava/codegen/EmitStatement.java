@@ -159,6 +159,7 @@ public class EmitStatement {
                 // Unlabeled next/last/redo must be allowed for *bare* blocks (no label), but
                 // must *not* accidentally target pseudo-loops like `SKIP: { ... }`.
                 boolean isUnlabeledTarget = !node.isSimpleBlock || node.labelName == null;
+
                 emitterVisitor.ctx.javaClassInfo.pushLoopLabels(
                         node.labelName,
                         continueLabel,
@@ -167,7 +168,8 @@ public class EmitStatement {
                         emitterVisitor.ctx.javaClassInfo.stackLevelManager.getStackLevel(),
                         RuntimeContextType.VOID,
                         true,
-                        isUnlabeledTarget);
+                        isUnlabeledTarget,
+                        !node.isSimpleBlock);
 
                 // Visit the loop body
                 node.body.accept(voidVisitor);
