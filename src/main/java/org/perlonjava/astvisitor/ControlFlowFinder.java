@@ -41,8 +41,12 @@ public class ControlFlowFinder implements Visitor {
 
         if (root instanceof AbstractNode abstractNode) {
             Boolean cached = abstractNode.getCachedHasAnyControlFlow();
-            if (cached != null) {
-                foundControlFlow = cached;
+            // IMPORTANT: Only trust positive cache entries.
+            // A cached FALSE can become stale if the AST is rewritten (e.g. during large-block
+            // refactoring / macros) and would cause us to miss control flow, leading to unsafe
+            // extraction of chunks that contain next/last/redo/goto.
+            if (Boolean.TRUE.equals(cached)) {
+                foundControlFlow = true;
                 return;
             }
         }

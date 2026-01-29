@@ -132,13 +132,12 @@ public class EmitBlock {
 
         if (node.isLoop) {
             // A labeled/bare block used as a loop target (e.g. SKIP: { ... }) is a
-            // pseudo-loop: it supports labeled next/last/redo (e.g. next SKIP), but
-            // an unlabeled next/last/redo must target the nearest enclosing true loop.
+            // pseudo-loop: it supports *labeled* next/last/redo (e.g. next SKIP), but
+            // an *unlabeled* next/last/redo must target the nearest enclosing true loop.
             //
-            // However, a *bare* block with loop control (e.g. `{ ...; redo }` or
-            // `{ ... } continue { ... }`) is itself a valid target for *unlabeled*
-            // last/next/redo, matching Perl semantics.
-            boolean isBareBlock = node.labelName == null;
+            // Perl semantics: unlabeled next/last/redo prefer a real loop if one exists,
+            // but outside any real loop a bare block can act as the target.
+            boolean isUnlabeledTarget = node.labelName == null;
             emitterVisitor.ctx.javaClassInfo.pushLoopLabels(
                     node.labelName,
                     nextLabel,
@@ -146,8 +145,9 @@ public class EmitBlock {
                     nextLabel,
                     emitterVisitor.ctx.javaClassInfo.stackLevelManager.getStackLevel(),
                     emitterVisitor.ctx.contextType,
-                    isBareBlock,
-                    isBareBlock);
+                    true,
+                    isUnlabeledTarget,
+                    false);
         }
 
         // Special case: detect pattern of `local $_` followed by `For1Node` with needsArrayOfAlias

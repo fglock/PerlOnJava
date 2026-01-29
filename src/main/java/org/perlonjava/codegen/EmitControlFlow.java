@@ -70,6 +70,22 @@ public class EmitControlFlow {
         }
         
         if (loopLabels == null) {
+            if (ctx.compilerOptions != null && ctx.compilerOptions.debugEnabled) {
+                ctx.logDebug("visit(next): loopLabels == null; dumping loopLabelStack (top-first):");
+                int depth = 0;
+                for (LoopLabels ll : ctx.javaClassInfo.loopLabelStack) {
+                    ctx.logDebug(
+                            "  [" + (depth++) + "] label=" + ll.labelName +
+                                    " isTrueLoop=" + ll.isTrueLoop +
+                                    " isRealLoop=" + ll.isRealLoop +
+                                    " isUnlabeledTarget=" + ll.isUnlabeledControlFlowTarget +
+                                    " asmStackLevel=" + ll.asmStackLevel +
+                                    " context=" + ll.context);
+                }
+                if (depth == 0) {
+                    ctx.logDebug("  <empty>");
+                }
+            }
             // Non-local control flow: return tagged RuntimeControlFlowList
             ctx.logDebug("visit(next): Non-local control flow for " + operator + " " + labelStr);
             
