@@ -7,6 +7,10 @@ import org.perlonjava.symbols.ScopedSymbolTable;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Represents information about a Java class being generated.
@@ -14,6 +18,18 @@ import java.util.Deque;
  * and a stack of loop labels for managing nested loops.
  */
 public class JavaClassInfo {
+
+    public enum LocalSlotKind {
+        INT,
+        REF,
+        MIXED
+    }
+
+    private final Map<Integer, LocalSlotKind> localSlotKinds = new HashMap<>();
+    private final Set<Integer> mixedSlotWarned = new HashSet<>();
+
+    private static final boolean SLOT_KIND_SELFTEST = System.getenv("JPERL_SLOT_KIND_SELFTEST") != null;
+    private boolean slotKindSelftestTriggered = false;
 
     /**
      * The name of the Java class.
@@ -81,6 +97,98 @@ public class JavaClassInfo {
         this.spillTop = 0;
     }
 
+    public void registerLocalSlotKind(int slot, LocalSlotKind kind) {
+        LocalSlotKind existing = localSlotKinds.get(slot);
+        if (existing == null) {
+            localSlotKinds.put(slot, kind);
+            return;
+        }
+
+        if (existing == kind || existing == LocalSlotKind.MIXED) {
+            return;
+        }
+
+        // Tracking-only phase: don't fail compilation; record conflicts.
+        localSlotKinds.put(slot, LocalSlotKind.MIXED);
+        warnMixedSlot(slot, existing, kind);
+    }
+
+    private void warnMixedSlot(int slot, LocalSlotKind existing, LocalSlotKind kind) {
+        if (mixedSlotWarned.add(slot)) {
+            System.err.println("[jperl] WARNING: local slot kind became MIXED: slot=" + slot + " existing=" + existing + " new=" + kind + " class=" + javaClassName);
+        }
+    }
+
+    public MethodVisitor wrapWithLocalSlotTracking(MethodVisitor mv) {
+        if (SLOT_KIND_SELFTEST && !slotKindSelftestTriggered) {
+            slotKindSelftestTriggered = true;
+
+            // Force a predictable MIXED warning to prove warning emission is working.
+            // Slot 0 is always valid ("this"), so this doesn't depend on allocation patterns.
+            registerRefLocalSlot(0);
+            registerIntLocalSlot(0);
+        }
+        return new LocalSlotTrackingMethodVisitor(mv, this);
+    }
+
+    private static final class LocalSlotTrackingMethodVisitor extends MethodVisitor {
+        private final JavaClassInfo info;
+
+        private LocalSlotTrackingMethodVisitor(MethodVisitor delegate, JavaClassInfo info) {
+            super(Opcodes.ASM9, delegate);
+            this.info = info;
+        }
+
+        @Override
+        public void visitVarInsn(int opcode, int var) {
+            switch (opcode) {
+                case Opcodes.ILOAD, Opcodes.ISTORE, Opcodes.IINC -> info.registerIntLocalSlot(var);
+                case Opcodes.ALOAD, Opcodes.ASTORE -> info.registerRefLocalSlot(var);
+                default -> {
+                }
+            }
+            super.visitVarInsn(opcode, var);
+        }
+
+        @Override
+        public void visitIincInsn(int var, int increment) {
+            info.registerIntLocalSlot(var);
+            super.visitIincInsn(var, increment);
+        }
+    }
+
+    public void registerIntLocalSlot(int slot) {
+        registerLocalSlotKind(slot, LocalSlotKind.INT);
+    }
+
+    public void registerRefLocalSlot(int slot) {
+        registerLocalSlotKind(slot, LocalSlotKind.REF);
+    }
+
+    public int allocateIntLocal(ScopedSymbolTable symbolTable) {
+        int slot = symbolTable.allocateLocalVariable();
+        registerIntLocalSlot(slot);
+        return slot;
+    }
+
+    public int allocateRefLocal(ScopedSymbolTable symbolTable) {
+        int slot = symbolTable.allocateLocalVariable();
+        registerRefLocalSlot(slot);
+        return slot;
+    }
+
+    public LocalSlotKind getLocalSlotKind(int slot) {
+        return localSlotKinds.get(slot);
+    }
+
+    public boolean isIntLocalSlot(int slot) {
+        return localSlotKinds.get(slot) == LocalSlotKind.INT;
+    }
+
+    public boolean isRefLocalSlot(int slot) {
+        return localSlotKinds.get(slot) == LocalSlotKind.REF;
+    }
+
     public int acquireSpillSlot() {
         if (spillTop >= spillSlots.length) {
             return -1;
@@ -107,7 +215,7 @@ public class JavaClassInfo {
         if (slot >= 0) {
             return new SpillRef(slot, true);
         }
-        return new SpillRef(symbolTable.allocateLocalVariable(), false);
+        return new SpillRef(allocateRefLocal(symbolTable), false);
     }
 
     public void storeSpillRef(MethodVisitor mv, SpillRef ref) {

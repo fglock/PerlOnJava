@@ -486,7 +486,8 @@ public class EmitterMethodCreator implements Opcodes {
             ctx.logDebug("constructorDescriptor: " + constructorDescriptor);
             ctx.mv =
                     cw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", constructorDescriptor.toString(), null, null);
-            MethodVisitor mv = ctx.mv;
+            MethodVisitor mv = ctx.javaClassInfo.wrapWithLocalSlotTracking(ctx.mv);
+            ctx.mv = mv;
             mv.visitCode();
             mv.visitVarInsn(Opcodes.ALOAD, 0); // Load 'this'
             mv.visitMethodInsn(
@@ -520,7 +521,8 @@ public class EmitterMethodCreator implements Opcodes {
                             "(Lorg/perlonjava/runtime/RuntimeArray;I)Lorg/perlonjava/runtime/RuntimeList;",
                             null,
                             new String[]{"java/lang/Exception"});
-            mv = ctx.mv;
+            mv = ctx.javaClassInfo.wrapWithLocalSlotTracking(ctx.mv);
+            ctx.mv = mv;
 
             // Generate the subroutine block
             mv.visitCode();
@@ -533,6 +535,7 @@ public class EmitterMethodCreator implements Opcodes {
                 if (env[i] == null) {
                     mv.visitInsn(Opcodes.ACONST_NULL);
                     mv.visitVarInsn(Opcodes.ASTORE, i);
+                    ctx.javaClassInfo.registerRefLocalSlot(i);
                     continue;
                 }
                 String descriptor = getVariableDescriptor(env[i]);
@@ -540,6 +543,7 @@ public class EmitterMethodCreator implements Opcodes {
                 ctx.logDebug("Init closure variable: " + descriptor);
                 mv.visitFieldInsn(Opcodes.GETFIELD, ctx.javaClassInfo.javaClassName, env[i], descriptor);
                 mv.visitVarInsn(Opcodes.ASTORE, i);
+                ctx.javaClassInfo.registerRefLocalSlot(i);
             }
 
             // IMPORTANT (JVM verifier): captured/lexical variables may live in *sparse* local slots,
@@ -576,12 +580,13 @@ public class EmitterMethodCreator implements Opcodes {
             for (int i = preInitTempLocalsStart; i < preInitTempLocalsStart + preInitTempLocalsCount; i++) {
                 mv.visitInsn(Opcodes.ACONST_NULL);
                 mv.visitVarInsn(Opcodes.ASTORE, i);
+                ctx.javaClassInfo.registerRefLocalSlot(i);
             }
 
             // Allocate slots for tail call trampoline (codeRef and args)
             // These are used at returnLabel for TAILCALL handling
-            int tailCallCodeRefSlot = ctx.symbolTable.allocateLocalVariable();
-            int tailCallArgsSlot = ctx.symbolTable.allocateLocalVariable();
+            int tailCallCodeRefSlot = ctx.javaClassInfo.allocateRefLocal(ctx.symbolTable);
+            int tailCallArgsSlot = ctx.javaClassInfo.allocateRefLocal(ctx.symbolTable);
             ctx.javaClassInfo.tailCallCodeRefSlot = tailCallCodeRefSlot;
             ctx.javaClassInfo.tailCallArgsSlot = tailCallArgsSlot;
             mv.visitInsn(Opcodes.ACONST_NULL);
@@ -591,12 +596,12 @@ public class EmitterMethodCreator implements Opcodes {
             
             // Allocate slot for control flow check temp storage
             // This is used at call sites to temporarily store marked RuntimeControlFlowList
-            int controlFlowTempSlot = ctx.symbolTable.allocateLocalVariable();
+            int controlFlowTempSlot = ctx.javaClassInfo.allocateRefLocal(ctx.symbolTable);
             ctx.javaClassInfo.controlFlowTempSlot = controlFlowTempSlot;
             mv.visitInsn(Opcodes.ACONST_NULL);
             mv.visitVarInsn(Opcodes.ASTORE, controlFlowTempSlot);
 
-            int controlFlowActionSlot = ctx.symbolTable.allocateLocalVariable();
+            int controlFlowActionSlot = ctx.javaClassInfo.allocateIntLocal(ctx.symbolTable);
             ctx.javaClassInfo.controlFlowActionSlot = controlFlowActionSlot;
             mv.visitInsn(Opcodes.ICONST_0);
             mv.visitVarInsn(Opcodes.ISTORE, controlFlowActionSlot);
@@ -607,7 +612,7 @@ public class EmitterMethodCreator implements Opcodes {
             ctx.javaClassInfo.spillSlots = new int[spillSlotCount];
             ctx.javaClassInfo.spillTop = 0;
             for (int i = 0; i < spillSlotCount; i++) {
-                int slot = ctx.symbolTable.allocateLocalVariable();
+                int slot = ctx.javaClassInfo.allocateRefLocal(ctx.symbolTable);
                 ctx.javaClassInfo.spillSlots[i] = slot;
                 mv.visitInsn(Opcodes.ACONST_NULL);
                 mv.visitVarInsn(Opcodes.ASTORE, slot);
