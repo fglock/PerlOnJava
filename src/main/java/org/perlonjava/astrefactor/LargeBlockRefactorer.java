@@ -29,6 +29,8 @@ public class LargeBlockRefactorer {
     // Thread-local flag to prevent recursion when creating chunk blocks
     private static final ThreadLocal<Boolean> skipRefactoring = ThreadLocal.withInitial(() -> false);
 
+    private static final ThreadLocal<Boolean> forceRefactoringForCodegen = ThreadLocal.withInitial(() -> false);
+
     private static final ThreadLocal<ControlFlowFinder> controlFlowFinderTl = ThreadLocal.withInitial(ControlFlowFinder::new);
 
     private static final int FORCE_REFACTOR_ELEMENT_COUNT = 50000;
@@ -84,7 +86,7 @@ public class LargeBlockRefactorer {
     private static final ThreadLocal<Boolean> processingPendingRefactors = ThreadLocal.withInitial(() -> false);
 
     public static void enqueueForRefactor(BlockNode node) {
-        if (!IS_REFACTORING_ENABLED || node == null) {
+        if ((!IS_REFACTORING_ENABLED && !forceRefactoringForCodegen.get()) || node == null) {
             return;
         }
         if (node.getBooleanAnnotation("queuedForRefactor")) {
@@ -124,10 +126,37 @@ public class LargeBlockRefactorer {
 
         // The estimator can under-estimate; if we reached codegen overflow, we must allow another pass.
         node.setAnnotation("blockAlreadyRefactored", false);
+        node.setAnnotation("forceRefactorForCodegen", true);
 
         // More aggressive than parse-time: allow deeper nesting to ensure we get under the JVM limit.
         trySmartChunking(node, null, 256);
         processPendingRefactors();
+    }
+
+    public static void forceRefactorForCodegenEvenIfDisabled(BlockNode node) {
+        if (node == null) {
+            return;
+        }
+
+        Object attemptsObj = node.getAnnotation("refactorAttempts");
+        int attempts = attemptsObj instanceof Integer ? (Integer) attemptsObj : 0;
+        if (attempts >= MAX_REFACTOR_ATTEMPTS) {
+            return;
+        }
+        node.setAnnotation("refactorAttempts", attempts + 1);
+
+        // The estimator can under-estimate; if we reached codegen overflow, we must allow another pass.
+        node.setAnnotation("blockAlreadyRefactored", false);
+        node.setAnnotation("forceRefactorForCodegen", true);
+
+        forceRefactoringForCodegen.set(true);
+        try {
+            trySmartChunking(node, null, 256);
+            processPendingRefactors();
+        } finally {
+            forceRefactoringForCodegen.set(false);
+            node.setAnnotation("forceRefactorForCodegen", false);
+        }
     }
 
     /**
@@ -299,7 +328,8 @@ public class LargeBlockRefactorer {
             node.setAnnotation("estimatedBytecodeSizeWithSafetyMargin", estimatedSizeWithSafetyMargin);
         }
         boolean forceRefactorByElementCount = node.elements.size() >= FORCE_REFACTOR_ELEMENT_COUNT;
-        if (!forceRefactorByElementCount && estimatedSizeWithSafetyMargin <= LARGE_BYTECODE_SIZE) {
+        boolean forceRefactorForCodegen = node.getBooleanAnnotation("forceRefactorForCodegen");
+        if (!forceRefactorForCodegen && !forceRefactorByElementCount && estimatedSizeWithSafetyMargin <= LARGE_BYTECODE_SIZE) {
             if (parser != null || node.annotations != null) {
                 node.setAnnotation("refactorSkipReason", "Bytecode size " + estimatedSize + " <= threshold " + LARGE_BYTECODE_SIZE);
             }
@@ -350,7 +380,8 @@ public class LargeBlockRefactorer {
         // can still place the control-flow node inside a generated closure.
         //
         // Be conservative: if the block contains ANY control flow, do not chunk it.
-        if (hasAnyControlFlowInBlock) {
+        boolean forceRefactorForCodegenForControlFlow = node.getBooleanAnnotation("forceRefactorForCodegen");
+        if (hasAnyControlFlowInBlock && !forceRefactorForCodegenForControlFlow) {
             if (parser != null || node.annotations != null) {
                 node.setAnnotation("refactorSkipReason", "Smart chunking skipped: block contains control flow");
             }

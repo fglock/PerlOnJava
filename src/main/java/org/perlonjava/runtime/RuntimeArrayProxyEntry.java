@@ -64,7 +64,15 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
      */
     @Override
     public void dynamicSaveState() {
-        dynamicStateStackInt.push(parent.elements.size());
+        // For local() on array elements (e.g. local $v->[3]), we want to restore the
+        // parent array back to its prior *logical* size.
+        // Some code paths may have already expanded the underlying list with trailing
+        // null placeholders. These should not be treated as real elements.
+        int effectiveSize = parent.elements.size();
+        while (effectiveSize > 0 && parent.elements.get(effectiveSize - 1) == null) {
+            effectiveSize--;
+        }
+        dynamicStateStackInt.push(effectiveSize);
         // Create a new RuntimeScalar to save the current state
         if (this.lvalue == null) {
             dynamicStateStack.push(null);

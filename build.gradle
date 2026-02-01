@@ -68,6 +68,8 @@ dependencies {
     // Core dependencies
     implementation libs.asm                           // ByteCode manipulation
     implementation libs.asm.util                      // ASM utilities
+    implementation libs.asm.tree                      // ASM tree API (MethodNode) for postprocessing
+    implementation libs.asm.analysis                   // ASM analysis API (Analyzer/Frame) for verifier debug
     implementation libs.icu4j                         // Unicode support
     implementation libs.fastjson2                     // JSON processing
     implementation libs.snakeyaml.engine              // YAML processing

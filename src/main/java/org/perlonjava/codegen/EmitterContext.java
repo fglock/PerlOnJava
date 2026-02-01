@@ -81,6 +81,8 @@ public class EmitterContext {
      */
     public boolean isEvalbytes;
 
+    public TempSlotPlan tempSlotPlan;
+
     /**
      * Constructs a new EmitterContext with the specified parameters.
      *
@@ -113,6 +115,7 @@ public class EmitterContext {
         this.errorUtil = errorUtil;
         this.compilerOptions = compilerOptions;
         this.unitcheckBlocks = unitcheckBlocks;
+        this.tempSlotPlan = new TempSlotPlan();
     }
 
     static void fixupContext(EmitterContext ctx) {
@@ -151,6 +154,7 @@ public class EmitterContext {
                 this.javaClassInfo, this.symbolTable,
                 this.mv, this.cw, contextType, this.isBoxed, this.errorUtil, this.compilerOptions,
                 this.unitcheckBlocks);
+        newContext.tempSlotPlan = this.tempSlotPlan;
         contextCache.put(contextType, newContext);
         return newContext;
     }

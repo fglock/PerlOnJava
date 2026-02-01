@@ -128,7 +128,7 @@ public class EmitBlock {
         mv.visitLabel(redoLabel);
 
         // Restore 'local' environment if 'redo' was called
-        Local.localTeardown(localRecord, mv);
+        Local.localRestore(localRecord, mv);
 
         if (node.isLoop) {
             // A labeled/bare block used as a loop target (e.g. SKIP: { ... }) is a
@@ -188,6 +188,13 @@ public class EmitBlock {
                 // General case for all other elements
                 emitterVisitor.ctx.logDebug("Element: " + element);
                 element.accept(voidVisitor);
+
+                if (node.isLoop) {
+                    LoopLabels loopLabels = emitterVisitor.ctx.javaClassInfo.getInnermostLoopLabels();
+                    if (loopLabels != null) {
+                        emitRegistryCheck(mv, loopLabels, redoLabel, nextLabel, nextLabel);
+                    }
+                }
             }
             
             // NOTE: Registry checks are DISABLED in EmitBlock because:
@@ -213,7 +220,7 @@ public class EmitBlock {
         // Add 'next', 'last' label
         mv.visitLabel(nextLabel);
 
-        Local.localTeardown(localRecord, mv);
+        Local.localTeardown(localRecord, emitterVisitor.ctx, mv);
 
         emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
         emitterVisitor.ctx.logDebug("generateCodeBlock end");

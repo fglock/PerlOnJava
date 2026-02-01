@@ -310,10 +310,25 @@ public class EmitForeach {
 
         emitterVisitor.ctx.logDebug("FOR1 loopLabelStack depth after push=" + emitterVisitor.ctx.javaClassInfo.loopLabelStack.size());
 
-        node.body.accept(emitterVisitor.with(RuntimeContextType.VOID));
-        
-        // Check RuntimeControlFlowRegistry for non-local control flow
-        emitRegistryCheck(mv, currentLoopLabels, redoLabel, continueLabel, loopEnd);
+        // Visit the loop body.
+        // Non-local control flow can be registered at runtime (e.g. `eval q{ next; }`).
+        // To correctly skip the remainder of the iteration, we must check the registry
+        // between statements when the body is a block.
+        if (node.body instanceof org.perlonjava.astnode.BlockNode bodyBlock) {
+            EmitterVisitor voidVisitor = emitterVisitor.with(RuntimeContextType.VOID);
+            for (org.perlonjava.astnode.Node stmt : bodyBlock.elements) {
+                if (stmt == null) {
+                    continue;
+                }
+                stmt.accept(voidVisitor);
+                emitRegistryCheck(mv, currentLoopLabels, redoLabel, continueLabel, loopEnd);
+            }
+        } else {
+            node.body.accept(emitterVisitor.with(RuntimeContextType.VOID));
+
+            // Check RuntimeControlFlowRegistry for non-local control flow
+            emitRegistryCheck(mv, currentLoopLabels, redoLabel, continueLabel, loopEnd);
+        }
 
         LoopLabels poppedLabels = emitterVisitor.ctx.javaClassInfo.popLoopLabels();
 
@@ -364,7 +379,7 @@ public class EmitForeach {
                     false);
         }
         
-        Local.localTeardown(localRecord, mv);
+        Local.localTeardown(localRecord, emitterVisitor.ctx, mv);
 
         emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
 
@@ -677,16 +692,19 @@ public class EmitForeach {
                 "(Ljava/lang/String;)I",
                 false);
         
-        // Use TABLESWITCH for clean bytecode
+        // Use TABLESWITCH for clean bytecode.
+        // IMPORTANT: action=0 means "no pending control flow" and must fall through.
+        Label noActionLabel = new Label();
         mv.visitTableSwitchInsn(
                 1,  // min (LAST)
                 3,  // max (REDO)
-                nextLabel,  // default (0=none or out of range)
+                noActionLabel,  // default (0=none or out of range)
                 lastLabel,  // 1: LAST
                 nextLabel,  // 2: NEXT  
                 redoLabel   // 3: REDO
         );
-        
-        // No label needed - all paths are handled by switch
+
+        // Fallthrough when there's no marker.
+        mv.visitLabel(noActionLabel);
     }
 }
