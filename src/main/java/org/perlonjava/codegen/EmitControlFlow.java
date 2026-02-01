@@ -11,6 +11,7 @@ import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.runtime.ControlFlowType;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
+import org.perlonjava.runtime.RuntimeControlFlowRegistry;
 
 /**
  * Handles the emission of control flow bytecode instructions for Perl-like language constructs.
@@ -86,38 +87,48 @@ public class EmitControlFlow {
                     ctx.logDebug("  <empty>");
                 }
             }
-            // Non-local control flow: return tagged RuntimeControlFlowList
-            ctx.logDebug("visit(next): Non-local control flow for " + operator + " " + labelStr);
-            
-            // Determine control flow type
+            // Non-local control flow across subroutine boundaries:
+            // Register marker in RuntimeControlFlowRegistry and return normally.
+            ctx.logDebug("visit(next): Non-local control flow (registry) for " + operator + " " + labelStr);
+
             ControlFlowType type = operator.equals("next") ? ControlFlowType.NEXT
                     : operator.equals("last") ? ControlFlowType.LAST
                     : ControlFlowType.REDO;
-            
-            // Create RuntimeControlFlowList: new RuntimeControlFlowList(type, label, fileName, lineNumber)
-            ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeControlFlowList");
+
+            // RuntimeControlFlowRegistry.register(new ControlFlowMarker(type, label, fileName, lineNumber))
+            ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/ControlFlowMarker");
             ctx.mv.visitInsn(Opcodes.DUP);
-            ctx.mv.visitFieldInsn(Opcodes.GETSTATIC, 
-                    "org/perlonjava/runtime/ControlFlowType", 
-                    type.name(), 
+            ctx.mv.visitFieldInsn(Opcodes.GETSTATIC,
+                    "org/perlonjava/runtime/ControlFlowType",
+                    type.name(),
                     "Lorg/perlonjava/runtime/ControlFlowType;");
             if (labelStr != null) {
                 ctx.mv.visitLdcInsn(labelStr);
             } else {
                 ctx.mv.visitInsn(Opcodes.ACONST_NULL);
             }
-            // Push fileName (from CompilerOptions)
             ctx.mv.visitLdcInsn(ctx.compilerOptions.fileName != null ? ctx.compilerOptions.fileName : "(eval)");
-            // Push lineNumber (from errorUtil if available)
             int lineNumber = ctx.errorUtil != null ? ctx.errorUtil.getLineNumber(node.tokenIndex) : 0;
             ctx.mv.visitLdcInsn(lineNumber);
             ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
-                    "org/perlonjava/runtime/RuntimeControlFlowList",
+                    "org/perlonjava/runtime/ControlFlowMarker",
                     "<init>",
                     "(Lorg/perlonjava/runtime/ControlFlowType;Ljava/lang/String;Ljava/lang/String;I)V",
                     false);
-            
-            // Return the tagged list (will be detected at subroutine return boundary)
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/RuntimeControlFlowRegistry",
+                    "register",
+                    "(Lorg/perlonjava/runtime/ControlFlowMarker;)V",
+                    false);
+
+            // Return an empty RuntimeList (control flow will be picked up by caller registry checks).
+            ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
+            ctx.mv.visitInsn(Opcodes.DUP);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                    "org/perlonjava/runtime/RuntimeList",
+                    "<init>",
+                    "()V",
+                    false);
             ctx.mv.visitInsn(Opcodes.ARETURN);
             return;
         }

@@ -1,22 +1,34 @@
 package org.perlonjava.codegen;
 
-import org.objectweb.asm.*;
+import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.ClassVisitor;
+import org.objectweb.asm.ClassWriter;
+import org.objectweb.asm.Label;
+import org.objectweb.asm.MethodTooLargeException;
+import org.objectweb.asm.MethodVisitor;
+import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.tree.AbstractInsnNode;
 import org.objectweb.asm.tree.ClassNode;
+import org.objectweb.asm.tree.IincInsnNode;
+import org.objectweb.asm.tree.InsnList;
+import org.objectweb.asm.tree.InsnNode;
+import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.MethodNode;
+import org.objectweb.asm.tree.TryCatchBlockNode;
+import org.objectweb.asm.tree.TypeInsnNode;
+import org.objectweb.asm.tree.VarInsnNode;
 import org.objectweb.asm.tree.analysis.Analyzer;
 import org.objectweb.asm.tree.analysis.AnalyzerException;
-import org.objectweb.asm.tree.analysis.BasicValue;
 import org.objectweb.asm.tree.analysis.BasicInterpreter;
-import org.objectweb.asm.tree.analysis.SourceInterpreter;
-import org.objectweb.asm.tree.analysis.SourceValue;
+import org.objectweb.asm.tree.analysis.BasicValue;
 import org.objectweb.asm.util.CheckClassAdapter;
 import org.objectweb.asm.util.Printer;
+import org.objectweb.asm.util.Textifier;
 import org.objectweb.asm.util.TraceClassVisitor;
 import org.perlonjava.astnode.*;
 import org.perlonjava.astvisitor.EmitterVisitor;
+import org.perlonjava.codegen.TempSlotPlan;
 import org.perlonjava.astrefactor.LargeBlockRefactorer;
-import org.perlonjava.parser.Parser;
 import org.perlonjava.runtime.GlobalVariable;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
@@ -174,16 +186,6 @@ public class EmitterMethodCreator implements Opcodes {
 
                                     org.objectweb.asm.tree.analysis.Frame<BasicValue>[] frames = analyzer.getFrames();
 
-                                    org.objectweb.asm.tree.analysis.Frame<SourceValue>[] sourceFrames = null;
-                                    try {
-                                        Analyzer<SourceValue> sourceAnalyzer = new Analyzer<>(new SourceInterpreter());
-                                        try {
-                                            sourceAnalyzer.analyze(cn.name, mn);
-                                        } catch (AnalyzerException ignored) {
-                                        }
-                                        sourceFrames = sourceAnalyzer.getFrames();
-                                    } catch (Throwable ignored) {
-                                    }
                                     java.util.ArrayList<Integer> framePoints = new java.util.ArrayList<>();
                                     framePoints.add(insnIndex);
                                     framePoints.add(target);
@@ -204,53 +206,6 @@ public class EmitterMethodCreator implements Opcodes {
                                             out.println("    stack[" + s + "]=" + f.getStack(s));
                                         }
 
-                                        if (sourceFrames != null && idx >= 0 && idx < sourceFrames.length) {
-                                            org.objectweb.asm.tree.analysis.Frame<SourceValue> sf = sourceFrames[idx];
-                                            if (sf != null) {
-                                                out.println("    --- stack sources at [" + idx + "] ---");
-                                                java.util.LinkedHashSet<Integer> sourceInsnsToPrint = new java.util.LinkedHashSet<>();
-                                                for (int s = 0; s < sf.getStackSize(); s++) {
-                                                    SourceValue sv = sf.getStack(s);
-                                                    if (sv == null || sv.insns == null) {
-                                                        continue;
-                                                    }
-                                                    java.util.ArrayList<Integer> srcIdxs = new java.util.ArrayList<>();
-                                                    for (org.objectweb.asm.tree.AbstractInsnNode src : sv.insns) {
-                                                        int si = mn.instructions.indexOf(src);
-                                                        if (si >= 0) {
-                                                            srcIdxs.add(si);
-                                                            sourceInsnsToPrint.add(si);
-                                                        }
-                                                    }
-                                                    if (!srcIdxs.isEmpty()) {
-                                                        out.println("      stack[" + s + "] sources=" + srcIdxs);
-                                                    }
-                                                }
-
-                                                int printed = 0;
-                                                for (Integer srcIdx : sourceInsnsToPrint) {
-                                                    if (srcIdx == null) {
-                                                        continue;
-                                                    }
-                                                    if (printed++ >= 12) {
-                                                        out.println("      (additional source windows omitted)");
-                                                        break;
-                                                    }
-                                                    out.println("    --- source instruction window: [" + srcIdx + "] ---");
-                                                    int sFrom = Math.max(0, srcIdx - 20);
-                                                    int sTo = Math.min(mn.instructions.size() - 1, srcIdx + 20);
-                                                    for (int i = sFrom; i <= sTo; i++) {
-                                                        org.objectweb.asm.tree.AbstractInsnNode n = mn.instructions.get(i);
-                                                        if (n instanceof org.objectweb.asm.tree.JumpInsnNode pj) {
-                                                            int sTarget = mn.instructions.indexOf(pj.label);
-                                                            out.println("    [" + i + "] " + insnToString(n) + " -> [" + sTarget + "]");
-                                                        } else {
-                                                            out.println("    [" + i + "] " + insnToString(n));
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
                                     }
                                 } catch (Throwable t) {
                                     out.println("  <frame dump failed: " + t + ">");
@@ -352,27 +307,30 @@ public class EmitterMethodCreator implements Opcodes {
             return getBytecodeInternal(ctx, ast, useTryCatch, false);
         } catch (MethodTooLargeException tooLarge) {
             // Best-effort: try a more aggressive large-block refactor pass, then retry once.
-            // This is only enabled when refactoring is explicitly requested.
-            String largecode = System.getenv("JPERL_LARGECODE");
-            boolean refactorEnabled = largecode != null && largecode.equalsIgnoreCase("refactor");
-            if (refactorEnabled && ast instanceof BlockNode blockAst) {
-                try {
-                    LargeBlockRefactorer.forceRefactorForCodegen(blockAst);
+            // This is safe for small code (it won't run) and unblocks very large Perl5 tests.
+            if (ast instanceof BlockNode blockAst) {
+                MethodTooLargeException last = tooLarge;
+                for (int attempt = 0; attempt < 3; attempt++) {
+                    try {
+                        LargeBlockRefactorer.forceRefactorForCodegenEvenIfDisabled(blockAst);
 
-                    // Reset JavaClassInfo to avoid reusing partially-resolved Labels.
-                    if (ctx != null && ctx.javaClassInfo != null) {
-                        String previousName = ctx.javaClassInfo.javaClassName;
-                        ctx.javaClassInfo = new JavaClassInfo();
-                        ctx.javaClassInfo.javaClassName = previousName;
-                        ctx.clearContextCache();
+                        // Reset JavaClassInfo to avoid reusing partially-resolved Labels.
+                        if (ctx != null && ctx.javaClassInfo != null) {
+                            String previousName = ctx.javaClassInfo.javaClassName;
+                            ctx.javaClassInfo = new JavaClassInfo();
+                            ctx.javaClassInfo.javaClassName = previousName;
+                            ctx.clearContextCache();
+                        }
+
+                        return getBytecodeInternal(ctx, ast, useTryCatch, false);
+                    } catch (MethodTooLargeException retryTooLarge) {
+                        last = retryTooLarge;
+                    } catch (Throwable ignored) {
+                        // Fall through to the original exception.
+                        break;
                     }
-
-                    return getBytecodeInternal(ctx, ast, useTryCatch, false);
-                } catch (MethodTooLargeException retryTooLarge) {
-                    throw retryTooLarge;
-                } catch (Throwable ignored) {
-                    // Fall through to the original exception.
                 }
+                throw last;
             }
             throw tooLarge;
         } catch (ArrayIndexOutOfBoundsException frameComputeCrash) {
@@ -475,6 +433,21 @@ public class EmitterMethodCreator implements Opcodes {
             // Add instance field for __SUB__ code reference
             cw.visitField(Opcodes.ACC_PUBLIC, "__SUB__", "Lorg/perlonjava/runtime/RuntimeScalar;", null, null).visitEnd();
 
+            // Add a simple no-arg constructor so reflection-based instantiation works
+            MethodVisitor noArgCtor = cw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null);
+            noArgCtor = ctx.javaClassInfo.wrapWithLocalSlotTracking(noArgCtor, Opcodes.ACC_PUBLIC, "()V");
+            noArgCtor.visitCode();
+            noArgCtor.visitVarInsn(Opcodes.ALOAD, 0);
+            noArgCtor.visitMethodInsn(
+                    Opcodes.INVOKESPECIAL,
+                    "java/lang/Object",
+                    "<init>",
+                    "()V",
+                    false);
+            noArgCtor.visitInsn(Opcodes.RETURN);
+            noArgCtor.visitMaxs(0, 0);
+            noArgCtor.visitEnd();
+
             // Add a constructor with parameters for initializing the fields
             // Include ALL env slots (even nulls) so signature matches caller expectations
             StringBuilder constructorDescriptor = new StringBuilder("(");
@@ -484,43 +457,54 @@ public class EmitterMethodCreator implements Opcodes {
             }
             constructorDescriptor.append(")V");
             ctx.logDebug("constructorDescriptor: " + constructorDescriptor);
-            ctx.mv =
-                    cw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", constructorDescriptor.toString(), null, null);
-            MethodVisitor mv = ctx.mv;
-            mv.visitCode();
-            mv.visitVarInsn(Opcodes.ALOAD, 0); // Load 'this'
-            mv.visitMethodInsn(
-                    Opcodes.INVOKESPECIAL,
-                    "java/lang/Object",
-                    "<init>",
-                    "()V",
-                    false); // Call the superclass constructor
-            for (int i = skipVariables; i < env.length; i++) {
-                // Skip null entries (gaps in sparse symbol table)
-                if (env[i] == null || env[i].isEmpty()) {
-                    continue;
-                }
-                String descriptor = getVariableDescriptor(env[i]);
-
+            if (!"()V".contentEquals(constructorDescriptor)) {
+                ctx.mv =
+                        cw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", constructorDescriptor.toString(), null, null);
+                MethodVisitor mv = ctx.javaClassInfo.wrapWithLocalSlotTracking(ctx.mv, Opcodes.ACC_PUBLIC, constructorDescriptor.toString());
+                ctx.mv = mv;
+                mv.visitCode();
                 mv.visitVarInsn(Opcodes.ALOAD, 0); // Load 'this'
-                mv.visitVarInsn(Opcodes.ALOAD, i - 2); // Load the constructor argument
-                mv.visitFieldInsn(
-                        Opcodes.PUTFIELD, ctx.javaClassInfo.javaClassName, env[i], descriptor); // Set the instance field
+                mv.visitMethodInsn(
+                        Opcodes.INVOKESPECIAL,
+                        "java/lang/Object",
+                        "<init>",
+                        "()V",
+                        false); // Call the superclass constructor
+                for (int i = skipVariables; i < env.length; i++) {
+                    // Skip null entries (gaps in sparse symbol table)
+                    if (env[i] == null || env[i].isEmpty()) {
+                        continue;
+                    }
+                    String descriptor = getVariableDescriptor(env[i]);
+
+                    mv.visitVarInsn(Opcodes.ALOAD, 0); // Load 'this'
+                    mv.visitVarInsn(Opcodes.ALOAD, i - 2); // Load the constructor argument
+                    mv.visitFieldInsn(
+                            Opcodes.PUTFIELD, ctx.javaClassInfo.javaClassName, env[i], descriptor); // Set the instance field
+                }
+                mv.visitInsn(Opcodes.RETURN); // Return void
+                mv.visitMaxs(0, 0); // Automatically computed
+                mv.visitEnd();
             }
-            mv.visitInsn(Opcodes.RETURN); // Return void
-            mv.visitMaxs(0, 0); // Automatically computed
-            mv.visitEnd();
 
             // Create the public "apply" method for the generated class
             ctx.logDebug("Create the method");
-            ctx.mv =
-                    cw.visitMethod(
+            // Emit apply into a MethodNode so we can insert local initializers at the top
+            // based on the observed slot-kind hashmap (no random ranges, no ceilings).
+            ctx.javaClassInfo.clearLocalSlotKinds();
+            MethodNode applyMethod =
+                    new MethodNode(
+                            Opcodes.ASM9,
                             Opcodes.ACC_PUBLIC,
                             "apply",
                             "(Lorg/perlonjava/runtime/RuntimeArray;I)Lorg/perlonjava/runtime/RuntimeList;",
                             null,
                             new String[]{"java/lang/Exception"});
-            mv = ctx.mv;
+            MethodVisitor mv = ctx.javaClassInfo.wrapWithLocalSlotTracking(
+                    applyMethod,
+                    Opcodes.ACC_PUBLIC,
+                    "(Lorg/perlonjava/runtime/RuntimeArray;I)Lorg/perlonjava/runtime/RuntimeList;");
+            ctx.mv = mv;
 
             // Generate the subroutine block
             mv.visitCode();
@@ -561,21 +545,26 @@ public class EmitterMethodCreator implements Opcodes {
             // instance across many eval invocations. If we don't reset the counter for each
             // generated method, the local slot numbers will grow without bound (eventually
             // producing invalid stack map frames / VerifyError).
-            ctx.symbolTable.resetLocalVariableIndex(env.length);
+            // Never allow temporaries to start in the reserved parameter slots.
+            // Slot 0 = this, slot 1 = @_, slot 2 = wantarray/context.
+            int startIndex = Math.max(env.length, skipVariables);
+            ctx.symbolTable.resetLocalVariableIndex(startIndex);
 
-            // Pre-initialize temporary local slots to avoid VerifyError
-            // Temporaries are allocated dynamically during bytecode emission via
-            // ctx.symbolTable.allocateLocalVariable(). We pre-initialize slots to ensure
-            // they're not in TOP state when accessed. Use a visitor to estimate the
-            // actual number needed based on AST structure rather than a fixed count.
-            int preInitTempLocalsStart = ctx.symbolTable.getCurrentLocalVariableIndex();
-            org.perlonjava.astvisitor.TempLocalCountVisitor tempCountVisitor = 
-                new org.perlonjava.astvisitor.TempLocalCountVisitor();
-            ast.accept(tempCountVisitor);
-            int preInitTempLocalsCount = Math.max(128, tempCountVisitor.getMaxTempCount() + 64);  // Add buffer
-            for (int i = preInitTempLocalsStart; i < preInitTempLocalsStart + preInitTempLocalsCount; i++) {
-                mv.visitInsn(Opcodes.ACONST_NULL);
-                mv.visitVarInsn(Opcodes.ASTORE, i);
+            // AST prepass: reserve temp slots for hotspot nodes so codegen reuses stable slots.
+            // This avoids mixing int/ref in the same JVM local and avoids TOP reads.
+            org.perlonjava.astvisitor.ApplyTempSlotPlannerVisitor planner =
+                    new org.perlonjava.astvisitor.ApplyTempSlotPlannerVisitor(ctx);
+            ast.accept(planner);
+
+            // Initialize preplanned temp slots with the correct kind.
+            for (TempSlotPlan.SlotInfo slotInfo : ctx.tempSlotPlan.allAssignedSlots()) {
+                if (slotInfo.kind() == TempSlotPlan.TempKind.INT) {
+                    mv.visitInsn(Opcodes.ICONST_0);
+                    mv.visitVarInsn(Opcodes.ISTORE, slotInfo.slot());
+                } else {
+                    mv.visitInsn(Opcodes.ACONST_NULL);
+                    mv.visitVarInsn(Opcodes.ASTORE, slotInfo.slot());
+                }
             }
 
             // Allocate slots for tail call trampoline (codeRef and args)
@@ -612,15 +601,30 @@ public class EmitterMethodCreator implements Opcodes {
                 mv.visitInsn(Opcodes.ACONST_NULL);
                 mv.visitVarInsn(Opcodes.ASTORE, slot);
             }
+
+            int intSpillSlotCount = System.getenv("JPERL_INT_SPILL_SLOTS") != null
+                    ? Integer.parseInt(System.getenv("JPERL_INT_SPILL_SLOTS"))
+                    : 16;
+            ctx.javaClassInfo.intSpillSlots = new int[intSpillSlotCount];
+            ctx.javaClassInfo.intSpillTop = 0;
+            for (int i = 0; i < intSpillSlotCount; i++) {
+                int slot = ctx.symbolTable.allocateLocalVariable();
+                ctx.javaClassInfo.intSpillSlots[i] = slot;
+                mv.visitInsn(Opcodes.ICONST_0);
+                mv.visitVarInsn(Opcodes.ISTORE, slot);
+            }
+
+            // Setup local variables and environment for the method BEFORE pre-initializing
+            // generic temp locals. localSetup may allocate INT locals (dynamicIndex) and write
+            // them with ISTORE; if we pre-initialize a broad temp-local range first using ASTORE,
+            // we can accidentally mark the same slot as REF and later as INT, producing MIXED.
+            Local.localRecord localRecord = Local.localSetup(ctx, ast, mv);
             
             // Create a label for the return point
             ctx.javaClassInfo.returnLabel = new Label();
 
             // Prepare to visit the AST to generate bytecode
             EmitterVisitor visitor = new EmitterVisitor(ctx);
-
-            // Setup local variables and environment for the method
-            Local.localRecord localRecord = Local.localSetup(ctx, ast, mv);
 
             if (useTryCatch) {
                 ctx.logDebug("useTryCatch");
@@ -867,152 +871,283 @@ public class EmitterMethodCreator implements Opcodes {
             }  // End of if (ENABLE_TAILCALL_TRAMPOLINE)
             
             // Teardown local variables and environment after the return value is materialized
-            Local.localTeardown(localRecord, mv);
+            Local.localTeardown(localRecord, ctx, mv);
 
             mv.visitInsn(Opcodes.ARETURN); // Returns an Object
             mv.visitMaxs(0, 0); // Automatically computed
             mv.visitEnd();
 
-            // Complete the class
-            cw.visitEnd();
-            classData = cw.toByteArray(); // Generate the bytecode
+            // Deterministic local initialization (no random ranges):
+            // Run ASM's control-flow analyzer on the emitted method and initialize exactly the
+            // local slots that are TOP at any ALOAD/ILOAD site.
+            InsnList initLocals = new InsnList();
+            enum InitValueKind { INT_ZERO, REF_NULL, RUNTIME_SCALAR_UNDEF }
+            java.util.Map<Integer, InitValueKind> initSlots = new java.util.HashMap<>();
+            Throwable initSlotsFailure = null;
 
-            String bytecodeSizeDebug = System.getenv("JPERL_BYTECODE_SIZE_DEBUG");
-            if (bytecodeSizeDebug != null && !bytecodeSizeDebug.isEmpty()) {
-                try {
-                    System.err.println("BYTECODE_SIZE class=" + className + " bytes=" + classData.length);
+            // Analyzer needs a correct maxLocals and can get confused by stale FrameNodes.
+            // Strip FRAME nodes and compute maxLocals from the instruction stream.
+            int computedMaxLocals = skipVariables;
+            for (AbstractInsnNode n = applyMethod.instructions.getFirst(); n != null; ) {
+                AbstractInsnNode next = n.getNext();
+                if (n.getType() == AbstractInsnNode.FRAME) {
+                    applyMethod.instructions.remove(n);
+                    n = next;
+                    continue;
+                }
+                if (n instanceof VarInsnNode vin) {
+                    computedMaxLocals = Math.max(computedMaxLocals, vin.var + 1);
+                } else if (n instanceof IincInsnNode iinc) {
+                    computedMaxLocals = Math.max(computedMaxLocals, iinc.var + 1);
+                }
+                n = next;
+            }
+            applyMethod.maxLocals = Math.max(applyMethod.maxLocals, computedMaxLocals);
 
-                    java.io.DataInputStream in = new java.io.DataInputStream(new java.io.ByteArrayInputStream(classData));
-                    int magic = in.readInt();
-                    if (magic != 0xCAFEBABE) {
-                        throw new RuntimeException("Bad class magic");
+            // Analyzer allocates frames based on maxStack. The MethodNode currently has maxStack=0
+            // (we emitted visitMaxs(0,0) and let ClassWriter compute it later). Provide a
+            // deterministic upper bound so Analyzer can run.
+            int computedMaxStack = 4096;
+            applyMethod.maxStack = Math.max(applyMethod.maxStack, computedMaxStack);
+
+            // Cheap prepass: find locals that are used as the receiver for auto-increment
+            // operations (x++ / ++x), so we can initialize them as undef RuntimeScalar.
+            java.util.Set<Integer> autoIncReceiverSlots = new java.util.HashSet<>();
+            java.util.Set<Integer> runtimeScalarReceiverSlots = new java.util.HashSet<>();
+            for (AbstractInsnNode n = applyMethod.instructions.getFirst(); n != null; n = n.getNext()) {
+                if (!(n instanceof VarInsnNode vin) || vin.getOpcode() != Opcodes.ALOAD) {
+                    continue;
+                }
+                AbstractInsnNode next = n.getNext();
+                if (!(next instanceof MethodInsnNode min)) {
+                    continue;
+                }
+                if (min.getOpcode() != Opcodes.INVOKEVIRTUAL) {
+                    continue;
+                }
+
+                if ("org/perlonjava/runtime/RuntimeScalar".equals(min.owner)) {
+                    runtimeScalarReceiverSlots.add(vin.var);
+                }
+
+                // Only treat auto-inc/-dec receiver slots specially (need RuntimeScalar object instead of null).
+                if (!("postAutoIncrement".equals(min.name)
+                        || "preAutoIncrement".equals(min.name)
+                        || "postAutoDecrement".equals(min.name)
+                        || "preAutoDecrement".equals(min.name))) {
+                    continue;
+                }
+
+                AbstractInsnNode prev = n.getPrevious();
+                for (int back = 0; back < 32 && prev != null; back++, prev = prev.getPrevious()) {
+                    int t = prev.getType();
+                    if (t == AbstractInsnNode.LABEL || t == AbstractInsnNode.LINE || t == AbstractInsnNode.FRAME) {
+                        continue;
                     }
-                    in.readUnsignedShort(); // minor
-                    in.readUnsignedShort(); // major
-
-                    int cpCount = in.readUnsignedShort();
-                    String[] utf8 = new String[cpCount];
-                    for (int i = 1; i < cpCount; i++) {
-                        int tag = in.readUnsignedByte();
-                        switch (tag) {
-                            case 1: { // Utf8
-                                int len = in.readUnsignedShort();
-                                byte[] buf = new byte[len];
-                                in.readFully(buf);
-                                utf8[i] = new String(buf, java.nio.charset.StandardCharsets.UTF_8);
-                                break;
-                            }
-                            case 3: // Integer
-                            case 4: // Float
-                                in.readInt();
-                                break;
-                            case 5: // Long
-                            case 6: // Double
-                                in.readLong();
-                                i++; // takes two cp slots
-                                break;
-                            case 7: // Class
-                            case 8: // String
-                            case 16: // MethodType
-                            case 19: // Module
-                            case 20: // Package
-                                in.readUnsignedShort();
-                                break;
-                            case 9: // Fieldref
-                            case 10: // Methodref
-                            case 11: // InterfaceMethodref
-                            case 12: // NameAndType
-                            case 18: // InvokeDynamic
-                                in.readUnsignedShort();
-                                in.readUnsignedShort();
-                                break;
-                            case 15: // MethodHandle
-                                in.readUnsignedByte();
-                                in.readUnsignedShort();
-                                break;
-                            case 17: // Dynamic
-                                in.readUnsignedShort();
-                                in.readUnsignedShort();
-                                break;
-                            default:
-                                throw new RuntimeException("Unknown constant pool tag: " + tag);
+                    if (prev.getOpcode() == Opcodes.CHECKCAST) {
+                        continue;
+                    }
+                    if (prev instanceof VarInsnNode prevVin && prevVin.getOpcode() == Opcodes.ALOAD) {
+                        if (prevVin.var >= skipVariables) {
+                            autoIncReceiverSlots.add(prevVin.var);
                         }
+                        break;
                     }
-
-                    in.readUnsignedShort(); // access_flags
-                    in.readUnsignedShort(); // this_class
-                    in.readUnsignedShort(); // super_class
-
-                    int interfacesCount = in.readUnsignedShort();
-                    for (int i = 0; i < interfacesCount; i++) {
-                        in.readUnsignedShort();
+                    // Stop if we hit another call or a store; receiver is no longer directly traceable.
+                    int op = prev.getOpcode();
+                    if (op == Opcodes.INVOKEVIRTUAL || op == Opcodes.INVOKESTATIC || op == Opcodes.INVOKEINTERFACE
+                            || op == Opcodes.ASTORE || op == Opcodes.ISTORE) {
+                        break;
                     }
-
-                    int fieldsCount = in.readUnsignedShort();
-                    for (int i = 0; i < fieldsCount; i++) {
-                        in.readUnsignedShort();
-                        in.readUnsignedShort();
-                        in.readUnsignedShort();
-                        int ac = in.readUnsignedShort();
-                        for (int a = 0; a < ac; a++) {
-                            in.readUnsignedShort();
-                            int alen = in.readInt();
-                            in.skipBytes(alen);
-                        }
-                    }
-
-                    int methodsCount = in.readUnsignedShort();
-                    long maxCodeLen = -1;
-                    for (int i = 0; i < methodsCount; i++) {
-                        in.readUnsignedShort(); // access
-                        int nameIdx = in.readUnsignedShort();
-                        int descIdx = in.readUnsignedShort();
-                        String mName = (nameIdx > 0 && nameIdx < utf8.length) ? utf8[nameIdx] : ("#" + nameIdx);
-                        String mDesc = (descIdx > 0 && descIdx < utf8.length) ? utf8[descIdx] : ("#" + descIdx);
-                        int ac = in.readUnsignedShort();
-                        long codeLen = -1;
-                        for (int a = 0; a < ac; a++) {
-                            int attrNameIdx = in.readUnsignedShort();
-                            String attrName = (attrNameIdx > 0 && attrNameIdx < utf8.length) ? utf8[attrNameIdx] : null;
-                            int alen = in.readInt();
-                            if ("Code".equals(attrName)) {
-                                in.readUnsignedShort(); // max_stack
-                                in.readUnsignedShort(); // max_locals
-                                codeLen = Integer.toUnsignedLong(in.readInt());
-                                // Skip rest of Code attribute
-                                in.skipBytes((int) codeLen);
-                                int exCount = in.readUnsignedShort();
-                                in.skipBytes(exCount * 8);
-                                int codeAttrCount = in.readUnsignedShort();
-                                for (int ca = 0; ca < codeAttrCount; ca++) {
-                                    in.readUnsignedShort();
-                                    int calen = in.readInt();
-                                    in.skipBytes(calen);
-                                }
-                            } else {
-                                in.skipBytes(alen);
-                            }
-                        }
-
-                        if (codeLen >= 0) {
-                            if (codeLen > maxCodeLen) {
-                                maxCodeLen = codeLen;
-                            }
-                            boolean isApply = "apply".equals(mName);
-                            boolean isLarge = codeLen >= 30000;
-                            if (isApply || isLarge) {
-                                System.err.println("BYTECODE_SIZE method=" + mName + mDesc + " code_bytes=" + codeLen);
-                            }
-                        }
-                    }
-
-                    if (maxCodeLen >= 0) {
-                        System.err.println("BYTECODE_SIZE max_code_bytes=" + maxCodeLen);
-                    }
-                } catch (Throwable ignored) {
                 }
             }
 
+            try {
+                // Cheap prepass: find locals that are used as the receiver for auto-increment
+                // operations (x++ / ++x), so we can initialize them as undef RuntimeScalar.
+                org.objectweb.asm.tree.analysis.Frame<BasicValue>[] frames = null;
+                AnalyzerException lastAnalyzerException = null;
+                int[] maxStackAttempts = new int[]{applyMethod.maxStack, 16384, 65536};
+                for (int attempt : maxStackAttempts) {
+                    applyMethod.maxStack = Math.max(applyMethod.maxStack, attempt);
+                    try {
+                        Analyzer<BasicValue> analyzer = new Analyzer<>(new BasicInterpreter());
+                        @SuppressWarnings("unchecked")
+                        org.objectweb.asm.tree.analysis.Frame<BasicValue>[] analyzed = analyzer.analyze(ctx.javaClassInfo.javaClassName, applyMethod);
+                        frames = analyzed;
+                        lastAnalyzerException = null;
+                        break;
+                    } catch (AnalyzerException ae) {
+                        lastAnalyzerException = ae;
+                    }
+                }
+
+                if (frames == null) {
+                    throw lastAnalyzerException;
+                }
+
+                for (int i = 0; i < applyMethod.instructions.size(); i++) {
+                    AbstractInsnNode insn = applyMethod.instructions.get(i);
+                    if (!(insn instanceof VarInsnNode vin)) {
+                        continue;
+                    }
+                    int op = vin.getOpcode();
+                    if (op != Opcodes.ALOAD && op != Opcodes.ILOAD) {
+                        continue;
+                    }
+                    int slot = vin.var;
+                    if (slot < skipVariables) {
+                        continue;
+                    }
+
+                    boolean isAutoIncReceiver = (op == Opcodes.ALOAD) && autoIncReceiverSlots.contains(slot);
+                    boolean isRuntimeScalarReceiver = (op == Opcodes.ALOAD) && runtimeScalarReceiverSlots.contains(slot);
+
+                    org.objectweb.asm.tree.analysis.Frame<BasicValue> f = frames[i];
+                    if (f == null) {
+                        continue;
+                    }
+                    if (slot >= f.getLocals()) {
+                        InitValueKind kind = (op == Opcodes.ILOAD) ? InitValueKind.INT_ZERO : InitValueKind.REF_NULL;
+                        if (op == Opcodes.ALOAD && isAutoIncReceiver) {
+                            kind = InitValueKind.RUNTIME_SCALAR_UNDEF;
+                        } else if (op == Opcodes.ALOAD && isRuntimeScalarReceiver) {
+                            kind = InitValueKind.RUNTIME_SCALAR_UNDEF;
+                        }
+                        initSlots.put(slot, kind);
+                        continue;
+                    }
+                    BasicValue v = f.getLocal(slot);
+                    if (v != null && v != BasicValue.UNINITIALIZED_VALUE) {
+                        continue;
+                    }
+                    InitValueKind kind = (op == Opcodes.ILOAD) ? InitValueKind.INT_ZERO : InitValueKind.REF_NULL;
+                    if (op == Opcodes.ALOAD && isAutoIncReceiver) {
+                        kind = InitValueKind.RUNTIME_SCALAR_UNDEF;
+                    } else if (op == Opcodes.ALOAD && isRuntimeScalarReceiver) {
+                        kind = InitValueKind.RUNTIME_SCALAR_UNDEF;
+                    }
+                    initSlots.put(slot, kind);
+                }
+            } catch (AnalyzerException ae) {
+                // Fall back to legacy behavior (no init insertion) if analysis fails.
+                initSlotsFailure = ae;
+            } catch (RuntimeException re) {
+                // Defensive: avoid losing required initializers due to unexpected analyzer/runtime issues.
+                initSlotsFailure = re;
+            }
+
+            // Deterministic fallback for huge methods where ASM analysis is unreliable:
+            // initialize exactly the local slots that are actually loaded (ALOAD/ILOAD/IINC).
+            if (initSlotsFailure != null) {
+                java.util.Map<Integer, InitValueKind> fallbackSlots = new java.util.HashMap<>();
+                for (AbstractInsnNode n = applyMethod.instructions.getFirst(); n != null; n = n.getNext()) {
+                    if (n instanceof VarInsnNode vin) {
+                        int op = vin.getOpcode();
+                        int slot = vin.var;
+                        if (slot < skipVariables) {
+                            continue;
+                        }
+                        if (op == Opcodes.ALOAD) {
+                            fallbackSlots.put(slot, (autoIncReceiverSlots.contains(slot) || runtimeScalarReceiverSlots.contains(slot))
+                                    ? InitValueKind.RUNTIME_SCALAR_UNDEF
+                                    : InitValueKind.REF_NULL);
+                        } else if (op == Opcodes.ILOAD) {
+                            fallbackSlots.put(slot, InitValueKind.INT_ZERO);
+                        }
+                    } else if (n instanceof IincInsnNode iinc) {
+                        int slot = iinc.var;
+                        if (slot >= skipVariables) {
+                            fallbackSlots.put(slot, InitValueKind.INT_ZERO);
+                        }
+                    }
+                }
+                if (!fallbackSlots.isEmpty()) {
+                    initSlotsFailure = null;
+                    initSlots.clear();
+                    initSlots.putAll(fallbackSlots);
+                }
+            }
+
+            String initDebug = System.getenv("JPERL_INIT_LOCALS_DEBUG");
+            if (initDebug != null && !initDebug.isEmpty()) {
+                System.err.println("[jperl] init-locals class=" + ctx.javaClassInfo.javaClassName
+                        + " computedMaxLocals=" + computedMaxLocals
+                        + " maxLocals=" + applyMethod.maxLocals
+                        + " slots=" + new java.util.TreeMap<>(initSlots)
+                        + (initSlotsFailure == null ? "" : " failure=" + initSlotsFailure.getClass().getSimpleName() + ":" + initSlotsFailure.getMessage()));
+            }
+
+java.util.function.Supplier<InsnList> buildInitInsnList = () -> {
+    InsnList list = new InsnList();
+    for (java.util.Map.Entry<Integer, InitValueKind> e : initSlots.entrySet()) {
+        int slot = e.getKey();
+        InitValueKind kind = e.getValue();
+        switch (kind) {
+            case REF_NULL -> {
+                list.add(new InsnNode(Opcodes.ACONST_NULL));
+                list.add(new VarInsnNode(Opcodes.ASTORE, slot));
+            }
+            case INT_ZERO -> {
+                list.add(new InsnNode(Opcodes.ICONST_0));
+                list.add(new VarInsnNode(Opcodes.ISTORE, slot));
+            }
+            case RUNTIME_SCALAR_UNDEF -> {
+                list.add(new TypeInsnNode(Opcodes.NEW, "org/perlonjava/runtime/RuntimeScalar"));
+                list.add(new InsnNode(Opcodes.DUP));
+                list.add(new MethodInsnNode(
+                        Opcodes.INVOKESPECIAL,
+                        "org/perlonjava/runtime/RuntimeScalar",
+                        "<init>",
+                        "()V",
+                        false));
+                list.add(new VarInsnNode(Opcodes.ASTORE, slot));
+            }
+        }
+    }
+    return list;
+};
+
+// 1) Method entry: insert before the first instruction node. This ensures initialization
+// runs on the normal entry path.
+AbstractInsnNode methodEntry = applyMethod.instructions.getFirst();
+if (methodEntry != null && !initSlots.isEmpty()) {
+    applyMethod.instructions.insertBefore(methodEntry, buildInitInsnList.get());
+}
+
+// 2) Exception handler entry: jumps to handler labels bypass method entry init.
+// Insert the same init list right after each handler label.
+if (applyMethod.tryCatchBlocks != null && !applyMethod.tryCatchBlocks.isEmpty() && !initSlots.isEmpty()) {
+    for (TryCatchBlockNode tcb : applyMethod.tryCatchBlocks) {
+        if (tcb == null || tcb.handler == null) {
+            continue;
+        }
+        AbstractInsnNode handlerLabel = tcb.handler;
+        AbstractInsnNode afterHandlerLabel = handlerLabel.getNext();
+        if (afterHandlerLabel == null) {
+            continue;
+        }
+        applyMethod.instructions.insertBefore(afterHandlerLabel, buildInitInsnList.get());
+    }
+}
+
+
+// Write apply into the class.
+applyMethod.accept(cw);
+
+// Complete the class
+cw.visitEnd();
+classData = cw.toByteArray(); // Generate the bytecode
+
+String bytecodeSizeDebug = System.getenv("JPERL_BYTECODE_SIZE_DEBUG");
+if (bytecodeSizeDebug != null && !bytecodeSizeDebug.isEmpty()) {
+    try {
+        System.err.println("BYTECODE_SIZE class=" + className + " bytes=" + classData.length);
+    } catch (Throwable ignored) {
+    }
+}
+
+            // Optional: persist generated class bytes for external inspection.
             if (asmDebug && asmDebugClassMatches && asmDebugClassFilter != null && !asmDebugClassFilter.isEmpty()) {
                 try {
                     Path outDir = Paths.get(System.getProperty("java.io.tmpdir"), "perlonjava-asm");
@@ -1023,66 +1158,22 @@ public class EmitterMethodCreator implements Opcodes {
                 }
             }
 
+            // Optional: print disassembly.
             if (ctx.compilerOptions.disassembleEnabled) {
-                // Disassemble the bytecode for debugging purposes
-                ClassReader cr = new ClassReader(classData);
-                PrintWriter pw = new PrintWriter(System.out);
-                TraceClassVisitor tcv = new TraceClassVisitor(pw);
-                cr.accept(tcv, ClassReader.EXPAND_FRAMES);
-                pw.flush();
-            }
-
-            if (asmDebug && !disableFrames && asmDebugClassMatches && asmDebugClassFilter != null && !asmDebugClassFilter.isEmpty()) {
                 try {
                     ClassReader cr = new ClassReader(classData);
-
-                    PrintWriter pw = new PrintWriter(System.err);
+                    PrintWriter pw = new PrintWriter(System.out);
                     TraceClassVisitor tcv = new TraceClassVisitor(pw);
                     cr.accept(tcv, ClassReader.EXPAND_FRAMES);
                     pw.flush();
-
-                    PrintWriter verifyPw = new PrintWriter(System.err);
-                    String thisClassNameDot = className.replace('/', '.');
-                    final byte[] verifyClassData = classData;
-                    ClassLoader verifyLoader = new ClassLoader(GlobalVariable.globalClassLoader) {
-                        @Override
-                        protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
-                            if (name.equals(thisClassNameDot)) {
-                                synchronized (getClassLoadingLock(name)) {
-                                    Class<?> loaded = findLoadedClass(name);
-                                    if (loaded == null) {
-                                        loaded = defineClass(name, verifyClassData, 0, verifyClassData.length);
-                                    }
-                                    if (resolve) {
-                                        resolveClass(loaded);
-                                    }
-                                    return loaded;
-                                }
-                            }
-                            return super.loadClass(name, resolve);
-                        }
-                    };
-
-                    try {
-                        CheckClassAdapter.verify(cr, verifyLoader, true, verifyPw);
-                    } catch (Throwable verifyErr) {
-                        verifyErr.printStackTrace(verifyPw);
-                    }
-                    verifyPw.flush();
-                } catch (Throwable t) {
-                    t.printStackTrace();
+                } catch (Throwable ignored) {
                 }
             }
 
-            if (asmDebug && disableFrames && asmDebugClassMatches) {
+            // Optional: verify/analyze the generated class.
+            if (asmDebug && asmDebugClassMatches) {
                 try {
                     ClassReader cr = new ClassReader(classData);
-
-                    PrintWriter pw = new PrintWriter(System.err);
-                    TraceClassVisitor tcv = new TraceClassVisitor(pw);
-                    cr.accept(tcv, ClassReader.EXPAND_FRAMES);
-                    pw.flush();
-
                     PrintWriter verifyPw = new PrintWriter(System.err);
                     String thisClassNameDot = className.replace('/', '.');
                     final byte[] verifyClassData = classData;
@@ -1104,57 +1195,6 @@ public class EmitterMethodCreator implements Opcodes {
                             return super.loadClass(name, resolve);
                         }
                     };
-
-                    boolean verified = false;
-                    try {
-                        CheckClassAdapter.verify(cr, verifyLoader, true, verifyPw);
-                        verified = true;
-                    } catch (Throwable verifyErr) {
-                        verifyErr.printStackTrace(verifyPw);
-                    }
-                    verifyPw.flush();
-
-                    // Always run a classloader-free verifier pass to get a concrete method/instruction index.
-                    // CheckClassAdapter.verify() can fail or be noisy when it cannot load generated anon classes.
-                    debugAnalyzeWithBasicInterpreter(cr, verifyPw);
-                    verifyPw.flush();
-                } catch (Throwable t) {
-                    t.printStackTrace();
-                }
-            }
-
-            if (asmDebug && !disableFrames && asmDebugClassMatches
-                    && asmDebugClassFilter != null && !asmDebugClassFilter.isEmpty()) {
-                try {
-                    ClassReader cr = new ClassReader(classData);
-
-                    PrintWriter pw = new PrintWriter(System.err);
-                    TraceClassVisitor tcv = new TraceClassVisitor(pw);
-                    cr.accept(tcv, ClassReader.EXPAND_FRAMES);
-                    pw.flush();
-
-                    PrintWriter verifyPw = new PrintWriter(System.err);
-                    String thisClassNameDot = className.replace('/', '.');
-                    final byte[] verifyClassData = classData;
-                    ClassLoader verifyLoader = new ClassLoader(GlobalVariable.globalClassLoader) {
-                        @Override
-                        protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
-                            if (name.equals(thisClassNameDot)) {
-                                synchronized (getClassLoadingLock(name)) {
-                                    Class<?> loaded = findLoadedClass(name);
-                                    if (loaded == null) {
-                                        loaded = defineClass(name, verifyClassData, 0, verifyClassData.length);
-                                    }
-                                    if (resolve) {
-                                        resolveClass(loaded);
-                                    }
-                                    return loaded;
-                                }
-                            }
-                            return super.loadClass(name, resolve);
-                        }
-                    };
-
                     try {
                         CheckClassAdapter.verify(cr, verifyLoader, true, verifyPw);
                     } catch (Throwable verifyErr) {
@@ -1162,10 +1202,11 @@ public class EmitterMethodCreator implements Opcodes {
                     }
                     verifyPw.flush();
 
-                    debugAnalyzeWithBasicInterpreter(cr, verifyPw);
-                    verifyPw.flush();
-                } catch (Throwable t) {
-                    t.printStackTrace();
+                    if (disableFrames) {
+                        debugAnalyzeWithBasicInterpreter(cr, verifyPw);
+                        verifyPw.flush();
+                    }
+                } catch (Throwable ignored) {
                 }
             }
             return classData;

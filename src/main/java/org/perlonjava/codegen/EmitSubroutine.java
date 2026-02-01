@@ -241,7 +241,11 @@ public class EmitSubroutine {
         // subroutine arguments. Argument evaluation may trigger non-local control flow
         // propagation (e.g. last/next/redo) which jumps out of the expression; any stray
         // stack items would then break ASM frame merging.
-        int callContextSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        int callContextSlot = emitterVisitor.ctx.tempSlotPlan.getOrAssign(
+                node,
+                "callContext",
+                TempSlotPlan.TempKind.INT,
+                emitterVisitor.ctx);
         emitterVisitor.pushCallContext();
         mv.visitVarInsn(Opcodes.ISTORE, callContextSlot);
 
@@ -299,14 +303,22 @@ public class EmitSubroutine {
         int codeRefSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
         boolean pooledCodeRef = codeRefSlot >= 0;
         if (!pooledCodeRef) {
-            codeRefSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            codeRefSlot = emitterVisitor.ctx.tempSlotPlan.getOrAssign(
+                    node,
+                    "codeRef",
+                    TempSlotPlan.TempKind.REF,
+                    emitterVisitor.ctx);
         }
         mv.visitVarInsn(Opcodes.ASTORE, codeRefSlot);
 
         int nameSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
         boolean pooledName = nameSlot >= 0;
         if (!pooledName) {
-            nameSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            nameSlot = emitterVisitor.ctx.tempSlotPlan.getOrAssign(
+                    node,
+                    "name",
+                    TempSlotPlan.TempKind.REF,
+                    emitterVisitor.ctx);
         }
         mv.visitLdcInsn(subroutineName);
         mv.visitVarInsn(Opcodes.ASTORE, nameSlot);
@@ -318,7 +330,11 @@ public class EmitSubroutine {
         int argsArraySlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
         boolean pooledArgsArray = argsArraySlot >= 0;
         if (!pooledArgsArray) {
-            argsArraySlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            argsArraySlot = emitterVisitor.ctx.tempSlotPlan.getOrAssign(
+                    node,
+                    "argsArray",
+                    TempSlotPlan.TempKind.REF,
+                    emitterVisitor.ctx);
         }
 
         if (argCount <= 5) {

@@ -10,6 +10,11 @@ package org.perlonjava.runtime;
 public class RuntimeControlFlowRegistry {
     // Thread-local storage for control flow markers
     private static final ThreadLocal<ControlFlowMarker> currentMarker = new ThreadLocal<>();
+
+    private static boolean debugEnabled() {
+        return System.getenv("JPERL_DEBUG_REGISTRY") != null
+                || System.getProperty("JPERL_DEBUG_REGISTRY") != null;
+    }
     
     /**
      * Register a control flow marker.
@@ -18,6 +23,10 @@ public class RuntimeControlFlowRegistry {
      * @param marker The control flow marker to register
      */
     public static void register(ControlFlowMarker marker) {
+        if (debugEnabled()) {
+            System.err.println("[JPERL_DEBUG_REGISTRY] register type=" + (marker != null ? marker.type : null)
+                    + " label=" + (marker != null ? marker.label : null));
+        }
         currentMarker.set(marker);
     }
     
@@ -114,6 +123,11 @@ public class RuntimeControlFlowRegistry {
         ControlFlowMarker marker = currentMarker.get();
         if (marker == null) {
             return 0;  // No marker
+        }
+
+        if (debugEnabled()) {
+            System.err.println("[JPERL_DEBUG_REGISTRY] checkLoopAndGetAction loopLabel=" + labelName
+                    + " markerType=" + marker.type + " markerLabel=" + marker.label);
         }
         
         // Check if marker's label matches (Perl semantics)

@@ -3,10 +3,17 @@ package org.perlonjava.codegen;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.Type;
+import org.perlonjava.astnode.Node;
 import org.perlonjava.symbols.ScopedSymbolTable;
 
 import java.util.ArrayDeque;
+import java.util.Collections;
 import java.util.Deque;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Represents information about a Java class being generated.
@@ -14,6 +21,63 @@ import java.util.Deque;
  * and a stack of loop labels for managing nested loops.
  */
 public class JavaClassInfo {
+
+     public enum LocalSlotKind {
+         INT,
+         REF,
+         MIXED
+     }
+
+     private static final boolean SLOT_KIND_TRACK = System.getenv("JPERL_SLOT_KIND_TRACK") != null;
+     private static final boolean SLOT_KIND_TRACE = System.getenv("JPERL_SLOT_KIND_TRACE") != null;
+     private static final boolean FAIL_UNWRITTEN_LOCAL = System.getenv("JPERL_FAIL_UNWRITTEN_LOCAL") != null;
+     private static final boolean FAIL_MIXED_LOCAL = System.getenv("JPERL_FAIL_MIXED_LOCAL") != null;
+     private static final String TRACE_LOCAL_SLOT_RAW = System.getenv("JPERL_TRACE_LOCAL_SLOT");
+     private static final int TRACE_LOCAL_SLOT = parseTraceLocalSlot(TRACE_LOCAL_SLOT_RAW);
+     private static final String TRACE_LOCAL_SLOT_CLASS_FILTER = System.getenv("JPERL_TRACE_LOCAL_SLOT_CLASS_FILTER");
+     private final Map<Integer, LocalSlotKind> localSlotKinds = new HashMap<>();
+     private final Set<Integer> mixedSlotWarned = new HashSet<>();
+     private final Map<Integer, LocalSlotKind> unwrittenReadKinds = new HashMap<>();
+
+     private static final ThreadLocal<Deque<Node>> currentAstNodeStack = ThreadLocal.withInitial(ArrayDeque::new);
+
+    private static int parseTraceLocalSlot(String raw) {
+        if (raw == null || raw.isEmpty()) {
+            return -1;
+        }
+        try {
+            return Integer.parseInt(raw.trim());
+        } catch (NumberFormatException ignored) {
+            return -1;
+        }
+    }
+
+     public AutoCloseable pushCurrentAstNode(Node node) {
+         if (!(SLOT_KIND_TRACK || FAIL_UNWRITTEN_LOCAL || FAIL_MIXED_LOCAL || TRACE_LOCAL_SLOT >= 0)) {
+             return () -> {
+             };
+         }
+         Deque<Node> stack = currentAstNodeStack.get();
+         stack.push(node);
+         return () -> {
+             Deque<Node> st = currentAstNodeStack.get();
+             if (!st.isEmpty()) {
+                 st.pop();
+             }
+         };
+     }
+
+     private static String formatCurrentAstNode() {
+         Deque<Node> stack = currentAstNodeStack.get();
+         if (stack == null || stack.isEmpty()) {
+             return "<no-ast-context>";
+         }
+         Node n = stack.peek();
+         if (n == null) {
+             return "<null-ast>";
+         }
+         return n.getClass().getSimpleName() + "#" + n.getIndex();
+     }
 
     /**
      * The name of the Java class.
@@ -44,6 +108,9 @@ public class JavaClassInfo {
 
     public int[] spillSlots;
     public int spillTop;
+
+    public int[] intSpillSlots;
+    public int intSpillTop;
 
     public static final class SpillRef {
         public final int slot;
@@ -81,6 +148,208 @@ public class JavaClassInfo {
         this.spillTop = 0;
     }
 
+     public void registerLocalSlotKind(int slot, LocalSlotKind kind) {
+         LocalSlotKind existing = localSlotKinds.get(slot);
+         if (existing == null) {
+             localSlotKinds.put(slot, kind);
+             return;
+         }
+
+         if (existing == kind || existing == LocalSlotKind.MIXED) {
+             return;
+         }
+
+         if (FAIL_MIXED_LOCAL) {
+            throw new IllegalStateException("[jperl] FAIL_MIXED_LOCAL: local slot kind became MIXED: slot=" + slot +
+                    " existing=" + existing +
+                    " new=" + kind +
+                    " class=" + javaClassName +
+                    " ast=" + formatCurrentAstNode() +
+                    " inRefSpillPool=" + isInSpillSlots(slot) +
+                    " inIntSpillPool=" + isInIntSpillSlots(slot));
+        }
+
+        localSlotKinds.put(slot, LocalSlotKind.MIXED);
+       if (mixedSlotWarned.add(slot) && SLOT_KIND_TRACK) {
+            System.err.println(
+                    "[jperl] WARNING: local slot kind became MIXED: slot=" + slot +
+                            " existing=" + existing +
+                            " new=" + kind +
+                            " class=" + javaClassName +
+                            " ast=" + formatCurrentAstNode());
+            if (SLOT_KIND_TRACE) {
+                StackTraceElement[] stack = Thread.currentThread().getStackTrace();
+                // Skip getStackTrace/registerLocalSlotKind/registerXxx helper frames.
+                for (int i = 3; i < Math.min(stack.length, 14); i++) {
+                    System.err.println("[jperl]   at " + stack[i]);
+                }
+            }
+        }
+     }
+
+     public void registerIntLocalSlot(int slot) {
+         registerLocalSlotKind(slot, LocalSlotKind.INT);
+     }
+
+     public void registerRefLocalSlot(int slot) {
+        registerLocalSlotKind(slot, LocalSlotKind.REF);
+    }
+
+    public void clearLocalSlotKinds() {
+        localSlotKinds.clear();
+        mixedSlotWarned.clear();
+        unwrittenReadKinds.clear();
+    }
+
+    private boolean isInSpillSlots(int slot) {
+        if (spillSlots == null) {
+            return false;
+        }
+        for (int s : spillSlots) {
+            if (s == slot) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isInIntSpillSlots(int slot) {
+        if (intSpillSlots == null) {
+            return false;
+        }
+        for (int s : intSpillSlots) {
+            if (s == slot) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public Map<Integer, LocalSlotKind> getLocalSlotKindsSnapshot() {
+        return Collections.unmodifiableMap(new HashMap<>(localSlotKinds));
+    }
+
+    public Map<Integer, LocalSlotKind> getUnwrittenReadKindsSnapshot() {
+        return Collections.unmodifiableMap(new HashMap<>(unwrittenReadKinds));
+    }
+
+    public MethodVisitor wrapWithLocalSlotTracking(MethodVisitor mv, int access, String desc) {
+        // Always wrap so we can collect slot kinds for deterministic initialization.
+        // Printing/throwing is gated by env vars inside the visitor.
+        return new LocalSlotTrackingMethodVisitor(mv, this, access, desc);
+    }
+
+    private static final class LocalSlotTrackingMethodVisitor extends MethodVisitor {
+        private final JavaClassInfo info;
+        private final Set<Integer> writtenSlots = new HashSet<>();
+        private final Set<Integer> readSlots = new HashSet<>();
+        private final Map<Integer, String> firstReadOp = new HashMap<>();
+        private final Map<Integer, String> firstReadAst = new HashMap<>();
+        private int tracePrinted = 0;
+
+        private LocalSlotTrackingMethodVisitor(MethodVisitor delegate, JavaClassInfo info, int access, String desc) {
+            super(Opcodes.ASM9, delegate);
+            this.info = info;
+
+            // All JVM method parameters are always considered initialized.
+            // Many generated constructors take a large number of closure env arguments.
+            int slot = 0;
+            boolean isStatic = (access & Opcodes.ACC_STATIC) != 0;
+            if (!isStatic) {
+                writtenSlots.add(0); // this
+                slot = 1;
+            }
+            if (desc != null) {
+                for (Type arg : Type.getArgumentTypes(desc)) {
+                    writtenSlots.add(slot);
+                    slot += arg.getSize();
+                }
+            }
+        }
+
+        @Override
+        public void visitVarInsn(int opcode, int var) {
+            switch (opcode) {
+                case Opcodes.ISTORE -> {
+                    writtenSlots.add(var);
+                    info.registerIntLocalSlot(var);
+                }
+                case Opcodes.ASTORE -> {
+                    writtenSlots.add(var);
+                    info.registerRefLocalSlot(var);
+                }
+                case Opcodes.ILOAD -> {
+                    info.registerIntLocalSlot(var);
+                    recordRead(opcode, var);
+                }
+                case Opcodes.ALOAD -> {
+                    info.registerRefLocalSlot(var);
+                    recordRead(opcode, var);
+                }
+                default -> {
+                }
+            }
+
+            if (TRACE_LOCAL_SLOT >= 0 && var == TRACE_LOCAL_SLOT) {
+                if (TRACE_LOCAL_SLOT_CLASS_FILTER == null
+                        || TRACE_LOCAL_SLOT_CLASS_FILTER.isEmpty()
+                        || (info.javaClassName != null && info.javaClassName.contains(TRACE_LOCAL_SLOT_CLASS_FILTER))) {
+                    if (tracePrinted++ < 40) {
+                        String op = opcode == Opcodes.ALOAD ? "ALOAD"
+                                : (opcode == Opcodes.ILOAD ? "ILOAD"
+                                : (opcode == Opcodes.ASTORE ? "ASTORE"
+                                : (opcode == Opcodes.ISTORE ? "ISTORE" : String.valueOf(opcode))));
+                        System.err.println("[jperl] TRACE_LOCAL_SLOT op=" + op + " slot=" + var + " class=" + info.javaClassName + " ast=" + formatCurrentAstNode());
+                    }
+                }
+            }
+            super.visitVarInsn(opcode, var);
+        }
+
+        @Override
+        public void visitIincInsn(int var, int increment) {
+            writtenSlots.add(var);
+            info.registerIntLocalSlot(var);
+            super.visitIincInsn(var, increment);
+        }
+
+        @Override
+        public void visitEnd() {
+            // Only flag locals that are read but never written anywhere in the method.
+            if (SLOT_KIND_TRACK || SLOT_KIND_TRACE || FAIL_UNWRITTEN_LOCAL) {
+                for (Integer slot : readSlots) {
+                    if (writtenSlots.contains(slot)) {
+                        continue;
+                    }
+                    String op = firstReadOp.getOrDefault(slot, "<unknown>");
+                    String ast = firstReadAst.getOrDefault(slot, "<no-ast-context>");
+                    String msg = "[jperl] WARNING: read from local slot that was never written in this method: op=" + op +
+                            " slot=" + slot + " class=" + info.javaClassName + " ast=" + ast;
+
+                    JavaClassInfo.LocalSlotKind kind = ("ILOAD".equals(op))
+                            ? JavaClassInfo.LocalSlotKind.INT
+                            : JavaClassInfo.LocalSlotKind.REF;
+                    info.unwrittenReadKinds.putIfAbsent(slot, kind);
+
+                    System.err.println(msg);
+                    if (FAIL_UNWRITTEN_LOCAL) {
+                        throw new IllegalStateException(msg);
+                    }
+                }
+            }
+            super.visitEnd();
+        }
+
+        private void recordRead(int opcode, int var) {
+            readSlots.add(var);
+            if (!firstReadOp.containsKey(var)) {
+                String op = opcode == Opcodes.ALOAD ? "ALOAD" : (opcode == Opcodes.ILOAD ? "ILOAD" : String.valueOf(opcode));
+                firstReadOp.put(var, op);
+                firstReadAst.put(var, formatCurrentAstNode());
+            }
+        }
+    }
+
     public int acquireSpillSlot() {
         if (spillTop >= spillSlots.length) {
             return -1;
@@ -88,9 +357,22 @@ public class JavaClassInfo {
         return spillSlots[spillTop++];
     }
 
+    public int acquireIntSpillSlot() {
+        if (intSpillSlots == null || intSpillTop >= intSpillSlots.length) {
+            return -1;
+        }
+        return intSpillSlots[intSpillTop++];
+    }
+
     public void releaseSpillSlot() {
         if (spillTop > 0) {
             spillTop--;
+        }
+    }
+
+    public void releaseIntSpillSlot() {
+        if (intSpillTop > 0) {
+            intSpillTop--;
         }
     }
 

@@ -3,8 +3,10 @@ package org.perlonjava.codegen;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
+import org.perlonjava.astnode.BlockNode;
 import org.perlonjava.astnode.For3Node;
 import org.perlonjava.astnode.IfNode;
+import org.perlonjava.astnode.Node;
 import org.perlonjava.astnode.OperatorNode;
 import org.perlonjava.astnode.TryNode;
 import org.perlonjava.astvisitor.EmitterVisitor;
@@ -171,8 +173,21 @@ public class EmitStatement {
                         isUnlabeledTarget,
                         !node.isSimpleBlock);
 
-                // Visit the loop body
-                node.body.accept(voidVisitor);
+                // Visit the loop body.
+                // For simple-block pseudo-loops (e.g. SKIP: { ... }), `skip()` is implemented as
+                // a helper sub that performs `last SKIP;` (non-local control flow). We must check
+                // the control-flow registry *between* statements so the block can exit immediately.
+                if (node.isSimpleBlock && node.body instanceof BlockNode bodyBlock) {
+                    for (Node stmt : bodyBlock.elements) {
+                        if (stmt == null) {
+                            continue;
+                        }
+                        stmt.accept(voidVisitor);
+                        emitRegistryCheck(mv, emitterVisitor.ctx.javaClassInfo.getInnermostLoopLabels(), redoLabel, continueLabel, endLabel);
+                    }
+                } else {
+                    node.body.accept(voidVisitor);
+                }
 
             } else {
                 // Within a `while` modifier, next/redo/last labels are not active
@@ -411,16 +426,19 @@ public class EmitStatement {
                 "(Ljava/lang/String;)I",
                 false);
         
-        // Use TABLESWITCH for clean bytecode
+        // Use TABLESWITCH for clean bytecode.
+        // IMPORTANT: action=0 means "no pending control flow" and must fall through.
+        Label noActionLabel = new Label();
         mv.visitTableSwitchInsn(
                 1,  // min (LAST)
                 3,  // max (REDO)
-                nextLabel,  // default (0=none or out of range)
+                noActionLabel,  // default (0=none or out of range)
                 lastLabel,  // 1: LAST
                 nextLabel,  // 2: NEXT  
                 redoLabel   // 3: REDO
         );
-        
-        // No label needed - all paths are handled by switch
+
+        // Fallthrough when there's no marker.
+        mv.visitLabel(noActionLabel);
     }
 }

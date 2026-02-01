@@ -34,6 +34,22 @@ public class EmitterVisitor implements Visitor {
         this.ctx = ctx;
     }
 
+    private void withAstNode(Node node, Runnable emit) {
+        if (ctx != null && ctx.javaClassInfo != null) {
+            AutoCloseable scope = ctx.javaClassInfo.pushCurrentAstNode(node);
+            try {
+                emit.run();
+            } finally {
+                try {
+                    scope.close();
+                } catch (Exception ignored) {
+                }
+            }
+            return;
+        }
+        emit.run();
+    }
+
     /**
      * Returns an EmitterVisitor with the specified context type. Uses a cache to avoid creating new
      * instances unnecessarily.
@@ -86,92 +102,92 @@ public class EmitterVisitor implements Visitor {
      */
     @Override
     public void visit(NumberNode node) {
-        EmitLiteral.emitNumber(ctx, node);
+        withAstNode(node, () -> EmitLiteral.emitNumber(ctx, node));
     }
 
     @Override
     public void visit(IdentifierNode node) {
-        EmitLiteral.emitIdentifier(this, ctx, node);
+        withAstNode(node, () -> EmitLiteral.emitIdentifier(this, ctx, node));
     }
 
     @Override
     public void visit(BinaryOperatorNode node) {
-        EmitBinaryOperatorNode.emitBinaryOperatorNode(this, node);
+        withAstNode(node, () -> EmitBinaryOperatorNode.emitBinaryOperatorNode(this, node));
     }
 
     @Override
     public void visit(OperatorNode node) {
-        EmitOperatorNode.emitOperatorNode(this, node);
+        withAstNode(node, () -> EmitOperatorNode.emitOperatorNode(this, node));
     }
 
     @Override
     public void visit(TryNode node) {
-        EmitStatement.emitTryCatch(this, node);
+        withAstNode(node, () -> EmitStatement.emitTryCatch(this, node));
     }
 
     @Override
     public void visit(SubroutineNode node) {
-        EmitSubroutine.emitSubroutine(ctx, node);
+        withAstNode(node, () -> EmitSubroutine.emitSubroutine(ctx, node));
     }
 
     @Override
     public void visit(For1Node node) {
-        EmitForeach.emitFor1(this, node);
+        withAstNode(node, () -> EmitForeach.emitFor1(this, node));
     }
 
     @Override
     public void visit(For3Node node) {
-        EmitStatement.emitFor3(this, node);
+        withAstNode(node, () -> EmitStatement.emitFor3(this, node));
     }
 
     @Override
     public void visit(IfNode node) {
-        EmitStatement.emitIf(this, node);
+        withAstNode(node, () -> EmitStatement.emitIf(this, node));
     }
 
     @Override
     public void visit(TernaryOperatorNode node) {
-        EmitLogicalOperator.emitTernaryOperator(this, node);
+        withAstNode(node, () -> EmitLogicalOperator.emitTernaryOperator(this, node));
     }
 
     @Override
     public void visit(BlockNode node) {
-        EmitBlock.emitBlock(this, node);
+        withAstNode(node, () -> EmitBlock.emitBlock(this, node));
     }
 
     @Override
     public void visit(ListNode node) {
-        EmitLiteral.emitList(this, node);
+        withAstNode(node, () -> EmitLiteral.emitList(this, node));
     }
 
     @Override
     public void visit(StringNode node) {
-        EmitLiteral.emitString(ctx, node);
+        withAstNode(node, () -> EmitLiteral.emitString(ctx, node));
     }
 
     @Override
     public void visit(HashLiteralNode node) {
-        EmitLiteral.emitHashLiteral(this, node);
+        withAstNode(node, () -> EmitLiteral.emitHashLiteral(this, node));
     }
 
     @Override
     public void visit(ArrayLiteralNode node) {
-        EmitLiteral.emitArrayLiteral(this, node);
+        withAstNode(node, () -> EmitLiteral.emitArrayLiteral(this, node));
     }
 
     @Override
     public void visit(LabelNode node) {
-        EmitLabel.emitLabel(ctx, node);
+        withAstNode(node, () -> EmitLabel.emitLabel(ctx, node));
     }
 
     @Override
     public void visit(CompilerFlagNode node) {
-        EmitCompilerFlag.emitCompilerFlag(ctx, node);
+        withAstNode(node, () -> EmitCompilerFlag.emitCompilerFlag(ctx, node));
     }
 
     @Override
     public void visit(FormatNode node) {
-        EmitFormat.emitFormat(this, node);
+        withAstNode(node, () -> EmitFormat.emitFormat(this, node));
     }
 
     @Override

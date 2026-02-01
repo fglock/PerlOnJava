@@ -152,15 +152,32 @@ public class ScopedSymbolTable {
      */
     public void exitScope(int scopeIndex) {
         clearVisibleVariablesCache();
+
+        // Preserve monotonic local-variable slot allocation across nested scopes.
+        // Each scope has its own SymbolTable with its own local index counter.
+        // When we exit an inner scope, we must not revert the index counter to an older
+        // (smaller) value from the outer scope, otherwise later allocations will reuse
+        // existing JVM local slots and can mix INT/REF kinds.
+        int maxIndexSeen = symbolTableStack.isEmpty() ? 0 : symbolTableStack.peek().index;
+
         // Pop entries from the stacks until reaching the specified scope index
         while (symbolTableStack.size() > scopeIndex) {
-            symbolTableStack.pop();
+            SymbolTable popped = symbolTableStack.pop();
+            if (popped != null) {
+                maxIndexSeen = Math.max(maxIndexSeen, popped.index);
+            }
             packageStack.pop();
             subroutineStack.pop();
             inSubroutineBodyStack.pop();
             warningFlagsStack.pop();
             featureFlagsStack.pop();
             strictOptionsStack.pop();
+        }
+
+        // Carry the maximum index forward into the remaining active scope.
+        if (!symbolTableStack.isEmpty()) {
+            SymbolTable current = symbolTableStack.peek();
+            current.index = Math.max(current.index, maxIndexSeen);
         }
     }
 
@@ -494,6 +511,15 @@ public class ScopedSymbolTable {
      */
     public int getCurrentLocalVariableIndex() {
         return symbolTableStack.peek().index;
+    }
+
+    public int reserveLocalSlots(int count) {
+        if (count <= 0) {
+            return symbolTableStack.peek().index;
+        }
+        int start = symbolTableStack.peek().index;
+        symbolTableStack.peek().index += count;
+        return start;
     }
 
     /**

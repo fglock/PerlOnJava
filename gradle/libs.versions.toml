@@ -11,6 +11,8 @@ tomlj = "1.1.1"
 [libraries]
 asm = { module = "org.ow2.asm:asm", version.ref = "asm" }
 asm-util = { module = "org.ow2.asm:asm-util", version.ref = "asm" }
+asm-tree = { module = "org.ow2.asm:asm-tree", version.ref = "asm" }
+asm-analysis = { module = "org.ow2.asm:asm-analysis", version.ref = "asm" }
 commons-csv = { module = "org.apache.commons:commons-csv", version.ref = "commons-csv" }
 fastjson2 = { module = "com.alibaba.fastjson2:fastjson2", version.ref = "fastjson2" }
 icu4j = { module = "com.ibm.icu:icu4j", version.ref = "icu4j" }

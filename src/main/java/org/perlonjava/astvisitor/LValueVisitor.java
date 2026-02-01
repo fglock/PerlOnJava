@@ -51,7 +51,9 @@ public class LValueVisitor implements Visitor {
                 break;
             case "[":   // $a[]  @a[]
             case "{":   // $a{}  @a{}
-                node.left.accept(this);
+                // Element access is always a scalar lvalue (even when the container is an array/hash).
+                // This is critical for constructs like `local $h{key}` / `local $a[0]`.
+                context = RuntimeContextType.SCALAR;
                 break;
             case "->":  // $a->() $a->[] $a->()
                 context = RuntimeContextType.SCALAR;
