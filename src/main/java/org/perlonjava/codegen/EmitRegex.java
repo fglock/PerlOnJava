@@ -6,6 +6,9 @@ import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
 
+ import java.util.ArrayList;
+ import java.util.HashMap;
+
 /**
  * The EmitRegex class is responsible for handling regex-related operations
  * within the code generation process. It provides methods to handle binding
@@ -30,8 +33,17 @@ public class EmitRegex {
                 && !right.operator.equals("quoteRegex")) {
             // Regex operator: $v =~ /regex/; (but NOT qr//)
             // Bind the variable to the regex operation
-            listNode.elements.add(node.left);
-            right.accept(emitterVisitor);  // Use caller's context for regex operations
+            // Do not mutate the original AST: create a local copy of the operator and its operand list.
+            ListNode boundListNode = new ListNode(new ArrayList<>(listNode.elements), listNode.tokenIndex);
+            boundListNode.handle = listNode.handle;
+            boundListNode.elements.add(node.left);
+
+            OperatorNode boundRight = new OperatorNode(right.operator, boundListNode, right.tokenIndex);
+            boundRight.id = right.id;
+            if (right.annotations != null) {
+                boundRight.annotations = new HashMap<>(right.annotations);
+            }
+            boundRight.accept(emitterVisitor);  // Use caller's context for regex operations
             return;
         }
 
