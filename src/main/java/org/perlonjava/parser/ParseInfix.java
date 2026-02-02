@@ -74,10 +74,10 @@ public class ParseInfix {
             if (operator.equals("..") || operator.equals("...")) {
                 // Handle regex in: /3/../5/
                 if (left instanceof OperatorNode operatorNode && operatorNode.operator.equals("matchRegex")) {
-                    operatorNode.operator = "quoteRegex";
+                    left = new OperatorNode("quoteRegex", operatorNode.operand, operatorNode.tokenIndex);
                 }
                 if (right instanceof OperatorNode operatorNode && operatorNode.operator.equals("matchRegex")) {
-                    operatorNode.operator = "quoteRegex";
+                    right = new OperatorNode("quoteRegex", operatorNode.operand, operatorNode.tokenIndex);
                 }
             }
 

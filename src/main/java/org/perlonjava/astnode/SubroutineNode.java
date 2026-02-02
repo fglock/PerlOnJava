@@ -41,6 +41,10 @@ public class SubroutineNode extends AbstractNode {
         this.block = block;
         this.useTryCatch = useTryCatch;
         this.tokenIndex = tokenIndex;
+
+        if (block instanceof AbstractNode abstractNode) {
+            abstractNode.setAnnotation("blockIsSubroutine", true);
+        }
     }
 
     /**
