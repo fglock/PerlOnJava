@@ -190,6 +190,7 @@ public class GlobalContext {
         JavaSystem.initialize();
         PerlIO.initialize();
         Version.initialize();   // Initialize version module for version objects
+        DynaLoader.initialize();
         XSLoader.initialize();  // XSLoader will load other classes on-demand
         // Filter::Util::Call will be loaded via XSLoader when needed
 
