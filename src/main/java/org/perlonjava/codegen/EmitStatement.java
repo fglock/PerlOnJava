@@ -409,16 +409,19 @@ public class EmitStatement {
                 "(Ljava/lang/String;)I",
                 false);
         
-        // Use TABLESWITCH for clean bytecode
+        // Use TABLESWITCH for clean bytecode.
+        // IMPORTANT: action 0 means "no marker" and must *not* jump.
+        Label noAction = new Label();
         mv.visitTableSwitchInsn(
-                1,  // min (LAST)
+                0,  // min (NONE)
                 3,  // max (REDO)
-                nextLabel,  // default (0=none or out of range)
-                lastLabel,  // 1: LAST
-                nextLabel,  // 2: NEXT  
-                redoLabel   // 3: REDO
+                noAction,  // default
+                noAction,  // 0: NONE
+                lastLabel, // 1: LAST
+                nextLabel, // 2: NEXT
+                redoLabel  // 3: REDO
         );
-        
-        // No label needed - all paths are handled by switch
+
+        mv.visitLabel(noAction);
     }
 }
