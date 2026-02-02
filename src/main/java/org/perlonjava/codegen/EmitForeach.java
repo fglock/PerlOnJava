@@ -308,9 +308,41 @@ public class EmitForeach {
 
         emitterVisitor.ctx.javaClassInfo.pushLoopLabels(currentLoopLabels);
 
-        node.body.accept(emitterVisitor.with(RuntimeContextType.VOID));
-        
-        // Check RuntimeControlFlowRegistry for non-local control flow
+        EmitterVisitor voidVisitor = emitterVisitor.with(RuntimeContextType.VOID);
+        if (node.body instanceof BlockNode blockNode) {
+            int bodyScopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
+            Local.localRecord bodyLocalRecord = Local.localSetup(emitterVisitor.ctx, blockNode, mv);
+
+            java.util.List<Node> list = blockNode.elements;
+            int lastNonNullIndex = -1;
+            for (int i = list.size() - 1; i >= 0; i--) {
+                if (list.get(i) != null) {
+                    lastNonNullIndex = i;
+                    break;
+                }
+            }
+
+            for (int i = 0; i < list.size(); i++) {
+                Node element = list.get(i);
+                if (element == null) {
+                    continue;
+                }
+
+                ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, element.getIndex());
+                element.accept(voidVisitor);
+
+                // Check RuntimeControlFlowRegistry after each statement, so that
+                // eval q{ next; } stops the loop iteration immediately.
+                emitRegistryCheck(mv, currentLoopLabels, redoLabel, continueLabel, loopEnd);
+            }
+
+            Local.localTeardown(bodyLocalRecord, mv);
+            emitterVisitor.ctx.symbolTable.exitScope(bodyScopeIndex);
+        } else {
+            node.body.accept(voidVisitor);
+        }
+
+        // Final check for non-local control flow.
         emitRegistryCheck(mv, currentLoopLabels, redoLabel, continueLabel, loopEnd);
 
         LoopLabels poppedLabels = emitterVisitor.ctx.javaClassInfo.popLoopLabels();
@@ -672,16 +704,19 @@ public class EmitForeach {
                 "(Ljava/lang/String;)I",
                 false);
         
-        // Use TABLESWITCH for clean bytecode
+        // Use TABLESWITCH for clean bytecode.
+        // IMPORTANT: action 0 means "no marker" and must *not* jump.
+        Label noAction = new Label();
         mv.visitTableSwitchInsn(
-                1,  // min (LAST)
+                0,  // min (NONE)
                 3,  // max (REDO)
-                nextLabel,  // default (0=none or out of range)
-                lastLabel,  // 1: LAST
-                nextLabel,  // 2: NEXT  
-                redoLabel   // 3: REDO
+                noAction,  // default
+                noAction,  // 0: NONE
+                lastLabel, // 1: LAST
+                nextLabel, // 2: NEXT
+                redoLabel  // 3: REDO
         );
-        
-        // No label needed - all paths are handled by switch
+
+        mv.visitLabel(noAction);
     }
 }
