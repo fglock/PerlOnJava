@@ -1,5 +1,6 @@
 package org.perlonjava.codegen;
 
+import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
@@ -506,6 +507,134 @@ public class EmitVariable {
                         false); // generate an .apply() call
 
                 emitterVisitor.ctx.javaClassInfo.incrementStackLevel(1);
+
+                // RuntimeCode.apply() can return a tagged RuntimeControlFlowList (last/next/redo).
+                // Handle it before context conversion (especially before POP in VOID context).
+                Label applyNoControlFlow = new Label();
+                Label applyNotNextLastRedo = new Label();
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/RuntimeList",
+                        "isNonLocalGoto",
+                        "()Z",
+                        false);
+                mv.visitJumpInsn(Opcodes.IFEQ, applyNoControlFlow);
+
+                int cfSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeControlFlowList");
+                mv.visitVarInsn(Opcodes.ASTORE, cfSlot);
+
+                int labelSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                mv.visitVarInsn(Opcodes.ALOAD, cfSlot);
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/RuntimeControlFlowList",
+                        "getControlFlowLabel",
+                        "()Ljava/lang/String;",
+                        false);
+                mv.visitVarInsn(Opcodes.ASTORE, labelSlot);
+
+                int typeSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                mv.visitVarInsn(Opcodes.ALOAD, cfSlot);
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/RuntimeControlFlowList",
+                        "getControlFlowType",
+                        "()Lorg/perlonjava/runtime/ControlFlowType;",
+                        false);
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/ControlFlowType",
+                        "ordinal",
+                        "()I",
+                        false);
+                mv.visitVarInsn(Opcodes.ISTORE, typeSlot);
+
+                // Only handle NEXT/LAST/REDO here (ordinals 0..2). Others propagate as values.
+                mv.visitVarInsn(Opcodes.ILOAD, typeSlot);
+                mv.visitInsn(Opcodes.ICONST_2);
+                mv.visitJumpInsn(Opcodes.IF_ICMPGT, applyNotNextLastRedo);
+
+                Label checkUnlabeled = new Label();
+                mv.visitVarInsn(Opcodes.ALOAD, labelSlot);
+                mv.visitJumpInsn(Opcodes.IFNULL, checkUnlabeled);
+
+                for (LoopLabels loopLabels : emitterVisitor.ctx.javaClassInfo.loopLabelStack) {
+                    if (loopLabels != null && loopLabels.labelName != null) {
+                        Label nextLabel = new Label();
+                        mv.visitVarInsn(Opcodes.ALOAD, labelSlot);
+                        mv.visitLdcInsn(loopLabels.labelName);
+                        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                                "java/lang/String",
+                                "equals",
+                                "(Ljava/lang/Object;)Z",
+                                false);
+                        mv.visitJumpInsn(Opcodes.IFEQ, nextLabel);
+
+                        Label isLast = new Label();
+                        Label isNext = new Label();
+                        Label isRedo = new Label();
+                        mv.visitVarInsn(Opcodes.ILOAD, typeSlot);
+                        mv.visitInsn(Opcodes.ICONST_0);
+                        mv.visitJumpInsn(Opcodes.IF_ICMPEQ, isLast);
+                        mv.visitVarInsn(Opcodes.ILOAD, typeSlot);
+                        mv.visitInsn(Opcodes.ICONST_1);
+                        mv.visitJumpInsn(Opcodes.IF_ICMPEQ, isNext);
+                        mv.visitVarInsn(Opcodes.ILOAD, typeSlot);
+                        mv.visitInsn(Opcodes.ICONST_2);
+                        mv.visitJumpInsn(Opcodes.IF_ICMPEQ, isRedo);
+                        mv.visitJumpInsn(Opcodes.GOTO, nextLabel);
+
+                        mv.visitLabel(isLast);
+                        mv.visitJumpInsn(Opcodes.GOTO, loopLabels.lastLabel);
+
+                        mv.visitLabel(isNext);
+                        mv.visitJumpInsn(Opcodes.GOTO, loopLabels.nextLabel);
+
+                        mv.visitLabel(isRedo);
+                        mv.visitJumpInsn(Opcodes.GOTO, loopLabels.redoLabel);
+
+                        mv.visitLabel(nextLabel);
+                    }
+                }
+
+                // No labeled target matched: propagate via returnLabel if available.
+                if (emitterVisitor.ctx.javaClassInfo.returnLabel != null) {
+                    mv.visitVarInsn(Opcodes.ALOAD, cfSlot);
+                    mv.visitJumpInsn(Opcodes.GOTO, emitterVisitor.ctx.javaClassInfo.returnLabel);
+                }
+
+                mv.visitLabel(checkUnlabeled);
+                LoopLabels unlabeledTarget = emitterVisitor.ctx.javaClassInfo.findInnermostTrueLoopLabels();
+                if (unlabeledTarget != null) {
+                    Label isLast = new Label();
+                    Label isNext = new Label();
+                    Label isRedo = new Label();
+                    mv.visitVarInsn(Opcodes.ILOAD, typeSlot);
+                    mv.visitInsn(Opcodes.ICONST_0);
+                    mv.visitJumpInsn(Opcodes.IF_ICMPEQ, isLast);
+                    mv.visitVarInsn(Opcodes.ILOAD, typeSlot);
+                    mv.visitInsn(Opcodes.ICONST_1);
+                    mv.visitJumpInsn(Opcodes.IF_ICMPEQ, isNext);
+                    mv.visitVarInsn(Opcodes.ILOAD, typeSlot);
+                    mv.visitInsn(Opcodes.ICONST_2);
+                    mv.visitJumpInsn(Opcodes.IF_ICMPEQ, isRedo);
+                    mv.visitJumpInsn(Opcodes.GOTO, applyNotNextLastRedo);
+
+                    mv.visitLabel(isLast);
+                    mv.visitJumpInsn(Opcodes.GOTO, unlabeledTarget.lastLabel);
+
+                    mv.visitLabel(isNext);
+                    mv.visitJumpInsn(Opcodes.GOTO, unlabeledTarget.nextLabel);
+
+                    mv.visitLabel(isRedo);
+                    mv.visitJumpInsn(Opcodes.GOTO, unlabeledTarget.redoLabel);
+                } else if (emitterVisitor.ctx.javaClassInfo.returnLabel != null) {
+                    mv.visitVarInsn(Opcodes.ALOAD, cfSlot);
+                    mv.visitJumpInsn(Opcodes.GOTO, emitterVisitor.ctx.javaClassInfo.returnLabel);
+                }
+
+                mv.visitLabel(applyNotNextLastRedo);
+                mv.visitVarInsn(Opcodes.ALOAD, cfSlot);
+
+                mv.visitLabel(applyNoControlFlow);
 
                 // Handle context conversion: RuntimeCode.apply() always returns RuntimeList
                 // but we need to convert based on the calling context
