@@ -491,8 +491,11 @@ public class EmitOperator {
             }
         } else {
             // Handle globbing if the argument is not empty or "<>".
-            node.operator = "glob";
-            handleGlobBuiltin(emitterVisitor, node);
+            // Do not mutate the original AST: create a local copy with operator rewritten.
+            OperatorNode globNode = new OperatorNode("glob", node.operand, node.tokenIndex);
+            globNode.id = node.id;
+            globNode.annotations = node.annotations;
+            handleGlobBuiltin(emitterVisitor, globNode);
         }
     }
 

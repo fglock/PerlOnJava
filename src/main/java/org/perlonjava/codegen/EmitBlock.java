@@ -152,6 +152,9 @@ public class EmitBlock {
 
         // Special case: detect pattern of `local $_` followed by `For1Node` with needsArrayOfAlias
         // In this case, we need to evaluate the For1Node's list before emitting the local operator
+        For1Node preEvalForNode = null;
+        int savedPreEvaluatedArrayIndex = -1;
+
         if (list.size() >= 2 && 
             list.get(0) instanceof OperatorNode localOp && localOp.operator.equals("local") &&
             list.get(1) instanceof For1Node forNode && forNode.needsArrayOfAlias) {
@@ -163,42 +166,50 @@ public class EmitBlock {
             mv.visitVarInsn(Opcodes.ASTORE, tempArrayIndex);
             
             // Mark the For1Node to use the pre-evaluated array
+            preEvalForNode = forNode;
+            savedPreEvaluatedArrayIndex = forNode.preEvaluatedArrayIndex;
             forNode.preEvaluatedArrayIndex = tempArrayIndex;
         }
 
-        for (int i = 0; i < list.size(); i++) {
-            Node element = list.get(i);
-            
-            // Skip null elements - these occur when parseStatement returns null to signal
-            // "not a statement, continue parsing" (e.g., AUTOLOAD without {}, try without feature enabled)
-            // ParseBlock.parseBlock() adds these null results to the statements list
-            if (element == null) {
-                emitterVisitor.ctx.logDebug("Skipping null element in block at index " + i);
-                continue;
-            }
+        try {
+            for (int i = 0; i < list.size(); i++) {
+                Node element = list.get(i);
+                
+                // Skip null elements - these occur when parseStatement returns null to signal
+                // "not a statement, continue parsing" (e.g., AUTOLOAD without {}, try without feature enabled)
+                // ParseBlock.parseBlock() adds these null results to the statements list
+                if (element == null) {
+                    emitterVisitor.ctx.logDebug("Skipping null element in block at index " + i);
+                    continue;
+                }
 
-            ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, element.getIndex());
+                ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, element.getIndex());
 
-            // Emit the statement with current context
-            if (i == lastNonNullIndex) {
-                // Special case for the last element
-                emitterVisitor.ctx.logDebug("Last element: " + element);
-                element.accept(emitterVisitor);
-            } else {
-                // General case for all other elements
-                emitterVisitor.ctx.logDebug("Element: " + element);
-                element.accept(voidVisitor);
+                // Emit the statement with current context
+                if (i == lastNonNullIndex) {
+                    // Special case for the last element
+                    emitterVisitor.ctx.logDebug("Last element: " + element);
+                    element.accept(emitterVisitor);
+                } else {
+                    // General case for all other elements
+                    emitterVisitor.ctx.logDebug("Element: " + element);
+                    element.accept(voidVisitor);
+                }
+                
+                // NOTE: Registry checks are DISABLED in EmitBlock because:
+                // 1. They cause ASM frame computation errors in nested/refactored code
+                // 2. Bare labeled blocks (like TODO:) don't need non-local control flow
+                // 3. Real loops (for/while/foreach) have their own registry checks in
+                //    EmitForeach.java and EmitStatement.java that work correctly
+                //
+                // This means non-local control flow (next LABEL from closures) works for
+                // actual loop constructs but NOT for bare labeled blocks, which is correct
+                // Perl behavior anyway.
             }
-            
-            // NOTE: Registry checks are DISABLED in EmitBlock because:
-            // 1. They cause ASM frame computation errors in nested/refactored code
-            // 2. Bare labeled blocks (like TODO:) don't need non-local control flow
-            // 3. Real loops (for/while/foreach) have their own registry checks in
-            //    EmitForeach.java and EmitStatement.java that work correctly
-            //
-            // This means non-local control flow (next LABEL from closures) works for
-            // actual loop constructs but NOT for bare labeled blocks, which is correct
-            // Perl behavior anyway.
+        } finally {
+            if (preEvalForNode != null) {
+                preEvalForNode.preEvaluatedArrayIndex = savedPreEvaluatedArrayIndex;
+            }
         }
 
         if (node.isLoop) {
