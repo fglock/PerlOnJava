@@ -251,7 +251,9 @@ sub run_single_test {
         | op/sprintf.t
         | base/lex.t }x
         ? "warn" : "";
-    local $ENV{JPERL_LARGECODE} = $test_file =~ m{opbasic/concat\.t$}
+    local $ENV{JPERL_LARGECODE} = $test_file =~ m{
+          opbasic/concat\.t$
+        | op/pack\.t$ }x
         ? "refactor" : "";
     local $ENV{JPERL_OPTS} = $test_file =~ m{
           re/pat.t
