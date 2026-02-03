@@ -254,24 +254,6 @@ public class JavaClassInfo {
     }
 
     /**
-     * Increments the stack level by a specified amount.
-     *
-     * @param level the amount to increment the stack level by
-     */
-    public void incrementStackLevel(int level) {
-        stackLevelManager.increment(level);
-    }
-
-    /**
-     * Decrements the stack level by a specified amount.
-     *
-     * @param level the amount to decrement the stack level by
-     */
-    public void decrementStackLevel(int level) {
-        stackLevelManager.decrement(level);
-    }
-
-    /**
      * Resets the stack level to its initial state.
      */
     public void resetStackLevel() {

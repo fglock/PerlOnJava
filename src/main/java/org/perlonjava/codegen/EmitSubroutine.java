@@ -365,8 +365,6 @@ public class EmitSubroutine {
                 "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;[Lorg/perlonjava/runtime/RuntimeBase;I)Lorg/perlonjava/runtime/RuntimeList;",
                 false); // Generate an .apply() call
 
-        emitterVisitor.ctx.javaClassInfo.incrementStackLevel(1);
-
         if (pooledArgsArray) {
             emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
         }
@@ -520,11 +518,7 @@ public class EmitSubroutine {
                     emitterVisitor.ctx.javaClassInfo.releaseSpillRef(ref);
                 }
             }
-            if (belowResultStackLevel > 0) {
-                emitterVisitor.ctx.javaClassInfo.incrementStackLevel(belowResultStackLevel);
-            }
             mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
-            emitterVisitor.ctx.javaClassInfo.incrementStackLevel(1);
         }
 
         if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {

@@ -506,8 +506,6 @@ public class EmitVariable {
                         "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeArray;I)Lorg/perlonjava/runtime/RuntimeList;",
                         false); // generate an .apply() call
 
-                emitterVisitor.ctx.javaClassInfo.incrementStackLevel(1);
-
                 // RuntimeCode.apply() can return a tagged RuntimeControlFlowList (last/next/redo).
                 // Handle it before context conversion (especially before POP in VOID context).
                 Label applyNoControlFlow = new Label();
