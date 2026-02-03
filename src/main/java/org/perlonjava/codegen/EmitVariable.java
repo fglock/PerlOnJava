@@ -596,6 +596,7 @@ public class EmitVariable {
                 // No labeled target matched: propagate via returnLabel if available.
                 if (emitterVisitor.ctx.javaClassInfo.returnLabel != null) {
                     mv.visitVarInsn(Opcodes.ALOAD, cfSlot);
+                    mv.visitVarInsn(Opcodes.ASTORE, emitterVisitor.ctx.javaClassInfo.returnValueSlot);
                     mv.visitJumpInsn(Opcodes.GOTO, emitterVisitor.ctx.javaClassInfo.returnLabel);
                 }
 
@@ -626,6 +627,7 @@ public class EmitVariable {
                     mv.visitJumpInsn(Opcodes.GOTO, unlabeledTarget.redoLabel);
                 } else if (emitterVisitor.ctx.javaClassInfo.returnLabel != null) {
                     mv.visitVarInsn(Opcodes.ALOAD, cfSlot);
+                    mv.visitVarInsn(Opcodes.ASTORE, emitterVisitor.ctx.javaClassInfo.returnValueSlot);
                     mv.visitJumpInsn(Opcodes.GOTO, emitterVisitor.ctx.javaClassInfo.returnLabel);
                 }
 
