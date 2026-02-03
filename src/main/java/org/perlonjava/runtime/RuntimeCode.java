@@ -263,7 +263,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             generatedClass = EmitterMethodCreator.createClassWithMethod(
                     evalCtx,
                     ast,
-                    true  // use try-catch
+                    false  // use try-catch
             );
             runUnitcheckBlocks(ctx.unitcheckBlocks);
         } catch (Throwable e) {
@@ -272,16 +272,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Set the global error variable "$@" using GlobalContext.setGlobalVariable(key, value)
             GlobalVariable.getGlobalVariable("main::@").set(e.getMessage());
 
-            // In case of error return an "undef" ast and class
-            ast = new OperatorNode("undef", null, 1);
-            evalCtx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
-            evalCtx.symbolTable = capturedSymbolTable;
-            setCurrentScope(evalCtx.symbolTable);
-            generatedClass = EmitterMethodCreator.createClassWithMethod(
-                    evalCtx,
-                    ast,
-                    false
-            );
+            // Rethrow so applyEval() can return undef/empty list as appropriate and avoid
+            // incorrectly treating this as a successful eval.
+            throw new PerlCompilerException(e.getMessage());
         } finally {
             // Restore caller lexical flags (do not leak eval pragmas).
             capturedSymbolTable.warningFlagsStack.pop();
@@ -707,6 +700,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static RuntimeList applyEval(RuntimeScalar runtimeScalar, RuntimeArray a, int callContext) {
         try {
             RuntimeList result = apply(runtimeScalar, a, callContext);
+            // Perl clears $@ on successful eval (even if nested evals previously set it).
+            GlobalVariable.setGlobalVariable("main::@", "");
             return result;
         } catch (Throwable t) {
             // Perl eval catches exceptions; set $@ and return undef / empty list.
