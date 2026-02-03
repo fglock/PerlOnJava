@@ -622,6 +622,18 @@ public class EmitterMethodCreator implements Opcodes {
             // Setup local variables and environment for the method
             Local.localRecord localRecord = Local.localSetup(ctx, ast, mv);
 
+            // Store the computed RuntimeList return value in a dedicated local slot.
+            // This keeps the operand stack empty at join labels (endCatch), avoiding
+            // inconsistent stack map frames when multiple control-flow paths merge.
+            int returnListSlot = ctx.symbolTable.allocateLocalVariable();
+
+            // Spill the raw RuntimeBase return value for stack-neutral joins at returnLabel.
+            // Any path that jumps to returnLabel must arrive with an empty operand stack.
+            int returnValueSlot = ctx.symbolTable.allocateLocalVariable();
+            ctx.javaClassInfo.returnValueSlot = returnValueSlot;
+            mv.visitInsn(Opcodes.ACONST_NULL);
+            mv.visitVarInsn(Opcodes.ASTORE, returnValueSlot);
+
             // Labels for eval-block try/catch wrapping (used only when useTryCatch=true)
             Label tryStart = null;
             Label tryEnd = null;
@@ -658,9 +670,13 @@ public class EmitterMethodCreator implements Opcodes {
 
                 ast.accept(visitor);
 
+                // Normal fallthrough return: spill and jump with empty operand stack.
+                mv.visitVarInsn(Opcodes.ASTORE, returnValueSlot);
+                mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
+
                 // Handle the return value
                 ctx.logDebug("Return the last value");
-                mv.visitLabel(ctx.javaClassInfo.returnLabel); // "return" from other places arrive here
+
 
                 // --------------------------------
                 // End of the try block
@@ -679,14 +695,23 @@ public class EmitterMethodCreator implements Opcodes {
 
                 ast.accept(visitor);
 
+                // Normal fallthrough return: spill and jump with empty operand stack.
+                mv.visitVarInsn(Opcodes.ASTORE, returnValueSlot);
+                mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
+
                 // Handle the return value
                 ctx.logDebug("Return the last value");
-                mv.visitLabel(ctx.javaClassInfo.returnLabel); // "return" from other places arrive here
             }
 
-            // Transform the value in the stack to RuntimeList BEFORE local teardown
-            // This ensures that array/hash elements are expanded before local variables are restored
+            // Join point for all returns/gotos. Must be stack-neutral.
+            mv.visitLabel(ctx.javaClassInfo.returnLabel);
+            mv.visitVarInsn(Opcodes.ALOAD, returnValueSlot);
+
+            // Transform the value in the stack to RuntimeList BEFORE local teardown.
+            // Materialize it into a local slot immediately so all subsequent control-flow
+            // checks operate from locals and join points don't depend on operand stack shape.
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "getList", "()Lorg/perlonjava/runtime/RuntimeList;", false);
+            mv.visitVarInsn(Opcodes.ASTORE, returnListSlot);
 
             // Phase 3: Check for control flow markers
             // RuntimeList is on stack after getList()
@@ -697,6 +722,7 @@ public class EmitterMethodCreator implements Opcodes {
             Label notTailcall = new Label();
             Label normalReturn = new Label();
             
+            mv.visitVarInsn(Opcodes.ALOAD, returnListSlot);
             mv.visitInsn(Opcodes.DUP);  // Duplicate for checking
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, 
                     "org/perlonjava/runtime/RuntimeList", 
@@ -900,6 +926,9 @@ public class EmitterMethodCreator implements Opcodes {
                 mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "()V", false);
                 mv.visitLabel(evalBlockDone);
 
+                // Materialize return value in local slot and jump to endCatch with empty stack.
+                mv.visitVarInsn(Opcodes.ASTORE, returnListSlot);
+
                 // Skip the success epilogue that clears $@.
                 // This path represents an eval failure (bad goto/other marker),
                 // so $@ must be preserved.
@@ -910,6 +939,11 @@ public class EmitterMethodCreator implements Opcodes {
             
             // Normal return
             mv.visitLabel(normalReturn);
+
+            // The RuntimeList is currently on stack when coming from the trampoline checks.
+            // When jumping here from the initial isNonLocalGoto check, we need to reload it.
+            // To normalize both paths, store any on-stack value and then reload from the slot.
+            mv.visitVarInsn(Opcodes.ASTORE, returnListSlot);
             }  // End of if (ENABLE_TAILCALL_TRAMPOLINE)
 
             if (useTryCatch) {
@@ -965,8 +999,18 @@ public class EmitterMethodCreator implements Opcodes {
                 mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "()V", false);
                 mv.visitLabel(evalCatchDone);
 
+                // Materialize return value in local slot.
+                mv.visitVarInsn(Opcodes.ASTORE, returnListSlot);
+
                 // End of the catch block
                 mv.visitLabel(endCatch);
+
+                // Load the return value for the method epilogue.
+                mv.visitVarInsn(Opcodes.ALOAD, returnListSlot);
+            } else {
+                // No try/catch: ensure the method epilogue sees the return value
+                // on the operand stack.
+                mv.visitVarInsn(Opcodes.ALOAD, returnListSlot);
             }
             
             // Teardown local variables and environment after the return value is materialized

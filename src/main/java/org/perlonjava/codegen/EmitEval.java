@@ -308,20 +308,24 @@ public class EmitEval {
             mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "(Lorg/perlonjava/runtime/RuntimeScalar;)V", false);
         }
 
+        int evalResultSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
         mv.visitLabel(endCatch);
+        mv.visitVarInsn(Opcodes.ASTORE, evalResultSlot);
 
         // If eval returned a non-local control flow marker (next/last/redo),
         // it must apply to the enclosing scope, matching Perl semantics.
         // We translate it into a local jump to the appropriate loop/block label.
         Label evalNoControlFlow = new Label();
         Label evalNotNextLastRedo = new Label();
-        mv.visitInsn(Opcodes.DUP);
+        mv.visitVarInsn(Opcodes.ALOAD, evalResultSlot);
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                 "org/perlonjava/runtime/RuntimeList",
                 "isNonLocalGoto",
                 "()Z",
                 false);
         mv.visitJumpInsn(Opcodes.IFEQ, evalNoControlFlow);
+
+        mv.visitVarInsn(Opcodes.ALOAD, evalResultSlot);
 
         int cfSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
         mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeControlFlowList");
@@ -391,6 +395,7 @@ public class EmitEval {
             mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeScalar", "<init>", "()V", false);
             mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "(Lorg/perlonjava/runtime/RuntimeScalar;)V", false);
         }
+        mv.visitVarInsn(Opcodes.ASTORE, evalResultSlot);
         mv.visitJumpInsn(Opcodes.GOTO, evalNoControlFlow);
 
         mv.visitLabel(evalIsNextLastRedo);
@@ -472,6 +477,7 @@ public class EmitEval {
             mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeScalar", "<init>", "()V", false);
             mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "(Lorg/perlonjava/runtime/RuntimeScalar;)V", false);
         }
+        mv.visitVarInsn(Opcodes.ASTORE, evalResultSlot);
         mv.visitJumpInsn(Opcodes.GOTO, evalNoControlFlow);
 
         // 2) Unlabeled control flow: target the innermost true loop
@@ -494,10 +500,60 @@ public class EmitEval {
             mv.visitJumpInsn(Opcodes.GOTO, evalNotNextLastRedo);
 
             mv.visitLabel(isLast);
-            mv.visitJumpInsn(Opcodes.GOTO, unlabeledTarget.lastLabel);
+            mv.visitVarInsn(Opcodes.ALOAD, cfSlot);
+            mv.visitFieldInsn(Opcodes.GETFIELD,
+                    "org/perlonjava/runtime/RuntimeControlFlowList",
+                    "marker",
+                    "Lorg/perlonjava/runtime/ControlFlowMarker;");
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/RuntimeControlFlowRegistry",
+                    "register",
+                    "(Lorg/perlonjava/runtime/ControlFlowMarker;)V",
+                    false);
+
+            // Return undef/empty list from eval after registering control flow
+            if (emitterVisitor.ctx.contextType == RuntimeContextType.LIST) {
+                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "()V", false);
+            } else {
+                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeScalar");
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeScalar", "<init>", "()V", false);
+                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "(Lorg/perlonjava/runtime/RuntimeScalar;)V", false);
+            }
+            mv.visitVarInsn(Opcodes.ASTORE, evalResultSlot);
+            mv.visitJumpInsn(Opcodes.GOTO, evalNoControlFlow);
 
             mv.visitLabel(isNext);
-            mv.visitJumpInsn(Opcodes.GOTO, unlabeledTarget.nextLabel);
+            mv.visitVarInsn(Opcodes.ALOAD, cfSlot);
+            mv.visitFieldInsn(Opcodes.GETFIELD,
+                    "org/perlonjava/runtime/RuntimeControlFlowList",
+                    "marker",
+                    "Lorg/perlonjava/runtime/ControlFlowMarker;");
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/RuntimeControlFlowRegistry",
+                    "register",
+                    "(Lorg/perlonjava/runtime/ControlFlowMarker;)V",
+                    false);
+
+            // Return undef/empty list from eval after registering control flow
+            if (emitterVisitor.ctx.contextType == RuntimeContextType.LIST) {
+                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "()V", false);
+            } else {
+                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeScalar");
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeScalar", "<init>", "()V", false);
+                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "(Lorg/perlonjava/runtime/RuntimeScalar;)V", false);
+            }
+            mv.visitVarInsn(Opcodes.ASTORE, evalResultSlot);
+            mv.visitJumpInsn(Opcodes.GOTO, evalNoControlFlow);
 
             mv.visitLabel(isRedo);
             mv.visitJumpInsn(Opcodes.GOTO, unlabeledTarget.redoLabel);
@@ -532,6 +588,7 @@ public class EmitEval {
                 mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeScalar", "<init>", "()V", false);
                 mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "(Lorg/perlonjava/runtime/RuntimeScalar;)V", false);
             }
+            mv.visitVarInsn(Opcodes.ASTORE, evalResultSlot);
             mv.visitJumpInsn(Opcodes.GOTO, evalNoControlFlow);
         }
 
@@ -539,7 +596,11 @@ public class EmitEval {
         mv.visitLabel(evalNotNextLastRedo);
         mv.visitVarInsn(Opcodes.ALOAD, cfSlot);
 
+        mv.visitVarInsn(Opcodes.ASTORE, evalResultSlot);
+
         mv.visitLabel(evalNoControlFlow);
+
+        mv.visitVarInsn(Opcodes.ALOAD, evalResultSlot);
 
         // Convert result based on calling context
         if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {

@@ -187,6 +187,7 @@ public class EmitControlFlow {
             node.operand.accept(emitterVisitor.with(RuntimeContextType.RUNTIME));
         }
 
+        ctx.mv.visitVarInsn(Opcodes.ASTORE, ctx.javaClassInfo.returnValueSlot);
         ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
     }
     
@@ -253,6 +254,7 @@ public class EmitControlFlow {
         }
         
         // Jump to returnLabel (trampoline will handle it)
+        ctx.mv.visitVarInsn(Opcodes.ASTORE, ctx.javaClassInfo.returnValueSlot);
         ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
     }
 
@@ -330,11 +332,15 @@ public class EmitControlFlow {
                         "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeArray;Ljava/lang/String;I)V",
                         false);
 
+                ctx.javaClassInfo.resetStackLevel(); // Clean up stack before jumping
+
                 if (pooledTarget) {
                     ctx.javaClassInfo.releaseSpillSlot();
                 }
 
+                ctx.mv.visitVarInsn(Opcodes.ASTORE, ctx.javaClassInfo.returnValueSlot);
                 ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
+
 
                 // Otherwise, treat it as a computed label name (dynamic goto).
                 ctx.mv.visitLabel(notCodeRef);
@@ -388,6 +394,7 @@ public class EmitControlFlow {
                 if (pooledMarker) {
                     ctx.javaClassInfo.releaseSpillSlot();
                 }
+                ctx.mv.visitVarInsn(Opcodes.ASTORE, ctx.javaClassInfo.returnValueSlot);
                 ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
                 return;
             }
@@ -436,6 +443,7 @@ public class EmitControlFlow {
             if (pooledMarker) {
                 ctx.javaClassInfo.releaseSpillSlot();
             }
+            ctx.mv.visitVarInsn(Opcodes.ASTORE, ctx.javaClassInfo.returnValueSlot);
             ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
             return;
         }
