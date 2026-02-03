@@ -15,7 +15,7 @@ import org.perlonjava.runtime.ScalarUtils;
 import static org.perlonjava.codegen.EmitOperator.emitOperator;
 
 public class EmitBinaryOperator {
-    static final boolean ENABLE_SPILL_BINARY_LHS = System.getenv("JPERL_NO_SPILL_BINARY_LHS") == null;
+    static final boolean ENABLE_SPILL_BINARY_LHS = true;
 
     static void handleBinaryOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node, OperatorHandler operatorHandler) {
         EmitterVisitor scalarVisitor =
@@ -181,25 +181,20 @@ public class EmitBinaryOperator {
         }
 
         MethodVisitor mv = emitterVisitor.ctx.mv;
-        if (ENABLE_SPILL_BINARY_LHS) {
-            node.left.accept(scalarVisitor); // left parameter
-            int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
-            boolean pooled = leftSlot >= 0;
-            if (!pooled) {
-                leftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-            }
-            mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
+        node.left.accept(scalarVisitor); // left parameter
+        int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+        boolean pooled = leftSlot >= 0;
+        if (!pooled) {
+            leftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        }
+        mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
 
-            right.accept(scalarVisitor); // right parameter
+        right.accept(scalarVisitor); // right parameter
 
-            mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
-            mv.visitInsn(Opcodes.SWAP);
-            if (pooled) {
-                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
-            }
-        } else {
-            node.left.accept(scalarVisitor); // left parameter
-            right.accept(scalarVisitor); // right parameter
+        mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+        mv.visitInsn(Opcodes.SWAP);
+        if (pooled) {
+            emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
         }
         // stack: [left, right]
         emitOperator(node, emitterVisitor);
@@ -210,37 +205,31 @@ public class EmitBinaryOperator {
         EmitterVisitor scalarVisitor =
                 emitterVisitor.with(RuntimeContextType.SCALAR); // execute operands in scalar context
         MethodVisitor mv = emitterVisitor.ctx.mv;
-        if (ENABLE_SPILL_BINARY_LHS) {
-            node.left.accept(scalarVisitor); // target - left parameter
-            int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
-            boolean pooledLeft = leftSlot >= 0;
-            if (!pooledLeft) {
-                leftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-            }
-            mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
+        node.left.accept(scalarVisitor); // target - left parameter
+        int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+        boolean pooledLeft = leftSlot >= 0;
+        if (!pooledLeft) {
+            leftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        }
+        mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
 
-            node.right.accept(scalarVisitor); // right parameter
-            int rightSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
-            boolean pooledRight = rightSlot >= 0;
-            if (!pooledRight) {
-                rightSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-            }
-            mv.visitVarInsn(Opcodes.ASTORE, rightSlot);
+        node.right.accept(scalarVisitor); // right parameter
+        int rightSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+        boolean pooledRight = rightSlot >= 0;
+        if (!pooledRight) {
+            rightSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        }
+        mv.visitVarInsn(Opcodes.ASTORE, rightSlot);
 
-            mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
-            mv.visitInsn(Opcodes.DUP);
-            mv.visitVarInsn(Opcodes.ALOAD, rightSlot);
+        mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitVarInsn(Opcodes.ALOAD, rightSlot);
 
-            if (pooledRight) {
-                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
-            }
-            if (pooledLeft) {
-                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
-            }
-        } else {
-            node.left.accept(scalarVisitor); // target - left parameter
-            mv.visitInsn(Opcodes.DUP);
-            node.right.accept(scalarVisitor); // right parameter
+        if (pooledRight) {
+            emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+        }
+        if (pooledLeft) {
+            emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
         }
         // perform the operation
         String baseOperator = node.operator.substring(0, node.operator.length() - 1);
