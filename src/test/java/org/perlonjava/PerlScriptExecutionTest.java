@@ -10,6 +10,7 @@ import org.perlonjava.io.StandardIO;
 import org.perlonjava.runtime.RuntimeArray;
 import org.perlonjava.runtime.RuntimeIO;
 import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.GlobalVariable;
 import org.perlonjava.scriptengine.PerlLanguageProvider;
 
 import java.io.ByteArrayOutputStream;
@@ -164,6 +165,10 @@ public class PerlScriptExecutionTest {
 
         // Replace RuntimeIO.stdout with a new instance
         RuntimeIO.stdout = new RuntimeIO(newStdout);
+        // Keep Perl's global *STDOUT/*STDERR in sync with the RuntimeIO static fields.
+        // Some tests call `binmode STDOUT/STDERR` and expect it to affect the real globals.
+        GlobalVariable.getGlobalIO("main::STDOUT").setIO(RuntimeIO.stdout);
+        GlobalVariable.getGlobalIO("main::STDERR").setIO(RuntimeIO.stderr);
 
         // Also update System.out for any direct Java calls
         System.setOut(new PrintStream(outputStream));
@@ -176,6 +181,8 @@ public class PerlScriptExecutionTest {
     void tearDown() {
         // Restore original stdout
         RuntimeIO.stdout = new RuntimeIO(new StandardIO(originalOut, true));
+        GlobalVariable.getGlobalIO("main::STDOUT").setIO(RuntimeIO.stdout);
+        GlobalVariable.getGlobalIO("main::STDERR").setIO(RuntimeIO.stderr);
         System.setOut(originalOut);
     }
 
@@ -278,7 +285,11 @@ public class PerlScriptExecutionTest {
             Throwable rootCause = getRootCause(e);
             System.err.println("Root cause error in " + filename + ":");
             rootCause.printStackTrace(System.err);
-            fail("Execution of " + filename + " failed: " + rootCause.getMessage());
+            String msg = rootCause.getMessage();
+            if (msg == null || msg.isEmpty()) {
+                msg = rootCause.toString();
+            }
+            fail("Execution of " + filename + " failed: " + msg);
         }
     }
 
