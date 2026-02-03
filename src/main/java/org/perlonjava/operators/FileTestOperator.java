@@ -130,9 +130,18 @@ public class FileTestOperator {
             BasicFileAttributes basicAttr = lstat
                     ? Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS)
                     : Files.readAttributes(path, BasicFileAttributes.class);
-            PosixFileAttributes posixAttr = lstat
-                    ? Files.readAttributes(path, PosixFileAttributes.class, LinkOption.NOFOLLOW_LINKS)
-                    : Files.readAttributes(path, PosixFileAttributes.class);
+
+            // POSIX attributes are not available on all platforms (e.g. Windows).
+            // Perl filetest operators like -e/-f/-d only need the basic attributes.
+            PosixFileAttributes posixAttr = null;
+            try {
+                posixAttr = lstat
+                        ? Files.readAttributes(path, PosixFileAttributes.class, LinkOption.NOFOLLOW_LINKS)
+                        : Files.readAttributes(path, PosixFileAttributes.class);
+            } catch (UnsupportedOperationException | IOException ignored) {
+                // Leave posixAttr as null.
+            }
+
             lastBasicAttr = basicAttr;
             lastPosixAttr = posixAttr;
             getGlobalVariable("main::!").set(0);
@@ -142,7 +151,7 @@ public class FileTestOperator {
             getGlobalVariable("main::!").set(2);
             updateLastStat(arg, false, 2, lstat);
             return false;
-        } catch (IOException e) {
+        } catch (IOException | UnsupportedOperationException e) {
             getGlobalVariable("main::!").set(5);
             updateLastStat(arg, false, 5, lstat);
             return false;
