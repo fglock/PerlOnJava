@@ -1,7 +1,6 @@
 package org.perlonjava.astnode;
 
 import org.perlonjava.astvisitor.Visitor;
-import org.perlonjava.astrefactor.LargeNodeRefactorer;
 import org.perlonjava.parser.Parser;
 
 import java.util.List;
@@ -17,13 +16,7 @@ import java.util.List;
  * </ul>
  * <p>
  * The elements list contains key-value pairs in sequence: key1, value1, key2, value2, etc.
- * <p>
- * <b>Large Literal Handling:</b> The constructor automatically invokes
- * {@link LargeNodeRefactorer#maybeRefactorElements} to split very large hashes
- * into chunks (currently disabled - on-demand refactoring is used instead).
- * For hashes, chunk sizes are forced to be even to preserve key-value pairing.
  *
- * @see LargeNodeRefactorer
  * @see ArrayLiteralNode
  * @see ListNode
  */
@@ -33,22 +26,14 @@ public class HashLiteralNode extends AbstractNode {
      * <p>
      * Elements are stored as alternating key-value pairs: [key1, value1, key2, value2, ...].
      * Each element is evaluated in LIST context when the hash is constructed.
-     * <p>
-     * Note: This field is non-final because {@link LargeNodeRefactorer} may replace
-     * the original list with a refactored version containing chunk wrappers.
      */
     public List<Node> elements;
 
     /**
      * Constructs a new HashLiteralNode with the specified list of child nodes.
-     * <p>
-     * <b>Large Literal Refactoring:</b> Currently disabled by default.
-     * Large code is handled automatically via on-demand refactoring when compilation errors occur.
-     * Chunk sizes are forced to be even to preserve key-value pairing.
      *
      * @param elements   the list of key-value pairs (alternating keys and values)
      * @param tokenIndex the token index in the source for error reporting
-     * @see LargeNodeRefactorer#maybeRefactorElements
      */
     public HashLiteralNode(List<Node> elements, int tokenIndex) {
         this(elements, tokenIndex, null);
@@ -56,17 +41,14 @@ public class HashLiteralNode extends AbstractNode {
 
     /**
      * Constructs a new HashLiteralNode with the specified list of child nodes and parser context.
-     * <p>
-     * This constructor provides better error messages with source code context when refactoring fails.
      *
      * @param elements   the list of key-value pairs (alternating keys and values)
      * @param tokenIndex the token index in the source for error reporting
-     * @param parser     the parser instance for access to error utilities
-     * @see LargeNodeRefactorer#maybeRefactorElements
+     * @param parser     the parser instance (unused, kept for API compatibility)
      */
     public HashLiteralNode(List<Node> elements, int tokenIndex, Parser parser) {
         this.tokenIndex = tokenIndex;
-        this.elements = LargeNodeRefactorer.maybeRefactorElements(elements, tokenIndex, parser);
+        this.elements = elements;
     }
 
     /**

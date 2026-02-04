@@ -1,7 +1,6 @@
 package org.perlonjava.astnode;
 
 import org.perlonjava.astvisitor.Visitor;
-import org.perlonjava.astrefactor.LargeNodeRefactorer;
 import org.perlonjava.parser.Parser;
 
 import java.util.ArrayList;
@@ -20,12 +19,7 @@ import java.util.List;
  * <p>
  * Unlike {@link ArrayLiteralNode} which creates an array reference, ListNode represents
  * a flat list that can be assigned to arrays or used in list context.
- * <p>
- * <b>Large Literal Handling:</b> The constructor automatically invokes
- * {@link LargeNodeRefactorer#maybeRefactorElements} to split very large lists
- * into chunks (currently disabled - on-demand refactoring is used instead).
  *
- * @see LargeNodeRefactorer
  * @see ArrayLiteralNode
  * @see HashLiteralNode
  */
@@ -36,9 +30,6 @@ public class ListNode extends AbstractNode {
      * Each element is an AST node representing an expression. Elements are evaluated
      * in the context determined by how the list is used (list context for assignments,
      * scalar context for the last element in scalar context, etc.).
-     * <p>
-     * Note: This field is non-final because {@link LargeNodeRefactorer} may replace
-     * the original list with a refactored version containing chunk wrappers.
      */
     public List<Node> elements;
 
@@ -58,13 +49,9 @@ public class ListNode extends AbstractNode {
 
     /**
      * Constructs a ListNode with the specified elements.
-     * <p>
-     * <b>Large Literal Refactoring:</b> Currently disabled by default.
-     * Large code is handled automatically via on-demand refactoring when compilation errors occur.
      *
      * @param elements   the list of child nodes to be stored in this ListNode
      * @param tokenIndex the token index in the source for error reporting
-     * @see LargeNodeRefactorer#maybeRefactorElements
      */
     public ListNode(List<Node> elements, int tokenIndex) {
         this(elements, tokenIndex, null);
@@ -72,17 +59,14 @@ public class ListNode extends AbstractNode {
 
     /**
      * Constructs a ListNode with the specified elements and parser context.
-     * <p>
-     * This constructor provides better error messages with source code context when refactoring fails.
      *
      * @param elements   the list of child nodes to be stored in this ListNode
      * @param tokenIndex the token index in the source for error reporting
-     * @param parser     the parser instance for access to error utilities
-     * @see LargeNodeRefactorer#maybeRefactorElements
+     * @param parser     the parser instance (unused, kept for API compatibility)
      */
     public ListNode(List<Node> elements, int tokenIndex, Parser parser) {
         this.tokenIndex = tokenIndex;
-        this.elements = LargeNodeRefactorer.maybeRefactorElements(elements, tokenIndex, parser);
+        this.elements = elements;
         this.handle = null;
     }
 

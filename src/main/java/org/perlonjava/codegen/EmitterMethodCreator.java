@@ -357,8 +357,8 @@ public class EmitterMethodCreator implements Opcodes {
                     // Notify user that automatic refactoring is happening
                     System.err.println("Note: Method too large, retrying with automatic refactoring.");
 
-                    // Force refactoring with auto-retry flag
-                    LargeBlockRefactorer.forceRefactorForCodegen(blockAst, true);
+                    // Force refactoring
+                    LargeBlockRefactorer.forceRefactorForCodegen(blockAst);
 
                     // Reset JavaClassInfo to avoid reusing partially-resolved Labels.
                     if (ctx != null && ctx.javaClassInfo != null) {

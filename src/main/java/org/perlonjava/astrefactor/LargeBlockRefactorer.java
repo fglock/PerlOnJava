@@ -7,13 +7,10 @@ import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.astvisitor.BytecodeSizeEstimator;
 import org.perlonjava.parser.Parser;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Deque;
 import java.util.List;
 
 import static org.perlonjava.astrefactor.BlockRefactor.*;
-import static org.perlonjava.astrefactor.LargeNodeRefactorer.IS_REFACTORING_ENABLED;
 
 /**
  * Helper class for refactoring large blocks to avoid JVM's "Method too large" error.
@@ -80,38 +77,13 @@ public class LargeBlockRefactorer {
         return chunkStart;
     }
 
-    private static final ThreadLocal<Deque<BlockNode>> pendingRefactorBlocks = ThreadLocal.withInitial(ArrayDeque::new);
-    private static final ThreadLocal<Boolean> processingPendingRefactors = ThreadLocal.withInitial(() -> false);
-
-    private static void processPendingRefactors() {
-        if (processingPendingRefactors.get()) {
-            return;
-        }
-        processingPendingRefactors.set(true);
-        Deque<BlockNode> queue = pendingRefactorBlocks.get();
-        try {
-            while (!queue.isEmpty()) {
-                BlockNode block = queue.removeFirst();
-                maybeRefactorBlock(block, null);
-            }
-        } finally {
-            queue.clear();
-            processingPendingRefactors.set(false);
-        }
-    }
-
     /**
      * Force refactoring of a block that has already reached codegen and failed with MethodTooLargeException.
      * This is called during automatic error recovery.
      *
      * @param node The block to refactor (modified in place)
-     * @param isAutoRetry True if this is automatic retry on error (always refactor), false otherwise
      */
-    public static void forceRefactorForCodegen(BlockNode node, boolean isAutoRetry) {
-        // Only check IS_REFACTORING_ENABLED if NOT auto-retry
-        if (!isAutoRetry && !IS_REFACTORING_ENABLED) {
-            return;
-        }
+    public static void forceRefactorForCodegen(BlockNode node) {
         if (node == null) {
             return;
         }
@@ -127,64 +99,6 @@ public class LargeBlockRefactorer {
 
         // More aggressive than parse-time: allow deeper nesting to ensure we get under the JVM limit.
         trySmartChunking(node, null, 256);
-        processPendingRefactors();
-    }
-
-    /**
-     * Parse-time entry point: called from BlockNode constructor to refactor large blocks.
-     * This applies smart chunking to split safe statement sequences into closures.
-     * Disabled by default - automatic on-demand refactoring is used instead.
-     *
-     * @param node   The block to potentially refactor (modified in place)
-     * @param parser The parser instance for access to error utilities (can be null if not available)
-     */
-    public static void maybeRefactorBlock(BlockNode node, Parser parser) {
-        // Skip if refactoring is not enabled
-        // This is critical - we only do bytecode size estimation when refactoring is enabled
-        // to avoid parse-time overhead and potential issues with partially constructed AST
-        if (!IS_REFACTORING_ENABLED) {
-            return;
-        }
-
-        // Skip if we're inside createMarkedBlock (prevents recursion)
-        if (skipRefactoring.get()) {
-            if (node.annotations != null) {
-                node.setAnnotation("refactorSkipReason", "Inside createMarkedBlock (recursion prevention)");
-            }
-            return;
-        }
-
-        // Skip if already successfully refactored (prevents infinite recursion)
-        if (node.getBooleanAnnotation("blockAlreadyRefactored")) {
-            if (parser != null || node.annotations != null) {
-                node.setAnnotation("refactorSkipReason", "Already refactored");
-            }
-            return;
-        }
-
-        Object attemptsObj = node.getAnnotation("refactorAttempts");
-        int attempts = attemptsObj instanceof Integer ? (Integer) attemptsObj : 0;
-        if (attempts >= MAX_REFACTOR_ATTEMPTS) {
-            if (parser != null || node.annotations != null) {
-                node.setAnnotation("refactorSkipReason", "Refactor attempt limit reached: " + attempts);
-            }
-            return;
-        }
-        node.setAnnotation("refactorAttempts", attempts + 1);
-
-        // Skip special blocks (BEGIN, END, etc.)
-        if (isSpecialContext(node)) {
-            if (parser != null || node.annotations != null) {
-                node.setAnnotation("refactorSkipReason", "Special block (BEGIN/END/etc)");
-            }
-            return;
-        }
-
-        // Apply smart chunking
-        trySmartChunking(node, parser, 64);
-
-        // Refactor any blocks created during this pass (iteratively, not recursively).
-        processPendingRefactors();
     }
 
     /**
@@ -207,7 +121,7 @@ public class LargeBlockRefactorer {
         }
 
         // Determine if we need to refactor
-        boolean needsRefactoring = shouldRefactorBlock(node, emitterVisitor, IS_REFACTORING_ENABLED);
+        boolean needsRefactoring = shouldRefactorBlock(node, emitterVisitor, false);
 
         if (!needsRefactoring) {
             return false;

@@ -1,7 +1,6 @@
 package org.perlonjava.astnode;
 
 import org.perlonjava.astvisitor.Visitor;
-import org.perlonjava.astrefactor.LargeBlockRefactorer;
 import org.perlonjava.parser.Parser;
 
 import java.util.ArrayList;
@@ -15,8 +14,6 @@ import java.util.List;
 public class BlockNode extends AbstractNode {
     /**
      * The list of child nodes contained in this BlockNode.
-     * Note: This field is non-final because {@link LargeBlockRefactorer} may modify
-     * the list during parse-time refactoring.
      */
     public List<Node> elements;
 
@@ -36,9 +33,6 @@ public class BlockNode extends AbstractNode {
 
     /**
      * Constructs a new BlockNode with the specified list of child nodes.
-     * <p>
-     * <b>Large Block Refactoring:</b> Currently disabled by default.
-     * Large code is handled automatically via on-demand refactoring when compilation errors occur.
      *
      * @param elements   the list of child nodes to be stored in this BlockNode
      * @param tokenIndex the index of the token in the source code
@@ -49,12 +43,10 @@ public class BlockNode extends AbstractNode {
 
     /**
      * Constructs a new BlockNode with the specified list of child nodes and parser context.
-     * <p>
-     * This constructor provides better error messages with source code context when refactoring fails.
      *
      * @param elements   the list of child nodes to be stored in this BlockNode
      * @param tokenIndex the index of the token in the source code
-     * @param parser     the parser instance for access to error utilities
+     * @param parser     the parser instance (unused, kept for API compatibility)
      */
     public BlockNode(List<Node> elements, int tokenIndex, Parser parser) {
         this.elements = elements;
@@ -62,8 +54,6 @@ public class BlockNode extends AbstractNode {
         this.labels = new ArrayList<>();
         this.labelName = null;
         this.isLoop = false;
-        // Apply parse-time refactoring if enabled
-        LargeBlockRefactorer.maybeRefactorBlock(this, parser);
     }
 
     /**
