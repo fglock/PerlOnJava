@@ -7,6 +7,8 @@ import org.perlonjava.symbols.ScopedSymbolTable;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Represents information about a Java class being generated.
@@ -72,6 +74,12 @@ public class JavaClassInfo {
     public Deque<GotoLabels> gotoLabelStack;
 
     /**
+     * Map of loop state signature to block-level dispatcher label.
+     * Allows multiple call sites with the same visible loops to share one dispatcher.
+     */
+    public Map<String, Label> blockDispatcherLabels;
+
+    /**
      * Constructs a new JavaClassInfo object.
      * Initializes the class name, stack level manager, and loop label stack.
      */
@@ -81,6 +89,7 @@ public class JavaClassInfo {
         this.returnValueSlot = -1;
         this.loopLabelStack = new ArrayDeque<>();
         this.gotoLabelStack = new ArrayDeque<>();
+        this.blockDispatcherLabels = new HashMap<>();
         this.spillSlots = new int[0];
         this.spillTop = 0;
     }
@@ -249,6 +258,32 @@ public class JavaClassInfo {
 
     public void popGotoLabels() {
         gotoLabelStack.pop();
+    }
+
+    /**
+     * Computes a unique signature for the current loop state.
+     * This signature identifies which loops are visible at the current point.
+     * Call sites with the same signature can share a block-level dispatcher.
+     *
+     * @return a string signature representing the current loop state
+     */
+    public String getLoopStateSignature() {
+        if (loopLabelStack.isEmpty()) {
+            return "NO_LOOPS";
+        }
+
+        StringBuilder sb = new StringBuilder();
+        boolean first = true;
+        // Iterate from innermost to outermost (stack order)
+        for (LoopLabels loop : loopLabelStack) {
+            if (!first) {
+                sb.append("|");
+            }
+            first = false;
+            sb.append(loop.labelName != null ? loop.labelName : "UNLABELED");
+            sb.append("@").append(System.identityHashCode(loop));
+        }
+        return sb.toString();
     }
 
     /**
