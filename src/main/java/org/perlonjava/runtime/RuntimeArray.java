@@ -100,6 +100,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 yield pop(runtimeArray); // Recursive call after vivification
             }
             case TIED_ARRAY -> TieArray.tiedPop(runtimeArray);
+            case READONLY_ARRAY -> throw new PerlCompilerException("Modification of a read-only value attempted");
             default -> throw new IllegalStateException("Unknown array type: " + runtimeArray.type);
         };
     }
@@ -123,6 +124,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 yield shift(runtimeArray); // Recursive call after vivification
             }
             case TIED_ARRAY -> TieArray.tiedShift(runtimeArray);
+            case READONLY_ARRAY -> throw new PerlCompilerException("Modification of a read-only value attempted");
             default -> throw new IllegalStateException("Unknown array type: " + runtimeArray.type);
         };
     }
@@ -158,6 +160,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 yield push(runtimeArray, value);
             }
             case TIED_ARRAY -> TieArray.tiedPush(runtimeArray, value);
+            case READONLY_ARRAY -> throw new PerlCompilerException("Modification of a read-only value attempted");
             default -> throw new IllegalStateException("Unknown array type: " + runtimeArray.type);
         };
     }
@@ -297,6 +300,16 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             }
             case AUTOVIVIFY_ARRAY -> scalarFalse;
             case TIED_ARRAY -> TieArray.tiedExists(this, getScalarInt(index));
+            case READONLY_ARRAY -> {
+                if (index < 0) {
+                    index = elements.size() + index; // Handle negative indices
+                }
+                if (index < 0 || index >= elements.size()) {
+                    yield scalarFalse;
+                }
+                RuntimeScalar element = elements.get(index);
+                yield (element == null) ? scalarFalse : scalarTrue;
+            }
             default -> throw new IllegalStateException("Unknown array type: " + type);
         };
     }
@@ -329,6 +342,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             }
             case AUTOVIVIFY_ARRAY -> scalarUndef;
             case TIED_ARRAY -> TieArray.tiedDelete(this, getScalarInt(index));
+            case READONLY_ARRAY -> throw new PerlCompilerException("Modification of a read-only value attempted");
             default -> throw new IllegalStateException("Unknown array type: " + type);
         };
     }
@@ -442,6 +456,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * @return The updated RuntimeArray.
      */
     public RuntimeArray set(RuntimeScalar value) {
+        if (this.type == READONLY_ARRAY) {
+            throw new PerlCompilerException("Modification of a read-only value attempted");
+        }
         this.elements.clear();
         this.elements.add(value);
         return this;
@@ -516,6 +533,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 }
                 yield this;
             }
+            case READONLY_ARRAY -> throw new PerlCompilerException("Modification of a read-only value attempted");
             default -> throw new IllegalStateException("Unknown array type: " + type);
         };
     }
@@ -597,6 +615,12 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             case AUTOVIVIFY_ARRAY ->
                     throw new PerlCompilerException("Can't use an undefined value as an ARRAY reference");
             case TIED_ARRAY -> TieArray.tiedFetchSize(this);
+            case READONLY_ARRAY -> {
+                if (scalarContextSize != null) {
+                    yield getScalarInt(scalarContextSize);
+                }
+                yield getScalarInt(elements.size());
+            }
             default -> throw new IllegalStateException("Unknown array type: " + type);
         };
     }
@@ -608,6 +632,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             case AUTOVIVIFY_ARRAY ->
                     throw new PerlCompilerException("Can't use an undefined value as an ARRAY reference");
             case TIED_ARRAY -> TieArray.tiedFetchSize(this).getInt() - 1;
+            case READONLY_ARRAY -> elements.size() - 1;
             default -> throw new IllegalStateException("Unknown array type: " + type);
         };
     }
@@ -636,6 +661,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 setLastElementIndex(value);
             }
             case TIED_ARRAY -> TieArray.tiedStoreSize(this, new RuntimeScalar(value.getInt() + 1));
+            case READONLY_ARRAY -> throw new PerlCompilerException("Modification of a read-only value attempted");
             default -> throw new IllegalStateException("Unknown array type: " + type);
         }
     }
