@@ -379,8 +379,7 @@ public class EmitSubroutine {
         // If RuntimeCode.apply() returned a RuntimeControlFlowList marker, handle it here.
         if (ENABLE_CONTROL_FLOW_CHECKS
                 && emitterVisitor.ctx.javaClassInfo.returnLabel != null
-                && emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot >= 0
-                && emitterVisitor.ctx.javaClassInfo.stackLevelManager.getStackLevel() <= 1) {
+                && emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot >= 0) {
 
             Label notControlFlow = new Label();
             Label propagateToCaller = new Label();
@@ -398,11 +397,6 @@ public class EmitSubroutine {
                 baseSpills[i] = emitterVisitor.ctx.javaClassInfo.acquireSpillRefOrAllocate(emitterVisitor.ctx.symbolTable);
                 emitterVisitor.ctx.javaClassInfo.storeSpillRef(mv, baseSpills[i]);
             }
-
-            // We just removed the entire base stack from the JVM operand stack via ASTORE.
-            // Keep StackLevelManager in sync; otherwise later emitPopInstructions() may POP the wrong values
-            // (including control-flow markers), producing invalid stackmap frames.
-            emitterVisitor.ctx.javaClassInfo.resetStackLevel();
 
             // Load and check if it's a control flow marker
             mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
@@ -463,7 +457,6 @@ public class EmitSubroutine {
                 if (loopLabels.lastLabel == emitterVisitor.ctx.javaClassInfo.returnLabel) {
                     mv.visitJumpInsn(Opcodes.GOTO, propagateToCaller);
                 } else {
-                    emitterVisitor.ctx.javaClassInfo.stackLevelManager.emitPopInstructions(mv, loopLabels.asmStackLevel);
                     if (loopLabels.context != RuntimeContextType.VOID) {
                         EmitOperator.emitUndef(mv);
                     }
@@ -478,7 +471,6 @@ public class EmitSubroutine {
                 if (loopLabels.nextLabel == emitterVisitor.ctx.javaClassInfo.returnLabel) {
                     mv.visitJumpInsn(Opcodes.GOTO, propagateToCaller);
                 } else {
-                    emitterVisitor.ctx.javaClassInfo.stackLevelManager.emitPopInstructions(mv, loopLabels.asmStackLevel);
                     if (loopLabels.context != RuntimeContextType.VOID) {
                         EmitOperator.emitUndef(mv);
                     }
@@ -490,7 +482,6 @@ public class EmitSubroutine {
                 if (loopLabels.redoLabel == emitterVisitor.ctx.javaClassInfo.returnLabel) {
                     mv.visitJumpInsn(Opcodes.GOTO, propagateToCaller);
                 } else {
-                    emitterVisitor.ctx.javaClassInfo.stackLevelManager.emitPopInstructions(mv, loopLabels.asmStackLevel);
                     mv.visitJumpInsn(Opcodes.GOTO, loopLabels.redoLabel);
                 }
 

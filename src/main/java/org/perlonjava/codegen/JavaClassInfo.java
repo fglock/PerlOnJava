@@ -65,11 +65,6 @@ public class JavaClassInfo {
     }
 
     /**
-     * Manages the stack level for the class.
-     */
-    public StackLevelManager stackLevelManager;
-
-    /**
      * A stack of loop labels for managing nested loops.
      */
     public Deque<LoopLabels> loopLabelStack;
@@ -84,7 +79,6 @@ public class JavaClassInfo {
         this.javaClassName = EmitterMethodCreator.generateClassName();
         this.returnLabel = null;
         this.returnValueSlot = -1;
-        this.stackLevelManager = new StackLevelManager();
         this.loopLabelStack = new ArrayDeque<>();
         this.gotoLabelStack = new ArrayDeque<>();
         this.spillSlots = new int[0];
@@ -143,7 +137,7 @@ public class JavaClassInfo {
      * @param lastLabel the label for exiting the loop
      */
     public void pushLoopLabels(String labelName, Label nextLabel, Label redoLabel, Label lastLabel, int context) {
-        loopLabelStack.push(new LoopLabels(labelName, nextLabel, redoLabel, lastLabel, stackLevelManager.getStackLevel(), context));
+        loopLabelStack.push(new LoopLabels(labelName, nextLabel, redoLabel, lastLabel, context));
     }
 
     /**
@@ -153,16 +147,15 @@ public class JavaClassInfo {
      * @param nextLabel     the label for the next iteration
      * @param redoLabel     the label for redoing the current iteration
      * @param lastLabel     the label for exiting the loop
-     * @param stackLevel    the current stack level
      * @param context       the context type
      * @param isTrueLoop    whether this is a true loop (for/while/until) or pseudo-loop (do-while/bare)
      */
-    public void pushLoopLabels(String labelName, Label nextLabel, Label redoLabel, Label lastLabel, int stackLevel, int context, boolean isTrueLoop) {
-        loopLabelStack.push(new LoopLabels(labelName, nextLabel, redoLabel, lastLabel, stackLevel, context, isTrueLoop));
+    public void pushLoopLabels(String labelName, Label nextLabel, Label redoLabel, Label lastLabel, int context, boolean isTrueLoop) {
+        loopLabelStack.push(new LoopLabels(labelName, nextLabel, redoLabel, lastLabel, context, isTrueLoop));
     }
 
-    public void pushLoopLabels(String labelName, Label nextLabel, Label redoLabel, Label lastLabel, int stackLevel, int context, boolean isTrueLoop, boolean isUnlabeledControlFlowTarget) {
-        loopLabelStack.push(new LoopLabels(labelName, nextLabel, redoLabel, lastLabel, stackLevel, context, isTrueLoop, isUnlabeledControlFlowTarget));
+    public void pushLoopLabels(String labelName, Label nextLabel, Label redoLabel, Label lastLabel, int context, boolean isTrueLoop, boolean isUnlabeledControlFlowTarget) {
+        loopLabelStack.push(new LoopLabels(labelName, nextLabel, redoLabel, lastLabel, context, isTrueLoop, isUnlabeledControlFlowTarget));
     }
     
     /**
@@ -242,7 +235,7 @@ public class JavaClassInfo {
     }
 
     public void pushGotoLabels(String labelName, Label gotoLabel) {
-        gotoLabelStack.push(new GotoLabels(labelName, gotoLabel, stackLevelManager.getStackLevel()));
+        gotoLabelStack.push(new GotoLabels(labelName, gotoLabel));
     }
 
     public GotoLabels findGotoLabelsByName(String labelName) {
@@ -259,13 +252,6 @@ public class JavaClassInfo {
     }
 
     /**
-     * Resets the stack level to its initial state.
-     */
-    public void resetStackLevel() {
-        stackLevelManager.reset();
-    }
-
-    /**
      * Returns a string representation of the JavaClassInfo object.
      *
      * @return a string representation of the JavaClassInfo object
@@ -275,7 +261,6 @@ public class JavaClassInfo {
         return "JavaClassInfo{\n" +
                 "    javaClassName='" + javaClassName + "',\n" +
                 "    returnLabel=" + (returnLabel != null ? returnLabel.toString() : "null") + ",\n" +
-                "    asmStackLevel=" + stackLevelManager.getStackLevel() + ",\n" +
                 "    loopLabelStack=" + loopLabelStack + "\n" +
                 "    gotoLabelStack=" + gotoLabelStack + "\n" +
                 "}";

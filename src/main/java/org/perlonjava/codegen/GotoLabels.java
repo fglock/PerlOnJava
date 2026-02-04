@@ -18,21 +18,14 @@ public class GotoLabels {
     public Label gotoLabel;
 
     /**
-     * The stack level at the point where this label is defined
-     */
-    public int asmStackLevel;
-
-    /**
      * Creates a new GotoLabels instance.
      *
      * @param labelName     The name of the label in source code
      * @param gotoLabel     The ASM Label object for bytecode generation
-     * @param asmStackLevel The stack level at label definition
      */
-    public GotoLabels(String labelName, Label gotoLabel, int asmStackLevel) {
+    public GotoLabels(String labelName, Label gotoLabel) {
         this.labelName = labelName;
         this.gotoLabel = gotoLabel;
-        this.asmStackLevel = asmStackLevel;
     }
 
     /**
@@ -46,7 +39,6 @@ public class GotoLabels {
         return "GotoLabels{" +
                 "labelName='" + labelName + '\'' +
                 ", gotoLabel=" + gotoLabel +
-                ", asmStackLevel=" + asmStackLevel +
                 '}';
     }
 }
