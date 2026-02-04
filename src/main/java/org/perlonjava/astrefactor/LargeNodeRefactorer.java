@@ -103,12 +103,12 @@ public class LargeNodeRefactorer {
         }
 
         // Refactor this node if it's a large literal
+        // Note: We only refactor ArrayLiteralNode and HashLiteralNode, not ListNode
+        // because ListNode appears in many contexts where refactoring breaks semantics
         if (node instanceof ArrayLiteralNode arrayNode && shouldRefactor(arrayNode.elements)) {
             arrayNode.elements = forceRefactorElements(arrayNode.elements, arrayNode.getIndex());
         } else if (node instanceof HashLiteralNode hashNode && shouldRefactor(hashNode.elements)) {
             hashNode.elements = forceRefactorElements(hashNode.elements, hashNode.getIndex());
-        } else if (node instanceof ListNode listNode && listNode.handle == null && shouldRefactor(listNode.elements)) {
-            listNode.elements = forceRefactorElements(listNode.elements, listNode.getIndex());
         }
 
         // Recursively traverse child nodes
@@ -123,6 +123,7 @@ public class LargeNodeRefactorer {
                 refactorLiteralsInNode(element);
             }
         } else if (node instanceof ListNode listNode) {
+            // Traverse ListNode elements but don't refactor the ListNode itself
             for (Node element : listNode.elements) {
                 refactorLiteralsInNode(element);
             }
