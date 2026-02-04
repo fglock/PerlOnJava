@@ -4,49 +4,22 @@
 +# --------------------------------------------
 +# Modified t/test.pl for running Perl test suite with PerlOnJava:
 +#
-+# - added subroutine `skip_internal` to workaround the use of non-local goto (`last SKIP`).
-+# - no other changes.
++# - no changes needed: non-local goto (`last SKIP`) now works correctly.
++# - as of 2026-02-04: block-level dispatcher sharing enables proper skip() support.
 +# --------------------------------------------
 +
  #
  # t/test.pl - most of Test::More functionality without the fuss
- 
-@@ -587,16 +594,44 @@
-     last SKIP;
+
+@@ -44,7 +51,8 @@
  }
- 
-+sub skip_internal {
-+    my $why = shift;
-+    my $n   = @_ ? shift : 1;
-+    my $bad_swap;
-+    my $both_zero;
-+    {
-+      local $^W = 0;
-+      $bad_swap = $why > 0 && $n == 0;
-+      $both_zero = $why == 0 && $n == 0;
-+    }
-+    if ($bad_swap || $both_zero || @_) {
-+      my $arg = "'$why', '$n'";
-+      if (@_) {
-+        $arg .= join(", ", '', map { qq['$_'] } @_);
-+      }
-+      die qq[$0: expected skip(why, count), got skip($arg)\n];
-+    }
-+    for (1..$n) {
-+        _print "ok $test # skip $why\n";
-+        $test = $test + 1;
-+    }
-+    local $^W = 0;
-+    # last SKIP;
-+    1;
-+}
-+
+
  sub skip_if_miniperl {
 -    skip(@_) if is_miniperl();
 +    ## PerlOnJava is not miniperl
 +    # skip(@_) if is_miniperl();
  }
- 
+
  sub skip_without_dynamic_extension {
 -    my $extension = shift;
 -    skip("no dynamic loading on miniperl, no extension $extension", @_)
@@ -60,5 +33,5 @@
 +    # return if &_have_dynamic_extension($extension);
 +    # skip("extension $extension was not built", @_);
  }
- 
+
  sub todo_skip {
