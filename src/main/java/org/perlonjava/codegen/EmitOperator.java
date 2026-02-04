@@ -20,7 +20,7 @@ import org.perlonjava.symbols.ScopedSymbolTable;
  */
 public class EmitOperator {
 
-    private static final boolean ENABLE_SPILL_BINARY_LHS = System.getenv("JPERL_NO_SPILL_BINARY_LHS") == null;
+    private static final boolean ENABLE_SPILL_BINARY_LHS = true;
 
     static void emitOperator(Node node, EmitterVisitor emitterVisitor) {
         // Extract operator string from the node

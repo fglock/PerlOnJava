@@ -70,46 +70,28 @@ public class EmitLiteral {
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeArray", "<init>", "()V", false);
         // Stack: [RuntimeArray]
 
-        JavaClassInfo.SpillRef arrayRef = null;
-        arrayRef = emitterVisitor.ctx.javaClassInfo.tryAcquirePooledSpillRef();
-        if (arrayRef != null) {
-            emitterVisitor.ctx.javaClassInfo.storeSpillRef(mv, arrayRef);
-        }
-        // Stack: [] (if arrayRef != null) else [RuntimeArray]
+        JavaClassInfo.SpillRef arrayRef = emitterVisitor.ctx.javaClassInfo.acquireSpillRefOrAllocate(emitterVisitor.ctx.symbolTable);
+        emitterVisitor.ctx.javaClassInfo.storeSpillRef(mv, arrayRef);
+        // Stack: []
 
         // Populate the array with elements
         for (Node element : node.elements) {
             // Generate code for the element in LIST context
-            if (arrayRef != null) {
-                element.accept(elementContext);
-                JavaClassInfo.SpillRef elementRef = emitterVisitor.ctx.javaClassInfo.acquireSpillRefOrAllocate(emitterVisitor.ctx.symbolTable);
-                emitterVisitor.ctx.javaClassInfo.storeSpillRef(mv, elementRef);
+            element.accept(elementContext);
+            JavaClassInfo.SpillRef elementRef = emitterVisitor.ctx.javaClassInfo.acquireSpillRefOrAllocate(emitterVisitor.ctx.symbolTable);
+            emitterVisitor.ctx.javaClassInfo.storeSpillRef(mv, elementRef);
 
-                emitterVisitor.ctx.javaClassInfo.loadSpillRef(mv, arrayRef);
-                emitterVisitor.ctx.javaClassInfo.loadSpillRef(mv, elementRef);
-                emitterVisitor.ctx.javaClassInfo.releaseSpillRef(elementRef);
-
-                // Add the element to the array
-                addElementToArray(mv, element);
-                // Stack: []
-            } else {
-                mv.visitInsn(Opcodes.DUP);
-                // Stack: [RuntimeArray]
-
-                emitterVisitor.ctx.javaClassInfo.incrementStackLevel(1);
-                element.accept(elementContext);
-                emitterVisitor.ctx.javaClassInfo.decrementStackLevel(1);
-
-                // Add the element to the array
-                addElementToArray(mv, element);
-                // Stack: [RuntimeArray]
-            }
-        }
-
-        if (arrayRef != null) {
             emitterVisitor.ctx.javaClassInfo.loadSpillRef(mv, arrayRef);
-            emitterVisitor.ctx.javaClassInfo.releaseSpillRef(arrayRef);
+            emitterVisitor.ctx.javaClassInfo.loadSpillRef(mv, elementRef);
+            emitterVisitor.ctx.javaClassInfo.releaseSpillRef(elementRef);
+
+            // Add the element to the array
+            addElementToArray(mv, element);
+            // Stack: []
         }
+
+        emitterVisitor.ctx.javaClassInfo.loadSpillRef(mv, arrayRef);
+        emitterVisitor.ctx.javaClassInfo.releaseSpillRef(arrayRef);
 
         // Convert the array to a reference (array literals produce references)
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase",

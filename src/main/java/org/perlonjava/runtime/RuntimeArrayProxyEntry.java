@@ -37,6 +37,9 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
      */
     void vivify() {
         if (lvalue == null) {
+            if (parent.type == RuntimeArray.READONLY_ARRAY) {
+                throw new PerlCompilerException("Modification of a read-only value attempted");
+            }
             lvalue = new RuntimeScalar();
 
             if (parent.type == RuntimeArray.AUTOVIVIFY_ARRAY) {

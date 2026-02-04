@@ -29,28 +29,6 @@ public class StackLevelManager {
     }
 
     /**
-     * Increments the stack level by the specified amount.
-     *
-     * @param level the amount to increment the stack level by.
-     */
-    public void increment(int level) {
-        stackLevel += level;
-    }
-
-    /**
-     * Decrements the stack level by the specified amount. If the resulting
-     * stack level is negative, it is reset to zero to maintain a valid state.
-     *
-     * @param level the amount to decrement the stack level by.
-     */
-    public void decrement(int level) {
-        stackLevel -= level;
-        if (stackLevel < 0) {
-            stackLevel = 0;
-        }
-    }
-
-    /**
      * Resets the stack level to zero.
      */
     public void reset() {

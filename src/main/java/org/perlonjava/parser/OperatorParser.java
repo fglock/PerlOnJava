@@ -71,6 +71,12 @@ public class OperatorParser {
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
             block = ParseBlock.parseBlock(parser);
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+            // Perl semantics: eval BLOCK behaves like a bare block for loop control.
+            // `last/next/redo` inside the eval block must target the eval block itself,
+            // not escape as non-local control flow.
+            if (block instanceof BlockNode blockNode) {
+                blockNode.isLoop = true;
+            }
             // transform:  eval { 123 }
             // into:  sub { 123 }->()  with useTryCatch flag
             return new BinaryOperatorNode("->",

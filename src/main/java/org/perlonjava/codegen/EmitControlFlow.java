@@ -11,6 +11,7 @@ import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.runtime.ControlFlowType;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
+import org.perlonjava.runtime.RuntimeScalarType;
 
 /**
  * Handles the emission of control flow bytecode instructions for Perl-like language constructs.
@@ -186,6 +187,7 @@ public class EmitControlFlow {
             node.operand.accept(emitterVisitor.with(RuntimeContextType.RUNTIME));
         }
 
+        ctx.mv.visitVarInsn(Opcodes.ASTORE, ctx.javaClassInfo.returnValueSlot);
         ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
     }
     
@@ -252,6 +254,7 @@ public class EmitControlFlow {
         }
         
         // Jump to returnLabel (trampoline will handle it)
+        ctx.mv.visitVarInsn(Opcodes.ASTORE, ctx.javaClassInfo.returnValueSlot);
         ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
     }
 
@@ -297,37 +300,86 @@ public class EmitControlFlow {
                 
                 // Evaluate the expression to get the label name at runtime
                 arg.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-                
+
+                int targetSlot = ctx.javaClassInfo.acquireSpillSlot();
+                boolean pooledTarget = targetSlot >= 0;
+                if (!pooledTarget) {
+                    targetSlot = ctx.symbolTable.allocateLocalVariable();
+                }
+                ctx.mv.visitVarInsn(Opcodes.ASTORE, targetSlot);
+
+                // If EXPR evaluates to a CODE reference, treat it like `goto &NAME` (tail call).
+                Label notCodeRef = new Label();
+                ctx.mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
+                ctx.mv.visitFieldInsn(Opcodes.GETFIELD,
+                        "org/perlonjava/runtime/RuntimeScalar",
+                        "type",
+                        "I");
+                ctx.mv.visitLdcInsn(RuntimeScalarType.CODE);
+                ctx.mv.visitJumpInsn(Opcodes.IF_ICMPNE, notCodeRef);
+
+                // Build a TAILCALL marker with the coderef and the current @_ array.
+                ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeControlFlowList");
+                ctx.mv.visitInsn(Opcodes.DUP);
+                ctx.mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
+                ctx.mv.visitVarInsn(Opcodes.ALOAD, 1); // current @_
+                ctx.mv.visitLdcInsn(ctx.compilerOptions.fileName != null ? ctx.compilerOptions.fileName : "(eval)");
+                int tailLineNumber = ctx.errorUtil != null ? ctx.errorUtil.getLineNumber(node.tokenIndex) : 0;
+                ctx.mv.visitLdcInsn(tailLineNumber);
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                        "org/perlonjava/runtime/RuntimeControlFlowList",
+                        "<init>",
+                        "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeArray;Ljava/lang/String;I)V",
+                        false);
+
+                ctx.javaClassInfo.resetStackLevel(); // Clean up stack before jumping
+
+                if (pooledTarget) {
+                    ctx.javaClassInfo.releaseSpillSlot();
+                }
+
+                ctx.mv.visitVarInsn(Opcodes.ASTORE, ctx.javaClassInfo.returnValueSlot);
+                ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
+
+
+                // Otherwise, treat it as a computed label name (dynamic goto).
+                ctx.mv.visitLabel(notCodeRef);
+
+                ctx.mv.visitVarInsn(Opcodes.ALOAD, targetSlot);
                 // Convert to string (label name)
                 ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                         "org/perlonjava/runtime/RuntimeScalar",
                         "toString",
                         "()Ljava/lang/String;",
                         false);
-                
-                // For dynamic goto, we always create a RuntimeControlFlowList
-                // because we can't know at compile-time if the label is local or not
+
+                // For dynamic goto, create a RuntimeControlFlowList marker
+                // because we can't know at compile-time if the label is local or not.
                 ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeControlFlowList");
                 ctx.mv.visitInsn(Opcodes.DUP_X1); // Stack: label, RuntimeControlFlowList, RuntimeControlFlowList
                 ctx.mv.visitInsn(Opcodes.SWAP);    // Stack: label, RuntimeControlFlowList, label, RuntimeControlFlowList
-                
+
                 ctx.mv.visitFieldInsn(Opcodes.GETSTATIC,
                         "org/perlonjava/runtime/ControlFlowType",
                         "GOTO",
                         "Lorg/perlonjava/runtime/ControlFlowType;");
                 ctx.mv.visitInsn(Opcodes.SWAP);    // Stack: ..., ControlFlowType, label
-                
+
                 // Push fileName
                 ctx.mv.visitLdcInsn(ctx.compilerOptions.fileName != null ? ctx.compilerOptions.fileName : "(eval)");
                 // Push lineNumber
                 int lineNumber = ctx.errorUtil != null ? ctx.errorUtil.getLineNumber(node.tokenIndex) : 0;
                 ctx.mv.visitLdcInsn(lineNumber);
-                
+
                 ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
                         "org/perlonjava/runtime/RuntimeControlFlowList",
                         "<init>",
                         "(Lorg/perlonjava/runtime/ControlFlowType;Ljava/lang/String;Ljava/lang/String;I)V",
                         false);
+
+                if (pooledTarget) {
+                    ctx.javaClassInfo.releaseSpillSlot();
+                }
 
                 int markerSlot = ctx.javaClassInfo.acquireSpillSlot();
                 boolean pooledMarker = markerSlot >= 0;
@@ -342,6 +394,7 @@ public class EmitControlFlow {
                 if (pooledMarker) {
                     ctx.javaClassInfo.releaseSpillSlot();
                 }
+                ctx.mv.visitVarInsn(Opcodes.ASTORE, ctx.javaClassInfo.returnValueSlot);
                 ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
                 return;
             }
@@ -390,6 +443,7 @@ public class EmitControlFlow {
             if (pooledMarker) {
                 ctx.javaClassInfo.releaseSpillSlot();
             }
+            ctx.mv.visitVarInsn(Opcodes.ASTORE, ctx.javaClassInfo.returnValueSlot);
             ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
             return;
         }

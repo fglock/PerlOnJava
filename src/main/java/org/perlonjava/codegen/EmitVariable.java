@@ -506,8 +506,6 @@ public class EmitVariable {
                         "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeArray;I)Lorg/perlonjava/runtime/RuntimeList;",
                         false); // generate an .apply() call
 
-                emitterVisitor.ctx.javaClassInfo.incrementStackLevel(1);
-
                 // RuntimeCode.apply() can return a tagged RuntimeControlFlowList (last/next/redo).
                 // Handle it before context conversion (especially before POP in VOID context).
                 Label applyNoControlFlow = new Label();
@@ -598,6 +596,7 @@ public class EmitVariable {
                 // No labeled target matched: propagate via returnLabel if available.
                 if (emitterVisitor.ctx.javaClassInfo.returnLabel != null) {
                     mv.visitVarInsn(Opcodes.ALOAD, cfSlot);
+                    mv.visitVarInsn(Opcodes.ASTORE, emitterVisitor.ctx.javaClassInfo.returnValueSlot);
                     mv.visitJumpInsn(Opcodes.GOTO, emitterVisitor.ctx.javaClassInfo.returnLabel);
                 }
 
@@ -628,6 +627,7 @@ public class EmitVariable {
                     mv.visitJumpInsn(Opcodes.GOTO, unlabeledTarget.redoLabel);
                 } else if (emitterVisitor.ctx.javaClassInfo.returnLabel != null) {
                     mv.visitVarInsn(Opcodes.ALOAD, cfSlot);
+                    mv.visitVarInsn(Opcodes.ASTORE, emitterVisitor.ctx.javaClassInfo.returnValueSlot);
                     mv.visitJumpInsn(Opcodes.GOTO, emitterVisitor.ctx.javaClassInfo.returnLabel);
                 }
 
