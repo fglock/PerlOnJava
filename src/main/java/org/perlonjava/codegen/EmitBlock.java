@@ -144,7 +144,6 @@ public class EmitBlock {
                     nextLabel,
                     redoLabel,
                     nextLabel,
-                    emitterVisitor.ctx.javaClassInfo.stackLevelManager.getStackLevel(),
                     emitterVisitor.ctx.contextType,
                     isBareBlock,
                     isBareBlock);
