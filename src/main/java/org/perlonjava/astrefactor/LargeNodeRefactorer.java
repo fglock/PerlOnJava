@@ -18,10 +18,8 @@ import static org.perlonjava.astrefactor.BlockRefactor.*;
  * <b>Solution:</b> This class splits large element lists into chunks, each wrapped in an
  * anonymous subroutine. The chunks are then dereferenced and merged back together.
  * <p>
- * <b>Integration:</b> Called automatically from AST node constructors when enabled.
- * This ensures the AST is always the right size from creation time.
- * <p>
- * <b>Activation:</b> Set environment variable {@code JPERL_LARGECODE=refactor} to enable.
+ * <b>Integration:</b> This proactive refactoring is disabled by default in favor of
+ * automatic on-demand refactoring (see {@link LargeBlockRefactorer}).
  * <p>
  * <b>Recursion Safety:</b> The circular dependency (constructor calls refactorer which
  * creates new nodes) breaks naturally when chunks become small enough (below MIN_CHUNK_SIZE).
@@ -32,10 +30,10 @@ import static org.perlonjava.astrefactor.BlockRefactor.*;
 public class LargeNodeRefactorer {
 
     /**
-     * Check if refactoring is enabled via environment variable.
-     * When JPERL_LARGECODE=refactor, large literals will be automatically split.
+     * Proactive refactoring is disabled by default.
+     * Automatic on-demand refactoring handles large code automatically.
      */
-    static final boolean IS_REFACTORING_ENABLED = "refactor".equals(System.getenv("JPERL_LARGECODE"));
+    static final boolean IS_REFACTORING_ENABLED = false;
     
     /**
      * Maximum elements per chunk. Limits chunk size even if bytecode estimates
@@ -51,19 +49,16 @@ public class LargeNodeRefactorer {
     /**
      * Main entry point: called from AST node constructors to potentially refactor large element lists.
      * <p>
-     * This method checks if refactoring is needed based on:
-     * <ol>
-     *   <li>Environment variable JPERL_LARGECODE=refactor must be set</li>
-     *   <li>Estimated bytecode size must exceed LARGE_BYTECODE_SIZE (40000 bytes)</li>
-     * </ol>
+     * Note: Proactive refactoring is disabled by default. Large code is handled automatically
+     * via on-demand refactoring when compilation errors occur.
      * <p>
-     * If refactoring is needed, elements are split into chunks and wrapped in anonymous
+     * If refactoring were enabled, elements would be split into chunks and wrapped in anonymous
      * subroutines with appropriate dereference operators.
      *
      * @param elements   the original elements list from the AST node constructor
      * @param tokenIndex the token index for creating new AST nodes (for error reporting)
      * @param parser     the parser instance for access to error utilities (can be null if not available)
-     * @return the original list if no refactoring needed, or a new list with chunked elements
+     * @return the original list (refactoring is disabled)
      */
     public static List<Node> maybeRefactorElements(List<Node> elements, int tokenIndex, Parser parser) {
         if (!IS_REFACTORING_ENABLED || !shouldRefactor(elements)) {

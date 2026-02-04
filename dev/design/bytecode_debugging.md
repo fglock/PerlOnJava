@@ -35,8 +35,6 @@ In practice this happens when a subexpression may perform **non-local control fl
 
 ### Environment variables
 
-- `JPERL_LARGECODE=refactor`
-  - Enables large-block refactoring to avoid `MethodTooLargeException`.
 - `JPERL_ASM_DEBUG=1`
   - Enables detailed debug output when ASM frame computation fails.
 - `JPERL_ASM_DEBUG_CLASS=anonNNN` (optional)
@@ -49,13 +47,14 @@ In practice this happens when a subexpression may perform **non-local control fl
 Run from `perl5_t/` so that `./test.pl` and relative includes resolve:
 
 ```
-JPERL_LARGECODE=refactor \
 JPERL_ASM_DEBUG=1 \
 JPERL_OPTS='-Xmx512m' \
 ../jperl t/op/pack.t \
   > /tmp/perlonjava_pack_out.log \
   2> /tmp/perlonjava_pack_err.log
 ```
+
+Note: Large code blocks are handled automatically via on-demand refactoring.
 
 ## Reading the debug output
 

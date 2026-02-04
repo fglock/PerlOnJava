@@ -18,8 +18,8 @@ import java.util.List;
  * <p>
  * <b>Large Literal Handling:</b> The constructor automatically invokes
  * {@link LargeNodeRefactorer#maybeRefactorElements} to split very large arrays
- * into chunks when {@code JPERL_LARGECODE=refactor} is set. This prevents
- * JVM "method too large" errors for arrays with thousands of elements.
+ * into chunks (currently disabled - on-demand refactoring is used instead).
+ * This prevents JVM "method too large" errors for arrays with thousands of elements.
  *
  * @see LargeNodeRefactorer
  * @see HashLiteralNode
@@ -41,10 +41,8 @@ public class ArrayLiteralNode extends AbstractNode {
     /**
      * Constructs a new ArrayLiteralNode with the specified list of child nodes.
      * <p>
-     * <b>Large Literal Refactoring:</b> When {@code JPERL_LARGECODE=refactor} environment
-     * variable is set and the elements list is large enough to potentially exceed JVM's
-     * 64KB method size limit, the constructor automatically splits the elements into
-     * chunks wrapped in anonymous subroutines.
+     * <b>Large Literal Refactoring:</b> Currently disabled by default.
+     * Large code is handled automatically via on-demand refactoring when compilation errors occur.
      *
      * @param elements   the list of child nodes to be stored in this ArrayLiteralNode
      * @param tokenIndex the token index in the source for error reporting
