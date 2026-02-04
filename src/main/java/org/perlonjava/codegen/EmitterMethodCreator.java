@@ -352,30 +352,34 @@ public class EmitterMethodCreator implements Opcodes {
             return getBytecodeInternal(ctx, ast, useTryCatch, false);
         } catch (MethodTooLargeException tooLarge) {
             // Automatic retry with refactoring on "Method too large" error
+            // Try up to 3 times with progressively more aggressive refactoring
             if (ast instanceof BlockNode blockAst) {
-                try {
-                    // Notify user that automatic refactoring is happening
-                    System.err.println("Note: Method too large, retrying with automatic refactoring.");
+                final int maxRetries = 3;
+                for (int retry = 0; retry < maxRetries; retry++) {
+                    try {
+                        // Force refactoring (progressively more aggressive on each retry)
+                        LargeBlockRefactorer.forceRefactorForCodegen(blockAst);
 
-                    // Force refactoring
-                    LargeBlockRefactorer.forceRefactorForCodegen(blockAst);
+                        // Reset JavaClassInfo to avoid reusing partially-resolved Labels
+                        if (ctx != null && ctx.javaClassInfo != null) {
+                            String previousName = ctx.javaClassInfo.javaClassName;
+                            ctx.javaClassInfo = new JavaClassInfo();
+                            ctx.javaClassInfo.javaClassName = previousName;
+                            ctx.clearContextCache();
+                        }
 
-                    // Reset JavaClassInfo to avoid reusing partially-resolved Labels.
-                    if (ctx != null && ctx.javaClassInfo != null) {
-                        String previousName = ctx.javaClassInfo.javaClassName;
-                        ctx.javaClassInfo = new JavaClassInfo();
-                        ctx.javaClassInfo.javaClassName = previousName;
-                        ctx.clearContextCache();
+                        return getBytecodeInternal(ctx, ast, useTryCatch, false);
+                    } catch (MethodTooLargeException retryTooLarge) {
+                        if (retry >= maxRetries - 1) {
+                            // Final retry failed - give up
+                            throw retryTooLarge;
+                        }
+                        // Continue to next retry with more aggressive refactoring
+                    } catch (Throwable retryError) {
+                        // Refactoring caused a different error - report and give up
+                        System.err.println("Warning: Automatic refactoring failed: " + retryError.getMessage());
+                        throw tooLarge;
                     }
-
-                    return getBytecodeInternal(ctx, ast, useTryCatch, false);
-                } catch (MethodTooLargeException retryTooLarge) {
-                    // Refactoring didn't help enough - give up
-                    throw retryTooLarge;
-                } catch (Throwable retryError) {
-                    // Refactoring caused a different error - report both
-                    System.err.println("Warning: Automatic refactoring failed: " + retryError.getMessage());
-                    // Fall through to throw original exception
                 }
             }
             throw tooLarge;

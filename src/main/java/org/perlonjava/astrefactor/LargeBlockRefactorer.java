@@ -80,6 +80,7 @@ public class LargeBlockRefactorer {
     /**
      * Force refactoring of a block that has already reached codegen and failed with MethodTooLargeException.
      * This is called during automatic error recovery.
+     * Uses progressively more aggressive chunking on each retry.
      *
      * @param node The block to refactor (modified in place)
      */
@@ -97,8 +98,12 @@ public class LargeBlockRefactorer {
         // The estimator can under-estimate; if we reached codegen overflow, we must allow another pass.
         node.setAnnotation("blockAlreadyRefactored", false);
 
+        // Use progressively smaller chunk sizes on each retry for more aggressive refactoring
+        // First attempt: 256, Second: 128, Third: 64
+        int chunkSize = 256 >> attempts;
+
         // Step 1: Apply block-level chunking to split statements into closures
-        trySmartChunking(node, null, 256);
+        trySmartChunking(node, null, chunkSize);
 
         // Step 2: Refactor any large literals (arrays/hashes/lists) within the block
         LargeNodeRefactorer.refactorLiteralsInBlock(node);
