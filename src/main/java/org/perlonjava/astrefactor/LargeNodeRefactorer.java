@@ -130,30 +130,28 @@ public class LargeNodeRefactorer {
                 refactorLiteralsInNode(listNode.handle);
             }
         } else if (node instanceof OperatorNode opNode) {
-            refactorLiteralsInNode(opNode.left);
-            refactorLiteralsInNode(opNode.right);
+            refactorLiteralsInNode(opNode.operand);
         } else if (node instanceof BinaryOperatorNode binOp) {
             refactorLiteralsInNode(binOp.left);
             refactorLiteralsInNode(binOp.right);
-        } else if (node instanceof UnaryOperatorNode unOp) {
-            refactorLiteralsInNode(unOp.operand);
         } else if (node instanceof TernaryOperatorNode ternary) {
             refactorLiteralsInNode(ternary.condition);
             refactorLiteralsInNode(ternary.trueExpr);
             refactorLiteralsInNode(ternary.falseExpr);
         } else if (node instanceof For1Node forNode) {
-            refactorLiteralsInNode(forNode.init);
-            refactorLiteralsInNode(forNode.condition);
-            refactorLiteralsInNode(forNode.increment);
-            refactorLiteralsInNode(forNode.body);
-        } else if (node instanceof ForNode forNode) {
             refactorLiteralsInNode(forNode.variable);
             refactorLiteralsInNode(forNode.list);
             refactorLiteralsInNode(forNode.body);
+            refactorLiteralsInNode(forNode.continueBlock);
+        } else if (node instanceof For3Node forNode) {
+            refactorLiteralsInNode(forNode.body);
+            refactorLiteralsInNode(forNode.continueBlock);
         } else if (node instanceof IfNode ifNode) {
             refactorLiteralsInNode(ifNode.condition);
             refactorLiteralsInNode(ifNode.thenBranch);
             refactorLiteralsInNode(ifNode.elseBranch);
+        } else if (node instanceof SubroutineNode subNode) {
+            refactorLiteralsInNode(subNode.block);
         }
     }
 
