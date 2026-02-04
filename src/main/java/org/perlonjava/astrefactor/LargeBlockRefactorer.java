@@ -111,8 +111,19 @@ public class LargeBlockRefactorer {
         }
     }
 
-    public static void forceRefactorForCodegen(BlockNode node) {
-        if (!IS_REFACTORING_ENABLED || node == null) {
+    /**
+     * Force refactoring of a block that has already reached codegen and failed with MethodTooLargeException.
+     * This is called during error recovery and works regardless of JPERL_LARGECODE setting.
+     *
+     * @param node The block to refactor (modified in place)
+     * @param isAutoRetry True if this is automatic retry on error (always refactor), false if user-requested via JPERL_LARGECODE
+     */
+    public static void forceRefactorForCodegen(BlockNode node, boolean isAutoRetry) {
+        // Only check IS_REFACTORING_ENABLED if NOT auto-retry
+        if (!isAutoRetry && !IS_REFACTORING_ENABLED) {
+            return;
+        }
+        if (node == null) {
             return;
         }
         Object attemptsObj = node.getAnnotation("refactorAttempts");
@@ -128,6 +139,16 @@ public class LargeBlockRefactorer {
         // More aggressive than parse-time: allow deeper nesting to ensure we get under the JVM limit.
         trySmartChunking(node, null, 256);
         processPendingRefactors();
+    }
+
+    /**
+     * Legacy wrapper for compatibility.
+     *
+     * @param node The block to refactor
+     * @deprecated Use {@link #forceRefactorForCodegen(BlockNode, boolean)} instead
+     */
+    public static void forceRefactorForCodegen(BlockNode node) {
+        forceRefactorForCodegen(node, false);
     }
 
     /**

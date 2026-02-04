@@ -79,3 +79,6 @@ Image-ExifTool-*
 /.err
 /.out
 /.windsurf/
+
+# Ignore xxx/ directory (temporary module staging area)
+xxx/
