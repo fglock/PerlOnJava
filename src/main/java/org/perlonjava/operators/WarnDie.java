@@ -22,6 +22,9 @@ public class WarnDie {
             Throwable cause = current.getCause();
 
             // Stop unwrapping if we find a meaningful exception
+            if (cause instanceof PerlDieException pde) {
+                return pde;
+            }
             if (cause instanceof PerlCompilerException pc) {
                 return pc;
             }
@@ -35,18 +38,38 @@ public class WarnDie {
      */
     public static RuntimeScalar catchEval(Throwable e) {
         e = unwrapException(e);
-        if (e instanceof PerlCompilerException && getGlobalVariable("main::@").getBoolean()) {
-            // $@ is already set
+        RuntimeScalar err = getGlobalVariable("main::@");
 
-            // System.out.println("catchEval :" + e);
-            // System.out.println("          :" + getGlobalVariable("main::@"));
+        if (e instanceof PerlDieException pde) {
+            RuntimeBase payload = pde.getPayload();
+            if (payload != null) {
+                err.set(payload.getFirst());
+            }
+            // die() already invokes $SIG{__DIE__} (when defined). Perl's eval
+            // should not invoke it again while catching the exception.
             return scalarUndef;
+        } else {
+            if (!(e instanceof PerlCompilerException) || !err.getBoolean()) {
+                err.set(new RuntimeScalar(ErrorMessageUtil.stringifyException(e)));
+            }
         }
 
-        // System.out.println("catchEval : not PerlCompilerException: " + e);
-        // e.printStackTrace();
+        RuntimeScalar sig = getGlobalHash("main::SIG").get("__DIE__");
+        if (sig.getDefinedBoolean()) {
+            RuntimeArray args = new RuntimeArray();
+            RuntimeArray.push(args, new RuntimeScalar(err));
 
-        getGlobalVariable("main::@").set(new RuntimeScalar(ErrorMessageUtil.stringifyException(e)));
+            RuntimeScalar sigHandler = new RuntimeScalar(sig);
+
+            // Undefine $SIG{__DIE__} before calling the handler to avoid infinite recursion
+            int level = DynamicVariableManager.getLocalLevel();
+            DynamicVariableManager.pushLocalVariable(sig);
+
+            RuntimeCode.apply(sigHandler, args, RuntimeContextType.SCALAR);
+
+            // Restore $SIG{__DIE__}
+            DynamicVariableManager.popToLocalLevel(level);
+        }
         return scalarUndef;
     }
 
@@ -187,10 +210,10 @@ public class WarnDie {
             // Restore $SIG{__DIE__}
             DynamicVariableManager.popToLocalLevel(level);
 
-            return res;
+            throw new PerlDieException(errVariable);
         }
 
-        throw new PerlCompilerException(errVariable.toString());
+        throw new PerlDieException(errVariable);
     }
 
     private static RuntimeBase dieEmptyMessage(RuntimeScalar oldErr, String fileName, int lineNumber) {
