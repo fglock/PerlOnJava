@@ -236,7 +236,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Process the string source code to create the LexerToken list
         Lexer lexer = new Lexer(evalString);
         List<LexerToken> tokens = lexer.tokenize(); // Tokenize the Perl code
-        Node ast;
+        Node ast = null;
         Class<?> generatedClass;
         try {
             // Create the AST
@@ -287,6 +287,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             capturedSymbolTable.strictOptionsStack.push(savedStrictOptions);
 
             setCurrentScope(capturedSymbolTable);
+
+            // Store source lines in symbol table if $^P flags are set
+            // Do this on both success and failure paths when flags require retention
+            // Use the original evalString and actualFileName; AST may be null on failure
+            storeSourceLines(evalString, actualFileName, ast, tokens);
         }
 
         // Cache the result (unless debugging is enabled)
@@ -296,9 +301,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
         }
 
-        // Store source lines in symbol table if $^P flags are set
-        storeSourceLines(evalString, actualFileName, ast);
-
         return generatedClass;
     }
 
@@ -307,9 +309,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      *
      * @param evalString The source code string to store
      * @param filename   The filename (e.g., "(eval 1)")
-     * @param ast        The AST to check for subroutine definitions
+     * @param ast        The AST to check for subroutine definitions (may be null on compilation failure)
+     * @param tokens     Lexer tokens for #line directive processing
      */
-    private static void storeSourceLines(String evalString, String filename, Node ast) {
+    private static void storeSourceLines(String evalString, String filename, Node ast, List<LexerToken> tokens) {
         // Check $^P for debugger flags
         int debugFlags = GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("P")).getInt();
         // 0x02 (2): Line-by-line debugging (also saves source like 0x400)
@@ -357,6 +360,56 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             
             // Index n+2: ";"
             sourceArray.elements.add(new RuntimeScalar(";"));
+
+            // Process #line directives to populate @{"_<filename"} arrays
+            processLineDirectives(evalString, lines, tokens);
+        }
+    }
+
+    /**
+     * Process #line directives in the eval string to populate @{"_<filename"} arrays.
+     * This implements the debugger behavior where #line N "file" causes subsequent
+     * source lines to be stored in @{"_<file"} at index N.
+     *
+     * @param evalString The full eval source string
+     * @param lines      The split lines of the eval string
+     * @param tokens     Lexer tokens (may be null on compilation failure)
+     */
+    private static void processLineDirectives(String evalString, String[] lines, List<LexerToken> tokens) {
+        String currentFilename = null;
+        int currentLineOffset = 0; // 0-based index into lines array
+
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i];
+            // Simple #line directive parsing: #line N "filename"
+            // Allow optional leading whitespace
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("^\\s*#line\\s+(\\d+)\\s+\"([^\"]+)\"").matcher(line);
+            if (m.find()) {
+                int targetLine = Integer.parseInt(m.group(1)); // 1-based line number in target file
+                currentFilename = m.group(2);
+                currentLineOffset = i + 1; // Next line in eval corresponds to targetLine
+                // Ensure the target array exists and is properly sized
+                String targetKey = "main::_<" + currentFilename;
+                RuntimeArray targetArray = GlobalVariable.getGlobalArray(targetKey);
+                // Ensure array is large enough (sparse behavior)
+                while (targetArray.elements.size() <= targetLine) {
+                    targetArray.elements.add(RuntimeScalarCache.scalarUndef);
+                }
+                // Place the next line at the correct index
+                if (i + 1 < lines.length) {
+                    targetArray.elements.set(targetLine, new RuntimeScalar(lines[i + 1] + "\n"));
+                }
+            } else if (currentFilename != null && i >= currentLineOffset) {
+                // Continue populating the current filename array
+                int targetLine = (i - currentLineOffset) + 1; // Convert to 1-based
+                String targetKey = "main::_<" + currentFilename;
+                RuntimeArray targetArray = GlobalVariable.getGlobalArray(targetKey);
+                // Ensure array is large enough (sparse behavior)
+                while (targetArray.elements.size() <= targetLine) {
+                    targetArray.elements.add(RuntimeScalarCache.scalarUndef);
+                }
+                targetArray.elements.set(targetLine, new RuntimeScalar(line + "\n"));
+            }
         }
     }
 
@@ -706,6 +759,22 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         } catch (Throwable t) {
             // Perl eval catches exceptions; set $@ and return undef / empty list.
             WarnDie.catchEval(t);
+            
+            // If $@ is set and $^P flags require source retention, we may need to retain lines
+            // for runtime errors (e.g., BEGIN/UNITCHECK die) where storeSourceLines wasn't called.
+            // Try to extract the eval string from the codeRef if available
+            String evalString = null;
+            String filename = null;
+            if (runtimeScalar.type == RuntimeScalarType.CODE) {
+                RuntimeCode code = (RuntimeCode) runtimeScalar.value;
+                // Use the evalString if it was captured in the codeRef
+                // Note: This is a best-effort fallback; the primary path is evalStringHelper
+                if (code.packageName != null && code.packageName.startsWith("(eval")) {
+                    filename = code.packageName;
+                    // We cannot reconstruct the exact eval string here, so skip retention
+                }
+            }
+            
             if (callContext == RuntimeContextType.LIST) {
                 return new RuntimeList();
             }
