@@ -37,9 +37,8 @@ public class BlockNode extends AbstractNode {
     /**
      * Constructs a new BlockNode with the specified list of child nodes.
      * <p>
-     * <b>Large Block Refactoring:</b> When {@code JPERL_LARGECODE=refactor} environment
-     * variable is set and the block is large enough, the constructor automatically
-     * applies smart chunking to split safe statement sequences into closures.
+     * <b>Large Block Refactoring:</b> Currently disabled by default.
+     * Large code is handled automatically via on-demand refactoring when compilation errors occur.
      *
      * @param elements   the list of child nodes to be stored in this BlockNode
      * @param tokenIndex the index of the token in the source code

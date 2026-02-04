@@ -2,9 +2,13 @@
 
 ## Status: ✅ IMPLEMENTED
 
+## Overview
+
+PerlOnJava automatically handles large code blocks that exceed JVM's 65KB method size limit through on-demand refactoring. When compilation fails with "Method too large" error, the compiler automatically retries with refactoring enabled.
+
 ## Problem Discovery
 
-When attempting to enable `JPERL_LARGECODE` refactoring by default, all 151 unit tests failed with errors like:
+When attempting to enable proactive refactoring by default, all 151 unit tests failed with errors like:
 ```
 Global symbol "%Config" requires explicit package name
 ```
@@ -103,16 +107,10 @@ try {
     return getBytecodeInternal(ctx, ast, useTryCatch, false);
 } catch (MethodTooLargeException tooLarge) {
     // Automatic retry with refactoring on "Method too large" error
-    // This happens regardless of JPERL_LARGECODE setting (on-demand refactoring)
     if (ast instanceof BlockNode blockAst) {
         try {
             // Notify user that automatic refactoring is happening
-            String largecode = System.getenv("JPERL_LARGECODE");
-            boolean userRequestedRefactor = largecode != null && largecode.equalsIgnoreCase("refactor");
-            if (!userRequestedRefactor) {
-                System.err.println("Note: Method too large, retrying with automatic refactoring.");
-                System.err.println("      To avoid retry overhead, set JPERL_LARGECODE=refactor");
-            }
+            System.err.println("Note: Method too large, retrying with automatic refactoring.");
             // Force refactoring with auto-retry flag
             LargeBlockRefactorer.forceRefactorForCodegen(blockAst, true);
             // Reset JavaClassInfo to avoid reusing partially-resolved Labels
@@ -138,15 +136,10 @@ try {
 ### Test Case: 30,000 Element Array
 
 ```bash
-# Without JPERL_LARGECODE - automatic retry
+# Automatic retry (default behavior)
 ./jperl /tmp/test_auto_refactor.pl
 # Output: "Note: Method too large, retrying with automatic refactoring."
-#         Still fails (code extremely large - exceeds limits even after refactoring)
-
-# With JPERL_LARGECODE=refactor - proactive refactoring
-JPERL_LARGECODE=refactor ./jperl /tmp/test_auto_refactor.pl
-# Output: "Array has 30000 elements... ok"
-#         Works perfectly!
+#         May still fail if code is extremely large (exceeds limits even after refactoring)
 ```
 
 ### Unit Tests
@@ -159,40 +152,26 @@ JPERL_LARGECODE=refactor ./jperl /tmp/test_auto_refactor.pl
 
 1. **Zero overhead for normal code** - No bytecode estimation unless actually needed
 2. **Semantic correctness** - Imports and `use` statements work normally
-3. **Helpful user feedback** - Tells user about `JPERL_LARGECODE=refactor` option
+3. **Automatic handling** - Users don't need to set environment variables
 4. **Fail-safe** - Catches extreme cases that exceed limits even after refactoring
-5. **Backwards compatible** - `JPERL_LARGECODE=refactor` still works for proactive mode
 
 ## User Messages
 
 ### On automatic retry:
 ```
 Note: Method too large, retrying with automatic refactoring.
-      To avoid retry overhead, set JPERL_LARGECODE=refactor
 ```
 
 ### On failure after retry:
 ```
 Hint: If this is a 'Method too large' error after automatic refactoring,
       the code may be too complex to compile. Consider splitting into smaller methods.
-      Or set JPERL_LARGECODE=refactor to enable proactive refactoring during parse.
 ```
 
 ## Usage Recommendations
 
-- **Default behavior (on-demand)**: ✅ Good for 99% of code - automatic and transparent
-- **JPERL_LARGECODE=refactor**: ✅ Use for codebases with very large data structures or generated code
-- **JPERL_LARGECODE=off**: Disable all refactoring (not recommended unless debugging)
-
-## Configuration Options
-
-### Environment Variable: JPERL_LARGECODE
-
-| Value | Behavior |
-|-------|----------|
-| (unset) | Default: on-demand refactoring when compilation fails |
-| `refactor` | Proactive: refactor during parse (more aggressive) |
-| `off` | Disabled: no refactoring even on error (may cause compilation failures) |
+- **Default behavior (on-demand)**: ✅ Automatic and transparent for all code
+- No configuration needed - refactoring happens automatically when required
 
 ## Technical Details
 

@@ -366,6 +366,7 @@ The following areas are currently under active development to enhance the functi
   - Optimization: faster list assignment.
   - Optimization: faster type resolution in Perl scalars.
   - Optimization: `make` now runs tests in parallel.
+  - Optimization: A workaround is implemented to Java 64k bytes segment limit.
   - Planned release date: 2026-02-10.
 
 - Work in Progress
