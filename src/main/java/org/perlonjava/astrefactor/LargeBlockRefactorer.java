@@ -97,8 +97,11 @@ public class LargeBlockRefactorer {
         // The estimator can under-estimate; if we reached codegen overflow, we must allow another pass.
         node.setAnnotation("blockAlreadyRefactored", false);
 
-        // More aggressive than parse-time: allow deeper nesting to ensure we get under the JVM limit.
+        // Step 1: Apply block-level chunking to split statements into closures
         trySmartChunking(node, null, 256);
+
+        // Step 2: Refactor any large literals (arrays/hashes/lists) within the block
+        LargeNodeRefactorer.refactorLiteralsInBlock(node);
     }
 
     /**
