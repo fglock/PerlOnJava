@@ -92,11 +92,6 @@ public static void forceRefactorForCodegen(BlockNode node, boolean isAutoRetry) 
     trySmartChunking(node, null, 256);
     processPendingRefactors();
 }
-
-// Legacy wrapper for compatibility
-public static void forceRefactorForCodegen(BlockNode node) {
-    forceRefactorForCodegen(node, false);
-}
 ```
 
 #### EmitterMethodCreator.java
