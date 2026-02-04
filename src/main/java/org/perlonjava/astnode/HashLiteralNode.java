@@ -20,8 +20,8 @@ import java.util.List;
  * <p>
  * <b>Large Literal Handling:</b> The constructor automatically invokes
  * {@link LargeNodeRefactorer#maybeRefactorElements} to split very large hashes
- * into chunks when {@code JPERL_LARGECODE=refactor} is set. For hashes, chunk
- * sizes are forced to be even to preserve key-value pairing.
+ * into chunks (currently disabled - on-demand refactoring is used instead).
+ * For hashes, chunk sizes are forced to be even to preserve key-value pairing.
  *
  * @see LargeNodeRefactorer
  * @see ArrayLiteralNode
@@ -42,11 +42,9 @@ public class HashLiteralNode extends AbstractNode {
     /**
      * Constructs a new HashLiteralNode with the specified list of child nodes.
      * <p>
-     * <b>Large Literal Refactoring:</b> When {@code JPERL_LARGECODE=refactor} environment
-     * variable is set and the elements list is large enough to potentially exceed JVM's
-     * 64KB method size limit, the constructor automatically splits the elements into
-     * chunks wrapped in anonymous subroutines. Chunk sizes are forced to be even
-     * to preserve key-value pairing.
+     * <b>Large Literal Refactoring:</b> Currently disabled by default.
+     * Large code is handled automatically via on-demand refactoring when compilation errors occur.
+     * Chunk sizes are forced to be even to preserve key-value pairing.
      *
      * @param elements   the list of key-value pairs (alternating keys and values)
      * @param tokenIndex the token index in the source for error reporting

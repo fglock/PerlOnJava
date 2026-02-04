@@ -352,16 +352,10 @@ public class EmitterMethodCreator implements Opcodes {
             return getBytecodeInternal(ctx, ast, useTryCatch, false);
         } catch (MethodTooLargeException tooLarge) {
             // Automatic retry with refactoring on "Method too large" error
-            // This happens regardless of JPERL_LARGECODE setting (on-demand refactoring)
             if (ast instanceof BlockNode blockAst) {
                 try {
                     // Notify user that automatic refactoring is happening
-                    String largecode = System.getenv("JPERL_LARGECODE");
-                    boolean userRequestedRefactor = largecode != null && largecode.equalsIgnoreCase("refactor");
-                    if (!userRequestedRefactor) {
-                        System.err.println("Note: Method too large, retrying with automatic refactoring.");
-                        System.err.println("      To avoid retry overhead, set JPERL_LARGECODE=refactor");
-                    }
+                    System.err.println("Note: Method too large, retrying with automatic refactoring.");
 
                     // Force refactoring with auto-retry flag
                     LargeBlockRefactorer.forceRefactorForCodegen(blockAst, true);
@@ -1416,10 +1410,9 @@ public class EmitterMethodCreator implements Opcodes {
                     errorMsg.append(String.format("Refactoring status: %s\n", skipReason));
                 }
             }
-            
+
             errorMsg.append("Hint: If this is a 'Method too large' error after automatic refactoring,\n");
-            errorMsg.append("      the code may be too complex to compile. Consider splitting into smaller methods.\n");
-            errorMsg.append("      Or set JPERL_LARGECODE=refactor to enable proactive refactoring during parse.");
+            errorMsg.append("      the code may be too complex to compile. Consider splitting into smaller methods.");
 
             throw new PerlCompilerException(
                     ast.getIndex(),

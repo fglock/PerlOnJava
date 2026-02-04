@@ -113,10 +113,10 @@ public class LargeBlockRefactorer {
 
     /**
      * Force refactoring of a block that has already reached codegen and failed with MethodTooLargeException.
-     * This is called during error recovery and works regardless of JPERL_LARGECODE setting.
+     * This is called during automatic error recovery.
      *
      * @param node The block to refactor (modified in place)
-     * @param isAutoRetry True if this is automatic retry on error (always refactor), false if user-requested via JPERL_LARGECODE
+     * @param isAutoRetry True if this is automatic retry on error (always refactor), false otherwise
      */
     public static void forceRefactorForCodegen(BlockNode node, boolean isAutoRetry) {
         // Only check IS_REFACTORING_ENABLED if NOT auto-retry
@@ -154,7 +154,7 @@ public class LargeBlockRefactorer {
     /**
      * Parse-time entry point: called from BlockNode constructor to refactor large blocks.
      * This applies smart chunking to split safe statement sequences into closures.
-     * Only runs when JPERL_LARGECODE=refactor is set.
+     * Disabled by default - automatic on-demand refactoring is used instead.
      *
      * @param node   The block to potentially refactor (modified in place)
      * @param parser The parser instance for access to error utilities (can be null if not available)
