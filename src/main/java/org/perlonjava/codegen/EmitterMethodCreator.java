@@ -351,13 +351,14 @@ public class EmitterMethodCreator implements Opcodes {
         try {
             return getBytecodeInternal(ctx, ast, useTryCatch, false);
         } catch (MethodTooLargeException tooLarge) {
-            // Best-effort: try a more aggressive large-block refactor pass, then retry once.
-            // This is only enabled when refactoring is explicitly requested.
-            String largecode = System.getenv("JPERL_LARGECODE");
-            boolean refactorEnabled = largecode != null && largecode.equalsIgnoreCase("refactor");
-            if (refactorEnabled && ast instanceof BlockNode blockAst) {
+            // Automatic retry with refactoring on "Method too large" error
+            if (ast instanceof BlockNode blockAst) {
                 try {
-                    LargeBlockRefactorer.forceRefactorForCodegen(blockAst);
+                    // Notify user that automatic refactoring is happening
+                    System.err.println("Note: Method too large, retrying with automatic refactoring.");
+
+                    // Force refactoring with auto-retry flag
+                    LargeBlockRefactorer.forceRefactorForCodegen(blockAst, true);
 
                     // Reset JavaClassInfo to avoid reusing partially-resolved Labels.
                     if (ctx != null && ctx.javaClassInfo != null) {
@@ -369,9 +370,12 @@ public class EmitterMethodCreator implements Opcodes {
 
                     return getBytecodeInternal(ctx, ast, useTryCatch, false);
                 } catch (MethodTooLargeException retryTooLarge) {
+                    // Refactoring didn't help enough - give up
                     throw retryTooLarge;
-                } catch (Throwable ignored) {
-                    // Fall through to the original exception.
+                } catch (Throwable retryError) {
+                    // Refactoring caused a different error - report both
+                    System.err.println("Warning: Automatic refactoring failed: " + retryError.getMessage());
+                    // Fall through to throw original exception
                 }
             }
             throw tooLarge;
@@ -1406,9 +1410,10 @@ public class EmitterMethodCreator implements Opcodes {
                     errorMsg.append(String.format("Refactoring status: %s\n", skipReason));
                 }
             }
-            
-            errorMsg.append("Hint: If this is a 'Method too large' error, try enabling JPERL_LARGECODE=refactor");
-            
+
+            errorMsg.append("Hint: If this is a 'Method too large' error after automatic refactoring,\n");
+            errorMsg.append("      the code may be too complex to compile. Consider splitting into smaller methods.");
+
             throw new PerlCompilerException(
                     ast.getIndex(),
                     errorMsg.toString(),
