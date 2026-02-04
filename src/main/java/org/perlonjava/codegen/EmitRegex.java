@@ -237,8 +237,6 @@ public class EmitRegex {
 
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
             emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-        } else {
-            emitterVisitor.ctx.javaClassInfo.incrementStackLevel(1);
         }
     }
 
@@ -290,15 +288,16 @@ public class EmitRegex {
                 "org/perlonjava/regex/RuntimeRegex", "matchRegex",
                 "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeBase;", false);
 
-        emitterVisitor.ctx.javaClassInfo.incrementStackLevel(1);
+        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+            // Discard result if in void context
+            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
+            return;
+        }
 
         // Handle the result based on context type
         if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
             // Convert result to Scalar if in scalar context
             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
-        } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            // Discard result if in void context
-            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
         }
     }
 

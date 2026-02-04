@@ -24,6 +24,15 @@ public class JavaClassInfo {
      * The label to return to after method execution.
      */
     public Label returnLabel;
+
+    /**
+     * Local variable slot used to spill the value returned by `return`, `goto` markers,
+     * and other non-local control-flow paths before jumping to {@link #returnLabel}.
+     *
+     * The {@link #returnLabel} join point must be stack-neutral: no incoming edge may
+     * rely on operand stack contents.
+     */
+    public int returnValueSlot;
     
     /**
      * Local variable slot for tail call trampoline - stores codeRef.
@@ -74,6 +83,7 @@ public class JavaClassInfo {
     public JavaClassInfo() {
         this.javaClassName = EmitterMethodCreator.generateClassName();
         this.returnLabel = null;
+        this.returnValueSlot = -1;
         this.stackLevelManager = new StackLevelManager();
         this.loopLabelStack = new ArrayDeque<>();
         this.gotoLabelStack = new ArrayDeque<>();
@@ -218,18 +228,13 @@ public class JavaClassInfo {
     }
 
     /**
-     * Finds the innermost "true" loop labels.
-     * This skips pseudo-loops like bare/labeled blocks (e.g. SKIP: { ... }) that
-     * may be present on the loop label stack to support redo/last/next on blocks.
-     *
-     * For unlabeled next/last/redo, Perl semantics target the nearest enclosing
-     * true loop, not a labeled block used for SKIP.
+     * Finds the innermost LoopLabels that is a true loop (for/while/until).
      *
      * @return the innermost LoopLabels with isTrueLoop=true, or null if none
      */
     public LoopLabels findInnermostTrueLoopLabels() {
         for (LoopLabels loopLabels : loopLabelStack) {
-            if (loopLabels != null && loopLabels.isUnlabeledControlFlowTarget) {
+            if (loopLabels != null && loopLabels.isTrueLoop && loopLabels.isUnlabeledControlFlowTarget) {
                 return loopLabels;
             }
         }
@@ -251,24 +256,6 @@ public class JavaClassInfo {
 
     public void popGotoLabels() {
         gotoLabelStack.pop();
-    }
-
-    /**
-     * Increments the stack level by a specified amount.
-     *
-     * @param level the amount to increment the stack level by
-     */
-    public void incrementStackLevel(int level) {
-        stackLevelManager.increment(level);
-    }
-
-    /**
-     * Decrements the stack level by a specified amount.
-     *
-     * @param level the amount to decrement the stack level by
-     */
-    public void decrementStackLevel(int level) {
-        stackLevelManager.decrement(level);
     }
 
     /**

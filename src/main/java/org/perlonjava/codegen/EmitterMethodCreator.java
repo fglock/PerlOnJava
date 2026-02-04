@@ -622,6 +622,24 @@ public class EmitterMethodCreator implements Opcodes {
             // Setup local variables and environment for the method
             Local.localRecord localRecord = Local.localSetup(ctx, ast, mv);
 
+            // Store the computed RuntimeList return value in a dedicated local slot.
+            // This keeps the operand stack empty at join labels (endCatch), avoiding
+            // inconsistent stack map frames when multiple control-flow paths merge.
+            int returnListSlot = ctx.symbolTable.allocateLocalVariable();
+
+            // Spill the raw RuntimeBase return value for stack-neutral joins at returnLabel.
+            // Any path that jumps to returnLabel must arrive with an empty operand stack.
+            int returnValueSlot = ctx.symbolTable.allocateLocalVariable();
+            ctx.javaClassInfo.returnValueSlot = returnValueSlot;
+            mv.visitInsn(Opcodes.ACONST_NULL);
+            mv.visitVarInsn(Opcodes.ASTORE, returnValueSlot);
+
+            // Labels for eval-block try/catch wrapping (used only when useTryCatch=true)
+            Label tryStart = null;
+            Label tryEnd = null;
+            Label catchBlock = null;
+            Label endCatch = null;
+
             if (useTryCatch) {
                 ctx.logDebug("useTryCatch");
 
@@ -629,10 +647,10 @@ public class EmitterMethodCreator implements Opcodes {
                 // Start of try-catch block
                 // --------------------------------
 
-                Label tryStart = new Label();
-                Label tryEnd = new Label();
-                Label catchBlock = new Label();
-                Label endCatch = new Label();
+                tryStart = new Label();
+                tryEnd = new Label();
+                catchBlock = new Label();
+                endCatch = new Label();
 
                 // Define the try-catch block
                 mv.visitTryCatchBlock(tryStart, tryEnd, catchBlock, "java/lang/Throwable");
@@ -652,47 +670,48 @@ public class EmitterMethodCreator implements Opcodes {
 
                 ast.accept(visitor);
 
+                // Normal fallthrough return: spill and jump with empty operand stack.
+                mv.visitVarInsn(Opcodes.ASTORE, returnValueSlot);
+                mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
+
                 // Handle the return value
                 ctx.logDebug("Return the last value");
-                mv.visitLabel(ctx.javaClassInfo.returnLabel); // "return" from other places arrive here
+
 
                 // --------------------------------
                 // End of the try block
                 // --------------------------------
-                mv.visitLabel(tryEnd);
-
-                // Jump over the catch block if no exception occurs
-                mv.visitJumpInsn(Opcodes.GOTO, endCatch);
-
-                // Start of the catch block
-                mv.visitLabel(catchBlock);
-
-                // The throwable object is on the stack
-                // Catch the throwable
-                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                        "org/perlonjava/operators/WarnDie",
-                        "catchEval",
-                        "(Ljava/lang/Throwable;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-
-                // End of the catch block
-                mv.visitLabel(endCatch);
+                // NOTE: We intentionally delay tryEnd/endCatch labels until after the
+                // return-value materialization and trampoline checks below.
+                // This ensures eval BLOCK catches control-flow marker errors raised
+                // during epilogue processing (e.g. bad goto), instead of escaping and
+                // terminating top-level execution.
 
                 // --------------------------------
-                // End of try-catch block
+                // End of try-catch block is emitted AFTER the epilogue/trampoline.
                 // --------------------------------
             } else {
                 // No try-catch block is used
 
                 ast.accept(visitor);
 
+                // Normal fallthrough return: spill and jump with empty operand stack.
+                mv.visitVarInsn(Opcodes.ASTORE, returnValueSlot);
+                mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
+
                 // Handle the return value
                 ctx.logDebug("Return the last value");
-                mv.visitLabel(ctx.javaClassInfo.returnLabel); // "return" from other places arrive here
             }
 
-            // Transform the value in the stack to RuntimeList BEFORE local teardown
-            // This ensures that array/hash elements are expanded before local variables are restored
+            // Join point for all returns/gotos. Must be stack-neutral.
+            mv.visitLabel(ctx.javaClassInfo.returnLabel);
+            mv.visitVarInsn(Opcodes.ALOAD, returnValueSlot);
+
+            // Transform the value in the stack to RuntimeList BEFORE local teardown.
+            // Materialize it into a local slot immediately so all subsequent control-flow
+            // checks operate from locals and join points don't depend on operand stack shape.
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "getList", "()Lorg/perlonjava/runtime/RuntimeList;", false);
+            mv.visitVarInsn(Opcodes.ASTORE, returnListSlot);
 
             // Phase 3: Check for control flow markers
             // RuntimeList is on stack after getList()
@@ -703,6 +722,7 @@ public class EmitterMethodCreator implements Opcodes {
             Label notTailcall = new Label();
             Label normalReturn = new Label();
             
+            mv.visitVarInsn(Opcodes.ALOAD, returnListSlot);
             mv.visitInsn(Opcodes.DUP);  // Duplicate for checking
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, 
                     "org/perlonjava/runtime/RuntimeList", 
@@ -855,16 +875,143 @@ public class EmitterMethodCreator implements Opcodes {
                     false);
             mv.visitInsn(Opcodes.ICONST_4);
             mv.visitJumpInsn(Opcodes.IF_ICMPEQ, tailcallLoop);  // Loop if still TAILCALL
-            // Otherwise fall through to normalReturn (propagate other control flow)
-            
             // Not TAILCALL: check if we're inside a loop and should jump to loop handler
             mv.visitLabel(notTailcall);
+            if (useTryCatch) {
+                // For eval BLOCK, any marked non-TAILCALL result is an eval failure.
+                // Stack here: [RuntimeControlFlowList]
+                int msgSlot = ctx.symbolTable.allocateLocalVariable();
+
+                // msg = marker.buildErrorMessage()
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitFieldInsn(Opcodes.GETFIELD,
+                        "org/perlonjava/runtime/RuntimeControlFlowList",
+                        "marker",
+                        "Lorg/perlonjava/runtime/ControlFlowMarker;");
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/ControlFlowMarker",
+                        "buildErrorMessage",
+                        "()Ljava/lang/String;",
+                        false);
+                mv.visitVarInsn(Opcodes.ASTORE, msgSlot);
+
+                // $@ = msg
+                mv.visitLdcInsn("main::@");
+                mv.visitVarInsn(Opcodes.ALOAD, msgSlot);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/GlobalVariable",
+                        "setGlobalVariable",
+                        "(Ljava/lang/String;Ljava/lang/String;)V",
+                        false);
+
+                // Replace marker with undef/empty list
+                mv.visitInsn(Opcodes.POP);
+                Label evalBlockList = new Label();
+                Label evalBlockDone = new Label();
+                mv.visitVarInsn(Opcodes.ILOAD, 2);
+                mv.visitInsn(Opcodes.ICONST_2); // RuntimeContextType.LIST
+                mv.visitJumpInsn(Opcodes.IF_ICMPEQ, evalBlockList);
+
+                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeScalar");
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeScalar", "<init>", "()V", false);
+                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "(Lorg/perlonjava/runtime/RuntimeScalar;)V", false);
+                mv.visitJumpInsn(Opcodes.GOTO, evalBlockDone);
+
+                mv.visitLabel(evalBlockList);
+                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "()V", false);
+                mv.visitLabel(evalBlockDone);
+
+                // Materialize return value in local slot and jump to endCatch with empty stack.
+                mv.visitVarInsn(Opcodes.ASTORE, returnListSlot);
+
+                // Skip the success epilogue that clears $@.
+                // This path represents an eval failure (bad goto/other marker),
+                // so $@ must be preserved.
+                mv.visitJumpInsn(Opcodes.GOTO, endCatch);
+            }
             // TODO: Check ctx.javaClassInfo loop stack, if non-empty, jump to innermost loop handler
             // For now, just propagate (return to caller)
             
             // Normal return
             mv.visitLabel(normalReturn);
+
+            // The RuntimeList is currently on stack when coming from the trampoline checks.
+            // When jumping here from the initial isNonLocalGoto check, we need to reload it.
+            // To normalize both paths, store any on-stack value and then reload from the slot.
+            mv.visitVarInsn(Opcodes.ASTORE, returnListSlot);
             }  // End of if (ENABLE_TAILCALL_TRAMPOLINE)
+
+            if (useTryCatch) {
+                // --------------------------------
+                // End of the try block (includes epilogue/trampoline)
+                // --------------------------------
+                mv.visitLabel(tryEnd);
+
+                // Clear $@ on successful completion of eval (nested evals may have set it).
+                mv.visitLdcInsn("main::@");
+                mv.visitLdcInsn("");
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/GlobalVariable",
+                        "setGlobalVariable",
+                        "(Ljava/lang/String;Ljava/lang/String;)V", false);
+
+                // Jump over the catch block if no exception occurs
+                mv.visitJumpInsn(Opcodes.GOTO, endCatch);
+
+                // Start of the catch block
+                mv.visitLabel(catchBlock);
+
+                // The throwable object is on the stack
+                // Catch the throwable
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/operators/WarnDie",
+                        "catchEval",
+                        "(Ljava/lang/Throwable;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+
+                // Discard catchEval() return value; it only sets $@
+                mv.visitInsn(Opcodes.POP);
+
+                // Return undef/empty list from eval on error.
+                Label evalCatchList = new Label();
+                Label evalCatchDone = new Label();
+                mv.visitVarInsn(Opcodes.ILOAD, 2);
+                mv.visitInsn(Opcodes.ICONST_2); // RuntimeContextType.LIST
+                mv.visitJumpInsn(Opcodes.IF_ICMPEQ, evalCatchList);
+
+                // Scalar/void: RuntimeList(new RuntimeScalar())
+                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeScalar");
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeScalar", "<init>", "()V", false);
+                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "(Lorg/perlonjava/runtime/RuntimeScalar;)V", false);
+                mv.visitJumpInsn(Opcodes.GOTO, evalCatchDone);
+
+                // List: new RuntimeList()
+                mv.visitLabel(evalCatchList);
+                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "()V", false);
+                mv.visitLabel(evalCatchDone);
+
+                // Materialize return value in local slot.
+                mv.visitVarInsn(Opcodes.ASTORE, returnListSlot);
+
+                // End of the catch block
+                mv.visitLabel(endCatch);
+
+                // Load the return value for the method epilogue.
+                mv.visitVarInsn(Opcodes.ALOAD, returnListSlot);
+            } else {
+                // No try/catch: ensure the method epilogue sees the return value
+                // on the operand stack.
+                mv.visitVarInsn(Opcodes.ALOAD, returnListSlot);
+            }
             
             // Teardown local variables and environment after the return value is materialized
             Local.localTeardown(localRecord, mv);

@@ -44,6 +44,8 @@ public class GlobalContext {
             String varName = "main::" + Character.toString(c - 'A' + 1);
             GlobalVariable.getGlobalVariable(varName);
         }
+        // $^N - last capture group closed (not yet implemented, but must be read-only)
+        GlobalVariable.globalVariables.put(encodeSpecialVar("N"), new RuntimeScalarReadOnly());
         GlobalVariable.getGlobalVariable("main::" + Character.toString('O' - 'A' + 1)).set(SystemUtils.getPerlOsName());    // initialize $^O
         GlobalVariable.getGlobalVariable("main::" + Character.toString('V' - 'A' + 1)).set(Configuration.getPerlVersionVString());    // initialize $^V
         GlobalVariable.getGlobalVariable("main::" + Character.toString('T' - 'A' + 1)).set((int)(System.currentTimeMillis() / 1000));    // initialize $^T to epoch time
@@ -108,8 +110,12 @@ public class GlobalContext {
         GlobalVariable.getGlobalVariable(encodeSpecialVar("SAFE_LOCALES"));  // TODO
 
         // Initialize arrays
-        GlobalVariable.getGlobalArray("main::+").elements = new ArraySpecialVariable(ArraySpecialVariable.Id.LAST_MATCH_END);  // regex @+
-        GlobalVariable.getGlobalArray("main::-").elements = new ArraySpecialVariable(ArraySpecialVariable.Id.LAST_MATCH_START);  // regex @-
+        RuntimeArray matchEnd = GlobalVariable.getGlobalArray("main::+");
+        matchEnd.type = RuntimeArray.READONLY_ARRAY;
+        matchEnd.elements = new ArraySpecialVariable(ArraySpecialVariable.Id.LAST_MATCH_END);  // regex @+
+        RuntimeArray matchStart = GlobalVariable.getGlobalArray("main::-");
+        matchStart.type = RuntimeArray.READONLY_ARRAY;
+        matchStart.elements = new ArraySpecialVariable(ArraySpecialVariable.Id.LAST_MATCH_START);  // regex @-
         GlobalVariable.getGlobalArray(encodeSpecialVar("CAPTURE")).elements = new ArraySpecialVariable(ArraySpecialVariable.Id.CAPTURE);  // regex @{^CAPTURE}
         GlobalVariable.getGlobalArray("main::'");  // @'
 
