@@ -302,7 +302,6 @@ public class EmitForeach {
                 continueLabel,
                 redoLabel,
                 loopEnd,
-                emitterVisitor.ctx.javaClassInfo.stackLevelManager.getStackLevel(),
                 RuntimeContextType.VOID);
         currentLoopLabels.controlFlowHandler = controlFlowHandler;
 

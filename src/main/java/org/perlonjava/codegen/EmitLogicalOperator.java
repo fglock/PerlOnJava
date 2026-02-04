@@ -281,17 +281,10 @@ public class EmitLogicalOperator {
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", getBoolean, "()Z", false);
             mv.visitJumpInsn(compareOpcode, endLabel);
 
-            // The condition value has been consumed by getBoolean() and the conditional jump.
-            // Keep StackLevelManager in sync with the actual operand stack (empty) so that
-            // downstream non-local control flow (return/last/next/redo/goto) doesn't emit POPs
-            // based on stale stack accounting.
-            emitterVisitor.ctx.javaClassInfo.resetStackLevel();
-
             node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
             mv.visitInsn(Opcodes.POP);
 
             mv.visitLabel(endLabel);
-            emitterVisitor.ctx.javaClassInfo.resetStackLevel();
             return;
         }
 
