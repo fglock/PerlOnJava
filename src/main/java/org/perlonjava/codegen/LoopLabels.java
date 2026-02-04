@@ -41,11 +41,6 @@ public class LoopLabels {
     public int context;
 
     /**
-     * The stack level at the point where these loop labels are defined
-     */
-    public int asmStackLevel;
-    
-    /**
      * Whether this is a "true" loop (for/while/until) vs a pseudo-loop (do-while/bare block).
      * True loops allow last/next/redo. Pseudo-loops cause compile errors.
      */
@@ -70,11 +65,10 @@ public class LoopLabels {
      * @param nextLabel     The ASM Label for 'next' operations
      * @param redoLabel     The ASM Label for 'redo' operations
      * @param lastLabel     The ASM Label for 'last' operations
-     * @param asmStackLevel The stack level at label definition
      * @param context       The context type for this loop
      */
-    public LoopLabels(String labelName, Label nextLabel, Label redoLabel, Label lastLabel, int asmStackLevel, int context) {
-        this(labelName, nextLabel, redoLabel, lastLabel, asmStackLevel, context, true, true);
+    public LoopLabels(String labelName, Label nextLabel, Label redoLabel, Label lastLabel, int context) {
+        this(labelName, nextLabel, redoLabel, lastLabel, context, true, true);
     }
     
     /**
@@ -84,20 +78,18 @@ public class LoopLabels {
      * @param nextLabel     The ASM Label for 'next' operations
      * @param redoLabel     The ASM Label for 'redo' operations
      * @param lastLabel     The ASM Label for 'last' operations
-     * @param asmStackLevel The stack level at label definition
      * @param context       The context type for this loop
      * @param isTrueLoop    Whether this is a true loop (for/while/until) or pseudo-loop (do-while/bare)
      */
-    public LoopLabels(String labelName, Label nextLabel, Label redoLabel, Label lastLabel, int asmStackLevel, int context, boolean isTrueLoop) {
-        this(labelName, nextLabel, redoLabel, lastLabel, asmStackLevel, context, isTrueLoop, true);
+    public LoopLabels(String labelName, Label nextLabel, Label redoLabel, Label lastLabel, int context, boolean isTrueLoop) {
+        this(labelName, nextLabel, redoLabel, lastLabel, context, isTrueLoop, true);
     }
 
-    public LoopLabels(String labelName, Label nextLabel, Label redoLabel, Label lastLabel, int asmStackLevel, int context, boolean isTrueLoop, boolean isUnlabeledControlFlowTarget) {
+    public LoopLabels(String labelName, Label nextLabel, Label redoLabel, Label lastLabel, int context, boolean isTrueLoop, boolean isUnlabeledControlFlowTarget) {
         this.labelName = labelName;
         this.nextLabel = nextLabel;
         this.redoLabel = redoLabel;
         this.lastLabel = lastLabel;
-        this.asmStackLevel = asmStackLevel;
         this.context = context;
         this.isTrueLoop = isTrueLoop;
         this.isUnlabeledControlFlowTarget = isUnlabeledControlFlowTarget;
@@ -116,7 +108,6 @@ public class LoopLabels {
                 ", nextLabel=" + nextLabel +
                 ", redoLabel=" + redoLabel +
                 ", lastLabel=" + lastLabel +
-                ", asmStackLevel=" + asmStackLevel +
                 ", context=" + context +
                 '}';
     }

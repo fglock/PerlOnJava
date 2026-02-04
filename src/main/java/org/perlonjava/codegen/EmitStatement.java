@@ -164,7 +164,6 @@ public class EmitStatement {
                         continueLabel,
                         redoLabel,
                         endLabel,
-                        emitterVisitor.ctx.javaClassInfo.stackLevelManager.getStackLevel(),
                         RuntimeContextType.VOID,
                         true,
                         isUnlabeledTarget);
@@ -245,7 +244,6 @@ public class EmitStatement {
                 continueLabel,
                 redoLabel,
                 endLabel,
-                emitterVisitor.ctx.javaClassInfo.stackLevelManager.getStackLevel(),
                 RuntimeContextType.VOID,
                 false); // isTrueLoop = false (do-while is not a true loop)
 
@@ -266,7 +264,6 @@ public class EmitStatement {
                 continueLabel,
                 redoLabel,
                 endLabel,
-                emitterVisitor.ctx.javaClassInfo.stackLevelManager.getStackLevel(),
                 RuntimeContextType.VOID,
                 false);
         emitRegistryCheck(mv, loopLabels, redoLabel, continueLabel, endLabel);
