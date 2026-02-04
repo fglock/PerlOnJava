@@ -381,9 +381,17 @@ public class EmitSubroutine {
                 && emitterVisitor.ctx.javaClassInfo.returnLabel != null
                 && emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot >= 0) {
 
+            // Get or create a block-level dispatcher for the current loop state
+            String loopStateSignature = emitterVisitor.ctx.javaClassInfo.getLoopStateSignature();
+            Label blockDispatcher = emitterVisitor.ctx.javaClassInfo.blockDispatcherLabels.get(loopStateSignature);
+            boolean isFirstUse = (blockDispatcher == null);
+
+            if (isFirstUse) {
+                blockDispatcher = new Label();
+                emitterVisitor.ctx.javaClassInfo.blockDispatcherLabels.put(loopStateSignature, blockDispatcher);
+            }
+
             Label notControlFlow = new Label();
-            Label propagateToCaller = new Label();
-            Label checkLoopLabels = new Label();
 
             int belowResultStackLevel = 0;
             JavaClassInfo.SpillRef[] baseSpills = new JavaClassInfo.SpillRef[0];
@@ -407,100 +415,8 @@ public class EmitSubroutine {
                     false);
             mv.visitJumpInsn(Opcodes.IFEQ, notControlFlow);
 
-            // Marked: load control flow type ordinal into controlFlowActionSlot
-            mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
-            mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeControlFlowList");
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                    "org/perlonjava/runtime/RuntimeControlFlowList",
-                    "getControlFlowType",
-                    "()Lorg/perlonjava/runtime/ControlFlowType;",
-                    false);
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                    "org/perlonjava/runtime/ControlFlowType",
-                    "ordinal",
-                    "()I",
-                    false);
-            mv.visitVarInsn(Opcodes.ISTORE, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
-
-            // Only handle LAST/NEXT/REDO locally (ordinals 0/1/2). Others propagate.
-            mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
-            mv.visitInsn(Opcodes.ICONST_2);
-            mv.visitJumpInsn(Opcodes.IF_ICMPGT, propagateToCaller);
-
-            mv.visitLabel(checkLoopLabels);
-            for (LoopLabels loopLabels : emitterVisitor.ctx.javaClassInfo.loopLabelStack) {
-                Label nextLoopCheck = new Label();
-
-                // if (!marked.matchesLabel(loopLabels.labelName)) continue;
-                mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
-                mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeControlFlowList");
-                if (loopLabels.labelName != null) {
-                    mv.visitLdcInsn(loopLabels.labelName);
-                } else {
-                    mv.visitInsn(Opcodes.ACONST_NULL);
-                }
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                        "org/perlonjava/runtime/RuntimeControlFlowList",
-                        "matchesLabel",
-                        "(Ljava/lang/String;)Z",
-                        false);
-                mv.visitJumpInsn(Opcodes.IFEQ, nextLoopCheck);
-
-                // Match found: jump based on type
-                Label checkNext = new Label();
-                Label checkRedo = new Label();
-
-                // if (type == LAST (0)) goto lastLabel
-                mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
-                mv.visitInsn(Opcodes.ICONST_0);
-                mv.visitJumpInsn(Opcodes.IF_ICMPNE, checkNext);
-                if (loopLabels.lastLabel == emitterVisitor.ctx.javaClassInfo.returnLabel) {
-                    mv.visitJumpInsn(Opcodes.GOTO, propagateToCaller);
-                } else {
-                    if (loopLabels.context != RuntimeContextType.VOID) {
-                        EmitOperator.emitUndef(mv);
-                    }
-                    mv.visitJumpInsn(Opcodes.GOTO, loopLabels.lastLabel);
-                }
-
-                // if (type == NEXT (1)) goto nextLabel
-                mv.visitLabel(checkNext);
-                mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
-                mv.visitInsn(Opcodes.ICONST_1);
-                mv.visitJumpInsn(Opcodes.IF_ICMPNE, checkRedo);
-                if (loopLabels.nextLabel == emitterVisitor.ctx.javaClassInfo.returnLabel) {
-                    mv.visitJumpInsn(Opcodes.GOTO, propagateToCaller);
-                } else {
-                    if (loopLabels.context != RuntimeContextType.VOID) {
-                        EmitOperator.emitUndef(mv);
-                    }
-                    mv.visitJumpInsn(Opcodes.GOTO, loopLabels.nextLabel);
-                }
-
-                // if (type == REDO (2)) goto redoLabel
-                mv.visitLabel(checkRedo);
-                if (loopLabels.redoLabel == emitterVisitor.ctx.javaClassInfo.returnLabel) {
-                    mv.visitJumpInsn(Opcodes.GOTO, propagateToCaller);
-                } else {
-                    mv.visitJumpInsn(Opcodes.GOTO, loopLabels.redoLabel);
-                }
-
-                mv.visitLabel(nextLoopCheck);
-            }
-
-            // No loop match; propagate
-            mv.visitJumpInsn(Opcodes.GOTO, propagateToCaller);
-
-            // Propagate: jump to returnLabel with the marked list
-            mv.visitLabel(propagateToCaller);
-            for (JavaClassInfo.SpillRef ref : baseSpills) {
-                if (ref != null) {
-                    emitterVisitor.ctx.javaClassInfo.releaseSpillRef(ref);
-                }
-            }
-            mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
-            mv.visitVarInsn(Opcodes.ASTORE, emitterVisitor.ctx.javaClassInfo.returnValueSlot);
-            mv.visitJumpInsn(Opcodes.GOTO, emitterVisitor.ctx.javaClassInfo.returnLabel);
+            // Marked: jump to block-level dispatcher
+            mv.visitJumpInsn(Opcodes.GOTO, blockDispatcher);
 
             // Not a control flow marker - load it back and continue
             mv.visitLabel(notControlFlow);
@@ -511,6 +427,15 @@ public class EmitSubroutine {
                 }
             }
             mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+
+            // If this is the first use of this dispatcher, emit it now
+            // We need to skip over it in the normal flow
+            if (isFirstUse) {
+                Label skipDispatcher = new Label();
+                mv.visitJumpInsn(Opcodes.GOTO, skipDispatcher);
+                emitBlockDispatcher(mv, emitterVisitor, blockDispatcher, baseSpills);
+                mv.visitLabel(skipDispatcher);
+            }
         }
 
         if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
@@ -620,5 +545,119 @@ public class EmitSubroutine {
             // The loop level will check if it's marked and handle it.
         }
         // If not inside a loop, don't check registry (result stays on stack)
+    }
+
+    /**
+     * Emits the block-level dispatcher code that handles control flow for all call sites
+     * with the same visible loop state.
+     *
+     * @param mv MethodVisitor to emit bytecode
+     * @param emitterVisitor The emitter visitor context
+     * @param blockDispatcher The label for this block dispatcher
+     * @param baseSpills Array of spill references that need to be cleaned up
+     */
+    private static void emitBlockDispatcher(MethodVisitor mv, EmitterVisitor emitterVisitor,
+                                           Label blockDispatcher, JavaClassInfo.SpillRef[] baseSpills) {
+        Label propagateToCaller = new Label();
+        Label checkLoopLabels = new Label();
+
+        // Entry point for block dispatcher
+        mv.visitLabel(blockDispatcher);
+
+        // Get control flow type ordinal into controlFlowActionSlot
+        mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+        mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeControlFlowList");
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/RuntimeControlFlowList",
+                "getControlFlowType",
+                "()Lorg/perlonjava/runtime/ControlFlowType;",
+                false);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/ControlFlowType",
+                "ordinal",
+                "()I",
+                false);
+        mv.visitVarInsn(Opcodes.ISTORE, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
+
+        // Only handle LAST/NEXT/REDO locally (ordinals 0/1/2). Others propagate.
+        mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
+        mv.visitInsn(Opcodes.ICONST_2);
+        mv.visitJumpInsn(Opcodes.IF_ICMPGT, propagateToCaller);
+
+        // Check each visible loop label
+        mv.visitLabel(checkLoopLabels);
+        for (LoopLabels loopLabels : emitterVisitor.ctx.javaClassInfo.loopLabelStack) {
+            Label nextLoopCheck = new Label();
+
+            // if (!marked.matchesLabel(loopLabels.labelName)) continue;
+            mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+            mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeControlFlowList");
+            if (loopLabels.labelName != null) {
+                mv.visitLdcInsn(loopLabels.labelName);
+            } else {
+                mv.visitInsn(Opcodes.ACONST_NULL);
+            }
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/RuntimeControlFlowList",
+                    "matchesLabel",
+                    "(Ljava/lang/String;)Z",
+                    false);
+            mv.visitJumpInsn(Opcodes.IFEQ, nextLoopCheck);
+
+            // Match found: dispatch based on type
+            Label checkNext = new Label();
+            Label checkRedo = new Label();
+
+            // if (type == LAST (0)) goto lastLabel
+            mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
+            mv.visitInsn(Opcodes.ICONST_0);
+            mv.visitJumpInsn(Opcodes.IF_ICMPNE, checkNext);
+            if (loopLabels.lastLabel == emitterVisitor.ctx.javaClassInfo.returnLabel) {
+                mv.visitJumpInsn(Opcodes.GOTO, propagateToCaller);
+            } else {
+                if (loopLabels.context != RuntimeContextType.VOID) {
+                    EmitOperator.emitUndef(mv);
+                }
+                mv.visitJumpInsn(Opcodes.GOTO, loopLabels.lastLabel);
+            }
+
+            // if (type == NEXT (1)) goto nextLabel
+            mv.visitLabel(checkNext);
+            mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
+            mv.visitInsn(Opcodes.ICONST_1);
+            mv.visitJumpInsn(Opcodes.IF_ICMPNE, checkRedo);
+            if (loopLabels.nextLabel == emitterVisitor.ctx.javaClassInfo.returnLabel) {
+                mv.visitJumpInsn(Opcodes.GOTO, propagateToCaller);
+            } else {
+                if (loopLabels.context != RuntimeContextType.VOID) {
+                    EmitOperator.emitUndef(mv);
+                }
+                mv.visitJumpInsn(Opcodes.GOTO, loopLabels.nextLabel);
+            }
+
+            // if (type == REDO (2)) goto redoLabel
+            mv.visitLabel(checkRedo);
+            if (loopLabels.redoLabel == emitterVisitor.ctx.javaClassInfo.returnLabel) {
+                mv.visitJumpInsn(Opcodes.GOTO, propagateToCaller);
+            } else {
+                mv.visitJumpInsn(Opcodes.GOTO, loopLabels.redoLabel);
+            }
+
+            mv.visitLabel(nextLoopCheck);
+        }
+
+        // No loop match; propagate to caller
+        mv.visitJumpInsn(Opcodes.GOTO, propagateToCaller);
+
+        // Propagate: jump to returnLabel with the marked list
+        mv.visitLabel(propagateToCaller);
+        for (JavaClassInfo.SpillRef ref : baseSpills) {
+            if (ref != null) {
+                emitterVisitor.ctx.javaClassInfo.releaseSpillRef(ref);
+            }
+        }
+        mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+        mv.visitVarInsn(Opcodes.ASTORE, emitterVisitor.ctx.javaClassInfo.returnValueSlot);
+        mv.visitJumpInsn(Opcodes.GOTO, emitterVisitor.ctx.javaClassInfo.returnLabel);
     }
 }
