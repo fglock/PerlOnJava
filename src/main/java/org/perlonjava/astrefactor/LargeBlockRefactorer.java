@@ -83,17 +83,6 @@ public class LargeBlockRefactorer {
     private static final ThreadLocal<Deque<BlockNode>> pendingRefactorBlocks = ThreadLocal.withInitial(ArrayDeque::new);
     private static final ThreadLocal<Boolean> processingPendingRefactors = ThreadLocal.withInitial(() -> false);
 
-    public static void enqueueForRefactor(BlockNode node) {
-        if (!IS_REFACTORING_ENABLED || node == null) {
-            return;
-        }
-        if (node.getBooleanAnnotation("queuedForRefactor")) {
-            return;
-        }
-        node.setAnnotation("queuedForRefactor", true);
-        pendingRefactorBlocks.get().addLast(node);
-    }
-
     private static void processPendingRefactors() {
         if (processingPendingRefactors.get()) {
             return;
@@ -139,16 +128,6 @@ public class LargeBlockRefactorer {
         // More aggressive than parse-time: allow deeper nesting to ensure we get under the JVM limit.
         trySmartChunking(node, null, 256);
         processPendingRefactors();
-    }
-
-    /**
-     * Legacy wrapper for compatibility.
-     *
-     * @param node The block to refactor
-     * @deprecated Use {@link #forceRefactorForCodegen(BlockNode, boolean)} instead
-     */
-    public static void forceRefactorForCodegen(BlockNode node) {
-        forceRefactorForCodegen(node, false);
     }
 
     /**
@@ -570,46 +549,6 @@ public class LargeBlockRefactorer {
         // Emit the refactored block
         subr.accept(emitterVisitor);
         return true;
-    }
-
-    /**
-     * Check if a node is a complete block/loop with its own scope.
-     */
-    private static boolean isCompleteBlock(Node node) {
-        return node instanceof BlockNode ||
-                node instanceof For1Node ||
-                node instanceof For3Node ||
-                node instanceof IfNode ||
-                node instanceof TryNode;
-    }
-
-    /**
-     * Check if a chunk would be wrapped in a closure based on its size.
-     *
-     * @param chunk The chunk to check
-     * @return true if the chunk is large enough to be wrapped (>= MIN_CHUNK_SIZE)
-     */
-    private static boolean chunkWouldBeWrapped(List<Node> chunk) {
-        return chunk.size() >= MIN_CHUNK_SIZE;
-    }
-
-    /**
-     * Check if a chunk contains unsafe control flow.
-     * This checks for any control flow statements (last/next/redo/goto) that would break
-     * if the chunk is wrapped in a closure.
-     *
-     * @param chunk The chunk to check
-     * @return true if unsafe control flow found
-     */
-    private static boolean chunkHasUnsafeControlFlow(List<Node> chunk) {
-        controlFlowDetector.reset();
-        for (Node element : chunk) {
-            element.accept(controlFlowDetector);
-            if (controlFlowDetector.hasUnsafeControlFlow()) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private static BlockNode createBlockNode(List<Node> elements, int tokenIndex, ThreadLocal<Boolean> skipRefactoring) {
