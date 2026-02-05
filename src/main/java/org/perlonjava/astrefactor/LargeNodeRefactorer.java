@@ -95,6 +95,38 @@ public class LargeNodeRefactorer {
     }
 
     /**
+     * Force refactoring of a large element list (for on-demand use when MethodTooLargeException occurs).
+     * <p>
+     * Unlike maybeRefactorElements, this method always attempts refactoring regardless of
+     * IS_REFACTORING_ENABLED flag. Used by DepthFirstLiteralRefactorVisitor.
+     *
+     * @param elements   the elements list to refactor
+     * @param tokenIndex the token index for creating new nodes
+     * @return refactored list with elements chunked into closures, or original list if refactoring not possible
+     */
+    public static List<Node> forceRefactorElements(List<Node> elements, int tokenIndex) {
+        if (elements == null || elements.isEmpty() || !shouldRefactor(elements)) {
+            return elements;
+        }
+
+        // Check if elements contain any top-level labels
+        for (Node element : elements) {
+            if (element instanceof LabelNode) {
+                // Contains a label - skip refactoring to preserve label scope
+                return elements;
+            }
+        }
+
+        List<Node> chunks = splitIntoDynamicChunks(elements);
+
+        // Note: Control flow checks removed since master supports non-local gotos in subroutines
+        // Wrapping code in `sub { next }` is now safe
+
+        // Create nested closures for proper lexical scoping
+        return createNestedListClosures(chunks, tokenIndex);
+    }
+
+    /**
      * Creates nested closures for LIST chunks to ensure proper lexical scoping.
      * Structure: sub{ chunk1, sub{ chunk2, sub{ chunk3 }->(@_) }->(@_) }->(@_)
      *

@@ -352,31 +352,35 @@ public class EmitterMethodCreator implements Opcodes {
             return getBytecodeInternal(ctx, ast, useTryCatch, false);
         } catch (MethodTooLargeException tooLarge) {
             // Automatic retry with refactoring on "Method too large" error
-            if (ast instanceof BlockNode blockAst) {
-                try {
-                    // Notify user that automatic refactoring is happening
-                    System.err.println("Note: Method too large, retrying with automatic refactoring.");
+            try {
+                // Notify user that automatic refactoring is happening
+                System.err.println("Note: Method too large, retrying with automatic refactoring.");
 
-                    // Force refactoring with auto-retry flag
+                // First, try depth-first literal refactoring (refactors nested structures first)
+                org.perlonjava.astvisitor.DepthFirstLiteralRefactorVisitor.refactor(ast);
+
+                // Then, if it's a BlockNode, also try block-level refactoring
+                if (ast instanceof BlockNode blockAst) {
                     LargeBlockRefactorer.forceRefactorForCodegen(blockAst, true);
-
-                    // Reset JavaClassInfo to avoid reusing partially-resolved Labels.
-                    if (ctx != null && ctx.javaClassInfo != null) {
-                        String previousName = ctx.javaClassInfo.javaClassName;
-                        ctx.javaClassInfo = new JavaClassInfo();
-                        ctx.javaClassInfo.javaClassName = previousName;
-                        ctx.clearContextCache();
-                    }
-
-                    return getBytecodeInternal(ctx, ast, useTryCatch, false);
-                } catch (MethodTooLargeException retryTooLarge) {
-                    // Refactoring didn't help enough - give up
-                    throw retryTooLarge;
-                } catch (Throwable retryError) {
-                    // Refactoring caused a different error - report both
-                    System.err.println("Warning: Automatic refactoring failed: " + retryError.getMessage());
-                    // Fall through to throw original exception
                 }
+
+                // Reset JavaClassInfo to avoid reusing partially-resolved Labels.
+                if (ctx != null && ctx.javaClassInfo != null) {
+                    String previousName = ctx.javaClassInfo.javaClassName;
+                    ctx.javaClassInfo = new JavaClassInfo();
+                    ctx.javaClassInfo.javaClassName = previousName;
+                    ctx.clearContextCache();
+                }
+
+                return getBytecodeInternal(ctx, ast, useTryCatch, false);
+            } catch (MethodTooLargeException retryTooLarge) {
+                // Refactoring didn't help enough - give up
+                throw retryTooLarge;
+            } catch (Throwable retryError) {
+                // Refactoring caused a different error - report both
+                System.err.println("Warning: Automatic refactoring failed: " + retryError.getMessage());
+                retryError.printStackTrace();
+                // Fall through to throw original exception
             }
             throw tooLarge;
         } catch (ArrayIndexOutOfBoundsException frameComputeCrash) {
