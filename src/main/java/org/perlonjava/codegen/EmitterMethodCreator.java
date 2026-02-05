@@ -354,7 +354,7 @@ public class EmitterMethodCreator implements Opcodes {
             // Automatic retry with refactoring on "Method too large" error
             try {
                 // Notify user that automatic refactoring is happening
-                System.err.println("Note: Method too large, retrying with automatic refactoring.");
+                // System.err.println("Note: Method too large, retrying with automatic refactoring.");
 
                 // First, try depth-first literal refactoring (refactors nested structures first)
                 org.perlonjava.astvisitor.DepthFirstLiteralRefactorVisitor.refactor(ast);

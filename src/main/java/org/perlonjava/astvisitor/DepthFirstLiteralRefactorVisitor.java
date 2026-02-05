@@ -38,6 +38,11 @@ public class DepthFirstLiteralRefactorVisitor implements Visitor {
     private static final int MIN_ELEMENTS_FOR_REFACTORING = 500;
 
     /**
+     * Debug flag for controlling debug output.
+     */
+    private static final boolean DEBUG = false;
+
+    /**
      * Refactor an AST starting from the given node.
      * Traverses depth-first and refactors large literals in-place.
      *
@@ -64,14 +69,18 @@ public class DepthFirstLiteralRefactorVisitor implements Visitor {
 
         // Then, refactor this node if it's too large
         if (shouldRefactor(node.elements)) {
-            System.err.println("DEBUG: Refactoring ListNode with " + node.elements.size() + " elements");
-            System.err.println("DEBUG: First few elements: " +
-                node.elements.stream().limit(3).map(Node::toString).collect(java.util.stream.Collectors.joining(", ")));
+            if (DEBUG) {
+                System.err.println("DEBUG: Refactoring ListNode with " + node.elements.size() + " elements");
+                System.err.println("DEBUG: First few elements: " +
+                    node.elements.stream().limit(3).map(Node::toString).collect(java.util.stream.Collectors.joining(", ")));
+            }
             List<Node> original = node.elements;
             node.elements = LargeNodeRefactorer.forceRefactorElements(node.elements, node.getIndex());
-            System.err.println("DEBUG: After refactoring: " + node.elements.size() + " elements");
-            System.err.println("DEBUG: Refactored structure: " + node.elements.stream().limit(2)
-                .map(n -> n.getClass().getSimpleName()).collect(java.util.stream.Collectors.joining(", ")));
+            if (DEBUG) {
+                System.err.println("DEBUG: After refactoring: " + node.elements.size() + " elements");
+                System.err.println("DEBUG: Refactored structure: " + node.elements.stream().limit(2)
+                    .map(n -> n.getClass().getSimpleName()).collect(java.util.stream.Collectors.joining(", ")));
+            }
         }
     }
 
