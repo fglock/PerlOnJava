@@ -731,7 +731,7 @@ public class RuntimeIO extends RuntimeScalar {
         if (fh == null) {
             // Check if object is eligible for overloading `*{}`
             int blessId = RuntimeScalarType.blessedId(runtimeScalar);
-            if (blessId != 0) {
+            if (blessId < 0) {
                 // Prepare overload context and check if object is eligible for overloading
                 OverloadContext ctx = OverloadContext.prepare(blessId);
                 if (ctx != null) {

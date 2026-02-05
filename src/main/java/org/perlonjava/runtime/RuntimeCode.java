@@ -785,7 +785,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     private static RuntimeScalar handleCodeOverload(RuntimeScalar runtimeScalar) {
         // Check if object is eligible for overloading
         int blessId = blessedId(runtimeScalar);
-        if (blessId != 0) {
+        if (blessId < 0) {
             // Prepare overload context and check if object is eligible for overloading
             OverloadContext ctx = OverloadContext.prepare(blessId);
             if (ctx != null) {

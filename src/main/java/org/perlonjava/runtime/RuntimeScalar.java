@@ -904,7 +904,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public RuntimeArray arrayDeref() {
         // Check if object is eligible for overloading
         int blessId = blessedId(this);
-        if (blessId != 0) {
+        if (blessId < 0) {
             // Prepare overload context and check if object is eligible for overloading
             OverloadContext ctx = OverloadContext.prepare(blessId);
             if (ctx != null) {
@@ -991,7 +991,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public RuntimeHash hashDeref() {
         // Check if object is eligible for overloading (blessed objects)
         int blessId = blessedId(this);
-        if (blessId != 0) {
+        if (blessId < 0) {
             // Prepare overload context and check if object is eligible for overloading
             OverloadContext ctx = OverloadContext.prepare(blessId);
             if (ctx != null) {
@@ -1054,7 +1054,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public RuntimeScalar scalarDeref() {
         // Check if object is eligible for overloading
         int blessId = blessedId(this);
-        if (blessId != 0) {
+        if (blessId < 0) {
             // Prepare overload context and check if object is eligible for overloading
             OverloadContext ctx = OverloadContext.prepare(blessId);
             if (ctx != null) {
@@ -1085,7 +1085,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public RuntimeScalar scalarDerefNonStrict(String packageName) {
         // Check if object is eligible for overloading
         int blessId = blessedId(this);
-        if (blessId != 0) {
+        if (blessId < 0) {
             // Prepare overload context and check if object is eligible for overloading
             OverloadContext ctx = OverloadContext.prepare(blessId);
             if (ctx != null) {
@@ -1112,7 +1112,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public RuntimeHash hashDerefNonStrict(String packageName) {
         // Check if object is eligible for overloading
         int blessId = blessedId(this);
-        if (blessId != 0) {
+        if (blessId < 0) {
             // Prepare overload context and check if object is eligible for overloading
             OverloadContext ctx = OverloadContext.prepare(blessId);
             if (ctx != null) {
@@ -1178,7 +1178,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public RuntimeArray arrayDerefNonStrict(String packageName) {
         // Check if object is eligible for overloading
         int blessId = blessedId(this);
-        if (blessId != 0) {
+        if (blessId < 0) {
             // Prepare overload context and check if object is eligible for overloading
             OverloadContext ctx = OverloadContext.prepare(blessId);
             if (ctx != null) {
@@ -1247,7 +1247,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public RuntimeGlob globDeref() {
         // Check if object is eligible for overloading
         int blessId = blessedId(this);
-        if (blessId != 0) {
+        if (blessId < 0) {
             // Prepare overload context and check if object is eligible for overloading
             OverloadContext ctx = OverloadContext.prepare(blessId);
             if (ctx != null) {
@@ -1284,7 +1284,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public RuntimeGlob globDerefNonStrict(String packageName) {
         // Check if object is eligible for overloading
         int blessId = blessedId(this);
-        if (blessId != 0) {
+        if (blessId < 0) {
             // Prepare overload context and check if object is eligible for overloading
             OverloadContext ctx = OverloadContext.prepare(blessId);
             if (ctx != null) {
@@ -1315,7 +1315,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public RuntimeScalar codeDerefNonStrict(String packageName) {
         // Check if object is eligible for overloading
         int blessId = blessedId(this);
-        if (blessId != 0) {
+        if (blessId < 0) {
             // Prepare overload context and check if object is eligible for overloading
             OverloadContext ctx = OverloadContext.prepare(blessId);
             if (ctx != null) {
@@ -1454,7 +1454,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             default -> { // All reference types (CODE, REFERENCE, ARRAYREFERENCE, etc.)
                 // Check if object is eligible for overloading
                 int blessId = blessedId(this);
-                if (blessId != 0) {
+                if (blessId < 0) {
                     // Prepare overload context and check if object is eligible for overloading
                     OverloadContext ctx = OverloadContext.prepare(blessId);
                     if (ctx != null) {
@@ -1552,7 +1552,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             default -> { // All reference types
                 // Check if object is eligible for overloading
                 int blessId = blessedId(this);
-                if (blessId != 0) {
+                if (blessId < 0) {
                     // Prepare overload context and check if object is eligible for overloading
                     OverloadContext ctx = OverloadContext.prepare(blessId);
                     if (ctx != null) {
@@ -1632,7 +1632,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             default -> { // All reference types
                 // Check if object is eligible for overloading
                 int blessId = blessedId(this);
-                if (blessId != 0) {
+                if (blessId < 0) {
                     // Prepare overload context and check if object is eligible for overloading
                     OverloadContext ctx = OverloadContext.prepare(blessId);
                     if (ctx != null) {
@@ -1717,7 +1717,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             default -> { // All reference types
                 // Check if object is eligible for overloading
                 int blessId = blessedId(this);
-                if (blessId != 0) {
+                if (blessId < 0) {
                     // Prepare overload context and check if object is eligible for overloading
                     OverloadContext ctx = OverloadContext.prepare(blessId);
                     if (ctx != null) {

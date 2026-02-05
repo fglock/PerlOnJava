@@ -243,7 +243,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         // Check for qr overloading
         int blessId = RuntimeScalarType.blessedId(patternString);
-        if (blessId != 0) {
+        if (blessId < 0) {
             OverloadContext overloadCtx = OverloadContext.prepare(blessId);
             if (overloadCtx != null) {
                 // Try qr overload
@@ -881,7 +881,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         // Check if the object has qr overloading
         int blessId = RuntimeScalarType.blessedId(quotedRegex);
-        if (blessId != 0) {
+        if (blessId < 0) {
             OverloadContext overloadCtx = OverloadContext.prepare(blessId);
             if (overloadCtx != null) {
                 // Try qr overload
