@@ -66,7 +66,7 @@ public class HashLiteralNode extends AbstractNode {
      */
     public HashLiteralNode(List<Node> elements, int tokenIndex, Parser parser) {
         this.tokenIndex = tokenIndex;
-        this.elements = LargeNodeRefactorer.maybeRefactorElements(elements, tokenIndex, parser);
+        this.elements = elements;
     }
 
     /**
