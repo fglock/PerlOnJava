@@ -85,6 +85,13 @@ public class OverloadContext {
      * @return OverloadContext instance if overloading is enabled, null otherwise
      */
     public static OverloadContext prepare(int blessId) {
+        // Fast path: positive blessIds are non-overloaded classes (set at bless time)
+        // Negative blessIds indicate classes with overloads
+        // This saves ~10-20ns HashMap lookup per hash access
+        if (blessId > 0) {
+            return null;
+        }
+
         // Check cache first
         OverloadContext cachedContext = InheritanceResolver.getCachedOverloadContext(blessId);
         if (cachedContext != null) {
