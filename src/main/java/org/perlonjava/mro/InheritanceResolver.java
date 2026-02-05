@@ -99,17 +99,22 @@ public class InheritanceResolver {
      * Checks if the @ISA array for a class has changed since last cached.
      */
     private static boolean hasIsaChanged(String className) {
+        List<String> cachedIsa = isaStateCache.get(className);
         RuntimeArray isaArray = GlobalVariable.getGlobalArray(className + "::ISA");
-        List<String> currentIsa = new ArrayList<>();
 
+        // Fast path: if both cached and current ISA are empty, no need to rebuild list
+        if (cachedIsa != null && cachedIsa.isEmpty() && isaArray.elements.isEmpty()) {
+            return false;
+        }
+
+        // Build current ISA list
+        List<String> currentIsa = new ArrayList<>();
         for (RuntimeBase entity : isaArray.elements) {
             String parentName = entity.toString();
             if (parentName != null && !parentName.isEmpty()) {
                 currentIsa.add(parentName);
             }
         }
-
-        List<String> cachedIsa = isaStateCache.get(className);
 
         // If ISA changed, update cache and return true
         if (!currentIsa.equals(cachedIsa)) {
@@ -162,6 +167,16 @@ public class InheritanceResolver {
      */
     public static void cacheOverloadContext(int blessId, OverloadContext context) {
         overloadContextCache.put(blessId, context);
+    }
+
+    /**
+     * Checks if an OverloadContext is cached for the given blessing ID.
+     *
+     * @param blessId The blessing ID of the class.
+     * @return true if an OverloadContext is cached (even if null), false otherwise.
+     */
+    public static boolean overloadContextCacheContainsKey(int blessId) {
+        return overloadContextCache.containsKey(blessId);
     }
 
     /**
@@ -279,18 +294,23 @@ public class InheritanceResolver {
             System.err.flush();
         }
 
-        // Check if ISA changed for this class - if so, invalidate relevant caches
-        if (hasIsaChanged(perlClassName)) {
-            invalidateCacheForClass(perlClassName);
-        }
-
-        // Check the method cache - handles both found and not-found cases
+        // Fast path: check the method cache first before validating ISA
+        // This is a significant optimization since method cache hits are common
+        // and @ISA changes are rare
         if (methodCache.containsKey(cacheKey)) {
-            if (TRACE_METHOD_RESOLUTION) {
-                System.err.println("  Found in cache: " + (methodCache.get(cacheKey) != null ? "YES" : "NULL"));
-                System.err.flush();
+            // Only check if ISA changed when we have a cache hit
+            // If ISA changed, invalidate cache and fall through to do full lookup
+            if (hasIsaChanged(perlClassName)) {
+                invalidateCacheForClass(perlClassName);
+                // Cache was invalidated, fall through to do full method resolution
+            } else {
+                // Fast path: return cached method without ISA validation overhead
+                if (TRACE_METHOD_RESOLUTION) {
+                    System.err.println("  Found in cache: " + (methodCache.get(cacheKey) != null ? "YES" : "NULL"));
+                    System.err.flush();
+                }
+                return methodCache.get(cacheKey);
             }
-            return methodCache.get(cacheKey);
         }
 
         // Get the linearized inheritance hierarchy using the appropriate MRO

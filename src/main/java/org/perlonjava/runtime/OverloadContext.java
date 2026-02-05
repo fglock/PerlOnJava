@@ -85,10 +85,9 @@ public class OverloadContext {
      * @return OverloadContext instance if overloading is enabled, null otherwise
      */
     public static OverloadContext prepare(int blessId) {
-        // Check cache first
-        OverloadContext cachedContext = InheritanceResolver.getCachedOverloadContext(blessId);
-        if (cachedContext != null) {
-            return cachedContext;
+        // Check cache first - need to use containsKey to distinguish "not cached" from "cached as null"
+        if (InheritanceResolver.overloadContextCacheContainsKey(blessId)) {
+            return InheritanceResolver.getCachedOverloadContext(blessId);
         }
 
         // Resolve Perl class name from blessing ID
@@ -115,9 +114,10 @@ public class OverloadContext {
         OverloadContext context = null;
         if (methodOverloaded != null || methodFallback != null) {
             context = new OverloadContext(perlClassName, methodOverloaded, methodFallback);
-            // Cache the result
-            InheritanceResolver.cacheOverloadContext(blessId, context);
         }
+
+        // Always cache the result, even if null (to avoid repeated lookups for non-overloaded classes)
+        InheritanceResolver.cacheOverloadContext(blessId, context);
 
         return context;
     }
