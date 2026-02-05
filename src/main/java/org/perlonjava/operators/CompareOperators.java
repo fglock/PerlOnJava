@@ -24,7 +24,7 @@ public class CompareOperators {
         // Prepare overload context and check if object is eligible for overloading
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
-        if (blessId != 0 || blessId2 != 0) {
+        if (blessId < 0 || blessId2 < 0) {
             RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(<", "<");
             if (result != null) return result;
 
@@ -57,7 +57,7 @@ public class CompareOperators {
         // Prepare overload context and check if object is eligible for overloading
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
-        if (blessId != 0 || blessId2 != 0) {
+        if (blessId < 0 || blessId2 < 0) {
             RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(<=", "<=");
             if (result != null) return result;
 
@@ -90,7 +90,7 @@ public class CompareOperators {
         // Prepare overload context and check if object is eligible for overloading
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
-        if (blessId != 0 || blessId2 != 0) {
+        if (blessId < 0 || blessId2 < 0) {
             RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(>", ">");
             if (result != null) return result;
 
@@ -123,7 +123,7 @@ public class CompareOperators {
         // Prepare overload context and check if object is eligible for overloading
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
-        if (blessId != 0 || blessId2 != 0) {
+        if (blessId < 0 || blessId2 < 0) {
             RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(>=", ">=");
             if (result != null) return result;
 
@@ -155,7 +155,7 @@ public class CompareOperators {
     public static RuntimeScalar equalTo(RuntimeScalar arg1, int arg2) {
         // Prepare overload context and check if object is eligible for overloading
         int blessId = blessedId(arg1);
-        if (blessId != 0) {
+        if (blessId < 0) {
             RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, new RuntimeScalar(arg2), blessId, 0, "(==", "==");
             if (result != null) return result;
 
@@ -187,7 +187,7 @@ public class CompareOperators {
         // Prepare overload context and check if object is eligible for overloading
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
-        if (blessId != 0 || blessId2 != 0) {
+        if (blessId < 0 || blessId2 < 0) {
             RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(==", "==");
             if (result != null) return result;
 
@@ -220,7 +220,7 @@ public class CompareOperators {
         // Prepare overload context and check if object is eligible for overloading
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
-        if (blessId != 0 || blessId2 != 0) {
+        if (blessId < 0 || blessId2 < 0) {
             RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(!=", "!=");
             if (result != null) return result;
 
@@ -253,7 +253,7 @@ public class CompareOperators {
         // Prepare overload context and check if object is eligible for overloading
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
-        if (blessId != 0 || blessId2 != 0) {
+        if (blessId < 0 || blessId2 < 0) {
             RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(<=>", "<=>");
             if (result != null) {
                 // Normalize the overloaded result to -1, 0, or 1
@@ -289,7 +289,7 @@ public class CompareOperators {
         // Prepare overload context and check if object is eligible for overloading
         int blessId = blessedId(runtimeScalar);
         int blessId2 = blessedId(arg2);
-        if (blessId != 0 || blessId2 != 0) {
+        if (blessId < 0 || blessId2 < 0) {
             RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(runtimeScalar, arg2, blessId, blessId2, "(cmp", "cmp");
             if (result != null) {
                 // Normalize the overloaded result to -1, 0, or 1
@@ -312,7 +312,7 @@ public class CompareOperators {
         // Prepare overload context and check if object is eligible for overloading
         int blessId = blessedId(runtimeScalar);
         int blessId2 = blessedId(arg2);
-        if (blessId != 0 || blessId2 != 0) {
+        if (blessId < 0 || blessId2 < 0) {
             RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(runtimeScalar, arg2, blessId, blessId2, "(eq", "eq");
             if (result != null) return result;
 
@@ -337,7 +337,7 @@ public class CompareOperators {
         // Prepare overload context and check if object is eligible for overloading
         int blessId = blessedId(runtimeScalar);
         int blessId2 = blessedId(arg2);
-        if (blessId != 0 || blessId2 != 0) {
+        if (blessId < 0 || blessId2 < 0) {
             RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(runtimeScalar, arg2, blessId, blessId2, "(ne", "ne");
             if (result != null) return result;
 
@@ -362,7 +362,7 @@ public class CompareOperators {
         // Prepare overload context and check if object is eligible for overloading
         int blessId = blessedId(runtimeScalar);
         int blessId2 = blessedId(arg2);
-        if (blessId != 0 || blessId2 != 0) {
+        if (blessId < 0 || blessId2 < 0) {
             RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(runtimeScalar, arg2, blessId, blessId2, "(lt", "lt");
             if (result != null) return result;
 
@@ -387,7 +387,7 @@ public class CompareOperators {
         // Prepare overload context and check if object is eligible for overloading
         int blessId = blessedId(runtimeScalar);
         int blessId2 = blessedId(arg2);
-        if (blessId != 0 || blessId2 != 0) {
+        if (blessId < 0 || blessId2 < 0) {
             RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(runtimeScalar, arg2, blessId, blessId2, "(le", "le");
             if (result != null) return result;
 
@@ -412,7 +412,7 @@ public class CompareOperators {
         // Prepare overload context and check if object is eligible for overloading
         int blessId = blessedId(runtimeScalar);
         int blessId2 = blessedId(arg2);
-        if (blessId != 0 || blessId2 != 0) {
+        if (blessId < 0 || blessId2 < 0) {
             RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(runtimeScalar, arg2, blessId, blessId2, "(gt", "gt");
             if (result != null) return result;
 
@@ -437,7 +437,7 @@ public class CompareOperators {
         // Prepare overload context and check if object is eligible for overloading
         int blessId = blessedId(runtimeScalar);
         int blessId2 = blessedId(arg2);
-        if (blessId != 0 || blessId2 != 0) {
+        if (blessId < 0 || blessId2 < 0) {
             RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(runtimeScalar, arg2, blessId, blessId2, "(ge", "ge");
             if (result != null) return result;
 

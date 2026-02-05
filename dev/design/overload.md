@@ -29,7 +29,7 @@ The system detects overloadable objects through:
 ```java
 // Check if object is blessed
 int blessId = runtimeScalar.blessedId();
-if (blessId != 0) {
+if (blessId < 0) {
     OverloadContext ctx = OverloadContext.prepare(blessId);
     // ctx will be non-null if overloading is enabled
 }
