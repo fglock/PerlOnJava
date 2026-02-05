@@ -128,6 +128,15 @@ public class StatementParser {
             parser.parsingForLoopVariable = true;
             varNode = ParsePrimary.parsePrimary(parser);
             parser.parsingForLoopVariable = false;
+        } else if (token.text.equals("\\")) {
+            // Handle reference loop variables: for \$x (...), for \@x (...), for \%x (...)
+            // We need to parse the reference manually to avoid parsePrimary trying to parse
+            // the following (...) as a function call or hash subscript.
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "\\");
+            parser.parsingForLoopVariable = true;
+            Node operand = ParsePrimary.parsePrimary(parser);
+            parser.parsingForLoopVariable = false;
+            varNode = new OperatorNode("\\", operand, parser.tokenIndex);
         }
 
         // If we didn't parse a loop variable, Perl expects the '(' of the for(..) header next.
