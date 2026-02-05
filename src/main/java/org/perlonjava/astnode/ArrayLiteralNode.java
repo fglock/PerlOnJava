@@ -41,12 +41,11 @@ public class ArrayLiteralNode extends AbstractNode {
     /**
      * Constructs a new ArrayLiteralNode with the specified list of child nodes.
      * <p>
-     * <b>Large Literal Refactoring:</b> Currently disabled by default.
-     * Large code is handled automatically via on-demand refactoring when compilation errors occur.
+     * <b>Parse-time refactoring is disabled:</b> We rely entirely on automatic on-demand
+     * refactoring triggered by "Method too large" errors during bytecode generation.
      *
      * @param elements   the list of child nodes to be stored in this ArrayLiteralNode
      * @param tokenIndex the token index in the source for error reporting
-     * @see LargeNodeRefactorer#maybeRefactorElements
      */
     public ArrayLiteralNode(List<Node> elements, int tokenIndex) {
         this(elements, tokenIndex, null);
@@ -55,16 +54,16 @@ public class ArrayLiteralNode extends AbstractNode {
     /**
      * Constructs a new ArrayLiteralNode with the specified list of child nodes and parser context.
      * <p>
-     * This constructor provides better error messages with source code context when refactoring fails.
+     * <b>Parse-time refactoring is disabled:</b> We rely entirely on automatic on-demand
+     * refactoring triggered by "Method too large" errors during bytecode generation.
      *
      * @param elements   the list of child nodes to be stored in this ArrayLiteralNode
      * @param tokenIndex the token index in the source for error reporting
-     * @param parser     the parser instance for access to error utilities
-     * @see LargeNodeRefactorer#maybeRefactorElements
+     * @param parser     the parser instance (unused, kept for API compatibility)
      */
     public ArrayLiteralNode(List<Node> elements, int tokenIndex, Parser parser) {
         this.tokenIndex = tokenIndex;
-        this.elements = LargeNodeRefactorer.maybeRefactorElements(elements, tokenIndex, parser);
+        this.elements = elements;
     }
 
     /**
