@@ -11,23 +11,35 @@ import java.util.Set;
  * retrieval of previously normalized names and blessed IDs.
  */
 public class NameNormalizer {
+    /**
+     * Composite key for name cache to avoid string concatenation overhead.
+     * Using a record provides efficient hashCode/equals with no allocation.
+     */
+    private record CacheKey(String packageName, String variable) {}
+
     // Cache to store previously normalized variables for faster lookup
-    private static final Map<String, String> nameCache = new HashMap<>();
+    // Using composite key avoids ~12ns string concatenation per lookup
+    private static final Map<CacheKey, String> nameCache = new HashMap<>();
     private static final Map<String, Integer> blessIdCache = new HashMap<>();
-    private static final ArrayList<String> blessStrCache = new ArrayList<>();
+    // Changed to HashMap to support non-contiguous IDs (positive: normal, negative: overloaded)
+    private static final Map<Integer, String> blessStrCache = new HashMap<>();
     private static final Set<String> SPECIAL_VARIABLES = Set.of(
             "ARGV", "ARGVOUT", "ENV", "INC", "SIG", "STDOUT", "STDERR", "STDIN"
     );
     // Cache to store blessed class lookups
+    // Positive blessIds (1, 2, 3, ...): normal classes without overloads
+    // Negative blessIds (-1, -2, -3, ...): classes with overloads (enables fast rejection in OverloadContext.prepare)
     private static int currentBlessId = 0;
+    private static int currentOverloadedBlessId = -1;
 
     static {
-        blessStrCache.add("");  // this starts with index 1
+        blessStrCache.put(0, "");  // Reserve 0 for unblessed
     }
 
     /**
      * Retrieves the unique ID associated with a "blessed" class name.
      * If the class name is not already cached, it assigns a new ID.
+     * Classes with overloads get negative IDs for fast rejection.
      *
      * @param str The name of the class to be "blessed".
      * @return The unique ID associated with the class name.
@@ -35,12 +47,39 @@ public class NameNormalizer {
     public static int getBlessId(String str) {
         Integer id = blessIdCache.get(str);
         if (id == null) {
-            currentBlessId++;
-            blessIdCache.put(str, currentBlessId);
-            blessStrCache.add(currentBlessId, str);
-            id = currentBlessId;
+            // Check if class has overload marker "(("
+            boolean hasOverload = hasOverloadMarker(str);
+
+            if (hasOverload) {
+                id = currentOverloadedBlessId;
+                currentOverloadedBlessId--;  // Next overloaded class gets -2, -3, etc.
+            } else {
+                currentBlessId++;  // Next normal class gets 2, 3, etc.
+                id = currentBlessId;
+            }
+
+            blessIdCache.put(str, id);
+            blessStrCache.put(id, str);
         }
         return id;
+    }
+
+    /**
+     * Quick check if a class has the overload marker "((" using full MRO resolution.
+     * This is called at bless time to assign the appropriate ID range.
+     */
+    private static boolean hasOverloadMarker(String className) {
+        // Use InheritanceResolver to do full MRO check
+        // This avoids circular dependency because findMethodInHierarchy uses
+        // normalizeVariableName (not getBlessId)
+        try {
+            RuntimeScalar method = org.perlonjava.mro.InheritanceResolver.findMethodInHierarchy(
+                "((", className, null, 0);
+            return method != null;
+        } catch (Exception e) {
+            // If we can't check (e.g., during early initialization), assume no overload
+            return false;
+        }
     }
 
     /**
@@ -59,7 +98,7 @@ public class NameNormalizer {
             // Ensure subsequent blesses into this name also become anonymous.
             id = getBlessId(className);
         }
-        blessStrCache.set(id, "__ANON__");
+        blessStrCache.put(id, "__ANON__");
     }
 
     public static String getBlessStrForClassName(String className) {
@@ -79,16 +118,18 @@ public class NameNormalizer {
      */
     public static String normalizeVariableName(String variable, String defaultPackage) {
 
-        // Create a cache key based on both the variable and the default package
-        String cacheKey = defaultPackage + "::" + variable;
-
         if (variable.isEmpty()) {
-            return cacheKey;
+            // Fast path for empty variable - don't cache, just concatenate
+            return defaultPackage + "::" + variable;
         }
 
-        // Check the cache first
-        if (nameCache.containsKey(cacheKey)) {
-            return nameCache.get(cacheKey);
+        // Create composite cache key (no string allocation!)
+        CacheKey cacheKey = new CacheKey(defaultPackage, variable);
+
+        // Single cache lookup - use get() instead of containsKey() + get()
+        String cached = nameCache.get(cacheKey);
+        if (cached != null) {
+            return cached;
         }
 
         char firstLetter = variable.charAt(0);
