@@ -132,6 +132,85 @@ public class EmitForeach {
             }
         }
 
+        // Handle reference aliasing: for \$x (...), for \@x (...), for \%x (...)
+        // We need to save the original value and restore it after the loop
+        boolean isReferenceAliasing = false;
+        int savedValueIndex = -1;
+        Node actualVariable = variableNode;
+
+        if (variableNode instanceof OperatorNode opNode && opNode.operator.equals("\\")) {
+            isReferenceAliasing = true;
+            actualVariable = opNode.operand; // Get the actual variable ($x, @x, %x)
+
+            // Allocate a temporary variable to save the current value
+            savedValueIndex = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+
+            // Load and save the current value of the variable
+            if (actualVariable instanceof OperatorNode innerOp && innerOp.operand instanceof IdentifierNode) {
+                String varName = innerOp.operator + ((IdentifierNode) innerOp.operand).name;
+                int varIndex = emitterVisitor.ctx.symbolTable.getVariableIndex(varName);
+
+                if (varIndex != -1) {
+                    // Local variable - save its current value
+                    // For scalars, arrays, and hashes, just save a reference to the current value
+                    mv.visitVarInsn(Opcodes.ALOAD, varIndex);
+
+                    // Create a shallow copy/reference based on type
+                    if (innerOp.operator.equals("$")) {
+                        // Scalar: create a copy
+                        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                                "org/perlonjava/runtime/RuntimeScalar",
+                                "createReference",
+                                "()Lorg/perlonjava/runtime/RuntimeScalar;",
+                                false);
+                    } else if (innerOp.operator.equals("@")) {
+                        // Array: save the reference as-is (it's already a RuntimeArray)
+                        // We'll restore the array reference itself, not make a copy
+                    } else if (innerOp.operator.equals("%")) {
+                        // Hash: save the reference as-is (it's already a RuntimeHash)
+                    }
+
+                    mv.visitVarInsn(Opcodes.ASTORE, savedValueIndex);
+                    emitterVisitor.ctx.logDebug("FOR1 ref-alias: saved local var " + varName + " to index " + savedValueIndex);
+                } else {
+                    // Global variable - save its current value
+                    String globalName = ((IdentifierNode) innerOp.operand).name;
+                    mv.visitLdcInsn(globalName);
+
+                    if (innerOp.operator.equals("$")) {
+                        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                "org/perlonjava/runtime/GlobalVariable",
+                                "getGlobalVariable",
+                                "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                                false);
+                        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                                "org/perlonjava/runtime/RuntimeScalar",
+                                "createReference",
+                                "()Lorg/perlonjava/runtime/RuntimeScalar;",
+                                false);
+                    } else if (innerOp.operator.equals("@")) {
+                        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                "org/perlonjava/runtime/GlobalVariable",
+                                "getGlobalArray",
+                                "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeArray;",
+                                false);
+                    } else if (innerOp.operator.equals("%")) {
+                        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                "org/perlonjava/runtime/GlobalVariable",
+                                "getGlobalHash",
+                                "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeHash;",
+                                false);
+                    }
+
+                    mv.visitVarInsn(Opcodes.ASTORE, savedValueIndex);
+                    emitterVisitor.ctx.logDebug("FOR1 ref-alias: saved global var " + globalName + " to index " + savedValueIndex);
+                }
+            }
+
+            // Use the actual variable (without the \ operator) for the rest of the loop
+            variableNode = actualVariable;
+        }
+
         // For global $_ as loop variable, we need to:
         // 1. Evaluate the list first (before any localization takes effect)
         // 2. For statement modifiers: localize $_ ourselves
@@ -357,7 +436,61 @@ public class EmitForeach {
         mv.visitJumpInsn(Opcodes.GOTO, loopStart);
 
         mv.visitLabel(loopEnd);
-        
+
+        // Restore the original value for reference aliasing: for \$x (...), for \@x (...), for \%x (...)
+        if (isReferenceAliasing && savedValueIndex != -1) {
+            if (actualVariable instanceof OperatorNode innerOp && innerOp.operand instanceof IdentifierNode) {
+                String varName = innerOp.operator + ((IdentifierNode) innerOp.operand).name;
+                int varIndex = emitterVisitor.ctx.symbolTable.getVariableIndex(varName);
+
+                // Load the saved value
+                mv.visitVarInsn(Opcodes.ALOAD, savedValueIndex);
+
+                if (innerOp.operator.equals("$")) {
+                    // Scalar: dereference it to get the original value
+                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                            "org/perlonjava/runtime/RuntimeScalar",
+                            "scalarDeref",
+                            "()Lorg/perlonjava/runtime/RuntimeScalar;",
+                            false);
+                }
+                // For arrays and hashes, the saved value is already the right type (RuntimeArray/RuntimeHash)
+
+                if (varIndex != -1) {
+                    // Local variable - restore it
+                    mv.visitVarInsn(Opcodes.ASTORE, varIndex);
+                    emitterVisitor.ctx.logDebug("FOR1 ref-alias: restored local var " + varName + " from index " + savedValueIndex);
+                } else {
+                    // Global variable - restore it
+                    String globalName = ((IdentifierNode) innerOp.operand).name;
+                    mv.visitLdcInsn(globalName);
+                    mv.visitInsn(Opcodes.SWAP);
+
+                    if (innerOp.operator.equals("$")) {
+                        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                "org/perlonjava/runtime/GlobalVariable",
+                                "setGlobalVariable",
+                                "(Ljava/lang/String;Lorg/perlonjava/runtime/RuntimeBase;)V",
+                                false);
+                    } else if (innerOp.operator.equals("@")) {
+                        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                "org/perlonjava/runtime/GlobalVariable",
+                                "setGlobalArray",
+                                "(Ljava/lang/String;Lorg/perlonjava/runtime/RuntimeArray;)V",
+                                false);
+                    } else if (innerOp.operator.equals("%")) {
+                        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                "org/perlonjava/runtime/GlobalVariable",
+                                "setGlobalHash",
+                                "(Ljava/lang/String;Lorg/perlonjava/runtime/RuntimeHash;)V",
+                                false);
+                    }
+
+                    emitterVisitor.ctx.logDebug("FOR1 ref-alias: restored global var " + globalName + " from index " + savedValueIndex);
+                }
+            }
+        }
+
         // Emit control flow handler (if enabled)
         if (ENABLE_LOOP_HANDLERS) {
             // Get parent loop labels (if any)
