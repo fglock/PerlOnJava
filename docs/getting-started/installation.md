@@ -15,7 +15,9 @@
 6. [Build Notes](#build-notes)
 7. [Java Library Upgrades](#java-library-upgrades)
 8. [Using Configure.pl](#using-configurepl)
-   - [Upgrade Dependencies](#upgrade-dependencies)
+   - [Common Tasks](#common-tasks)
+   - [Available Options](#available-options)
+   - [Important Notes](#important-notes)
 
 ## Prerequisites
 - Java 21 or higher
@@ -113,18 +115,52 @@ See [JDBC Database Guide](JDBC_GUIDE.md) for detailed connection examples and su
 
 ## Using Configure.pl
 
-### Upgrade Dependencies
+The `Configure.pl` script manages configuration settings and dependencies for PerlOnJava.
 
-The `Configure.pl` script provides an option to upgrade your project's dependencies to their latest versions. This can be useful for ensuring that your project uses the most up-to-date libraries.
+### Common Tasks
 
-To upgrade dependencies, use the `--upgrade` option:
-
+**View current configuration:**
 ```bash
-perl ./Configure.pl --upgrade
+./Configure.pl
 ```
 
-This command will:
-- Update Maven dependencies to their latest versions if a `pom.xml` file is present.
-- Update Gradle dependencies to their latest versions if a `build.gradle` file is present.
+**Add JDBC driver (search):**
+```bash
+./Configure.pl --search mysql
+make  # Rebuild to include driver
+```
 
-Make sure that Maven and Gradle are installed and accessible in your environment.
+**Add JDBC driver (direct):**
+```bash
+./Configure.pl --direct com.h2database:h2:2.2.224
+make  # Rebuild to include driver
+```
+
+**Update configuration:**
+```bash
+./Configure.pl -D perlVersion=v5.42.0
+```
+
+**Upgrade all dependencies:**
+```bash
+./Configure.pl --upgrade
+```
+
+### Available Options
+
+- **`-h, --help`** - Show help message
+- **`-D key=value`** - Set configuration value
+- **`--search keyword`** - Search Maven Central for artifacts
+- **`--direct group:artifact:version`** - Add dependency with Maven coordinates
+- **`--verbose`** - Enable verbose output
+- **`--upgrade`** - Upgrade dependencies to latest versions
+
+### Important Notes
+
+1. **Rebuild required**: After adding dependencies with `--search` or `--direct`, you must run `make` to download and bundle them
+2. **Alternative approach**: Instead of bundling drivers, you can use CLASSPATH:
+   ```bash
+   CLASSPATH=/path/to/driver.jar ./jperl script.pl
+   ```
+
+**→ See [Configure.pl Reference](../reference/configure.md) for complete documentation**

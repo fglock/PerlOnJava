@@ -95,29 +95,28 @@ PerlOnJava includes the DBI module with JDBC support.
 
 ### Step 1: Download JDBC Driver
 
-**⚠️ IMPORTANT:** You must download the appropriate JDBC driver for your database.
+**⚠️ IMPORTANT:** You must download the appropriate JDBC driver JAR for your database.
 
 **H2 Database (for testing):**
-```bash
-./Configure.pl --search h2
-./Configure.pl --install com.h2database:h2:2.2.224
-```
+- Download from: https://repo1.maven.org/maven2/com/h2database/h2/2.2.224/h2-2.2.224.jar
 
 **PostgreSQL:**
-```bash
-./Configure.pl --search postgresql
-./Configure.pl --install org.postgresql:postgresql:42.7.1
-```
+- Download from: https://jdbc.postgresql.org/download/
 
 **MySQL:**
-```bash
-./Configure.pl --search mysql
-./Configure.pl --install com.mysql:mysql-connector-j:8.2.0
-```
+- Download from: https://dev.mysql.com/downloads/connector/j/
 
 **Other databases:** See **[Database Access Guide](docs/guides/database-access.md)**
 
-### Step 2: Connect to Database
+### Step 2: Set CLASSPATH and Connect
+
+```bash
+# Set CLASSPATH to the downloaded driver
+export CLASSPATH=/path/to/h2-2.2.224.jar
+
+# Or set it inline when running jperl
+CLASSPATH=/path/to/h2-2.2.224.jar ./jperl your_script.pl
+```
 
 ```perl
 use DBI;
@@ -137,6 +136,8 @@ while (my $row = $sth->fetchrow_hashref) {
     say "$row->{id}: $row->{name}";
 }
 ```
+
+**Alternative:** Add driver to build files with `./Configure.pl --direct group:artifact:version` then run `make`.
 
 **Full guide:** **[Database Access Guide](docs/guides/database-access.md)**
 
