@@ -1,5 +1,17 @@
 # PerlOnJava Architecture
 
+## Overview
+
+PerlOnJava compiles Perl source code into JVM bytecode, enabling Perl programs to run natively on the Java Virtual Machine. The compilation process transforms Perl scripts into Java classes at runtime, providing seamless integration with Java libraries and frameworks while maintaining Perl semantics.
+
+**Key features:**
+- Compile-time transformation from Perl to JVM bytecode
+- Direct access to Java libraries via JDBC, Maven, and other JVM tools
+- Implements most Perl 5.42 features including references, closures, and regular expressions
+- Includes 150+ core Perl modules
+
+This document describes the internal architecture and compilation pipeline.
+
 ## Internal Modules
 
 ### Project Structure

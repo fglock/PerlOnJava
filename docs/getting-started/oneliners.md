@@ -33,7 +33,12 @@ Write and read YAML file:
 
 Write and read JSON file:
 ```bash
-./jperl -MJSON -e 'my $json = JSON->new; DumpFile("test.json", { hello => "world" }); print encode_json(from_json(LoadFile("test.json")))'
+./jperl -MJSON -e 'use JSON; my $data = { hello => "world" }; open my $fh, ">", "test.json"; print $fh encode_json($data); close $fh; open my $in, "<", "test.json"; my $json = do { local $/; <$in> }; print encode_json(decode_json($json))'
+```
+
+Or more simply:
+```bash
+./jperl -MJSON -E 'my $data = { hello => "world" }; say encode_json($data)'
 ```
 
 ## Benchmark

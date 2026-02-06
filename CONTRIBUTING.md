@@ -222,4 +222,4 @@ See **[Module Porting Guide](docs/guides/module-porting.md)** for:
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the MIT License.
+By contributing, you agree that your contributions will be licensed under the Artistic License 2.0.

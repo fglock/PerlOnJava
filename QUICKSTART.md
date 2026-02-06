@@ -40,7 +40,7 @@ cd PerlOnJava
 make
 ```
 
-This compiles the project and runs the fast unit tests (completes in ~30 seconds).
+The `make` command compiles the project and runs the fast unit tests. The complete build with tests typically completes in ~30 seconds.
 
 **Build troubleshooting:** See [Installation Guide](docs/getting-started/installation.md)
 
@@ -100,39 +100,26 @@ See **[One-liners Guide](docs/getting-started/oneliners.md)** for practical exam
 
 PerlOnJava includes the DBI module with JDBC support.
 
-### Step 1: Download JDBC Driver
+### Quick Example
 
-**⚠️ IMPORTANT:** You must download the appropriate JDBC driver JAR for your database.
-
-**H2 Database (for testing):**
-- Download from: https://repo1.maven.org/maven2/com/h2database/h2/2.2.224/h2-2.2.224.jar
-
-**PostgreSQL:**
-- Download from: https://jdbc.postgresql.org/download/
-
-**MySQL:**
-- Download from: https://dev.mysql.com/downloads/connector/j/
-
-**Other databases:** See **[Database Access Guide](docs/guides/database-access.md)**
-
-### Step 2: Set CLASSPATH and Connect
-
+**1. Download a JDBC driver** (H2 database for testing):
 ```bash
-# Set CLASSPATH to the downloaded driver
-export CLASSPATH=/path/to/h2-2.2.224.jar
-
-# Or set it inline when running jperl
-CLASSPATH=/path/to/h2-2.2.224.jar ./jperl your_script.pl
+wget https://repo1.maven.org/maven2/com/h2database/h2/2.2.224/h2-2.2.224.jar
 ```
 
+**2. Set CLASSPATH and run:**
+```bash
+export CLASSPATH=/path/to/h2-2.2.224.jar
+./jperl your_script.pl
+```
+
+**3. Use DBI in your script:**
 ```perl
 use DBI;
 
-# H2 in-memory database (for testing)
 my $dbh = DBI->connect("jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1")
     or die $DBI::errstr;
 
-# Create and query
 $dbh->do("CREATE TABLE users (id INT, name VARCHAR(50))");
 $dbh->do("INSERT INTO users VALUES (1, 'Alice')");
 
@@ -144,9 +131,7 @@ while (my $row = $sth->fetchrow_hashref) {
 }
 ```
 
-**Alternative:** Add driver to build files with `./Configure.pl --direct group:artifact:version` then run `make`.
-
-**Full guide:** **[Database Access Guide](docs/guides/database-access.md)**
+**→ For PostgreSQL, MySQL, and other databases:** See **[Database Access Guide](docs/guides/database-access.md)**
 
 ## Using Perl from Java
 

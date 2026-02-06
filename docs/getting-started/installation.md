@@ -143,7 +143,7 @@ my $dbh = DBI->connect("jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1");
 $dbh->do("CREATE TABLE test (id INT, name VARCHAR(50))");
 ```
 
-See [JDBC Database Guide](JDBC_GUIDE.md) for detailed connection examples and supported databases.
+See [Database Access Guide](../guides/database-access.md) for detailed connection examples and supported databases.
 
 ## Build Notes
 - Maven builds use `maven-shade-plugin` for creating the shaded JAR

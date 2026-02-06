@@ -1,49 +1,97 @@
-## Running the Application with Docker
+# Docker Guide
 
-This project includes a `Dockerfile` that allows you to build and run the application in a Docker container. Follow the steps below to get started:
+Run PerlOnJava in a Docker container for isolated and portable execution.
 
-### Prerequisites
+## Prerequisites
 
-- Ensure you have [Docker](https://www.docker.com/products/docker-desktop) installed on your machine.
+- [Docker](https://www.docker.com/products/docker-desktop) installed on your machine
 
-### Building the Docker Image
+## Quick Start
 
-To build the Docker image, navigate to the root directory of the project where the `Dockerfile` is located and run the following command:
+### Build the Docker Image
 
 ```bash
 docker build -t perlonjava:latest .
 ```
 
-This command will create a Docker image named `perlonjava` with the `latest` tag.
+This creates a Docker image named `perlonjava` with the `latest` tag.
 
-### Running the Docker Container
-
-Once the image is built, you can run the application in a Docker container using the following command:
+### Run Perl Code
 
 ```bash
-docker run --name perlonjava_app -p 8080:8080 perlonjava:latest -E ' say "hello, World!" '
+# Simple one-liner
+docker run --rm perlonjava:latest -E 'say "Hello from Docker!"'
+
+# Run a script file (mount current directory)
+docker run --rm -v "$(pwd)":/scripts perlonjava:latest /scripts/myscript.pl
+
+# Interactive shell
+docker run --rm -it perlonjava:latest -de0
 ```
 
-- `--name perlonjava_app`: Assigns a name to the running container.
-- `-p 8080:8080`: Maps port 8080 of the host to port 8080 of the container. Adjust the ports as needed for your application.
+### Common Options
 
-### Stopping and Removing the Container
+**`--rm`**: Automatically remove the container when it exits
 
-To stop the running container, use the following command:
+**`-v /path/to/scripts:/scripts`**: Mount local directory for script access
+
+**`-e VAR=value`**: Set environment variables
+
+**`--name myname`**: Assign a name to the container for easier management
+
+## Examples
+
+### Running Tests
 
 ```bash
+# Run unit tests in Docker
+docker run --rm perlonjava:latest -MTAP::Harness -e 'TAP::Harness->new->runtests("/app/src/test/resources/unit/array.t")'
+```
+
+### With JDBC Drivers
+
+To use JDBC drivers, add them to the Dockerfile or mount them at runtime:
+
+```bash
+# Mount driver and use it
+docker run --rm \
+  -v /path/to/mysql-connector.jar:/drivers/mysql.jar \
+  -e CLASSPATH=/drivers/mysql.jar \
+  perlonjava:latest your_script.pl
+```
+
+### Persistent Containers
+
+If you need to keep a container running:
+
+```bash
+# Start named container
+docker run --name perlonjava_app -d perlonjava:latest -E 'sleep infinity'
+
+# Execute commands in running container
+docker exec perlonjava_app jperl -E 'say "Hello"'
+
+# Stop and remove
 docker stop perlonjava_app
-```
-
-To remove the container after stopping it, run:
-
-```bash
 docker rm perlonjava_app
 ```
 
-### Additional Notes
+## Customizing the Dockerfile
 
-- Ensure that any required environment variables or configuration files are properly set up before running the container.
-- You can modify the `Dockerfile` to include additional dependencies or configurations as needed for your specific use case.
+Modify the `Dockerfile` to include additional dependencies:
+
+```dockerfile
+# Add JDBC driver
+FROM eclipse-temurin:21-jdk
+COPY --from=build /app/target/perlonjava-3.0.0.jar /app/perlonjava.jar
+COPY path/to/driver.jar /app/drivers/
+ENV CLASSPATH=/app/drivers/driver.jar
+ENTRYPOINT ["java", "-jar", "/app/perlonjava.jar"]
+```
+
+## See Also
+
+- [Installation Guide](installation.md) - Build without Docker
+- [Database Access](../guides/database-access.md) - Using JDBC drivers
 
 
