@@ -1,3 +1,4 @@
+print "1..4998\n";
 my $v;
 my @aa = ();
 my @ab = (7);
