@@ -44,6 +44,13 @@ This compiles the project and runs the fast unit tests (completes in ~30 seconds
 
 **Build troubleshooting:** See [Installation Guide](docs/getting-started/installation.md)
 
+**Debian/Ubuntu users:** You can also build and install a `.deb` package:
+```bash
+make deb
+sudo dpkg -i build/distributions/perlonjava_*.deb
+```
+This installs `jperl` systemwide. See [Installation Guide](docs/getting-started/installation.md#debian-package) for details.
+
 ### 2. Verify Installation
 
 <details open>

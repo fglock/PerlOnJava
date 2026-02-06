@@ -3,18 +3,21 @@
 ## Table of Contents
 1. [Prerequisites](#prerequisites)
 2. [Build Options](#build-options)
+   - [Using Make](#using-make)
    - [Using Maven](#using-maven)
    - [Using Gradle](#using-gradle)
-3. [Dependencies](#dependencies)
-4. [Running PerlOnJava](#running-perlonjava)
+3. [Package Installation](#package-installation)
+   - [Debian Package](#debian-package)
+4. [Dependencies](#dependencies)
+5. [Running PerlOnJava](#running-perlonjava)
    - [Platform-Specific Instructions](#platform-specific-instructions)
    - [Common Options](#common-options)
-5. [Database Integration](#database-integration)
+6. [Database Integration](#database-integration)
    - [Adding JDBC Drivers](#adding-jdbc-drivers)
    - [Database Connection Example](#database-connection-example)
-6. [Build Notes](#build-notes)
-7. [Java Library Upgrades](#java-library-upgrades)
-8. [Using Configure.pl](#using-configurepl)
+7. [Build Notes](#build-notes)
+8. [Java Library Upgrades](#java-library-upgrades)
+9. [Using Configure.pl](#using-configurepl)
    - [Common Tasks](#common-tasks)
    - [Available Options](#available-options)
    - [Important Notes](#important-notes)
@@ -31,10 +34,11 @@ The project includes a Makefile that wraps Gradle commands for a familiar build 
 
 ```bash
 make          # same as 'make build'
-make build    # builds the project
-make test     # runs tests
+make build    # builds the project and runs unit tests
+make dev      # force clean rebuild (use during active development)
+make test     # runs fast unit tests
 make clean    # cleans build artifacts
-make deb      # creates a Debian package
+make deb      # creates a Debian package (Linux only)
 ```
 
 ### Using Maven
@@ -46,6 +50,49 @@ mvn clean package
 ```bash
 ./gradlew clean build
 ```
+
+## Package Installation
+
+### Debian Package
+
+For Debian-based systems (Ubuntu, Debian, Mint, etc.), you can create and install a `.deb` package:
+
+**Build the package:**
+```bash
+make deb
+```
+
+This creates a Debian package in `build/distributions/` with:
+- PerlOnJava JAR installed to `/usr/share/perlonjava/`
+- `jperl` command installed to `/usr/bin/`
+- All dependencies bundled
+- Systemwide availability
+
+**Install the package:**
+```bash
+sudo dpkg -i build/distributions/perlonjava_*.deb
+```
+
+**Usage after installation:**
+```bash
+# jperl is now available systemwide
+jperl -E 'say "Hello World"'
+jperl myscript.pl
+
+# No need for ./jperl - it's in your PATH
+```
+
+**Uninstall:**
+```bash
+sudo dpkg -r perlonjava
+```
+
+**Benefits of Debian package:**
+- Clean installation and removal
+- Systemwide availability (no need for `./jperl`)
+- Automatic dependency tracking
+- Integrates with system package manager
+- Can be distributed to other Debian-based systems
 
 ## Dependencies
 - JUnit: For testing
