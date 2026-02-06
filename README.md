@@ -1,255 +1,73 @@
-# PerlOnJava: A Perl Distribution for the JVM
+# PerlOnJava
 
-PerlOnJava provides a Perl distribution designed to run natively on the Java Virtual Machine (JVM).
-It allows Perl scripts to integrate seamlessly with Java-based ecosystems while offering familiar tools and modules for Perl development.
+> Perl running natively on the JVM
 
-The JAR package features a variety of Perl modules, such as `DBI` (with JDBC support), `HTTP::Tiny`, `Text::CSV`, `JSON`, `YAML`, `TOML`, `File::Find`, and `Data::Dumper`.
-Users can also add their own database JDBC drivers, making it a flexible solution for cross-platform Perl applications.
+[![Build Status](https://github.com/fglock/PerlOnJava/workflows/CI/badge.svg)](https://github.com/fglock/PerlOnJava/actions)
+[![License](https://img.shields.io/badge/license-Artistic_2.0-blue.svg)](LICENSE.md)
 
-## Table of Contents
+## About Perl
 
-1. [Introduction](#introduction)
-2. [Why PerlOnJava](docs/WHY_PERLONJAVA.md)
-3. [Target Audience](#target-audience)
-4. [Quick Start](#quick-start)
-5. [Features and Limitations](docs/FEATURE_MATRIX.md)
-6. [Build Instructions](docs/BUILD.md)
-7. [Testing](docs/TESTING.md)
-8. [Running with Docker](docs/DOCKER.md)
-9. [Running the JAR File](#running-the-jar-file)
-10. [Debugging Tools](#debugging-tools)
-11. [Architecture](docs/ARCHITECTURE.md)
-12. [Porting Modules](docs/PORTING_MODULES.md)
-13. [Milestones](MILESTONES.md)
-14. [Community and Support](docs/SUPPORT.md)
-15. [License](#license)
-16. [Additional Resources](docs/RESOURCES.md)
+[Perl](https://www.perl.org/) is a high-level, general-purpose programming language known for text processing, system administration, web development, and database integration. It combines features from C, shell scripting, and other languages with powerful regular expressions and flexible syntax.
 
-## Introduction
+**Learn more:** [www.perl.org](https://www.perl.org/)
 
-PerlOnJava bridges the gap between Perl and Java by providing a platform that compiles Perl scripts into Java bytecode, making them executable on the JVM.
-By leveraging this distribution, developers can run familiar Perl code while accessing Java's ecosystem of libraries and tools.
-This project aims to bring the strengths of Perl to modern JVM environments while supporting a growing list of core modules and pragmas.
+## What is PerlOnJava?
 
-Need help? Check out our [Community and Support](docs/SUPPORT.md) section.
-
-### What This Project Is
-
-- **A JVM-Native Perl Implementation**: Runs Perl code directly on the Java Virtual Machine
-- **A Bridge to Java Ecosystems**: Enables Perl scripts to interact with Java libraries and frameworks
-- **A Cross-Platform Solution**: Provides consistent Perl behavior across different operating systems via JVM
-- **A Modern Integration Tool**: Allows Perl codebases to participate in Java-based enterprise environments
-
-## Target Audience
-
-- **Java Developers with Perl Knowledge**: Provides a method for integrating Perl scripts into Java applications.
-- **Compiler and Language Enthusiasts**: Offers insights into translating high-level languages into JVM bytecode.
-- **Experimenters and Tinkerers**: A tool for experimenting with language interoperability.
-
+A Perl compiler and runtime for the JVM that:
+- Compiles Perl scripts to Java bytecode
+- Integrates with Java ecosystems (JDBC, Maven, Spring)
+- Supports most Perl 5.42 features
+- Includes 150+ core Perl modules (DBI, HTTP::Tiny, JSON, YAML, Text::CSV)
 
 ## Quick Start
 
-Get started quickly with PerlOnJava. For a complete list of capabilities, see our [Feature Matrix](docs/FEATURE_MATRIX.md).
-
-1. Build the project ([detailed instructions](docs/BUILD.md)):
-   ```bash
-   make
-   ```
-
-2. Run a simple Perl script:
-
-<details open>
-<summary>Linux/Mac</summary>
-
 ```bash
+# Build
+make
+
+# Run Perl
 ./jperl -E 'say "Hello World"'
 ```
-</details>
 
-<details>
-<summary>Windows</summary>
+**→ [Full Quick Start Guide](QUICKSTART.md)** - Installation, examples, and database setup
 
-```bash
-jperl -E "say 'Hello World'"
-```
-</details>
+**→ [Database Access Guide](docs/guides/database-access.md)** - DBI with JDBC drivers
 
-3. Use Perl in your Java application:
-   ```java
-   import javax.script.*;
-   
-   public class TestPerl {
-      public static void main(String[] args) throws Exception {
-         ScriptEngineManager manager = new ScriptEngineManager();
-         ScriptEngine engine = manager.getEngineByName("perl");
-         engine.eval("print 'Hello from Java-integrated Perl!\n'");
-      }
-   }
-   ```
+## Documentation
 
-4. Connect to a database:
-   ```perl
-   use DBI;
-   my $dbh = DBI->connect("jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1");
-   $dbh->do("CREATE TABLE test (id INT, name VARCHAR(50))");
-   $dbh->do("INSERT INTO test VALUES (1, 'Hello World')");
-   ```
+### Getting Started
+- **[Installation](docs/getting-started/installation.md)** - Build and setup
+- **[Quick Start](QUICKSTART.md)** - Get running in 5 minutes
+- **[Docker](docs/getting-started/docker.md)** - Run in containers
+- **[One-liners](docs/getting-started/oneliners.md)** - Quick examples
 
-## Testing
+### Guides
+- **[Database Access](docs/guides/database-access.md)** - Using DBI with JDBC drivers
+- **[Java Integration](docs/guides/java-integration.md)** - Call Perl from Java (JSR-223)
+- **[Module Porting](docs/guides/module-porting.md)** - Port Perl modules
 
-PerlOnJava provides a two-level testing strategy for development and validation:
+### Reference
+- **[Feature Matrix](docs/reference/feature-matrix.md)** - What's implemented
+- **[Testing](docs/reference/testing.md)** - Test suite information
+- **[Architecture](docs/reference/architecture.md)** - How it works
+- **[CLI Options](docs/reference/cli-options.md)** - Command-line reference
+- **[Configure.pl](docs/reference/configure.md)** - Configuration and dependency management
 
-### Fast Unit Tests (Recommended for Development)
+### About
+- **[Why PerlOnJava?](docs/about/why-perlonjava.md)** - Project goals and use cases
+- **[Roadmap](docs/about/roadmap.md)** - Future plans
+- **[Changelog](docs/about/changelog.md)** - Release history
+- **[Support](docs/about/support.md)** - Get help and contribute
+- **[Resources](docs/about/resources.md)** - External links
 
-```bash
-make test        # Fast unit tests (default)
-make test-unit   # Same as above
-```
+## Contributing
 
-Runs tests from `src/test/resources/unit/` in seconds with parallel execution.
-
-### Comprehensive Test Suite
-
-```bash
-make test-all    # All tests including module tests
-```
-
-Runs all tests including Benchmark.pm and other Perl core modules. Takes longer but provides comprehensive validation with detailed JSON reports.
-
-See [Testing Guide](docs/TESTING.md) for detailed information about:
-- Test organization and categories
-- Using `perl_test_runner.pl` (like `prove`)
-- JUnit/Gradle integration for CI/CD
-- Performance tips and debugging
-
-## Running the JAR File
-
-1. **Show Instructions**:
-<details open>
-<summary>Linux/Mac</summary>
-
-```bash
-./jperl --help
-```
-</details>
-
-<details>
-<summary>Windows</summary>
-
-```bash
-jperl --help
-```
-</details>
-
-2. **Execute Something**:
-<details open>
-<summary>Linux/Mac</summary>
-
-```bash
-./jperl -E 'print 123'
-```
-</details>
-
-<details>
-<summary>Windows</summary>
-
-```bash
-jperl -E "print 123"
-```
-</details>
-
-## Debugging Tools
-
-1. **Execute Emitting Debug Information**:
-<details open>
-<summary>Linux/Mac</summary>
-
-```bash
-./jperl --debug -E 'print 123'
-```
-</details>
-
-<details>
-<summary>Windows</summary>
-
-```bash
-jperl --debug -E "print 123"
-```
-</details>
-
-2. **Compile Only; Can Be Combined with --debug**:
-<details open>
-<summary>Linux/Mac</summary>
-
-```bash
-./jperl -c -E 'print 123'
-./jperl --debug -c -E 'print 123'
-```
-</details>
-
-<details>
-<summary>Windows</summary>
-
-```bash
-jperl -c -E "print 123"
-jperl --debug -c -E "print 123"
-```
-</details>
-
-3. **Execute and Emit Disassembled ASM Code**:
-<details open>
-<summary>Linux/Mac</summary>
-
-```bash
-./jperl --disassemble -E 'print 123'
-```
-</details>
-
-<details>
-<summary>Windows</summary>
-
-```bash
-jperl --disassemble -E "print 123"
-```
-</details>
-
-4. **Run the Lexer Only**:
-<details open>
-<summary>Linux/Mac</summary>
-
-```bash
-./jperl --tokenize -E 'print 123'
-```
-</details>
-
-<details>
-<summary>Windows</summary>
-
-```bash
-jperl --tokenize -E "print 123"
-```
-</details>
-
-5. **Run the Parser Only**:
-<details open>
-<summary>Linux/Mac</summary>
-
-```bash
-./jperl --parse -E 'print 123'
-```
-</details>
-
-<details>
-<summary>Windows</summary>
-
-```bash
-jperl --parse -E "print 123"
-```
-</details>
+We welcome contributions! See **[CONTRIBUTING.md](CONTRIBUTING.md)** for:
+- How to build and test
+- Code organization
+- Submitting pull requests
+- Developer documentation
 
 ## License
 
-This project is licensed under the Perl Artistic License 2.0 - see the [LICENSE](LICENSE.md) file for details.
-
-![Java CI with Maven](https://github.com/fglock/PerlOnJava/workflows/Java%20CI%20with%20Maven/badge.svg)
-
+[Artistic License 2.0](LICENSE.md) - Copyright (c) Flavio Glock

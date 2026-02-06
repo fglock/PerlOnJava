@@ -14,8 +14,8 @@ PerlOnJava offers a unique solution for JVM-based environments or use cases wher
 3. **Modular Architecture**:  
    PerlOnJava’s architecture facilitates integration with other JVM-based languages (e.g., Kotlin, Scala) and provides tools like JDBC for database interaction, making it ideal for enterprise environments.
 
-4. **Advanced Performance Features**:  
-   The project uses modern Java and ASM techniques to optimize execution. Features like multithreaded I/O can offer performance benefits in specific use cases compared to traditional Perl.
+4. **JVM Performance Optimizations**:
+   The project uses modern Java and ASM techniques to optimize execution. The JVM's just-in-time (JIT) compilation and garbage collection can provide performance benefits for compute-intensive tasks.
 
 5. **Educational and Experimental Value**:  
    PerlOnJava is a compelling resource for understanding compiler design, language interoperability, and the translation of high-level languages to bytecode.

@@ -33,10 +33,13 @@ endif
 test: test-unit
 
 # Fast unit tests only (from src/test/resources/unit/ directory)
-# Uses perl_test_runner.pl with TAP output and parallel execution
-test-unit:
-	@echo "Running fast unit tests..."
-	perl dev/tools/perl_test_runner.pl --jobs 8 --timeout 10 src/test/resources/unit
+# Uses Gradle's testUnitParallel (same as default make build)
+test-unit: wrapper
+ifeq ($(OS),Windows_NT)
+	gradlew.bat testUnitParallel --parallel
+else
+	./gradlew testUnitParallel --parallel
+endif
 
 # Perl 5 core test suite (perl5_t/t/ directory)
 # Run 'perl dev/import-perl5/sync.pl' first to populate perl5_t/
