@@ -352,15 +352,63 @@ public class EmitForeach {
             mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "next", "()Ljava/lang/Object;", true);
             mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeScalar");
 
+            // For reference aliasing with arrays/hashes, dereference the scalar
+            // to get the underlying RuntimeArray/RuntimeHash
+            if (isReferenceAliasing && actualVariable instanceof OperatorNode innerOp) {
+                if (innerOp.operator.equals("@")) {
+                    // Array: dereference scalar to get RuntimeArray
+                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                            "org/perlonjava/runtime/RuntimeScalar",
+                            "arrayDeref",
+                            "()Lorg/perlonjava/runtime/RuntimeArray;",
+                            false);
+                } else if (innerOp.operator.equals("%")) {
+                    // Hash: dereference scalar to get RuntimeHash
+                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                            "org/perlonjava/runtime/RuntimeScalar",
+                            "hashDeref",
+                            "()Lorg/perlonjava/runtime/RuntimeHash;",
+                            false);
+                }
+                // For scalars ($), no dereferencing needed - keep the reference as-is
+            }
+
             if (loopVariableIsGlobal) {
-                // Regular global variable assignment
+                // Global variable assignment
                 mv.visitLdcInsn(globalVarName);
                 mv.visitInsn(Opcodes.SWAP); // Stack: globalVarName, iteratorValue
-                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                        "org/perlonjava/runtime/GlobalVariable",
-                        "aliasGlobalVariable",
-                        "(Ljava/lang/String;Lorg/perlonjava/runtime/RuntimeScalar;)V",
-                        false);
+
+                if (isReferenceAliasing && actualVariable instanceof OperatorNode innerOp) {
+                    if (innerOp.operator.equals("@")) {
+                        // Array: use setGlobalArray
+                        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                "org/perlonjava/runtime/GlobalVariable",
+                                "setGlobalArray",
+                                "(Ljava/lang/String;Lorg/perlonjava/runtime/RuntimeArray;)V",
+                                false);
+                    } else if (innerOp.operator.equals("%")) {
+                        // Hash: use setGlobalHash
+                        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                "org/perlonjava/runtime/GlobalVariable",
+                                "setGlobalHash",
+                                "(Ljava/lang/String;Lorg/perlonjava/runtime/RuntimeHash;)V",
+                                false);
+                    } else {
+                        // Scalar: use aliasGlobalVariable (original behavior)
+                        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                "org/perlonjava/runtime/GlobalVariable",
+                                "aliasGlobalVariable",
+                                "(Ljava/lang/String;Lorg/perlonjava/runtime/RuntimeScalar;)V",
+                                false);
+                    }
+                } else {
+                    // Non-reference-aliasing case: use aliasGlobalVariable
+                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/GlobalVariable",
+                            "aliasGlobalVariable",
+                            "(Ljava/lang/String;Lorg/perlonjava/runtime/RuntimeScalar;)V",
+                            false);
+                }
             } else if (variableNode instanceof OperatorNode operatorNode) {
                 // Local variable case
                 String varName = operatorNode.operator + ((IdentifierNode) operatorNode.operand).name;
