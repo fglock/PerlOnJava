@@ -132,13 +132,15 @@ public class SpecialBlockParser {
                 if (entry.name().startsWith("&")) {
                     continue;
                 }
-                
+
+                String packageName;
                 if (entry.decl().equals("our")) {
                     // "our" variable lives in a Perl package
+                    packageName = entry.perlPackage();
                     // Emit: package PKG
                     nodes.add(
                             new OperatorNode("package",
-                                    new IdentifierNode(entry.perlPackage(), tokenIndex), tokenIndex));
+                                    new IdentifierNode(packageName, tokenIndex), tokenIndex));
                 } else {
                     // "my" or "state" variable live in a special BEGIN package
                     // Retrieve the variable id from the AST; create a new id if needed
@@ -146,12 +148,48 @@ public class SpecialBlockParser {
                     if (ast.id == 0) {
                         ast.id = EmitterMethodCreator.classCounter++;
                     }
+                    packageName = PersistentVariable.beginPackage(ast.id);
                     // Emit: package BEGIN_PKG
                     nodes.add(
                             new OperatorNode("package",
-                                    new IdentifierNode(PersistentVariable.beginPackage(ast.id), tokenIndex), tokenIndex));
+                                    new IdentifierNode(packageName, tokenIndex), tokenIndex));
                 }
+                // CLEAN FIX: For eval STRING, make special globals aliases to closed variables
+                // This allows BEGIN blocks to access outer lexical variables with their runtime values.
+                //
+                // In perl5: my @arr = qw(a b); eval q{ BEGIN { say @arr } };  # prints: a b
+                // The special global BEGIN_PKG::@arr is an ALIAS to the closed @arr variable.
+                //
+                // Implementation: Set the global variable to reference the same runtime object.
+                if (!entry.decl().equals("our")) {
+                    RuntimeCode.EvalRuntimeContext evalCtx = RuntimeCode.getEvalRuntimeContext();
+                    if (evalCtx != null) {
+                        Object runtimeValue = evalCtx.getRuntimeValue(entry.name());
+                        if (runtimeValue != null) {
+                            // Create alias: set special global to reference the runtime object
+                            // IMPORTANT: Global variable keys do NOT include the sigil
+                            // entry.name() is "@arr" but the key should be "packageName::arr"
+                            String varNameWithoutSigil = entry.name().substring(1);  // Remove the sigil
+                            String fullName = packageName + "::" + varNameWithoutSigil;
+
+                            // Put in the appropriate global map based on variable type
+                            if (runtimeValue instanceof RuntimeArray) {
+                                GlobalVariable.globalArrays.put(fullName, (RuntimeArray) runtimeValue);
+                                parser.ctx.logDebug("BEGIN block: Aliased array " + fullName);
+                            } else if (runtimeValue instanceof RuntimeHash) {
+                                GlobalVariable.globalHashes.put(fullName, (RuntimeHash) runtimeValue);
+                                parser.ctx.logDebug("BEGIN block: Aliased hash " + fullName);
+                            } else if (runtimeValue instanceof RuntimeScalar) {
+                                GlobalVariable.globalVariables.put(fullName, (RuntimeScalar) runtimeValue);
+                                parser.ctx.logDebug("BEGIN block: Aliased scalar " + fullName);
+                            }
+                        }
+                    }
+                }
+
                 // Emit: our $var
+                // When we've aliased the variable above, the "our" declaration will fetch the
+                // existing global (our alias) instead of creating a new empty one.
                 nodes.add(
                         new OperatorNode(
                                 "our",
