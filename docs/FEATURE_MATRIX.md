@@ -214,7 +214,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **Taking References of a List**: like: `\(1,2,3)`
 - ✅  **List assignment in scalar context**: List assignment in scalar context returns the number of elements produced by the expression on the right side of the assignment
 - ✅  **`$#array`**: Operator for array count is implemented.
-- ✅  **`scalar`**: Operator to get scalar value is not implemented.
+- ✅  **`scalar`**: Operator to get scalar value is implemented.
 - ✅  **Array dereference**: Dereferencing arrays using `@$x`.
 - ✅  **Hash dereference**: Dereferencing hashes using `%$x`.
 - ✅  **Dereference with $$var{...}**: Dereferencing using `$$var{...}` and `$$var[...]` works.
@@ -426,7 +426,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **`chmod`**: File permissions.
 - ✅  **`sysread`**
 - ✅  **`syswrite`**
-- ✅  **Tied Handles**: Tied file handles are not implemented.
+- ✅  **Tied Handles**: Tied file handles are implemented.
 - ✅  **`DATA`**: `DATA` file handle works.
 - ✅  **`truncate`**: File truncation
 

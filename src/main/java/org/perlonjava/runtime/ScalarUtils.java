@@ -259,8 +259,26 @@ public class ScalarUtils {
             result = result.replaceAll("(\\d)\\.?0+e", "$1e");
             return result;
         } else {
-            // Use fixed-point notation
-            String result = String.format("%.15f", value);
+            // Special case for zero
+            if (absValue == 0.0) {
+                return "0";
+            }
+
+            // Use fixed-point notation with 15 significant figures
+            // Perl uses 15 significant figures total, not 15 decimal places
+            int decimalPlaces;
+            if (absValue >= 1.0) {
+                // Count digits before decimal point
+                int digitsBefore = (int) Math.floor(Math.log10(absValue)) + 1;
+                // Use (15 - digitsBefore) decimal places to get exactly 15 significant figures
+                decimalPlaces = 15 - digitsBefore;
+            } else {
+                // For numbers < 1, account for leading zeros after decimal point
+                // The first significant digit is at position -floor(log10(absValue))
+                // To get 15 significant figures, we need that position + 14 more digits
+                decimalPlaces = -(int) Math.floor(Math.log10(absValue)) + 14;
+            }
+            String result = String.format("%." + decimalPlaces + "f", value);
             // Remove trailing zeros and decimal point if not needed
             result = result.replaceAll("0+$", "").replaceAll("\\.$", "");
             return result;
