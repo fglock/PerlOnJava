@@ -361,7 +361,7 @@ public class EmitterMethodCreator implements Opcodes {
 
                 // Then, if it's a BlockNode, also try block-level refactoring
                 if (ast instanceof BlockNode blockAst) {
-                    LargeBlockRefactorer.forceRefactorForCodegen(blockAst, true);
+                    LargeBlockRefactorer.forceRefactorForCodegen(blockAst);
                 }
 
                 // Reset JavaClassInfo to avoid reusing partially-resolved Labels.

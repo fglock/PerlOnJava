@@ -16,10 +16,6 @@ import java.util.List;
  *   <li>{@code [[1,2], [3,4]]} - nested array literals</li>
  * </ul>
  * <p>
- * <b>Large Literal Handling:</b> The constructor automatically invokes
- * {@link LargeNodeRefactorer#maybeRefactorElements} to split very large arrays
- * into chunks (currently disabled - on-demand refactoring is used instead).
- * This prevents JVM "method too large" errors for arrays with thousands of elements.
  *
  * @see LargeNodeRefactorer
  * @see HashLiteralNode

@@ -1,8 +1,9 @@
 package org.perlonjava.astrefactor;
 
-import org.perlonjava.astnode.*;
+import org.perlonjava.astnode.LabelNode;
+import org.perlonjava.astnode.ListNode;
+import org.perlonjava.astnode.Node;
 import org.perlonjava.astvisitor.BytecodeSizeEstimator;
-import org.perlonjava.parser.Parser;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -10,16 +11,17 @@ import java.util.List;
 import static org.perlonjava.astrefactor.BlockRefactor.*;
 
 /**
- * Generic helper class for refactoring large AST node lists to avoid JVM's "Method too large" error.
+ * Helper class for refactoring large AST node lists to avoid JVM's "Method too large" error.
  * <p>
  * <b>Problem:</b> The JVM has a hard limit of 65535 bytes per method. Large Perl literals
  * (arrays, hashes, lists with thousands of elements) can exceed this limit when compiled.
  * <p>
- * <b>Solution:</b> This class splits large element lists into chunks, each wrapped in an
- * anonymous subroutine. The chunks are then dereferenced and merged back together.
+ * <b>Solution:</b> This class provides on-demand refactoring that splits large element lists
+ * into chunks, each wrapped in an anonymous subroutine. The chunks are then dereferenced
+ * and merged back together when compilation errors occur.
  * <p>
- * <b>Integration:</b> This proactive refactoring is disabled by default in favor of
- * automatic on-demand refactoring (see {@link LargeBlockRefactorer}).
+ * <b>Integration:</b> Used by {@link LargeBlockRefactorer} for automatic on-demand refactoring
+ * when "Method too large" errors are detected during bytecode generation.
  * <p>
  * <b>Recursion Safety:</b> The circular dependency (constructor calls refactorer which
  * creates new nodes) breaks naturally when chunks become small enough (below MIN_CHUNK_SIZE).
@@ -28,13 +30,6 @@ import static org.perlonjava.astrefactor.BlockRefactor.*;
  * @see LargeBlockRefactorer
  */
 public class LargeNodeRefactorer {
-
-    /**
-     * Proactive refactoring is disabled by default.
-     * Automatic on-demand refactoring handles large code automatically.
-     */
-    static final boolean IS_REFACTORING_ENABLED = false;
-    
     /**
      * Maximum elements per chunk. Limits chunk size even if bytecode estimates
      * suggest larger chunks would fit.
@@ -47,58 +42,10 @@ public class LargeNodeRefactorer {
     private static final ThreadLocal<Boolean> skipRefactoring = ThreadLocal.withInitial(() -> false);
 
     /**
-     * Main entry point: called from AST node constructors to potentially refactor large element lists.
+     * Refactors a large element list (for on-demand use when MethodTooLargeException occurs).
      * <p>
-     * Note: Proactive refactoring is disabled by default. Large code is handled automatically
-     * via on-demand refactoring when compilation errors occur.
-     * <p>
-     * If refactoring were enabled, elements would be split into chunks and wrapped in anonymous
-     * subroutines with appropriate dereference operators.
-     *
-     * @param elements   the original elements list from the AST node constructor
-     * @param tokenIndex the token index for creating new AST nodes (for error reporting)
-     * @param parser     the parser instance for access to error utilities (can be null if not available)
-     * @return the original list (refactoring is disabled)
-     */
-    public static List<Node> maybeRefactorElements(List<Node> elements, int tokenIndex, Parser parser) {
-        if (!IS_REFACTORING_ENABLED || !shouldRefactor(elements)) {
-            return elements;
-        }
-
-        // Check if elements contain any top-level labels
-        // Labels in lists/arrays/hashes would break if wrapped in closures
-        for (Node element : elements) {
-            if (element instanceof LabelNode) {
-                // Contains a label - skip refactoring to preserve label scope
-                return elements;
-            }
-        }
-
-        List<Node> chunks = splitIntoDynamicChunks(elements);
-
-        // Check if any chunk that will be wrapped contains unsafe control flow
-        // Control flow in lists/arrays/hashes can break if wrapped in closures
-        if (hasUnsafeControlFlowInChunks(chunks, MIN_CHUNK_SIZE)) {
-            // Chunks contain control flow that would break if wrapped
-            // Skip refactoring - cannot safely refactor this list
-            return elements;
-        }
-
-        // For LIST nodes, create nested closures for proper lexical scoping
-        List<Node> result = createNestedListClosures(chunks, tokenIndex);
-        // Check if refactoring was successful by estimating bytecode size
-        long estimatedSize = BlockRefactor.estimateTotalBytecodeSizeExact(result);
-        if (estimatedSize > LARGE_BYTECODE_SIZE) {
-            errorCantRefactorLargeBlock(tokenIndex, parser, estimatedSize);
-        }
-        return result;
-    }
-
-    /**
-     * Force refactoring of a large element list (for on-demand use when MethodTooLargeException occurs).
-     * <p>
-     * Unlike maybeRefactorElements, this method always attempts refactoring regardless of
-     * IS_REFACTORING_ENABLED flag. Used by DepthFirstLiteralRefactorVisitor.
+     * This method always attempts refactoring and is used by DepthFirstLiteralRefactorVisitor
+     * when "Method too large" errors are detected during bytecode generation.
      *
      * @param elements   the elements list to refactor
      * @param tokenIndex the token index for creating new nodes
@@ -187,13 +134,13 @@ public class LargeNodeRefactorer {
             long size = BytecodeSizeEstimator.estimateSnippetSize(elements.get(0));
             return size > LARGE_BYTECODE_SIZE;
         }
-        
+
         // Estimate all elements for accurate size calculation
         long totalSize = 0;
         for (Node element : elements) {
             totalSize += BytecodeSizeEstimator.estimateSnippetSize(element);
         }
-        
+
         return totalSize > LARGE_BYTECODE_SIZE;
     }
 
@@ -239,6 +186,4 @@ public class LargeNodeRefactorer {
 
         return chunks;
     }
-
-
 }

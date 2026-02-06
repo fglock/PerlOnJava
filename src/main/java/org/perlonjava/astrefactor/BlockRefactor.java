@@ -8,18 +8,16 @@ import org.perlonjava.runtime.PerlCompilerException;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Function;
 
 import static org.perlonjava.parser.ParserNodeUtils.variableAst;
 
 public class BlockRefactor {
-    // Shared configuration thresholds for both LargeBlockRefactorer and LargeNodeRefactorer
-    public static final int LARGE_ELEMENT_COUNT = 200;     // Deprecated: kept for MIN_CHUNK_SIZE compatibility
     public static final int LARGE_BYTECODE_SIZE = 40000;   // Maximum bytecode size before refactoring
     public static final int MIN_CHUNK_SIZE = 4;            // Minimum statements to extract as a chunk
 
     // Reusable visitor for control flow detection
     private static final ControlFlowDetectorVisitor controlFlowDetector = new ControlFlowDetectorVisitor();
+
     /**
      * Creates an anonymous subroutine call node that invokes a subroutine with the @_ array as arguments.
      *
@@ -146,37 +144,6 @@ public class BlockRefactor {
         return block;
     }
 
-    /**
-     * Estimates the total bytecode size for a list of nodes.
-     * Uses sampling for efficiency on large lists.
-     *
-     * @param nodes the list of nodes to estimate
-     * @return estimated total bytecode size in bytes
-     */
-    public static long estimateTotalBytecodeSize(List<Node> nodes) {
-        if (nodes.isEmpty()) {
-            return 0;
-        }
-
-        // For small lists, calculate exact size
-        if (nodes.size() <= 10) {
-            long total = 0;
-            for (Node node : nodes) {
-                total += BytecodeSizeEstimator.estimateSnippetSize(node);
-            }
-            return total;
-        }
-
-        // For large lists, use sampling
-        int sampleSize = Math.min(10, nodes.size());
-        long totalSampleSize = 0;
-        for (int i = 0; i < sampleSize; i++) {
-            int index = (int) (((long) i * (nodes.size() - 1)) / (sampleSize - 1));
-            totalSampleSize += BytecodeSizeEstimator.estimateSnippetSize(nodes.get(index));
-        }
-        return (totalSampleSize * nodes.size()) / sampleSize;
-    }
-
     public static long estimateTotalBytecodeSizeExact(List<Node> nodes) {
         if (nodes.isEmpty()) {
             return 0;
@@ -192,7 +159,7 @@ public class BlockRefactor {
      * Check if any chunk that will be wrapped in a closure contains unsafe control flow.
      * Only checks chunks that are large enough to be wrapped (>= minChunkSize).
      *
-     * @param chunks List of chunks (either ListNode or List<Node>)
+     * @param chunks       List of chunks (either ListNode or List<Node>)
      * @param minChunkSize Minimum size for a chunk to be wrapped
      * @return true if unsafe control flow found in chunks that will be wrapped
      */

@@ -62,8 +62,6 @@ public class BlockNode extends AbstractNode {
         this.labels = new ArrayList<>();
         this.labelName = null;
         this.isLoop = false;
-        // Apply parse-time refactoring if enabled
-        LargeBlockRefactorer.maybeRefactorBlock(this, parser);
     }
 
     /**
