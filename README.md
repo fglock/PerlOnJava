@@ -2,7 +2,7 @@
 
 > Perl running natively on the JVM
 
-[![Build Status](https://github.com/fglock/PerlOnJava/workflows/CI/badge.svg)](https://github.com/fglock/PerlOnJava/actions)
+[![Build Status](https://github.com/fglock/PerlOnJava/workflows/Java%20CI%20with%20Gradle/badge.svg)](https://github.com/fglock/PerlOnJava/actions)
 [![License](https://img.shields.io/badge/license-Artistic_2.0-blue.svg)](LICENSE.md)
 
 ## About Perl
