@@ -1,28 +1,37 @@
 # Perl on JVM Feature Matrix
 
-# Table of Contents
+## Status Legend
+
+- ✅ Fully implemented
+- 🚧 Partially implemented
+- 🟡 Implemented with limitations
+- ❌ Not implemented
+
+---
+
+## Table of Contents
 
 1. [Compiler Usability](#compiler-usability)
 2. [Testing](#testing)
 3. [Autovivification](#autovivification)
-3. [Scalars](#scalars)
-4. [Objects](#objects)
-5. [Operators](#operators)
-6. [Arrays, Hashes, and Lists](#arrays-hashes-and-lists)
-7. [Subroutines](#subroutines)
-8. [Regular Expressions](#regular-expressions)
-9. [Statements and Special Operators](#statements-and-special-operators)
-10. [I/O Operations](#io-operations)
-11. [Namespaces and Global Variables](#namespaces-and-global-variables)
-12. [Perl Modules, Pragmas, Features](#perl-modules-pragmas-features)
-- [Pragmas](#pragmas)
-- [Core modules](#core-modules)
-- [Non-core modules](#non-core-modules)
-- [DBI module](#dbi-module)
-13. [Non-strict and Obsolete Features](#non-strict-and-obsolete-features)
-14. [Features Probably Incompatible with JVM](#features-probably-incompatible-with-jvm)
-15. [Language Differences and Workarounds](#language-differences-and-workarounds)
-16. [Optimizations](#optimizations)
+4. [Scalars](#scalars)
+5. [Objects](#objects)
+6. [Operators](#operators)
+7. [Arrays, Hashes, and Lists](#arrays-hashes-and-lists)
+8. [Subroutines](#subroutines)
+9. [Regular Expressions](#regular-expressions)
+10. [Statements and Special Operators](#statements-and-special-operators)
+11. [I/O Operations](#io-operations)
+12. [Namespaces and Global Variables](#namespaces-and-global-variables)
+13. [Perl Modules, Pragmas, Features](#perl-modules-pragmas-features)
+    - [Pragmas](#pragmas)
+    - [Core modules](#core-modules)
+    - [Non-core modules](#non-core-modules)
+    - [DBI module](#dbi-module)
+14. [Features Incompatible with JVM](#features-incompatible-with-jvm)
+15. [Optimizations](#optimizations)
+
+---
 
 ## Summary
 
@@ -50,6 +59,8 @@ PerlOnJava implements most core Perl features with some key differences:
 - Threading
 - DESTROY blocks
 
+---
+
 ## Compiler Usability
 - ✅  **Wrapper scripts**: (jperl/jperl.bat) for easier command-line usage.
 - ✅  **Perl-like compile-time error messages**: Error messages mimic those in Perl for consistency.
@@ -58,7 +69,7 @@ PerlOnJava implements most core Perl features with some key differences:
 - ✅  **Comments**: Support for comments and POD (documentation) in code is implemented.
 - ✅  **Environment**: Support for `PERL5LIB`, `PERL5OPT` environment variables.
 - 🚧  **Perl-like warnings**: Warnings is work in progress. Some warnings need to be formatted to resemble Perl's output.
-- ❌  **Perl debugger**: The built-in Perl debugger (`perl -d`) is not implemented..
+- ❌  **Perl debugger**: The built-in Perl debugger (`perl -d`) is not implemented.
 
 
 ### Command line switches
@@ -81,10 +92,13 @@ PerlOnJava implements most core Perl features with some key differences:
   - `-D[number/list]`: Sets debugging flags.
   - `-C [number/list]`: Controls Unicode features.
 
+---
+
 ## Testing
 - ✅  **TAP tests**: Running standard Perl testing protocol.
 - ✅  **CI/CD**: Github testing pipeline in Ubuntu and Windows.
 
+---
 
 ## Autovivification
 
@@ -120,6 +134,7 @@ my @reversed = reverse @{$z};  # ERROR
 my @copy = @{$z};         # ERROR
 ```
 
+---
 
 ## Scalars
 - ✅  **`my` variable declaration**: Local variables can be declared using `my`.
@@ -128,7 +143,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **`state` variable declaration**: State variables are implemented. State variables are initialized only once.
 - ✅  **Declared references**: `my \$x`, `my(\@arr)`, `my(\%hash)` are implemented.
 - ✅  **Variable assignment**: Basic variable assignment is implemented.
-- ✅  **Basic types**: Support for integers, doubles, strings, v-strings, regex, CODE, undef, references is present.
+- ✅  **Basic types**: Integers, doubles, strings, v-strings, regex, CODE, undef, and references are supported.
 - ✅  **String Interpolation**: Both array and scalar string interpolation are supported.
 - ✅  **String Interpolation escapes**: Handles escape sequences like `\n`, `\N{name}`, `\Q`, `\E`, `\U`, `\L`, `\u`, `\l` within interpolated strings.
 - ✅  **String numification**: Strings can be converted to numbers automatically.
@@ -139,16 +154,18 @@ my @copy = @{$z};         # ERROR
 - ✅  **References**: References to variables and data structures are supported.
 - ✅  **Autovivification**: Autovivification is implemented.
 - ✅  **File handles**: Support for file handles is implemented.
-- ✅  **`local` special cases**: `local` works for typeglobs and filehandles.
+- ✅  **`local` special cases**: `local` is implemented for typeglobs and filehandles.
 - ✅  **Typeglob as hash**: `*$val{$k}` for `SCALAR`, `ARRAY`, `HASH`, `CODE`, `IO` is implemented.
 - ✅  **Use string as a scalar reference**: Support for scalar references from strings is implemented.
-- ✅  **Tied Scalars**: Support for tying scalars to classes is implemented.
+- ✅  **Tied Scalars**: Support for tying scalars to classes is implemented. See also [Tied Arrays](#arrays-hashes-and-lists), [Tied Hashes](#arrays-hashes-and-lists), [Tied Handles](#io-operations).
 - ❌  **Taint checks**: Support for taint checks is not implemented.
 - ❌  **`local` special cases**: `local *HANDLE = *HANDLE` doesn't create a new typeglob.
 - ❌  **Variable attributes**: Variable attributes are not yet supported.
 
+---
+
 ## Objects
-- ✅  **Objects**: Creating classes, method call syntax works.
+- ✅  **Objects**: Creating classes and method call syntax are implemented.
 - ✅  **Object operators**: `ref` and `bless`
 - ✅  **Special variables**: `@ISA` is implemented.
 - ✅  **Multiple Inheritance**: C3 method resolution is implemented.
@@ -158,7 +175,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **Autoload**: `AUTOLOAD` mechanism is implemented; `$AUTOLOAD` variable is implemented.
 - ✅  **`class`**: `class` keyword fully supported with blocks.
 - ✅  **Indirect object syntax** indirect object syntax is implemented.
-- ✅  **`:isa`**: Class inheritance with version checking works.
+- ✅  **`:isa`**: Class inheritance with version checking is implemented.
 - ✅  **`method`**: Method declarations with automatic `$self`.
 - ✅  **`field`**: Field declarations with all sigils supported.
 - ✅  **`:param`**: Constructor parameter fields fully working.
@@ -166,7 +183,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **`ADJUST`**: `ADJUST` blocks with field transformation work.
 - ✅  **Constructor generation**: Automatic `new()` method creation.
 - ✅  **Field transformation**: Fields become `$self->{field}` in methods.
-- ✅  **Lexical method calls**: `$self->&priv` syntax works.
+- ✅  **Lexical method calls**: `$self->&priv` syntax is implemented.
 - ✅  **Object stringification**: Shows OBJECT not HASH properly.
 - ✅  **Field defaults**: Default values for fields work.
 - ✅  **Field inheritance**: Parent class fields are inherited.
@@ -174,35 +191,49 @@ my @copy = @{$z};         # ERROR
 - 🟡  **Argument validation**: Limited by operator implementation issues.
 - ❌  **`DESTROY`**: Destructor blocks not yet implemented.
 
+---
+
 ## Operators
+
+### Arithmetic and Comparison
 - ✅  **Simple arithmetic**: Operators like `+`, `-`, `*`, and `%` are supported.
 - ✅  **Numeric Comparison operators**: Comparison operators such as `==`, `!=`, `>`, `<`, etc., are implemented.
+- ✅  **Chained operators**: Operations like `$x < $y <= $z` are implemented.
 - ✅  **defined-or**: `//` operator.
 - ✅  **low-precedence-xor**: `^^` and `^^=` operator.
+
+### String Operators
 - ✅  **String concat**: Concatenation of strings using `.` is supported.
 - ✅  **String Comparison operators**: String comparison operators such as `eq`, `ne`, `lt`, `gt`, etc., are implemented.
 - ✅  **`q`, `qq`, `qw`, `qx` String operators**: Various string quoting mechanisms are supported.
-- ✅  **Bitwise operators**: Bitwise operations like `~`, `&`, `|`, `^`, `~.`, `&.`, `|.`, `^.`, `<<`, and `>>` are supported.
-- ✅  **Bitwise operators**: Bitwise integer and string operations are implemented.
-- ✅  **Bitwise operators return unsigned**: Emulate unsigned integers.
-- ✅  **Autoincrement, Autodecrement; String increment**: Increment and decrement operators, including for strings, are implemented.
 - ✅  **Scalar string and math operators**: `quotemeta`, `ref`, `undef`, `log`, `rand`, `oct`, `hex`, `ord`, `chr`, `int`, `sqrt`, `cos`, `sin`, `exp`, `atan2`, `lc`, `lcfirst`, `uc`, `ucfirst`, `chop`, `fc`, `index`, `rindex`, `prototype`.
 - ✅  **`join`**: Join operator for combining array elements into a string is supported.
 - ✅  **`sprintf`**: String formatting is supported.
+- ✅  **`substr`**: Substring extraction is implemented.
+- ✅  **Lvalue `substr`**: Assignable Substring extraction is implemented.
+- ✅  **`chomp`**: `chomp` is implemented.
+
+### Bitwise Operators
+- ✅  **Bitwise operators**: Bitwise operations like `~`, `&`, `|`, `^`, `~.`, `&.`, `|.`, `^.`, `<<`, and `>>` are supported.
+- ✅  **Bitwise operators**: Bitwise integer and string operations are implemented.
+- ✅  **Bitwise operators return unsigned**: Emulate unsigned integers.
+- ✅  **Vectors**: `vec` is implemented.
+- ✅  **Lvalue `vec`**: Assignable `vec` is implemented.
+
+### List and Array Operators
 - ✅  **`grep`, `map`, `sort`**: List processing functions are implemented.
-- ✅  **`substr`**: Substring extraction works.
-- ✅  **Time-related functions**: `time`, `times`, `gmtime`, `localtime` are implemented.
 - ✅  **`pack` and `unpack` operators**: `pack` and `unpack` are implemented.
+
+### Other Operators
+- ✅  **Autoincrement, Autodecrement; String increment**: Increment and decrement operators, including for strings, are implemented.
+- ✅  **Time-related functions**: `time`, `times`, `gmtime`, `localtime` are implemented.
 - ✅  **`crypt` operator**: `crypt` is implemented.
 - ✅  **`study`, `srand`**: `study`, `srand` are implemented.
-- ✅  **`chomp`**: `chomp` is implemented.
 - ✅  **`sleep`**: `sleep` is implemented. It takes fractional seconds.
 - ✅  **`alarm`**: `alarm` is implemented with `$SIG{ALRM}` signal handling support.
 - ✅  **`stat`**: `stat`, `lstat` are implemented. Some fields are not available in JVM and return `undef`.
-- ✅  **Vectors**: `vec` is implemented.
-- ✅  **Lvalue `substr`**: Assignable Substring extraction is implemented.
-- ✅  **Lvalue `vec`**: Assignable `vec` is implemented.
-- ✅  **Chained operators**: operations like `$x < $y <= $z` are implemented.
+
+---
 
 ## Arrays, Hashes, and Lists
 - ✅  **Array, Hash, and List infrastructure**: Basic infrastructure for arrays, hashes, and lists is implemented.
@@ -217,7 +248,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **`scalar`**: Operator to get scalar value is implemented.
 - ✅  **Array dereference**: Dereferencing arrays using `@$x`.
 - ✅  **Hash dereference**: Dereferencing hashes using `%$x`.
-- ✅  **Dereference with $$var{...}**: Dereferencing using `$$var{...}` and `$$var[...]` works.
+- ✅  **Dereference with $$var{...}**: Dereferencing using `$$var{...}` and `$$var[...]` is implemented.
 - ✅  **Basic Array Operations**: `push`, `unshift`, `pop`, `shift`, `splice`, `reverse` are implemented.
 - ✅  **Slices**: Array and Hash slices like `@array[2, 3]`, `@hash{"a", "b"}` and `%hash{"a", "b"}` are implemented.
 - ✅  **Array literals**: Array literals are supported.
@@ -228,8 +259,10 @@ my @copy = @{$z};         # ERROR
 - ✅  **`$#array`**: Lvalue array count is implemented: `$#{$sl} = 10`.
 - ✅  **Array exists**: `exists` for array indexes is implemented.
 - ✅  **Array delete**: `delete` for array indexes is implemented.
-- ✅  **Tied Arrays**: Tied arrays are implemented.
-- ✅  **Tied Hashes**: Tied hashes are implemented.
+- ✅  **Tied Arrays**: Tied arrays are implemented. See also [Tied Scalars](#scalars), [Tied Hashes](#arrays-hashes-and-lists), [Tied Handles](#io-operations).
+- ✅  **Tied Hashes**: Tied hashes are implemented. See also [Tied Scalars](#scalars), [Tied Arrays](#arrays-hashes-and-lists), [Tied Handles](#io-operations).
+
+---
 
 ## Subroutines
 - ✅  **Subroutine hoisting**: Invoking subroutines before their actual declaration in the code.
@@ -251,6 +284,8 @@ my @copy = @{$z};         # ERROR
 - ✅  **Lexical subroutines**: Subroutines declared `my`, `state`, or `our` are supported.
 - 🚧  **Subroutine attributes**: `prototype` is implemented. Other subroutine attributes are not yet supported.
 - ❌  **CORE operator references**: Taking a reference to a `CORE` operator is not implemented: `BEGIN { *shove = \&CORE::push; } shove @array, 1,2,3;`
+
+---
 
 ## Regular Expressions
 - ✅  **Basic Matching**: Operators `qr//`, `m//`, `s///`, `split` are implemented.
@@ -282,7 +317,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **Possessive Quantifiers**: Quantifiers like `*+`, `++`, `?+`, or `{n,m}+`, which disable backtracking, are not supported.
 - ✅  **Atomic Grouping**: Use of `(?>...)` for atomic groups is supported.
 - ✅  **Preprocessor**: `\Q`, `\L`, `\U`, `\l`, `\u`, `\E` are preprocessed in regex.
-- ✅  **Overloading**: `qr` overloading is implemented.
+- ✅  **Overloading**: `qr` overloading is implemented. See also [overload pragma](#pragmas).
 
 ### Missing Regular Expression Features
 
@@ -348,8 +383,8 @@ my @copy = @{$z};         # ERROR
 - ✅  **`require` operator**: `pmc` files are supported.
 - ✅  **`use` and `no` statements**: Module imports and version check via `use` and `no` are implemented; version checks are implemented. `use` arguments are executed at compile-time.
 - ✅  **`use version`**: `use version` enables the corresponding features, strictures, and warnings.
-- ✅  **Import methods**: `import`, `unimport` works.
-- ✅  **`__SUB__`**: The `__SUB__` keyword works.
+- ✅  **Import methods**: `import` and `unimport` are implemented.
+- ✅  **`__SUB__`**: The `__SUB__` keyword is implemented.
 - ✅  **`BEGIN` block**: `BEGIN` special block is implemented.
 - ✅  **`END` block**: `END` special block is implemented.
 - ✅  **`INIT`**: special block is implemented.
@@ -395,6 +430,8 @@ my @copy = @{$z};         # ERROR
 - ✅  **`format` operator**: `format` and `write` functions for report generation are implemented.
 - ✅  **`formline` operator**: `formline` and `$^A` accumulator variable are implemented.
 
+---
+
 ## I/O Operations
 
 ### Basic I/O Operators
@@ -426,8 +463,8 @@ my @copy = @{$z};         # ERROR
 - ✅  **`chmod`**: File permissions.
 - ✅  **`sysread`**
 - ✅  **`syswrite`**
-- ✅  **Tied Handles**: Tied file handles are implemented.
-- ✅  **`DATA`**: `DATA` file handle works.
+- ✅  **Tied Handles**: Tied file handles are implemented. See also [Tied Scalars](#scalars), [Tied Arrays](#arrays-hashes-and-lists), [Tied Hashes](#arrays-hashes-and-lists).
+- ✅  **`DATA`**: `DATA` file handle is implemented.
 - ✅  **`truncate`**: File truncation
 
 ### Socket Operations
@@ -482,10 +519,11 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - `windows-1251` - Windows Cyrillic
 - `KOI8-R` - Russian
 
+---
 
 ## Namespaces and Global Variables
 - ✅  **Global variable infrastructure**: Support for global variables is implemented.
-- ✅  **Namespaces**: Namespace support is present.
+- ✅  **Namespaces**: Namespace support is implemented.
 - ✅  **Stash**: Stash can be accessed as a hash, like: `$namespace::{entry}`.
 - ✅  **`@_` and `$@` special variables**: Special variables like `@_` and `$@` are supported.
 - ✅  **Special variables**: The special variables `%ENV`, `@ARGV`, `@INC`, `$0`, `$_`, `$.`, `$]`, `$"`, `$\\`, `$,`, `$/`, `$$`, `$a`, `$b`, `$^O`, `$^V`, `$^X` are implemented.
@@ -499,6 +537,8 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
   - ❌  **Extended call stack information**: extra debug information like `(caller($level))[9]` is not implemented.<br>
     This means we don't include subroutine names in error messages yet.<br>
     Extra debug information: `($package, $filename, $line, $subroutine, $hasargs, $wantarray, $evaltext, $is_require, $hints, $bitmask, $hinthash)`
+
+---
 
 ## Perl Modules, Pragmas, Features
 
@@ -654,12 +694,10 @@ The DBI module provides seamless integration with JDBC drivers:
 #### Statement Handle Attributes
 - `NAME`, `NAME_lc`, `NAME_uc`, `NUM_OF_FIELDS`, `NUM_OF_PARAMS`, `Database`
 
-
-## Non-strict and Obsolete Features
-- ❌  **DBM file support**: `dbmclose`, `dbmopen` are not implemented.
-- ❌  **Calling a class name** `package Test; Test->()` gives `Undefined subroutine &Test::Test called`.
+---
 
 ## Features Incompatible with JVM
+
 - ❌  **`fork` operator**: `fork` is not implemented. Calling `fork` will always fail and return `undef`.
 - ❌  **`DESTROY`**: Handling of object destruction may be incompatible with JVM garbage collection.
   - For more details see: `dev/design/auto_close.md`.
@@ -668,12 +706,10 @@ The DBI module provides seamless integration with JDBC drivers:
 - ❌  **Perl `XS` code**: XS code interfacing with C is not supported on the JVM.
 - ❌  **Auto-close files**: File auto-close depends on handling of object destruction, may be incompatible with JVM garbage collection. All files are closed before the program ends.
 - ❌  **Keywords related to the control flow of the Perl program**: `dump` operator.
+- ❌  **DBM file support**: `dbmclose`, `dbmopen` are not implemented.
+- ❌  **Calling a class name** `package Test; Test->()` gives `Undefined subroutine &Test::Test called`.
 
-
-## Language Differences and Workarounds
-
-This section is being worked on.
-
+---
 
 ## Optimizations
 
