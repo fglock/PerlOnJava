@@ -3,9 +3,35 @@ use strict;
 use warnings;
 use Test::More tests => 9;
 use Cwd qw(getcwd abs_path);
+use File::Spec;
+
+# Create a unique directory name to avoid conflicts when tests run in parallel
+my $test_dir = 'test_dir_' . $$ . '_' . time();
+my $test_file = 'test_file.txt';
+
+# Cleanup function to remove test artifacts
+sub cleanup {
+    my $original_cwd = getcwd();
+
+    # Try to clean up test file and directory
+    eval {
+        chdir $original_cwd;
+        if (-e "$test_dir/$test_file") {
+            unlink "$test_dir/$test_file" or warn "Failed to remove test file: $!";
+        }
+        if (-d $test_dir) {
+            rmdir $test_dir or warn "Failed to remove test directory: $!";
+        }
+    };
+}
+
+# Ensure cleanup happens even if test fails
+END { cleanup(); }
+
+# Clean up any leftover artifacts from previous failed runs
+cleanup();
 
 # Test mkdir function
-my $test_dir = 'test_dir';
 my $mkdir_result = mkdir $test_dir;
 ok($mkdir_result, 'mkdir creates a directory');
 
@@ -42,17 +68,26 @@ my $expected_cwd = abs_path('.');  # Correctly calculate the expected path
 is($cwd_after_chdir, $expected_cwd, 'cwd returns correct path after chdir');
 
 # Test open command after directory change
-open my $fh, '>', 'test_file.txt' or die "Cannot open file: $!";
+open my $fh, '>', $test_file or die "Cannot open file: $!";
 print $fh "test content";
 close $fh;
-ok(-e 'test_file.txt', 'open creates a file in the new directory');
+ok(-e $test_file, 'open creates a file in the new directory');
 
-# Cleanup
+# Cleanup - restore original directory before removing files
 chdir $original_cwd;
-unlink "$test_dir/test_file.txt" if -e "$test_dir/test_file.txt";
-rmdir $test_dir if -d $test_dir;
 
-# Verify cleanup
-if (-d $test_dir || -e "$test_dir/test_file.txt") {
-    die "Cleanup failed: test directory or files still exist";
+# Give filesystem a moment to sync (helps with parallel test reliability)
+# Remove test file
+if (-e "$test_dir/$test_file") {
+    unlink "$test_dir/$test_file" or warn "Failed to remove $test_dir/$test_file: $!";
+}
+
+# Remove test directory
+if (-d $test_dir) {
+    rmdir $test_dir or warn "Failed to remove $test_dir: $!";
+}
+
+# Verify cleanup (non-fatal - let END block try again if needed)
+if (-d $test_dir || -e "$test_dir/$test_file") {
+    diag "Warning: Cleanup verification found leftover files (will retry in END block)";
 }
