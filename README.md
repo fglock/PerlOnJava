@@ -21,13 +21,11 @@ make
 
 # Run Perl
 ./jperl -E 'say "Hello World"'
-
-# Database access with JDBC
-use DBI;
-my $dbh = DBI->connect("jdbc:h2:mem:testdb");
 ```
 
-**→ [Full Quick Start Guide](QUICKSTART.md)**
+**→ [Full Quick Start Guide](QUICKSTART.md)** - Installation, examples, and database setup
+
+**→ [Database Access Guide](docs/guides/database-access.md)** - DBI with JDBC drivers
 
 ## Documentation
 
@@ -47,6 +45,7 @@ my $dbh = DBI->connect("jdbc:h2:mem:testdb");
 - **[Testing](docs/reference/testing.md)** - Test suite information
 - **[Architecture](docs/reference/architecture.md)** - How it works
 - **[CLI Options](docs/reference/cli-options.md)** - Command-line reference
+- **[Configure.pl](docs/reference/configure.md)** - Configuration and dependency management
 
 ### About
 - **[Why PerlOnJava?](docs/about/why-perlonjava.md)** - Project goals and use cases
