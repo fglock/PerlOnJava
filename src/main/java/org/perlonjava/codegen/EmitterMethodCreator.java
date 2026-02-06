@@ -577,10 +577,10 @@ public class EmitterMethodCreator implements Opcodes {
             // they're not in TOP state when accessed. Use a visitor to estimate the
             // actual number needed based on AST structure rather than a fixed count.
             int preInitTempLocalsStart = ctx.symbolTable.getCurrentLocalVariableIndex();
-            org.perlonjava.astvisitor.TempLocalCountVisitor tempCountVisitor = 
+            org.perlonjava.astvisitor.TempLocalCountVisitor tempCountVisitor =
                 new org.perlonjava.astvisitor.TempLocalCountVisitor();
             ast.accept(tempCountVisitor);
-            int preInitTempLocalsCount = Math.max(128, tempCountVisitor.getMaxTempCount() + 64);  // Add buffer
+            int preInitTempLocalsCount = tempCountVisitor.getMaxTempCount() + 64;  // Optimized: removed min-128 baseline
             for (int i = preInitTempLocalsStart; i < preInitTempLocalsStart + preInitTempLocalsCount; i++) {
                 mv.visitInsn(Opcodes.ACONST_NULL);
                 mv.visitVarInsn(Opcodes.ASTORE, i);
