@@ -21,9 +21,6 @@ import java.util.List;
  * Unlike {@link ArrayLiteralNode} which creates an array reference, ListNode represents
  * a flat list that can be assigned to arrays or used in list context.
  * <p>
- * <b>Large Literal Handling:</b> The constructor automatically invokes
- * {@link LargeNodeRefactorer#maybeRefactorElements} to split very large lists
- * into chunks (currently disabled - on-demand refactoring is used instead).
  *
  * @see LargeNodeRefactorer
  * @see ArrayLiteralNode
@@ -37,7 +34,7 @@ public class ListNode extends AbstractNode {
      * in the context determined by how the list is used (list context for assignments,
      * scalar context for the last element in scalar context, etc.).
      * <p>
-     * Note: This field is non-final because {@link LargeNodeRefactorer} may replace
+     * Note: This field is non-final because LargeNodeRefactorer may replace
      * the original list with a refactored version containing chunk wrappers.
      */
     public List<Node> elements;

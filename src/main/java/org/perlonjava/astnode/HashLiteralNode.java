@@ -18,10 +18,6 @@ import java.util.List;
  * <p>
  * The elements list contains key-value pairs in sequence: key1, value1, key2, value2, etc.
  * <p>
- * <b>Large Literal Handling:</b> The constructor automatically invokes
- * {@link LargeNodeRefactorer#maybeRefactorElements} to split very large hashes
- * into chunks (currently disabled - on-demand refactoring is used instead).
- * For hashes, chunk sizes are forced to be even to preserve key-value pairing.
  *
  * @see LargeNodeRefactorer
  * @see ArrayLiteralNode
@@ -48,7 +44,6 @@ public class HashLiteralNode extends AbstractNode {
      *
      * @param elements   the list of key-value pairs (alternating keys and values)
      * @param tokenIndex the token index in the source for error reporting
-     * @see LargeNodeRefactorer#maybeRefactorElements
      */
     public HashLiteralNode(List<Node> elements, int tokenIndex) {
         this(elements, tokenIndex, null);
@@ -62,7 +57,6 @@ public class HashLiteralNode extends AbstractNode {
      * @param elements   the list of key-value pairs (alternating keys and values)
      * @param tokenIndex the token index in the source for error reporting
      * @param parser     the parser instance for access to error utilities
-     * @see LargeNodeRefactorer#maybeRefactorElements
      */
     public HashLiteralNode(List<Node> elements, int tokenIndex, Parser parser) {
         this.tokenIndex = tokenIndex;
