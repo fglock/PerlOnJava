@@ -134,6 +134,68 @@ make test-all
 # Review test_results.json for any regressions
 ```
 
+### Tracking Test Progress Over Time
+
+For long-running development work, track test results over time to monitor progress and catch regressions:
+
+#### 1. Run Tests with Timestamped Logs
+
+```bash
+# Clean up and run comprehensive tests
+killall java
+rm -rf perl5_t/t/tmp_*
+
+# Run with extended timeout and save to dated log
+perl dev/tools/perl_test_runner.pl \
+  --timeout 300 \
+  --output out.json \
+  perl5_t/t \
+  2>&1 > logs/test_$(date +%Y%m%d_%H%M%S).log
+```
+
+**Workflow details:**
+- `killall java` - Stop any hung Java processes from previous runs
+- `rm -rf perl5_t/t/tmp_*` - Clean temporary test files
+- `--timeout 300` - Allow 5 minutes per test (for slower tests)
+- `logs/test_YYYYMMDD_HHMMSS.log` - Timestamped log for tracking history
+
+#### 2. Compare Test Runs
+
+Compare two test runs to see what changed:
+
+```bash
+perl dev/tools/compare_test_logs.pl \
+  logs/test_20260206_090000.log \
+  logs/test_20260206_102400.log
+```
+
+**Output shows:**
+- Tests that started passing
+- Tests that started failing
+- Changes in test counts
+- New tests added or removed
+- Summary of improvements or regressions
+
+**Use cases:**
+- Before/after implementing a feature
+- Daily progress tracking on a branch
+- Identifying when a regression was introduced
+- Measuring impact of optimizations
+
+#### 3. Log Organization
+
+Suggested `logs/` directory structure:
+
+```
+logs/
+├── test_20260206_090000.log  # Baseline
+├── test_20260206_102400.log  # After Feature A
+├── test_20260206_153000.log  # After Bug Fix
+└── test_20260207_101500.log  # Latest
+```
+
+Keep baseline logs for major milestones to track long-term progress.
+
 ### CI/CD Pipeline
 
 ```bash
@@ -303,10 +365,13 @@ To import Perl test files and verify their behavior under PerlOnJava:
    perl dev/import-perl5/sync.pl
    ```
 
-This will copy all files from `perl5/` to `perl5_t/`, creating a complete Perl 5 test environment including:
-- Core tests (`perl5_t/t/`)
+This script reads `dev/import-perl5/config.yaml` and copies configured files from the `perl5/` directory (Perl 5 source repository) to `perl5_t/` at the project root, creating:
+- Core tests in `perl5_t/t/`
+- Module tests in `perl5_t/[Module]/`
 - Test infrastructure (`TestInit.pm`, `MANIFEST`)
 - Supporting files (`Porting/` directory)
+
+The script also applies patches from `dev/import-perl5/patches/` for PerlOnJava compatibility.
 
 ### Running Imported Tests
 
@@ -323,7 +388,7 @@ See `dev/import-perl5/README.md` for more details on:
 
 ## See Also
 
-- [Build Guide](BUILD.md) - Building PerlOnJava
-- [Architecture](ARCHITECTURE.md) - System architecture
-- [Import System](../dev/import-perl5/README.md) - Importing Perl5 tests
+- [Installation Guide](../getting-started/installation.md) - Building PerlOnJava
+- [Architecture](architecture.md) - System architecture
+- [Import System](../../dev/import-perl5/README.md) - Importing Perl5 tests
 
