@@ -4,14 +4,30 @@ Get PerlOnJava running in 5 minutes.
 
 ## Prerequisites
 
-- **Java 21 or later**
+- **Java Development Kit (JDK) 21 or later**
 - **Git** for cloning the repository
-- **Make** (or use Gradle directly)
+- **Make** (optional - can use Gradle directly)
+
+### Verify You Have JDK Installed
 
 Check your Java version:
 ```bash
-java -version  # Should show 21 or higher
+java -version
 ```
+Should show version 21 or higher.
+
+**Important:** Check you have the **JDK** (not just JRE):
+```bash
+javac -version
+```
+Should show the same version. If `javac: command not found`, you need to install a JDK.
+
+**Installing JDK:**
+- Download from [Adoptium](https://adoptium.net/) (recommended)
+- Or use your package manager:
+  - **macOS**: `brew install openjdk@21`
+  - **Ubuntu/Debian**: `sudo apt install openjdk-21-jdk`
+  - **Windows**: Download from [Adoptium](https://adoptium.net/) or use [Chocolatey](https://chocolatey.org/)
 
 ## Installation
 
