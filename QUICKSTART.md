@@ -23,11 +23,12 @@ javac -version
 Should show the same version. If `javac: command not found`, you need to install a JDK.
 
 **Installing JDK:**
-- Download from [Adoptium](https://adoptium.net/) (recommended)
-- Or use your package manager:
+- Use your system's package manager, or
+- Download from a JDK provider (Adoptium, Oracle, Azul, Amazon Corretto, etc.)
+- Common package manager commands:
   - **macOS**: `brew install openjdk@21`
   - **Ubuntu/Debian**: `sudo apt install openjdk-21-jdk`
-  - **Windows**: Download from [Adoptium](https://adoptium.net/) or use [Chocolatey](https://chocolatey.org/)
+  - **Windows**: Use package manager like [Chocolatey](https://chocolatey.org/) or [Scoop](https://scoop.sh/)
 
 ## Installation
 
