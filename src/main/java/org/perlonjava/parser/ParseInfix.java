@@ -50,6 +50,51 @@ public class ParseInfix {
 
         if (ParserTables.INFIX_OP.contains(token.text)) {
             String operator = token.text;
+
+            // Check if left operand is a declaration (my/our/state/local)
+            // Most operators cannot be applied to declarations
+            if (left instanceof OperatorNode leftOp) {
+                String declOperator = leftOp.operator;
+                if ("my".equals(declOperator) || "our".equals(declOperator) ||
+                    "state".equals(declOperator) || "local".equals(declOperator)) {
+
+                    // Allow assignment operators and comma (special handling)
+                    boolean isAllowedOperator =
+                        operator.equals("=") || operator.equals(",") ||
+                        operator.endsWith("="); // +=, -=, .=, etc.
+
+                    if (!isAllowedOperator) {
+                        // Get operator name for error message
+                        String opName = switch (operator) {
+                            case "**" -> "exponentiation (**)";
+                            case "+" -> "addition (+)";
+                            case "-" -> "subtraction (-)";
+                            case "*" -> "multiplication (*)";
+                            case "/" -> "division (/)";
+                            case "%" -> "modulus (%)";
+                            case "x" -> "repetition (x)";
+                            case "." -> "concatenation (.)";
+                            case ".." -> "range (..)";
+                            case "..." -> "flip-flop (...)";
+                            case "<<", ">>" -> "shift (" + operator + ")";
+                            case "<", ">", "<=", ">=", "==", "!=" -> "comparison (" + operator + ")";
+                            case "lt", "gt", "le", "ge", "eq", "ne", "cmp", "<=>" -> "comparison (" + operator + ")";
+                            case "~~" -> "smartmatch (~~)";
+                            case "&", "|", "^" -> "bitwise (" + operator + ")";
+                            case "&&", "||", "//" -> "logical (" + operator + ")";
+                            case "and", "or", "xor" -> "logical (" + operator + ")";
+                            default -> operator + " (" + operator + ")";
+                        };
+
+                        throw new PerlCompilerException(
+                            parser.tokenIndex,
+                            "Can't declare " + opName + " in " + declOperator,
+                            parser.ctx.errorUtil
+                        );
+                    }
+                }
+            }
+
             boolean operatorEnabled = switch (operator) {
                 case "isa" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("isa");
                 case "&.", "|.", "^.", "&.=", "|.=", "^.=" ->
