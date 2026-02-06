@@ -5,6 +5,12 @@
 [![Build Status](https://github.com/fglock/PerlOnJava/workflows/CI/badge.svg)](https://github.com/fglock/PerlOnJava/actions)
 [![License](https://img.shields.io/badge/license-Artistic_2.0-blue.svg)](LICENSE.md)
 
+## About Perl
+
+[Perl](https://www.perl.org/) is a high-level, general-purpose programming language known for text processing, system administration, web development, and database integration. It combines features from C, shell scripting, and other languages with powerful regular expressions and flexible syntax.
+
+**Learn more:** [www.perl.org](https://www.perl.org/)
+
 ## What is PerlOnJava?
 
 A Perl compiler and runtime for the JVM that:
