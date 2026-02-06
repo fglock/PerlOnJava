@@ -41,11 +41,14 @@ docker run --rm -it perlonjava:latest -de0
 
 ## Examples
 
-### Running Tests
+### Running a Test File
 
 ```bash
-# Run unit tests in Docker
-docker run --rm perlonjava:latest -MTAP::Harness -e 'TAP::Harness->new->runtests("/app/src/test/resources/unit/array.t")'
+# Copy test file to local directory
+cp src/test/resources/unit/array.t .
+
+# Run test in Docker
+docker run --rm -v "$(pwd)":/test perlonjava:latest /test/array.t
 ```
 
 ### With JDBC Drivers
