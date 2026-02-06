@@ -26,7 +26,7 @@
 
 ### Advanced Topics
 - [GraalVM Native Image Support Investigation](GRAALVM.md): Technical exploration of GraalVM integration
-- [Feature Matrix](FEATURE_MATRIX.md): Detailed implementation status
+- [Feature Matrix](../reference/feature-matrix.md): Detailed implementation status
 - [Architecture Overview](ARCHITECTURE.md): System design and components
 - [Porting Guide](PORTING_MODULES.md): Guidelines for porting Perl modules
 
