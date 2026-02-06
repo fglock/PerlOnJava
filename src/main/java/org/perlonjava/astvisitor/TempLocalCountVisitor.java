@@ -38,6 +38,10 @@ public class TempLocalCountVisitor implements Visitor {
         if (node.operator.equals("&&") || node.operator.equals("||") || node.operator.equals("//")) {
             countTemp();
         }
+        // Dereference operations (->) allocate temps for complex access patterns
+        if (node.operator.equals("->")) {
+            countTemp();  // Conservative: 1 temp for dereference
+        }
         if (node.left != null) node.left.accept(this);
         if (node.right != null) node.right.accept(this);
     }
@@ -81,6 +85,10 @@ public class TempLocalCountVisitor implements Visitor {
     public void visit(OperatorNode node) {
         // local() allocates a temp for dynamic variable tracking
         if ("local".equals(node.operator)) {
+            countTemp();
+        }
+        // eval block allocates temps for exception handling
+        if ("eval".equals(node.operator)) {
             countTemp();
         }
         if (node.operand != null) {
