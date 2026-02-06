@@ -3,9 +3,10 @@
 ## Getting Help
 
 ### Documentation
-- [README.md](../README.md) - Project overview and setup instructions
+- [README.md](../../README.md) - Project overview and setup instructions
 - [Feature Matrix](../reference/feature-matrix.md) - Detailed feature compatibility list
-- [MILESTONES.md](../MILESTONES.md) - Project roadmap and version history
+- [Roadmap](roadmap.md) - Future plans
+- [Changelog](changelog.md) - Release history
 
 ### Community Resources
 - GitHub Issues: Technical questions and bug reports

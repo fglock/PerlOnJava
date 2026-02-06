@@ -22,13 +22,12 @@
 
 ### Related Projects
 - [Perlito5 Compiler](https://github.com/fglock/Perlito): Perl to Java and JavaScript compiler
-- See [RELATION_WITH_PERLITO_COMPILER.md](RELATION_WITH_PERLITO_COMPILER.md) for details on how Perlito5 influenced and complements PerlOnJava
 
 ### Advanced Topics
-- [GraalVM Native Image Support Investigation](GRAALVM.md): Technical exploration of GraalVM integration
+- [GraalVM Native Image Support Investigation](../../dev/design/graalvm.md): Technical exploration of GraalVM integration
 - [Feature Matrix](../reference/feature-matrix.md): Detailed implementation status
-- [Architecture Overview](ARCHITECTURE.md): System design and components
-- [Porting Guide](PORTING_MODULES.md): Guidelines for porting Perl modules
+- [Architecture Overview](../reference/architecture.md): System design and components
+- [Porting Guide](../guides/module-porting.md): Guidelines for porting Perl modules
 
 ## Community Resources
 - [GitHub Issues](https://github.com/fglock/PerlOnJava/issues)
