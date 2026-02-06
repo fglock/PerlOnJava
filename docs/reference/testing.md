@@ -303,10 +303,13 @@ To import Perl test files and verify their behavior under PerlOnJava:
    perl dev/import-perl5/sync.pl
    ```
 
-This will copy all files from `perl5/` to `perl5_t/`, creating a complete Perl 5 test environment including:
-- Core tests (`perl5_t/t/`)
+This script reads `dev/import-perl5/config.yaml` and copies configured files from the `perl5/` directory (Perl 5 source repository) to `perl5_t/` at the project root, creating:
+- Core tests in `perl5_t/t/`
+- Module tests in `perl5_t/[Module]/`
 - Test infrastructure (`TestInit.pm`, `MANIFEST`)
 - Supporting files (`Porting/` directory)
+
+The script also applies patches from `dev/import-perl5/patches/` for PerlOnJava compatibility.
 
 ### Running Imported Tests
 
@@ -323,7 +326,7 @@ See `dev/import-perl5/README.md` for more details on:
 
 ## See Also
 
-- [Build Guide](BUILD.md) - Building PerlOnJava
-- [Architecture](ARCHITECTURE.md) - System architecture
-- [Import System](../dev/import-perl5/README.md) - Importing Perl5 tests
+- [Installation Guide](../getting-started/installation.md) - Building PerlOnJava
+- [Architecture](architecture.md) - System architecture
+- [Import System](../../dev/import-perl5/README.md) - Importing Perl5 tests
 

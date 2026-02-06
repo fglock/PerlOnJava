@@ -18,7 +18,6 @@ How-to guides for common tasks:
 - **[Database Access](guides/database-access.md)** - Using DBI with JDBC drivers
 - **[Java Integration](guides/java-integration.md)** - Call Perl from Java (JSR-223)
 - **[Module Porting](guides/module-porting.md)** - Port Perl modules to PerlOnJava
-- **[GraalVM](guides/graalvm.md)** - Native compilation with GraalVM
 
 ## Reference
 

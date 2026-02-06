@@ -3,7 +3,7 @@
 > Perl running natively on the JVM
 
 [![Build Status](https://github.com/fglock/PerlOnJava/workflows/CI/badge.svg)](https://github.com/fglock/PerlOnJava/actions)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
+[![License](https://img.shields.io/badge/license-Artistic_2.0-blue.svg)](LICENSE.md)
 
 ## What is PerlOnJava?
 
@@ -41,7 +41,6 @@ my $dbh = DBI->connect("jdbc:h2:mem:testdb");
 - **[Database Access](docs/guides/database-access.md)** - Using DBI with JDBC drivers
 - **[Java Integration](docs/guides/java-integration.md)** - Call Perl from Java (JSR-223)
 - **[Module Porting](docs/guides/module-porting.md)** - Port Perl modules
-- **[GraalVM](docs/guides/graalvm.md)** - Native compilation
 
 ### Reference
 - **[Feature Matrix](docs/reference/feature-matrix.md)** - What's implemented
@@ -66,4 +65,4 @@ We welcome contributions! See **[CONTRIBUTING.md](CONTRIBUTING.md)** for:
 
 ## License
 
-[MIT License](LICENSE.md) - Copyright (c) Flavio Glock
+[Artistic License 2.0](LICENSE.md) - Copyright (c) Flavio Glock
