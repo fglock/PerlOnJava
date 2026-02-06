@@ -4,11 +4,11 @@
 
 PerlOnJava supports three types of Perl modules:
 
-1. Pure Perl modules (.pm files)
-2. Java-implemented modules (replacing XS/C modules)
-3. Hybrid modules (combining Perl and Java implementations)
+1. **Pure Perl modules** (.pm files) - No Java code needed
+2. **Java-implemented modules** (via XSLoader) - Perl modules that load Java implementations, replacing XS/C modules
+3. **Built-in modules** (in GlobalContext) - Internal PerlOnJava modules available at startup (e.g., UNIVERSAL)
 
-A hybrid module typically consists of a .pm file containing Perl code and a corresponding Java class that implements performance-critical or system-level functionality. This approach lets you leverage the best of both languages - Perl's expressiveness and Java's performance.
+**Most CPAN module ports should use type #2 (XSLoader).** Type #3 is only for internal PerlOnJava functionality.
 
 ## Directory Structure
 
@@ -27,59 +27,107 @@ sub import   { shift; unshift @_, 1; goto &work }
 sub unimport { shift; unshift @_, 0; goto &work }
 ```
 
-## Java-Implemented Modules
+## Java-Implemented Modules (via XSLoader)
 
-Java implementations replace Perl XS modules. They extend `PerlModuleBase` and implement the module's functionality in Java.
+Java implementations replace Perl XS modules. They extend `PerlModuleBase` and are loaded via `XSLoader::load()`.
 
-Example from DBI module:
+### Naming Convention
+
+XSLoader maps Perl module names to Java class names:
+
+- **Perl module**: `DBI` → **Java class**: `org.perlonjava.perlmodule.Dbi`
+- **Perl module**: `Text::CSV` → **Java class**: `org.perlonjava.perlmodule.Text_CSV`
+- **Perl module**: `My::Module` → **Java class**: `org.perlonjava.perlmodule.My_Module`
+
+Rules:
+- Package: Always `org.perlonjava.perlmodule`
+- Class name: Perl module name with `::` replaced by `_`
+- First letter capitalized (Java convention)
+
+### Basic Structure
 
 ```java
+package org.perlonjava.perlmodule;
+
 public class Dbi extends PerlModuleBase {
     public Dbi() {
         super("DBI", false);
     }
 
+    // Called by XSLoader::load('DBI')
     public static void initialize() {
         Dbi dbi = new Dbi();
         dbi.registerMethod("connect", null);
         dbi.registerMethod("prepare", null);
         // Register other methods...
     }
-}
-```
 
-## Module Loading API
-
-### Pure Perl Module Loading
-```perl
-use ModuleName;
-require "ModuleName.pm";
-```
-
-### Java Module Registration
-
-1. Extend PerlModuleBase:
-```java
-public class MyModule extends PerlModuleBase {
-    public MyModule() {
-        super("My::Module");
+    // Implement methods
+    public static RuntimeList connect(RuntimeArray args, int ctx) {
+        // Implementation...
     }
 }
 ```
 
-2. Register methods:
+## Using Java-Implemented Modules
+
+### From Perl Code (XSLoader)
+
+In your Perl module, load the Java implementation:
+
+```perl
+package My::Module;
+use strict;
+use warnings;
+
+our $VERSION = '1.00';
+
+# Load Java implementation
+require XSLoader;
+XSLoader::load('My::Module', $VERSION);
+
+# Pure Perl methods can call Java methods
+sub helper_method {
+    my ($self, @args) = @_;
+    return $self->java_implemented_method(@args);
+}
+
+1;
+```
+
+### From User Code
+
+Users just use the module normally:
+
+```perl
+use My::Module;
+
+my $obj = My::Module->new();
+$obj->method();
+```
+
+The XSLoader mechanism is completely transparent to end users.
+
+## Implementing Java Module Methods
+
+### Method Registration
+
+In your Java class's `initialize()` method, register all methods:
+
 ```java
-protected void initialize() {
-    registerMethod("method_name", null);
-    registerMethod("perl_name", "java_name", null);
+public static void initialize() {
+    MyModule module = new MyModule();
+    module.registerMethod("method_name", null);
+    module.registerMethod("perl_name", "java_method_name", null);
 }
 ```
 
-3. Define exports:
+### Defining Exports
+
 ```java
-defineExport("EXPORT", "function1", "function2");
-defineExport("EXPORT_OK", "optional_function");
-defineExportTag("group", "function1", "function2");
+module.defineExport("EXPORT", "function1", "function2");
+module.defineExport("EXPORT_OK", "optional_function");
+module.defineExportTag("group", "function1", "function2");
 ```
 
 ## Calling Conventions
@@ -103,34 +151,40 @@ public static RuntimeList method_name(RuntimeArray args, int ctx) {
 - For list context: return multi-element list
 - For void context: return empty list
 
-## Module Registration in GlobalContext
+## Module Registration
 
-After implementing a module, register it in `GlobalContext.java`:
+There are two ways to register Java-implemented modules:
+
+### 1. Built-in/Internal Modules (GlobalContext)
+
+**Only for internal PerlOnJava modules** that need to be available immediately at startup (e.g., UNIVERSAL, CORE functions).
+
+Register in `GlobalContext.java`:
 
 ```java
 // Initialize built-in Perl classes
 DiamondIO.initialize(compilerOptions);
 Universal.initialize();
-MyNewModule.initialize();  // Add your module here
 ```
 
-This step ensures your module is initialized during PerlOnJava startup alongside other core modules.
+**Do not use this approach for regular CPAN-style modules.**
 
-The initialization sequence handles:
-- Method registration
-- Export definitions
-- Global variable setup
-- Module state initialization
+### 2. Regular Modules (XSLoader)
 
-## Real-World Example: DBI Module
+**This is the standard approach for porting modules.** Use XSLoader in your Perl module:
 
-The DBI module demonstrates a complete port:
-
-1. Pure Perl portion (`DBI.pm`):
 ```perl
 package DBI;
 use strict;
+use warnings;
 
+our $VERSION = '1.643';
+
+# Load Java implementation
+require XSLoader;
+XSLoader::load('DBI', $VERSION);
+
+# Pure Perl methods
 sub do {
     my ($dbh, $statement, $attr, @params) = @_;
     my $sth = $dbh->prepare($statement, $attr) or return undef;
@@ -138,20 +192,77 @@ sub do {
     my $rows = $sth->rows;
     ($rows == 0) ? "0E0" : $rows;
 }
+
+1;
 ```
 
-2. Java implementation (`Dbi.java`):
+When `XSLoader::load('DBI')` is called:
+1. XSLoader looks for the Java class `org.perlonjava.perlmodule.Dbi`
+2. Calls the static `initialize()` method
+3. Registers all methods defined in the Java class
+
+This is transparent to users - they just `use DBI` and it works.
+
+## Real-World Example: DBI Module
+
+The DBI module demonstrates a complete port using XSLoader:
+
+1. **Perl module** (`DBI.pm`):
+```perl
+package DBI;
+use strict;
+use warnings;
+
+our $VERSION = '1.643';
+
+# Load Java implementation
+require XSLoader;
+XSLoader::load('DBI', $VERSION);
+
+# Pure Perl helper method
+sub do {
+    my ($dbh, $statement, $attr, @params) = @_;
+    my $sth = $dbh->prepare($statement, $attr) or return undef;
+    $sth->execute(@params) or return undef;
+    my $rows = $sth->rows;
+    ($rows == 0) ? "0E0" : $rows;
+}
+
+1;
+```
+
+2. **Java implementation** (`org/perlonjava/perlmodule/Dbi.java`):
 ```java
 public class Dbi extends PerlModuleBase {
+    public Dbi() {
+        super("DBI", false);
+    }
+
+    // Called by XSLoader
+    public static void initialize() {
+        Dbi dbi = new Dbi();
+        dbi.registerMethod("connect", null);
+        dbi.registerMethod("prepare", null);
+        dbi.registerMethod("execute", null);
+        // ... register other methods
+    }
+
+    // Implementation of connect method
     public static RuntimeList connect(RuntimeArray args, int ctx) {
         RuntimeHash dbh = new RuntimeHash();
         String jdbcUrl = args.get(1).toString();
         dbh.put("Username", new RuntimeScalar(args.get(2).toString()));
-        // Implementation...
+        // ... JDBC connection logic
         return dbh.createReference().getList();
     }
 }
 ```
+
+**Key points:**
+- DBI.pm calls `XSLoader::load('DBI')` to load the Java implementation
+- Java class is in `org.perlonjava.perlmodule.Dbi` (naming convention)
+- `initialize()` method registers all Java-implemented methods
+- Pure Perl methods (like `do()`) can call Java methods (like `prepare()`, `execute()`)
 
 ## Best Practices
 
