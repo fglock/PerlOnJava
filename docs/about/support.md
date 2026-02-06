@@ -4,7 +4,7 @@
 
 ### Documentation
 - [README.md](../README.md) - Project overview and setup instructions
-- [FEATURE_MATRIX.md](FEATURE_MATRIX.md) - Detailed feature compatibility list
+- [Feature Matrix](../reference/feature-matrix.md) - Detailed feature compatibility list
 - [MILESTONES.md](../MILESTONES.md) - Project roadmap and version history
 
 ### Community Resources
@@ -55,7 +55,7 @@ PerlOnJava follows semantic versioning (MAJOR.MINOR.PATCH):
 ### Pull Request Process
 1. Update documentation
 2. Add/update tests
-3. Update FEATURE_MATRIX.md if needed
+3. Update Feature Matrix if needed
 4. Request review from maintainers
 
 ### Issue Reporting

@@ -260,5 +260,5 @@ for my $id (@ids) {
 
 ## See Also
 
-- [FEATURE_MATRIX.md](FEATURE_MATRIX.md) for complete feature list
+- [Feature Matrix](../reference/feature-matrix.md) for complete feature list
 - [DBI documentation](https://metacpan.org/pod/DBI) for standard DBI interface
