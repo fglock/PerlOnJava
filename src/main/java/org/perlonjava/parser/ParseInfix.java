@@ -51,12 +51,15 @@ public class ParseInfix {
         if (ParserTables.INFIX_OP.contains(token.text)) {
             String operator = token.text;
 
-            // Check if left operand is a declaration (my/our/state/local)
-            // Most operators cannot be applied to declarations
+            // Check if left operand is a DECLARED REFERENCE (my \$a, our \@arr, etc.)
+            // Most operators cannot be applied to declared references
             if (left instanceof OperatorNode leftOp) {
                 String declOperator = leftOp.operator;
-                if ("my".equals(declOperator) || "our".equals(declOperator) ||
-                    "state".equals(declOperator) || "local".equals(declOperator)) {
+                boolean isDeclaredReference = leftOp.getBooleanAnnotation("isDeclaredReference");
+
+                if (isDeclaredReference &&
+                    ("my".equals(declOperator) || "our".equals(declOperator) ||
+                     "state".equals(declOperator) || "local".equals(declOperator))) {
 
                     // Allow assignment operators and comma (special handling)
                     boolean isAllowedOperator =
