@@ -63,7 +63,7 @@ src/main/java/org/perlonjava/
 ├── astnode/         # AST node representations
 ├── parser/          # Parser implementation
 ├── lexer/           # Tokenization
-├── codegen/         # Bytecode generation
+├── codegen/         # Bytecode generation and class creation
 ├── astvisitor/      # AST traversal (EmitterVisitor, PrinterVisitor)
 ├── runtime/         # Runtime implementations (RuntimeScalar, RuntimeArray, etc.)
 ├── operators/       # Operator implementations
@@ -79,7 +79,8 @@ src/test/resources/  # Test files
 
 - **Lexer** (`lexer/Lexer.java`) - Tokenizes Perl source
 - **Parser** (`parser/Parser.java`) - Builds AST from tokens
-- **EmitterVisitor** (`astvisitor/`) - Generates JVM bytecode from AST
+- **EmitterVisitor** (`astvisitor/`) - Traverses AST and coordinates bytecode generation
+- **Emit classes** (`codegen/`) - Generate JVM bytecode using ASM library
 - **Runtime** (`runtime/`) - RuntimeScalar, RuntimeArray, RuntimeHash, RuntimeCode
 - **Operators** (`operators/`) - Perl operator implementations
 
@@ -87,8 +88,11 @@ src/test/resources/  # Test files
 
 ```
 src/test/resources/
-├── unit/            # Fast unit tests (run in seconds)
-└── perl5_t/         # Perl 5 compatibility tests (imported from perl5/)
+└── unit/            # Fast unit tests (run in seconds)
+
+perl5_t/ (at project root)
+├── t/               # Perl 5 core test suite
+└── [Module]/        # Perl 5 module tests
 ```
 
 ## Development Guidelines
