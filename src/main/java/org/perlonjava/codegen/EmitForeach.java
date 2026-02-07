@@ -36,6 +36,35 @@ public class EmitForeach {
     
     // Set to true to enable debug output for loop control flow
     private static final boolean DEBUG_LOOP_CONTROL_FLOW = false;
+
+    private static void pushGotoLabelsForBlock(EmitterVisitor emitterVisitor, BlockNode blockNode) {
+        // Pre-register labels for forward/backward goto inside this block.
+        // BlockNode.labels contains labels visible in this block scope (including statement labels
+        // like `NEXT:` that can be goto targets).
+        for (int i = 0; i < blockNode.labels.size(); i++) {
+            emitterVisitor.ctx.javaClassInfo.pushGotoLabels(blockNode.labels.get(i), new Label());
+        }
+
+        // Some labels may appear as explicit LabelNode statements.
+        for (Node element : blockNode.elements) {
+            if (element instanceof LabelNode labelNode) {
+                emitterVisitor.ctx.javaClassInfo.pushGotoLabels(labelNode.label, new Label());
+            }
+        }
+    }
+
+    private static void popGotoLabelsForBlock(EmitterVisitor emitterVisitor, BlockNode blockNode) {
+        // Pop in reverse order of pushes above.
+        for (Node element : blockNode.elements) {
+            if (element instanceof LabelNode) {
+                emitterVisitor.ctx.javaClassInfo.popGotoLabels();
+            }
+        }
+        for (int i = 0; i < blockNode.labels.size(); i++) {
+            emitterVisitor.ctx.javaClassInfo.popGotoLabels();
+        }
+    }
+
     public static void emitFor1(EmitterVisitor emitterVisitor, For1Node node) {
         emitterVisitor.ctx.logDebug("FOR1 start");
 
@@ -439,6 +468,8 @@ public class EmitForeach {
             int bodyScopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
             Local.localRecord bodyLocalRecord = Local.localSetup(emitterVisitor.ctx, blockNode, mv);
 
+            pushGotoLabelsForBlock(emitterVisitor, blockNode);
+
             java.util.List<Node> list = blockNode.elements;
             int lastNonNullIndex = -1;
             for (int i = list.size() - 1; i >= 0; i--) {
@@ -461,6 +492,8 @@ public class EmitForeach {
                 // eval q{ next; } stops the loop iteration immediately.
                 emitRegistryCheck(mv, currentLoopLabels, redoLabel, continueLabel, loopEnd);
             }
+
+            popGotoLabelsForBlock(emitterVisitor, blockNode);
 
             Local.localTeardown(bodyLocalRecord, mv);
             emitterVisitor.ctx.symbolTable.exitScope(bodyScopeIndex);
