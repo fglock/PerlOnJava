@@ -1,6 +1,8 @@
 package org.perlonjava.runtime;
 
 import org.perlonjava.codegen.CustomClassLoader;
+import org.perlonjava.codegen.ByteCodeSourceMapper;
+import org.perlonjava.mro.InheritanceResolver;
 import org.perlonjava.parser.ParserTables;
 
 import java.util.ArrayList;
@@ -69,6 +71,12 @@ public class GlobalVariable {
         clearPackageCache();
 
         RuntimeCode.clearCaches();
+
+        // Method resolution caches can grow across test scripts.
+        InheritanceResolver.invalidateCache();
+
+        // Debug/source mapping cache grows with every compilation; clear it between test scripts.
+        ByteCodeSourceMapper.resetAll();
 
         // Destroy the old classloader and create a new one
         // This allows the old generated classes to be garbage collected
