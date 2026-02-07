@@ -503,8 +503,15 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             posScalar.set(scalarUndef);
         }
 
-        // If no match was found, keep lastSuccessful* state intact (Perl behavior).
-        // Do not clear lastSuccessfulPattern or lastSuccessfulMatch* values here.
+        if (!found) {
+            // No match: scalar match vars ($`, $&, $') should become undef.
+            // Keep lastSuccessful* and the previous globalMatcher intact so @-/@+ do not get clobbered
+            // by internal regex checks that fail (e.g. in test libraries).
+            globalMatchString = null;
+            lastMatchedString = null;
+            lastMatchStart = -1;
+            lastMatchEnd = -1;
+        }
 
         if (found) {
             regex.matched = true; // Counter for m?PAT?
@@ -774,9 +781,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         if (globalMatcher != null && lastMatchedString != null) {
             // Current match data available
             return lastMatchedString;
-        } else if (lastSuccessfulMatchedString != null) {
-            // Fall back to last successful match
-            return lastSuccessfulMatchedString;
         }
         return null;
     }
@@ -786,10 +790,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             // Current match data available
             String result = globalMatchString.substring(0, lastMatchStart);
             return result;
-        } else if (lastSuccessfulMatchString != null && lastSuccessfulMatchStart != -1) {
-            // Fall back to last successful match
-            String result = lastSuccessfulMatchString.substring(0, lastSuccessfulMatchStart);
-            return result;
         }
         return null;
     }
@@ -798,10 +798,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         if (globalMatcher != null && globalMatchString != null && lastMatchEnd != -1) {
             // Current match data available
             String result = globalMatchString.substring(lastMatchEnd);
-            return result;
-        } else if (lastSuccessfulMatchString != null && lastSuccessfulMatchEnd != -1) {
-            // Fall back to last successful match
-            String result = lastSuccessfulMatchString.substring(lastSuccessfulMatchEnd);
             return result;
         }
         return null;
