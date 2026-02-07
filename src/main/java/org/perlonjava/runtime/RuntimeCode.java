@@ -189,6 +189,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         evalCache.clear();
         methodHandleCache.clear();
         anonSubs.clear();
+        evalContext.clear();
+        evalRuntimeContext.remove();
     }
 
     public static void copy(RuntimeCode code, RuntimeCode codeFrom) {
