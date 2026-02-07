@@ -10,6 +10,7 @@ import org.perlonjava.runtime.RuntimeContextType;
 import java.util.List;
 import java.util.Set;
 import java.util.LinkedHashSet;
+import java.util.ArrayList;
 
 public class EmitBlock {
 
@@ -41,7 +42,6 @@ public class EmitBlock {
             for (Node child : block.elements) {
                 collectStateDeclSigilNodes(child, out);
             }
-            return;
         }
         if (node instanceof For1Node for1) {
             collectStateDeclSigilNodes(for1.variable, out);
@@ -68,6 +68,14 @@ public class EmitBlock {
             collectStateDeclSigilNodes(tryNode.tryBlock, out);
             collectStateDeclSigilNodes(tryNode.catchBlock, out);
             collectStateDeclSigilNodes(tryNode.finallyBlock, out);
+        }
+    }
+
+    private static void collectStatementLabelNames(List<Node> elements, List<String> out) {
+        for (Node element : elements) {
+            if (element instanceof LabelNode labelNode) {
+                out.add(labelNode.label);
+            }
         }
     }
 
@@ -115,6 +123,17 @@ public class EmitBlock {
         // Create labels for the block as a loop, like `L1: {...}`
         Label redoLabel = new Label();
         Label nextLabel = new Label();
+
+        // Pre-register statement labels (e.g. `NEXT:`) in this block so `goto NEXT` can resolve
+        // even when the goto appears before the label (forward goto).
+        //
+        // We intentionally only register labels at this block's top level. Nested blocks get
+        // their own EmitBlock invocation and maintain proper scoping/shadowing via the stack.
+        List<String> statementLabelNames = new ArrayList<>();
+        collectStatementLabelNames(list, statementLabelNames);
+        for (String labelName : statementLabelNames) {
+            emitterVisitor.ctx.javaClassInfo.pushGotoLabels(labelName, new Label());
+        }
 
         // Create labels used inside the block, like `{ L1: ... }`
         for (int i = 0; i < node.labels.size(); i++) {
@@ -217,6 +236,11 @@ public class EmitBlock {
 
         // Pop labels used inside the block
         for (int i = 0; i < node.labels.size(); i++) {
+            emitterVisitor.ctx.javaClassInfo.popGotoLabels();
+        }
+
+        // Pop statement labels registered for this block
+        for (int i = 0; i < statementLabelNames.size(); i++) {
             emitterVisitor.ctx.javaClassInfo.popGotoLabels();
         }
 

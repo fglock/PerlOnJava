@@ -38,6 +38,17 @@ public class Main {
             if (parsedArgs.compileOnly) {
                 System.out.println(parsedArgs.fileName + " syntax OK");
             }
+
+            // Match system perl behavior:
+            // - Running external commands sets $? (usually as a wait status like 0x0200),
+            //   but does NOT by itself make the perl interpreter exit non-zero.
+            // - Test frameworks (Test2/Test::More) set $? to a small integer (1..255)
+            //   in an END block to request a non-zero exit status.
+            RuntimeScalar childStatus = GlobalVariable.getGlobalVariable("main::?");
+            int rawChildStatus = childStatus.getInt();
+            if (rawChildStatus > 0 && rawChildStatus <= 255) {
+                System.exit(rawChildStatus);
+            }
         } catch (Throwable t) {
             if (parsedArgs.debugEnabled) {
                 // Print full JVM stack
@@ -48,25 +59,23 @@ public class Main {
             String errorMessage = ErrorMessageUtil.stringifyException(t);
             System.out.println(errorMessage);
 
-            // Implement Perl's exit code logic based on $! and $?
-            // exit $! if $!;              # errno
-            // exit $? >> 8 if $? >> 8;    # child exit status
-            // exit 255;                   # last resort
-
-            RuntimeScalar errno = GlobalVariable.getGlobalVariable("main::!");
-            RuntimeScalar childStatus = GlobalVariable.getGlobalVariable("main::?");
-
-            if (errno.getInt() != 0) {
-                System.exit(errno.getInt());
+            // Match system perl behavior for unhandled die:
+            // Prefer $! (errno) if non-zero, else prefer ($? >> 8), else 255.
+            int exitCode = 255;
+            try {
+                int bang = GlobalVariable.getGlobalVariable("main::!").getInt();
+                int query = GlobalVariable.getGlobalVariable("main::?").getInt();
+                int queryExit = (query >> 8);
+                if (bang != 0) {
+                    exitCode = bang;
+                } else if (queryExit != 0) {
+                    exitCode = queryExit;
+                }
+            } catch (Throwable ignored) {
+                // Last resort below
             }
 
-            int exitStatus = childStatus.getInt() >> 8;
-            if (exitStatus != 0) {
-                System.exit(exitStatus);
-            }
-
-            // Last resort
-            System.exit(255);
+            System.exit(exitCode);
         }
     }
 

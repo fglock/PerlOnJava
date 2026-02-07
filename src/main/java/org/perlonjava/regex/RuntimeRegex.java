@@ -412,12 +412,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         int capture = 1;
         int previousPos = startPos; // Track the previous position  
         int previousMatchEnd = -1;  // Track end of previous match
-        // System.err.println("DEBUG: Resetting globalMatcher to null at start of matchRegex");
-        globalMatcher = null;
-        // Reset stored match information (but preserve last successful match info)
-        lastMatchedString = null;
-        lastMatchStart = -1;
-        lastMatchEnd = -1;
+        // NOTE: Do NOT clear global match variables here.
+        //
+        // Perl preserves $1, @-, @+, $&, etc. from the last *successful* match even if a
+        // subsequent regex operation fails. Test libraries (notably Test::Builder/Test2)
+        // frequently run internal regexes (some of which fail) between user assertions.
+        // Clearing these variables would incorrectly erase the previous successful capture
+        // state and break tests that rely on @-/@+.
 
         while (matcher.find()) {
             // If \G is used, ensure the match starts at the expected position
@@ -502,13 +503,14 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             posScalar.set(scalarUndef);
         }
 
-        // Reset special variables on failed match (Perl behavior)
         if (!found) {
-            lastSuccessfulPattern = null;
-            lastSuccessfulMatchedString = null;
-            lastSuccessfulMatchStart = -1;
-            lastSuccessfulMatchEnd = -1;
-            lastSuccessfulMatchString = null;
+            // No match: scalar match vars ($`, $&, $') should become undef.
+            // Keep lastSuccessful* and the previous globalMatcher intact so @-/@+ do not get clobbered
+            // by internal regex checks that fail (e.g. in test libraries).
+            globalMatchString = null;
+            lastMatchedString = null;
+            lastMatchStart = -1;
+            lastMatchEnd = -1;
         }
 
         if (found) {
@@ -779,9 +781,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         if (globalMatcher != null && lastMatchedString != null) {
             // Current match data available
             return lastMatchedString;
-        } else if (lastSuccessfulMatchedString != null) {
-            // Fall back to last successful match
-            return lastSuccessfulMatchedString;
         }
         return null;
     }
@@ -791,10 +790,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             // Current match data available
             String result = globalMatchString.substring(0, lastMatchStart);
             return result;
-        } else if (lastSuccessfulMatchString != null && lastSuccessfulMatchStart != -1) {
-            // Fall back to last successful match
-            String result = lastSuccessfulMatchString.substring(0, lastSuccessfulMatchStart);
-            return result;
         }
         return null;
     }
@@ -803,10 +798,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         if (globalMatcher != null && globalMatchString != null && lastMatchEnd != -1) {
             // Current match data available
             String result = globalMatchString.substring(lastMatchEnd);
-            return result;
-        } else if (lastSuccessfulMatchString != null && lastSuccessfulMatchEnd != -1) {
-            // Fall back to last successful match
-            String result = lastSuccessfulMatchString.substring(lastSuccessfulMatchEnd);
             return result;
         }
         return null;
