@@ -39,22 +39,15 @@ public class Main {
                 System.out.println(parsedArgs.fileName + " syntax OK");
             }
 
-            // Implement Perl's exit code logic based on $! and $?
-            // exit $! if $!;              # errno
-            // exit $? >> 8 if $? >> 8;    # child exit status
-            // exit 0;                     # success
-            RuntimeScalar errno = GlobalVariable.getGlobalVariable("main::!");
+            // Match system perl behavior:
+            // - Running external commands sets $? (usually as a wait status like 0x0200),
+            //   but does NOT by itself make the perl interpreter exit non-zero.
+            // - Test frameworks (Test2/Test::More) set $? to a small integer (1..255)
+            //   in an END block to request a non-zero exit status.
             RuntimeScalar childStatus = GlobalVariable.getGlobalVariable("main::?");
-
-            if (errno.getInt() != 0) {
-                System.exit(errno.getInt());
-            }
-
             int rawChildStatus = childStatus.getInt();
-            int shiftedExitStatus = rawChildStatus >> 8;
-            int exitStatus = shiftedExitStatus != 0 ? shiftedExitStatus : rawChildStatus;
-            if (exitStatus != 0) {
-                System.exit(exitStatus);
+            if (rawChildStatus > 0 && rawChildStatus <= 255) {
+                System.exit(rawChildStatus);
             }
         } catch (Throwable t) {
             if (parsedArgs.debugEnabled) {
@@ -65,25 +58,6 @@ public class Main {
 
             String errorMessage = ErrorMessageUtil.stringifyException(t);
             System.out.println(errorMessage);
-
-            // Implement Perl's exit code logic based on $! and $?
-            // exit $! if $!;              # errno
-            // exit $? >> 8 if $? >> 8;    # child exit status
-            // exit 255;                   # last resort
-
-            RuntimeScalar errno = GlobalVariable.getGlobalVariable("main::!");
-            RuntimeScalar childStatus = GlobalVariable.getGlobalVariable("main::?");
-
-            if (errno.getInt() != 0) {
-                System.exit(errno.getInt());
-            }
-
-            int rawChildStatus = childStatus.getInt();
-            int shiftedExitStatus = rawChildStatus >> 8;
-            int exitStatus = shiftedExitStatus != 0 ? shiftedExitStatus : rawChildStatus;
-            if (exitStatus != 0) {
-                System.exit(exitStatus);
-            }
 
             // Last resort
             System.exit(255);
