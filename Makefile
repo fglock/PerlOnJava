@@ -2,7 +2,10 @@
 
 # If FORCE_TESTS=1, Gradle test tasks will be executed with --rerun-tasks to avoid
 # false positives from UP-TO-DATE/cached test results.
-FORCE_TESTS ?= 0
+#
+# Default is 1 because `make` is used frequently and should not give a false
+# impression of correctness.
+FORCE_TESTS ?= 1
 RERUN_TASKS_FLAG := $(if $(filter 1,$(FORCE_TESTS)),--rerun-tasks,)
 
 all: build
