@@ -59,8 +59,23 @@ public class Main {
             String errorMessage = ErrorMessageUtil.stringifyException(t);
             System.out.println(errorMessage);
 
-            // Last resort
-            System.exit(255);
+            // Match system perl behavior for unhandled die:
+            // Prefer $! (errno) if non-zero, else prefer ($? >> 8), else 255.
+            int exitCode = 255;
+            try {
+                int bang = GlobalVariable.getGlobalVariable("main::!").getInt();
+                int query = GlobalVariable.getGlobalVariable("main::?").getInt();
+                int queryExit = (query >> 8);
+                if (bang != 0) {
+                    exitCode = bang;
+                } else if (queryExit != 0) {
+                    exitCode = queryExit;
+                }
+            } catch (Throwable ignored) {
+                // Last resort below
+            }
+
+            System.exit(exitCode);
         }
     }
 
