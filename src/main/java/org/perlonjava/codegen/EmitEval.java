@@ -179,23 +179,37 @@ public class EmitEval {
         mv.visitLdcInsn(evalTag);
         // Stack: [RuntimeScalar(String), String]
 
+        // Calculate how many variables need to be passed
+        // We skip 'this', '@_', and 'wantarray' which are handled separately
+        int skipVariables = EmitterMethodCreator.skipVariables;
+
+        // Build array of runtime values for captured variables
+        // These are passed to evalStringHelper so BEGIN blocks can access outer lexical variables
+        mv.visitIntInsn(Opcodes.BIPUSH, newEnv.length - skipVariables);
+        mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object");
+        // Stack: [RuntimeScalar(String), String, Object[]]
+
+        // Fill the runtime values array with actual variable values from local variables
+        for (Integer index : newSymbolTable.getAllVisibleVariables().keySet()) {
+            if (index >= skipVariables) {
+                String varName = newEnv[index];
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitIntInsn(Opcodes.BIPUSH, index - skipVariables);
+                mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.symbolTable.getVariableIndex(varName));
+                mv.visitInsn(Opcodes.AASTORE);
+            }
+        }
+        // Stack: [RuntimeScalar(String), String, Object[]]
+
         // Call evalStringHelper to compile the eval string at runtime
-        // This method:
-        // 1. Retrieves the EmitterContext using evalTag
-        // 2. Parses and compiles the eval string
-        // 3. Returns the generated Class object
-        // 4. Caches the result for repeated evals of the same string
+        // Now passes runtime values so BEGIN blocks can access outer lexical variables
         mv.visitMethodInsn(
                 Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/RuntimeCode",
                 "evalStringHelper",
-                "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;)Ljava/lang/Class;",
+                "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/Class;",
                 false);
         // Stack: [Class]
-
-        // Calculate how many variables need to be passed to the constructor
-        // We skip 'this', '@_', and 'wantarray' which are handled separately
-        int skipVariables = EmitterMethodCreator.skipVariables;
 
         // Create array of parameter types for the constructor
         // Each captured variable becomes a constructor parameter (including null gaps)

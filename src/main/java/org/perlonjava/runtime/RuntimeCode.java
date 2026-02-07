@@ -14,6 +14,7 @@ import org.perlonjava.mro.InheritanceResolver;
 import org.perlonjava.operators.ModuleOperators;
 import org.perlonjava.scriptengine.PerlLanguageProvider;
 import org.perlonjava.symbols.ScopedSymbolTable;
+import org.perlonjava.symbols.SymbolTable;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
@@ -40,6 +41,82 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     // Lookup object for performing method handle operations
     public static final MethodHandles.Lookup lookup = MethodHandles.lookup();
+
+    /**
+     * ThreadLocal storage for runtime values of captured variables during eval STRING compilation.
+     *
+     * PROBLEM: In perl5, BEGIN blocks inside eval STRING can access outer lexical variables' runtime values:
+     *   my @imports = qw(a b);
+     *   eval q{ BEGIN { say @imports } };  # perl5 prints: a b
+     *
+     * In PerlOnJava, BEGIN blocks execute during parsing (before the eval class is instantiated),
+     * so they couldn't access runtime values - they would see empty variables.
+     *
+     * SOLUTION: When evalStringHelper() is called, the runtime values are stored in this ThreadLocal.
+     * During parsing, when SpecialBlockParser sets up BEGIN blocks, it can access these runtime values
+     * and use them to initialize the special globals that lexical variables become in BEGIN blocks.
+     *
+     * This ThreadLocal stores:
+     * - Key: The evalTag identifying this eval compilation
+     * - Value: EvalRuntimeContext containing:
+     *     - runtimeValues: Object[] of captured variable values
+     *     - capturedEnv: String[] of captured variable names (matching array indices)
+     *
+     * Thread-safety: Each thread's eval compilation uses its own ThreadLocal storage, so parallel
+     * eval compilations don't interfere with each other.
+     */
+    private static final ThreadLocal<EvalRuntimeContext> evalRuntimeContext = new ThreadLocal<>();
+
+    /**
+     * Container for runtime context during eval STRING compilation.
+     * Holds both the runtime values and variable names so SpecialBlockParser can
+     * match variables to their values.
+     */
+    public static class EvalRuntimeContext {
+        public final Object[] runtimeValues;
+        public final String[] capturedEnv;
+        public final String evalTag;
+
+        public EvalRuntimeContext(Object[] runtimeValues, String[] capturedEnv, String evalTag) {
+            this.runtimeValues = runtimeValues;
+            this.capturedEnv = capturedEnv;
+            this.evalTag = evalTag;
+        }
+
+        /**
+         * Get the runtime value for a variable by name.
+         *
+         * IMPORTANT: The capturedEnv array includes all variables (including 'this', '@_', 'wantarray'),
+         * but runtimeValues array skips the first skipVariables (currently 3).
+         * So if @imports is at capturedEnv[5], its value is at runtimeValues[5-3=2].
+         *
+         * @param varName The variable name (e.g., "@imports", "$scalar")
+         * @return The runtime value, or null if not found
+         */
+        public Object getRuntimeValue(String varName) {
+            int skipVariables = 3; // 'this', '@_', 'wantarray'
+            for (int i = skipVariables; i < capturedEnv.length; i++) {
+                if (varName.equals(capturedEnv[i])) {
+                    int runtimeIndex = i - skipVariables;
+                    if (runtimeIndex >= 0 && runtimeIndex < runtimeValues.length) {
+                        return runtimeValues[runtimeIndex];
+                    }
+                }
+            }
+            return null;
+        }
+    }
+
+    /**
+     * Get the current eval runtime context for accessing variable runtime values during parsing.
+     * This is called by SpecialBlockParser when setting up BEGIN blocks.
+     *
+     * @return The current eval runtime context, or null if not in eval STRING compilation
+     */
+    public static EvalRuntimeContext getEvalRuntimeContext() {
+        return evalRuntimeContext.get();
+    }
+
     // Cache for memoization of evalStringHelper results
     private static final int CLASS_CACHE_SIZE = 100;
     private static final Map<String, Class<?>> evalCache = new LinkedHashMap<String, Class<?>>(CLASS_CACHE_SIZE, 0.75f, true) {
@@ -123,10 +200,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     /**
-     * Compiles the text of an eval string into a Class that represents an anonymous subroutine.
-     * After the Class is returned to the caller, an instance of the Class will be populated
-     * with closure variables, and then makeCodeObject() will be called to transform the Class
-     * instance into a Perl CODE object.
+     * Backwards-compatible overload for code compiled before runtimeValues parameter was added.
+     * This allows pre-compiled Perl modules to continue working with the new signature.
      *
      * @param code    the RuntimeScalar containing the eval string
      * @param evalTag the tag used to retrieve the eval context
@@ -134,14 +209,61 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * @throws Exception if an error occurs during compilation
      */
     public static Class<?> evalStringHelper(RuntimeScalar code, String evalTag) throws Exception {
+        return evalStringHelper(code, evalTag, new Object[0]);
+    }
+
+    /**
+     * Compiles the text of an eval string into a Class that represents an anonymous subroutine.
+     * After the Class is returned to the caller, an instance of the Class will be populated
+     * with closure variables, and then makeCodeObject() will be called to transform the Class
+     * instance into a Perl CODE object.
+     *
+     * IMPORTANT CHANGE: This method now accepts runtime values of captured variables.
+     *
+     * WHY THIS IS NEEDED:
+     * In perl5, BEGIN blocks inside eval STRING can access outer lexical variables' runtime values.
+     * For example:
+     *     my @imports = qw(md5 md5_hex);
+     *     eval q{ use Digest::MD5 @imports };  # BEGIN block sees @imports = (md5 md5_hex)
+     *
+     * Previously in PerlOnJava, BEGIN blocks would see empty variables because they execute
+     * during parsing, before the eval class is instantiated with runtime values.
+     *
+     * NOW: We pass runtime values to this method and store them in ThreadLocal storage.
+     * SpecialBlockParser can then access these values when setting up BEGIN blocks,
+     * allowing lexical variables to be initialized with their runtime values.
+     *
+     * @param code          the RuntimeScalar containing the eval string
+     * @param evalTag       the tag used to retrieve the eval context
+     * @param runtimeValues the runtime values of captured variables (Object[] matching capturedEnv order)
+     * @return the compiled Class representing the anonymous subroutine
+     * @throws Exception if an error occurs during compilation
+     */
+    public static Class<?> evalStringHelper(RuntimeScalar code, String evalTag, Object[] runtimeValues) throws Exception {
 
         // Retrieve the eval context that was saved at program compile-time
         EmitterContext ctx = RuntimeCode.evalContext.get(evalTag);
 
-        // Check if the eval string contains non-ASCII characters
-        // If so, treat it as Unicode source to preserve Unicode characters during parsing
-        // EXCEPT for evalbytes, which must treat everything as bytes
-        String evalString = code.toString();
+        // Store runtime values in ThreadLocal so SpecialBlockParser can access them during parsing.
+        // This enables BEGIN blocks to see outer lexical variables' runtime values.
+        //
+        // CRITICAL: The runtimeValues array matches capturedEnv order (both skip first 3 variables).
+        // SpecialBlockParser will use getRuntimeValue() to look up values by variable name.
+        //
+        // Example: If @imports is at capturedEnv[5], its runtime value is at runtimeValues[5-3=2]
+        //          (because both arrays skip 'this', '@_', and 'wantarray')
+        EvalRuntimeContext runtimeCtx = new EvalRuntimeContext(
+                runtimeValues,
+                ctx.capturedEnv,  // Variable names in same order as runtimeValues
+                evalTag
+        );
+        evalRuntimeContext.set(runtimeCtx);
+
+        try {
+            // Check if the eval string contains non-ASCII characters
+            // If so, treat it as Unicode source to preserve Unicode characters during parsing
+            // EXCEPT for evalbytes, which must treat everything as bytes
+            String evalString = code.toString();
         boolean hasUnicode = false;
         if (!ctx.isEvalbytes && code.type != RuntimeScalarType.BYTE_STRING) {
             for (int i = 0; i < evalString.length(); i++) {
@@ -219,6 +341,51 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // IMPORTANT: The parseSymbolTable starts with the captured flags so that
         // the eval code is parsed with the correct feature/strict/warning context
         ScopedSymbolTable parseSymbolTable = capturedSymbolTable.snapShot();
+
+        // CRITICAL: Pre-create aliases for captured variables BEFORE parsing
+        // This allows BEGIN blocks in the eval string to access outer lexical variables.
+        //
+        // When the eval string is parsed, variable references in BEGIN blocks will be
+        // resolved to these special package globals that we're aliasing now.
+        //
+        // Example: my @arr = qw(a b); eval q{ BEGIN { say @arr } };
+        // We create: globalArrays["BEGIN_PKG_x::@arr"] = (the runtime @arr object)
+        // Then when "say @arr" is parsed in the BEGIN, it resolves to BEGIN_PKG_x::@arr
+        // which is aliased to the runtime array with values (a, b).
+        Map<Integer, SymbolTable.SymbolEntry> capturedVars = capturedSymbolTable.getAllVisibleVariables();
+        for (SymbolTable.SymbolEntry entry : capturedVars.values()) {
+            if (!entry.name().equals("@_") && !entry.decl().isEmpty() && !entry.name().startsWith("&")) {
+                if (!entry.decl().equals("our")) {
+                    // "my" or "state" variables get special BEGIN package globals
+                    Object runtimeValue = runtimeCtx.getRuntimeValue(entry.name());
+                    if (runtimeValue != null) {
+                        // Get or create the special package ID
+                        // IMPORTANT: We need to set the ID NOW (before parsing) so that when
+                        // runSpecialBlock is called during parsing, it uses the SAME ID
+                        OperatorNode ast = entry.ast();
+                        if (ast != null) {
+                            if (ast.id == 0) {
+                                ast.id = EmitterMethodCreator.classCounter++;
+                            }
+                            String packageName = PersistentVariable.beginPackage(ast.id);
+                            // IMPORTANT: Global variable keys do NOT include the sigil
+                            // entry.name() is "@arr" but the key should be "packageName::arr"
+                            String varNameWithoutSigil = entry.name().substring(1);  // Remove the sigil
+                            String fullName = packageName + "::" + varNameWithoutSigil;
+
+                            // Alias the global to the runtime value
+                            if (runtimeValue instanceof RuntimeArray) {
+                                GlobalVariable.globalArrays.put(fullName, (RuntimeArray) runtimeValue);
+                            } else if (runtimeValue instanceof RuntimeHash) {
+                                GlobalVariable.globalHashes.put(fullName, (RuntimeHash) runtimeValue);
+                            } else if (runtimeValue instanceof RuntimeScalar) {
+                                GlobalVariable.globalVariables.put(fullName, (RuntimeScalar) runtimeValue);
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         EmitterContext evalCtx = new EmitterContext(
                 new JavaClassInfo(),  // internal java class name
@@ -302,6 +469,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
 
         return generatedClass;
+        } finally {
+            // Clean up ThreadLocal to prevent memory leaks
+            // IMPORTANT: Always clean up ThreadLocal in finally block to ensure it's removed
+            // even if compilation fails. Failure to do so could cause memory leaks in
+            // long-running applications with thread pools.
+            evalRuntimeContext.remove();
+        }
     }
 
     /**

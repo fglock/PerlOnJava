@@ -49,7 +49,7 @@ public class RuntimePosLvalue {
         if (cachedEntry == null || cachedEntry.valueHash != code) {
             // If the position is not cached or the value has changed,
             // create a new undefined RuntimeScalar to represent the position
-            position = new RuntimeScalar();
+            position = new PosLvalueScalar(perlVariable);
             // Cache the new position with the current hash of the value
             positionCache.put(perlVariable, new CacheEntry(code, position));
         } else {
@@ -57,6 +57,60 @@ public class RuntimePosLvalue {
             position = cachedEntry.regexPosition;
         }
         return position;
+    }
+
+    private static void clearZeroLengthMatchTracking(RuntimeScalar perlVariable) {
+        CacheEntry cachedEntry = positionCache.get(perlVariable);
+        if (cachedEntry != null) {
+            cachedEntry.lastMatchWasZeroLength = false;
+            cachedEntry.lastMatchPosition = -1;
+            cachedEntry.lastMatchPattern = null;
+        }
+    }
+
+    private static class PosLvalueScalar extends RuntimeScalar {
+        private final RuntimeScalar target;
+
+        private PosLvalueScalar(RuntimeScalar target) {
+            super();
+            this.target = target;
+        }
+
+        @Override
+        public RuntimeScalar set(RuntimeScalar value) {
+            RuntimePosLvalue.clearZeroLengthMatchTracking(target);
+            return super.set(value);
+        }
+
+        @Override
+        public RuntimeScalar set(int value) {
+            RuntimePosLvalue.clearZeroLengthMatchTracking(target);
+            return super.set(value);
+        }
+
+        @Override
+        public RuntimeScalar set(long value) {
+            RuntimePosLvalue.clearZeroLengthMatchTracking(target);
+            return super.set(value);
+        }
+
+        @Override
+        public RuntimeScalar set(boolean value) {
+            RuntimePosLvalue.clearZeroLengthMatchTracking(target);
+            return super.set(value);
+        }
+
+        @Override
+        public RuntimeScalar set(String value) {
+            RuntimePosLvalue.clearZeroLengthMatchTracking(target);
+            return super.set(value);
+        }
+
+        @Override
+        public RuntimeScalar set(Object value) {
+            RuntimePosLvalue.clearZeroLengthMatchTracking(target);
+            return super.set(value);
+        }
     }
 
     /**
