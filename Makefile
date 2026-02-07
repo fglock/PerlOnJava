@@ -1,5 +1,10 @@
 .PHONY: all clean test test-unit test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper dev ci
 
+# If FORCE_TESTS=1, Gradle test tasks will be executed with --rerun-tasks to avoid
+# false positives from UP-TO-DATE/cached test results.
+FORCE_TESTS ?= 0
+RERUN_TASKS_FLAG := $(if $(filter 1,$(FORCE_TESTS)),--rerun-tasks,)
+
 all: build
 
 # CI build - optimized for CI/CD environments
@@ -16,9 +21,9 @@ wrapper:
 # Standard build - incremental compilation with parallel tests (4 JVMs)
 build: wrapper
 ifeq ($(OS),Windows_NT)
-	gradlew.bat classes testUnitParallel --parallel shadowJar
+	gradlew.bat classes testUnitParallel --parallel $(RERUN_TASKS_FLAG) shadowJar
 else
-	./gradlew classes testUnitParallel --parallel shadowJar
+	./gradlew classes testUnitParallel --parallel $(RERUN_TASKS_FLAG) shadowJar
 endif
 
 # Development build - forces recompilation (use during active development)
@@ -36,10 +41,17 @@ test: test-unit
 # Uses Gradle's testUnitParallel (same as default make build)
 test-unit: wrapper
 ifeq ($(OS),Windows_NT)
-	gradlew.bat testUnitParallel --parallel
+	gradlew.bat testUnitParallel --parallel $(RERUN_TASKS_FLAG)
 else
-	./gradlew testUnitParallel --parallel
+	./gradlew testUnitParallel --parallel $(RERUN_TASKS_FLAG)
 endif
+
+# Convenience targets to force tests regardless of FORCE_TESTS env var.
+test-unit-force:
+	$(MAKE) FORCE_TESTS=1 test-unit
+
+build-force:
+	$(MAKE) FORCE_TESTS=1 build
 
 # Perl 5 core test suite (perl5_t/t/ directory)
 # Run 'perl dev/import-perl5/sync.pl' first to populate perl5_t/
