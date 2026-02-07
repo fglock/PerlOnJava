@@ -38,6 +38,24 @@ public class Main {
             if (parsedArgs.compileOnly) {
                 System.out.println(parsedArgs.fileName + " syntax OK");
             }
+
+            // Implement Perl's exit code logic based on $! and $?
+            // exit $! if $!;              # errno
+            // exit $? >> 8 if $? >> 8;    # child exit status
+            // exit 0;                     # success
+            RuntimeScalar errno = GlobalVariable.getGlobalVariable("main::!");
+            RuntimeScalar childStatus = GlobalVariable.getGlobalVariable("main::?");
+
+            if (errno.getInt() != 0) {
+                System.exit(errno.getInt());
+            }
+
+            int rawChildStatus = childStatus.getInt();
+            int shiftedExitStatus = rawChildStatus >> 8;
+            int exitStatus = shiftedExitStatus != 0 ? shiftedExitStatus : rawChildStatus;
+            if (exitStatus != 0) {
+                System.exit(exitStatus);
+            }
         } catch (Throwable t) {
             if (parsedArgs.debugEnabled) {
                 // Print full JVM stack
@@ -60,7 +78,9 @@ public class Main {
                 System.exit(errno.getInt());
             }
 
-            int exitStatus = childStatus.getInt() >> 8;
+            int rawChildStatus = childStatus.getInt();
+            int shiftedExitStatus = rawChildStatus >> 8;
+            int exitStatus = shiftedExitStatus != 0 ? shiftedExitStatus : rawChildStatus;
             if (exitStatus != 0) {
                 System.exit(exitStatus);
             }

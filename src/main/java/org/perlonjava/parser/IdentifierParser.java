@@ -63,7 +63,7 @@ public class IdentifierParser {
             // For example "$\t = 4" must be a syntax error, not "$= 4".
             if (tokenAfter.type == LexerTokenType.OPERATOR
                     && tokenAfter.text.length() == 1
-                    && "!|/*+-<>&~.=%'".indexOf(tokenAfter.text.charAt(0)) >= 0) {
+                    && "!|/*+-<>&~.=%'?".indexOf(tokenAfter.text.charAt(0)) >= 0) {
                 parser.throwError("syntax error");
             }
         }
@@ -196,7 +196,7 @@ public class IdentifierParser {
 
         // Special case for special variables like `$|`, `$'`, etc.
         char firstChar = token.text.charAt(0);
-        if (token.type == LexerTokenType.OPERATOR && "!|/*+-<>&~.=%'".indexOf(firstChar) >= 0) {
+        if (token.type == LexerTokenType.OPERATOR && "!|/*+-<>&~.=%'?".indexOf(firstChar) >= 0) {
             // Check if this is a leading single quote followed by an identifier ($'foo means $main::foo)
             if (firstChar == '\'' && (nextToken.type == LexerTokenType.IDENTIFIER || nextToken.type == LexerTokenType.NUMBER)) {
                 // This is $'foo which means $main::foo
