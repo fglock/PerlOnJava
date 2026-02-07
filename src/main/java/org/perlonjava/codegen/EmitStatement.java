@@ -15,21 +15,6 @@ import org.perlonjava.runtime.RuntimeContextType;
  * and generating the corresponding bytecode using ASM.
  */
 public class EmitStatement {
-    // Feature flags for control flow implementation
-    // Feature flag for loop control flow handlers (same as EmitForeach.java)
-    //
-    // WHAT THIS WOULD DO IF ENABLED:
-    // Enable control flow handlers for while/until/for loops (same as foreach).
-    //
-    // WHY IT'S DISABLED:
-    // Same reason as EmitForeach.java - depends on ENABLE_CONTROL_FLOW_CHECKS.
-    //
-    // DEPENDENCY:
-    // Must remain false until EmitSubroutine.ENABLE_CONTROL_FLOW_CHECKS is fixed.
-    private static final boolean ENABLE_LOOP_HANDLERS = false;
-    
-    // Set to true to enable debug output for loop control flow
-    private static final boolean DEBUG_LOOP_CONTROL_FLOW = false;
 
     /**
      * Emits bytecode to check for pending signals (like SIGALRM from alarm()).

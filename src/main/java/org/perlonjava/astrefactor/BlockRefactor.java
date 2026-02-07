@@ -1,10 +1,6 @@
 package org.perlonjava.astrefactor;
 
 import org.perlonjava.astnode.*;
-import org.perlonjava.astvisitor.BytecodeSizeEstimator;
-import org.perlonjava.astvisitor.ControlFlowDetectorVisitor;
-import org.perlonjava.parser.Parser;
-import org.perlonjava.runtime.PerlCompilerException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -14,9 +10,6 @@ import static org.perlonjava.parser.ParserNodeUtils.variableAst;
 public class BlockRefactor {
     public static final int LARGE_BYTECODE_SIZE = 40000;   // Maximum bytecode size before refactoring
     public static final int MIN_CHUNK_SIZE = 4;            // Minimum statements to extract as a chunk
-
-    // Reusable visitor for control flow detection
-    private static final ControlFlowDetectorVisitor controlFlowDetector = new ControlFlowDetectorVisitor();
 
     /**
      * Creates an anonymous subroutine call node that invokes a subroutine with the @_ array as arguments.
@@ -144,61 +137,4 @@ public class BlockRefactor {
         return block;
     }
 
-    public static long estimateTotalBytecodeSizeExact(List<Node> nodes) {
-        if (nodes.isEmpty()) {
-            return 0;
-        }
-        long total = 0;
-        for (Node node : nodes) {
-            total += BytecodeSizeEstimator.estimateSnippetSize(node);
-        }
-        return total;
-    }
-
-    /**
-     * Check if any chunk that will be wrapped in a closure contains unsafe control flow.
-     * Only checks chunks that are large enough to be wrapped (>= minChunkSize).
-     *
-     * @param chunks       List of chunks (either ListNode or List<Node>)
-     * @param minChunkSize Minimum size for a chunk to be wrapped
-     * @return true if unsafe control flow found in chunks that will be wrapped
-     */
-    public static boolean hasUnsafeControlFlowInChunks(List<?> chunks, int minChunkSize) {
-        for (Object chunk : chunks) {
-            List<Node> elements = null;
-            if (chunk instanceof ListNode listChunk) {
-                elements = listChunk.elements;
-            } else if (chunk instanceof List) {
-                @SuppressWarnings("unchecked")
-                List<Node> nodeList = (List<Node>) chunk;
-                elements = nodeList;
-            }
-
-            if (elements != null && elements.size() >= minChunkSize) {
-                controlFlowDetector.reset();
-                for (Node element : elements) {
-                    element.accept(controlFlowDetector);
-                    if (controlFlowDetector.hasUnsafeControlFlow()) {
-                        return true;
-                    }
-                }
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Throw an error when a large block/node cannot be refactored.
-     */
-    public static void errorCantRefactorLargeBlock(int tokenIndex, Parser parser, long estimatedSize) {
-        String message = "Code is too large (estimated " + estimatedSize + " bytes) " +
-                "and refactoring failed to reduce it below " + LARGE_BYTECODE_SIZE + " bytes. " +
-                "The block may contain control flow statements that prevent safe refactoring. " +
-                "Consider breaking the code into smaller subroutines manually.";
-        if (parser != null) {
-            throw new PerlCompilerException(tokenIndex, message, parser.ctx.errorUtil);
-        } else {
-            throw new PerlCompilerException(message);
-        }
-    }
 }

@@ -32,10 +32,6 @@ public class ControlFlowDetectorVisitor implements Visitor {
         allowedGotoLabels = null;
     }
 
-    public void setAllowedGotoLabels(Set<String> allowedGotoLabels) {
-        this.allowedGotoLabels = allowedGotoLabels;
-    }
-
     /**
      * Iterative (non-recursive) scan for unsafe control flow.
      *
