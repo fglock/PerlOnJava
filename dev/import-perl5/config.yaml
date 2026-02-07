@@ -382,11 +382,6 @@ imports:
     target: src/main/perl/lib
     type: directory
 
-  # Test::More.pm is protected - won't be overwritten if it exists (customized for PerlOnJava)
-  - source: perl5/cpan/Test-Simple/lib/Test/More.pm
-    target: src/main/perl/lib/Test/More.pm
-    protected: true
-
   # Tests for distribution
   - source: perl5/cpan/Test-Simple/t
     target: perl5_t/Test-Simple
