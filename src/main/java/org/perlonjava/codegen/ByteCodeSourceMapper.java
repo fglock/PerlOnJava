@@ -28,6 +28,19 @@ public class ByteCodeSourceMapper {
     private static final ArrayList<String> subroutineNamePool = new ArrayList<>();
     private static final Map<String, Integer> subroutineNameToId = new HashMap<>();
 
+    public static void resetAll() {
+        sourceFiles.clear();
+
+        packageNamePool.clear();
+        packageNameToId.clear();
+
+        fileNamePool.clear();
+        fileNameToId.clear();
+
+        subroutineNamePool.clear();
+        subroutineNameToId.clear();
+    }
+
     /**
      * Gets or creates a unique identifier for a package name.
      *
