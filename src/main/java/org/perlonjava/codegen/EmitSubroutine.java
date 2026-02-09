@@ -149,22 +149,8 @@ public class EmitSubroutine {
         ctx.logDebug("Used variables: " + String.join(", ", usedVariableNames));
 
         // Filter to keep only variables that are actually referenced in the subroutine body
-        // Currently disabled - needs more investigation of how indices work in closures
+        // Disable filtering for now - it's causing VerifyError even for simple cases
         boolean enableFiltering = false;
-
-        // Check if the closure would be too large due to too many captured variables
-        // Reject early with a clear error message instead of hitting bytecode limits later
-        int capturedCount = visibleVariables.size();
-        if (capturedCount > 100 && !enableFiltering) {
-            throw new PerlCompilerException(
-                node.getIndex(),
-                "Cannot create closure: too many captured variables (" + capturedCount + "). " +
-                "The constructor would exceed JVM bytecode size limits. " +
-                "Hint: Consider refactoring to reduce the number of lexical variables in scope, " +
-                "or move the closure to a separate subroutine with fewer captures.",
-                ctx.errorUtil
-            );
-        }
         if (enableFiltering && !isPackageSub) {
             visibleVariables.entrySet().removeIf(entry -> {
                 String varName = entry.getValue().name();
@@ -182,15 +168,58 @@ public class EmitSubroutine {
                 originalCount, filteredCount, originalCount - filteredCount));
         }
 
+        // Check if the closure would be too large due to too many captured variables
+        // If filtering is disabled and there are >100 variables, reject early with clear error
+        if (!enableFiltering && filteredCount > 100) {
+            throw new PerlCompilerException(
+                node.getIndex(),
+                "Cannot create closure: too many captured variables (" + filteredCount + "). " +
+                "The constructor would exceed JVM bytecode size limits. " +
+                "Hint: Consider refactoring to reduce the number of lexical variables in scope, " +
+                "or move the closure to a separate subroutine with fewer captures.",
+                ctx.errorUtil
+            );
+        }
+
         ctx.logDebug("AnonSub ctx.symbolTable.getAllVisibleVariables");
 
         // Create a new symbol table for the subroutine, but manually add only the filtered variables
         ScopedSymbolTable newSymbolTable = new ScopedSymbolTable();
         newSymbolTable.enterScope();
 
-        // Add only the filtered visible variables (excluding 'our sub' entries)
-        for (SymbolTable.SymbolEntry entry : visibleVariables.values()) {
-            newSymbolTable.addVariable(entry.name(), entry.decl(), entry.ast());
+        if (enableFiltering) {
+            // When filtering, preserve original indices so local variable slots match expectations
+            // (slots 0,1,2 reserved for this/@_/wantarray)
+            int maxIndex = 0;
+            SymbolTable currentScope = newSymbolTable.getCurrentScopeTable();
+            for (Map.Entry<Integer, SymbolTable.SymbolEntry> entry : visibleVariables.entrySet()) {
+                int originalIndex = entry.getKey();
+                SymbolTable.SymbolEntry symbolEntry = entry.getValue();
+
+                // Directly insert into the symbol table's variableIndex map, preserving the original index
+                currentScope.variableIndex.put(
+                    symbolEntry.name(),
+                    new SymbolTable.SymbolEntry(
+                        originalIndex,  // Preserve original index
+                        symbolEntry.name(),
+                        symbolEntry.decl(),
+                        symbolEntry.perlPackage(),
+                        symbolEntry.ast()
+                    )
+                );
+
+                if (originalIndex > maxIndex) {
+                    maxIndex = originalIndex;
+                }
+            }
+
+            // Update the symbol table's index counter to be after the last variable
+            currentScope.index = maxIndex + 1;
+        } else {
+            // When not filtering, use the normal addVariable method
+            for (SymbolTable.SymbolEntry entry : visibleVariables.values()) {
+                newSymbolTable.addVariable(entry.name(), entry.decl(), entry.ast());
+            }
         }
         
         // Copy package, subroutine, and flags from the current context

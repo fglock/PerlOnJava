@@ -259,6 +259,17 @@ public class ScopedSymbolTable {
     }
 
     /**
+     * Gets the current (innermost) scope's SymbolTable.
+     * This is used when we need direct access to manipulate the symbol table.
+     */
+    public SymbolTable getCurrentScopeTable() {
+        if (symbolTableStack.isEmpty()) {
+            return null;
+        }
+        return symbolTableStack.peek();
+    }
+
+    /**
      * Replaces an existing symbol table entry in the current scope.
      * This is used for lexical subs where a redefinition creates a new pad entry that shadows the forward declaration.
      */
