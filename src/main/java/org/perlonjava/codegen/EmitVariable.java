@@ -375,7 +375,14 @@ public class EmitVariable {
             } else {
                 // ===== LEXICAL VARIABLE ACCESS =====
                 // Variable is lexical (my/our/state), load it from JVM local variable slot
-                mv.visitVarInsn(Opcodes.ALOAD, symbolEntry.index());
+
+                // Look up the variable in the current symbol table to get the correct index.
+                // This infrastructure is in place for future variable capture optimization,
+                // but for now it just returns the same index since filtering is disabled.
+                SymbolTable.SymbolEntry currentEntry = emitterVisitor.ctx.symbolTable.getSymbolEntry(symbolEntry.name());
+                int currentIndex = (currentEntry != null) ? currentEntry.index() : symbolEntry.index();
+
+                mv.visitVarInsn(Opcodes.ALOAD, currentIndex);
             }
             
             // ===== CONTEXT CONVERSION =====

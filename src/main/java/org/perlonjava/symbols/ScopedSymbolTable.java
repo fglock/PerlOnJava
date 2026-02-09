@@ -247,6 +247,18 @@ public class ScopedSymbolTable {
     }
 
     /**
+     * Gets a symbol entry from the current scope only, without traversing outer scopes.
+     * This is used when emitting code for closures with filtered variable captures,
+     * where we need the index from the closure's symbol table, not from outer scopes.
+     */
+    public SymbolTable.SymbolEntry getCurrentScopeEntry(String name) {
+        if (symbolTableStack.isEmpty()) {
+            return null;
+        }
+        return symbolTableStack.peek().getSymbolEntry(name);
+    }
+
+    /**
      * Replaces an existing symbol table entry in the current scope.
      * This is used for lexical subs where a redefinition creates a new pad entry that shadows the forward declaration.
      */
