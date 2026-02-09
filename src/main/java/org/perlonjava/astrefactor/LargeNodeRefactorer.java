@@ -52,6 +52,12 @@ public class LargeNodeRefactorer {
      * @return refactored list with elements chunked into closures, or original list if refactoring not possible
      */
     public static List<Node> forceRefactorElements(List<Node> elements, int tokenIndex) {
+        // Check if we're already in a refactoring operation to prevent infinite recursion
+        // This flag is set during BlockNode creation to avoid re-refactoring nodes being constructed
+        if (skipRefactoring.get()) {
+            return elements;
+        }
+
         if (elements == null || elements.isEmpty() || !shouldRefactor(elements)) {
             return elements;
         }
@@ -66,11 +72,42 @@ public class LargeNodeRefactorer {
 
         List<Node> chunks = splitIntoDynamicChunks(elements);
 
+        // Verify that refactoring will actually help
+        // If any chunk is still very large, wrapping it in a closure with captured variables
+        // will make it even larger, potentially triggering another refactoring cycle
+        long maxChunkSize = 0;
+        for (Node chunk : chunks) {
+            long chunkSize = (chunk instanceof ListNode listNode) ?
+                    estimateListSize(listNode.elements) :
+                    BytecodeSizeEstimator.estimateSnippetSize(chunk);
+            maxChunkSize = Math.max(maxChunkSize, chunkSize);
+        }
+
+        // If the largest chunk is > 70% of the limit, refactoring won't help much
+        // because closure overhead (constructor with captured variables) will push it over the limit
+        // In this case, let it fail naturally rather than creating infinite refactoring loops
+        if (maxChunkSize > LARGE_BYTECODE_SIZE * 0.7) {
+            // Return original elements - let the natural "method too large" error occur
+            // This is better than creating closures that will themselves be too large
+            return elements;
+        }
+
         // Note: Control flow checks removed since master supports non-local gotos in subroutines
         // Wrapping code in `sub { next }` is now safe
 
         // Create nested closures for proper lexical scoping
         return createNestedListClosures(chunks, tokenIndex);
+    }
+
+    /**
+     * Estimates total bytecode size of a list of elements.
+     */
+    private static long estimateListSize(List<Node> elements) {
+        long total = 0;
+        for (Node element : elements) {
+            total += BytecodeSizeEstimator.estimateSnippetSize(element);
+        }
+        return total;
     }
 
     /**
