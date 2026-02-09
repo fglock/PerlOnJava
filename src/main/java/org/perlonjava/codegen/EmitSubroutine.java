@@ -6,6 +6,7 @@ import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
 import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.runtime.NameNormalizer;
+import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeCode;
 import org.perlonjava.runtime.RuntimeContextType;
 import org.perlonjava.symbols.ScopedSymbolTable;
@@ -148,15 +149,22 @@ public class EmitSubroutine {
         ctx.logDebug("Used variables: " + String.join(", ", usedVariableNames));
 
         // Filter to keep only variables that are actually referenced in the subroutine body
-        //
-        // DISABLED: Variable filtering breaks the apply() method signature. The issue is that
-        // filtering changes the constructor parameters, which somehow corrupts the bytecode
-        // for the apply() method (causing VerifyError: locals[2] null instead of integer).
-        //
-        // The root cause needs more investigation - it may be related to how local variable
-        // slots are allocated after changing the constructor signature, or how the frame map
-        // is computed. For now, keep filtering disabled until we fully understand the issue.
+        // Currently disabled - needs more investigation of how indices work in closures
         boolean enableFiltering = false;
+
+        // Check if the closure would be too large due to too many captured variables
+        // Reject early with a clear error message instead of hitting bytecode limits later
+        int capturedCount = visibleVariables.size();
+        if (capturedCount > 100 && !enableFiltering) {
+            throw new PerlCompilerException(
+                node.getIndex(),
+                "Cannot create closure: too many captured variables (" + capturedCount + "). " +
+                "The constructor would exceed JVM bytecode size limits. " +
+                "Hint: Consider refactoring to reduce the number of lexical variables in scope, " +
+                "or move the closure to a separate subroutine with fewer captures.",
+                ctx.errorUtil
+            );
+        }
         if (enableFiltering && !isPackageSub) {
             visibleVariables.entrySet().removeIf(entry -> {
                 String varName = entry.getValue().name();
@@ -179,7 +187,7 @@ public class EmitSubroutine {
         // Create a new symbol table for the subroutine, but manually add only the filtered variables
         ScopedSymbolTable newSymbolTable = new ScopedSymbolTable();
         newSymbolTable.enterScope();
-        
+
         // Add only the filtered visible variables (excluding 'our sub' entries)
         for (SymbolTable.SymbolEntry entry : visibleVariables.values()) {
             newSymbolTable.addVariable(entry.name(), entry.decl(), entry.ast());
