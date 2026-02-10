@@ -380,7 +380,10 @@ public class LargeBlockRefactorer {
                 safeRunLen -= chunkLen;
             }
 
-            safeRunStart = safeRunEndExclusive - safeRunLen;
+            // Add remaining elements that haven't been chunked yet.
+            // If treatAllElementsAsSafe=true, we skipped the backward loop and need ALL elements [0..safeRunEndExclusive-1].
+            // Otherwise, the backward loop already processed elements before safeRunStart, so only add [safeRunStart..safeRunEndExclusive-1].
+            safeRunStart = treatAllElementsAsSafe ? 0 : (safeRunEndExclusive - safeRunLen);
             for (int j = safeRunEndExclusive - 1; j >= safeRunStart; j--) {
                 suffixReversed.add(node.elements.get(j));
             }
