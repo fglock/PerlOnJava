@@ -1068,7 +1068,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
 
         return switch (type) {
-            case UNDEF -> throw new PerlCompilerException("Can't use an undefined value as a SCALAR reference");
+            case UNDEF -> {
+                // Autovivify: create a new scalar reference for undefined values
+                RuntimeScalar newScalar = new RuntimeScalar();
+                this.value = newScalar;
+                this.type = RuntimeScalarType.REFERENCE;
+                yield newScalar;
+            }
             case REFERENCE -> (RuntimeScalar) value;
             case STRING, BYTE_STRING ->
                     throw new PerlCompilerException("Can't use string (\"" + this + "\") as a SCALAR ref while \"strict refs\" in use");
