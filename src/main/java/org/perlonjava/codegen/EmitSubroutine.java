@@ -6,12 +6,14 @@ import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
 import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.runtime.NameNormalizer;
+import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeCode;
 import org.perlonjava.runtime.RuntimeContextType;
 import org.perlonjava.symbols.ScopedSymbolTable;
 import org.perlonjava.symbols.SymbolTable;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Map;
 
 import static org.perlonjava.perlmodule.Strict.HINT_STRICT_REFS;
@@ -115,8 +117,16 @@ public class EmitSubroutine {
         ScopedSymbolTable newSymbolTable = new ScopedSymbolTable();
         newSymbolTable.enterScope();
         
+        boolean isLargeBlockRefactorerCreated = node.getBooleanAnnotation("largeBlockRefactorerCreated");
+
         // Add only the filtered visible variables (excluding 'our sub' entries)
         for (SymbolTable.SymbolEntry entry : visibleVariables.values()) {
+            if (isLargeBlockRefactorerCreated
+                    && entry.ast() instanceof OperatorNode operatorNode
+                    && ("my".equals(entry.decl()) || "state".equals(entry.decl()))
+                    && operatorNode.id != 0) {
+                operatorNode.setAnnotation("needsPersistentVariable", true);
+            }
             newSymbolTable.addVariable(entry.name(), entry.decl(), entry.ast());
         }
         
@@ -152,6 +162,22 @@ public class EmitSubroutine {
                         ctx.errorUtil, // Error message utility
                         ctx.compilerOptions,
                         null);
+
+        String debugAnonEnv = System.getenv("JPERL_DEBUG_ANON_ENV");
+        if (debugAnonEnv != null && newEnv != null) {
+            String className = subCtx.javaClassInfo.javaClassName;
+            if (className.contains("anon")) {
+                System.err.println("DEBUG anon env class=" + className + " size=" + newEnv.length);
+                for (int i = 0; i < newEnv.length; i++) {
+                    if (newEnv[i] == null) {
+                        System.err.println("DEBUG anon env gap idx=" + i);
+                    }
+                }
+                for (SymbolTable.SymbolEntry entry : visibleVariables.values()) {
+                    System.err.println("DEBUG anon visible idx=" + entry.index() + " name=" + entry.name());
+                }
+            }
+        }
         Class<?> generatedClass =
                 EmitterMethodCreator.createClassWithMethod(
                         subCtx, node.block, node.useTryCatch
@@ -170,12 +196,23 @@ public class EmitSubroutine {
         mv.visitInsn(Opcodes.DUP);
 
         // 2. Load all captured variables for the constructor
-        int newIndex = 0;
-        for (Integer currentIndex : visibleVariables.keySet()) {
-            if (newIndex >= skipVariables) {
-                mv.visitVarInsn(Opcodes.ALOAD, currentIndex); // Load the captured variable
+        Map<String, SymbolTable.SymbolEntry> visibleVariablesByName = new HashMap<>();
+        for (SymbolTable.SymbolEntry entry : visibleVariables.values()) {
+            visibleVariablesByName.put(entry.name(), entry);
+        }
+
+        for (int i = skipVariables; i < newEnv.length; i++) {
+            String envName = newEnv[i];
+            if (envName == null) {
+                mv.visitInsn(Opcodes.ACONST_NULL);
+            } else {
+                SymbolTable.SymbolEntry entry = visibleVariablesByName.get(envName);
+                if (entry == null) {
+                    mv.visitInsn(Opcodes.ACONST_NULL);
+                } else {
+                    mv.visitVarInsn(Opcodes.ALOAD, entry.index()); // Load the captured variable
+                }
             }
-            newIndex++;
         }
 
         // 3. Build the constructor descriptor

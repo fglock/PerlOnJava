@@ -375,7 +375,39 @@ public class EmitVariable {
             } else {
                 // ===== LEXICAL VARIABLE ACCESS =====
                 // Variable is lexical (my/our/state), load it from JVM local variable slot
-                mv.visitVarInsn(Opcodes.ALOAD, symbolEntry.index());
+                OperatorNode sigilNode = symbolEntry.ast();
+                boolean needsPersistentVar = sigilNode != null && sigilNode.getBooleanAnnotation("needsPersistentVariable");
+                if (needsPersistentVar) {
+                    String methodName;
+                    String methodDescriptor;
+                    switch (sigil) {
+                        case "$" -> {
+                            methodName = "retrieveBeginScalar";
+                            methodDescriptor = "(Ljava/lang/String;I)Lorg/perlonjava/runtime/RuntimeScalar;";
+                        }
+                        case "@" -> {
+                            methodName = "retrieveBeginArray";
+                            methodDescriptor = "(Ljava/lang/String;I)Lorg/perlonjava/runtime/RuntimeArray;";
+                        }
+                        case "%" -> {
+                            methodName = "retrieveBeginHash";
+                            methodDescriptor = "(Ljava/lang/String;I)Lorg/perlonjava/runtime/RuntimeHash;";
+                        }
+                        default -> throw new PerlCompilerException(node.tokenIndex,
+                                "Unsupported variable type: " + sigil,
+                                emitterVisitor.ctx.errorUtil);
+                    }
+                    emitterVisitor.ctx.mv.visitLdcInsn(sigil + name);
+                    emitterVisitor.ctx.mv.visitLdcInsn(sigilNode.id);
+                    emitterVisitor.ctx.mv.visitMethodInsn(
+                            Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/PersistentVariable",
+                            methodName,
+                            methodDescriptor,
+                            false);
+                } else {
+                    mv.visitVarInsn(Opcodes.ALOAD, symbolEntry.index());
+                }
             }
             
             // ===== CONTEXT CONVERSION =====

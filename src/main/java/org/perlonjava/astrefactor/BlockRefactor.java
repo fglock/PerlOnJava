@@ -21,9 +21,11 @@ public class BlockRefactor {
     public static BinaryOperatorNode createAnonSubCall(int tokenIndex, BlockNode nestedBlock) {
         ArrayList<Node> args = new ArrayList<>(1);
         args.add(variableAst("@", "_", tokenIndex));
+        SubroutineNode subNode = new SubroutineNode(null, null, null, nestedBlock, false, tokenIndex);
+        subNode.setAnnotation("largeBlockRefactorerCreated", true);
         return new BinaryOperatorNode(
                 "->",
-                new SubroutineNode(null, null, null, nestedBlock, false, tokenIndex),
+                subNode,
                 new ListNode(args, tokenIndex),
                 tokenIndex
         );
