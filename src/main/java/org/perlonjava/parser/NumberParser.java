@@ -181,7 +181,13 @@ public class NumberParser {
                     exponentStr = String.valueOf(exponent);
                 }
             } else {
+                // Save token index for backtracking
+                int savedTokenIndex = parser.tokenIndex;
                 exponentStr = parseHexExponentTokens(parser);
+                if (exponentStr.isEmpty()) {
+                    // No exponent found, backtrack
+                    parser.tokenIndex = savedTokenIndex;
+                }
             }
         }
 
@@ -262,8 +268,9 @@ public class NumberParser {
         if (parser.tokenIndex < parser.tokens.size() &&
                 parser.tokens.get(parser.tokenIndex).type == LexerTokenType.NUMBER) {
             exponentStr.append(cleanUnderscores(TokenUtils.consume(parser).text));
-        } else if (exponentStr.length() > 0) {
-            parser.throwError("Malformed hexadecimal floating-point exponent");
+        } else {
+            // Not a valid exponent - return empty string
+            return "";
         }
 
         return exponentStr.toString();
