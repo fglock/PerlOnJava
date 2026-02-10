@@ -180,6 +180,7 @@ public class Universal extends PerlModuleBase {
             case REFERENCE:
             case ARRAYREFERENCE:
             case HASHREFERENCE:
+            case GLOBREFERENCE:
             case FORMAT:
                 int blessId = ((RuntimeBase) object.value).blessId;
                 if (blessId == 0) {
@@ -187,6 +188,7 @@ public class Universal extends PerlModuleBase {
                             type == ARRAYREFERENCE && argString.equals("ARRAY")
                                     || type == HASHREFERENCE && argString.equals("HASH")
                                     || type == REFERENCE && argString.equals("SCALAR")
+                                    || type == GLOBREFERENCE && argString.equals("GLOB")
                                     || type == FORMAT && argString.equals("FORMAT")
                     ).getList();
                 }
@@ -212,6 +214,7 @@ public class Universal extends PerlModuleBase {
             if ((argString.equals("HASH") && baseValue instanceof RuntimeHash)
                     || (argString.equals("ARRAY") && baseValue instanceof RuntimeArray)
                     || (argString.equals("SCALAR") && baseValue instanceof RuntimeScalar)
+                    || (argString.equals("GLOB") && baseValue instanceof RuntimeGlob)
                     || (argString.equals("FORMAT") && baseValue instanceof RuntimeFormat)) {
                 return getScalarBoolean(true).getList();
             }
