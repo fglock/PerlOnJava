@@ -2,13 +2,11 @@ package org.perlonjava.interpreter;
 
 import org.perlonjava.astnode.*;
 import org.perlonjava.astvisitor.Visitor;
+import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.runtime.*;
 
 import java.io.ByteArrayOutputStream;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * BytecodeCompiler traverses the AST and generates interpreter bytecode.
@@ -34,6 +32,11 @@ public class BytecodeCompiler implements Visitor {
     // Track last result register for expression chaining
     private int lastResultReg = -1;
 
+    // Closure support
+    private RuntimeBase[] capturedVars;           // Captured variable values
+    private String[] capturedVarNames;            // Parallel array of names
+    private Map<String, Integer> capturedVarIndices;  // Name → register index
+
     // Source information
     private final String sourceName;
     private final int sourceLine;
@@ -50,6 +53,29 @@ public class BytecodeCompiler implements Visitor {
      * @return InterpretedCode ready for execution
      */
     public InterpretedCode compile(Node node) {
+        return compile(node, null);
+    }
+
+    /**
+     * Compile an AST node to InterpretedCode with optional closure support.
+     *
+     * @param node The AST node to compile
+     * @param ctx  EmitterContext for closure detection (may be null)
+     * @return InterpretedCode ready for execution
+     */
+    public InterpretedCode compile(Node node, EmitterContext ctx) {
+        // Detect closure variables if context is provided
+        if (ctx != null) {
+            detectClosureVariables(node, ctx);
+        }
+
+        // If we have captured variables, allocate registers for them
+        if (capturedVars != null && capturedVars.length > 0) {
+            // Registers 0-2 are reserved (this, @_, wantarray)
+            // Registers 3+ are captured variables
+            nextRegister = 3 + capturedVars.length;
+        }
+
         // Visit the node to generate bytecode
         node.accept(this);
 
@@ -63,10 +89,114 @@ public class BytecodeCompiler implements Visitor {
             constants.toArray(),
             stringPool.toArray(new String[0]),
             nextRegister,  // maxRegisters
-            null,  // capturedVars (TODO: closure support)
+            capturedVars,  // NOW POPULATED!
             sourceName,
             sourceLine
         );
+    }
+
+    // =========================================================================
+    // CLOSURE DETECTION
+    // =========================================================================
+
+    /**
+     * Detect closure variables: variables referenced but not declared locally.
+     * Populates capturedVars, capturedVarNames, and capturedVarIndices.
+     *
+     * @param ast AST to scan for variable references
+     * @param ctx EmitterContext containing symbol table and eval context
+     */
+    private void detectClosureVariables(Node ast, EmitterContext ctx) {
+        // Step 1: Collect all variable references in AST
+        Set<String> referencedVars = collectReferencedVariables(ast);
+
+        // Step 2: Get local variable declarations from symbol table
+        Set<String> localVars = getLocalVariableNames(ctx);
+
+        // Step 3: Closure vars = referenced - local
+        Set<String> closureVarNames = new HashSet<>(referencedVars);
+        closureVarNames.removeAll(localVars);
+
+        // Remove special variables that don't need capture (they're globals)
+        closureVarNames.removeIf(name ->
+            name.equals("$_") || name.equals("$@") || name.equals("$!")
+        );
+
+        if (closureVarNames.isEmpty()) {
+            return;  // No closure vars
+        }
+
+        // Step 4: Build arrays
+        capturedVarNames = closureVarNames.toArray(new String[0]);
+        capturedVarIndices = new HashMap<>();
+        List<RuntimeBase> values = new ArrayList<>();
+
+        for (int i = 0; i < capturedVarNames.length; i++) {
+            String varName = capturedVarNames[i];
+            capturedVarIndices.put(varName, 3 + i);  // Registers 3+
+
+            // Get variable value from eval runtime context
+            RuntimeBase value = getVariableValueFromContext(varName, ctx);
+            values.add(value);
+        }
+
+        capturedVars = values.toArray(new RuntimeBase[0]);
+    }
+
+    /**
+     * Collect all variable references in AST.
+     *
+     * @param ast AST node to scan
+     * @return Set of variable names (with sigils)
+     */
+    private Set<String> collectReferencedVariables(Node ast) {
+        Set<String> refs = new HashSet<>();
+        ast.accept(new VariableCollectorVisitor(refs));
+        return refs;
+    }
+
+    /**
+     * Get local variable names from current scope (not parent scopes).
+     *
+     * @param ctx EmitterContext containing symbol table
+     * @return Set of local variable names
+     */
+    private Set<String> getLocalVariableNames(EmitterContext ctx) {
+        Set<String> locals = new HashSet<>();
+        // This is a simplified version - we collect variables from registerMap
+        // which contains all lexically declared variables in the current compilation unit
+        locals.addAll(registerMap.keySet());
+        return locals;
+    }
+
+    /**
+     * Get variable value from eval runtime context for closure capture.
+     *
+     * @param varName Variable name (with sigil)
+     * @param ctx     EmitterContext containing eval tag
+     * @return RuntimeBase value to capture
+     */
+    private RuntimeBase getVariableValueFromContext(String varName, EmitterContext ctx) {
+        // For eval STRING, runtime values are available via evalRuntimeContext ThreadLocal
+        RuntimeCode.EvalRuntimeContext evalCtx = RuntimeCode.getEvalRuntimeContext();
+        if (evalCtx != null && evalCtx.runtimeValues != null) {
+            // Find variable in captured environment
+            String[] capturedEnv = evalCtx.capturedEnv;
+            Object[] runtimeValues = evalCtx.runtimeValues;
+
+            for (int i = 0; i < capturedEnv.length; i++) {
+                if (capturedEnv[i].equals(varName)) {
+                    Object value = runtimeValues[i];
+                    if (value instanceof RuntimeBase) {
+                        return (RuntimeBase) value;
+                    }
+                }
+            }
+        }
+
+        // If we can't find a runtime value, return a placeholder
+        // This is OK - closures are typically created at runtime via eval
+        return new RuntimeScalar();
     }
 
     // =========================================================================
@@ -124,20 +254,45 @@ public class BytecodeCompiler implements Visitor {
         // Variable reference
         String varName = node.name;
 
-        // Check if it's a lexical variable
+        // Check if this is a captured variable (with sigil)
+        // Try common sigils: $, @, %
+        String[] sigils = {"$", "@", "%"};
+        for (String sigil : sigils) {
+            String varNameWithSigil = sigil + varName;
+            if (capturedVarIndices != null && capturedVarIndices.containsKey(varNameWithSigil)) {
+                // Captured variable - use its pre-allocated register
+                lastResultReg = capturedVarIndices.get(varNameWithSigil);
+                return;
+            }
+        }
+
+        // Check if it's a lexical variable (may have sigil or not)
         if (registerMap.containsKey(varName)) {
             // Lexical variable - already has a register
             lastResultReg = registerMap.get(varName);
         } else {
-            // Global variable
-            int rd = allocateRegister();
-            int nameIdx = addToStringPool(varName);
+            // Try with sigils
+            boolean found = false;
+            for (String sigil : sigils) {
+                String varNameWithSigil = sigil + varName;
+                if (registerMap.containsKey(varNameWithSigil)) {
+                    lastResultReg = registerMap.get(varNameWithSigil);
+                    found = true;
+                    break;
+                }
+            }
 
-            emit(Opcodes.LOAD_GLOBAL_SCALAR);
-            emit(rd);
-            emit(nameIdx);
+            if (!found) {
+                // Global variable
+                int rd = allocateRegister();
+                int nameIdx = addToStringPool(varName);
 
-            lastResultReg = rd;
+                emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                emit(rd);
+                emit(nameIdx);
+
+                lastResultReg = rd;
+            }
         }
     }
 
@@ -341,6 +496,26 @@ public class BytecodeCompiler implements Visitor {
                 emit(rd);
                 emit(rs1);
                 emit(rs2);
+            }
+            case "()" -> {
+                // Apply operator: $coderef->(args) or &subname(args)
+                // left (rs1) = code reference (RuntimeScalar containing RuntimeCode)
+                // right (rs2) = arguments (should be ListNode)
+
+                // TODO: Convert arguments to RuntimeArray
+                // For now, assume simple case where right is already evaluated
+                // This is a simplified implementation - full implementation would need
+                // to build a RuntimeArray from the arguments
+
+                // Emit CALL_SUB: rd = coderef.apply(args, context)
+                emit(Opcodes.CALL_SUB);
+                emit(rd);  // Result register
+                emit(rs1); // Code reference register
+                emit(rs2); // Arguments register (should be RuntimeArray)
+                emit(RuntimeContextType.SCALAR); // Context (TODO: detect from usage)
+
+                // Note: CALL_SUB may return RuntimeControlFlowList
+                // The interpreter will handle control flow propagation
             }
             default -> throw new RuntimeException("Unsupported operator: " + node.operator);
         }
