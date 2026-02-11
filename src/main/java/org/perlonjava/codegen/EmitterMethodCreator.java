@@ -446,14 +446,8 @@ public class EmitterMethodCreator implements Opcodes {
             // Use capturedEnv if available (for eval), otherwise get from symbol table
             String[] env = (ctx.capturedEnv != null) ? ctx.capturedEnv : ctx.symbolTable.getVariableNames();
 
-            // Create a ClassWriter with COMPUTE_FRAMES and COMPUTE_MAXS options for automatic frame and max
-            // stack size calculation
-            // Only disable COMPUTE_FRAMES for the explicit diagnostic pass (disableFrames=true).
-            // In normal operation (even when JPERL_ASM_DEBUG is enabled) we want COMPUTE_FRAMES,
-            // otherwise the generated class may fail verification on modern JVMs.
-            // For the diagnostic (disableFrames=true) pass we disable COMPUTE_FRAMES so ASM does not
-            // attempt to compute stack map frames (which may crash if invalid bytecode was generated).
-            // Keep COMPUTE_MAXS enabled so max stack/locals are correct and we can run analyzers.
+            // Create a ClassWriter with COMPUTE_FRAMES for automatic frame computation
+            // Only disable for explicit diagnostic pass
             int cwFlags = disableFrames
                     ? ClassWriter.COMPUTE_MAXS
                     : (ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
@@ -585,6 +579,8 @@ public class EmitterMethodCreator implements Opcodes {
                 mv.visitInsn(Opcodes.ACONST_NULL);
                 mv.visitVarInsn(Opcodes.ASTORE, i);
             }
+
+            // Manual frames removed - using COMPUTE_FRAMES for automatic frame computation
 
             // Allocate slots for tail call trampoline (codeRef and args)
             // These are used at returnLabel for TAILCALL handling
