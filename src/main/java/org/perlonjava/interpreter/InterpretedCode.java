@@ -115,6 +115,135 @@ public class InterpretedCode extends RuntimeCode {
     }
 
     /**
+     * Disassemble bytecode for debugging and optimization analysis.
+     */
+    public String disassemble() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("=== Bytecode Disassembly ===\n");
+        sb.append("Source: ").append(sourceName).append(":").append(sourceLine).append("\n");
+        sb.append("Registers: ").append(maxRegisters).append("\n");
+        sb.append("Bytecode length: ").append(bytecode.length).append(" bytes\n\n");
+
+        int pc = 0;
+        while (pc < bytecode.length) {
+            int startPc = pc;
+            byte opcode = bytecode[pc++];
+            sb.append(String.format("%4d: ", startPc));
+
+            switch (opcode) {
+                case Opcodes.NOP:
+                    sb.append("NOP\n");
+                    break;
+                case Opcodes.RETURN:
+                    sb.append("RETURN r").append(bytecode[pc++] & 0xFF).append("\n");
+                    break;
+                case Opcodes.GOTO:
+                    sb.append("GOTO ").append(readInt(bytecode, pc)).append("\n");
+                    pc += 4;
+                    break;
+                case Opcodes.GOTO_IF_FALSE:
+                    int condReg = bytecode[pc++] & 0xFF;
+                    int target = readInt(bytecode, pc);
+                    pc += 4;
+                    sb.append("GOTO_IF_FALSE r").append(condReg).append(" -> ").append(target).append("\n");
+                    break;
+                case Opcodes.GOTO_IF_TRUE:
+                    condReg = bytecode[pc++] & 0xFF;
+                    target = readInt(bytecode, pc);
+                    pc += 4;
+                    sb.append("GOTO_IF_TRUE r").append(condReg).append(" -> ").append(target).append("\n");
+                    break;
+                case Opcodes.MOVE:
+                    int dest = bytecode[pc++] & 0xFF;
+                    int src = bytecode[pc++] & 0xFF;
+                    sb.append("MOVE r").append(dest).append(" = r").append(src).append("\n");
+                    break;
+                case Opcodes.LOAD_INT:
+                    int rd = bytecode[pc++] & 0xFF;
+                    int value = readInt(bytecode, pc);
+                    pc += 4;
+                    sb.append("LOAD_INT r").append(rd).append(" = ").append(value).append("\n");
+                    break;
+                case Opcodes.LOAD_GLOBAL_SCALAR:
+                    rd = bytecode[pc++] & 0xFF;
+                    int nameIdx = bytecode[pc++] & 0xFF;
+                    sb.append("LOAD_GLOBAL_SCALAR r").append(rd).append(" = $").append(stringPool[nameIdx]).append("\n");
+                    break;
+                case Opcodes.STORE_GLOBAL_SCALAR:
+                    nameIdx = bytecode[pc++] & 0xFF;
+                    int srcReg = bytecode[pc++] & 0xFF;
+                    sb.append("STORE_GLOBAL_SCALAR $").append(stringPool[nameIdx]).append(" = r").append(srcReg).append("\n");
+                    break;
+                case Opcodes.ADD_SCALAR:
+                    rd = bytecode[pc++] & 0xFF;
+                    int rs1 = bytecode[pc++] & 0xFF;
+                    int rs2 = bytecode[pc++] & 0xFF;
+                    sb.append("ADD_SCALAR r").append(rd).append(" = r").append(rs1).append(" + r").append(rs2).append("\n");
+                    break;
+                case Opcodes.ADD_SCALAR_INT:
+                    rd = bytecode[pc++] & 0xFF;
+                    int rs = bytecode[pc++] & 0xFF;
+                    int imm = readInt(bytecode, pc);
+                    pc += 4;
+                    sb.append("ADD_SCALAR_INT r").append(rd).append(" = r").append(rs).append(" + ").append(imm).append("\n");
+                    break;
+                case Opcodes.LT_NUM:
+                    rd = bytecode[pc++] & 0xFF;
+                    rs1 = bytecode[pc++] & 0xFF;
+                    rs2 = bytecode[pc++] & 0xFF;
+                    sb.append("LT_NUM r").append(rd).append(" = r").append(rs1).append(" < r").append(rs2).append("\n");
+                    break;
+                case Opcodes.INC_REG:
+                    rd = bytecode[pc++] & 0xFF;
+                    sb.append("INC_REG r").append(rd).append("++\n");
+                    break;
+                case Opcodes.DEC_REG:
+                    rd = bytecode[pc++] & 0xFF;
+                    sb.append("DEC_REG r").append(rd).append("--\n");
+                    break;
+                case Opcodes.ADD_ASSIGN:
+                    rd = bytecode[pc++] & 0xFF;
+                    rs = bytecode[pc++] & 0xFF;
+                    sb.append("ADD_ASSIGN r").append(rd).append(" += r").append(rs).append("\n");
+                    break;
+                case Opcodes.ADD_ASSIGN_INT:
+                    rd = bytecode[pc++] & 0xFF;
+                    imm = readInt(bytecode, pc);
+                    pc += 4;
+                    sb.append("ADD_ASSIGN_INT r").append(rd).append(" += ").append(imm).append("\n");
+                    break;
+                case Opcodes.PRE_AUTOINCREMENT:
+                    rd = bytecode[pc++] & 0xFF;
+                    sb.append("PRE_AUTOINCREMENT ++r").append(rd).append("\n");
+                    break;
+                case Opcodes.POST_AUTOINCREMENT:
+                    rd = bytecode[pc++] & 0xFF;
+                    sb.append("POST_AUTOINCREMENT r").append(rd).append("++\n");
+                    break;
+                case Opcodes.PRE_AUTODECREMENT:
+                    rd = bytecode[pc++] & 0xFF;
+                    sb.append("PRE_AUTODECREMENT --r").append(rd).append("\n");
+                    break;
+                case Opcodes.POST_AUTODECREMENT:
+                    rd = bytecode[pc++] & 0xFF;
+                    sb.append("POST_AUTODECREMENT r").append(rd).append("--\n");
+                    break;
+                default:
+                    sb.append("UNKNOWN(").append(opcode & 0xFF).append(")\n");
+                    break;
+            }
+        }
+        return sb.toString();
+    }
+
+    private static int readInt(byte[] bytecode, int pc) {
+        return ((bytecode[pc] & 0xFF) << 24) |
+               ((bytecode[pc + 1] & 0xFF) << 16) |
+               ((bytecode[pc + 2] & 0xFF) << 8) |
+               (bytecode[pc + 3] & 0xFF);
+    }
+
+    /**
      * Builder class for constructing InterpretedCode instances.
      */
     public static class Builder {

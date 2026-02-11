@@ -299,5 +299,34 @@ public class Opcodes {
     /** Warn with message: warn(rs) */
     public static final byte WARN = 74;
 
+    // =================================================================
+    // SUPERINSTRUCTIONS (75-90) - Combine common opcode sequences
+    // These eliminate MOVE overhead by doing operation + store in one step
+    // =================================================================
+
+    /** Increment register in-place: rd = rd + 1 (combines ADD_SCALAR_INT + MOVE) */
+    public static final byte INC_REG = 75;
+
+    /** Decrement register in-place: rd = rd - 1 (combines SUB_SCALAR_INT + MOVE) */
+    public static final byte DEC_REG = 76;
+
+    /** Add and assign: rd = rd + rs (combines ADD_SCALAR + MOVE when dest == src1) */
+    public static final byte ADD_ASSIGN = 77;
+
+    /** Add immediate and assign: rd = rd + imm (combines ADD_SCALAR_INT + MOVE when dest == src) */
+    public static final byte ADD_ASSIGN_INT = 78;
+
+    /** Pre-increment: ++rd (calls RuntimeScalar.preAutoIncrement) */
+    public static final byte PRE_AUTOINCREMENT = 79;
+
+    /** Post-increment: rd++ (calls RuntimeScalar.postAutoIncrement) */
+    public static final byte POST_AUTOINCREMENT = 80;
+
+    /** Pre-decrement: --rd (calls RuntimeScalar.preAutoDecrement) */
+    public static final byte PRE_AUTODECREMENT = 81;
+
+    /** Post-decrement: rd-- (calls RuntimeScalar.postAutoDecrement) */
+    public static final byte POST_AUTODECREMENT = 82;
+
     private Opcodes() {} // Utility class - no instantiation
 }

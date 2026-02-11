@@ -141,12 +141,13 @@ public class BytecodeInterpreter {
                     }
 
                     case Opcodes.LOAD_INT: {
-                        // Load cached integer: rd = RuntimeScalarCache.getScalarInt(immediate)
+                        // Load integer: rd = immediate (create NEW mutable scalar, not cached)
                         int rd = bytecode[pc++] & 0xFF;
                         int value = readInt(bytecode, pc);
                         pc += 4;
-                        // Uses SAME cache as compiled code
-                        registers[rd] = RuntimeScalarCache.getScalarInt(value);
+                        // Create NEW RuntimeScalar (mutable) instead of using cache
+                        // This is needed for local variables that may be modified (++/--)
+                        registers[rd] = new RuntimeScalar(value);
                         break;
                     }
 
@@ -553,6 +554,72 @@ public class BytecodeInterpreter {
                         int rs = bytecode[pc++] & 0xFF;
                         RuntimeScalar val = (RuntimeScalar) registers[rs];
                         System.out.println(val.toString());
+                        break;
+                    }
+
+                    // =================================================================
+                    // SUPERINSTRUCTIONS - Eliminate MOVE overhead
+                    // =================================================================
+
+                    case Opcodes.INC_REG: {
+                        // Increment register in-place: r++
+                        int rd = bytecode[pc++] & 0xFF;
+                        registers[rd] = MathOperators.add((RuntimeScalar) registers[rd], 1);
+                        break;
+                    }
+
+                    case Opcodes.DEC_REG: {
+                        // Decrement register in-place: r--
+                        int rd = bytecode[pc++] & 0xFF;
+                        registers[rd] = MathOperators.subtract((RuntimeScalar) registers[rd], 1);
+                        break;
+                    }
+
+                    case Opcodes.ADD_ASSIGN: {
+                        // Add and assign: rd = rd + rs
+                        int rd = bytecode[pc++] & 0xFF;
+                        int rs = bytecode[pc++] & 0xFF;
+                        registers[rd] = MathOperators.add(
+                            (RuntimeScalar) registers[rd],
+                            (RuntimeScalar) registers[rs]
+                        );
+                        break;
+                    }
+
+                    case Opcodes.ADD_ASSIGN_INT: {
+                        // Add immediate and assign: rd = rd + imm
+                        int rd = bytecode[pc++] & 0xFF;
+                        int immediate = readInt(bytecode, pc);
+                        pc += 4;
+                        registers[rd] = MathOperators.add((RuntimeScalar) registers[rd], immediate);
+                        break;
+                    }
+
+                    case Opcodes.PRE_AUTOINCREMENT: {
+                        // Pre-increment: ++rd
+                        int rd = bytecode[pc++] & 0xFF;
+                        ((RuntimeScalar) registers[rd]).preAutoIncrement();
+                        break;
+                    }
+
+                    case Opcodes.POST_AUTOINCREMENT: {
+                        // Post-increment: rd++
+                        int rd = bytecode[pc++] & 0xFF;
+                        ((RuntimeScalar) registers[rd]).postAutoIncrement();
+                        break;
+                    }
+
+                    case Opcodes.PRE_AUTODECREMENT: {
+                        // Pre-decrement: --rd
+                        int rd = bytecode[pc++] & 0xFF;
+                        ((RuntimeScalar) registers[rd]).preAutoDecrement();
+                        break;
+                    }
+
+                    case Opcodes.POST_AUTODECREMENT: {
+                        // Post-decrement: rd--
+                        int rd = bytecode[pc++] & 0xFF;
+                        ((RuntimeScalar) registers[rd]).postAutoDecrement();
                         break;
                     }
 
