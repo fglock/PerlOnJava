@@ -29,58 +29,95 @@ See `dev/design/interpreter_benchmarks.md` for detailed results.
 
 ## Correct Architecture (Based on Compiler Analysis)
 
-### Key Insight: Mirror the Compiler's Approach
+### Key Insight: Pure Register Architecture (NOT Stack-Based)
+
+**CRITICAL**: The compiler uses register architecture (not stack-based) because Perl's complex control flow (GOTO, last/next/redo, die/eval) would corrupt a stack. The interpreter **MUST** use the same architecture for correctness.
 
 Analysis of `./jperl --disassemble` output reveals the compiler:
 
-1. **Uses RuntimeBase objects everywhere** - no primitive unboxing in operations
-2. **Calls static operator methods** - `MathOperators.add(RuntimeScalar, RuntimeScalar)`
-3. **Shares global variables** - via `GlobalVariable` maps
-4. **Uses RuntimeScalarCache** - for constant values
+1. **Uses register architecture** - JVM local variables as registers (no expression stack)
+2. **Uses RuntimeBase objects everywhere** - no primitive unboxing in operations
+3. **Calls static operator methods** - `MathOperators.add(RuntimeScalar, RuntimeScalar)`
+4. **Shares global variables** - via `GlobalVariable` maps
+5. **Uses RuntimeScalarCache** - for constant values
+6. **Has specialized unboxed operations** - rare optimizations like `add(RuntimeScalar, int)`
 
 **The interpreter must do EXACTLY the same:**
 
 ```java
-// Interpreter operations mirror compiled bytecode
-RuntimeBase[] locals = new RuntimeBase[maxLocals];  // RuntimeScalar, RuntimeArray, RuntimeHash, etc.
-RuntimeBase[] stack = new RuntimeBase[maxStack];
-int sp = 0;
+// Pure register architecture (like compiler's JVM locals)
+RuntimeBase[] registers = new RuntimeBase[code.maxRegisters];
 
 case Opcodes.ADD_SCALAR:
-    RuntimeScalar b = (RuntimeScalar) stack[--sp];
-    RuntimeScalar a = (RuntimeScalar) stack[--sp];
+    // 3-address code: rd = rs1 + rs2
+    int rd = bytecode[pc++] & 0xFF;   // destination register
+    int rs1 = bytecode[pc++] & 0xFF;  // source register 1
+    int rs2 = bytecode[pc++] & 0xFF;  // source register 2
     // Call the SAME method the compiler uses
-    stack[sp++] = MathOperators.add(a, b);  // org.perlonjava.operators.MathOperators
+    registers[rd] = MathOperators.add(
+        (RuntimeScalar) registers[rs1],
+        (RuntimeScalar) registers[rs2]
+    );
+    break;
+
+case Opcodes.ADD_SCALAR_INT:
+    // Specialized unboxed operation (rare optimization)
+    // 2-address code: rd = rs + immediate_int
+    int rd = bytecode[pc++] & 0xFF;
+    int rs = bytecode[pc++] & 0xFF;
+    int immediate = readInt(bytecode, pc);
+    pc += 4;
+    // Call specialized unboxed method
+    registers[rd] = MathOperators.add(
+        (RuntimeScalar) registers[rs],
+        immediate  // primitive int, not RuntimeScalar
+    );
     break;
 
 case Opcodes.LOAD_GLOBAL_SCALAR:
-    String name = code.stringPool[bytecode[pc++]];
-    stack[sp++] = GlobalVariable.getGlobalScalar(name);  // Shared with compiled code
+    int destReg = bytecode[pc++] & 0xFF;
+    int nameIdx = bytecode[pc++] & 0xFF;
+    String name = code.stringPool[nameIdx];
+    registers[destReg] = GlobalVariable.getGlobalScalar(name);  // Shared with compiled code
     break;
 
 case Opcodes.ARRAY_GET:
-    RuntimeScalar index = (RuntimeScalar) stack[--sp];
-    RuntimeArray array = (RuntimeArray) stack[--sp];
-    stack[sp++] = array.get(index.getInt());  // Use existing RuntimeArray API
+    int resultReg = bytecode[pc++] & 0xFF;
+    int arrayReg = bytecode[pc++] & 0xFF;
+    int indexReg = bytecode[pc++] & 0xFF;
+    RuntimeArray array = (RuntimeArray) registers[arrayReg];
+    RuntimeScalar index = (RuntimeScalar) registers[indexReg];
+    registers[resultReg] = array.get(index.getInt());  // Use existing RuntimeArray API
+    break;
+
+case Opcodes.GOTO:
+    // Jump doesn't corrupt register state (unlike stack-based)!
+    int offset = readInt(bytecode, pc);
+    pc = offset;  // All registers stay valid
     break;
 ```
 
 ### Critical Requirements
 
-1. **No Primitive Unboxing** - Everything stays as RuntimeBase objects
-2. **Reuse Operator Implementations** - Call `org.perlonjava.operators.*` methods directly
-3. **Share Global State** - Same `GlobalVariable` maps for `$::x`, `@::arr`, `%::hash`
-4. **RuntimeCode Compatibility** - Interpreted code looks exactly like compiled code to callers
+1. **Pure Register Architecture** - NO expression stack (matches compiler for control flow correctness)
+2. **No Primitive Unboxing** - Everything stays as RuntimeBase objects (except rare specialized ops)
+3. **Reuse Operator Implementations** - Call `org.perlonjava.operators.*` methods directly
+4. **Share Global State** - Same `GlobalVariable` maps for `$::x`, `@::arr`, `%::hash`
+5. **RuntimeCode Compatibility** - Interpreted code looks exactly like compiled code to callers
+6. **Specialized Unboxed Ops** - Support rare optimizations like `add(RuntimeScalar, int)` when beneficial
 
-## Architecture: Hybrid Bytecode Interpreter
+## Architecture: Pure Register Bytecode Interpreter
 
-### Design: Custom Bytecode with Switch Dispatch
+### Design: Custom Bytecode with Register Machine
 
 - **Custom bytecode format** (NOT JVM bytecode) - optimized for Perl semantics
 - **Switch-based dispatch** - JVM JIT optimizes to tableswitch (O(1) jump table)
-- **Register machine** - fewer instructions than stack machine
+- **Pure register machine** - NO expression stack (matches compiler for control flow correctness)
+- **3-address code** - `rd = rs1 op rs2` (explicit register operands)
 - **Zero compilation overhead** - fast AST-to-bytecode translation (~microseconds)
-- **Runtime object stack** - RuntimeScalar/Array/Hash/List (no primitives)
+- **Runtime object registers** - RuntimeScalar/Array/Hash/List (no primitives, except rare specialized ops)
+
+**Why register architecture**: Perl's complex control flow (GOTO, last/next/redo, die/eval) requires registers that persist across jumps. Stack-based architecture would corrupt state on non-local jumps.
 
 **Expected performance**: 2-5x slower than compiled code in steady-state, but 10-50x faster for small eval strings due to eliminated compilation overhead.
 
@@ -99,113 +136,174 @@ src/main/java/org/perlonjava/interpreter/
 
 ### 1. InterpretedCode (Bytecode Container)
 
-**CRITICAL: Must be compatible with RuntimeCode**
+**CRITICAL: Subclass of RuntimeCode for perfect compatibility**
 
 ```java
 /**
- * Interpreted bytecode that looks exactly like compiled RuntimeCode to the system.
+ * Interpreted bytecode that IS-A RuntimeCode (subclass).
  * Can be stored in global variables, passed as code refs, captured in closures.
+ * COMPLETELY INDISTINGUISHABLE from compiled RuntimeCode to the system.
  */
 public class InterpretedCode extends RuntimeCode {
+    // Bytecode and metadata
     byte[] bytecode;          // Instruction opcodes (compact)
     Object[] constants;       // Constant pool (RuntimeBase objects)
     String[] stringPool;      // String constants (variable names, etc.)
-    int maxLocals;            // Number of local variable slots
-    int maxStack;             // Max operand stack depth
+    int maxRegisters;         // Number of registers needed
     RuntimeBase[] capturedVars; // Closure support (captured from outer scope)
 
+    // Constructor
+    public InterpretedCode(byte[] bytecode, Object[] constants, String[] stringPool,
+                          int maxRegisters, RuntimeBase[] capturedVars) {
+        this.bytecode = bytecode;
+        this.constants = constants;
+        this.stringPool = stringPool;
+        this.maxRegisters = maxRegisters;
+        this.capturedVars = capturedVars;
+    }
+
+    /**
+     * Override RuntimeCode.apply() to dispatch to interpreter.
+     * This is the ONLY difference from compiled code - execution engine.
+     * API signature is IDENTICAL.
+     */
     @Override
     public RuntimeList apply(RuntimeArray args, int contextType) {
-        // Dispatch to interpreter
+        // Dispatch to interpreter (not compiled bytecode)
         return BytecodeInterpreter.execute(this, args, contextType);
     }
 
+    /**
+     * Override RuntimeCode.call() for method call support.
+     * API signature is IDENTICAL to compiled code.
+     */
     @Override
     public RuntimeList call(RuntimeScalar invocant, String method, RuntimeBase[] args, int context) {
-        // Method call support
+        // Dispatch to interpreter with method call context
         return BytecodeInterpreter.executeMethod(this, invocant, method, args, context);
+    }
+
+    /**
+     * Closures: Capture variables from outer scope.
+     * Works EXACTLY like compiled closures.
+     */
+    public void captureVariables(RuntimeBase[] vars) {
+        this.capturedVars = vars;
     }
 }
 ```
 
-**Key insight**: Interpreted closures are indistinguishable from compiled closures - both extend `RuntimeCode`, both have `apply()` method, both can capture variables.
+**Key insight**: InterpretedCode **IS-A** RuntimeCode (not "implements same interface"). This means:
+- Can be assigned to `RuntimeScalar` holding code ref
+- Can be stored in `$::func` global
+- Can be passed to/from compiled code
+- Can be captured in closures (both directions)
+- Can be used in `@ISA`, method dispatch, overload, etc.
+- **No code in PerlOnJava can tell the difference** (except profiling/debugging)
+
+**Closure example:**
+```perl
+# Outer compiled code
+my $x = 10;
+my $closure = sub { $x + $_[0] };  # Interpreted (small eval) - captures $x
+
+# Inner interpreted code can access $x from outer compiled scope
+say $closure->(5);  # 15
+
+# Reverse: compiled code captures interpreted closure
+my $interpreted = eval 'sub { shift + 1 }';  # InterpretedCode
+my $compiled = sub { $interpreted->($_[0]) + 10 };  # Compiled, captures InterpretedCode
+say $compiled->(5);  # 16
+```
+
+Both directions work seamlessly because InterpretedCode extends RuntimeCode.
 
 ### 2. Opcodes (Instruction Set)
 
-Register-machine instructions that mirror compiler operations:
+Register-machine instructions (3-address code format) that mirror compiler operations:
 
 ```java
 public class Opcodes {
     // Control flow
     public static final byte NOP = 0;
-    public static final byte RETURN = 1;
-    public static final byte JUMP = 2;
-    public static final byte JUMP_IF_FALSE = 3;
+    public static final byte RETURN = 1;             // return rd (register)
+    public static final byte GOTO = 2;               // pc = offset (absolute)
+    public static final byte GOTO_IF_FALSE = 3;      // if (!rs) pc = offset
+
+    // Register operations
+    public static final byte MOVE = 10;              // rd = rs (register copy)
+    public static final byte LOAD_CONST = 11;        // rd = constants[index]
+    public static final byte LOAD_INT = 12;          // rd = RuntimeScalarCache.getScalarInt(immediate)
+    public static final byte LOAD_STRING = 13;       // rd = new RuntimeScalar(stringPool[index])
 
     // Variable access (uses same GlobalVariable maps as compiler)
-    public static final byte LOAD_LOCAL = 10;        // locals[index]
-    public static final byte STORE_LOCAL = 11;       // locals[index] = value
-    public static final byte LOAD_GLOBAL_SCALAR = 12; // GlobalVariable.getGlobalScalar(name)
-    public static final byte STORE_GLOBAL_SCALAR = 13;
-    public static final byte LOAD_GLOBAL_ARRAY = 14;  // GlobalVariable.getGlobalArray(name)
-    public static final byte STORE_GLOBAL_ARRAY = 15;
-    public static final byte LOAD_GLOBAL_HASH = 16;   // GlobalVariable.getGlobalHash(name)
-    public static final byte STORE_GLOBAL_HASH = 17;
+    public static final byte LOAD_GLOBAL_SCALAR = 20;  // rd = GlobalVariable.getGlobalScalar(name)
+    public static final byte STORE_GLOBAL_SCALAR = 21; // GlobalVariable.getGlobalScalar(name).set(rs)
+    public static final byte LOAD_GLOBAL_ARRAY = 22;   // rd = GlobalVariable.getGlobalArray(name)
+    public static final byte STORE_GLOBAL_ARRAY = 23;
+    public static final byte LOAD_GLOBAL_HASH = 24;    // rd = GlobalVariable.getGlobalHash(name)
+    public static final byte STORE_GLOBAL_HASH = 25;
 
-    // Constants (from RuntimeScalarCache or constant pool)
-    public static final byte LOAD_CONST = 20;        // constants[index]
-    public static final byte LOAD_STRING = 21;       // stringPool[index]
-    public static final byte LOAD_INT = 22;          // RuntimeScalarCache.getScalarInt(n)
+    // Operators (call org.perlonjava.operators.* methods) - 3-address format
+    public static final byte ADD_SCALAR = 30;        // rd = MathOperators.add(rs1, rs2)
+    public static final byte SUB_SCALAR = 31;        // rd = MathOperators.subtract(rs1, rs2)
+    public static final byte MUL_SCALAR = 32;        // rd = MathOperators.multiply(rs1, rs2)
+    public static final byte DIV_SCALAR = 33;        // rd = MathOperators.divide(rs1, rs2)
+    public static final byte CONCAT = 34;            // rd = StringOperators.concat(rs1, rs2)
+    public static final byte COMPARE_NUM = 35;       // rd = CompareOperators.compareNum(rs1, rs2)
 
-    // Operators (call org.perlonjava.operators.* methods)
-    public static final byte ADD_SCALAR = 30;        // MathOperators.add(a, b)
-    public static final byte SUB_SCALAR = 31;        // MathOperators.subtract(a, b)
-    public static final byte MUL_SCALAR = 32;        // MathOperators.multiply(a, b)
-    public static final byte CONCAT = 33;            // StringOperators.concat(a, b)
-    public static final byte COMPARE_NUM = 34;       // CompareOperators.compareNum(a, b)
+    // Specialized unboxed operations (rare optimizations)
+    public static final byte ADD_SCALAR_INT = 40;    // rd = MathOperators.add(rs, immediate_int)
+    public static final byte CMP_SCALAR_INT = 41;    // rd = CompareOperators.compareNum(rs, immediate_int)
 
-    // Array operations (use RuntimeArray API)
-    public static final byte ARRAY_GET = 40;         // array.get(index)
-    public static final byte ARRAY_SET = 41;         // array.set(index, value)
-    public static final byte ARRAY_PUSH = 42;        // array.push(value)
+    // Array operations (use RuntimeArray API) - 3-address format
+    public static final byte ARRAY_GET = 50;         // rd = array_reg.get(index_reg)
+    public static final byte ARRAY_SET = 51;         // array_reg.set(index_reg, value_reg)
+    public static final byte ARRAY_PUSH = 52;        // array_reg.push(value_reg)
+    public static final byte ARRAY_SIZE = 53;        // rd = new RuntimeScalar(array_reg.size())
 
-    // Hash operations (use RuntimeHash API)
-    public static final byte HASH_GET = 50;          // hash.get(key)
-    public static final byte HASH_SET = 51;          // hash.put(key, value)
-    public static final byte HASH_EXISTS = 52;       // hash.exists(key)
+    // Hash operations (use RuntimeHash API) - 3-address format
+    public static final byte HASH_GET = 60;          // rd = hash_reg.get(key_reg)
+    public static final byte HASH_SET = 61;          // hash_reg.put(key_reg, value_reg)
+    public static final byte HASH_EXISTS = 62;       // rd = hash_reg.exists(key_reg)
+    public static final byte HASH_DELETE = 63;       // rd = hash_reg.delete(key_reg)
 
     // Subroutine calls (RuntimeCode.apply)
-    public static final byte CALL_SUB = 60;          // RuntimeCode.apply(codeRef, args, context)
-    public static final byte CALL_METHOD = 61;       // RuntimeCode.call(obj, method, args, context)
-    public static final byte CALL_BUILTIN = 62;      // BuiltinRegistry.call(id, args, context)
+    public static final byte CALL_SUB = 70;          // rd = RuntimeCode.apply(coderef_reg, args_reg, context)
+    public static final byte CALL_METHOD = 71;       // rd = RuntimeCode.call(obj_reg, method, args_reg, context)
+    public static final byte CALL_BUILTIN = 72;      // rd = BuiltinRegistry.call(builtin_id, args_reg, context)
 
     // Context operations
-    public static final byte LIST_TO_SCALAR = 70;    // RuntimeList.scalar()
-    public static final byte SCALAR_TO_LIST = 71;    // new RuntimeList(scalar)
+    public static final byte LIST_TO_SCALAR = 80;    // rd = list_reg.scalar()
+    public static final byte SCALAR_TO_LIST = 81;    // rd = new RuntimeList(scalar_reg)
 }
 ```
 
+**Encoding format:**
+- Most opcodes: `[opcode] [rd] [rs1] [rs2]` (4 bytes for 3-address ops)
+- Load immediate: `[opcode] [rd] [imm32]` (6 bytes for 32-bit immediate)
+- Jump: `[opcode] [offset32]` (5 bytes for absolute offset)
+- Conditional jump: `[opcode] [rs] [offset32]` (6 bytes)
+
 ### 3. BytecodeInterpreter (Execution Engine)
 
-**Switch-based dispatch calling existing operator methods:**
+**Pure register-based dispatch calling existing operator methods:**
 
 ```java
 public class BytecodeInterpreter {
 
     public static RuntimeList execute(InterpretedCode code, RuntimeArray args, int contextType) {
-        // Runtime object arrays (NOT primitives)
-        RuntimeBase[] locals = new RuntimeBase[code.maxLocals];
-        RuntimeBase[] stack = new RuntimeBase[code.maxStack];
-        int sp = 0;
+        // Pure register file (NOT stack-based - matches compiler for control flow correctness)
+        RuntimeBase[] registers = new RuntimeBase[code.maxRegisters];
 
-        // Initialize special variables
-        locals[0] = code;           // $this (for closures)
-        locals[1] = args;           // @_
-        locals[2] = RuntimeScalarCache.getScalarInt(contextType); // wantarray
+        // Initialize special registers
+        registers[0] = code;           // $this (for closures)
+        registers[1] = args;           // @_
+        registers[2] = RuntimeScalarCache.getScalarInt(contextType); // wantarray
 
         // Copy captured variables (closure support)
         if (code.capturedVars != null) {
-            System.arraycopy(code.capturedVars, 0, locals, 3, code.capturedVars.length);
+            System.arraycopy(code.capturedVars, 0, registers, 3, code.capturedVars.length);
         }
 
         int pc = 0;
@@ -216,72 +314,136 @@ public class BytecodeInterpreter {
             byte opcode = bytecode[pc++];
 
             switch (opcode) {
-                case Opcodes.LOAD_LOCAL:
-                    int index = bytecode[pc++] & 0xFF;
-                    stack[sp++] = locals[index];
-                    break;
-
-                case Opcodes.STORE_LOCAL:
-                    int storeIndex = bytecode[pc++] & 0xFF;
-                    locals[storeIndex] = stack[--sp];
-                    break;
-
-                case Opcodes.LOAD_GLOBAL_SCALAR:
-                    int nameIndex = bytecode[pc++] & 0xFF;
-                    String name = code.stringPool[nameIndex];
-                    // Uses SAME GlobalVariable as compiled code
-                    stack[sp++] = GlobalVariable.getGlobalScalar(name);
+                case Opcodes.MOVE:
+                    // Register-to-register copy: rd = rs
+                    int dest = bytecode[pc++] & 0xFF;
+                    int src = bytecode[pc++] & 0xFF;
+                    registers[dest] = registers[src];
                     break;
 
                 case Opcodes.LOAD_INT:
+                    // Load immediate integer: rd = RuntimeScalarCache.getScalarInt(imm)
+                    int destReg = bytecode[pc++] & 0xFF;
                     int value = readInt(bytecode, pc);
                     pc += 4;
                     // Uses SAME cache as compiled code
-                    stack[sp++] = RuntimeScalarCache.getScalarInt(value);
+                    registers[destReg] = RuntimeScalarCache.getScalarInt(value);
+                    break;
+
+                case Opcodes.LOAD_GLOBAL_SCALAR:
+                    // Load global scalar: rd = GlobalVariable.getGlobalScalar(name)
+                    int rd = bytecode[pc++] & 0xFF;
+                    int nameIndex = bytecode[pc++] & 0xFF;
+                    String name = code.stringPool[nameIndex];
+                    // Uses SAME GlobalVariable as compiled code
+                    registers[rd] = GlobalVariable.getGlobalScalar(name);
+                    break;
+
+                case Opcodes.STORE_GLOBAL_SCALAR:
+                    // Store global scalar: GlobalVariable.getGlobalScalar(name).set(rs)
+                    int nameIdx = bytecode[pc++] & 0xFF;
+                    int srcReg = bytecode[pc++] & 0xFF;
+                    String varName = code.stringPool[nameIdx];
+                    GlobalVariable.getGlobalScalar(varName).set((RuntimeScalar) registers[srcReg]);
                     break;
 
                 case Opcodes.ADD_SCALAR:
-                    RuntimeScalar b = (RuntimeScalar) stack[--sp];
-                    RuntimeScalar a = (RuntimeScalar) stack[--sp];
+                    // 3-address addition: rd = rs1 + rs2
+                    int rdAdd = bytecode[pc++] & 0xFF;
+                    int rs1Add = bytecode[pc++] & 0xFF;
+                    int rs2Add = bytecode[pc++] & 0xFF;
                     // Calls SAME method as compiled code
-                    stack[sp++] = MathOperators.add(a, b);
+                    registers[rdAdd] = MathOperators.add(
+                        (RuntimeScalar) registers[rs1Add],
+                        (RuntimeScalar) registers[rs2Add]
+                    );
+                    break;
+
+                case Opcodes.ADD_SCALAR_INT:
+                    // Specialized unboxed operation: rd = rs + immediate_int
+                    int rdAddInt = bytecode[pc++] & 0xFF;
+                    int rsAddInt = bytecode[pc++] & 0xFF;
+                    int immediate = readInt(bytecode, pc);
+                    pc += 4;
+                    // Calls specialized unboxed method (rare optimization)
+                    registers[rdAddInt] = MathOperators.add(
+                        (RuntimeScalar) registers[rsAddInt],
+                        immediate  // primitive int, not RuntimeScalar
+                    );
+                    break;
+
+                case Opcodes.CONCAT:
+                    // String concatenation: rd = rs1 . rs2
+                    int rdConcat = bytecode[pc++] & 0xFF;
+                    int rs1Concat = bytecode[pc++] & 0xFF;
+                    int rs2Concat = bytecode[pc++] & 0xFF;
+                    registers[rdConcat] = StringOperators.concat(
+                        (RuntimeScalar) registers[rs1Concat],
+                        (RuntimeScalar) registers[rs2Concat]
+                    );
                     break;
 
                 case Opcodes.ARRAY_GET:
-                    RuntimeScalar idx = (RuntimeScalar) stack[--sp];
-                    RuntimeArray arr = (RuntimeArray) stack[--sp];
+                    // Array element access: rd = array_reg[index_reg]
+                    int rdArray = bytecode[pc++] & 0xFF;
+                    int arrayReg = bytecode[pc++] & 0xFF;
+                    int indexReg = bytecode[pc++] & 0xFF;
+                    RuntimeArray arr = (RuntimeArray) registers[arrayReg];
+                    RuntimeScalar idx = (RuntimeScalar) registers[indexReg];
                     // Uses RuntimeArray API directly
-                    stack[sp++] = arr.get(idx.getInt());
+                    registers[rdArray] = arr.get(idx.getInt());
                     break;
 
                 case Opcodes.HASH_GET:
-                    RuntimeScalar key = (RuntimeScalar) stack[--sp];
-                    RuntimeHash hash = (RuntimeHash) stack[--sp];
+                    // Hash element access: rd = hash_reg{key_reg}
+                    int rdHash = bytecode[pc++] & 0xFF;
+                    int hashReg = bytecode[pc++] & 0xFF;
+                    int keyReg = bytecode[pc++] & 0xFF;
+                    RuntimeHash hash = (RuntimeHash) registers[hashReg];
+                    RuntimeScalar key = (RuntimeScalar) registers[keyReg];
                     // Uses RuntimeHash API directly
-                    stack[sp++] = hash.get(key);
+                    registers[rdHash] = hash.get(key);
                     break;
 
                 case Opcodes.CALL_SUB:
-                    int argCount = bytecode[pc++] & 0xFF;
+                    // Subroutine call: rd = coderef_reg->(args_reg)
+                    int rdCall = bytecode[pc++] & 0xFF;
+                    int coderefReg = bytecode[pc++] & 0xFF;
+                    int argsReg = bytecode[pc++] & 0xFF;
                     int callContext = bytecode[pc++] & 0xFF;
-                    RuntimeArray callArgs = new RuntimeArray();
-                    for (int i = 0; i < argCount; i++) {
-                        callArgs.push(stack[--sp]);
-                    }
-                    RuntimeScalar codeRef = (RuntimeScalar) stack[--sp];
+                    RuntimeScalar codeRef = (RuntimeScalar) registers[coderefReg];
+                    RuntimeArray callArgs = (RuntimeArray) registers[argsReg];
                     // RuntimeCode.apply works for both compiled AND interpreted code
                     RuntimeList result = RuntimeCode.apply(codeRef, "", callArgs, callContext);
-                    stack[sp++] = result;
+                    registers[rdCall] = result;
+                    break;
+
+                case Opcodes.GOTO:
+                    // Unconditional jump: pc = offset
+                    // Registers persist across jump (unlike stack-based!)
+                    int offset = readInt(bytecode, pc);
+                    pc = offset;
+                    break;
+
+                case Opcodes.GOTO_IF_FALSE:
+                    // Conditional jump: if (!rs) pc = offset
+                    int condReg = bytecode[pc++] & 0xFF;
+                    int target = readInt(bytecode, pc);
+                    pc += 4;
+                    RuntimeScalar cond = (RuntimeScalar) registers[condReg];
+                    if (!cond.getBoolean()) {
+                        pc = target;  // Jump - all registers stay valid!
+                    }
                     break;
 
                 case Opcodes.RETURN:
-                    if (sp > 0) {
-                        RuntimeBase retVal = stack[--sp];
-                        if (retVal instanceof RuntimeList) {
-                            return (RuntimeList) retVal;
-                        } else {
-                            return new RuntimeList((RuntimeScalar) retVal);
-                        }
+                    // Return from subroutine: return rd
+                    int retReg = bytecode[pc++] & 0xFF;
+                    RuntimeBase retVal = registers[retReg];
+                    if (retVal instanceof RuntimeList) {
+                        return (RuntimeList) retVal;
+                    } else if (retVal instanceof RuntimeScalar) {
+                        return new RuntimeList((RuntimeScalar) retVal);
                     }
                     return new RuntimeList();
 
@@ -301,6 +463,13 @@ public class BytecodeInterpreter {
 }
 ```
 
+**Key features:**
+- **Pure register file** - no expression stack, no stack pointer management
+- **3-address code** - all operands explicit in bytecode
+- **Control flow safe** - GOTO/last/next don't corrupt state
+- **Operator reuse** - calls same `org.perlonjava.operators.*` methods as compiler
+- **Specialized unboxing** - rare optimizations like `add(RuntimeScalar, int)` when beneficial
+
 ### 4. BytecodeCompiler (AST Translator)
 
 ```java
@@ -308,50 +477,160 @@ public class BytecodeCompiler implements Visitor {
     ByteArrayOutputStream bytecode;
     List<RuntimeBase> constants;      // RuntimeBase objects
     List<String> stringPool;          // Variable names
-    Map<String, Integer> localIndices; // Variable name → local slot
+    Map<String, Integer> registerMap; // Variable name → register index
+    int nextRegister = 0;             // Next available register
 
     public InterpretedCode compile(Node ast, EmitterContext ctx) {
-        this.localIndices = buildLocalMap(ctx.symbolTable);
+        this.registerMap = buildRegisterMap(ctx.symbolTable);
+        this.nextRegister = registerMap.size() + 3; // After special regs: $this, @_, wantarray
+
         ast.accept(this);  // Traverse AST
+
+        // Emit return with register 0 (default return value)
         emit(Opcodes.RETURN);
+        emit(0);
+
         return buildInterpretedCode();
     }
 
     @Override
     public void visit(BinaryOperatorNode node) {
-        node.left.accept(this);   // Compile left operand → stack
-        node.right.accept(this);  // Compile right operand → stack
+        // Allocate registers for operands and result
+        int rs1 = allocateTempRegister();
+        int rs2 = allocateTempRegister();
+        int rd = allocateTempRegister();
 
-        // Emit opcode that calls same operator as compiler
+        // Compile left operand → rs1
+        node.left.accept(this);
+        emit(Opcodes.MOVE);
+        emit(rs1);
+        emit(getLastResultRegister());
+
+        // Compile right operand → rs2
+        node.right.accept(this);
+        emit(Opcodes.MOVE);
+        emit(rs2);
+        emit(getLastResultRegister());
+
+        // Emit 3-address opcode: rd = rs1 op rs2
         switch (node.operator) {
-            case "+" -> emit(Opcodes.ADD_SCALAR);    // → MathOperators.add()
-            case "." -> emit(Opcodes.CONCAT);         // → StringOperators.concat()
-            case "<=>" -> emit(Opcodes.COMPARE_NUM); // → CompareOperators.compareNum()
+            case "+" -> {
+                // Check if right operand is constant int for optimization
+                if (node.right instanceof NumberNode && ((NumberNode) node.right).isInteger()) {
+                    // Specialized unboxed operation
+                    emit(Opcodes.ADD_SCALAR_INT);
+                    emit(rd);
+                    emit(rs1);
+                    emitInt(((NumberNode) node.right).intValue());
+                } else {
+                    // General operation
+                    emit(Opcodes.ADD_SCALAR);    // → MathOperators.add(rs1, rs2)
+                    emit(rd);
+                    emit(rs1);
+                    emit(rs2);
+                }
+            }
+            case "." -> {
+                emit(Opcodes.CONCAT);         // → StringOperators.concat(rs1, rs2)
+                emit(rd);
+                emit(rs1);
+                emit(rs2);
+            }
+            case "<=>" -> {
+                emit(Opcodes.COMPARE_NUM);    // → CompareOperators.compareNum(rs1, rs2)
+                emit(rd);
+                emit(rs1);
+                emit(rs2);
+            }
             // ... more operators
         }
+
+        setLastResultRegister(rd);
+        freeTempRegister(rs1);
+        freeTempRegister(rs2);
     }
 
     @Override
     public void visit(IdentifierNode node) {
-        if (localIndices.containsKey(node.name)) {
-            // Lexical variable
-            emit(Opcodes.LOAD_LOCAL);
-            emit(localIndices.get(node.name));
+        int rd = allocateTempRegister();
+
+        if (registerMap.containsKey(node.name)) {
+            // Lexical variable - register is already allocated
+            emit(Opcodes.MOVE);
+            emit(rd);
+            emit(registerMap.get(node.name));
         } else {
             // Global variable - uses same GlobalVariable map as compiled code
             emit(Opcodes.LOAD_GLOBAL_SCALAR);
+            emit(rd);
             emit(getStringPoolIndex(node.name));
         }
+
+        setLastResultRegister(rd);
     }
 
     @Override
     public void visit(ArrayIndexNode node) {
-        node.array.accept(this);   // → RuntimeArray on stack
-        node.index.accept(this);   // → RuntimeScalar on stack
+        int arrayReg = allocateTempRegister();
+        int indexReg = allocateTempRegister();
+        int rd = allocateTempRegister();
+
+        // Compile array expression → arrayReg
+        node.array.accept(this);
+        emit(Opcodes.MOVE);
+        emit(arrayReg);
+        emit(getLastResultRegister());
+
+        // Compile index expression → indexReg
+        node.index.accept(this);
+        emit(Opcodes.MOVE);
+        emit(indexReg);
+        emit(getLastResultRegister());
+
+        // Emit array access: rd = array[index]
         emit(Opcodes.ARRAY_GET);   // → RuntimeArray.get()
+        emit(rd);
+        emit(arrayReg);
+        emit(indexReg);
+
+        setLastResultRegister(rd);
+        freeTempRegister(arrayReg);
+        freeTempRegister(indexReg);
+    }
+
+    @Override
+    public void visit(GotoNode node) {
+        // Emit GOTO - registers persist across jump (unlike stack-based!)
+        emit(Opcodes.GOTO);
+        emitInt(getLabelOffset(node.label));
+    }
+
+    private int allocateTempRegister() {
+        return nextRegister++;
+    }
+
+    private void freeTempRegister(int reg) {
+        // Simple allocator - could be optimized with register reuse
+    }
+
+    private void emit(byte opcode) {
+        bytecode.write(opcode);
+    }
+
+    private void emitInt(int value) {
+        bytecode.write((value >> 24) & 0xFF);
+        bytecode.write((value >> 16) & 0xFF);
+        bytecode.write((value >> 8) & 0xFF);
+        bytecode.write(value & 0xFF);
     }
 }
 ```
+
+**Key features:**
+- **3-address code generation** - all operands explicit in bytecode
+- **Register allocation** - maps variables to registers
+- **Specialized unboxing** - detects constant integers and uses optimized opcodes
+- **Control flow safe** - GOTO generates absolute offsets, registers persist
 
 ## Integration with Existing Code
 
@@ -427,36 +706,43 @@ boolean shouldInterpret(Node ast, String source) {
 
 ### Phase 1: Core Interpreter (1-2 weeks)
 
-1. **InterpretedCode extends RuntimeCode**
-   - Implements `apply(RuntimeArray, int)` → calls interpreter
-   - Supports closure variable capture
-   - Indistinguishable from compiled code to callers
+1. **InterpretedCode extends RuntimeCode** (subclass, not interface)
+   - Implements `apply(RuntimeArray, int)` → calls BytecodeInterpreter.execute()
+   - Implements `call(RuntimeScalar, String, RuntimeBase[], int)` → calls BytecodeInterpreter.executeMethod()
+   - Supports closure variable capture via `capturedVars` array
+   - **Completely indistinguishable from compiled RuntimeCode** to all system code
 
-2. **Opcodes.java** - Define 50-100 opcodes mirroring compiler operations
-   - Variable access (local, global scalar/array/hash)
-   - Operators (call `org.perlonjava.operators.*`)
+2. **Opcodes.java** - Define 50-100 opcodes in 3-address format
+   - Variable access (register moves, global scalar/array/hash)
+   - Operators (call `org.perlonjava.operators.*` with 3-address encoding)
    - Array/Hash operations (use RuntimeArray/RuntimeHash API)
-   - Control flow (JUMP, RETURN)
-   - Subroutine calls (RuntimeCode.apply)
+   - Control flow (GOTO, GOTO_IF_FALSE, RETURN with absolute offsets)
+   - Subroutine calls (RuntimeCode.apply - works for compiled AND interpreted)
+   - Specialized unboxed ops (rare optimizations like `add(RuntimeScalar, int)`)
 
-3. **BytecodeInterpreter.java** - Switch-based execution
-   - RuntimeBase[] stack and locals (no primitives)
-   - Call existing operator methods
-   - Share GlobalVariable maps
+3. **BytecodeInterpreter.java** - Switch-based execution with pure register file
+   - RuntimeBase[] registers (NOT stack - no sp management)
+   - 3-address code execution (rd = rs1 op rs2)
+   - Call existing operator methods from `org.perlonjava.operators.*`
+   - Share GlobalVariable maps with compiled code
    - Return RuntimeList
+   - Handle GOTO/control flow correctly (registers persist across jumps)
 
 4. **BytecodeCompiler.java** - AST → bytecode translator
    - Visitor pattern (like EmitterVisitor)
-   - Generate opcodes that mirror compiler operations
+   - Generate 3-address code with register allocation
    - Build constant pool (RuntimeBase objects)
    - Build string pool (variable names)
+   - Detect constant integers for specialized unboxed operations
+   - Generate absolute offsets for GOTO (not relative)
 
 5. **Unit tests**
    - Basic operations (arithmetic, string concat)
-   - Variable access (lexical, global)
+   - Variable access (lexical registers, global variables)
    - Arrays and hashes
-   - Control flow
-   - Mixed compiled/interpreted calls
+   - Control flow (GOTO, conditionals, loops)
+   - Mixed compiled/interpreted calls (both directions)
+   - Closures (both directions: compiled capturing interpreted, interpreted capturing compiled)
 
 ### Phase 2: Integration (1 week)
 
@@ -517,16 +803,19 @@ All new files under `src/main/java/org/perlonjava/interpreter/`:
 
 ## Success Criteria
 
-- [x] **Phase 0 complete** - Switch-based dispatch proven 2.25-4.63x faster
+- [x] **Phase 0 complete** - Switch-based dispatch proven 2.25-4.63x faster than function-array
+- [x] **Register architecture confirmed** - Required for control flow correctness (GOTO/last/next/redo)
 - [ ] Small eval strings (< 100 chars) execute 10-50x faster than compilation
 - [ ] Large one-time code (> 50KB) executes 10-20x faster than compilation
-- [ ] InterpretedCode is indistinguishable from RuntimeCode to callers
-- [ ] Compiled and interpreted code can call each other seamlessly
-- [ ] Global variables shared between compiled and interpreted code
-- [ ] Interpreted closures work exactly like compiled closures
+- [ ] InterpretedCode extends RuntimeCode (IS-A subclass, perfect compatibility)
+- [ ] Compiled and interpreted code can call each other seamlessly (both directions)
+- [ ] Global variables shared between compiled and interpreted code (same GlobalVariable maps)
+- [ ] Interpreted closures work exactly like compiled closures (capture works both directions)
 - [ ] All existing unit tests pass with interpreter enabled
-- [ ] Interpreter uses RuntimeBase objects (no primitive unboxing)
-- [ ] Interpreter calls org.perlonjava.operators.* methods (reuse)
+- [ ] Interpreter uses RuntimeBase objects in registers (no primitives except specialized ops)
+- [ ] Interpreter calls org.perlonjava.operators.* methods (100% code reuse)
+- [ ] Specialized unboxed operations used where beneficial (e.g., add(RuntimeScalar, int))
+- [ ] Control flow (GOTO/last/next/redo) works correctly (registers persist across jumps)
 - [ ] Memory overhead < 1KB per InterpretedCode instance
 
 ## Documentation
