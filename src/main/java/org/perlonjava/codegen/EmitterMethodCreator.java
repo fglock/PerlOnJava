@@ -580,7 +580,7 @@ public class EmitterMethodCreator implements Opcodes {
             org.perlonjava.astvisitor.TempLocalCountVisitor tempCountVisitor =
                 new org.perlonjava.astvisitor.TempLocalCountVisitor();
             ast.accept(tempCountVisitor);
-            int preInitTempLocalsCount = tempCountVisitor.getMaxTempCount() + 64;  // Optimized: removed min-128 baseline
+            int preInitTempLocalsCount = Math.max(128, tempCountVisitor.getMaxTempCount() + 64);  // Restore min-128 baseline to fix VerifyError
             for (int i = preInitTempLocalsStart; i < preInitTempLocalsStart + preInitTempLocalsCount; i++) {
                 mv.visitInsn(Opcodes.ACONST_NULL);
                 mv.visitVarInsn(Opcodes.ASTORE, i);
