@@ -13,20 +13,10 @@ import org.perlonjava.symbols.ScopedSymbolTable;
 import java.util.List;
 
 /**
- * Simple test harness for the interpreter.
- *
- * Usage: Parse Perl code -> Compile to bytecode -> Execute via apply()
+ * Test for loop implementation in interpreter.
  */
-public class InterpreterTest {
+public class ForLoopTest {
 
-    /**
-     * Parse, compile, and execute Perl code using the interpreter.
-     *
-     * @param perlCode   The Perl code to execute
-     * @param sourceName Source name for debugging
-     * @param sourceLine Source line for debugging
-     * @return RuntimeList containing the result
-     */
     public static RuntimeList runCode(String perlCode, String sourceName, int sourceLine) {
         try {
             // Step 1: Tokenize Perl code
@@ -41,13 +31,9 @@ public class InterpreterTest {
             EmitterContext ctx = new EmitterContext(
                 new JavaClassInfo(),
                 symbolTable,
-                null, // mv
-                null, // cw
+                null, null,
                 RuntimeContextType.VOID,
-                false, // isBoxed
-                errorUtil,
-                opts,
-                null  // unitcheckBlocks
+                false, errorUtil, opts, null
             );
 
             // Step 3: Parse tokens to AST
@@ -58,9 +44,9 @@ public class InterpreterTest {
             BytecodeCompiler compiler = new BytecodeCompiler(sourceName, sourceLine);
             InterpretedCode code = compiler.compile(ast);
 
-            // Step 5: Execute via apply() (just like compiled code)
-            RuntimeArray args = new RuntimeArray();  // Empty @_
-            int context = RuntimeContextType.VOID;   // Void context
+            // Step 5: Execute via apply()
+            RuntimeArray args = new RuntimeArray();
+            int context = RuntimeContextType.SCALAR;
 
             return code.apply(args, context);
 
@@ -72,24 +58,22 @@ public class InterpreterTest {
         }
     }
 
-    /**
-     * Main entry point for manual testing.
-     */
     public static void main(String[] args) {
-        System.out.println("=== Interpreter Test Suite ===\n");
+        System.out.println("=== For Loop Interpreter Test ===\n");
 
-        // Test 1: Simple integer
-        System.out.println("Test 1: my $x = 5; say $x");
-        runCode("my $x = 5; say $x", "test1.pl", 1);
+        try {
+            // Test 1: Simple C-style for loop
+            System.out.println("Test 1: C-style for loop sum");
+            String code1 = "my $sum = 0; for (my $i = 0; $i < 10; $i++) { $sum = $sum + $i; } $sum";
+            RuntimeList result1 = runCode(code1, "test1.pl", 1);
+            System.out.println("Result: " + result1);
+            System.out.println("Expected: 45");
 
-        // Test 2: Arithmetic
-        System.out.println("\nTest 2: my $x = 10 + 20; say $x");
-        runCode("my $x = 10 + 20; say $x", "test2.pl", 1);
-
-        // Test 3: String concatenation
-        System.out.println("\nTest 3: my $x = 'Hello' . ' World'; say $x");
-        runCode("my $x = 'Hello' . ' World'; say $x", "test3.pl", 1);
-
-        System.out.println("\n=== All tests completed ===");
+            System.out.println("\n=== All tests completed ===");
+        } catch (Exception e) {
+            System.err.println("\n=== Test failed ===");
+            e.printStackTrace();
+            System.exit(1);
+        }
     }
 }

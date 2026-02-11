@@ -86,15 +86,21 @@ public class BytecodeCompiler implements Visitor {
         // Emit LOAD_INT: rd = RuntimeScalarCache.getScalarInt(value)
         int rd = allocateRegister();
 
-        if (node.isInteger()) {
-            emit(Opcodes.LOAD_INT);
-            emit(rd);
-            emitInt((int) node.value);
-        } else {
-            // TODO: Handle double values
-            emit(Opcodes.LOAD_INT);
-            emit(rd);
-            emitInt((int) node.value);
+        try {
+            if (node.value.contains(".")) {
+                // TODO: Handle double values properly
+                int intValue = (int) Double.parseDouble(node.value);
+                emit(Opcodes.LOAD_INT);
+                emit(rd);
+                emitInt(intValue);
+            } else {
+                int intValue = Integer.parseInt(node.value);
+                emit(Opcodes.LOAD_INT);
+                emit(rd);
+                emitInt(intValue);
+            }
+        } catch (NumberFormatException e) {
+            throw new RuntimeException("Invalid number: " + node.value, e);
         }
 
         lastResultReg = rd;
@@ -116,7 +122,7 @@ public class BytecodeCompiler implements Visitor {
     @Override
     public void visit(IdentifierNode node) {
         // Variable reference
-        String varName = node.value;
+        String varName = node.name;
 
         // Check if it's a lexical variable
         if (registerMap.containsKey(varName)) {
@@ -137,6 +143,115 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(BinaryOperatorNode node) {
+        // Handle assignment separately (doesn't follow standard left-right-op pattern)
+        if (node.operator.equals("=")) {
+            // Special case: my $x = value
+            if (node.left instanceof OperatorNode) {
+                OperatorNode leftOp = (OperatorNode) node.left;
+                if (leftOp.operator.equals("my")) {
+                    // Extract variable name from "my" operand
+                    Node myOperand = leftOp.operand;
+
+                    // Handle my $x (where $x is OperatorNode("$", IdentifierNode("x")))
+                    if (myOperand instanceof OperatorNode) {
+                        OperatorNode sigilOp = (OperatorNode) myOperand;
+                        if (sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode) {
+                            String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
+
+                            // Allocate register for new lexical variable
+                            int reg = allocateRegister();
+                            registerMap.put(varName, reg);
+
+                            // Compile RHS
+                            node.right.accept(this);
+                            int valueReg = lastResultReg;
+
+                            // Move to variable register
+                            emit(Opcodes.MOVE);
+                            emit(reg);
+                            emit(valueReg);
+
+                            lastResultReg = reg;
+                            return;
+                        }
+                    }
+
+                    // Handle my x (direct identifier without sigil)
+                    if (myOperand instanceof IdentifierNode) {
+                        String varName = ((IdentifierNode) myOperand).name;
+
+                        // Allocate register for new lexical variable
+                        int reg = allocateRegister();
+                        registerMap.put(varName, reg);
+
+                        // Compile RHS
+                        node.right.accept(this);
+                        int valueReg = lastResultReg;
+
+                        // Move to variable register
+                        emit(Opcodes.MOVE);
+                        emit(reg);
+                        emit(valueReg);
+
+                        lastResultReg = reg;
+                        return;
+                    }
+                }
+            }
+
+            // Regular assignment: $x = value
+            // Compile RHS first
+            node.right.accept(this);
+            int valueReg = lastResultReg;
+
+            // Assign to LHS
+            if (node.left instanceof OperatorNode) {
+                OperatorNode leftOp = (OperatorNode) node.left;
+                if (leftOp.operator.equals("$") && leftOp.operand instanceof IdentifierNode) {
+                    String varName = "$" + ((IdentifierNode) leftOp.operand).name;
+
+                    if (registerMap.containsKey(varName)) {
+                        // Lexical variable - copy to its register
+                        int targetReg = registerMap.get(varName);
+                        emit(Opcodes.MOVE);
+                        emit(targetReg);
+                        emit(valueReg);
+                        lastResultReg = targetReg;
+                    } else {
+                        // Global variable
+                        int nameIdx = addToStringPool(varName);
+                        emit(Opcodes.STORE_GLOBAL_SCALAR);
+                        emit(nameIdx);
+                        emit(valueReg);
+                        lastResultReg = valueReg;
+                    }
+                } else {
+                    throw new RuntimeException("Assignment to non-scalar not yet supported");
+                }
+            } else if (node.left instanceof IdentifierNode) {
+                String varName = ((IdentifierNode) node.left).name;
+
+                if (registerMap.containsKey(varName)) {
+                    // Lexical variable - copy to its register
+                    int targetReg = registerMap.get(varName);
+                    emit(Opcodes.MOVE);
+                    emit(targetReg);
+                    emit(valueReg);
+                    lastResultReg = targetReg;
+                } else {
+                    // Global variable
+                    int nameIdx = addToStringPool(varName);
+                    emit(Opcodes.STORE_GLOBAL_SCALAR);
+                    emit(nameIdx);
+                    emit(valueReg);
+                    lastResultReg = valueReg;
+                }
+            } else {
+                throw new RuntimeException("Assignment to non-identifier not yet supported: " + node.left.getClass().getSimpleName());
+            }
+            return;
+        }
+
         // Compile left and right operands
         node.left.accept(this);
         int rs1 = lastResultReg;
@@ -203,70 +318,123 @@ public class BytecodeCompiler implements Visitor {
 
         // Handle specific operators
         if (op.equals("my")) {
-            // my $x = value
-            // Allocate register for the variable
-            if (node.operands.size() == 1 && node.operands.get(0) instanceof IdentifierNode) {
-                IdentifierNode var = (IdentifierNode) node.operands.get(0);
-                int reg = allocateRegister();
-                registerMap.put(var.value, reg);
+            // my $x - variable declaration
+            // The operand will be OperatorNode("$", IdentifierNode("x"))
+            if (node.operand instanceof OperatorNode) {
+                OperatorNode sigilOp = (OperatorNode) node.operand;
+                if (sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode) {
+                    String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
+                    int reg = allocateRegister();
+                    registerMap.put(varName, reg);
 
-                // Load undef initially
-                emit(Opcodes.LOAD_UNDEF);
-                emit(reg);
+                    // Load undef initially
+                    emit(Opcodes.LOAD_UNDEF);
+                    emit(reg);
 
-                lastResultReg = reg;
+                    lastResultReg = reg;
+                    return;
+                }
             }
-        } else if (op.equals("=")) {
-            // Assignment: $x = value
-            if (node.operands.size() == 2) {
-                Node lhs = node.operands.get(0);
-                Node rhs = node.operands.get(1);
+            throw new RuntimeException("Unsupported my operand: " + node.operand.getClass().getSimpleName());
+        } else if (op.equals("$")) {
+            // Scalar variable dereference: $x
+            if (node.operand instanceof IdentifierNode) {
+                String varName = "$" + ((IdentifierNode) node.operand).name;
 
-                // Compile RHS
-                rhs.accept(this);
-                int valueReg = lastResultReg;
+                if (registerMap.containsKey(varName)) {
+                    // Lexical variable - use existing register
+                    lastResultReg = registerMap.get(varName);
+                } else {
+                    // Global variable - load it
+                    int rd = allocateRegister();
+                    int nameIdx = addToStringPool(varName);
 
-                // Assign to LHS
-                if (lhs instanceof IdentifierNode) {
-                    String varName = ((IdentifierNode) lhs).value;
+                    emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                    emit(rd);
+                    emit(nameIdx);
+
+                    lastResultReg = rd;
+                }
+            } else {
+                throw new RuntimeException("Unsupported $ operand: " + node.operand.getClass().getSimpleName());
+            }
+        } else if (op.equals("say") || op.equals("print")) {
+            // say/print $x
+            if (node.operand != null) {
+                node.operand.accept(this);
+                int rs = lastResultReg;
+
+                emit(op.equals("say") ? Opcodes.SAY : Opcodes.PRINT);
+                emit(rs);
+            }
+        } else if (op.equals("++") || op.equals("--") || op.equals("++postfix") || op.equals("--postfix")) {
+            // Pre/post increment/decrement
+            boolean isPostfix = op.endsWith("postfix");
+            boolean isIncrement = op.startsWith("++");
+
+            if (node.operand instanceof IdentifierNode) {
+                String varName = ((IdentifierNode) node.operand).name;
+
+                if (registerMap.containsKey(varName)) {
+                    int varReg = registerMap.get(varName);
+                    int rd = allocateRegister();
+
+                    if (isIncrement) {
+                        emit(Opcodes.ADD_SCALAR_INT);
+                        emit(rd);
+                        emit(varReg);
+                        emitInt(1);
+                    } else {
+                        emit(Opcodes.SUB_SCALAR_INT);
+                        emit(rd);
+                        emit(varReg);
+                        emitInt(1);
+                    }
+
+                    // Store back to variable
+                    emit(Opcodes.MOVE);
+                    emit(varReg);
+                    emit(rd);
+
+                    lastResultReg = rd;
+                } else {
+                    throw new RuntimeException("Increment/decrement of non-lexical variable not yet supported");
+                }
+            } else if (node.operand instanceof OperatorNode) {
+                // Handle $x++
+                OperatorNode innerOp = (OperatorNode) node.operand;
+                if (innerOp.operator.equals("$") && innerOp.operand instanceof IdentifierNode) {
+                    String varName = "$" + ((IdentifierNode) innerOp.operand).name;
 
                     if (registerMap.containsKey(varName)) {
-                        // Lexical variable - copy to its register
-                        int targetReg = registerMap.get(varName);
+                        int varReg = registerMap.get(varName);
+                        int rd = allocateRegister();
+
+                        if (isIncrement) {
+                            emit(Opcodes.ADD_SCALAR_INT);
+                            emit(rd);
+                            emit(varReg);
+                            emitInt(1);
+                        } else {
+                            emit(Opcodes.SUB_SCALAR_INT);
+                            emit(rd);
+                            emit(varReg);
+                            emitInt(1);
+                        }
+
+                        // Store back to variable
                         emit(Opcodes.MOVE);
-                        emit(targetReg);
-                        emit(valueReg);
-                        lastResultReg = targetReg;
+                        emit(varReg);
+                        emit(rd);
+
+                        lastResultReg = rd;
                     } else {
-                        // Global variable
-                        int nameIdx = addToStringPool(varName);
-                        emit(Opcodes.STORE_GLOBAL_SCALAR);
-                        emit(nameIdx);
-                        emit(valueReg);
-                        lastResultReg = valueReg;
+                        throw new RuntimeException("Increment/decrement of non-lexical variable not yet supported");
                     }
                 }
             }
-        } else if (op.equals("say")) {
-            // say $x
-            if (node.operands.size() > 0) {
-                node.operands.get(0).accept(this);
-                int rs = lastResultReg;
-
-                emit(Opcodes.SAY);
-                emit(rs);
-            }
-        } else if (op.equals("print")) {
-            // print $x
-            if (node.operands.size() > 0) {
-                node.operands.get(0).accept(this);
-                int rs = lastResultReg;
-
-                emit(Opcodes.PRINT);
-                emit(rs);
-            }
         } else {
-            throw new RuntimeException("Unsupported operator: " + op);
+            throw new UnsupportedOperationException("Unsupported operator: " + op);
         }
     }
 
@@ -331,13 +499,145 @@ public class BytecodeCompiler implements Visitor {
     }
 
     @Override
-    public void visit(ForNode node) {
-        throw new UnsupportedOperationException("For loops not yet implemented");
+    public void visit(For1Node node) {
+        // For1Node: foreach-style loop
+        // for my $var (@list) { body }
+
+        // Step 1: Evaluate list in list context
+        node.list.accept(this);
+        int listReg = lastResultReg;
+
+        // Step 2: Convert to RuntimeArray if needed
+        // TODO: Handle list-to-array conversion
+        int arrayReg = allocateRegister();
+        emit(Opcodes.CREATE_ARRAY);  // Placeholder - need to convert list to array
+        emit(arrayReg);
+        emit(listReg);
+
+        // Step 3: Allocate iterator index register
+        int indexReg = allocateRegister();
+        emit(Opcodes.LOAD_INT);
+        emit(indexReg);
+        emitInt(0);
+
+        // Step 4: Allocate array size register
+        int sizeReg = allocateRegister();
+        emit(Opcodes.ARRAY_SIZE);
+        emit(sizeReg);
+        emit(arrayReg);
+
+        // Step 5: Allocate loop variable register
+        int varReg = allocateRegister();
+        if (node.variable != null && node.variable instanceof OperatorNode) {
+            OperatorNode varOp = (OperatorNode) node.variable;
+            if (varOp.operator.equals("my") && varOp.operand instanceof OperatorNode) {
+                OperatorNode sigilOp = (OperatorNode) varOp.operand;
+                if (sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode) {
+                    String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
+                    registerMap.put(varName, varReg);
+                }
+            }
+        }
+
+        // Step 6: Loop start - check if index < size
+        int loopStartPc = bytecode.size();
+
+        // Compare index with size
+        int cmpReg = allocateRegister();
+        emit(Opcodes.LT_NUM);
+        emit(cmpReg);
+        emit(indexReg);
+        emit(sizeReg);
+
+        // If false, jump to end (we'll patch this later)
+        emit(Opcodes.GOTO_IF_FALSE);
+        emit(cmpReg);
+        int loopEndJumpPc = bytecode.size();
+        emitInt(0);  // Placeholder for jump target
+
+        // Step 7: Get array element and assign to loop variable
+        emit(Opcodes.ARRAY_GET);
+        emit(varReg);
+        emit(arrayReg);
+        emit(indexReg);
+
+        // Step 8: Execute body
+        if (node.body != null) {
+            node.body.accept(this);
+        }
+
+        // Step 9: Increment index
+        emit(Opcodes.ADD_SCALAR_INT);
+        emit(indexReg);
+        emit(indexReg);
+        emitInt(1);
+
+        // Step 10: Jump back to loop start
+        emit(Opcodes.GOTO);
+        emitInt(loopStartPc);
+
+        // Step 11: Loop end - patch the forward jump
+        int loopEndPc = bytecode.size();
+        patchJump(loopEndJumpPc, loopEndPc);
+
+        lastResultReg = -1;  // For loop returns empty
     }
 
     @Override
     public void visit(For3Node node) {
-        throw new UnsupportedOperationException("C-style for loops not yet implemented");
+        // For3Node: C-style for loop
+        // for (init; condition; increment) { body }
+
+        // Step 1: Execute initialization
+        if (node.initialization != null) {
+            node.initialization.accept(this);
+        }
+
+        // Step 2: Loop start
+        int loopStartPc = bytecode.size();
+
+        // Step 3: Check condition
+        int condReg = allocateRegister();
+        if (node.condition != null) {
+            node.condition.accept(this);
+            condReg = lastResultReg;
+        } else {
+            // No condition means infinite loop - load true
+            emit(Opcodes.LOAD_INT);
+            emit(condReg);
+            emitInt(1);
+        }
+
+        // Step 4: If condition is false, jump to end
+        emit(Opcodes.GOTO_IF_FALSE);
+        emit(condReg);
+        int loopEndJumpPc = bytecode.size();
+        emitInt(0);  // Placeholder for jump target (will be patched)
+
+        // Step 5: Execute body
+        if (node.body != null) {
+            node.body.accept(this);
+        }
+
+        // Step 6: Execute continue block if present
+        if (node.continueBlock != null) {
+            node.continueBlock.accept(this);
+        }
+
+        // Step 7: Execute increment
+        if (node.increment != null) {
+            node.increment.accept(this);
+        }
+
+        // Step 8: Jump back to loop start
+        emit(Opcodes.GOTO);
+        emitInt(loopStartPc);
+
+        // Step 9: Loop end - patch the forward jump
+        int loopEndPc = bytecode.size();
+        patchJump(loopEndJumpPc, loopEndPc);
+
+        lastResultReg = -1;  // For loop returns empty
     }
 
     @Override
@@ -351,7 +651,50 @@ public class BytecodeCompiler implements Visitor {
     }
 
     @Override
+    public void visit(TryNode node) {
+        throw new UnsupportedOperationException("Try/catch not yet implemented");
+    }
+
+    @Override
+    public void visit(LabelNode node) {
+        // Labels are tracked in loops, standalone labels are no-ops
+        lastResultReg = -1;
+    }
+
+    @Override
+    public void visit(CompilerFlagNode node) {
+        // Compiler flags affect parsing, not runtime - no-op
+        lastResultReg = -1;
+    }
+
+    @Override
+    public void visit(FormatNode node) {
+        throw new UnsupportedOperationException("Formats not yet implemented");
+    }
+
+    @Override
     public void visit(ListNode node) {
         throw new UnsupportedOperationException("Lists not yet implemented");
+    }
+
+    // =========================================================================
+    // HELPER METHODS
+    // =========================================================================
+
+    /**
+     * Patch a forward jump instruction with the actual target offset.
+     *
+     * @param jumpPc The PC where the 4-byte jump target was emitted
+     * @param targetPc The actual target PC to jump to
+     */
+    private void patchJump(int jumpPc, int targetPc) {
+        byte[] bc = bytecode.toByteArray();
+        bc[jumpPc] = (byte) ((targetPc >> 24) & 0xFF);
+        bc[jumpPc + 1] = (byte) ((targetPc >> 16) & 0xFF);
+        bc[jumpPc + 2] = (byte) ((targetPc >> 8) & 0xFF);
+        bc[jumpPc + 3] = (byte) (targetPc & 0xFF);
+        // Reset bytecode stream with patched data
+        bytecode.reset();
+        bytecode.write(bc, 0, bc.length);
     }
 }
