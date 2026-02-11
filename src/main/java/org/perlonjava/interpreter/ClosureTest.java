@@ -24,7 +24,7 @@ public class ClosureTest {
         System.out.println("=== Interpreter Closure Test ===\n");
 
         // Test 1: Closure captures outer variable
-        System.out.println("Test 1: Closure captures \$x");
+        System.out.println("Test 1: Closure captures $x");
         testSimpleClosure();
 
         // Test 2: Closure modifies captured variable
