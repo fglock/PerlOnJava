@@ -138,7 +138,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static MethodType methodType = MethodType.methodType(RuntimeList.class, RuntimeArray.class, int.class);
     // Temporary storage for anonymous subroutines and eval string compiler context
     public static HashMap<String, Class<?>> anonSubs = new HashMap<>(); // temp storage for makeCodeObject()
-    public static HashMap<String, InterpretedCode> interpretedSubs = new HashMap<>(); // storage for interpreted closures
     public static HashMap<String, EmitterContext> evalContext = new HashMap<>(); // storage for eval string compiler context
     // Runtime eval counter for generating unique filenames when $^P is set
     private static int runtimeEvalCounter = 1;
@@ -192,7 +191,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         evalCache.clear();
         methodHandleCache.clear();
         anonSubs.clear();
-        interpretedSubs.clear();
         evalContext.clear();
         evalRuntimeContext.remove();
     }

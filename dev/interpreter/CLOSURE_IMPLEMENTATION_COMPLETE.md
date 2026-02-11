@@ -11,8 +11,8 @@
 
 2. **Named Subroutine Registration** ✓
    - InterpretedCode.registerAsNamedSub() registers as global sub
-   - Stored in RuntimeCode.interpretedSubs HashMap
-   - Also stored in GlobalVariable.getGlobalCodeRef() for &name syntax
+   - Uses existing GlobalVariable.getGlobalCodeRef() mechanism
+   - No additional storage needed - globalCodeRefs handles everything
    - Follows existing pattern: getGlobalCodeRef().set()
 
 3. **Cross-Calling** ✓

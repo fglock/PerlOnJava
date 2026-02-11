@@ -118,9 +118,6 @@ public class InterpretedCode extends RuntimeCode {
             this.subName = name;
         }
 
-        // Store in RuntimeCode.interpretedSubs map for reference
-        RuntimeCode.interpretedSubs.put(name, this);
-
         // Register in global code refs (creates or gets existing RuntimeScalar)
         // Then set its value to this InterpretedCode
         RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(name);
