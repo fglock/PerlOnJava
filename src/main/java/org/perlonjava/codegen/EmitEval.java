@@ -209,6 +209,36 @@ public class EmitEval {
                 "evalStringHelper",
                 "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/Class;",
                 false);
+        // Stack: [Class or null]
+
+        // Check if evalStringHelper returned null (compilation error)
+        Label compileSuccess = new Label();
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitJumpInsn(Opcodes.IFNONNULL, compileSuccess);
+        // Stack: [null]
+
+        // Compilation failed, $SIG{__DIE__} was called, $@ is set
+        // Pop null and return undef
+        mv.visitInsn(Opcodes.POP);
+        // Stack: []
+
+        // Create undef result
+        if (emitterVisitor.ctx.contextType == RuntimeContextType.LIST) {
+            mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "()V", false);
+        } else {
+            mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeScalar");
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeScalar", "<init>", "()V", false);
+            mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "(Lorg/perlonjava/runtime/RuntimeScalar;)V", false);
+        }
+        mv.visitJumpInsn(Opcodes.GOTO, endCatch);
+        // Stack: [RuntimeList]
+
+        mv.visitLabel(compileSuccess);
         // Stack: [Class]
 
         // Create array of parameter types for the constructor
