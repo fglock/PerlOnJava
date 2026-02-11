@@ -206,6 +206,10 @@ public class WarnDie {
                 } else {
                     out += where.toString();
                 }
+                // Perl adds a period and newline to die messages
+                if (!out.endsWith("\n")) {
+                    out += ".\n";
+                }
             }
             errVariable.set(out);
         } else {

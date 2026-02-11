@@ -438,12 +438,49 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         } catch (Throwable e) {
             // Compilation error in eval-string
 
-            // Set the global error variable "$@" using GlobalContext.setGlobalVariable(key, value)
-            GlobalVariable.getGlobalVariable("main::@").set(e.getMessage());
+            // Set the global error variable "$@"
+            RuntimeScalar err = GlobalVariable.getGlobalVariable("main::@");
+            err.set(e.getMessage());
 
-            // Rethrow so applyEval() can return undef/empty list as appropriate and avoid
-            // incorrectly treating this as a successful eval.
-            throw new PerlCompilerException(e.getMessage());
+            // Check if $SIG{__DIE__} handler is defined
+            RuntimeScalar sig = GlobalVariable.getGlobalHash("main::SIG").get("__DIE__");
+            if (sig.getDefinedBoolean()) {
+                // Call the $SIG{__DIE__} handler (similar to what die() does)
+                RuntimeScalar sigHandler = new RuntimeScalar(sig);
+
+                // Undefine $SIG{__DIE__} before calling to avoid infinite recursion
+                int level = DynamicVariableManager.getLocalLevel();
+                DynamicVariableManager.pushLocalVariable(sig);
+
+                try {
+                    RuntimeArray args = new RuntimeArray();
+                    RuntimeArray.push(args, new RuntimeScalar(err));
+                    apply(sigHandler, args, RuntimeContextType.SCALAR);
+                } catch (Throwable handlerException) {
+                    // If the handler dies, use its payload as the new error
+                    if (handlerException instanceof RuntimeException && handlerException.getCause() instanceof PerlDieException) {
+                        PerlDieException pde = (PerlDieException) handlerException.getCause();
+                        RuntimeBase handlerPayload = pde.getPayload();
+                        if (handlerPayload != null) {
+                            err.set(handlerPayload.getFirst());
+                        }
+                    } else if (handlerException instanceof PerlDieException) {
+                        PerlDieException pde = (PerlDieException) handlerException;
+                        RuntimeBase handlerPayload = pde.getPayload();
+                        if (handlerPayload != null) {
+                            err.set(handlerPayload.getFirst());
+                        }
+                    }
+                    // If handler throws other exceptions, ignore them (keep original error in $@)
+                } finally {
+                    // Restore $SIG{__DIE__}
+                    DynamicVariableManager.popToLocalLevel(level);
+                }
+            }
+
+            // Return null to signal compilation failure (don't throw exception)
+            // This prevents the exception from escaping to outer eval blocks
+            return null;
         } finally {
             // Restore caller lexical flags (do not leak eval pragmas).
             capturedSymbolTable.warningFlagsStack.pop();
