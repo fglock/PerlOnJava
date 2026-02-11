@@ -26,12 +26,12 @@ sub benchmark_sum {
 
 # Warm up
 print "Warming up JIT...\n";
-benchmark_sum(100, 100);
+benchmark_sum(1000, 100);
 
 # Actual benchmark
 print "Running benchmark...\n\n";
 
-my $iterations = 1000;
+my $iterations = 10000;  # Match interpreter
 my $loop_size = 100;
 
 my $elapsed = benchmark_sum($iterations, $loop_size);

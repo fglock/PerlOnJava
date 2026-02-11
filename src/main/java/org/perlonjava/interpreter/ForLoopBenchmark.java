@@ -49,17 +49,17 @@ public class ForLoopBenchmark {
         // Compile once
         InterpretedCode interpretedCode = compileCode(code);
 
-        // Warm up JIT
+        // Warm up JIT (more iterations for better optimization)
         System.out.println("Warming up JIT...");
         RuntimeArray emptyArgs = new RuntimeArray();
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < 1000; i++) {
             interpretedCode.apply(emptyArgs, RuntimeContextType.SCALAR);
         }
 
         // Actual benchmark
         System.out.println("Running benchmark...\n");
 
-        int iterations = 1000;
+        int iterations = 10000;  // 10x more iterations for stable measurement
         int loop_size = 100;
 
         long start = System.nanoTime();
