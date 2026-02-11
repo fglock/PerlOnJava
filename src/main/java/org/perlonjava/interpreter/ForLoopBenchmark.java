@@ -13,12 +13,15 @@ import org.perlonjava.symbols.ScopedSymbolTable;
 import java.util.List;
 
 /**
- * Benchmark for loop performance: Interpreter vs Compiler
+ * Benchmark for loop performance: Interpreter
  *
- * This benchmark measures the interpreter's performance on loop-heavy code.
- * Compare with compiled version by running the same code via ./jperl
+ * This benchmark measures interpreter performance on loop-heavy code.
+ * Compare with compiler by running: ./jperl -MTime::HiRes /tmp/bench.pl
  */
 public class ForLoopBenchmark {
+
+    // Debug flag - JVM will optimize this away when false
+    private static final boolean DEBUG = false;
 
     private static InterpretedCode compileCode(String perlCode) throws Exception {
         Lexer lexer = new Lexer(perlCode);
@@ -43,11 +46,24 @@ public class ForLoopBenchmark {
     public static void main(String[] args) throws Exception {
         System.out.println("=== For Loop Benchmark: Interpreter ===\n");
 
-        // Test code: nested for loops
-        String code = "my $sum = 0; for (my $i = 0; $i < 100; $i++) { $sum = $sum + $i; } $sum";
+        // Test code: for loop with 1000 iterations (enough for JVM warmup)
+        String code = "my $sum = 0; for (my $i = 0; $i < 1000; $i++) { $sum = $sum + $i; } $sum";
 
         // Compile once
         InterpretedCode interpretedCode = compileCode(code);
+
+        if (DEBUG) {
+            // Print disassembly to analyze overhead
+            System.out.println(interpretedCode.disassemble());
+
+            // Show raw bytecode to verify opcodes
+            System.out.println("Raw bytecode (hex):");
+            for (int i = 0; i < Math.min(interpretedCode.bytecode.length, 60); i++) {
+                System.out.printf("%02x ", interpretedCode.bytecode[i] & 0xFF);
+                if ((i + 1) % 16 == 0) System.out.println();
+            }
+            System.out.println("\n");
+        }
 
         // Warm up JIT (more iterations for better optimization)
         System.out.println("Warming up JIT...");
@@ -60,13 +76,14 @@ public class ForLoopBenchmark {
         System.out.println("Running benchmark...\n");
 
         int iterations = 10000;  // 10x more iterations for stable measurement
-        int loop_size = 100;
+        int loop_size = 1000;     // Increased from 100 to 1000 for better JIT warmup
 
         long start = System.nanoTime();
         for (int iter = 0; iter < iterations; iter++) {
             interpretedCode.apply(emptyArgs, RuntimeContextType.SCALAR);
         }
         long elapsed = System.nanoTime() - start;
+        long elapsed_interpreter = elapsed;  // Save for comparison
 
         double seconds = elapsed / 1_000_000_000.0;
         long total_ops = (long) iterations * loop_size;
@@ -79,6 +96,6 @@ public class ForLoopBenchmark {
         System.out.printf("Operations/sec: %.2f million\n\n", ops_per_sec / 1_000_000);
 
         System.out.println("Compare with compiler:");
-        System.out.println("  ./jperl dev/interpreter/tests/for_loop_benchmark.pl");
+        System.out.println("  ./jperl -MTime::HiRes /tmp/bench.pl");
     }
 }

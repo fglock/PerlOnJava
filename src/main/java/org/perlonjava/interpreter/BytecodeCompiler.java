@@ -200,6 +200,42 @@ public class BytecodeCompiler implements Visitor {
             }
 
             // Regular assignment: $x = value
+            // OPTIMIZATION: Detect $x = $x + $y and emit ADD_ASSIGN instead of ADD_SCALAR + MOVE
+            if (node.left instanceof OperatorNode && node.right instanceof BinaryOperatorNode) {
+                OperatorNode leftOp = (OperatorNode) node.left;
+                BinaryOperatorNode rightBin = (BinaryOperatorNode) node.right;
+
+                if (leftOp.operator.equals("$") && leftOp.operand instanceof IdentifierNode &&
+                    rightBin.operator.equals("+") &&
+                    rightBin.left instanceof OperatorNode) {
+
+                    String leftVarName = "$" + ((IdentifierNode) leftOp.operand).name;
+                    OperatorNode rightLeftOp = (OperatorNode) rightBin.left;
+
+                    if (rightLeftOp.operator.equals("$") && rightLeftOp.operand instanceof IdentifierNode) {
+                        String rightLeftVarName = "$" + ((IdentifierNode) rightLeftOp.operand).name;
+
+                        // Pattern match: $x = $x + $y (emit ADD_ASSIGN)
+                        if (leftVarName.equals(rightLeftVarName) && registerMap.containsKey(leftVarName)) {
+                            int targetReg = registerMap.get(leftVarName);
+
+                            // Compile RHS operand ($y)
+                            rightBin.right.accept(this);
+                            int rhsReg = lastResultReg;
+
+                            // Emit ADD_ASSIGN instead of ADD_SCALAR + MOVE
+                            emit(Opcodes.ADD_ASSIGN);
+                            emit(targetReg);
+                            emit(rhsReg);
+
+                            lastResultReg = targetReg;
+                            return;
+                        }
+                    }
+                }
+            }
+
+            // Regular assignment: $x = value (no optimization)
             // Compile RHS first
             node.right.accept(this);
             int valueReg = lastResultReg;
@@ -377,26 +413,26 @@ public class BytecodeCompiler implements Visitor {
 
                 if (registerMap.containsKey(varName)) {
                     int varReg = registerMap.get(varName);
-                    int rd = allocateRegister();
 
-                    if (isIncrement) {
-                        emit(Opcodes.ADD_SCALAR_INT);
-                        emit(rd);
-                        emit(varReg);
-                        emitInt(1);
+                    // Use optimized autoincrement/decrement opcodes
+                    if (isPostfix) {
+                        // Postfix: returns old value before modifying
+                        if (isIncrement) {
+                            emit(Opcodes.POST_AUTOINCREMENT);
+                        } else {
+                            emit(Opcodes.POST_AUTODECREMENT);
+                        }
                     } else {
-                        emit(Opcodes.SUB_SCALAR_INT);
-                        emit(rd);
-                        emit(varReg);
-                        emitInt(1);
+                        // Prefix: returns new value after modifying
+                        if (isIncrement) {
+                            emit(Opcodes.PRE_AUTOINCREMENT);
+                        } else {
+                            emit(Opcodes.PRE_AUTODECREMENT);
+                        }
                     }
-
-                    // Store back to variable
-                    emit(Opcodes.MOVE);
                     emit(varReg);
-                    emit(rd);
 
-                    lastResultReg = rd;
+                    lastResultReg = varReg;
                 } else {
                     throw new RuntimeException("Increment/decrement of non-lexical variable not yet supported");
                 }
@@ -408,26 +444,24 @@ public class BytecodeCompiler implements Visitor {
 
                     if (registerMap.containsKey(varName)) {
                         int varReg = registerMap.get(varName);
-                        int rd = allocateRegister();
 
-                        if (isIncrement) {
-                            emit(Opcodes.ADD_SCALAR_INT);
-                            emit(rd);
-                            emit(varReg);
-                            emitInt(1);
+                        // Use optimized autoincrement/decrement opcodes
+                        if (isPostfix) {
+                            if (isIncrement) {
+                                emit(Opcodes.POST_AUTOINCREMENT);
+                            } else {
+                                emit(Opcodes.POST_AUTODECREMENT);
+                            }
                         } else {
-                            emit(Opcodes.SUB_SCALAR_INT);
-                            emit(rd);
-                            emit(varReg);
-                            emitInt(1);
+                            if (isIncrement) {
+                                emit(Opcodes.PRE_AUTOINCREMENT);
+                            } else {
+                                emit(Opcodes.PRE_AUTODECREMENT);
+                            }
                         }
-
-                        // Store back to variable
-                        emit(Opcodes.MOVE);
                         emit(varReg);
-                        emit(rd);
 
-                        lastResultReg = rd;
+                        lastResultReg = varReg;
                     } else {
                         throw new RuntimeException("Increment/decrement of non-lexical variable not yet supported");
                     }
