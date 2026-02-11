@@ -29,9 +29,26 @@ public class TieOperators {
     public static RuntimeScalar tie(int ctx, RuntimeBase... scalars) {
         RuntimeScalar variable = scalars[0].getFirst();
         RuntimeScalar classArg = scalars[1].getFirst();
-        String className = classArg.getBoolean() ? scalars[1].toString() : "main";
 
-        RuntimeArray args = new RuntimeArray(Arrays.copyOfRange(scalars, 2, scalars.length));
+        // Determine the class name and arguments
+        String className;
+        RuntimeArray args;
+
+        // Check if classArg is a blessed reference (object)
+        int blessId = blessedId(classArg);
+        if (blessId != 0) {
+            // classArg is a blessed object, get the package name
+            className = NameNormalizer.getBlessStr(blessId);
+            // Prepend the object to the arguments
+            RuntimeBase[] argsWithObj = new RuntimeBase[scalars.length - 1];
+            argsWithObj[0] = classArg;
+            System.arraycopy(scalars, 2, argsWithObj, 1, scalars.length - 2);
+            args = new RuntimeArray(argsWithObj);
+        } else {
+            // classArg is a string class name
+            className = classArg.getBoolean() ? scalars[1].toString() : "main";
+            args = new RuntimeArray(Arrays.copyOfRange(scalars, 2, scalars.length));
+        }
 
         String method = switch (variable.type) {
             case REFERENCE -> "TIESCALAR";
