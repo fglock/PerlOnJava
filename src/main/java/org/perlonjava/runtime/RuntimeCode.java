@@ -935,7 +935,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         } catch (Throwable t) {
             // Perl eval catches exceptions; set $@ and return undef / empty list.
             WarnDie.catchEval(t);
-            
+
             // If $@ is set and $^P flags require source retention, we may need to retain lines
             // for runtime errors (e.g., BEGIN/UNITCHECK die) where storeSourceLines wasn't called.
             // Try to extract the eval string from the codeRef if available
@@ -950,7 +950,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     // We cannot reconstruct the exact eval string here, so skip retention
                 }
             }
-            
+
             if (callContext == RuntimeContextType.LIST) {
                 return new RuntimeList();
             }

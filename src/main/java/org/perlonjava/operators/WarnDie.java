@@ -65,10 +65,26 @@ public class WarnDie {
             int level = DynamicVariableManager.getLocalLevel();
             DynamicVariableManager.pushLocalVariable(sig);
 
-            RuntimeCode.apply(sigHandler, args, RuntimeContextType.SCALAR);
+            try {
+                RuntimeCode.apply(sigHandler, args, RuntimeContextType.SCALAR);
+            } catch (Throwable handlerException) {
+                // Unwrap RuntimeException to get to the real exception
+                handlerException = unwrapException(handlerException);
 
-            // Restore $SIG{__DIE__}
-            DynamicVariableManager.popToLocalLevel(level);
+                // If the handler dies, use its payload as the new error
+                if (handlerException instanceof PerlDieException pde) {
+                    RuntimeBase handlerPayload = pde.getPayload();
+                    if (handlerPayload != null) {
+                        err.set(handlerPayload.getFirst());
+                    }
+                } else {
+                    // If the handler throws any other exception, stringify it
+                    err.set(new RuntimeScalar(ErrorMessageUtil.stringifyException(handlerException)));
+                }
+            } finally {
+                // Restore $SIG{__DIE__}
+                DynamicVariableManager.popToLocalLevel(level);
+            }
         }
         return scalarUndef;
     }
