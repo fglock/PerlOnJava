@@ -257,6 +257,14 @@ public class InterpretedCode extends RuntimeCode {
                     rd = bytecode[pc++] & 0xFF;
                     sb.append("POST_AUTODECREMENT r").append(rd).append("--\n");
                     break;
+                case Opcodes.CALL_SUB:
+                    rd = bytecode[pc++] & 0xFF;
+                    int coderefReg = bytecode[pc++] & 0xFF;
+                    int argsReg = bytecode[pc++] & 0xFF;
+                    int ctx = bytecode[pc++] & 0xFF;
+                    sb.append("CALL_SUB r").append(rd).append(" = r").append(coderefReg)
+                      .append("->(r").append(argsReg).append(", ctx=").append(ctx).append(")\n");
+                    break;
                 default:
                     sb.append("UNKNOWN(").append(opcode & 0xFF).append(")\n");
                     break;
