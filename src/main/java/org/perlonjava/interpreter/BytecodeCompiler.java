@@ -15,12 +15,6 @@ import java.util.Map;
  *
  * This is analogous to EmitterVisitor but generates custom bytecode
  * for the interpreter instead of JVM bytecode via ASM.
- *
- * Key responsibilities:
- * - Visit AST nodes and emit interpreter opcodes
- * - Allocate registers for variables and temporaries
- * - Build constant pool and string pool
- * - Generate 3-address code (rd = rs1 op rs2)
  */
 public class BytecodeCompiler implements Visitor {
     private final ByteArrayOutputStream bytecode = new ByteArrayOutputStream();
@@ -45,9 +39,6 @@ public class BytecodeCompiler implements Visitor {
 
     /**
      * Compile an AST node to InterpretedCode.
-     *
-     * @param node The AST node to compile
-     * @return InterpretedCode ready for execution
      */
     public InterpretedCode compile(Node node) {
         // Visit the node to generate bytecode
@@ -83,18 +74,24 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(NumberNode node) {
-        // Emit LOAD_INT: rd = RuntimeScalarCache.getScalarInt(value)
+        // NumberNode.value is a String - need to parse it
         int rd = allocateRegister();
 
-        if (node.isInteger()) {
-            emit(Opcodes.LOAD_INT);
-            emit(rd);
-            emitInt((int) node.value);
-        } else {
-            // TODO: Handle double values
-            emit(Opcodes.LOAD_INT);
-            emit(rd);
-            emitInt((int) node.value);
+        try {
+            if (node.value.contains(".")) {
+                // TODO: Handle double values properly (for now, truncate to int)
+                int intValue = (int) Double.parseDouble(node.value);
+                emit(Opcodes.LOAD_INT);
+                emit(rd);
+                emitInt(intValue);
+            } else {
+                int intValue = Integer.parseInt(node.value);
+                emit(Opcodes.LOAD_INT);
+                emit(rd);
+                emitInt(intValue);
+            }
+        } catch (NumberFormatException e) {
+            throw new RuntimeException("Invalid number: " + node.value, e);
         }
 
         lastResultReg = rd;
@@ -102,7 +99,7 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(StringNode node) {
-        // Emit LOAD_STRING: rd = new RuntimeScalar(stringPool[index])
+        // StringNode.value is a String
         int rd = allocateRegister();
         int strIndex = addToStringPool(node.value);
 
@@ -115,8 +112,8 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(IdentifierNode node) {
-        // Variable reference
-        String varName = node.value;
+        // IdentifierNode uses .name (NOT .value)
+        String varName = node.name;
 
         // Check if it's a lexical variable
         if (registerMap.containsKey(varName)) {
@@ -137,6 +134,91 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(BinaryOperatorNode node) {
+        // Handle assignment separately (doesn't follow standard left-right-op pattern)
+        if (node.operator.equals("=")) {
+            // Special case: my $x = value
+            if (node.left instanceof OperatorNode) {
+                OperatorNode leftOp = (OperatorNode) node.left;
+                if (leftOp.operator.equals("my")) {
+                    // Extract variable name from "my" operand
+                    Node myOperand = leftOp.operand;
+
+                    // Handle my $x (where $x is OperatorNode("$", IdentifierNode("x")))
+                    if (myOperand instanceof OperatorNode) {
+                        OperatorNode sigilOp = (OperatorNode) myOperand;
+                        if (sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode) {
+                            String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
+
+                            // Allocate register for new lexical variable
+                            int reg = allocateRegister();
+                            registerMap.put(varName, reg);
+
+                            // Compile RHS
+                            node.right.accept(this);
+                            int valueReg = lastResultReg;
+
+                            // Move to variable register
+                            emit(Opcodes.MOVE);
+                            emit(reg);
+                            emit(valueReg);
+
+                            lastResultReg = reg;
+                            return;
+                        }
+                    }
+
+                    // Handle my x (direct identifier without sigil)
+                    if (myOperand instanceof IdentifierNode) {
+                        String varName = ((IdentifierNode) myOperand).name;
+
+                        // Allocate register for new lexical variable
+                        int reg = allocateRegister();
+                        registerMap.put(varName, reg);
+
+                        // Compile RHS
+                        node.right.accept(this);
+                        int valueReg = lastResultReg;
+
+                        // Move to variable register
+                        emit(Opcodes.MOVE);
+                        emit(reg);
+                        emit(valueReg);
+
+                        lastResultReg = reg;
+                        return;
+                    }
+                }
+            }
+
+            // Compile RHS first
+            node.right.accept(this);
+            int valueReg = lastResultReg;
+
+            // Assign to LHS
+            if (node.left instanceof IdentifierNode) {
+                String varName = ((IdentifierNode) node.left).name;
+
+                if (registerMap.containsKey(varName)) {
+                    // Lexical variable - copy to its register
+                    int targetReg = registerMap.get(varName);
+                    emit(Opcodes.MOVE);
+                    emit(targetReg);
+                    emit(valueReg);
+                    lastResultReg = targetReg;
+                } else {
+                    // Global variable
+                    int nameIdx = addToStringPool(varName);
+                    emit(Opcodes.STORE_GLOBAL_SCALAR);
+                    emit(nameIdx);
+                    emit(valueReg);
+                    lastResultReg = valueReg;
+                }
+            } else {
+                throw new RuntimeException("Assignment to non-identifier not yet supported: " + node.left.getClass().getSimpleName());
+            }
+            return;
+        }
+
         // Compile left and right operands
         node.left.accept(this);
         int rs1 = lastResultReg;
@@ -203,71 +285,177 @@ public class BytecodeCompiler implements Visitor {
 
         // Handle specific operators
         if (op.equals("my")) {
-            // my $x = value
-            // Allocate register for the variable
-            if (node.operands.size() == 1 && node.operands.get(0) instanceof IdentifierNode) {
-                IdentifierNode var = (IdentifierNode) node.operands.get(0);
+            // my $x or my $x = value
+            // OperatorNode has .operand which can be a single node or ListNode
+            Node operand = node.operand;
+
+            if (operand instanceof IdentifierNode) {
+                IdentifierNode var = (IdentifierNode) operand;
                 int reg = allocateRegister();
-                registerMap.put(var.value, reg);
+                registerMap.put(var.name, reg);
 
                 // Load undef initially
                 emit(Opcodes.LOAD_UNDEF);
                 emit(reg);
 
                 lastResultReg = reg;
-            }
-        } else if (op.equals("=")) {
-            // Assignment: $x = value
-            if (node.operands.size() == 2) {
-                Node lhs = node.operands.get(0);
-                Node rhs = node.operands.get(1);
+            } else if (operand instanceof BinaryOperatorNode) {
+                // my $x = value
+                BinaryOperatorNode assignOp = (BinaryOperatorNode) operand;
+                if (assignOp.operator.equals("=")) {
+                    // Left is identifier, right is value
+                    if (assignOp.left instanceof IdentifierNode) {
+                        IdentifierNode var = (IdentifierNode) assignOp.left;
+                        int reg = allocateRegister();
+                        registerMap.put(var.name, reg);
 
-                // Compile RHS
-                rhs.accept(this);
-                int valueReg = lastResultReg;
+                        // Compile RHS
+                        assignOp.right.accept(this);
+                        int valueReg = lastResultReg;
 
-                // Assign to LHS
-                if (lhs instanceof IdentifierNode) {
-                    String varName = ((IdentifierNode) lhs).value;
-
-                    if (registerMap.containsKey(varName)) {
-                        // Lexical variable - copy to its register
-                        int targetReg = registerMap.get(varName);
+                        // Move to variable register
                         emit(Opcodes.MOVE);
-                        emit(targetReg);
+                        emit(reg);
                         emit(valueReg);
-                        lastResultReg = targetReg;
-                    } else {
-                        // Global variable
-                        int nameIdx = addToStringPool(varName);
-                        emit(Opcodes.STORE_GLOBAL_SCALAR);
-                        emit(nameIdx);
-                        emit(valueReg);
-                        lastResultReg = valueReg;
+
+                        lastResultReg = reg;
                     }
                 }
             }
-        } else if (op.equals("say")) {
-            // say $x
-            if (node.operands.size() > 0) {
-                node.operands.get(0).accept(this);
-                int rs = lastResultReg;
+        } else if (op.equals("=")) {
+            // Assignment: $x = value
+            // For OperatorNode, operand might be a BinaryOperatorNode
+            if (node.operand instanceof BinaryOperatorNode) {
+                BinaryOperatorNode binOp = (BinaryOperatorNode) node.operand;
+                if (binOp.operator.equals("=")) {
+                    // Compile RHS
+                    binOp.right.accept(this);
+                    int valueReg = lastResultReg;
 
-                emit(Opcodes.SAY);
-                emit(rs);
+                    // Assign to LHS
+                    if (binOp.left instanceof IdentifierNode) {
+                        String varName = ((IdentifierNode) binOp.left).name;
+
+                        if (registerMap.containsKey(varName)) {
+                            // Lexical variable - copy to its register
+                            int targetReg = registerMap.get(varName);
+                            emit(Opcodes.MOVE);
+                            emit(targetReg);
+                            emit(valueReg);
+                            lastResultReg = targetReg;
+                        } else {
+                            // Global variable
+                            int nameIdx = addToStringPool(varName);
+                            emit(Opcodes.STORE_GLOBAL_SCALAR);
+                            emit(nameIdx);
+                            emit(valueReg);
+                            lastResultReg = valueReg;
+                        }
+                    }
+                }
             }
-        } else if (op.equals("print")) {
-            // print $x
-            if (node.operands.size() > 0) {
-                node.operands.get(0).accept(this);
+        } else if (op.equals("$")) {
+            // Scalar variable dereference: $x
+            if (node.operand instanceof IdentifierNode) {
+                String varName = "$" + ((IdentifierNode) node.operand).name;
+
+                if (registerMap.containsKey(varName)) {
+                    // Lexical variable - use existing register
+                    lastResultReg = registerMap.get(varName);
+                } else {
+                    // Global variable - load it
+                    int rd = allocateRegister();
+                    int nameIdx = addToStringPool(varName);
+
+                    emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                    emit(rd);
+                    emit(nameIdx);
+
+                    lastResultReg = rd;
+                }
+            } else {
+                throw new RuntimeException("Unsupported $ operand: " + node.operand.getClass().getSimpleName());
+            }
+        } else if (op.equals("say") || op.equals("print")) {
+            // say/print $x
+            if (node.operand != null) {
+                node.operand.accept(this);
                 int rs = lastResultReg;
 
-                emit(Opcodes.PRINT);
+                emit(op.equals("say") ? Opcodes.SAY : Opcodes.PRINT);
                 emit(rs);
             }
         } else {
             throw new RuntimeException("Unsupported operator: " + op);
         }
+    }
+
+    @Override
+    public void visit(ListNode node) {
+        // Visit all elements in the list
+        for (Node element : node.elements) {
+            element.accept(this);
+        }
+    }
+
+    // =========================================================================
+    // UNIMPLEMENTED VISITOR METHODS (TODO)
+    // =========================================================================
+
+    @Override
+    public void visit(ArrayLiteralNode node) {
+        throw new UnsupportedOperationException("Arrays not yet implemented");
+    }
+
+    @Override
+    public void visit(HashLiteralNode node) {
+        throw new UnsupportedOperationException("Hashes not yet implemented");
+    }
+
+    @Override
+    public void visit(SubroutineNode node) {
+        throw new UnsupportedOperationException("Subroutines not yet implemented");
+    }
+
+    @Override
+    public void visit(For1Node node) {
+        throw new UnsupportedOperationException("For loops not yet implemented");
+    }
+
+    @Override
+    public void visit(For3Node node) {
+        throw new UnsupportedOperationException("C-style for loops not yet implemented");
+    }
+
+    @Override
+    public void visit(IfNode node) {
+        throw new UnsupportedOperationException("If statements not yet implemented");
+    }
+
+    @Override
+    public void visit(TernaryOperatorNode node) {
+        throw new UnsupportedOperationException("Ternary operator not yet implemented");
+    }
+
+    @Override
+    public void visit(TryNode node) {
+        throw new UnsupportedOperationException("Try/catch not yet implemented");
+    }
+
+    @Override
+    public void visit(LabelNode node) {
+        throw new UnsupportedOperationException("Labels not yet implemented");
+    }
+
+    @Override
+    public void visit(CompilerFlagNode node) {
+        // Compiler flags are no-ops for the interpreter
+        // They affect parsing/compilation but not runtime execution
+    }
+
+    @Override
+    public void visit(FormatNode node) {
+        throw new UnsupportedOperationException("Formats not yet implemented");
     }
 
     // =========================================================================
@@ -309,49 +497,5 @@ public class BytecodeCompiler implements Visitor {
         bytecode.write((value >> 16) & 0xFF);
         bytecode.write((value >> 8) & 0xFF);
         bytecode.write(value & 0xFF);
-    }
-
-    // =========================================================================
-    // UNIMPLEMENTED VISITOR METHODS (TODO)
-    // =========================================================================
-
-    @Override
-    public void visit(ArrayLiteralNode node) {
-        throw new UnsupportedOperationException("Arrays not yet implemented");
-    }
-
-    @Override
-    public void visit(HashLiteralNode node) {
-        throw new UnsupportedOperationException("Hashes not yet implemented");
-    }
-
-    @Override
-    public void visit(SubroutineNode node) {
-        throw new UnsupportedOperationException("Subroutines not yet implemented");
-    }
-
-    @Override
-    public void visit(ForNode node) {
-        throw new UnsupportedOperationException("For loops not yet implemented");
-    }
-
-    @Override
-    public void visit(For3Node node) {
-        throw new UnsupportedOperationException("C-style for loops not yet implemented");
-    }
-
-    @Override
-    public void visit(IfNode node) {
-        throw new UnsupportedOperationException("If statements not yet implemented");
-    }
-
-    @Override
-    public void visit(TernaryOperatorNode node) {
-        throw new UnsupportedOperationException("Ternary operator not yet implemented");
-    }
-
-    @Override
-    public void visit(ListNode node) {
-        throw new UnsupportedOperationException("Lists not yet implemented");
     }
 }
