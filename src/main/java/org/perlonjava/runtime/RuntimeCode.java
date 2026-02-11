@@ -15,6 +15,8 @@ import org.perlonjava.operators.ModuleOperators;
 import org.perlonjava.scriptengine.PerlLanguageProvider;
 import org.perlonjava.symbols.ScopedSymbolTable;
 import org.perlonjava.symbols.SymbolTable;
+import org.perlonjava.interpreter.BytecodeCompiler;
+import org.perlonjava.interpreter.InterpretedCode;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;

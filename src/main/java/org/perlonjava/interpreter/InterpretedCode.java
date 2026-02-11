@@ -101,6 +101,32 @@ public class InterpretedCode extends RuntimeCode {
     }
 
     /**
+     * Register this InterpretedCode as a global named subroutine.
+     * This allows compiled code to call interpreted closures seamlessly.
+     *
+     * @param name Subroutine name (e.g., "main::closure_123")
+     * @return RuntimeScalar CODE reference to this InterpretedCode
+     */
+    public RuntimeScalar registerAsNamedSub(String name) {
+        // Extract package and sub name
+        int lastColonIndex = name.lastIndexOf("::");
+        if (lastColonIndex > 0) {
+            this.packageName = name.substring(0, lastColonIndex);
+            this.subName = name.substring(lastColonIndex + 2);
+        } else {
+            this.packageName = "main";
+            this.subName = name;
+        }
+
+        // Register in global code refs (creates or gets existing RuntimeScalar)
+        // Then set its value to this InterpretedCode
+        RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(name);
+        codeRef.set(new RuntimeScalar(this));
+
+        return codeRef;
+    }
+
+    /**
      * Get a human-readable representation for debugging.
      */
     @Override
@@ -227,6 +253,14 @@ public class InterpretedCode extends RuntimeCode {
                 case Opcodes.POST_AUTODECREMENT:
                     rd = bytecode[pc++] & 0xFF;
                     sb.append("POST_AUTODECREMENT r").append(rd).append("--\n");
+                    break;
+                case Opcodes.CALL_SUB:
+                    rd = bytecode[pc++] & 0xFF;
+                    int coderefReg = bytecode[pc++] & 0xFF;
+                    int argsReg = bytecode[pc++] & 0xFF;
+                    int ctx = bytecode[pc++] & 0xFF;
+                    sb.append("CALL_SUB r").append(rd).append(" = r").append(coderefReg)
+                      .append("->(r").append(argsReg).append(", ctx=").append(ctx).append(")\n");
                     break;
                 default:
                     sb.append("UNKNOWN(").append(opcode & 0xFF).append(")\n");
