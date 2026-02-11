@@ -407,9 +407,13 @@ Bytecode length: 15 bytes
 
 ### Test Files
 
-- `src/test/resources/unit/interpreter_closures.t` - Closure functionality
-- `src/test/resources/unit/interpreter_cross_calling.t` - Cross-calling
-- `src/test/resources/unit/interpreter_globals.t` - Global variable sharing
+- `dev/interpreter/tests/interpreter_closures.t` - Closure functionality
+- `dev/interpreter/tests/interpreter_cross_calling.t` - Cross-calling
+- `dev/interpreter/tests/interpreter_globals.t` - Global variable sharing
+
+**Note:** These tests require eval STRING integration to run. They are kept in
+`dev/interpreter/tests/` for documentation and manual testing, not in the
+automatic CI test suite.
 
 ## Summary
 
