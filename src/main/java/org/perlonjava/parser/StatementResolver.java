@@ -7,6 +7,7 @@ import org.perlonjava.codegen.EmitterMethodCreator;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.NameNormalizer;
+import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.symbols.SymbolTable;
 
 import java.util.ArrayList;
@@ -558,6 +559,17 @@ public class StatementResolver {
 
                         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
                         BlockNode block = ParseBlock.parseBlock(parser);
+
+                        // Check for closing brace with better error message
+                        LexerToken closingToken = TokenUtils.peek(parser);
+                        if (closingToken.type == LexerTokenType.EOF) {
+                            String fileName = parser.ctx.errorUtil.getFileName();
+                            int lineNum = parser.ctx.errorUtil.getLineNumber(parser.tokenIndex);
+                            String errorMsg = "Missing right curly or square bracket at " + fileName + " line " + lineNum + ", at end of line\n" +
+                                "syntax error at " + fileName + " line " + lineNum + ", at EOF\n" +
+                                "Execution of " + fileName + " aborted due to compilation errors.\n";
+                            throw new PerlCompilerException(errorMsg);
+                        }
                         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
                         Node continueNode = null;
