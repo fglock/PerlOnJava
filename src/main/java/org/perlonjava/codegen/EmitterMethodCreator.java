@@ -637,15 +637,16 @@ public class EmitterMethodCreator implements Opcodes {
             // ctx.symbolTable.allocateLocalVariable(). We pre-initialize slots to ensure
             // they're not in TOP state when accessed.
             //
-            // IMPORTANT: Use min-1024 baseline for complex code (e.g., ExifTool with deeply
-            // nested closures and control flow). TempLocalCountVisitor significantly
+            // IMPORTANT: Use min-128 baseline. TempLocalCountVisitor significantly
             // underestimates for complex patterns, and the JVM verifier's frame analysis
-            // loses initialization tracking through complex control flow paths.
+            // can lose initialization tracking through complex control flow paths.
+            // Higher baselines (256, 512, 1024, 2048) just increase bytecode size without
+            // fixing the root cause (ASM frame merging loses initialization state).
             int preInitTempLocalsStart = ctx.symbolTable.getCurrentLocalVariableIndex();
             org.perlonjava.astvisitor.TempLocalCountVisitor tempCountVisitor =
                 new org.perlonjava.astvisitor.TempLocalCountVisitor();
             ast.accept(tempCountVisitor);
-            int preInitTempLocalsCount = Math.max(1024, tempCountVisitor.getMaxTempCount() + 256);
+            int preInitTempLocalsCount = Math.max(128, tempCountVisitor.getMaxTempCount() + 64);
             ctx.logDebug("Pre-init temps: start=" + preInitTempLocalsStart +
                        ", count=" + preInitTempLocalsCount +
                        ", range=[" + preInitTempLocalsStart + "-" +
@@ -654,21 +655,6 @@ public class EmitterMethodCreator implements Opcodes {
                 mv.visitInsn(Opcodes.ACONST_NULL);
                 mv.visitVarInsn(Opcodes.ASTORE, i);
             }
-
-            // Add explicit stack map frame to lock in initialization state
-            // This helps ASM's frame computation preserve initialization tracking through
-            // complex control flow paths with frame merging (branches, loops, try-catch).
-            // Without this, ASM may lose track of which slots are initialized when merging
-            // frames from different control flow paths, causing VerifyError: Bad local variable type.
-            Object[] locals = buildLocalsArray(env, ctx.javaClassInfo.javaClassName,
-                                              preInitTempLocalsStart, preInitTempLocalsCount);
-            mv.visitFrame(
-                Opcodes.F_NEW,           // Full frame
-                locals.length,           // Number of locals
-                locals,                  // Local variable types
-                0,                       // Stack size (empty)
-                new Object[0]            // Stack types (empty)
-            );
 
             // Allocate slots for tail call trampoline (codeRef and args)
             // These are used at returnLabel for TAILCALL handling
