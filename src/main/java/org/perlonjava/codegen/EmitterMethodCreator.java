@@ -333,6 +333,67 @@ public class EmitterMethodCreator implements Opcodes {
     }
 
     /**
+     * Builds a frame locals array for explicit stack map frame generation.
+     * This is used to provide ASM with explicit type information for all local variables,
+     * helping to prevent frame merging issues where initialization state is lost.
+     *
+     * @param env The environment array of captured variable names
+     * @param className The internal class name (e.g., "org/perlonjava/anon830")
+     * @param tempStart The starting index for temporary variable slots
+     * @param tempCount The number of temporary slots to pre-initialize
+     * @return Array of frame types for all local variable slots
+     */
+    private static Object[] buildLocalsArray(String[] env, String className, int tempStart, int tempCount) {
+        int totalSlots = tempStart + tempCount;
+        Object[] locals = new Object[totalSlots];
+
+        // Slot 0: 'this' reference
+        locals[0] = className;
+
+        // Slot 1: RuntimeArray (@_)
+        locals[1] = "org/perlonjava/runtime/RuntimeArray";
+
+        // Slot 2: integer (wantarray)
+        locals[2] = Opcodes.INTEGER;
+
+        // Slots 3 to env.length-1: Captured variables from env
+        for (int i = 3; i < env.length; i++) {
+            if (env[i] == null || env[i].isEmpty()) {
+                locals[i] = Opcodes.NULL;  // Null reference
+            } else {
+                locals[i] = getFrameTypeForVariable(env[i]);
+            }
+        }
+
+        // Slots from env.length to totalSlots: All pre-initialized to Object
+        for (int i = env.length; i < totalSlots; i++) {
+            locals[i] = "java/lang/Object";  // Initialized reference
+        }
+
+        return locals;
+    }
+
+    /**
+     * Gets the frame type descriptor for a Perl variable based on its sigil.
+     * Used for building explicit stack map frames.
+     *
+     * @param varName The Perl variable name (e.g., "$x", "@array", "%hash")
+     * @return The internal class name for the variable's runtime type
+     */
+    private static String getFrameTypeForVariable(String varName) {
+        if (varName != null && !varName.isEmpty()) {
+            char firstChar = varName.charAt(0);
+            return switch (firstChar) {
+                case '$' -> "org/perlonjava/runtime/RuntimeScalar";
+                case '@' -> "org/perlonjava/runtime/RuntimeArray";
+                case '%' -> "org/perlonjava/runtime/RuntimeHash";
+                default -> "java/lang/Object";
+            };
+        }
+        return "java/lang/Object";  // Default to Object for unknown types
+    }
+
+    /**
      * Creates a new class with a method based on the provided context, environment, and abstract
      * syntax tree (AST).
      *
@@ -593,6 +654,21 @@ public class EmitterMethodCreator implements Opcodes {
                 mv.visitInsn(Opcodes.ACONST_NULL);
                 mv.visitVarInsn(Opcodes.ASTORE, i);
             }
+
+            // Add explicit stack map frame to lock in initialization state
+            // This helps ASM's frame computation preserve initialization tracking through
+            // complex control flow paths with frame merging (branches, loops, try-catch).
+            // Without this, ASM may lose track of which slots are initialized when merging
+            // frames from different control flow paths, causing VerifyError: Bad local variable type.
+            Object[] locals = buildLocalsArray(env, ctx.javaClassInfo.javaClassName,
+                                              preInitTempLocalsStart, preInitTempLocalsCount);
+            mv.visitFrame(
+                Opcodes.F_NEW,           // Full frame
+                locals.length,           // Number of locals
+                locals,                  // Local variable types
+                0,                       // Stack size (empty)
+                new Object[0]            // Stack types (empty)
+            );
 
             // Allocate slots for tail call trampoline (codeRef and args)
             // These are used at returnLabel for TAILCALL handling
