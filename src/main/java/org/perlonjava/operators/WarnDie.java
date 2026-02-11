@@ -65,10 +65,26 @@ public class WarnDie {
             int level = DynamicVariableManager.getLocalLevel();
             DynamicVariableManager.pushLocalVariable(sig);
 
-            RuntimeCode.apply(sigHandler, args, RuntimeContextType.SCALAR);
+            try {
+                RuntimeCode.apply(sigHandler, args, RuntimeContextType.SCALAR);
+            } catch (Throwable handlerException) {
+                // Unwrap RuntimeException to get to the real exception
+                handlerException = unwrapException(handlerException);
 
-            // Restore $SIG{__DIE__}
-            DynamicVariableManager.popToLocalLevel(level);
+                // If the handler dies, use its payload as the new error
+                if (handlerException instanceof PerlDieException pde) {
+                    RuntimeBase handlerPayload = pde.getPayload();
+                    if (handlerPayload != null) {
+                        err.set(handlerPayload.getFirst());
+                    }
+                } else {
+                    // If the handler throws any other exception, stringify it
+                    err.set(new RuntimeScalar(ErrorMessageUtil.stringifyException(handlerException)));
+                }
+            } finally {
+                // Restore $SIG{__DIE__}
+                DynamicVariableManager.popToLocalLevel(level);
+            }
         }
         return scalarUndef;
     }
@@ -121,8 +137,10 @@ public class WarnDie {
                 if (!out.endsWith("\n")) {
                     String whereStr = where.toString();
                     out += whereStr;
-                    // Only add newline if where was empty (no location info)
-                    if (whereStr.isEmpty() && !out.endsWith("\n")) {
+                    // Add period and newline if location info was added
+                    if (!whereStr.isEmpty()) {
+                        out += ".\n";
+                    } else if (!out.endsWith("\n")) {
                         out += "\n";
                     }
                 }
@@ -187,6 +205,10 @@ public class WarnDie {
                     out += " " + filehandleContext;
                 } else {
                     out += where.toString();
+                }
+                // Perl adds a period and newline to die messages
+                if (!out.endsWith("\n")) {
+                    out += ".\n";
                 }
             }
             errVariable.set(out);
