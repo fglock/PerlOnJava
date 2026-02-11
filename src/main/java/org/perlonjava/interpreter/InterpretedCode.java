@@ -101,6 +101,35 @@ public class InterpretedCode extends RuntimeCode {
     }
 
     /**
+     * Register this InterpretedCode as a global named subroutine.
+     * This allows compiled code to call interpreted closures seamlessly.
+     *
+     * @param name Subroutine name (e.g., "main::closure_123")
+     * @return RuntimeScalar CODE reference to this InterpretedCode
+     */
+    public RuntimeScalar registerAsNamedSub(String name) {
+        // Extract package and sub name
+        int lastColonIndex = name.lastIndexOf("::");
+        if (lastColonIndex > 0) {
+            this.packageName = name.substring(0, lastColonIndex);
+            this.subName = name.substring(lastColonIndex + 2);
+        } else {
+            this.packageName = "main";
+            this.subName = name;
+        }
+
+        // Store in RuntimeCode.interpretedSubs map for reference
+        RuntimeCode.interpretedSubs.put(name, this);
+
+        // Register in global code refs (creates or gets existing RuntimeScalar)
+        // Then set its value to this InterpretedCode
+        RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(name);
+        codeRef.set(new RuntimeScalar(this));
+
+        return codeRef;
+    }
+
+    /**
      * Get a human-readable representation for debugging.
      */
     @Override
