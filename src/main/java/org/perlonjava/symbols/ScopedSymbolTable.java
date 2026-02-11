@@ -219,6 +219,17 @@ public class ScopedSymbolTable {
     }
 
     /**
+     * Adds a variable to the current scope with an explicit index.
+     * Used when preserving slot indices from parent scopes (e.g., closure creation).
+     *
+     * @param entry The complete SymbolEntry to add with its original index
+     */
+    public void addVariableWithIndex(SymbolTable.SymbolEntry entry) {
+        clearVisibleVariablesCache();
+        symbolTableStack.peek().addVariableWithIndex(entry);
+    }
+
+    /**
      * Retrieves the index of a variable, searching from the innermost to the outermost scope.
      *
      * @param name The name of the variable to look up.

@@ -37,6 +37,22 @@ public class SymbolTable {
     }
 
     /**
+     * Adds a variable to the symbol table with an explicit index.
+     * Used when preserving slot indices from parent scopes (e.g., closure creation).
+     *
+     * @param entry The complete SymbolEntry to add with its original index
+     */
+    public void addVariableWithIndex(SymbolEntry entry) {
+        if (!variableIndex.containsKey(entry.name())) {
+            variableIndex.put(entry.name(), entry);
+            // Update the index counter if this entry's index is at or beyond current counter
+            if (entry.index() >= this.index) {
+                this.index = entry.index() + 1;
+            }
+        }
+    }
+
+    /**
      * Retrieves the index of a variable from the symbol table.
      *
      * @param name The name of the variable to look up.

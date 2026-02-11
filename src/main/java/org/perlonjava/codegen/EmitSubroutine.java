@@ -114,7 +114,7 @@ public class EmitSubroutine {
         // Create a new symbol table for the subroutine, but manually add only the filtered variables
         ScopedSymbolTable newSymbolTable = new ScopedSymbolTable();
         newSymbolTable.enterScope();
-        
+
         // Add only the filtered visible variables (excluding 'our sub' entries)
         for (SymbolTable.SymbolEntry entry : visibleVariables.values()) {
             newSymbolTable.addVariable(entry.name(), entry.decl(), entry.ast());

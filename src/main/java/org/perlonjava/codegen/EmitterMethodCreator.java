@@ -574,13 +574,21 @@ public class EmitterMethodCreator implements Opcodes {
             // Pre-initialize temporary local slots to avoid VerifyError
             // Temporaries are allocated dynamically during bytecode emission via
             // ctx.symbolTable.allocateLocalVariable(). We pre-initialize slots to ensure
-            // they're not in TOP state when accessed. Use a visitor to estimate the
-            // actual number needed based on AST structure rather than a fixed count.
+            // they're not in TOP state when accessed.
+            //
+            // IMPORTANT: Use min-1024 baseline for complex code (e.g., ExifTool with deeply
+            // nested closures and control flow). TempLocalCountVisitor significantly
+            // underestimates for complex patterns, and the JVM verifier's frame analysis
+            // loses initialization tracking through complex control flow paths.
             int preInitTempLocalsStart = ctx.symbolTable.getCurrentLocalVariableIndex();
             org.perlonjava.astvisitor.TempLocalCountVisitor tempCountVisitor =
                 new org.perlonjava.astvisitor.TempLocalCountVisitor();
             ast.accept(tempCountVisitor);
-            int preInitTempLocalsCount = tempCountVisitor.getMaxTempCount() + 64;  // Optimized: removed min-128 baseline
+            int preInitTempLocalsCount = Math.max(1024, tempCountVisitor.getMaxTempCount() + 256);
+            ctx.logDebug("Pre-init temps: start=" + preInitTempLocalsStart +
+                       ", count=" + preInitTempLocalsCount +
+                       ", range=[" + preInitTempLocalsStart + "-" +
+                       (preInitTempLocalsStart + preInitTempLocalsCount - 1) + "]");
             for (int i = preInitTempLocalsStart; i < preInitTempLocalsStart + preInitTempLocalsCount; i++) {
                 mv.visitInsn(Opcodes.ACONST_NULL);
                 mv.visitVarInsn(Opcodes.ASTORE, i);
