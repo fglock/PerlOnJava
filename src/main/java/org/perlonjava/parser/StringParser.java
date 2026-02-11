@@ -64,7 +64,10 @@ public class StringParser {
         while (state != END_TOKEN) {
             LexerToken currentToken = tokens.get(tokPos);
             if (currentToken.type == LexerTokenType.EOF) {
-                throw new PerlCompilerException(tokPos, "Can't find string terminator " + endDelim + " anywhere before EOF", ctx.errorUtil);
+                String errorMsg = endDelim == '/'
+                    ? "Search pattern not terminated"
+                    : "Can't find string terminator " + endDelim + " anywhere before EOF";
+                throw new PerlCompilerException(tokPos, errorMsg, ctx.errorUtil);
             }
 
             // Process heredocs at newlines during string parsing

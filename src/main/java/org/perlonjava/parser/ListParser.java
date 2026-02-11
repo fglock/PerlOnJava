@@ -266,6 +266,18 @@ public class ListParser {
         } else {
             expr = ListNode.makeList(parser.parseExpression(0));
             parser.ctx.logDebug("parseList end at " + TokenUtils.peek(parser));
+
+            // Check for closing delimiter with better error message for hash/array literals
+            LexerToken closingToken = TokenUtils.peek(parser);
+            if (closingToken.type == LexerTokenType.EOF && (close.equals("}") || close.equals("]"))) {
+                String fileName = parser.ctx.errorUtil.getFileName();
+                int lineNum = parser.ctx.errorUtil.getLineNumber(parser.tokenIndex);
+                String errorMsg = "Missing right curly or square bracket at " + fileName + " line " + lineNum + ", at end of line\n" +
+                    "syntax error at " + fileName + " line " + lineNum + ", at EOF\n" +
+                    "Execution of " + fileName + " aborted due to compilation errors.\n";
+                throw new PerlCompilerException(errorMsg);
+            }
+
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, close);
         }
 

@@ -121,8 +121,10 @@ public class WarnDie {
                 if (!out.endsWith("\n")) {
                     String whereStr = where.toString();
                     out += whereStr;
-                    // Only add newline if where was empty (no location info)
-                    if (whereStr.isEmpty() && !out.endsWith("\n")) {
+                    // Add period and newline if location info was added
+                    if (!whereStr.isEmpty()) {
+                        out += ".\n";
+                    } else if (!out.endsWith("\n")) {
                         out += "\n";
                     }
                 }

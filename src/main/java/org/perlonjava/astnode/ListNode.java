@@ -106,6 +106,10 @@ public class ListNode extends AbstractNode {
      * @return a ListNode containing the input node
      */
     public static ListNode makeList(Node left) {
+        if (left == null) {
+            // Handle null input by creating an empty list
+            return new ListNode(0);
+        }
         if (left instanceof ListNode) {
             return (ListNode) left;
         }
