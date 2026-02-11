@@ -497,6 +497,26 @@ public class BytecodeCompiler implements Visitor {
                 emit(rs1);
                 emit(rs2);
             }
+            case "()" -> {
+                // Apply operator: $coderef->(args) or &subname(args)
+                // left (rs1) = code reference (RuntimeScalar containing RuntimeCode)
+                // right (rs2) = arguments (should be ListNode)
+
+                // TODO: Convert arguments to RuntimeArray
+                // For now, assume simple case where right is already evaluated
+                // This is a simplified implementation - full implementation would need
+                // to build a RuntimeArray from the arguments
+
+                // Emit CALL_SUB: rd = coderef.apply(args, context)
+                emit(Opcodes.CALL_SUB);
+                emit(rd);  // Result register
+                emit(rs1); // Code reference register
+                emit(rs2); // Arguments register (should be RuntimeArray)
+                emit(RuntimeContextType.SCALAR); // Context (TODO: detect from usage)
+
+                // Note: CALL_SUB may return RuntimeControlFlowList
+                // The interpreter will handle control flow propagation
+            }
             default -> throw new RuntimeException("Unsupported operator: " + node.operator);
         }
 

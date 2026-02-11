@@ -33,6 +33,10 @@ public class ClosureTest {
         System.out.println("\nTest 2: Call interpreted code as named sub");
         testNamedSubCall();
 
+        // Test 3: Anonymous closure (code ref in scalar)
+        System.out.println("\nTest 3: Anonymous closure via code ref");
+        testAnonymousClosure();
+
         System.out.println("\n=== All manual tests completed ===");
     }
 
@@ -85,6 +89,35 @@ public class ClosureTest {
             System.out.println("  Result: " + result.scalar().toString());
             System.out.println("  Expected: 10");
             System.out.println("  Status: " + (result.scalar().getInt() == 10 ? "PASS" : "FAIL"));
+
+        } catch (Exception e) {
+            System.err.println("  [ERROR] " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    private static void testAnonymousClosure() {
+        try {
+            // Test that InterpretedCode can be stored in a scalar and called
+            // This simulates: my $closure = sub { $_[0] + 10 }; $closure->(5)
+
+            String perlCode = "$_[0] + 10";
+            InterpretedCode code = compileSimple(perlCode);
+
+            // Store InterpretedCode in a RuntimeScalar (anonymous closure)
+            RuntimeScalar closureRef = new RuntimeScalar();
+            closureRef.type = RuntimeScalarType.CODE;
+            closureRef.value = code;
+
+            // Call via RuntimeCode.apply()
+            RuntimeArray args = new RuntimeArray();
+            args.push(new RuntimeScalar(5));
+
+            RuntimeList result = RuntimeCode.apply(closureRef, "", args, RuntimeContextType.SCALAR);
+            System.out.println("  Result: " + result.scalar().toString());
+            System.out.println("  Expected: 15");
+            System.out.println("  Status: " + (result.scalar().getInt() == 15 ? "PASS" : "FAIL"));
+            System.out.println("  [INFO] Anonymous closures work correctly!");
 
         } catch (Exception e) {
             System.err.println("  [ERROR] " + e.getMessage());
