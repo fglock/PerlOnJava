@@ -394,25 +394,6 @@ public class EmitterMethodCreator implements Opcodes {
     }
 
     /**
-     * Emits bytecode to re-initialize temporary local variable slots.
-     * This is called after control flow merge point labels to ensure ASM's frame
-     * computation sees slots as initialized on all paths reaching the merge point.
-     *
-     * @param mv The MethodVisitor to emit instructions to
-     * @param tempStart The starting index for temporary variable slots
-     * @param tempCount The number of temporary slots to re-initialize
-     */
-    private static void reinitializeTempSlots(MethodVisitor mv, int tempStart, int tempCount) {
-        // Re-initialize a subset of temp slots to avoid excessive bytecode bloat
-        // Focus on the most commonly accessed slots (first 128)
-        int slotsToReinit = Math.min(128, tempCount);
-        for (int i = tempStart; i < tempStart + slotsToReinit; i++) {
-            mv.visitInsn(Opcodes.ACONST_NULL);
-            mv.visitVarInsn(Opcodes.ASTORE, i);
-        }
-    }
-
-    /**
      * Creates a new class with a method based on the provided context, environment, and abstract
      * syntax tree (AST).
      *
@@ -816,12 +797,6 @@ public class EmitterMethodCreator implements Opcodes {
 
             // Join point for all returns/gotos. Must be stack-neutral.
             mv.visitLabel(ctx.javaClassInfo.returnLabel);
-
-            // Re-initialize temp slots at this merge point to prevent frame merging issues
-            // ASM's frame computation can lose track of initialization state when merging
-            // frames from different control flow paths (returns, gotos, exceptions).
-            reinitializeTempSlots(mv, preInitTempLocalsStart, preInitTempLocalsCount);
-
             mv.visitVarInsn(Opcodes.ALOAD, returnValueSlot);
 
             // Transform the value in the stack to RuntimeList BEFORE local teardown.
@@ -867,10 +842,6 @@ public class EmitterMethodCreator implements Opcodes {
             
             // TAILCALL trampoline loop
             mv.visitLabel(tailcallLoop);
-
-            // Re-initialize temp slots at loop entry (merge point for jumps back to loop)
-            reinitializeTempSlots(mv, preInitTempLocalsStart, preInitTempLocalsCount);
-
             // Cast to RuntimeControlFlowList to access getTailCallCodeRef/getTailCallArgs
             mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeControlFlowList");
             
@@ -1087,9 +1058,6 @@ public class EmitterMethodCreator implements Opcodes {
                 // Start of the catch block
                 mv.visitLabel(catchBlock);
 
-                // Re-initialize temp slots at catch entry (exception handler merge point)
-                reinitializeTempSlots(mv, preInitTempLocalsStart, preInitTempLocalsCount);
-
                 // The throwable object is on the stack
                 // Catch the throwable
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC,
@@ -1128,9 +1096,6 @@ public class EmitterMethodCreator implements Opcodes {
 
                 // End of the catch block
                 mv.visitLabel(endCatch);
-
-                // Re-initialize temp slots after catch merge point
-                reinitializeTempSlots(mv, preInitTempLocalsStart, preInitTempLocalsCount);
 
                 // Load the return value for the method epilogue.
                 mv.visitVarInsn(Opcodes.ALOAD, returnListSlot);
