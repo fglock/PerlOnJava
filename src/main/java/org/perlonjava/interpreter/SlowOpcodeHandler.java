@@ -136,6 +136,9 @@ public class SlowOpcodeHandler {
             case Opcodes.SLOWOP_SYSCALL:
                 return executeSyscall(bytecode, pc, registers);
 
+            case Opcodes.SLOWOP_EVAL_STRING:
+                return executeEvalString(bytecode, pc, registers, code);
+
             default:
                 throw new RuntimeException(
                     "Unknown slow operation ID: " + slowOpId +
@@ -169,6 +172,7 @@ public class SlowOpcodeHandler {
             case Opcodes.SLOWOP_SHMREAD -> "shmread";
             case Opcodes.SLOWOP_SHMWRITE -> "shmwrite";
             case Opcodes.SLOWOP_SYSCALL -> "syscall";
+            case Opcodes.SLOWOP_EVAL_STRING -> "eval";
             default -> "slowop_" + slowOpId;
         };
     }
@@ -468,6 +472,36 @@ public class SlowOpcodeHandler {
 
         // TODO: Implement via JNI or Panama FFM API
         throw new UnsupportedOperationException("syscall() not yet implemented");
+    }
+
+    /**
+     * SLOW_EVAL_STRING: rd = eval(rs_string)
+     * Format: [SLOW_EVAL_STRING] [rd] [rs_string]
+     * Effect: Dynamically evaluates Perl code string
+     */
+    private static int executeEvalString(
+            byte[] bytecode,
+            int pc,
+            RuntimeBase[] registers,
+            InterpretedCode code) {
+
+        int rd = bytecode[pc++] & 0xFF;
+        int stringReg = bytecode[pc++] & 0xFF;
+
+        RuntimeScalar codeString = (RuntimeScalar) registers[stringReg];
+        String perlCode = codeString.toString();
+
+        // Call EvalStringHandler to parse, compile, and execute
+        RuntimeScalar result = EvalStringHandler.evalString(
+            perlCode,
+            code,           // Current InterpretedCode for context
+            registers,      // Current registers for variable access
+            code.sourceName,
+            code.sourceLine
+        );
+
+        registers[rd] = result;
+        return pc;
     }
 
     private SlowOpcodeHandler() {
