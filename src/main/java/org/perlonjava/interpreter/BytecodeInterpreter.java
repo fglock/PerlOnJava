@@ -559,37 +559,50 @@ public class BytecodeInterpreter {
                     // =================================================================
 
                     case Opcodes.PRINT: {
-                        // Print to STDOUT
+                        // Print to selected filehandle (default STDOUT)
                         int rs = bytecode[pc++] & 0xFF;
                         Object val = registers[rs];
+
+                        RuntimeList list;
                         if (val instanceof RuntimeList) {
-                            // Print all elements of the list
-                            RuntimeList list = (RuntimeList) val;
-                            for (RuntimeBase elem : list.elements) {
-                                System.out.print(elem.toString());
-                            }
+                            list = (RuntimeList) val;
                         } else if (val instanceof RuntimeScalar) {
-                            // Print single scalar
-                            System.out.print(((RuntimeScalar) val).toString());
+                            // Convert scalar to single-element list
+                            list = new RuntimeList();
+                            list.add((RuntimeScalar) val);
+                        } else {
+                            list = new RuntimeList();
                         }
+
+                        // Get selected filehandle
+                        RuntimeScalar fh = new RuntimeScalar(RuntimeIO.selectedHandle);
+
+                        // Call IOOperator.print()
+                        org.perlonjava.operators.IOOperator.print(list, fh);
                         break;
                     }
 
                     case Opcodes.SAY: {
-                        // Say to STDOUT (print with newline)
+                        // Say to selected filehandle (default STDOUT)
                         int rs = bytecode[pc++] & 0xFF;
                         Object val = registers[rs];
+
+                        RuntimeList list;
                         if (val instanceof RuntimeList) {
-                            // Print all elements of the list with newline at end
-                            RuntimeList list = (RuntimeList) val;
-                            for (RuntimeBase elem : list.elements) {
-                                System.out.print(elem.toString());
-                            }
-                            System.out.println();
+                            list = (RuntimeList) val;
                         } else if (val instanceof RuntimeScalar) {
-                            // Print single scalar with newline
-                            System.out.println(((RuntimeScalar) val).toString());
+                            // Convert scalar to single-element list
+                            list = new RuntimeList();
+                            list.add((RuntimeScalar) val);
+                        } else {
+                            list = new RuntimeList();
                         }
+
+                        // Get selected filehandle
+                        RuntimeScalar fh = new RuntimeScalar(RuntimeIO.selectedHandle);
+
+                        // Call IOOperator.say()
+                        org.perlonjava.operators.IOOperator.say(list, fh);
                         break;
                     }
 

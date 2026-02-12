@@ -757,19 +757,37 @@ public class BytecodeCompiler implements Visitor {
             }
         } else if (op.equals("select")) {
             // select FILEHANDLE or select()
-            // For now, we ignore filehandle selection and just return a placeholder
-            // since we always print to STDOUT
-            // In full implementation, this would set/get the default output filehandle
+            // Call IOOperator.select() which handles the logic
+            // For now, emit a SLOW_OP that will call the operator at runtime
 
-            if (node.operand != null) {
-                // select FILEHANDLE - evaluate the filehandle but ignore it
+            int rd = allocateRegister();
+
+            if (node.operand != null && node.operand instanceof ListNode) {
+                // select FILEHANDLE or select() with arguments
+                // Compile the operand (ListNode containing filehandle ref)
                 node.operand.accept(this);
+                int listReg = lastResultReg;
+
+                // Emit SLOW_OP with SLOWOP_SELECT
+                emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                emit(Opcodes.SLOWOP_SELECT);
+                emit(rd);
+                emit(listReg);
+            } else {
+                // select() with no arguments - returns current filehandle
+                // Create empty list
+                emit(Opcodes.CREATE_LIST);
+                int listReg = allocateRegister();
+                emit(listReg);
+                emit(0); // count = 0
+
+                // Emit SLOW_OP with SLOWOP_SELECT
+                emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                emit(Opcodes.SLOWOP_SELECT);
+                emit(rd);
+                emit(listReg);
             }
 
-            // Return a placeholder (we could return the filehandle object here)
-            int rd = allocateRegister();
-            emit(Opcodes.LOAD_UNDEF);
-            emit(rd);
             lastResultReg = rd;
         } else {
             throw new UnsupportedOperationException("Unsupported operator: " + op);
