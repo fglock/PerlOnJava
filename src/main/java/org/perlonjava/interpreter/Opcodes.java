@@ -377,6 +377,13 @@ public class Opcodes {
     public static final byte JOIN = 88;
 
     // =================================================================
+    // I/O OPERATIONS (89)
+    // =================================================================
+
+    /** Select default output filehandle: rd = IOOperator.select(rs_list, SCALAR) */
+    public static final byte SELECT = 89;
+
+    // =================================================================
     // SLOW OPERATIONS (87) - Single opcode for rarely-used operations
     // =================================================================
 

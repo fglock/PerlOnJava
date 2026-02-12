@@ -816,8 +816,9 @@ public class BytecodeCompiler implements Visitor {
             }
         } else if (op.equals("select")) {
             // select FILEHANDLE or select()
-            // Call IOOperator.select() which handles the logic
-            // For now, emit a SLOW_OP that will call the operator at runtime
+            // SELECT is a fast opcode (used in every print statement)
+            // Format: [SELECT] [rd] [rs_list]
+            // Effect: rd = IOOperator.select(registers[rs_list], SCALAR)
 
             int rd = allocateRegister();
 
@@ -827,9 +828,8 @@ public class BytecodeCompiler implements Visitor {
                 node.operand.accept(this);
                 int listReg = lastResultReg;
 
-                // Emit SLOW_OP with SLOWOP_SELECT
-                emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                emit(Opcodes.SLOWOP_SELECT);
+                // Emit SELECT opcode
+                emitWithToken(Opcodes.SELECT, node.getIndex());
                 emit(rd);
                 emit(listReg);
             } else {
@@ -840,9 +840,8 @@ public class BytecodeCompiler implements Visitor {
                 emit(listReg);
                 emit(0); // count = 0
 
-                // Emit SLOW_OP with SLOWOP_SELECT
-                emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                emit(Opcodes.SLOWOP_SELECT);
+                // Emit SELECT opcode
+                emitWithToken(Opcodes.SELECT, node.getIndex());
                 emit(rd);
                 emit(listReg);
             }
