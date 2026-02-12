@@ -287,10 +287,10 @@ public class Opcodes {
     // MISCELLANEOUS (71-74)
     // =================================================================
 
-    /** Print to STDOUT: print(rs) */
+    /** Print to filehandle: print(rs_content, rs_filehandle) */
     public static final byte PRINT = 71;
 
-    /** Say to STDOUT: say(rs) */
+    /** Say to filehandle: say(rs_content, rs_filehandle) */
     public static final byte SAY = 72;
 
     /** Die with message: die(rs) */
@@ -458,6 +458,9 @@ public class Opcodes {
 
     /** Slow op ID: rd = select(rs_list) - set/get default output filehandle */
     public static final int SLOWOP_SELECT = 20;
+
+    /** Slow op ID: rd = getGlobalIO(name) - load glob/filehandle from global variables */
+    public static final int SLOWOP_LOAD_GLOB = 21;
 
     // =================================================================
     // OPCODES 88-255: RESERVED FOR FUTURE FAST OPERATIONS
