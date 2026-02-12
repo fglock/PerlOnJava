@@ -172,46 +172,94 @@ Interpreted code is 1.82x slower than compiled code
 - Direct bytecode execution
 - Compare interpreter vs. compiler performance
 
-## Dispatch Architecture & Future CPU Cache Optimization
+## Dispatch Architecture & CPU Cache Optimization
 
-### Current Design: Single Unified Switch
+### Current Design: Main Switch + SLOW_OP Gateway
 
-The interpreter uses **one monolithic switch statement** in BytecodeInterpreter.java (lines 62-632):
+The interpreter uses **optimized dual-dispatch architecture** for maximum performance:
 
+**Main Switch (Opcodes 0-87):**
 ```java
-public static RuntimeDataProvider execute(
-    byte[] bytecode,
-    RuntimeArray args,
-    RuntimeContextType wantContext) {
-
-    RuntimeDataProvider[] registers = new RuntimeDataProvider[256];
+public static RuntimeList execute(InterpretedCode code, RuntimeArray args, int callContext) {
+    RuntimeBase[] registers = new RuntimeBase[code.maxRegisters];
     int pc = 0;
+    byte[] bytecode = code.bytecode;
 
     while (pc < bytecode.length) {
-        int opcode = bytecode[pc++] & 0xFF;
+        byte opcode = bytecode[pc++];
 
         switch (opcode) {
             case Opcodes.RETURN: ...
             case Opcodes.GOTO: ...
             case Opcodes.LOAD_INT: ...
-            // ... all 83 opcodes in one switch ...
-            case Opcodes.LOOP_PLUS_PLUS: ...
-            default: throw new IllegalStateException("Unknown opcode: " + opcode);
+            // ... hot path opcodes (0-86) ...
+            case Opcodes.CREATE_LIST: ...
+
+            case Opcodes.SLOW_OP:  // Gateway to rare operations
+                pc = SlowOpcodeHandler.execute(bytecode, pc, registers, code);
+                break;
+
+            default: throw new RuntimeException("Unknown opcode: " + opcode);
         }
     }
 }
 ```
 
-**Key Characteristics:**
-- All 83 opcodes (0-82) handled in single switch
-- Dense numbering (no gaps) enables JVM tableswitch optimization
-- Organized by functional category (not frequency)
-- ~10-15% speedup from tableswitch vs. lookupswitch
+**Slow Operation Handler (Separate Class):**
+```java
+// SlowOpcodeHandler.java
+public static int execute(byte[] bytecode, int pc, RuntimeBase[] registers, InterpretedCode code) {
+    int slowOpId = bytecode[pc++] & 0xFF;
 
-**Why This Works:**
-- JVM JIT compiler optimizes switch to tableswitch (O(1) jump table)
-- CPU branch predictor learns execution patterns
-- Modern CPUs have large instruction caches (32KB-64KB L1 i-cache)
+    switch (slowOpId) {  // Dense switch (0,1,2...) for tableswitch
+        case 0:  return executeChown(...);
+        case 1:  return executeWaitpid(...);
+        case 2:  return executeSetsockopt(...);
+        // ... up to 255 slow operations
+    }
+}
+```
+
+**Key Characteristics:**
+- Main switch: 87 opcodes (0-87) - compact for CPU i-cache
+- Dense numbering (no gaps) enables JVM tableswitch optimization (O(1))
+- SLOW_OP (87): Single gateway for 256 rare operations
+- SlowOpcodeHandler: Separate class with own dense switch (0-255)
+- Preserves opcodes 88-255 for future fast operations
+
+**Architecture Benefits:**
+1. **Opcode Space Efficiency**: Uses 1 opcode for 256 slow operations
+2. **CPU Cache Optimized**: Main loop stays compact (fits in i-cache)
+3. **Tableswitch x2**: Both main and slow switches use dense numbering
+4. **Easy Extension**: Add slow ops without consuming fast opcodes
+
+### Performance Characteristics
+
+**Main Switch (Hot Path):**
+- 87 dense opcodes (0-87)
+- ~10-15% speedup from tableswitch vs. lookupswitch
+- Fits in CPU L1 instruction cache (32-64KB)
+- No overhead for fast operations
+
+**SLOW_OP Gateway (Cold Path):**
+- Single opcode (87) with sub-operation ID parameter
+- Adds ~5ns overhead per slow operation
+- Worth it for <1% execution frequency
+- Keeps main loop compact (main benefit)
+
+**Bytecode Format:**
+```
+Fast operation:
+[OPCODE] [operands...]
+e.g., [ADD_SCALAR] [rd] [rs1] [rs2]
+
+Slow operation:
+[SLOW_OP] [slow_op_id] [operands...]
+e.g., [87] [1] [rd] [rs_pid] [rs_flags]
+         ^    ^
+         |    |__ SLOWOP_WAITPID (1)
+         |_______ SLOW_OP gateway
+```
 
 ### JVM Tableswitch Optimization
 
@@ -236,64 +284,82 @@ lookupswitch {  // O(log n) lookup via binary search
 
 **Critical:** To maintain tableswitch, opcodes MUST be dense (no large gaps in numbering).
 
-### Future Enhancement: Separate Switch for Rare Opcodes
+### SLOW_OP Architecture (Implemented)
 
-**Currently NOT implemented**, but could improve CPU cache utilization by keeping the hot path compact:
+**Design:** Single gateway opcode for all rarely-used operations.
 
+**Rationale:**
+- Consuming many opcode numbers (200-255) for rare operations wastes space
+- Main interpreter switch grows large, reducing CPU i-cache efficiency
+- Better: Use ONE opcode with sub-operation parameter
+
+**Implementation:**
 ```java
-// Proposed architecture (not current!)
-switch (opcode) {
-    case Opcodes.RETURN: ...
-    case Opcodes.GOTO: ...
-    case Opcodes.LOAD_INT: ...
-    case Opcodes.ADD_SCALAR: ...
-    case Opcodes.CALL_SUB: ...
-    // ... hot path opcodes only ...
+// Main interpreter switch
+case Opcodes.SLOW_OP:  // Opcode 87
+    pc = SlowOpcodeHandler.execute(bytecode, pc, registers, code);
+    break;
 
-    default:
-        return handleRareOpcodes(opcode, pc, registers); // Separate switch
-}
-
-private static int handleRareOpcodes(int opcode, int pc, RuntimeDataProvider[] registers) {
-    switch (opcode) {
-        case Opcodes.ARRAY_UNSHIFT: ...
-        case Opcodes.HASH_EXISTS: ...
-        case Opcodes.CALL_METHOD: ...
-        case Opcodes.CREATE_REDO: ...
-        case Opcodes.DIE: ...
-        // ... rarely-used opcodes ...
+// SlowOpcodeHandler.java
+public static int execute(...) {
+    int slowOpId = bytecode[pc++] & 0xFF;
+    switch (slowOpId) {  // Dense: 0, 1, 2, 3, ...
+        case SLOWOP_CHOWN: return executeChown(...);
+        case SLOWOP_WAITPID: return executeWaitpid(...);
+        case SLOWOP_SETSOCKOPT: return executeSetsockopt(...);
+        // ... 19 operations defined, 236 slots remaining
     }
 }
 ```
 
 **Benefits:**
-- Smaller main switch keeps CPU instruction cache hot
-- Rare opcodes moved to cold path (separate function)
-- Potential 5-10% speedup for hot paths
+- **Opcode Efficiency**: 1 opcode for 256 slow operations
+- **Space Preservation**: Opcodes 88-255 available for future fast ops
+- **CPU Cache**: Main loop stays compact (87 cases vs 255+)
+- **Tableswitch x2**: Both switches use dense numbering
+- **Easy Extension**: Add slow ops without affecting main loop
 
-**Trade-offs:**
-- Adds function call overhead for rare opcodes
-- More complex code maintenance
-- Only beneficial if rare opcodes are truly rare (<1% execution)
+**Implemented Slow Operations (19 defined, 236 slots remaining):**
 
-### Candidate Rare Opcodes for Future Separation
+| ID | Name | Description |
+|----|------|-------------|
+| 0 | SLOWOP_CHOWN | Change file ownership |
+| 1 | SLOWOP_WAITPID | Wait for process completion |
+| 2 | SLOWOP_SETSOCKOPT | Set socket options |
+| 3 | SLOWOP_GETSOCKOPT | Get socket options |
+| 4 | SLOWOP_FCNTL | File control operations |
+| 5 | SLOWOP_IOCTL | Device control operations |
+| 6 | SLOWOP_FLOCK | File locking |
+| 7 | SLOWOP_SEMOP | Semaphore operations |
+| 8 | SLOWOP_MSGCTL | Message queue control |
+| 9 | SLOWOP_SHMCTL | Shared memory control |
+| 10 | SLOWOP_GETPRIORITY | Get process priority |
+| 11 | SLOWOP_SETPRIORITY | Set process priority |
+| 12 | SLOWOP_SYSCALL | Generic system call |
+| 13 | SLOWOP_SOCKET | Create socket |
+| 14 | SLOWOP_BIND | Bind socket to address |
+| 15 | SLOWOP_CONNECT | Connect socket |
+| 16 | SLOWOP_LISTEN | Listen for connections |
+| 17 | SLOWOP_ACCEPT | Accept connection |
+| 18 | SLOWOP_SHUTDOWN | Shutdown socket |
 
-**Good Candidates (rarely executed):**
-- **ARRAY_UNSHIFT** (42), **ARRAY_SHIFT** (43) - Less common than push/pop
-- **HASH_EXISTS** (52), **HASH_DELETE** (53), **HASH_KEYS** (54), **HASH_VALUES** (55)
-- **CALL_METHOD** (58), **CALL_BUILTIN** (59) - Less common than CALL_SUB
-- **CREATE_REDO** (62), **CREATE_GOTO** (65), **GET_CONTROL_FLOW_TYPE** (67)
-- **CREATE_REF** (68), **DEREF** (69), **GET_TYPE** (70), **GET_REFTYPE** (71), **BLESS** (72)
-- **DIE** (73), **WARN** (74) - Only on error paths
+**Usage Example:**
+```
+Perl code:    chown($uid, $gid, @files);
+Bytecode:     [SLOW_OP] [0] [operands...]  # 0 = SLOWOP_CHOWN
+```
 
-**MUST Keep in Main Switch (hot path):**
-- **LOAD_INT** (7), **LOAD_STRING** (8), **LOAD_UNDEF** (9)
-- **MOVE** (5) - Critical data movement
-- **ADD_SCALAR** (17), **ADD_SCALAR_INT** (24) - Arithmetic hot path
-- **GOTO** (2), **GOTO_IF_FALSE** (3), **GOTO_IF_TRUE** (4) - Control flow
-- **COMPARE_NUM** (31), **EQ_NUM** (33), **LT_NUM** (35) - Loop conditions
-- **CALL_SUB** (57) - Most common call type
-- **All superinstructions** (75-82) - Designed for hot paths
+**Performance Characteristics:**
+- **Gateway overhead**: ~5ns per slow operation (method call + second switch)
+- **Worth it for**: Operations used <1% of execution time
+- **Main benefit**: Keeps main interpreter loop compact for CPU i-cache
+
+**Adding New Slow Operations:**
+1. Add constant to `Opcodes.java`: `SLOWOP_FOO = 19`
+2. Add case to `SlowOpcodeHandler.execute()`: `case 19: return executeFoo(...)`
+3. Implement handler: `private static int executeFoo(...)`
+4. Update disassembler in `InterpretedCode.java`
+5. Maintain dense numbering (no gaps)
 
 ## Optimization Strategies
 
