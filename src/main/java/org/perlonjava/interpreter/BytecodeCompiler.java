@@ -361,6 +361,52 @@ public class BytecodeCompiler implements Visitor {
 
                             lastResultReg = reg;
                             return;
+                        } else if (sigilOp.operator.equals("@") && sigilOp.operand instanceof IdentifierNode) {
+                            // Handle my @array = ...
+                            String varName = "@" + ((IdentifierNode) sigilOp.operand).name;
+
+                            // Allocate register for new lexical array
+                            int arrayReg = allocateRegister();
+                            registerMap.put(varName, arrayReg);
+
+                            // Create empty array
+                            emit(Opcodes.NEW_ARRAY);
+                            emit(arrayReg);
+
+                            // Compile RHS (should evaluate to a list)
+                            node.right.accept(this);
+                            int listReg = lastResultReg;
+
+                            // Populate array from list using setFromList
+                            emit(Opcodes.ARRAY_SET_FROM_LIST);
+                            emit(arrayReg);
+                            emit(listReg);
+
+                            lastResultReg = arrayReg;
+                            return;
+                        } else if (sigilOp.operator.equals("%") && sigilOp.operand instanceof IdentifierNode) {
+                            // Handle my %hash = ...
+                            String varName = "%" + ((IdentifierNode) sigilOp.operand).name;
+
+                            // Allocate register for new lexical hash
+                            int hashReg = allocateRegister();
+                            registerMap.put(varName, hashReg);
+
+                            // Create empty hash
+                            emit(Opcodes.NEW_HASH);
+                            emit(hashReg);
+
+                            // Compile RHS (should evaluate to a list)
+                            node.right.accept(this);
+                            int listReg = lastResultReg;
+
+                            // Populate hash from list
+                            emit(Opcodes.HASH_SET_FROM_LIST);
+                            emit(hashReg);
+                            emit(listReg);
+
+                            lastResultReg = hashReg;
+                            return;
                         }
                     }
 
@@ -682,6 +728,122 @@ public class BytecodeCompiler implements Visitor {
                 emit(rs2);       // List register
                 emit(rs1);       // Closure register
                 emit(RuntimeContextType.LIST);  // Map always uses list context
+            }
+            case "[" -> {
+                // Array element access: $a[10] means get element 10 from array @a
+                // left: OperatorNode("$", IdentifierNode("a"))
+                // right: ArrayLiteralNode(index_expression)
+
+                if (!(node.left instanceof OperatorNode)) {
+                    throw new RuntimeException("Array access requires variable on left side");
+                }
+                OperatorNode leftOp = (OperatorNode) node.left;
+                if (!leftOp.operator.equals("$") || !(leftOp.operand instanceof IdentifierNode)) {
+                    throw new RuntimeException("Array access requires scalar dereference: $var[index]");
+                }
+
+                String varName = ((IdentifierNode) leftOp.operand).name;
+                String arrayVarName = "@" + varName;
+
+                // Get the array - check lexical first, then global
+                int arrayReg;
+                if (registerMap.containsKey(arrayVarName)) {
+                    // Lexical array
+                    arrayReg = registerMap.get(arrayVarName);
+                } else {
+                    // Global array - load it
+                    arrayReg = allocateRegister();
+                    String globalArrayName = "main::" + varName;
+                    int nameIdx = addToStringPool(globalArrayName);
+                    emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                    emit(arrayReg);
+                    emit(nameIdx);
+                }
+
+                // Evaluate index expression
+                // For ArrayLiteralNode, get the first element
+                if (!(node.right instanceof ArrayLiteralNode)) {
+                    throw new RuntimeException("Array access requires ArrayLiteralNode on right side");
+                }
+                ArrayLiteralNode indexNode = (ArrayLiteralNode) node.right;
+                if (indexNode.elements.isEmpty()) {
+                    throw new RuntimeException("Array access requires index expression");
+                }
+
+                // Compile the index expression
+                indexNode.elements.get(0).accept(this);
+                int indexReg = lastResultReg;
+
+                // Emit ARRAY_GET
+                emit(Opcodes.ARRAY_GET);
+                emit(rd);
+                emit(arrayReg);
+                emit(indexReg);
+            }
+            case "{" -> {
+                // Hash element access: $h{key} means get element 'key' from hash %h
+                // left: OperatorNode("$", IdentifierNode("h"))
+                // right: HashLiteralNode(key_expression)
+
+                if (!(node.left instanceof OperatorNode)) {
+                    throw new RuntimeException("Hash access requires variable on left side");
+                }
+                OperatorNode leftOp = (OperatorNode) node.left;
+                if (!leftOp.operator.equals("$") || !(leftOp.operand instanceof IdentifierNode)) {
+                    throw new RuntimeException("Hash access requires scalar dereference: $var{key}");
+                }
+
+                String varName = ((IdentifierNode) leftOp.operand).name;
+                String hashVarName = "%" + varName;
+
+                // Get the hash - check lexical first, then global
+                int hashReg;
+                if (registerMap.containsKey(hashVarName)) {
+                    // Lexical hash
+                    hashReg = registerMap.get(hashVarName);
+                } else {
+                    // Global hash - load it
+                    hashReg = allocateRegister();
+                    String globalHashName = "main::" + varName;
+                    int nameIdx = addToStringPool(globalHashName);
+                    emit(Opcodes.LOAD_GLOBAL_HASH);
+                    emit(hashReg);
+                    emit(nameIdx);
+                }
+
+                // Evaluate key expression
+                // For HashLiteralNode, get the first element (should be the key)
+                if (!(node.right instanceof HashLiteralNode)) {
+                    throw new RuntimeException("Hash access requires HashLiteralNode on right side");
+                }
+                HashLiteralNode keyNode = (HashLiteralNode) node.right;
+                if (keyNode.elements.isEmpty()) {
+                    throw new RuntimeException("Hash access requires key expression");
+                }
+
+                // Compile the key expression
+                // Special case: bareword identifiers should be treated as string literals
+                int keyReg;
+                Node keyElement = keyNode.elements.get(0);
+                if (keyElement instanceof IdentifierNode) {
+                    // Bareword key - treat as string literal
+                    String keyStr = ((IdentifierNode) keyElement).name;
+                    keyReg = allocateRegister();
+                    int strIdx = addToStringPool(keyStr);
+                    emit(Opcodes.LOAD_STRING);
+                    emit(keyReg);
+                    emit(strIdx);
+                } else {
+                    // Expression key - evaluate normally
+                    keyElement.accept(this);
+                    keyReg = lastResultReg;
+                }
+
+                // Emit HASH_GET
+                emit(Opcodes.HASH_GET);
+                emit(rd);
+                emit(hashReg);
+                emit(keyReg);
             }
             default -> throw new RuntimeException("Unsupported operator: " + node.operator);
         }

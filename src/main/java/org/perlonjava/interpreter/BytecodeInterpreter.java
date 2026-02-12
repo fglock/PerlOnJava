@@ -946,6 +946,50 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.NEW_ARRAY: {
+                        // Create empty array: rd = new RuntimeArray()
+                        int rd = bytecode[pc++] & 0xFF;
+                        registers[rd] = new RuntimeArray();
+                        break;
+                    }
+
+                    case Opcodes.NEW_HASH: {
+                        // Create empty hash: rd = new RuntimeHash()
+                        int rd = bytecode[pc++] & 0xFF;
+                        registers[rd] = new RuntimeHash();
+                        break;
+                    }
+
+                    case Opcodes.ARRAY_SET_FROM_LIST: {
+                        // Set array content from list: array_reg.setFromList(list_reg)
+                        // Format: [ARRAY_SET_FROM_LIST] [array_reg] [list_reg]
+                        int arrayReg = bytecode[pc++] & 0xFF;
+                        int listReg = bytecode[pc++] & 0xFF;
+
+                        RuntimeArray array = (RuntimeArray) registers[arrayReg];
+                        RuntimeBase listBase = registers[listReg];
+                        RuntimeList list = listBase.getList();
+
+                        // setFromList clears and repopulates the array
+                        array.setFromList(list);
+                        break;
+                    }
+
+                    case Opcodes.HASH_SET_FROM_LIST: {
+                        // Set hash content from list: hash_reg = RuntimeHash.createHash(list_reg)
+                        // Format: [HASH_SET_FROM_LIST] [hash_reg] [list_reg]
+                        int hashReg = bytecode[pc++] & 0xFF;
+                        int listReg = bytecode[pc++] & 0xFF;
+
+                        RuntimeHash existingHash = (RuntimeHash) registers[hashReg];
+                        RuntimeBase listBase = registers[listReg];
+
+                        // Create new hash from list, then copy elements to existing hash
+                        RuntimeHash newHash = RuntimeHash.createHash(listBase);
+                        existingHash.elements = newHash.elements;
+                        break;
+                    }
+
                     // =================================================================
                     // SLOW OPERATIONS
                     // =================================================================
