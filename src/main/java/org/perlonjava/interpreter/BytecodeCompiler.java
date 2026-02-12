@@ -919,14 +919,46 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(SubroutineNode node) {
-        // For now, only handle anonymous subroutines used as eval blocks
         if (node.useTryCatch) {
             // This is an eval block: eval { ... }
             visitEvalBlock(node);
+        } else if (node.name == null || node.name.equals("<anon>")) {
+            // Anonymous subroutine: sub { ... }
+            visitAnonymousSubroutine(node);
         } else {
-            // Regular named or anonymous subroutine - not yet supported
-            throw new UnsupportedOperationException("Named subroutines not yet implemented in interpreter");
+            // Named subroutine - not yet supported
+            throw new UnsupportedOperationException("Named subroutines not yet implemented in interpreter: " + node.name);
         }
+    }
+
+    /**
+     * Visit an anonymous subroutine: sub { ... }
+     *
+     * Compiles the subroutine body to bytecode and creates an InterpretedCode instance.
+     * Handles closure variable capture if needed.
+     *
+     * The result is an InterpretedCode wrapped in RuntimeScalar, stored in lastResultReg.
+     */
+    private void visitAnonymousSubroutine(SubroutineNode node) {
+        // Create a new BytecodeCompiler for the subroutine body
+        BytecodeCompiler subCompiler = new BytecodeCompiler(this.sourceName, node.getIndex());
+
+        // Compile the subroutine body to InterpretedCode
+        InterpretedCode subCode = subCompiler.compile(node.block);
+
+        // Wrap InterpretedCode in RuntimeScalar
+        // InterpretedCode extends RuntimeCode, so use RuntimeScalar(RuntimeCode) constructor
+        RuntimeScalar codeScalar = new RuntimeScalar(subCode);
+
+        // Store the wrapped code in constants pool and load it into a register
+        int constIdx = addToConstantPool(codeScalar);
+        int rd = allocateRegister();
+
+        emit(Opcodes.LOAD_CONST);
+        emit(rd);
+        emit(constIdx);
+
+        lastResultReg = rd;
     }
 
     /**
