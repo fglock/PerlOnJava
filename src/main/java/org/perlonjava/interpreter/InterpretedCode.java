@@ -475,6 +475,24 @@ public class InterpretedCode extends RuntimeCode {
                     sb.append("MAP r").append(rd).append(" = map(r").append(rs1)
                       .append(", r").append(rs2).append(", ctx=").append(mapCtx).append(")\n");
                     break;
+                case Opcodes.NEW_ARRAY:
+                    rd = bytecode[pc++] & 0xFF;
+                    sb.append("NEW_ARRAY r").append(rd).append(" = new RuntimeArray()\n");
+                    break;
+                case Opcodes.NEW_HASH:
+                    rd = bytecode[pc++] & 0xFF;
+                    sb.append("NEW_HASH r").append(rd).append(" = new RuntimeHash()\n");
+                    break;
+                case Opcodes.ARRAY_SET_FROM_LIST:
+                    rs1 = bytecode[pc++] & 0xFF;  // array register
+                    rs2 = bytecode[pc++] & 0xFF;  // list register
+                    sb.append("ARRAY_SET_FROM_LIST r").append(rs1).append(".setFromList(r").append(rs2).append(")\n");
+                    break;
+                case Opcodes.HASH_SET_FROM_LIST:
+                    rs1 = bytecode[pc++] & 0xFF;  // hash register
+                    rs2 = bytecode[pc++] & 0xFF;  // list register
+                    sb.append("HASH_SET_FROM_LIST r").append(rs1).append(".setFromList(r").append(rs2).append(")\n");
+                    break;
                 case Opcodes.NOT:
                     rd = bytecode[pc++] & 0xFF;
                     rs = bytecode[pc++] & 0xFF;
