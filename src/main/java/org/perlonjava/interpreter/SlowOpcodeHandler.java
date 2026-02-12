@@ -139,6 +139,12 @@ public class SlowOpcodeHandler {
             case Opcodes.SLOWOP_EVAL_STRING:
                 return executeEvalString(bytecode, pc, registers, code);
 
+            case Opcodes.SLOWOP_SELECT:
+                return executeSelect(bytecode, pc, registers);
+
+            case Opcodes.SLOWOP_LOAD_GLOB:
+                return executeLoadGlob(bytecode, pc, registers, code);
+
             default:
                 throw new RuntimeException(
                     "Unknown slow operation ID: " + slowOpId +
@@ -173,6 +179,8 @@ public class SlowOpcodeHandler {
             case Opcodes.SLOWOP_SHMWRITE -> "shmwrite";
             case Opcodes.SLOWOP_SYSCALL -> "syscall";
             case Opcodes.SLOWOP_EVAL_STRING -> "eval";
+            case Opcodes.SLOWOP_SELECT -> "select";
+            case Opcodes.SLOWOP_LOAD_GLOB -> "load_glob";
             default -> "slowop_" + slowOpId;
         };
     }
@@ -501,6 +509,54 @@ public class SlowOpcodeHandler {
         );
 
         registers[rd] = result;
+        return pc;
+    }
+
+    /**
+     * SLOW_SELECT: rd = select(listReg)
+     * Format: [SLOW_SELECT] [rd] [rs_list]
+     * Effect: Sets or gets the default output filehandle
+     */
+    private static int executeSelect(
+            byte[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+
+        int rd = bytecode[pc++] & 0xFF;
+        int listReg = bytecode[pc++] & 0xFF;
+
+        RuntimeList list = (RuntimeList) registers[listReg];
+
+        // Call IOOperator.select() which handles the logic
+        RuntimeScalar result = org.perlonjava.operators.IOOperator.select(
+            list,
+            org.perlonjava.runtime.RuntimeContextType.SCALAR
+        );
+
+        registers[rd] = result;
+        return pc;
+    }
+
+    /**
+     * SLOW_LOAD_GLOB: rd = getGlobalIO(name)
+     * Format: [SLOW_LOAD_GLOB] [rd] [name_idx]
+     * Effect: Loads a glob/filehandle from global variables
+     */
+    private static int executeLoadGlob(
+            byte[] bytecode,
+            int pc,
+            RuntimeBase[] registers,
+            InterpretedCode code) {
+
+        int rd = bytecode[pc++] & 0xFF;
+        int nameIdx = bytecode[pc++] & 0xFF;
+
+        String globName = code.stringPool[nameIdx];
+
+        // Call GlobalVariable.getGlobalIO() to get the RuntimeGlob
+        RuntimeGlob glob = org.perlonjava.runtime.GlobalVariable.getGlobalIO(globName);
+
+        registers[rd] = glob;
         return pc;
     }
 

@@ -69,6 +69,8 @@ The following areas are currently under active development to enhance the functi
   - Optimization: faster type resolution in Perl scalars.
   - Optimization: `make` now runs tests in parallel.
   - Optimization: A workaround is implemented to Java 64k bytes segment limit.
+  - New command line option: `--interpreter` to run PerlOnJava as an interpreter instead of JVM compiler.
+    - `./jperl --interpreter --disassemble -e 'print "Hello, World!\n"'`
   - Planned release date: 2026-02-10.
 
 - Work in Progress

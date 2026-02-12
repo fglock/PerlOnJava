@@ -918,6 +918,10 @@ public class ArgumentParser {
                 validateExclusiveOptions(parsedArgs, "disassemble");
                 parsedArgs.disassembleEnabled = true;
                 break;
+            case "--interpreter":
+                // Use bytecode interpreter instead of JVM compiler
+                parsedArgs.useInterpreter = true;
+                break;
             case "--help":
                 // Print help message and exit
                 printHelp();
@@ -1066,6 +1070,7 @@ public class ArgumentParser {
         System.out.println("  --tokenize            tokenize the input code");
         System.out.println("  --parse               parse the input code");
         System.out.println("  --disassemble         disassemble the generated code");
+        System.out.println("  --interpreter         use bytecode interpreter instead of JVM compiler");
         System.out.println("  -h, --help            displays this help message");
         System.out.println();
 //        System.out.println("Unicode/encoding flags for -C:");

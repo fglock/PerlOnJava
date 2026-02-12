@@ -287,10 +287,10 @@ public class Opcodes {
     // MISCELLANEOUS (71-74)
     // =================================================================
 
-    /** Print to STDOUT: print(rs) */
+    /** Print to filehandle: print(rs_content, rs_filehandle) */
     public static final byte PRINT = 71;
 
-    /** Say to STDOUT: say(rs) */
+    /** Say to filehandle: say(rs_content, rs_filehandle) */
     public static final byte SAY = 72;
 
     /** Die with message: die(rs) */
@@ -368,6 +368,20 @@ public class Opcodes {
      * This is the most performance-critical opcode for list operations.
      */
     public static final byte CREATE_LIST = 86;
+
+    // =================================================================
+    // STRING OPERATIONS (88)
+    // =================================================================
+
+    /** Join list elements with separator: rd = join(rs_separator, rs_list) */
+    public static final byte JOIN = 88;
+
+    // =================================================================
+    // I/O OPERATIONS (89)
+    // =================================================================
+
+    /** Select default output filehandle: rd = IOOperator.select(rs_list, SCALAR) */
+    public static final byte SELECT = 89;
 
     // =================================================================
     // SLOW OPERATIONS (87) - Single opcode for rarely-used operations
@@ -455,6 +469,12 @@ public class Opcodes {
 
     /** Slow op ID: rd = eval(rs_string) - dynamic code evaluation */
     public static final int SLOWOP_EVAL_STRING = 19;
+
+    /** Slow op ID: rd = select(rs_list) - set/get default output filehandle */
+    public static final int SLOWOP_SELECT = 20;
+
+    /** Slow op ID: rd = getGlobalIO(name) - load glob/filehandle from global variables */
+    public static final int SLOWOP_LOAD_GLOB = 21;
 
     // =================================================================
     // OPCODES 88-255: RESERVED FOR FUTURE FAST OPERATIONS

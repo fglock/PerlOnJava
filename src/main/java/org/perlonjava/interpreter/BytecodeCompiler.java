@@ -302,6 +302,35 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(BinaryOperatorNode node) {
+        // Handle print/say early (special handling for filehandle)
+        if (node.operator.equals("print") || node.operator.equals("say")) {
+            // print/say FILEHANDLE LIST
+            // left = filehandle reference (\*STDERR)
+            // right = list to print
+
+            // Compile the filehandle (left operand)
+            node.left.accept(this);
+            int filehandleReg = lastResultReg;
+
+            // Compile the content (right operand)
+            node.right.accept(this);
+            int contentReg = lastResultReg;
+
+            // Emit PRINT or SAY with both registers
+            emit(node.operator.equals("say") ? Opcodes.SAY : Opcodes.PRINT);
+            emit(contentReg);
+            emit(filehandleReg);
+
+            // print/say return 1 on success
+            int rd = allocateRegister();
+            emit(Opcodes.LOAD_INT);
+            emit(rd);
+            emitInt(1);
+
+            lastResultReg = rd;
+            return;
+        }
+
         // Handle assignment separately (doesn't follow standard left-right-op pattern)
         if (node.operator.equals("=")) {
             // Special case: my $x = value
@@ -522,6 +551,16 @@ public class BytecodeCompiler implements Visitor {
                 // Note: CALL_SUB may return RuntimeControlFlowList
                 // The interpreter will handle control flow propagation
             }
+            case "join" -> {
+                // String join: rd = join(separator, list)
+                // left (rs1) = separator (empty string for interpolation)
+                // right (rs2) = list of elements
+
+                emit(Opcodes.JOIN);
+                emit(rd);
+                emit(rs1);
+                emit(rs2);
+            }
             default -> throw new RuntimeException("Unsupported operator: " + node.operator);
         }
 
@@ -593,6 +632,50 @@ public class BytecodeCompiler implements Visitor {
         } else if (op.equals("%")) {
             // Hash variable dereference: %x
             throw new RuntimeException("Hash variables not yet supported");
+        } else if (op.equals("*")) {
+            // Glob variable dereference: *x
+            if (node.operand instanceof IdentifierNode) {
+                IdentifierNode idNode = (IdentifierNode) node.operand;
+                String varName = idNode.name;
+
+                // Add package prefix if not present
+                if (!varName.contains("::")) {
+                    varName = "main::" + varName;
+                }
+
+                // Allocate register for glob
+                int rd = allocateRegister();
+                int nameIdx = addToStringPool(varName);
+
+                // Emit SLOW_OP with SLOWOP_LOAD_GLOB
+                emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                emit(Opcodes.SLOWOP_LOAD_GLOB);
+                emit(rd);
+                emit(nameIdx);
+
+                lastResultReg = rd;
+            } else {
+                throw new RuntimeException("Unsupported * operand: " + node.operand.getClass().getSimpleName());
+            }
+        } else if (op.equals("\\")) {
+            // Reference operator: \$x, \@x, \%x, \*x, etc.
+            if (node.operand != null) {
+                // Evaluate the operand
+                node.operand.accept(this);
+                int valueReg = lastResultReg;
+
+                // Allocate register for reference
+                int rd = allocateRegister();
+
+                // Emit CREATE_REF
+                emit(Opcodes.CREATE_REF);
+                emit(rd);
+                emit(valueReg);
+
+                lastResultReg = rd;
+            } else {
+                throw new RuntimeException("Reference operator requires operand");
+            }
         } else if (op.equals("say") || op.equals("print")) {
             // say/print $x
             if (node.operand != null) {
@@ -731,6 +814,39 @@ public class BytecodeCompiler implements Visitor {
                 emit(undefReg);
                 lastResultReg = undefReg;
             }
+        } else if (op.equals("select")) {
+            // select FILEHANDLE or select()
+            // SELECT is a fast opcode (used in every print statement)
+            // Format: [SELECT] [rd] [rs_list]
+            // Effect: rd = IOOperator.select(registers[rs_list], SCALAR)
+
+            int rd = allocateRegister();
+
+            if (node.operand != null && node.operand instanceof ListNode) {
+                // select FILEHANDLE or select() with arguments
+                // Compile the operand (ListNode containing filehandle ref)
+                node.operand.accept(this);
+                int listReg = lastResultReg;
+
+                // Emit SELECT opcode
+                emitWithToken(Opcodes.SELECT, node.getIndex());
+                emit(rd);
+                emit(listReg);
+            } else {
+                // select() with no arguments - returns current filehandle
+                // Create empty list
+                emit(Opcodes.CREATE_LIST);
+                int listReg = allocateRegister();
+                emit(listReg);
+                emit(0); // count = 0
+
+                // Emit SELECT opcode
+                emitWithToken(Opcodes.SELECT, node.getIndex());
+                emit(rd);
+                emit(listReg);
+            }
+
+            lastResultReg = rd;
         } else {
             throw new UnsupportedOperationException("Unsupported operator: " + op);
         }
