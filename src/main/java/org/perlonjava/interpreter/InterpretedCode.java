@@ -259,6 +259,33 @@ public class InterpretedCode extends RuntimeCode {
                     rd = bytecode[pc++] & 0xFF;
                     sb.append("POST_AUTODECREMENT r").append(rd).append("--\n");
                     break;
+                case Opcodes.PRINT: {
+                    int contentReg = bytecode[pc++] & 0xFF;
+                    int filehandleReg = bytecode[pc++] & 0xFF;
+                    sb.append("PRINT r").append(contentReg).append(", fh=r").append(filehandleReg).append("\n");
+                    break;
+                }
+                case Opcodes.SAY: {
+                    int contentReg = bytecode[pc++] & 0xFF;
+                    int filehandleReg = bytecode[pc++] & 0xFF;
+                    sb.append("SAY r").append(contentReg).append(", fh=r").append(filehandleReg).append("\n");
+                    break;
+                }
+                case Opcodes.CREATE_REF:
+                    rd = bytecode[pc++] & 0xFF;
+                    rs = bytecode[pc++] & 0xFF;
+                    sb.append("CREATE_REF r").append(rd).append(" = \\r").append(rs).append("\n");
+                    break;
+                case Opcodes.DEREF:
+                    rd = bytecode[pc++] & 0xFF;
+                    rs = bytecode[pc++] & 0xFF;
+                    sb.append("DEREF r").append(rd).append(" = ${r").append(rs).append("}\n");
+                    break;
+                case Opcodes.GET_TYPE:
+                    rd = bytecode[pc++] & 0xFF;
+                    rs = bytecode[pc++] & 0xFF;
+                    sb.append("GET_TYPE r").append(rd).append(" = type(r").append(rs).append(")\n");
+                    break;
                 case Opcodes.DIE:
                     rs = bytecode[pc++] & 0xFF;
                     sb.append("DIE r").append(rs).append("\n");
@@ -303,13 +330,39 @@ public class InterpretedCode extends RuntimeCode {
                     sb.append("CALL_SUB r").append(rd).append(" = r").append(coderefReg)
                       .append("->(r").append(argsReg).append(", ctx=").append(ctx).append(")\n");
                     break;
-                case Opcodes.SLOW_OP:
+                case Opcodes.SLOW_OP: {
                     int slowOpId = bytecode[pc++] & 0xFF;
-                    sb.append("SLOW_OP ").append(SlowOpcodeHandler.getSlowOpName(slowOpId))
-                      .append(" (id=").append(slowOpId).append(")\n");
-                    // Note: We can't easily decode operands without duplicating
-                    // SlowOpcodeHandler logic, so just show opcode name and ID
+                    String opName = SlowOpcodeHandler.getSlowOpName(slowOpId);
+                    sb.append("SLOW_OP ").append(opName).append(" (id=").append(slowOpId).append(")");
+
+                    // Decode operands for known SLOW_OPs
+                    switch (slowOpId) {
+                        case Opcodes.SLOWOP_EVAL_STRING:
+                            // Format: [rd] [rs_string]
+                            rd = bytecode[pc++] & 0xFF;
+                            rs = bytecode[pc++] & 0xFF;
+                            sb.append(" r").append(rd).append(" = eval(r").append(rs).append(")");
+                            break;
+                        case Opcodes.SLOWOP_SELECT:
+                            // Format: [rd] [rs_list]
+                            rd = bytecode[pc++] & 0xFF;
+                            rs = bytecode[pc++] & 0xFF;
+                            sb.append(" r").append(rd).append(" = select(r").append(rs).append(")");
+                            break;
+                        case Opcodes.SLOWOP_LOAD_GLOB:
+                            // Format: [rd] [name_idx]
+                            rd = bytecode[pc++] & 0xFF;
+                            int globNameIdx = bytecode[pc++] & 0xFF;
+                            String globName = stringPool[globNameIdx];
+                            sb.append(" r").append(rd).append(" = *").append(globName);
+                            break;
+                        default:
+                            sb.append(" (operands not decoded)");
+                            break;
+                    }
+                    sb.append("\n");
                     break;
+                }
                 default:
                     sb.append("UNKNOWN(").append(opcode & 0xFF).append(")\n");
                     break;
