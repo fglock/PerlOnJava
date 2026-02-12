@@ -646,6 +646,47 @@ public class BytecodeCompiler implements Visitor {
                     }
                 }
             }
+        } else if (op.equals("return")) {
+            // return $expr;
+            if (node.operand != null) {
+                // Evaluate return expression
+                node.operand.accept(this);
+                int exprReg = lastResultReg;
+
+                // Emit RETURN with expression register
+                emitWithToken(Opcodes.RETURN, node.getIndex());
+                emit(exprReg);
+            } else {
+                // return; (no value - return empty list/undef)
+                int undefReg = allocateRegister();
+                emit(Opcodes.LOAD_UNDEF);
+                emit(undefReg);
+
+                emitWithToken(Opcodes.RETURN, node.getIndex());
+                emit(undefReg);
+            }
+            lastResultReg = -1; // No result after return
+        } else if (op.equals("die")) {
+            // die $message;
+            if (node.operand != null) {
+                // Evaluate die message
+                node.operand.accept(this);
+                int msgReg = lastResultReg;
+
+                // Emit DIE with message register
+                emitWithToken(Opcodes.DIE, node.getIndex());
+                emit(msgReg);
+            } else {
+                // die; (no message - use $@)
+                // For now, emit with undef register
+                int undefReg = allocateRegister();
+                emit(Opcodes.LOAD_UNDEF);
+                emit(undefReg);
+
+                emitWithToken(Opcodes.DIE, node.getIndex());
+                emit(undefReg);
+            }
+            lastResultReg = -1; // No result after die
         } else {
             throw new UnsupportedOperationException("Unsupported operator: " + op);
         }

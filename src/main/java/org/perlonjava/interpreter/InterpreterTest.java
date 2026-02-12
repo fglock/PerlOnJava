@@ -88,21 +88,26 @@ public class InterpreterTest {
         runCode("my $x = 10 + 20", "test2.pl", 1);
         System.out.println("OK\n");
 
-        // Test 3: Eval block structure (infrastructure test)
-        System.out.println("Test 3: my $result = eval { 42 }");
+        // Test 3: Eval block with die
+        System.out.println("Test 3: my $result = eval { die 'error' }");
         try {
-            runCode("my $result = eval { 42 }", "test3.pl", 1);
-            System.out.println("OK - Eval block infrastructure works\n");
+            runCode("my $result = eval { die 'error' }", "test3.pl", 1);
+            System.out.println("OK - eval block with die works\n");
+        } catch (Exception e) {
+            System.out.println("FAILED: " + e.getMessage() + "\n");
+            e.printStackTrace();
+        }
+
+        // Test 4: Eval block with return
+        System.out.println("Test 4: my $result = eval { return 42 }");
+        try {
+            runCode("my $result = eval { return 42 }", "test4.pl", 1);
+            System.out.println("OK - eval block with return works\n");
         } catch (Exception e) {
             System.out.println("FAILED: " + e.getMessage() + "\n");
             e.printStackTrace();
         }
 
         System.out.println("=== All tests completed ===");
-        System.out.println("\nNote: Full eval block testing requires:");
-        System.out.println("  - 'die' operator implementation");
-        System.out.println("  - 'return' operator implementation");
-        System.out.println("  - Exception propagation in interpreter");
-        System.out.println("These will be added in follow-up commits.");
     }
 }
