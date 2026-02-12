@@ -26,6 +26,9 @@ public class BytecodeCompiler implements Visitor {
     private final List<String> stringPool = new ArrayList<>();
     private final Map<String, Integer> registerMap = new HashMap<>();
 
+    // Token index tracking for error reporting
+    private final Map<Integer, Integer> pcToTokenIndex = new HashMap<>();
+
     // Register allocation
     private int nextRegister = 3;  // 0=this, 1=@_, 2=wantarray
 
@@ -91,7 +94,8 @@ public class BytecodeCompiler implements Visitor {
             nextRegister,  // maxRegisters
             capturedVars,  // NOW POPULATED!
             sourceName,
-            sourceLine
+            sourceLine,
+            pcToTokenIndex  // Pass token index map for error reporting
         );
     }
 
@@ -497,21 +501,22 @@ public class BytecodeCompiler implements Visitor {
                 emit(rs1);
                 emit(rs2);
             }
-            case "()" -> {
+            case "()", "->" -> {
                 // Apply operator: $coderef->(args) or &subname(args)
-                // left (rs1) = code reference (RuntimeScalar containing RuntimeCode)
-                // right (rs2) = arguments (should be ListNode)
+                // left (rs1) = code reference (RuntimeScalar containing RuntimeCode or SubroutineNode)
+                // right (rs2) = arguments (should be RuntimeList from ListNode)
 
-                // TODO: Convert arguments to RuntimeArray
-                // For now, assume simple case where right is already evaluated
-                // This is a simplified implementation - full implementation would need
-                // to build a RuntimeArray from the arguments
+                // Note: rs2 should contain a RuntimeList (from visiting the ListNode)
+                // We need to convert it to RuntimeArray for the CALL_SUB opcode
+
+                // For now, rs2 is a RuntimeList - we'll pass it directly and let
+                // BytecodeInterpreter convert it to RuntimeArray
 
                 // Emit CALL_SUB: rd = coderef.apply(args, context)
                 emit(Opcodes.CALL_SUB);
                 emit(rd);  // Result register
                 emit(rs1); // Code reference register
-                emit(rs2); // Arguments register (should be RuntimeArray)
+                emit(rs2); // Arguments register (RuntimeList to be converted to RuntimeArray)
                 emit(RuntimeContextType.SCALAR); // Context (TODO: detect from usage)
 
                 // Note: CALL_SUB may return RuntimeControlFlowList
@@ -569,6 +574,25 @@ public class BytecodeCompiler implements Visitor {
             } else {
                 throw new RuntimeException("Unsupported $ operand: " + node.operand.getClass().getSimpleName());
             }
+        } else if (op.equals("@")) {
+            // Array variable dereference: @x or @_
+            if (node.operand instanceof IdentifierNode) {
+                String varName = "@" + ((IdentifierNode) node.operand).name;
+
+                // Special case: @_ is register 1
+                if (varName.equals("@_")) {
+                    lastResultReg = 1; // @_ is always in register 1
+                    return;
+                }
+
+                // For now, only support @_ - other arrays require global variable support
+                throw new RuntimeException("Array variables other than @_ not yet supported: " + varName);
+            } else {
+                throw new RuntimeException("Unsupported @ operand: " + node.operand.getClass().getSimpleName());
+            }
+        } else if (op.equals("%")) {
+            // Hash variable dereference: %x
+            throw new RuntimeException("Hash variables not yet supported");
         } else if (op.equals("say") || op.equals("print")) {
             // say/print $x
             if (node.operand != null) {
@@ -642,6 +666,47 @@ public class BytecodeCompiler implements Visitor {
                     }
                 }
             }
+        } else if (op.equals("return")) {
+            // return $expr;
+            if (node.operand != null) {
+                // Evaluate return expression
+                node.operand.accept(this);
+                int exprReg = lastResultReg;
+
+                // Emit RETURN with expression register
+                emitWithToken(Opcodes.RETURN, node.getIndex());
+                emit(exprReg);
+            } else {
+                // return; (no value - return empty list/undef)
+                int undefReg = allocateRegister();
+                emit(Opcodes.LOAD_UNDEF);
+                emit(undefReg);
+
+                emitWithToken(Opcodes.RETURN, node.getIndex());
+                emit(undefReg);
+            }
+            lastResultReg = -1; // No result after return
+        } else if (op.equals("die")) {
+            // die $message;
+            if (node.operand != null) {
+                // Evaluate die message
+                node.operand.accept(this);
+                int msgReg = lastResultReg;
+
+                // Emit DIE with message register
+                emitWithToken(Opcodes.DIE, node.getIndex());
+                emit(msgReg);
+            } else {
+                // die; (no message - use $@)
+                // For now, emit with undef register
+                int undefReg = allocateRegister();
+                emit(Opcodes.LOAD_UNDEF);
+                emit(undefReg);
+
+                emitWithToken(Opcodes.DIE, node.getIndex());
+                emit(undefReg);
+            }
+            lastResultReg = -1; // No result after die
         } else {
             throw new UnsupportedOperationException("Unsupported operator: " + op);
         }
@@ -677,6 +742,16 @@ public class BytecodeCompiler implements Visitor {
         bytecode.write(opcode);
     }
 
+    /**
+     * Emit opcode and track tokenIndex for error reporting.
+     * Use this for opcodes that may throw exceptions (DIE, method calls, etc.)
+     */
+    private void emitWithToken(byte opcode, int tokenIndex) {
+        int pc = bytecode.size();
+        pcToTokenIndex.put(pc, tokenIndex);
+        bytecode.write(opcode);
+    }
+
     private void emit(int value) {
         bytecode.write(value & 0xFF);
     }
@@ -704,7 +779,87 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(SubroutineNode node) {
-        throw new UnsupportedOperationException("Subroutines not yet implemented");
+        // For now, only handle anonymous subroutines used as eval blocks
+        if (node.useTryCatch) {
+            // This is an eval block: eval { ... }
+            visitEvalBlock(node);
+        } else {
+            // Regular named or anonymous subroutine - not yet supported
+            throw new UnsupportedOperationException("Named subroutines not yet implemented in interpreter");
+        }
+    }
+
+    /**
+     * Visit an eval block: eval { ... }
+     *
+     * Generates:
+     *   EVAL_TRY catch_offset    # Set up exception handler, clear $@
+     *   ... block bytecode ...
+     *   EVAL_END                 # Clear $@ on success
+     *   GOTO end
+     *   LABEL catch:
+     *   EVAL_CATCH rd            # Set $@, store undef in rd
+     *   LABEL end:
+     *
+     * The result is stored in lastResultReg.
+     */
+    private void visitEvalBlock(SubroutineNode node) {
+        int resultReg = allocateRegister();
+
+        // Emit EVAL_TRY with placeholder for catch offset
+        int tryPc = bytecode.size();
+        emitWithToken(Opcodes.EVAL_TRY, node.getIndex());
+        int catchOffsetPos = bytecode.size();
+        emit(0); // High byte placeholder
+        emit(0); // Low byte placeholder
+
+        // Compile the eval block body
+        node.block.accept(this);
+
+        // Store result from block
+        if (lastResultReg >= 0) {
+            emit(Opcodes.MOVE);
+            emit(resultReg);
+            emit(lastResultReg);
+        }
+
+        // Emit EVAL_END (clears $@)
+        emit(Opcodes.EVAL_END);
+
+        // Jump over catch block
+        int gotoEndPos = bytecode.size();
+        emit(Opcodes.GOTO);
+        int gotoEndOffsetPos = bytecode.size();
+        emit(0); // High byte placeholder
+        emit(0); // Low byte placeholder
+
+        // CATCH block starts here
+        int catchPc = bytecode.size();
+
+        // Patch EVAL_TRY with catch offset
+        int catchOffset = catchPc - tryPc;
+        byte[] bc = bytecode.toByteArray();
+        bc[catchOffsetPos] = (byte) ((catchOffset >> 8) & 0xFF);
+        bc[catchOffsetPos + 1] = (byte) (catchOffset & 0xFF);
+        bytecode.reset();
+        bytecode.write(bc, 0, bc.length);
+
+        // Emit EVAL_CATCH (sets $@, stores undef)
+        emit(Opcodes.EVAL_CATCH);
+        emit(resultReg);
+
+        // END label (after catch)
+        int endPc = bytecode.size();
+
+        // Patch GOTO to end
+        int gotoEndOffset = endPc - gotoEndPos;
+        bc = bytecode.toByteArray();
+        bc[gotoEndOffsetPos] = (byte) ((gotoEndOffset >> 8) & 0xFF);
+        bc[gotoEndOffsetPos + 1] = (byte) (gotoEndOffset & 0xFF);
+        bytecode.reset();
+        bytecode.write(bc, 0, bc.length);
+
+        lastResultReg = resultReg;
     }
 
     @Override
@@ -883,7 +1038,56 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(ListNode node) {
-        throw new UnsupportedOperationException("Lists not yet implemented");
+        // Handle ListNode - represents (expr1, expr2, ...) in Perl
+
+        // Fast path: empty list
+        if (node.elements.isEmpty()) {
+            // Return empty RuntimeList
+            int listReg = allocateRegister();
+            emit(Opcodes.CREATE_LIST);
+            emit(listReg);
+            emit(0); // count = 0
+            lastResultReg = listReg;
+            return;
+        }
+
+        // Fast path: single element
+        // In list context, returns a RuntimeList with one element
+        // In scalar context, returns the element itself (but we don't track context yet)
+        if (node.elements.size() == 1) {
+            // For now, always create a RuntimeList (LIST context behavior)
+            node.elements.get(0).accept(this);
+            int elemReg = lastResultReg;
+
+            int listReg = allocateRegister();
+            emit(Opcodes.CREATE_LIST);
+            emit(listReg);
+            emit(1); // count = 1
+            emit(elemReg);
+            lastResultReg = listReg;
+            return;
+        }
+
+        // General case: multiple elements
+        // Evaluate each element into a register
+        int[] elementRegs = new int[node.elements.size()];
+        for (int i = 0; i < node.elements.size(); i++) {
+            node.elements.get(i).accept(this);
+            elementRegs[i] = lastResultReg;
+        }
+
+        // Create RuntimeList with all elements
+        int listReg = allocateRegister();
+        emit(Opcodes.CREATE_LIST);
+        emit(listReg);
+        emit(node.elements.size()); // count
+
+        // Emit register numbers for each element
+        for (int elemReg : elementRegs) {
+            emit(elemReg);
+        }
+
+        lastResultReg = listReg;
     }
 
     // =========================================================================

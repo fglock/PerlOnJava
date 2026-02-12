@@ -54,6 +54,11 @@ public class BytecodeInterpreter {
         int pc = 0;  // Program counter
         byte[] bytecode = code.bytecode;
 
+        // Eval block exception handling: stack of catch PCs
+        // When EVAL_TRY is executed, push the catch PC onto this stack
+        // When exception occurs, pop from stack and jump to catch PC
+        java.util.Stack<Integer> evalCatchStack = new java.util.Stack<>();
+
         try {
             // Main dispatch loop - JVM JIT optimizes switch to tableswitch (O(1) jump)
             while (pc < bytecode.length) {
@@ -472,7 +477,19 @@ public class BytecodeInterpreter {
                         int context = bytecode[pc++] & 0xFF;
 
                         RuntimeScalar codeRef = (RuntimeScalar) registers[coderefReg];
-                        RuntimeArray callArgs = (RuntimeArray) registers[argsReg];
+                        RuntimeBase argsBase = registers[argsReg];
+
+                        // Convert args to RuntimeArray if needed
+                        RuntimeArray callArgs;
+                        if (argsBase instanceof RuntimeArray) {
+                            callArgs = (RuntimeArray) argsBase;
+                        } else if (argsBase instanceof RuntimeList) {
+                            // Convert RuntimeList to RuntimeArray (from ListNode)
+                            callArgs = new RuntimeArray((RuntimeList) argsBase);
+                        } else {
+                            // Single scalar argument
+                            callArgs = new RuntimeArray((RuntimeScalar) argsBase);
+                        }
 
                         // RuntimeCode.apply works for both compiled AND interpreted code
                         RuntimeList result = RuntimeCode.apply(codeRef, "", callArgs, context);
@@ -623,6 +640,130 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    // =================================================================
+                    // ERROR HANDLING
+                    // =================================================================
+
+                    case Opcodes.DIE: {
+                        // Die with message: die(rs)
+                        int dieRs = bytecode[pc++] & 0xFF;
+                        RuntimeBase message = registers[dieRs];
+
+                        // Get token index for this die location if available
+                        Integer tokenIndex = code.pcToTokenIndex != null
+                                ? code.pcToTokenIndex.get(pc - 2) // PC before we read register
+                                : null;
+
+                        // Call WarnDie.die() with proper parameters
+                        // die(RuntimeBase message, RuntimeScalar where, String fileName, int lineNumber)
+                        RuntimeScalar where = new RuntimeScalar(" at " + code.sourceName + " line " + code.sourceLine);
+                        WarnDie.die(message, where, code.sourceName, code.sourceLine);
+
+                        // Should never reach here (die throws exception)
+                        throw new RuntimeException("die() did not throw exception");
+                    }
+
+                    case Opcodes.WARN: {
+                        // Warn with message: warn(rs)
+                        int warnRs = bytecode[pc++] & 0xFF;
+                        RuntimeBase message = registers[warnRs];
+
+                        // Get token index for this warn location if available
+                        Integer tokenIndex = code.pcToTokenIndex != null
+                                ? code.pcToTokenIndex.get(pc - 2) // PC before we read register
+                                : null;
+
+                        // Call WarnDie.warn() with proper parameters
+                        RuntimeScalar where = new RuntimeScalar(" at " + code.sourceName + " line " + code.sourceLine);
+                        WarnDie.warn(message, where, code.sourceName, code.sourceLine);
+                        break;
+                    }
+
+                    // =================================================================
+                    // EVAL BLOCK SUPPORT
+                    // =================================================================
+
+                    case Opcodes.EVAL_TRY: {
+                        // Start of eval block with exception handling
+                        // Format: [EVAL_TRY] [catch_offset_high] [catch_offset_low]
+
+                        int catchOffsetHigh = bytecode[pc++] & 0xFF;
+                        int catchOffsetLow = bytecode[pc++] & 0xFF;
+                        int catchOffset = (catchOffsetHigh << 8) | catchOffsetLow;
+                        int tryStartPc = pc - 3; // PC where EVAL_TRY opcode is
+                        int catchPc = tryStartPc + catchOffset;
+
+                        // Push catch PC onto eval stack
+                        evalCatchStack.push(catchPc);
+
+                        // Clear $@ at start of eval block
+                        GlobalVariable.setGlobalVariable("main::@", "");
+
+                        // Continue execution - if exception occurs, outer catch handler
+                        // will check evalCatchStack and jump to catchPc
+                        break;
+                    }
+
+                    case Opcodes.EVAL_END: {
+                        // End of successful eval block - clear $@ and pop catch stack
+                        GlobalVariable.setGlobalVariable("main::@", "");
+
+                        // Pop the catch PC from eval stack (we didn't need it)
+                        if (!evalCatchStack.isEmpty()) {
+                            evalCatchStack.pop();
+                        }
+                        break;
+                    }
+
+                    case Opcodes.EVAL_CATCH: {
+                        // Exception handler for eval block
+                        // Format: [EVAL_CATCH] [rd]
+                        // This is only reached when an exception is caught
+
+                        int rd = bytecode[pc++] & 0xFF;
+
+                        // WarnDie.catchEval() should have already been called to set $@
+                        // Just store undef as the eval result
+                        registers[rd] = RuntimeScalarCache.scalarUndef;
+                        break;
+                    }
+
+                    // =================================================================
+                    // LIST OPERATIONS
+                    // =================================================================
+
+                    case Opcodes.CREATE_LIST: {
+                        // Create RuntimeList from registers
+                        // Format: [CREATE_LIST] [rd] [count] [rs1] [rs2] ... [rsN]
+
+                        int rd = bytecode[pc++] & 0xFF;
+                        int count = bytecode[pc++] & 0xFF;
+
+                        // Optimize for common cases
+                        if (count == 0) {
+                            // Empty list - fastest path
+                            registers[rd] = new RuntimeList();
+                        } else if (count == 1) {
+                            // Single element - avoid loop overhead
+                            int rs = bytecode[pc++] & 0xFF;
+                            RuntimeList list = new RuntimeList();
+                            list.add(registers[rs]);
+                            registers[rd] = list;
+                        } else {
+                            // Multiple elements - preallocate and populate
+                            RuntimeList list = new RuntimeList();
+
+                            // Read all register indices and add elements
+                            for (int i = 0; i < count; i++) {
+                                int rs = bytecode[pc++] & 0xFF;
+                                list.add(registers[rs]);
+                            }
+
+                            registers[rd] = list;
+                        }
+                        break;
+                    }
+
                     default:
                         throw new RuntimeException(
                             "Unknown opcode: " + (opcode & 0xFF) +
@@ -635,8 +776,21 @@ public class BytecodeInterpreter {
             // Fell through end of bytecode - return empty list
             return new RuntimeList();
 
-        } catch (Exception e) {
-            // Add context to exceptions
+        } catch (Throwable e) {
+            // Check if we're inside an eval block
+            if (!evalCatchStack.isEmpty()) {
+                // Inside eval block - catch the exception
+                evalCatchStack.pop(); // Pop the catch handler
+
+                // Call WarnDie.catchEval() to set $@
+                WarnDie.catchEval(e);
+
+                // Eval block failed - return empty list
+                // (The result will be undef in scalar context, empty in list context)
+                return new RuntimeList();
+            }
+
+            // Not in eval block - propagate exception
             throw new RuntimeException(
                 "Interpreter error in " + code.sourceName + ":" + code.sourceLine +
                 " at pc=" + pc + ": " + e.getMessage(),
