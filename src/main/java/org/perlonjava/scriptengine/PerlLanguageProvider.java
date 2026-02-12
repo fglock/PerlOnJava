@@ -319,7 +319,8 @@ public class PerlLanguageProvider {
             ctx.logDebug("Compiling to bytecode interpreter");
             BytecodeCompiler compiler = new BytecodeCompiler(
                 ctx.compilerOptions.fileName,
-                1  // tokenIndex for error reporting
+                1,  // sourceLine (legacy parameter)
+                ctx.errorUtil  // Pass errorUtil for proper error formatting with line numbers
             );
             InterpretedCode interpretedCode = compiler.compile(ast);
 

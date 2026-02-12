@@ -3,6 +3,7 @@ package org.perlonjava.interpreter;
 import org.perlonjava.astnode.*;
 import org.perlonjava.astvisitor.Visitor;
 import org.perlonjava.codegen.EmitterContext;
+import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.runtime.*;
 
 import java.io.ByteArrayOutputStream;
@@ -28,6 +29,10 @@ public class BytecodeCompiler implements Visitor {
 
     // Token index tracking for error reporting
     private final Map<Integer, Integer> pcToTokenIndex = new HashMap<>();
+    private int currentTokenIndex = -1;  // Track current token for error reporting
+
+    // Error reporting
+    private final ErrorMessageUtil errorUtil;
 
     // Register allocation
     private int nextRegister = 3;  // 0=this, 1=@_, 2=wantarray
@@ -44,9 +49,40 @@ public class BytecodeCompiler implements Visitor {
     private final String sourceName;
     private final int sourceLine;
 
-    public BytecodeCompiler(String sourceName, int sourceLine) {
+    public BytecodeCompiler(String sourceName, int sourceLine, ErrorMessageUtil errorUtil) {
         this.sourceName = sourceName;
         this.sourceLine = sourceLine;
+        this.errorUtil = errorUtil;
+    }
+
+    // Legacy constructor for backward compatibility
+    public BytecodeCompiler(String sourceName, int sourceLine) {
+        this(sourceName, sourceLine, null);
+    }
+
+    /**
+     * Throw a compiler exception with proper error formatting.
+     * Uses PerlCompilerException which formats with line numbers and code context.
+     *
+     * @param message The error message
+     * @param tokenIndex The token index where the error occurred
+     */
+    private void throwCompilerException(String message, int tokenIndex) {
+        if (errorUtil != null && tokenIndex >= 0) {
+            throw new PerlCompilerException(tokenIndex, message, errorUtil);
+        } else {
+            // Fallback to simple error (no context available)
+            throw new RuntimeException(message);
+        }
+    }
+
+    /**
+     * Throw a compiler exception using the current token index.
+     *
+     * @param message The error message
+     */
+    private void throwCompilerException(String message) {
+        throwCompilerException(message, currentTokenIndex);
     }
 
     /**
@@ -302,6 +338,9 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(BinaryOperatorNode node) {
+        // Track token index for error reporting
+        currentTokenIndex = node.getIndex();
+
         // Handle print/say early (special handling for filehandle)
         if (node.operator.equals("print") || node.operator.equals("say")) {
             // print/say FILEHANDLE LIST
@@ -845,7 +884,7 @@ public class BytecodeCompiler implements Visitor {
                 emit(hashReg);
                 emit(keyReg);
             }
-            default -> throw new RuntimeException("Unsupported operator: " + node.operator);
+            default -> throwCompilerException("Unsupported operator: " + node.operator);
         }
 
         lastResultReg = rd;
@@ -853,6 +892,9 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(OperatorNode node) {
+        // Track token index for error reporting
+        currentTokenIndex = node.getIndex();
+
         String op = node.operator;
 
         // Handle specific operators
@@ -1195,7 +1237,7 @@ public class BytecodeCompiler implements Visitor {
 
             lastResultReg = rd;
         } else {
-            throw new UnsupportedOperationException("Unsupported operator: " + op);
+            throwCompilerException("Unsupported operator: " + op);
         }
     }
 
