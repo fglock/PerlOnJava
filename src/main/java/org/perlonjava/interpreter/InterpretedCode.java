@@ -303,6 +303,13 @@ public class InterpretedCode extends RuntimeCode {
                     sb.append("CALL_SUB r").append(rd).append(" = r").append(coderefReg)
                       .append("->(r").append(argsReg).append(", ctx=").append(ctx).append(")\n");
                     break;
+                case Opcodes.SLOW_OP:
+                    int slowOpId = bytecode[pc++] & 0xFF;
+                    sb.append("SLOW_OP ").append(SlowOpcodeHandler.getSlowOpName(slowOpId))
+                      .append(" (id=").append(slowOpId).append(")\n");
+                    // Note: We can't easily decode operands without duplicating
+                    // SlowOpcodeHandler logic, so just show opcode name and ID
+                    break;
                 default:
                     sb.append("UNKNOWN(").append(opcode & 0xFF).append(")\n");
                     break;

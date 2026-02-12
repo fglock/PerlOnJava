@@ -764,9 +764,19 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.SLOW_OP: {
+                        // Dispatch to slow operation handler
+                        // Format: [SLOW_OP] [slow_op_id] [operands...]
+                        // The slow_op_id is a dense sequence (0,1,2...) for tableswitch optimization
+                        pc = SlowOpcodeHandler.execute(bytecode, pc, registers, code);
+                        break;
+                    }
+
                     default:
+                        // Unknown opcode
+                        int opcodeInt = opcode & 0xFF;
                         throw new RuntimeException(
-                            "Unknown opcode: " + (opcode & 0xFF) +
+                            "Unknown opcode: " + opcodeInt +
                             " at pc=" + (pc - 1) +
                             " in " + code.sourceName + ":" + code.sourceLine
                         );
