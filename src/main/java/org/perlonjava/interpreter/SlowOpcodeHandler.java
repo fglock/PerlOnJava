@@ -145,9 +145,6 @@ public class SlowOpcodeHandler {
             case Opcodes.SLOWOP_LOAD_GLOB:
                 return executeLoadGlob(bytecode, pc, registers, code);
 
-            case Opcodes.SLOWOP_CREATE_HASH_FROM_LIST:
-                return executeCreateHashFromList(bytecode, pc, registers);
-
             default:
                 throw new RuntimeException(
                     "Unknown slow operation ID: " + slowOpId +
@@ -184,7 +181,6 @@ public class SlowOpcodeHandler {
             case Opcodes.SLOWOP_EVAL_STRING -> "eval";
             case Opcodes.SLOWOP_SELECT -> "select";
             case Opcodes.SLOWOP_LOAD_GLOB -> "load_glob";
-            case Opcodes.SLOWOP_CREATE_HASH_FROM_LIST -> "create_hash_from_list";
             default -> "slowop_" + slowOpId;
         };
     }
@@ -561,32 +557,6 @@ public class SlowOpcodeHandler {
         RuntimeGlob glob = org.perlonjava.runtime.GlobalVariable.getGlobalIO(globName);
 
         registers[rd] = glob;
-        return pc;
-    }
-
-    /**
-     * Create hash from list, flattening any arrays.
-     * Format: [rd] [rs_list]
-     *
-     * @param bytecode  The bytecode array
-     * @param pc        The program counter
-     * @param registers The register file
-     * @return The new program counter
-     */
-    private static int executeCreateHashFromList(
-            byte[] bytecode,
-            int pc,
-            RuntimeBase[] registers) {
-
-        int rd = bytecode[pc++] & 0xFF;
-        int listReg = bytecode[pc++] & 0xFF;
-
-        RuntimeBase list = registers[listReg];
-
-        // Call RuntimeHash.createHash() which flattens arrays and creates the hash
-        RuntimeHash hash = RuntimeHash.createHash(list);
-
-        registers[rd] = hash;
         return pc;
     }
 

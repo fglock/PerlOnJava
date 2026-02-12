@@ -4,7 +4,7 @@ package org.perlonjava.interpreter;
  * Bytecode opcodes for the PerlOnJava interpreter.
  *
  * Design: Pure register machine with 3-address code format.
- * DENSE opcodes (0-90, NO GAPS) enable JVM tableswitch optimization.
+ * DENSE opcodes (0-92, NO GAPS) enable JVM tableswitch optimization.
  *
  * Register architecture is REQUIRED for control flow correctness:
  * Perl's GOTO/last/next/redo would corrupt a stack-based architecture.
@@ -407,6 +407,12 @@ public class Opcodes {
     /** Create range: rd = PerlRange.createRange(rs_start, rs_end) */
     public static final byte RANGE = 90;
 
+    /** Random number: rd = Random.rand(rs_max) */
+    public static final byte RAND = 91;
+
+    /** Map operator: rd = ListOperators.map(list_reg, closure_reg, context) */
+    public static final byte MAP = 92;
+
     // =================================================================
     // Slow Operation IDs (0-255)
     // =================================================================
@@ -479,11 +485,8 @@ public class Opcodes {
     /** Slow op ID: rd = getGlobalIO(name) - load glob/filehandle from global variables */
     public static final int SLOWOP_LOAD_GLOB = 21;
 
-    /** Slow op ID: rd = RuntimeHash.createHash(list) - create hash from list (flattens arrays) */
-    public static final int SLOWOP_CREATE_HASH_FROM_LIST = 22;
-
     // =================================================================
-    // OPCODES 91-255: RESERVED FOR FUTURE FAST OPERATIONS
+    // OPCODES 93-255: RESERVED FOR FUTURE FAST OPERATIONS
     // =================================================================
     // This range is reserved for frequently-used operations that benefit
     // from being in the main interpreter switch for optimal CPU i-cache usage.

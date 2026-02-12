@@ -921,6 +921,31 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.RAND: {
+                        // Random number: rd = Random.rand(max)
+                        int rd = bytecode[pc++] & 0xFF;
+                        int maxReg = bytecode[pc++] & 0xFF;
+
+                        RuntimeScalar max = (RuntimeScalar) registers[maxReg];
+                        registers[rd] = org.perlonjava.operators.Random.rand(max);
+                        break;
+                    }
+
+                    case Opcodes.MAP: {
+                        // Map operator: rd = ListOperators.map(list, closure, ctx)
+                        int rd = bytecode[pc++] & 0xFF;
+                        int listReg = bytecode[pc++] & 0xFF;
+                        int closureReg = bytecode[pc++] & 0xFF;
+                        int ctx = bytecode[pc++] & 0xFF;
+
+                        RuntimeBase listBase = registers[listReg];
+                        RuntimeList list = listBase.getList();
+                        RuntimeScalar closure = (RuntimeScalar) registers[closureReg];
+                        RuntimeList result = org.perlonjava.operators.ListOperators.map(list, closure, ctx);
+                        registers[rd] = result;
+                        break;
+                    }
+
                     // =================================================================
                     // SLOW OPERATIONS
                     // =================================================================

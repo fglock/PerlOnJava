@@ -462,6 +462,19 @@ public class InterpretedCode extends RuntimeCode {
                     int hashListReg = bytecode[pc++] & 0xFF;
                     sb.append("CREATE_HASH r").append(rd).append(" = hash_ref(r").append(hashListReg).append(")\n");
                     break;
+                case Opcodes.RAND:
+                    rd = bytecode[pc++] & 0xFF;
+                    int maxReg = bytecode[pc++] & 0xFF;
+                    sb.append("RAND r").append(rd).append(" = rand(r").append(maxReg).append(")\n");
+                    break;
+                case Opcodes.MAP:
+                    rd = bytecode[pc++] & 0xFF;
+                    rs1 = bytecode[pc++] & 0xFF;  // list register
+                    rs2 = bytecode[pc++] & 0xFF;  // closure register
+                    int mapCtx = bytecode[pc++] & 0xFF;  // context
+                    sb.append("MAP r").append(rd).append(" = map(r").append(rs1)
+                      .append(", r").append(rs2).append(", ctx=").append(mapCtx).append(")\n");
+                    break;
                 case Opcodes.NOT:
                     rd = bytecode[pc++] & 0xFF;
                     rs = bytecode[pc++] & 0xFF;
@@ -492,12 +505,6 @@ public class InterpretedCode extends RuntimeCode {
                             int globNameIdx = bytecode[pc++] & 0xFF;
                             String globName = stringPool[globNameIdx];
                             sb.append(" r").append(rd).append(" = *").append(globName);
-                            break;
-                        case Opcodes.SLOWOP_CREATE_HASH_FROM_LIST:
-                            // Format: [rd] [rs_list]
-                            rd = bytecode[pc++] & 0xFF;
-                            rs = bytecode[pc++] & 0xFF;
-                            sb.append(" r").append(rd).append(" = hash_from_list(r").append(rs).append(")");
                             break;
                         default:
                             sb.append(" (operands not decoded)");
