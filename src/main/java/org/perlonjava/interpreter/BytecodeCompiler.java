@@ -679,14 +679,12 @@ public class BytecodeCompiler implements Visitor {
         } else if (op.equals("package")) {
             // Package declaration: package Foo;
             // This is a compile-time directive that sets the namespace context.
-            // For the interpreter, we can ignore it (it doesn't generate runtime code).
+            // It doesn't generate any runtime bytecode.
             // The operand is an IdentifierNode with the package name.
 
-            // Set lastResultReg to a valid register (undef) for consistency
-            int rd = allocateRegister();
-            emit(Opcodes.LOAD_UNDEF);
-            emit(rd);
-            lastResultReg = rd;
+            // Don't emit any bytecode - just leave lastResultReg unchanged
+            // (or set to -1 to indicate no result)
+            lastResultReg = -1;
         } else if (op.equals("say") || op.equals("print")) {
             // say/print $x
             if (node.operand != null) {
