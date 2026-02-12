@@ -559,9 +559,13 @@ public class BytecodeInterpreter {
                     // =================================================================
 
                     case Opcodes.PRINT: {
-                        // Print to selected filehandle (default STDOUT)
-                        int rs = bytecode[pc++] & 0xFF;
-                        Object val = registers[rs];
+                        // Print to filehandle
+                        // Format: [PRINT] [rs_content] [rs_filehandle]
+                        int contentReg = bytecode[pc++] & 0xFF;
+                        int filehandleReg = bytecode[pc++] & 0xFF;
+
+                        Object val = registers[contentReg];
+                        RuntimeScalar fh = (RuntimeScalar) registers[filehandleReg];
 
                         RuntimeList list;
                         if (val instanceof RuntimeList) {
@@ -573,9 +577,6 @@ public class BytecodeInterpreter {
                         } else {
                             list = new RuntimeList();
                         }
-
-                        // Get selected filehandle
-                        RuntimeScalar fh = new RuntimeScalar(RuntimeIO.selectedHandle);
 
                         // Call IOOperator.print()
                         org.perlonjava.operators.IOOperator.print(list, fh);
@@ -583,9 +584,13 @@ public class BytecodeInterpreter {
                     }
 
                     case Opcodes.SAY: {
-                        // Say to selected filehandle (default STDOUT)
-                        int rs = bytecode[pc++] & 0xFF;
-                        Object val = registers[rs];
+                        // Say to filehandle
+                        // Format: [SAY] [rs_content] [rs_filehandle]
+                        int contentReg = bytecode[pc++] & 0xFF;
+                        int filehandleReg = bytecode[pc++] & 0xFF;
+
+                        Object val = registers[contentReg];
+                        RuntimeScalar fh = (RuntimeScalar) registers[filehandleReg];
 
                         RuntimeList list;
                         if (val instanceof RuntimeList) {
@@ -597,9 +602,6 @@ public class BytecodeInterpreter {
                         } else {
                             list = new RuntimeList();
                         }
-
-                        // Get selected filehandle
-                        RuntimeScalar fh = new RuntimeScalar(RuntimeIO.selectedHandle);
 
                         // Call IOOperator.say()
                         org.perlonjava.operators.IOOperator.say(list, fh);
@@ -708,6 +710,39 @@ public class BytecodeInterpreter {
                         // Call WarnDie.warn() with proper parameters
                         RuntimeScalar where = new RuntimeScalar(" at " + code.sourceName + " line " + code.sourceLine);
                         WarnDie.warn(message, where, code.sourceName, code.sourceLine);
+                        break;
+                    }
+
+                    // =================================================================
+                    // REFERENCE OPERATIONS
+                    // =================================================================
+
+                    case Opcodes.CREATE_REF: {
+                        // Create reference: rd = rs.createReference()
+                        int rd = bytecode[pc++] & 0xFF;
+                        int rs = bytecode[pc++] & 0xFF;
+                        RuntimeBase value = registers[rs];
+                        registers[rd] = value.createReference();
+                        break;
+                    }
+
+                    case Opcodes.DEREF: {
+                        // Dereference: rd = rs (dereferencing depends on context)
+                        // For now, just copy the reference - proper dereferencing
+                        // is context-dependent and handled by specific operators
+                        int rd = bytecode[pc++] & 0xFF;
+                        int rs = bytecode[pc++] & 0xFF;
+                        registers[rd] = registers[rs];
+                        break;
+                    }
+
+                    case Opcodes.GET_TYPE: {
+                        // Get type: rd = new RuntimeScalar(rs.type)
+                        int rd = bytecode[pc++] & 0xFF;
+                        int rs = bytecode[pc++] & 0xFF;
+                        RuntimeScalar value = (RuntimeScalar) registers[rs];
+                        // RuntimeScalar.type is an int constant from RuntimeScalarType
+                        registers[rd] = new RuntimeScalar(value.type);
                         break;
                     }
 

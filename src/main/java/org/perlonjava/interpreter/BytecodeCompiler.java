@@ -302,19 +302,24 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(BinaryOperatorNode node) {
-        // Handle print/say early (special handling - ignore filehandle)
+        // Handle print/say early (special handling for filehandle)
         if (node.operator.equals("print") || node.operator.equals("say")) {
             // print/say FILEHANDLE LIST
-            // left = filehandle (select operator - ignored for now)
+            // left = filehandle reference (\*STDERR)
             // right = list to print
 
-            // Only compile the right operand (the content to print)
+            // Compile the filehandle (left operand)
+            node.left.accept(this);
+            int filehandleReg = lastResultReg;
+
+            // Compile the content (right operand)
             node.right.accept(this);
             int contentReg = lastResultReg;
 
-            // Emit PRINT or SAY
+            // Emit PRINT or SAY with both registers
             emit(node.operator.equals("say") ? Opcodes.SAY : Opcodes.PRINT);
             emit(contentReg);
+            emit(filehandleReg);
 
             // print/say return 1 on success
             int rd = allocateRegister();
@@ -617,6 +622,50 @@ public class BytecodeCompiler implements Visitor {
         } else if (op.equals("%")) {
             // Hash variable dereference: %x
             throw new RuntimeException("Hash variables not yet supported");
+        } else if (op.equals("*")) {
+            // Glob variable dereference: *x
+            if (node.operand instanceof IdentifierNode) {
+                IdentifierNode idNode = (IdentifierNode) node.operand;
+                String varName = idNode.name;
+
+                // Add package prefix if not present
+                if (!varName.contains("::")) {
+                    varName = "main::" + varName;
+                }
+
+                // Allocate register for glob
+                int rd = allocateRegister();
+                int nameIdx = addToStringPool(varName);
+
+                // Emit SLOW_OP with SLOWOP_LOAD_GLOB
+                emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                emit(Opcodes.SLOWOP_LOAD_GLOB);
+                emit(rd);
+                emit(nameIdx);
+
+                lastResultReg = rd;
+            } else {
+                throw new RuntimeException("Unsupported * operand: " + node.operand.getClass().getSimpleName());
+            }
+        } else if (op.equals("\\")) {
+            // Reference operator: \$x, \@x, \%x, \*x, etc.
+            if (node.operand != null) {
+                // Evaluate the operand
+                node.operand.accept(this);
+                int valueReg = lastResultReg;
+
+                // Allocate register for reference
+                int rd = allocateRegister();
+
+                // Emit CREATE_REF
+                emit(Opcodes.CREATE_REF);
+                emit(rd);
+                emit(valueReg);
+
+                lastResultReg = rd;
+            } else {
+                throw new RuntimeException("Reference operator requires operand");
+            }
         } else if (op.equals("say") || op.equals("print")) {
             // say/print $x
             if (node.operand != null) {

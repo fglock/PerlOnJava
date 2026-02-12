@@ -142,6 +142,9 @@ public class SlowOpcodeHandler {
             case Opcodes.SLOWOP_SELECT:
                 return executeSelect(bytecode, pc, registers);
 
+            case Opcodes.SLOWOP_LOAD_GLOB:
+                return executeLoadGlob(bytecode, pc, registers, code);
+
             default:
                 throw new RuntimeException(
                     "Unknown slow operation ID: " + slowOpId +
@@ -177,6 +180,7 @@ public class SlowOpcodeHandler {
             case Opcodes.SLOWOP_SYSCALL -> "syscall";
             case Opcodes.SLOWOP_EVAL_STRING -> "eval";
             case Opcodes.SLOWOP_SELECT -> "select";
+            case Opcodes.SLOWOP_LOAD_GLOB -> "load_glob";
             default -> "slowop_" + slowOpId;
         };
     }
@@ -530,6 +534,29 @@ public class SlowOpcodeHandler {
         );
 
         registers[rd] = result;
+        return pc;
+    }
+
+    /**
+     * SLOW_LOAD_GLOB: rd = getGlobalIO(name)
+     * Format: [SLOW_LOAD_GLOB] [rd] [name_idx]
+     * Effect: Loads a glob/filehandle from global variables
+     */
+    private static int executeLoadGlob(
+            byte[] bytecode,
+            int pc,
+            RuntimeBase[] registers,
+            InterpretedCode code) {
+
+        int rd = bytecode[pc++] & 0xFF;
+        int nameIdx = bytecode[pc++] & 0xFF;
+
+        String globName = code.stringPool[nameIdx];
+
+        // Call GlobalVariable.getGlobalIO() to get the RuntimeGlob
+        RuntimeGlob glob = org.perlonjava.runtime.GlobalVariable.getGlobalIO(globName);
+
+        registers[rd] = glob;
         return pc;
     }
 
