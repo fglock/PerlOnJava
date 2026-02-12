@@ -947,8 +947,8 @@ public class BytecodeCompiler implements Visitor {
         InterpretedCode subCode = subCompiler.compile(node.block);
 
         // Wrap InterpretedCode in RuntimeScalar
-        // InterpretedCode extends RuntimeCode, so use RuntimeScalar(RuntimeCode) constructor
-        RuntimeScalar codeScalar = new RuntimeScalar(subCode);
+        // Explicitly cast to RuntimeCode to ensure RuntimeScalar(RuntimeCode) constructor is called
+        RuntimeScalar codeScalar = new RuntimeScalar((RuntimeCode) subCode);
 
         // Store the wrapped code in constants pool and load it into a register
         int constIdx = addToConstantPool(codeScalar);
