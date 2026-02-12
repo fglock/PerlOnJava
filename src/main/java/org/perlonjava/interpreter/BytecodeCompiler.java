@@ -676,6 +676,17 @@ public class BytecodeCompiler implements Visitor {
             } else {
                 throw new RuntimeException("Reference operator requires operand");
             }
+        } else if (op.equals("package")) {
+            // Package declaration: package Foo;
+            // This is a compile-time directive that sets the namespace context.
+            // For the interpreter, we can ignore it (it doesn't generate runtime code).
+            // The operand is an IdentifierNode with the package name.
+
+            // Set lastResultReg to a valid register (undef) for consistency
+            int rd = allocateRegister();
+            emit(Opcodes.LOAD_UNDEF);
+            emit(rd);
+            lastResultReg = rd;
         } else if (op.equals("say") || op.equals("print")) {
             // say/print $x
             if (node.operand != null) {
