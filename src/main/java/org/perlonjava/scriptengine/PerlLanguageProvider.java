@@ -302,5 +302,70 @@ public class PerlLanguageProvider {
         RuntimeIO.flushAllHandles();
         return result;
     }
+
+    /**
+     * Compiles Perl code to RuntimeCode without executing it.
+     * This allows compilation once and execution multiple times for better performance.
+     *
+     * @param compilerOptions Compiler flags, file name and source code
+     * @return The compiled code instance (can be used with RuntimeCode.apply via MethodHandle)
+     * @throws Exception if compilation fails
+     */
+    public static Object compilePerlCode(CompilerOptions compilerOptions) throws Exception {
+        ScopedSymbolTable globalSymbolTable = new ScopedSymbolTable();
+        globalSymbolTable.enterScope();
+        globalSymbolTable.addVariable("this", "", null); // anon sub instance is local variable 0
+        globalSymbolTable.addVariable("@_", "our", null); // Argument list is local variable 1
+        globalSymbolTable.addVariable("wantarray", "", null); // Call context is local variable 2
+
+        if (compilerOptions.codeHasEncoding) {
+            globalSymbolTable.enableStrictOption(Strict.HINT_UTF8);
+        }
+
+        EmitterContext ctx = new EmitterContext(
+                new JavaClassInfo(),
+                globalSymbolTable.snapShot(),
+                null,
+                null,
+                RuntimeContextType.SCALAR,  // Default to SCALAR context
+                true,
+                null,
+                compilerOptions,
+                new RuntimeArray()
+        );
+
+        if (!globalInitialized) {
+            GlobalContext.initializeGlobals(compilerOptions);
+            globalInitialized = true;
+        }
+
+        // Tokenize
+        Lexer lexer = new Lexer(compilerOptions.code);
+        List<LexerToken> tokens = lexer.tokenize();
+        compilerOptions.code = null;  // Free memory
+
+        // Parse
+        ctx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
+        Parser parser = new Parser(ctx, tokens);
+        parser.isTopLevelScript = false;  // Not top-level for compiled script
+        Node ast = parser.parse();
+
+        // Compile to class
+        ctx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
+        ctx.symbolTable = ctx.symbolTable.snapShot();
+        SpecialBlockParser.setCurrentScope(ctx.symbolTable);
+        Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(
+                ctx,
+                ast,
+                false  // no try-catch
+        );
+
+        // Create instance and return it (no cast to avoid ClassLoader issues)
+        Constructor<?> constructor = generatedClass.getConstructor();
+        Object instance = constructor.newInstance();
+
+        // Return instance directly (will be used with MethodHandle)
+        return instance;
+    }
 }
 
