@@ -302,6 +302,30 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(BinaryOperatorNode node) {
+        // Handle print/say early (special handling - ignore filehandle)
+        if (node.operator.equals("print") || node.operator.equals("say")) {
+            // print/say FILEHANDLE LIST
+            // left = filehandle (select operator - ignored for now)
+            // right = list to print
+
+            // Only compile the right operand (the content to print)
+            node.right.accept(this);
+            int contentReg = lastResultReg;
+
+            // Emit PRINT or SAY
+            emit(node.operator.equals("say") ? Opcodes.SAY : Opcodes.PRINT);
+            emit(contentReg);
+
+            // print/say return 1 on success
+            int rd = allocateRegister();
+            emit(Opcodes.LOAD_INT);
+            emit(rd);
+            emitInt(1);
+
+            lastResultReg = rd;
+            return;
+        }
+
         // Handle assignment separately (doesn't follow standard left-right-op pattern)
         if (node.operator.equals("=")) {
             // Special case: my $x = value
@@ -731,6 +755,22 @@ public class BytecodeCompiler implements Visitor {
                 emit(undefReg);
                 lastResultReg = undefReg;
             }
+        } else if (op.equals("select")) {
+            // select FILEHANDLE or select()
+            // For now, we ignore filehandle selection and just return a placeholder
+            // since we always print to STDOUT
+            // In full implementation, this would set/get the default output filehandle
+
+            if (node.operand != null) {
+                // select FILEHANDLE - evaluate the filehandle but ignore it
+                node.operand.accept(this);
+            }
+
+            // Return a placeholder (we could return the filehandle object here)
+            int rd = allocateRegister();
+            emit(Opcodes.LOAD_UNDEF);
+            emit(rd);
+            lastResultReg = rd;
         } else {
             throw new UnsupportedOperationException("Unsupported operator: " + op);
         }

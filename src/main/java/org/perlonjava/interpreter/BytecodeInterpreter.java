@@ -561,16 +561,35 @@ public class BytecodeInterpreter {
                     case Opcodes.PRINT: {
                         // Print to STDOUT
                         int rs = bytecode[pc++] & 0xFF;
-                        RuntimeScalar val = (RuntimeScalar) registers[rs];
-                        System.out.print(val.toString());
+                        Object val = registers[rs];
+                        if (val instanceof RuntimeList) {
+                            // Print all elements of the list
+                            RuntimeList list = (RuntimeList) val;
+                            for (RuntimeBase elem : list.elements) {
+                                System.out.print(elem.toString());
+                            }
+                        } else if (val instanceof RuntimeScalar) {
+                            // Print single scalar
+                            System.out.print(((RuntimeScalar) val).toString());
+                        }
                         break;
                     }
 
                     case Opcodes.SAY: {
                         // Say to STDOUT (print with newline)
                         int rs = bytecode[pc++] & 0xFF;
-                        RuntimeScalar val = (RuntimeScalar) registers[rs];
-                        System.out.println(val.toString());
+                        Object val = registers[rs];
+                        if (val instanceof RuntimeList) {
+                            // Print all elements of the list with newline at end
+                            RuntimeList list = (RuntimeList) val;
+                            for (RuntimeBase elem : list.elements) {
+                                System.out.print(elem.toString());
+                            }
+                            System.out.println();
+                        } else if (val instanceof RuntimeScalar) {
+                            // Print single scalar with newline
+                            System.out.println(((RuntimeScalar) val).toString());
+                        }
                         break;
                     }
 
