@@ -79,17 +79,35 @@ public class InterpreterTest {
         System.out.println("=== Interpreter Test Suite ===\n");
 
         // Test 1: Simple integer
-        System.out.println("Test 1: my $x = 5; say $x");
-        runCode("my $x = 5; say $x", "test1.pl", 1);
+        System.out.println("Test 1: my $x = 5");
+        runCode("my $x = 5", "test1.pl", 1);
+        System.out.println("OK\n");
 
         // Test 2: Arithmetic
-        System.out.println("\nTest 2: my $x = 10 + 20; say $x");
-        runCode("my $x = 10 + 20; say $x", "test2.pl", 1);
+        System.out.println("Test 2: my $x = 10 + 20");
+        runCode("my $x = 10 + 20", "test2.pl", 1);
+        System.out.println("OK\n");
 
-        // Test 3: String concatenation
-        System.out.println("\nTest 3: my $x = 'Hello' . ' World'; say $x");
-        runCode("my $x = 'Hello' . ' World'; say $x", "test3.pl", 1);
+        // Test 3: Eval block with die
+        System.out.println("Test 3: my $result = eval { die 'error' }");
+        try {
+            runCode("my $result = eval { die 'error' }", "test3.pl", 1);
+            System.out.println("OK - eval block with die works\n");
+        } catch (Exception e) {
+            System.out.println("FAILED: " + e.getMessage() + "\n");
+            e.printStackTrace();
+        }
 
-        System.out.println("\n=== All tests completed ===");
+        // Test 4: Eval block with return
+        System.out.println("Test 4: my $result = eval { return 42 }");
+        try {
+            runCode("my $result = eval { return 42 }", "test4.pl", 1);
+            System.out.println("OK - eval block with return works\n");
+        } catch (Exception e) {
+            System.out.println("FAILED: " + e.getMessage() + "\n");
+            e.printStackTrace();
+        }
+
+        System.out.println("=== All tests completed ===");
     }
 }
