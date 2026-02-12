@@ -530,6 +530,18 @@ public class BytecodeCompiler implements Visitor {
                 emit(rs1);
                 emit(rs2);
             }
+            case ">" -> {
+                emit(Opcodes.GT_NUM);
+                emit(rd);
+                emit(rs1);
+                emit(rs2);
+            }
+            case "!=" -> {
+                emit(Opcodes.NE_NUM);
+                emit(rd);
+                emit(rs1);
+                emit(rs2);
+            }
             case "()", "->" -> {
                 // Apply operator: $coderef->(args) or &subname(args)
                 // left (rs1) = code reference (RuntimeScalar containing RuntimeCode or SubroutineNode)
@@ -560,6 +572,116 @@ public class BytecodeCompiler implements Visitor {
                 emit(rd);
                 emit(rs1);
                 emit(rs2);
+            }
+            case ".." -> {
+                // Range operator: start..end
+                // Create a PerlRange object which can be iterated or converted to a list
+
+                // Optimization: if both operands are constant numbers, create range at compile time
+                if (node.left instanceof NumberNode && node.right instanceof NumberNode) {
+                    try {
+                        int start = Integer.parseInt(((NumberNode) node.left).value);
+                        int end = Integer.parseInt(((NumberNode) node.right).value);
+
+                        // Create PerlRange with RuntimeScalarCache integers
+                        RuntimeScalar startScalar = RuntimeScalarCache.getScalarInt(start);
+                        RuntimeScalar endScalar = RuntimeScalarCache.getScalarInt(end);
+                        PerlRange range = PerlRange.createRange(startScalar, endScalar);
+
+                        // Store in constant pool and load
+                        int constIdx = addToConstantPool(range);
+                        emit(Opcodes.LOAD_CONST);
+                        emit(rd);
+                        emit(constIdx);
+                    } catch (NumberFormatException e) {
+                        throw new RuntimeException("Range operator requires integer values: " + e.getMessage());
+                    }
+                } else {
+                    // Runtime range creation using RANGE opcode
+                    // rs1 and rs2 already contain the start and end values
+                    emit(Opcodes.RANGE);
+                    emit(rd);
+                    emit(rs1);
+                    emit(rs2);
+                }
+            }
+            case "&&", "and" -> {
+                // Logical AND with short-circuit evaluation
+                // Semantics: if left is false, return left; else evaluate and return right
+                // Implementation:
+                //   rd = left
+                //   if (!rd) goto skip_right
+                //   rd = right
+                //   skip_right:
+
+                // Left operand is already in rs1
+                // Move to result register
+                emit(Opcodes.MOVE);
+                emit(rd);
+                emit(rs1);
+
+                // Mark position for forward jump
+                int skipRightPos = bytecode.size();
+
+                // Emit conditional jump: if (!rd) skip right evaluation
+                emit(Opcodes.GOTO_IF_FALSE);
+                emit(rd);
+                emitInt(0); // Placeholder for offset (will be patched)
+
+                // Right operand is already in rs2
+                // Move to result register (overwriting left value)
+                emit(Opcodes.MOVE);
+                emit(rd);
+                emit(rs2);
+
+                // Patch the forward jump offset
+                int skipRightTarget = bytecode.size();
+                patchIntOffset(skipRightPos + 2, skipRightTarget);
+            }
+            case "||", "or" -> {
+                // Logical OR with short-circuit evaluation
+                // Semantics: if left is true, return left; else evaluate and return right
+                // Implementation:
+                //   rd = left
+                //   if (rd) goto skip_right
+                //   rd = right
+                //   skip_right:
+
+                // Left operand is already in rs1
+                // Move to result register
+                emit(Opcodes.MOVE);
+                emit(rd);
+                emit(rs1);
+
+                // Mark position for forward jump
+                int skipRightPos = bytecode.size();
+
+                // Emit conditional jump: if (rd) skip right evaluation
+                emit(Opcodes.GOTO_IF_TRUE);
+                emit(rd);
+                emitInt(0); // Placeholder for offset (will be patched)
+
+                // Right operand is already in rs2
+                // Move to result register (overwriting left value)
+                emit(Opcodes.MOVE);
+                emit(rd);
+                emit(rs2);
+
+                // Patch the forward jump offset
+                int skipRightTarget = bytecode.size();
+                patchIntOffset(skipRightPos + 2, skipRightTarget);
+            }
+            case "map" -> {
+                // Map operator: map { block } list
+                // rs1 = closure (SubroutineNode compiled to code reference)
+                // rs2 = list expression
+
+                // Emit MAP opcode
+                emit(Opcodes.MAP);
+                emit(rd);
+                emit(rs2);       // List register
+                emit(rs1);       // Closure register
+                emit(RuntimeContextType.LIST);  // Map always uses list context
             }
             default -> throw new RuntimeException("Unsupported operator: " + node.operator);
         }
@@ -601,8 +723,15 @@ public class BytecodeCompiler implements Visitor {
                     lastResultReg = registerMap.get(varName);
                 } else {
                     // Global variable - load it
+                    // Add package prefix if not present (match compiler behavior)
+                    String globalVarName = varName;
+                    if (!globalVarName.contains("::")) {
+                        // Remove $ sigil, add package, restore sigil
+                        globalVarName = "main::" + varName.substring(1);
+                    }
+
                     int rd = allocateRegister();
-                    int nameIdx = addToStringPool(varName);
+                    int nameIdx = addToStringPool(globalVarName);
 
                     emit(Opcodes.LOAD_GLOBAL_SCALAR);
                     emit(rd);
@@ -676,6 +805,15 @@ public class BytecodeCompiler implements Visitor {
             } else {
                 throw new RuntimeException("Reference operator requires operand");
             }
+        } else if (op.equals("package")) {
+            // Package declaration: package Foo;
+            // This is a compile-time directive that sets the namespace context.
+            // It doesn't generate any runtime bytecode.
+            // The operand is an IdentifierNode with the package name.
+
+            // Don't emit any bytecode - just leave lastResultReg unchanged
+            // (or set to -1 to indicate no result)
+            lastResultReg = -1;
         } else if (op.equals("say") || op.equals("print")) {
             // say/print $x
             if (node.operand != null) {
@@ -684,6 +822,25 @@ public class BytecodeCompiler implements Visitor {
 
                 emit(op.equals("say") ? Opcodes.SAY : Opcodes.PRINT);
                 emit(rs);
+            }
+        } else if (op.equals("not")) {
+            // Logical NOT operator: not $x
+            // Evaluate operand and emit NOT opcode
+            if (node.operand != null) {
+                node.operand.accept(this);
+                int rs = lastResultReg;
+
+                // Allocate result register
+                int rd = allocateRegister();
+
+                // Emit NOT opcode
+                emit(Opcodes.NOT);
+                emit(rd);
+                emit(rs);
+
+                lastResultReg = rd;
+            } else {
+                throw new RuntimeException("NOT operator requires operand");
             }
         } else if (op.equals("++") || op.equals("--") || op.equals("++postfix") || op.equals("--postfix")) {
             // Pre/post increment/decrement
@@ -769,6 +926,34 @@ public class BytecodeCompiler implements Visitor {
                 emit(undefReg);
             }
             lastResultReg = -1; // No result after return
+        } else if (op.equals("rand")) {
+            // rand() or rand($max)
+            // Calls Random.rand(max) where max defaults to 1
+            int rd = allocateRegister();
+
+            if (node.operand != null) {
+                // rand($max) - evaluate operand
+                node.operand.accept(this);
+                int maxReg = lastResultReg;
+
+                // Emit RAND opcode
+                emit(Opcodes.RAND);
+                emit(rd);
+                emit(maxReg);
+            } else {
+                // rand() with no argument - defaults to 1
+                int oneReg = allocateRegister();
+                emit(Opcodes.LOAD_INT);
+                emit(oneReg);
+                emitInt(1);
+
+                // Emit RAND opcode
+                emit(Opcodes.RAND);
+                emit(rd);
+                emit(oneReg);
+            }
+
+            lastResultReg = rd;
         } else if (op.equals("die")) {
             // die $message;
             if (node.operand != null) {
@@ -903,30 +1088,198 @@ public class BytecodeCompiler implements Visitor {
         bytecode.write(value & 0xFF);
     }
 
+    /**
+     * Emit a 2-byte short value (big-endian for jump offsets).
+     */
+    private void emitShort(int value) {
+        bytecode.write((value >> 8) & 0xFF);
+        bytecode.write(value & 0xFF);
+    }
+
+    /**
+     * Patch a 4-byte int offset at the specified position.
+     * Used for forward jumps where the target is unknown at emit time.
+     */
+    private void patchIntOffset(int position, int target) {
+        byte[] bytes = bytecode.toByteArray();
+        // Store absolute target address (not relative offset)
+        bytes[position] = (byte)((target >> 24) & 0xFF);
+        bytes[position + 1] = (byte)((target >> 16) & 0xFF);
+        bytes[position + 2] = (byte)((target >> 8) & 0xFF);
+        bytes[position + 3] = (byte)(target & 0xFF);
+        // Rebuild the stream with patched bytes
+        bytecode.reset();
+        bytecode.write(bytes, 0, bytes.length);
+    }
+
+    /**
+     * Patch a 2-byte short offset at the specified position.
+     * Used for forward jumps where the target is unknown at emit time.
+     */
+    private void patchShortOffset(int position, int target) {
+        byte[] bytes = bytecode.toByteArray();
+        // Store absolute target address (not relative offset)
+        bytes[position] = (byte)((target >> 8) & 0xFF);
+        bytes[position + 1] = (byte)(target & 0xFF);
+        // Rebuild the stream with patched bytes
+        bytecode.reset();
+        bytecode.write(bytes, 0, bytes.length);
+    }
+
     // =========================================================================
     // UNIMPLEMENTED VISITOR METHODS (TODO)
     // =========================================================================
 
     @Override
     public void visit(ArrayLiteralNode node) {
-        throw new UnsupportedOperationException("Arrays not yet implemented");
+        // Array literal: [expr1, expr2, ...]
+        // In Perl, [..] creates an ARRAY REFERENCE (RuntimeScalar containing RuntimeArray)
+        // Implementation:
+        //   1. Create a list with all elements
+        //   2. Convert list to array reference using CREATE_ARRAY (which now returns reference)
+
+        // Fast path: empty array
+        if (node.elements.isEmpty()) {
+            // Create empty RuntimeList
+            int listReg = allocateRegister();
+            emit(Opcodes.CREATE_LIST);
+            emit(listReg);
+            emit(0); // count = 0
+
+            // Convert to RuntimeArray reference (CREATE_ARRAY now returns reference!)
+            int refReg = allocateRegister();
+            emit(Opcodes.CREATE_ARRAY);
+            emit(refReg);
+            emit(listReg);
+
+            lastResultReg = refReg;
+            return;
+        }
+
+        // General case: evaluate all elements
+        int[] elementRegs = new int[node.elements.size()];
+        for (int i = 0; i < node.elements.size(); i++) {
+            node.elements.get(i).accept(this);
+            elementRegs[i] = lastResultReg;
+        }
+
+        // Create RuntimeList with all elements
+        int listReg = allocateRegister();
+        emit(Opcodes.CREATE_LIST);
+        emit(listReg);
+        emit(node.elements.size()); // count
+
+        // Emit register numbers for each element
+        for (int elemReg : elementRegs) {
+            emit(elemReg);
+        }
+
+        // Convert list to array reference (CREATE_ARRAY now returns reference!)
+        int refReg = allocateRegister();
+        emit(Opcodes.CREATE_ARRAY);
+        emit(refReg);
+        emit(listReg);
+
+        lastResultReg = refReg;
     }
 
     @Override
     public void visit(HashLiteralNode node) {
-        throw new UnsupportedOperationException("Hashes not yet implemented");
+        // Hash literal: {key1 => value1, key2 => value2, ...}
+        // Can also contain array expansion: {a => 1, @x}
+        // In Perl, {...} creates a HASH REFERENCE (RuntimeScalar containing RuntimeHash)
+        //
+        // Implementation:
+        //   1. Create a RuntimeList with all elements (including arrays)
+        //   2. Call CREATE_HASH which flattens arrays and creates hash reference
+
+        // Fast path: empty hash
+        if (node.elements.isEmpty()) {
+            int listReg = allocateRegister();
+            emit(Opcodes.CREATE_LIST);
+            emit(listReg);
+            emit(0); // count = 0
+
+            // Create hash reference (CREATE_HASH now returns reference!)
+            int refReg = allocateRegister();
+            emit(Opcodes.CREATE_HASH);
+            emit(refReg);
+            emit(listReg);
+
+            lastResultReg = refReg;
+            return;
+        }
+
+        // General case: evaluate all elements
+        int[] elementRegs = new int[node.elements.size()];
+        for (int i = 0; i < node.elements.size(); i++) {
+            node.elements.get(i).accept(this);
+            elementRegs[i] = lastResultReg;
+        }
+
+        // Create RuntimeList with all elements
+        // Arrays will be included as-is; RuntimeHash.createHash() will flatten them
+        int listReg = allocateRegister();
+        emit(Opcodes.CREATE_LIST);
+        emit(listReg);
+        emit(node.elements.size()); // count
+
+        // Emit register numbers for each element
+        for (int elemReg : elementRegs) {
+            emit(elemReg);
+        }
+
+        // Create hash reference (CREATE_HASH now returns reference!)
+        int refReg = allocateRegister();
+        emit(Opcodes.CREATE_HASH);
+        emit(refReg);
+        emit(listReg);
+
+        lastResultReg = refReg;
     }
 
     @Override
     public void visit(SubroutineNode node) {
-        // For now, only handle anonymous subroutines used as eval blocks
         if (node.useTryCatch) {
             // This is an eval block: eval { ... }
             visitEvalBlock(node);
+        } else if (node.name == null || node.name.equals("<anon>")) {
+            // Anonymous subroutine: sub { ... }
+            visitAnonymousSubroutine(node);
         } else {
-            // Regular named or anonymous subroutine - not yet supported
-            throw new UnsupportedOperationException("Named subroutines not yet implemented in interpreter");
+            // Named subroutine - not yet supported
+            throw new UnsupportedOperationException("Named subroutines not yet implemented in interpreter: " + node.name);
         }
+    }
+
+    /**
+     * Visit an anonymous subroutine: sub { ... }
+     *
+     * Compiles the subroutine body to bytecode and creates an InterpretedCode instance.
+     * Handles closure variable capture if needed.
+     *
+     * The result is an InterpretedCode wrapped in RuntimeScalar, stored in lastResultReg.
+     */
+    private void visitAnonymousSubroutine(SubroutineNode node) {
+        // Create a new BytecodeCompiler for the subroutine body
+        BytecodeCompiler subCompiler = new BytecodeCompiler(this.sourceName, node.getIndex());
+
+        // Compile the subroutine body to InterpretedCode
+        InterpretedCode subCode = subCompiler.compile(node.block);
+
+        // Wrap InterpretedCode in RuntimeScalar
+        // Explicitly cast to RuntimeCode to ensure RuntimeScalar(RuntimeCode) constructor is called
+        RuntimeScalar codeScalar = new RuntimeScalar((RuntimeCode) subCode);
+
+        // Store the wrapped code in constants pool and load it into a register
+        int constIdx = addToConstantPool(codeScalar);
+        int rd = allocateRegister();
+
+        emit(Opcodes.LOAD_CONST);
+        emit(rd);
+        emit(constIdx);
+
+        lastResultReg = rd;
     }
 
     /**
@@ -1146,12 +1499,115 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(IfNode node) {
-        throw new UnsupportedOperationException("If statements not yet implemented");
+        // Compile condition
+        node.condition.accept(this);
+        int condReg = lastResultReg;
+
+        // Mark position for forward jump to else/end
+        int ifFalsePos = bytecode.size();
+        emit(Opcodes.GOTO_IF_FALSE);
+        emit(condReg);
+        emitInt(0); // Placeholder for else/end target
+
+        // Compile then block
+        if (node.thenBranch != null) {
+            node.thenBranch.accept(this);
+        }
+        int thenResultReg = lastResultReg;
+
+        if (node.elseBranch != null) {
+            // Need to jump over else block after then block executes
+            int gotoEndPos = bytecode.size();
+            emit(Opcodes.GOTO);
+            emitInt(0); // Placeholder for end target
+
+            // Patch if-false jump to here (start of else block)
+            int elseStart = bytecode.size();
+            patchIntOffset(ifFalsePos + 2, elseStart);
+
+            // Compile else block
+            node.elseBranch.accept(this);
+            int elseResultReg = lastResultReg;
+
+            // Both branches should produce results in the same register
+            // If they differ, move else result to then result register
+            if (thenResultReg >= 0 && elseResultReg >= 0 && thenResultReg != elseResultReg) {
+                emit(Opcodes.MOVE);
+                emit(thenResultReg);
+                emit(elseResultReg);
+            }
+
+            // Patch goto-end jump to here
+            int endPos = bytecode.size();
+            patchIntOffset(gotoEndPos + 1, endPos);
+
+            lastResultReg = thenResultReg >= 0 ? thenResultReg : elseResultReg;
+        } else {
+            // No else block - patch if-false jump to here (after then block)
+            int endPos = bytecode.size();
+            patchIntOffset(ifFalsePos + 2, endPos);
+
+            lastResultReg = thenResultReg;
+        }
     }
 
     @Override
     public void visit(TernaryOperatorNode node) {
-        throw new UnsupportedOperationException("Ternary operator not yet implemented");
+        // condition ? true_expr : false_expr
+        // Implementation:
+        //   eval condition
+        //   if (!condition) goto false_label
+        //   rd = true_expr
+        //   goto end_label
+        //   false_label:
+        //   rd = false_expr
+        //   end_label:
+
+        // Compile condition
+        node.condition.accept(this);
+        int condReg = lastResultReg;
+
+        // Allocate result register
+        int rd = allocateRegister();
+
+        // Mark position for forward jump to false expression
+        int ifFalsePos = bytecode.size();
+        emit(Opcodes.GOTO_IF_FALSE);
+        emit(condReg);
+        emitInt(0); // Placeholder for false_label
+
+        // Compile true expression
+        node.trueExpr.accept(this);
+        int trueReg = lastResultReg;
+
+        // Move true result to rd
+        emit(Opcodes.MOVE);
+        emit(rd);
+        emit(trueReg);
+
+        // Jump over false expression
+        int gotoEndPos = bytecode.size();
+        emit(Opcodes.GOTO);
+        emitInt(0); // Placeholder for end_label
+
+        // Patch if-false jump to here (start of false expression)
+        int falseStart = bytecode.size();
+        patchIntOffset(ifFalsePos + 2, falseStart);
+
+        // Compile false expression
+        node.falseExpr.accept(this);
+        int falseReg = lastResultReg;
+
+        // Move false result to rd
+        emit(Opcodes.MOVE);
+        emit(rd);
+        emit(falseReg);
+
+        // Patch goto-end jump to here
+        int endPos = bytecode.size();
+        patchIntOffset(gotoEndPos + 1, endPos);
+
+        lastResultReg = rd;
     }
 
     @Override

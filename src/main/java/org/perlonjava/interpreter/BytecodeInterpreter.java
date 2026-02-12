@@ -361,6 +361,30 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.GT_NUM: {
+                        // Greater than: rd = (rs1 > rs2)
+                        int rd = bytecode[pc++] & 0xFF;
+                        int rs1 = bytecode[pc++] & 0xFF;
+                        int rs2 = bytecode[pc++] & 0xFF;
+                        registers[rd] = CompareOperators.greaterThan(
+                            (RuntimeScalar) registers[rs1],
+                            (RuntimeScalar) registers[rs2]
+                        );
+                        break;
+                    }
+
+                    case Opcodes.NE_NUM: {
+                        // Not equal: rd = (rs1 != rs2)
+                        int rd = bytecode[pc++] & 0xFF;
+                        int rs1 = bytecode[pc++] & 0xFF;
+                        int rs2 = bytecode[pc++] & 0xFF;
+                        registers[rd] = CompareOperators.notEqualTo(
+                            (RuntimeScalar) registers[rs1],
+                            (RuntimeScalar) registers[rs2]
+                        );
+                        break;
+                    }
+
                     // =================================================================
                     // LOGICAL OPERATORS
                     // =================================================================
@@ -423,9 +447,25 @@ public class BytecodeInterpreter {
                     }
 
                     case Opcodes.CREATE_ARRAY: {
-                        // Create array: rd = []
+                        // Create array reference from list: rd = new RuntimeArray(rs_list).createReference()
+                        // Array literals always return references in Perl
                         int rd = bytecode[pc++] & 0xFF;
-                        registers[rd] = new RuntimeArray();
+                        int listReg = bytecode[pc++] & 0xFF;
+
+                        // Convert to list (polymorphic - works for PerlRange, RuntimeList, etc.)
+                        RuntimeBase source = registers[listReg];
+                        RuntimeArray array;
+                        if (source instanceof RuntimeArray) {
+                            // Already an array - pass through
+                            array = (RuntimeArray) source;
+                        } else {
+                            // Convert to list, then to array (works for PerlRange, RuntimeList, etc.)
+                            RuntimeList list = source.getList();
+                            array = new RuntimeArray(list);
+                        }
+
+                        // Create reference (array literals always return references!)
+                        registers[rd] = array.createReference();
                         break;
                     }
 
@@ -454,13 +494,6 @@ public class BytecodeInterpreter {
                         RuntimeScalar key = (RuntimeScalar) registers[keyReg];
                         RuntimeScalar val = (RuntimeScalar) registers[valueReg];
                         hash.put(key.toString(), val);  // Convert key to String
-                        break;
-                    }
-
-                    case Opcodes.CREATE_HASH: {
-                        // Create hash: rd = {}
-                        int rd = bytecode[pc++] & 0xFF;
-                        registers[rd] = new RuntimeHash();
                         break;
                     }
 
@@ -856,6 +889,59 @@ public class BytecodeInterpreter {
 
                         RuntimeList list = (RuntimeList) registers[listReg];
                         RuntimeScalar result = org.perlonjava.operators.IOOperator.select(list, RuntimeContextType.SCALAR);
+                        registers[rd] = result;
+                        break;
+                    }
+
+                    case Opcodes.RANGE: {
+                        // Create range: rd = PerlRange.createRange(rs_start, rs_end)
+                        int rd = bytecode[pc++] & 0xFF;
+                        int startReg = bytecode[pc++] & 0xFF;
+                        int endReg = bytecode[pc++] & 0xFF;
+
+                        RuntimeScalar start = (RuntimeScalar) registers[startReg];
+                        RuntimeScalar end = (RuntimeScalar) registers[endReg];
+                        PerlRange range = PerlRange.createRange(start, end);
+                        registers[rd] = range;
+                        break;
+                    }
+
+                    case Opcodes.CREATE_HASH: {
+                        // Create hash reference from list: rd = RuntimeHash.createHash(rs_list).createReference()
+                        // Hash literals always return references in Perl
+                        // This flattens any arrays in the list and creates key-value pairs
+                        int rd = bytecode[pc++] & 0xFF;
+                        int listReg = bytecode[pc++] & 0xFF;
+
+                        RuntimeBase list = registers[listReg];
+                        RuntimeHash hash = RuntimeHash.createHash(list);
+
+                        // Create reference (hash literals always return references!)
+                        registers[rd] = hash.createReference();
+                        break;
+                    }
+
+                    case Opcodes.RAND: {
+                        // Random number: rd = Random.rand(max)
+                        int rd = bytecode[pc++] & 0xFF;
+                        int maxReg = bytecode[pc++] & 0xFF;
+
+                        RuntimeScalar max = (RuntimeScalar) registers[maxReg];
+                        registers[rd] = org.perlonjava.operators.Random.rand(max);
+                        break;
+                    }
+
+                    case Opcodes.MAP: {
+                        // Map operator: rd = ListOperators.map(list, closure, ctx)
+                        int rd = bytecode[pc++] & 0xFF;
+                        int listReg = bytecode[pc++] & 0xFF;
+                        int closureReg = bytecode[pc++] & 0xFF;
+                        int ctx = bytecode[pc++] & 0xFF;
+
+                        RuntimeBase listBase = registers[listReg];
+                        RuntimeList list = listBase.getList();
+                        RuntimeScalar closure = (RuntimeScalar) registers[closureReg];
+                        RuntimeList result = org.perlonjava.operators.ListOperators.map(list, closure, ctx);
                         registers[rd] = result;
                         break;
                     }
