@@ -361,6 +361,30 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.GT_NUM: {
+                        // Greater than: rd = (rs1 > rs2)
+                        int rd = bytecode[pc++] & 0xFF;
+                        int rs1 = bytecode[pc++] & 0xFF;
+                        int rs2 = bytecode[pc++] & 0xFF;
+                        registers[rd] = CompareOperators.greaterThan(
+                            (RuntimeScalar) registers[rs1],
+                            (RuntimeScalar) registers[rs2]
+                        );
+                        break;
+                    }
+
+                    case Opcodes.NE_NUM: {
+                        // Not equal: rd = (rs1 != rs2)
+                        int rd = bytecode[pc++] & 0xFF;
+                        int rs1 = bytecode[pc++] & 0xFF;
+                        int rs2 = bytecode[pc++] & 0xFF;
+                        registers[rd] = CompareOperators.notEqualTo(
+                            (RuntimeScalar) registers[rs1],
+                            (RuntimeScalar) registers[rs2]
+                        );
+                        break;
+                    }
+
                     // =================================================================
                     // LOGICAL OPERATORS
                     // =================================================================
@@ -423,20 +447,25 @@ public class BytecodeInterpreter {
                     }
 
                     case Opcodes.CREATE_ARRAY: {
-                        // Create array from list: rd = array(rs_list)
+                        // Create array reference from list: rd = new RuntimeArray(rs_list).createReference()
+                        // Array literals always return references in Perl
                         int rd = bytecode[pc++] & 0xFF;
                         int listReg = bytecode[pc++] & 0xFF;
 
                         // Convert to list (polymorphic - works for PerlRange, RuntimeList, etc.)
                         RuntimeBase source = registers[listReg];
+                        RuntimeArray array;
                         if (source instanceof RuntimeArray) {
                             // Already an array - pass through
-                            registers[rd] = source;
+                            array = (RuntimeArray) source;
                         } else {
                             // Convert to list, then to array (works for PerlRange, RuntimeList, etc.)
                             RuntimeList list = source.getList();
-                            registers[rd] = new RuntimeArray(list);
+                            array = new RuntimeArray(list);
                         }
+
+                        // Create reference (array literals always return references!)
+                        registers[rd] = array.createReference();
                         break;
                     }
 
@@ -465,13 +494,6 @@ public class BytecodeInterpreter {
                         RuntimeScalar key = (RuntimeScalar) registers[keyReg];
                         RuntimeScalar val = (RuntimeScalar) registers[valueReg];
                         hash.put(key.toString(), val);  // Convert key to String
-                        break;
-                    }
-
-                    case Opcodes.CREATE_HASH: {
-                        // Create hash: rd = {}
-                        int rd = bytecode[pc++] & 0xFF;
-                        registers[rd] = new RuntimeHash();
                         break;
                     }
 
@@ -881,6 +903,21 @@ public class BytecodeInterpreter {
                         RuntimeScalar end = (RuntimeScalar) registers[endReg];
                         PerlRange range = PerlRange.createRange(start, end);
                         registers[rd] = range;
+                        break;
+                    }
+
+                    case Opcodes.CREATE_HASH: {
+                        // Create hash reference from list: rd = RuntimeHash.createHash(rs_list).createReference()
+                        // Hash literals always return references in Perl
+                        // This flattens any arrays in the list and creates key-value pairs
+                        int rd = bytecode[pc++] & 0xFF;
+                        int listReg = bytecode[pc++] & 0xFF;
+
+                        RuntimeBase list = registers[listReg];
+                        RuntimeHash hash = RuntimeHash.createHash(list);
+
+                        // Create reference (hash literals always return references!)
+                        registers[rd] = hash.createReference();
                         break;
                     }
 

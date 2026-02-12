@@ -271,6 +271,18 @@ public class InterpretedCode extends RuntimeCode {
                     rs2 = bytecode[pc++] & 0xFF;
                     sb.append("LT_NUM r").append(rd).append(" = r").append(rs1).append(" < r").append(rs2).append("\n");
                     break;
+                case Opcodes.GT_NUM:
+                    rd = bytecode[pc++] & 0xFF;
+                    rs1 = bytecode[pc++] & 0xFF;
+                    rs2 = bytecode[pc++] & 0xFF;
+                    sb.append("GT_NUM r").append(rd).append(" = r").append(rs1).append(" > r").append(rs2).append("\n");
+                    break;
+                case Opcodes.NE_NUM:
+                    rd = bytecode[pc++] & 0xFF;
+                    rs1 = bytecode[pc++] & 0xFF;
+                    rs2 = bytecode[pc++] & 0xFF;
+                    sb.append("NE_NUM r").append(rd).append(" = r").append(rs1).append(" != r").append(rs2).append("\n");
+                    break;
                 case Opcodes.INC_REG:
                     rd = bytecode[pc++] & 0xFF;
                     sb.append("INC_REG r").append(rd).append("++\n");
@@ -373,6 +385,40 @@ public class InterpretedCode extends RuntimeCode {
                     int listSourceReg = bytecode[pc++] & 0xFF;
                     sb.append("CREATE_ARRAY r").append(rd).append(" = array(r").append(listSourceReg).append(")\n");
                     break;
+                case Opcodes.HASH_GET:
+                    rd = bytecode[pc++] & 0xFF;
+                    int hashGetReg = bytecode[pc++] & 0xFF;
+                    int keyGetReg = bytecode[pc++] & 0xFF;
+                    sb.append("HASH_GET r").append(rd).append(" = r").append(hashGetReg).append("{r").append(keyGetReg).append("}\n");
+                    break;
+                case Opcodes.HASH_SET:
+                    int hashSetReg = bytecode[pc++] & 0xFF;
+                    int keySetReg = bytecode[pc++] & 0xFF;
+                    int valueSetReg = bytecode[pc++] & 0xFF;
+                    sb.append("HASH_SET r").append(hashSetReg).append("{r").append(keySetReg).append("} = r").append(valueSetReg).append("\n");
+                    break;
+                case Opcodes.HASH_EXISTS:
+                    rd = bytecode[pc++] & 0xFF;
+                    int hashExistsReg = bytecode[pc++] & 0xFF;
+                    int keyExistsReg = bytecode[pc++] & 0xFF;
+                    sb.append("HASH_EXISTS r").append(rd).append(" = exists r").append(hashExistsReg).append("{r").append(keyExistsReg).append("}\n");
+                    break;
+                case Opcodes.HASH_DELETE:
+                    rd = bytecode[pc++] & 0xFF;
+                    int hashDeleteReg = bytecode[pc++] & 0xFF;
+                    int keyDeleteReg = bytecode[pc++] & 0xFF;
+                    sb.append("HASH_DELETE r").append(rd).append(" = delete r").append(hashDeleteReg).append("{r").append(keyDeleteReg).append("}\n");
+                    break;
+                case Opcodes.HASH_KEYS:
+                    rd = bytecode[pc++] & 0xFF;
+                    int hashKeysReg = bytecode[pc++] & 0xFF;
+                    sb.append("HASH_KEYS r").append(rd).append(" = keys(r").append(hashKeysReg).append(")\n");
+                    break;
+                case Opcodes.HASH_VALUES:
+                    rd = bytecode[pc++] & 0xFF;
+                    int hashValuesReg = bytecode[pc++] & 0xFF;
+                    sb.append("HASH_VALUES r").append(rd).append(" = values(r").append(hashValuesReg).append(")\n");
+                    break;
                 case Opcodes.CREATE_LIST: {
                     rd = bytecode[pc++] & 0xFF;
                     int listCount = bytecode[pc++] & 0xFF;
@@ -411,6 +457,16 @@ public class InterpretedCode extends RuntimeCode {
                     int endReg = bytecode[pc++] & 0xFF;
                     sb.append("RANGE r").append(rd).append(" = r").append(startReg).append("..r").append(endReg).append("\n");
                     break;
+                case Opcodes.CREATE_HASH:
+                    rd = bytecode[pc++] & 0xFF;
+                    int hashListReg = bytecode[pc++] & 0xFF;
+                    sb.append("CREATE_HASH r").append(rd).append(" = hash_ref(r").append(hashListReg).append(")\n");
+                    break;
+                case Opcodes.NOT:
+                    rd = bytecode[pc++] & 0xFF;
+                    rs = bytecode[pc++] & 0xFF;
+                    sb.append("NOT r").append(rd).append(" = !r").append(rs).append("\n");
+                    break;
                 case Opcodes.SLOW_OP: {
                     int slowOpId = bytecode[pc++] & 0xFF;
                     String opName = SlowOpcodeHandler.getSlowOpName(slowOpId);
@@ -436,6 +492,12 @@ public class InterpretedCode extends RuntimeCode {
                             int globNameIdx = bytecode[pc++] & 0xFF;
                             String globName = stringPool[globNameIdx];
                             sb.append(" r").append(rd).append(" = *").append(globName);
+                            break;
+                        case Opcodes.SLOWOP_CREATE_HASH_FROM_LIST:
+                            // Format: [rd] [rs_list]
+                            rd = bytecode[pc++] & 0xFF;
+                            rs = bytecode[pc++] & 0xFF;
+                            sb.append(" r").append(rd).append(" = hash_from_list(r").append(rs).append(")");
                             break;
                         default:
                             sb.append(" (operands not decoded)");
