@@ -627,8 +627,8 @@ public class BytecodeCompiler implements Visitor {
                 emit(rs1);
                 emit(rs2);
             }
-            case "()", "->" -> {
-                // Apply operator: $coderef->(args) or &subname(args)
+            case "(", "()", "->" -> {
+                // Apply operator: $coderef->(args) or &subname(args) or foo(args)
                 // left (rs1) = code reference (RuntimeScalar containing RuntimeCode or SubroutineNode)
                 // right (rs2) = arguments (should be RuntimeList from ListNode)
 
@@ -989,6 +989,31 @@ public class BytecodeCompiler implements Visitor {
                 lastResultReg = rd;
             } else {
                 throw new RuntimeException("Unsupported * operand: " + node.operand.getClass().getSimpleName());
+            }
+        } else if (op.equals("&")) {
+            // Code reference: &subname
+            // Gets a reference to a named subroutine
+            if (node.operand instanceof IdentifierNode) {
+                IdentifierNode idNode = (IdentifierNode) node.operand;
+                String subName = idNode.name;
+
+                // Add package prefix if not present
+                if (!subName.contains("::")) {
+                    subName = "main::" + subName;
+                }
+
+                // Allocate register for code reference
+                int rd = allocateRegister();
+                int nameIdx = addToStringPool(subName);
+
+                // Emit LOAD_GLOBAL_CODE
+                emit(Opcodes.LOAD_GLOBAL_CODE);
+                emit(rd);
+                emit(nameIdx);
+
+                lastResultReg = rd;
+            } else {
+                throwCompilerException("Unsupported & operand: " + node.operand.getClass().getSimpleName());
             }
         } else if (op.equals("\\")) {
             // Reference operator: \$x, \@x, \%x, \*x, etc.
