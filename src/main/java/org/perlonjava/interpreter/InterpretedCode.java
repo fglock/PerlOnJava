@@ -475,6 +475,41 @@ public class InterpretedCode extends RuntimeCode {
                     sb.append("MAP r").append(rd).append(" = map(r").append(rs1)
                       .append(", r").append(rs2).append(", ctx=").append(mapCtx).append(")\n");
                     break;
+                case Opcodes.NEW_ARRAY:
+                    rd = bytecode[pc++] & 0xFF;
+                    sb.append("NEW_ARRAY r").append(rd).append(" = new RuntimeArray()\n");
+                    break;
+                case Opcodes.NEW_HASH:
+                    rd = bytecode[pc++] & 0xFF;
+                    sb.append("NEW_HASH r").append(rd).append(" = new RuntimeHash()\n");
+                    break;
+                case Opcodes.ARRAY_SET_FROM_LIST:
+                    rs1 = bytecode[pc++] & 0xFF;  // array register
+                    rs2 = bytecode[pc++] & 0xFF;  // list register
+                    sb.append("ARRAY_SET_FROM_LIST r").append(rs1).append(".setFromList(r").append(rs2).append(")\n");
+                    break;
+                case Opcodes.HASH_SET_FROM_LIST:
+                    rs1 = bytecode[pc++] & 0xFF;  // hash register
+                    rs2 = bytecode[pc++] & 0xFF;  // list register
+                    sb.append("HASH_SET_FROM_LIST r").append(rs1).append(".setFromList(r").append(rs2).append(")\n");
+                    break;
+                case Opcodes.STORE_GLOBAL_CODE:
+                    int codeNameIdx = bytecode[pc++] & 0xFF;
+                    rs = bytecode[pc++] & 0xFF;
+                    sb.append("STORE_GLOBAL_CODE '").append(stringPool[codeNameIdx]).append("' = r").append(rs).append("\n");
+                    break;
+                case Opcodes.CREATE_CLOSURE:
+                    rd = bytecode[pc++] & 0xFF;
+                    int templateIdx = bytecode[pc++] & 0xFF;
+                    int numCaptures = bytecode[pc++] & 0xFF;
+                    sb.append("CREATE_CLOSURE r").append(rd).append(" = closure(template[").append(templateIdx).append("], captures=[");
+                    for (int i = 0; i < numCaptures; i++) {
+                        if (i > 0) sb.append(", ");
+                        int captureReg = bytecode[pc++] & 0xFF;
+                        sb.append("r").append(captureReg);
+                    }
+                    sb.append("])\n");
+                    break;
                 case Opcodes.NOT:
                     rd = bytecode[pc++] & 0xFF;
                     rs = bytecode[pc++] & 0xFF;
@@ -505,6 +540,24 @@ public class InterpretedCode extends RuntimeCode {
                             int globNameIdx = bytecode[pc++] & 0xFF;
                             String globName = stringPool[globNameIdx];
                             sb.append(" r").append(rd).append(" = *").append(globName);
+                            break;
+                        case Opcodes.SLOWOP_RETRIEVE_BEGIN_SCALAR:
+                        case Opcodes.SLOWOP_RETRIEVE_BEGIN_ARRAY:
+                        case Opcodes.SLOWOP_RETRIEVE_BEGIN_HASH:
+                            // Format: [rd] [name_idx] [begin_id]
+                            rd = bytecode[pc++] & 0xFF;
+                            int varNameIdx = bytecode[pc++] & 0xFF;
+                            int beginId = bytecode[pc++] & 0xFF;
+                            String varName = stringPool[varNameIdx];
+                            sb.append(" r").append(rd).append(" = ").append(varName)
+                              .append(" (BEGIN_").append(beginId).append(")");
+                            break;
+                        case Opcodes.SLOWOP_LOCAL_SCALAR:
+                            // Format: [rd] [name_idx]
+                            rd = bytecode[pc++] & 0xFF;
+                            int localNameIdx = bytecode[pc++] & 0xFF;
+                            String localVarName = stringPool[localNameIdx];
+                            sb.append(" r").append(rd).append(" = local ").append(localVarName);
                             break;
                         default:
                             sb.append(" (operands not decoded)");
