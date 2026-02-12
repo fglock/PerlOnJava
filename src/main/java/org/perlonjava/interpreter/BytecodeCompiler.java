@@ -551,6 +551,16 @@ public class BytecodeCompiler implements Visitor {
                 // Note: CALL_SUB may return RuntimeControlFlowList
                 // The interpreter will handle control flow propagation
             }
+            case "join" -> {
+                // String join: rd = join(separator, list)
+                // left (rs1) = separator (empty string for interpolation)
+                // right (rs2) = list of elements
+
+                emit(Opcodes.JOIN);
+                emit(rd);
+                emit(rs1);
+                emit(rs2);
+            }
             default -> throw new RuntimeException("Unsupported operator: " + node.operator);
         }
 

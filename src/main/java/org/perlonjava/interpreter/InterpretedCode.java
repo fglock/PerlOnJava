@@ -330,6 +330,13 @@ public class InterpretedCode extends RuntimeCode {
                     sb.append("CALL_SUB r").append(rd).append(" = r").append(coderefReg)
                       .append("->(r").append(argsReg).append(", ctx=").append(ctx).append(")\n");
                     break;
+                case Opcodes.JOIN:
+                    rd = bytecode[pc++] & 0xFF;
+                    int separatorReg = bytecode[pc++] & 0xFF;
+                    int listReg = bytecode[pc++] & 0xFF;
+                    sb.append("JOIN r").append(rd).append(" = join(r").append(separatorReg)
+                      .append(", r").append(listReg).append(")\n");
+                    break;
                 case Opcodes.SLOW_OP: {
                     int slowOpId = bytecode[pc++] & 0xFF;
                     String opName = SlowOpcodeHandler.getSlowOpName(slowOpId);

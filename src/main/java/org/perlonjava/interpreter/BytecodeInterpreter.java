@@ -831,6 +831,28 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    // =================================================================
+                    // STRING OPERATIONS
+                    // =================================================================
+
+                    case Opcodes.JOIN: {
+                        // String join: rd = join(separator, list)
+                        int rd = bytecode[pc++] & 0xFF;
+                        int separatorReg = bytecode[pc++] & 0xFF;
+                        int listReg = bytecode[pc++] & 0xFF;
+
+                        RuntimeScalar separator = (RuntimeScalar) registers[separatorReg];
+                        RuntimeBase list = registers[listReg];
+
+                        // Call StringOperators.joinForInterpolation (doesn't warn on undef)
+                        registers[rd] = org.perlonjava.operators.StringOperators.joinForInterpolation(separator, list);
+                        break;
+                    }
+
+                    // =================================================================
+                    // SLOW OPERATIONS
+                    // =================================================================
+
                     case Opcodes.SLOW_OP: {
                         // Dispatch to slow operation handler
                         // Format: [SLOW_OP] [slow_op_id] [operands...]
