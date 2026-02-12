@@ -425,6 +425,18 @@ public class Opcodes {
     /** Set hash from list: hash_reg = RuntimeHash.createHash(list_reg) then copy elements */
     public static final byte HASH_SET_FROM_LIST = 96;
 
+    /** Store global code: GlobalVariable.getGlobalCodeRef().put(stringPool[nameIdx], codeRef) */
+    public static final byte STORE_GLOBAL_CODE = 97;
+
+    /** Create closure with captured variables: rd = createClosure(template, registers[rs1], registers[rs2], ...)
+     * Format: CREATE_CLOSURE rd template_const_idx num_captures reg1 reg2 ... */
+    public static final byte CREATE_CLOSURE = 98;
+
+    /** Set scalar value: ((RuntimeScalar)registers[rd]).set((RuntimeScalar)registers[rs])
+     * Format: SET_SCALAR rd rs
+     * Used to set the value in a persistent scalar without overwriting the reference */
+    public static final byte SET_SCALAR = 99;
+
     // =================================================================
     // Slow Operation IDs (0-255)
     // =================================================================
@@ -496,6 +508,24 @@ public class Opcodes {
 
     /** Slow op ID: rd = getGlobalIO(name) - load glob/filehandle from global variables */
     public static final int SLOWOP_LOAD_GLOB = 21;
+
+    /** Slow op ID: rd = Time.sleep(seconds) - sleep for specified seconds */
+    public static final int SLOWOP_SLEEP = 22;
+
+    /** Slow op ID: rd = deref_array(scalar_ref) - dereference array reference for multidimensional access */
+    public static final int SLOWOP_DEREF_ARRAY = 23;
+
+    /** Slow op ID: rd = PersistentVariable.retrieveBeginScalar(var_name, begin_id) - retrieve BEGIN scalar */
+    public static final int SLOWOP_RETRIEVE_BEGIN_SCALAR = 24;
+
+    /** Slow op ID: rd = PersistentVariable.retrieveBeginArray(var_name, begin_id) - retrieve BEGIN array */
+    public static final int SLOWOP_RETRIEVE_BEGIN_ARRAY = 25;
+
+    /** Slow op ID: rd = PersistentVariable.retrieveBeginHash(var_name, begin_id) - retrieve BEGIN hash */
+    public static final int SLOWOP_RETRIEVE_BEGIN_HASH = 26;
+
+    /** Slow op ID: rd = GlobalRuntimeScalar.makeLocal(var_name) - temporarily localize global variable */
+    public static final int SLOWOP_LOCAL_SCALAR = 27;
 
     // =================================================================
     // OPCODES 93-255: RESERVED FOR FUTURE FAST OPERATIONS

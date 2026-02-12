@@ -221,6 +221,60 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.STORE_GLOBAL_CODE: {
+                        // Store global code: GlobalVariable.globalCodeRefs.put(name, codeRef)
+                        int nameIdx = bytecode[pc++] & 0xFF;
+                        int codeReg = bytecode[pc++] & 0xFF;
+                        String name = code.stringPool[nameIdx];
+                        RuntimeScalar codeRef = (RuntimeScalar) registers[codeReg];
+                        // Store the code reference in the global namespace
+                        GlobalVariable.globalCodeRefs.put(name, codeRef);
+                        break;
+                    }
+
+                    case Opcodes.CREATE_CLOSURE: {
+                        // Create closure with captured variables
+                        // Format: CREATE_CLOSURE rd template_idx num_captures reg1 reg2 ...
+                        int rd = bytecode[pc++] & 0xFF;
+                        int templateIdx = bytecode[pc++] & 0xFF;
+                        int numCaptures = bytecode[pc++] & 0xFF;
+
+                        // Get the template InterpretedCode from constants
+                        InterpretedCode template = (InterpretedCode) code.constants[templateIdx];
+
+                        // Capture the current register values
+                        RuntimeBase[] capturedVars = new RuntimeBase[numCaptures];
+                        for (int i = 0; i < numCaptures; i++) {
+                            int captureReg = bytecode[pc++] & 0xFF;
+                            capturedVars[i] = registers[captureReg];
+                        }
+
+                        // Create a new InterpretedCode with the captured variables
+                        InterpretedCode closureCode = new InterpretedCode(
+                            template.bytecode,
+                            template.constants,
+                            template.stringPool,
+                            template.maxRegisters,
+                            capturedVars,  // The captured variables!
+                            template.sourceName,
+                            template.sourceLine,
+                            template.pcToTokenIndex
+                        );
+
+                        // Wrap in RuntimeScalar
+                        registers[rd] = new RuntimeScalar((RuntimeCode) closureCode);
+                        break;
+                    }
+
+                    case Opcodes.SET_SCALAR: {
+                        // Set scalar value: registers[rd].set(registers[rs])
+                        // Used to set the value in a persistent scalar without overwriting the reference
+                        int rd = bytecode[pc++] & 0xFF;
+                        int rs = bytecode[pc++] & 0xFF;
+                        ((RuntimeScalar) registers[rd]).set((RuntimeScalar) registers[rs]);
+                        break;
+                    }
+
                     // =================================================================
                     // ARITHMETIC OPERATORS
                     // =================================================================
@@ -309,6 +363,21 @@ public class BytecodeInterpreter {
                         registers[rd] = StringOperators.stringConcat(
                             (RuntimeScalar) registers[rs1],
                             (RuntimeScalar) registers[rs2]
+                        );
+                        break;
+                    }
+
+                    case Opcodes.REPEAT: {
+                        // String/list repetition: rd = rs1 x rs2
+                        int rd = bytecode[pc++] & 0xFF;
+                        int rs1 = bytecode[pc++] & 0xFF;
+                        int rs2 = bytecode[pc++] & 0xFF;
+                        // Call Operator.repeat(base, count, context)
+                        // Context: 1 = scalar context (for string repetition)
+                        registers[rd] = Operator.repeat(
+                            registers[rs1],
+                            (RuntimeScalar) registers[rs2],
+                            1  // scalar context
                         );
                         break;
                     }
@@ -408,6 +477,14 @@ public class BytecodeInterpreter {
                         int rd = bytecode[pc++] & 0xFF;
                         int arrayReg = bytecode[pc++] & 0xFF;
                         int indexReg = bytecode[pc++] & 0xFF;
+
+                        // Check type
+                        if (!(registers[arrayReg] instanceof RuntimeArray)) {
+                            throw new RuntimeException("ARRAY_GET: register " + arrayReg + " contains " +
+                                (registers[arrayReg] == null ? "null" : registers[arrayReg].getClass().getName()) +
+                                " instead of RuntimeArray");
+                        }
+
                         RuntimeArray arr = (RuntimeArray) registers[arrayReg];
                         RuntimeScalar idx = (RuntimeScalar) registers[indexReg];
                         // Uses RuntimeArray API directly
@@ -438,11 +515,24 @@ public class BytecodeInterpreter {
                     }
 
                     case Opcodes.ARRAY_SIZE: {
-                        // Array size: rd = scalar(@array)
+                        // Array size: rd = scalar(@array) or scalar(list)
                         int rd = bytecode[pc++] & 0xFF;
-                        int arrayReg = bytecode[pc++] & 0xFF;
-                        RuntimeArray arr = (RuntimeArray) registers[arrayReg];
-                        registers[rd] = new RuntimeScalar(arr.size());
+                        int operandReg = bytecode[pc++] & 0xFF;
+                        RuntimeBase operand = registers[operandReg];
+
+                        int size;
+                        if (operand instanceof RuntimeArray) {
+                            size = ((RuntimeArray) operand).size();
+                        } else if (operand instanceof RuntimeList) {
+                            size = ((RuntimeList) operand).size();
+                        } else if (operand instanceof RuntimeScalar) {
+                            // Scalar in array context - treat as 1-element list
+                            size = 1;
+                        } else {
+                            throw new RuntimeException("ARRAY_SIZE: register " + operandReg + " contains unexpected type: " +
+                                (operand == null ? "null" : operand.getClass().getName()));
+                        }
+                        registers[rd] = new RuntimeScalar(size);
                         break;
                     }
 
@@ -899,8 +989,15 @@ public class BytecodeInterpreter {
                         int startReg = bytecode[pc++] & 0xFF;
                         int endReg = bytecode[pc++] & 0xFF;
 
-                        RuntimeScalar start = (RuntimeScalar) registers[startReg];
-                        RuntimeScalar end = (RuntimeScalar) registers[endReg];
+                        RuntimeBase startBase = registers[startReg];
+                        RuntimeBase endBase = registers[endReg];
+
+                        // Handle null registers by creating undef scalars
+                        RuntimeScalar start = (startBase instanceof RuntimeScalar) ? (RuntimeScalar) startBase :
+                                             (startBase == null) ? new RuntimeScalar() : startBase.scalar();
+                        RuntimeScalar end = (endBase instanceof RuntimeScalar) ? (RuntimeScalar) endBase :
+                                           (endBase == null) ? new RuntimeScalar() : endBase.scalar();
+
                         PerlRange range = PerlRange.createRange(start, end);
                         registers[rd] = range;
                         break;
