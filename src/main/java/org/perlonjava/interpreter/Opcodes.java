@@ -370,6 +370,13 @@ public class Opcodes {
     public static final byte CREATE_LIST = 86;
 
     // =================================================================
+    // STRING OPERATIONS (88)
+    // =================================================================
+
+    /** Join list elements with separator: rd = join(rs_separator, rs_list) */
+    public static final byte JOIN = 88;
+
+    // =================================================================
     // SLOW OPERATIONS (87) - Single opcode for rarely-used operations
     // =================================================================
 
