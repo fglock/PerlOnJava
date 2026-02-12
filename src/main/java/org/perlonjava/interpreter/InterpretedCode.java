@@ -259,6 +259,14 @@ public class InterpretedCode extends RuntimeCode {
                     rd = bytecode[pc++] & 0xFF;
                     sb.append("POST_AUTODECREMENT r").append(rd).append("--\n");
                     break;
+                case Opcodes.DIE:
+                    rs = bytecode[pc++] & 0xFF;
+                    sb.append("DIE r").append(rs).append("\n");
+                    break;
+                case Opcodes.WARN:
+                    rs = bytecode[pc++] & 0xFF;
+                    sb.append("WARN r").append(rs).append("\n");
+                    break;
                 case Opcodes.EVAL_TRY: {
                     int catchOffsetHigh = bytecode[pc++] & 0xFF;
                     int catchOffsetLow = bytecode[pc++] & 0xFF;

@@ -629,6 +629,45 @@ public class BytecodeInterpreter {
                     }
 
                     // =================================================================
+                    // ERROR HANDLING
+                    // =================================================================
+
+                    case Opcodes.DIE: {
+                        // Die with message: die(rs)
+                        int dieRs = bytecode[pc++] & 0xFF;
+                        RuntimeBase message = registers[dieRs];
+
+                        // Get token index for this die location if available
+                        Integer tokenIndex = code.pcToTokenIndex != null
+                                ? code.pcToTokenIndex.get(pc - 2) // PC before we read register
+                                : null;
+
+                        // Call WarnDie.die() with proper parameters
+                        // die(RuntimeBase message, RuntimeScalar where, String fileName, int lineNumber)
+                        RuntimeScalar where = new RuntimeScalar(" at " + code.sourceName + " line " + code.sourceLine);
+                        WarnDie.die(message, where, code.sourceName, code.sourceLine);
+
+                        // Should never reach here (die throws exception)
+                        throw new RuntimeException("die() did not throw exception");
+                    }
+
+                    case Opcodes.WARN: {
+                        // Warn with message: warn(rs)
+                        int warnRs = bytecode[pc++] & 0xFF;
+                        RuntimeBase message = registers[warnRs];
+
+                        // Get token index for this warn location if available
+                        Integer tokenIndex = code.pcToTokenIndex != null
+                                ? code.pcToTokenIndex.get(pc - 2) // PC before we read register
+                                : null;
+
+                        // Call WarnDie.warn() with proper parameters
+                        RuntimeScalar where = new RuntimeScalar(" at " + code.sourceName + " line " + code.sourceLine);
+                        WarnDie.warn(message, where, code.sourceName, code.sourceLine);
+                        break;
+                    }
+
+                    // =================================================================
                     // EVAL BLOCK SUPPORT
                     // =================================================================
 
