@@ -283,6 +283,18 @@ public class InterpretedCode extends RuntimeCode {
                     rd = bytecode[pc++] & 0xFF;
                     sb.append("EVAL_CATCH r").append(rd).append("\n");
                     break;
+                case Opcodes.CREATE_LIST: {
+                    rd = bytecode[pc++] & 0xFF;
+                    int listCount = bytecode[pc++] & 0xFF;
+                    sb.append("CREATE_LIST r").append(rd).append(" = [");
+                    for (int i = 0; i < listCount; i++) {
+                        if (i > 0) sb.append(", ");
+                        int listRs = bytecode[pc++] & 0xFF;
+                        sb.append("r").append(listRs);
+                    }
+                    sb.append("]\n");
+                    break;
+                }
                 case Opcodes.CALL_SUB:
                     rd = bytecode[pc++] & 0xFF;
                     int coderefReg = bytecode[pc++] & 0xFF;

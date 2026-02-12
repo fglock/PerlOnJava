@@ -501,21 +501,22 @@ public class BytecodeCompiler implements Visitor {
                 emit(rs1);
                 emit(rs2);
             }
-            case "()" -> {
+            case "()", "->" -> {
                 // Apply operator: $coderef->(args) or &subname(args)
-                // left (rs1) = code reference (RuntimeScalar containing RuntimeCode)
-                // right (rs2) = arguments (should be ListNode)
+                // left (rs1) = code reference (RuntimeScalar containing RuntimeCode or SubroutineNode)
+                // right (rs2) = arguments (should be RuntimeList from ListNode)
 
-                // TODO: Convert arguments to RuntimeArray
-                // For now, assume simple case where right is already evaluated
-                // This is a simplified implementation - full implementation would need
-                // to build a RuntimeArray from the arguments
+                // Note: rs2 should contain a RuntimeList (from visiting the ListNode)
+                // We need to convert it to RuntimeArray for the CALL_SUB opcode
+
+                // For now, rs2 is a RuntimeList - we'll pass it directly and let
+                // BytecodeInterpreter convert it to RuntimeArray
 
                 // Emit CALL_SUB: rd = coderef.apply(args, context)
                 emit(Opcodes.CALL_SUB);
                 emit(rd);  // Result register
                 emit(rs1); // Code reference register
-                emit(rs2); // Arguments register (should be RuntimeArray)
+                emit(rs2); // Arguments register (RuntimeList to be converted to RuntimeArray)
                 emit(RuntimeContextType.SCALAR); // Context (TODO: detect from usage)
 
                 // Note: CALL_SUB may return RuntimeControlFlowList
@@ -573,6 +574,25 @@ public class BytecodeCompiler implements Visitor {
             } else {
                 throw new RuntimeException("Unsupported $ operand: " + node.operand.getClass().getSimpleName());
             }
+        } else if (op.equals("@")) {
+            // Array variable dereference: @x or @_
+            if (node.operand instanceof IdentifierNode) {
+                String varName = "@" + ((IdentifierNode) node.operand).name;
+
+                // Special case: @_ is register 1
+                if (varName.equals("@_")) {
+                    lastResultReg = 1; // @_ is always in register 1
+                    return;
+                }
+
+                // For now, only support @_ - other arrays require global variable support
+                throw new RuntimeException("Array variables other than @_ not yet supported: " + varName);
+            } else {
+                throw new RuntimeException("Unsupported @ operand: " + node.operand.getClass().getSimpleName());
+            }
+        } else if (op.equals("%")) {
+            // Hash variable dereference: %x
+            throw new RuntimeException("Hash variables not yet supported");
         } else if (op.equals("say") || op.equals("print")) {
             // say/print $x
             if (node.operand != null) {
@@ -1018,7 +1038,56 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(ListNode node) {
-        throw new UnsupportedOperationException("Lists not yet implemented");
+        // Handle ListNode - represents (expr1, expr2, ...) in Perl
+
+        // Fast path: empty list
+        if (node.elements.isEmpty()) {
+            // Return empty RuntimeList
+            int listReg = allocateRegister();
+            emit(Opcodes.CREATE_LIST);
+            emit(listReg);
+            emit(0); // count = 0
+            lastResultReg = listReg;
+            return;
+        }
+
+        // Fast path: single element
+        // In list context, returns a RuntimeList with one element
+        // In scalar context, returns the element itself (but we don't track context yet)
+        if (node.elements.size() == 1) {
+            // For now, always create a RuntimeList (LIST context behavior)
+            node.elements.get(0).accept(this);
+            int elemReg = lastResultReg;
+
+            int listReg = allocateRegister();
+            emit(Opcodes.CREATE_LIST);
+            emit(listReg);
+            emit(1); // count = 1
+            emit(elemReg);
+            lastResultReg = listReg;
+            return;
+        }
+
+        // General case: multiple elements
+        // Evaluate each element into a register
+        int[] elementRegs = new int[node.elements.size()];
+        for (int i = 0; i < node.elements.size(); i++) {
+            node.elements.get(i).accept(this);
+            elementRegs[i] = lastResultReg;
+        }
+
+        // Create RuntimeList with all elements
+        int listReg = allocateRegister();
+        emit(Opcodes.CREATE_LIST);
+        emit(listReg);
+        emit(node.elements.size()); // count
+
+        // Emit register numbers for each element
+        for (int elemReg : elementRegs) {
+            emit(elemReg);
+        }
+
+        lastResultReg = listReg;
     }
 
     // =========================================================================
