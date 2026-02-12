@@ -145,6 +145,24 @@ public class SlowOpcodeHandler {
             case Opcodes.SLOWOP_LOAD_GLOB:
                 return executeLoadGlob(bytecode, pc, registers, code);
 
+            case Opcodes.SLOWOP_SLEEP:
+                return executeSleep(bytecode, pc, registers);
+
+            case Opcodes.SLOWOP_DEREF_ARRAY:
+                return executeDerefArray(bytecode, pc, registers);
+
+            case Opcodes.SLOWOP_RETRIEVE_BEGIN_SCALAR:
+                return executeRetrieveBeginScalar(bytecode, pc, registers, code);
+
+            case Opcodes.SLOWOP_RETRIEVE_BEGIN_ARRAY:
+                return executeRetrieveBeginArray(bytecode, pc, registers, code);
+
+            case Opcodes.SLOWOP_RETRIEVE_BEGIN_HASH:
+                return executeRetrieveBeginHash(bytecode, pc, registers, code);
+
+            case Opcodes.SLOWOP_LOCAL_SCALAR:
+                return executeLocalScalar(bytecode, pc, registers, code);
+
             default:
                 throw new RuntimeException(
                     "Unknown slow operation ID: " + slowOpId +
@@ -181,6 +199,12 @@ public class SlowOpcodeHandler {
             case Opcodes.SLOWOP_EVAL_STRING -> "eval";
             case Opcodes.SLOWOP_SELECT -> "select";
             case Opcodes.SLOWOP_LOAD_GLOB -> "load_glob";
+            case Opcodes.SLOWOP_SLEEP -> "sleep";
+            case Opcodes.SLOWOP_DEREF_ARRAY -> "deref_array";
+            case Opcodes.SLOWOP_RETRIEVE_BEGIN_SCALAR -> "retrieve_begin_scalar";
+            case Opcodes.SLOWOP_RETRIEVE_BEGIN_ARRAY -> "retrieve_begin_array";
+            case Opcodes.SLOWOP_RETRIEVE_BEGIN_HASH -> "retrieve_begin_hash";
+            case Opcodes.SLOWOP_LOCAL_SCALAR -> "local_scalar";
             default -> "slowop_" + slowOpId;
         };
     }
@@ -557,6 +581,156 @@ public class SlowOpcodeHandler {
         RuntimeGlob glob = org.perlonjava.runtime.GlobalVariable.getGlobalIO(globName);
 
         registers[rd] = glob;
+        return pc;
+    }
+
+    /**
+     * Sleep for specified seconds.
+     * Format: [rd] [rs_seconds]
+     *
+     * @param bytecode  The bytecode array
+     * @param pc        The program counter
+     * @param registers The register file
+     * @return The new program counter
+     */
+    private static int executeSleep(
+            byte[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+
+        int rd = bytecode[pc++] & 0xFF;
+        int secondsReg = bytecode[pc++] & 0xFF;
+
+        // Convert to scalar (handles both RuntimeScalar and RuntimeList)
+        RuntimeBase secondsBase = registers[secondsReg];
+        RuntimeScalar seconds = secondsBase.scalar();
+
+        // Call Time.sleep()
+        RuntimeScalar result = org.perlonjava.operators.Time.sleep(seconds);
+
+        registers[rd] = result;
+        return pc;
+    }
+
+    /**
+     * Dereference array reference for multidimensional array access.
+     * Handles: $array[0][1] which is really $array[0]->[1]
+     *
+     * @param bytecode  The bytecode array
+     * @param pc        Program counter (points after slowOpId)
+     * @param registers Register array
+     * @return Updated program counter
+     */
+    private static int executeDerefArray(
+            byte[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+
+        int rd = bytecode[pc++] & 0xFF;
+        int scalarReg = bytecode[pc++] & 0xFF;
+
+        RuntimeBase scalarBase = registers[scalarReg];
+
+        // If it's already an array, use it directly
+        if (scalarBase instanceof RuntimeArray) {
+            registers[rd] = scalarBase;
+            return pc;
+        }
+
+        // Otherwise, dereference as array reference
+        RuntimeScalar scalar = scalarBase.scalar();
+
+        // Get the dereferenced array using Perl's array dereference semantics
+        RuntimeArray array = scalar.arrayDeref();
+
+        registers[rd] = array;
+        return pc;
+    }
+
+    /**
+     * SLOWOP_RETRIEVE_BEGIN_SCALAR: Retrieve persistent scalar from BEGIN block
+     * Format: [SLOWOP_RETRIEVE_BEGIN_SCALAR] [rd] [nameIdx] [begin_id]
+     * Effect: rd = PersistentVariable.retrieveBeginScalar(stringPool[nameIdx], begin_id)
+     */
+    private static int executeRetrieveBeginScalar(
+            byte[] bytecode,
+            int pc,
+            RuntimeBase[] registers,
+            InterpretedCode code) {
+
+        int rd = bytecode[pc++] & 0xFF;
+        int nameIdx = bytecode[pc++] & 0xFF;
+        int beginId = bytecode[pc++] & 0xFF;
+
+        String varName = code.stringPool[nameIdx];
+        RuntimeScalar result = PersistentVariable.retrieveBeginScalar(varName, beginId);
+
+        registers[rd] = result;
+        return pc;
+    }
+
+    /**
+     * SLOWOP_RETRIEVE_BEGIN_ARRAY: Retrieve persistent array from BEGIN block
+     * Format: [SLOWOP_RETRIEVE_BEGIN_ARRAY] [rd] [nameIdx] [begin_id]
+     * Effect: rd = PersistentVariable.retrieveBeginArray(stringPool[nameIdx], begin_id)
+     */
+    private static int executeRetrieveBeginArray(
+            byte[] bytecode,
+            int pc,
+            RuntimeBase[] registers,
+            InterpretedCode code) {
+
+        int rd = bytecode[pc++] & 0xFF;
+        int nameIdx = bytecode[pc++] & 0xFF;
+        int beginId = bytecode[pc++] & 0xFF;
+
+        String varName = code.stringPool[nameIdx];
+        RuntimeArray result = PersistentVariable.retrieveBeginArray(varName, beginId);
+
+        registers[rd] = result;
+        return pc;
+    }
+
+    /**
+     * SLOWOP_RETRIEVE_BEGIN_HASH: Retrieve persistent hash from BEGIN block
+     * Format: [SLOWOP_RETRIEVE_BEGIN_HASH] [rd] [nameIdx] [begin_id]
+     * Effect: rd = PersistentVariable.retrieveBeginHash(stringPool[nameIdx], begin_id)
+     */
+    private static int executeRetrieveBeginHash(
+            byte[] bytecode,
+            int pc,
+            RuntimeBase[] registers,
+            InterpretedCode code) {
+
+        int rd = bytecode[pc++] & 0xFF;
+        int nameIdx = bytecode[pc++] & 0xFF;
+        int beginId = bytecode[pc++] & 0xFF;
+
+        String varName = code.stringPool[nameIdx];
+        RuntimeHash result = PersistentVariable.retrieveBeginHash(varName, beginId);
+
+        registers[rd] = result;
+        return pc;
+    }
+
+    /**
+     * SLOWOP_LOCAL_SCALAR: Temporarily localize a global scalar variable
+     * Format: [SLOWOP_LOCAL_SCALAR] [rd] [nameIdx]
+     * Effect: rd = GlobalRuntimeScalar.makeLocal(stringPool[nameIdx])
+     */
+    private static int executeLocalScalar(
+            byte[] bytecode,
+            int pc,
+            RuntimeBase[] registers,
+            InterpretedCode code) {
+
+        int rd = bytecode[pc++] & 0xFF;
+        int nameIdx = bytecode[pc++] & 0xFF;
+
+        String varName = code.stringPool[nameIdx];
+        RuntimeScalar result = org.perlonjava.runtime.GlobalRuntimeScalar.makeLocal(varName);
+
+        registers[rd] = result;
         return pc;
     }
 
