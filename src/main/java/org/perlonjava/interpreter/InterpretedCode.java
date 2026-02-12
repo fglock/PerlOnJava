@@ -189,11 +189,40 @@ public class InterpretedCode extends RuntimeCode {
                     int src = bytecode[pc++] & 0xFF;
                     sb.append("MOVE r").append(dest).append(" = r").append(src).append("\n");
                     break;
-                case Opcodes.LOAD_INT:
+                case Opcodes.LOAD_CONST:
                     int rd = bytecode[pc++] & 0xFF;
+                    int constIdx = bytecode[pc++] & 0xFF;
+                    sb.append("LOAD_CONST r").append(rd).append(" = constants[").append(constIdx).append("]");
+                    if (constants != null && constIdx < constants.length) {
+                        sb.append(" (").append(constants[constIdx]).append(")");
+                    }
+                    sb.append("\n");
+                    break;
+                case Opcodes.LOAD_INT:
+                    rd = bytecode[pc++] & 0xFF;
                     int value = readInt(bytecode, pc);
                     pc += 4;
                     sb.append("LOAD_INT r").append(rd).append(" = ").append(value).append("\n");
+                    break;
+                case Opcodes.LOAD_STRING:
+                    rd = bytecode[pc++] & 0xFF;
+                    int strIdx = bytecode[pc++] & 0xFF;
+                    sb.append("LOAD_STRING r").append(rd).append(" = \"");
+                    if (stringPool != null && strIdx < stringPool.length) {
+                        String str = stringPool[strIdx];
+                        // Escape special characters for readability
+                        str = str.replace("\\", "\\\\")
+                                 .replace("\n", "\\n")
+                                 .replace("\r", "\\r")
+                                 .replace("\t", "\\t")
+                                 .replace("\"", "\\\"");
+                        sb.append(str);
+                    }
+                    sb.append("\"\n");
+                    break;
+                case Opcodes.LOAD_UNDEF:
+                    rd = bytecode[pc++] & 0xFF;
+                    sb.append("LOAD_UNDEF r").append(rd).append("\n");
                     break;
                 case Opcodes.LOAD_GLOBAL_SCALAR:
                     rd = bytecode[pc++] & 0xFF;
@@ -259,6 +288,33 @@ public class InterpretedCode extends RuntimeCode {
                     rd = bytecode[pc++] & 0xFF;
                     sb.append("POST_AUTODECREMENT r").append(rd).append("--\n");
                     break;
+                case Opcodes.PRINT: {
+                    int contentReg = bytecode[pc++] & 0xFF;
+                    int filehandleReg = bytecode[pc++] & 0xFF;
+                    sb.append("PRINT r").append(contentReg).append(", fh=r").append(filehandleReg).append("\n");
+                    break;
+                }
+                case Opcodes.SAY: {
+                    int contentReg = bytecode[pc++] & 0xFF;
+                    int filehandleReg = bytecode[pc++] & 0xFF;
+                    sb.append("SAY r").append(contentReg).append(", fh=r").append(filehandleReg).append("\n");
+                    break;
+                }
+                case Opcodes.CREATE_REF:
+                    rd = bytecode[pc++] & 0xFF;
+                    rs = bytecode[pc++] & 0xFF;
+                    sb.append("CREATE_REF r").append(rd).append(" = \\r").append(rs).append("\n");
+                    break;
+                case Opcodes.DEREF:
+                    rd = bytecode[pc++] & 0xFF;
+                    rs = bytecode[pc++] & 0xFF;
+                    sb.append("DEREF r").append(rd).append(" = ${r").append(rs).append("}\n");
+                    break;
+                case Opcodes.GET_TYPE:
+                    rd = bytecode[pc++] & 0xFF;
+                    rs = bytecode[pc++] & 0xFF;
+                    sb.append("GET_TYPE r").append(rd).append(" = type(r").append(rs).append(")\n");
+                    break;
                 case Opcodes.DIE:
                     rs = bytecode[pc++] & 0xFF;
                     sb.append("DIE r").append(rs).append("\n");
@@ -303,13 +359,51 @@ public class InterpretedCode extends RuntimeCode {
                     sb.append("CALL_SUB r").append(rd).append(" = r").append(coderefReg)
                       .append("->(r").append(argsReg).append(", ctx=").append(ctx).append(")\n");
                     break;
-                case Opcodes.SLOW_OP:
-                    int slowOpId = bytecode[pc++] & 0xFF;
-                    sb.append("SLOW_OP ").append(SlowOpcodeHandler.getSlowOpName(slowOpId))
-                      .append(" (id=").append(slowOpId).append(")\n");
-                    // Note: We can't easily decode operands without duplicating
-                    // SlowOpcodeHandler logic, so just show opcode name and ID
+                case Opcodes.JOIN:
+                    rd = bytecode[pc++] & 0xFF;
+                    int separatorReg = bytecode[pc++] & 0xFF;
+                    int listReg = bytecode[pc++] & 0xFF;
+                    sb.append("JOIN r").append(rd).append(" = join(r").append(separatorReg)
+                      .append(", r").append(listReg).append(")\n");
                     break;
+                case Opcodes.SELECT:
+                    rd = bytecode[pc++] & 0xFF;
+                    listReg = bytecode[pc++] & 0xFF;
+                    sb.append("SELECT r").append(rd).append(" = select(r").append(listReg).append(")\n");
+                    break;
+                case Opcodes.SLOW_OP: {
+                    int slowOpId = bytecode[pc++] & 0xFF;
+                    String opName = SlowOpcodeHandler.getSlowOpName(slowOpId);
+                    sb.append("SLOW_OP ").append(opName).append(" (id=").append(slowOpId).append(")");
+
+                    // Decode operands for known SLOW_OPs
+                    switch (slowOpId) {
+                        case Opcodes.SLOWOP_EVAL_STRING:
+                            // Format: [rd] [rs_string]
+                            rd = bytecode[pc++] & 0xFF;
+                            rs = bytecode[pc++] & 0xFF;
+                            sb.append(" r").append(rd).append(" = eval(r").append(rs).append(")");
+                            break;
+                        case Opcodes.SLOWOP_SELECT:
+                            // Format: [rd] [rs_list]
+                            rd = bytecode[pc++] & 0xFF;
+                            rs = bytecode[pc++] & 0xFF;
+                            sb.append(" r").append(rd).append(" = select(r").append(rs).append(")");
+                            break;
+                        case Opcodes.SLOWOP_LOAD_GLOB:
+                            // Format: [rd] [name_idx]
+                            rd = bytecode[pc++] & 0xFF;
+                            int globNameIdx = bytecode[pc++] & 0xFF;
+                            String globName = stringPool[globNameIdx];
+                            sb.append(" r").append(rd).append(" = *").append(globName);
+                            break;
+                        default:
+                            sb.append(" (operands not decoded)");
+                            break;
+                    }
+                    sb.append("\n");
+                    break;
+                }
                 default:
                     sb.append("UNKNOWN(").append(opcode & 0xFF).append(")\n");
                     break;

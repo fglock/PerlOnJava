@@ -559,18 +559,52 @@ public class BytecodeInterpreter {
                     // =================================================================
 
                     case Opcodes.PRINT: {
-                        // Print to STDOUT
-                        int rs = bytecode[pc++] & 0xFF;
-                        RuntimeScalar val = (RuntimeScalar) registers[rs];
-                        System.out.print(val.toString());
+                        // Print to filehandle
+                        // Format: [PRINT] [rs_content] [rs_filehandle]
+                        int contentReg = bytecode[pc++] & 0xFF;
+                        int filehandleReg = bytecode[pc++] & 0xFF;
+
+                        Object val = registers[contentReg];
+                        RuntimeScalar fh = (RuntimeScalar) registers[filehandleReg];
+
+                        RuntimeList list;
+                        if (val instanceof RuntimeList) {
+                            list = (RuntimeList) val;
+                        } else if (val instanceof RuntimeScalar) {
+                            // Convert scalar to single-element list
+                            list = new RuntimeList();
+                            list.add((RuntimeScalar) val);
+                        } else {
+                            list = new RuntimeList();
+                        }
+
+                        // Call IOOperator.print()
+                        org.perlonjava.operators.IOOperator.print(list, fh);
                         break;
                     }
 
                     case Opcodes.SAY: {
-                        // Say to STDOUT (print with newline)
-                        int rs = bytecode[pc++] & 0xFF;
-                        RuntimeScalar val = (RuntimeScalar) registers[rs];
-                        System.out.println(val.toString());
+                        // Say to filehandle
+                        // Format: [SAY] [rs_content] [rs_filehandle]
+                        int contentReg = bytecode[pc++] & 0xFF;
+                        int filehandleReg = bytecode[pc++] & 0xFF;
+
+                        Object val = registers[contentReg];
+                        RuntimeScalar fh = (RuntimeScalar) registers[filehandleReg];
+
+                        RuntimeList list;
+                        if (val instanceof RuntimeList) {
+                            list = (RuntimeList) val;
+                        } else if (val instanceof RuntimeScalar) {
+                            // Convert scalar to single-element list
+                            list = new RuntimeList();
+                            list.add((RuntimeScalar) val);
+                        } else {
+                            list = new RuntimeList();
+                        }
+
+                        // Call IOOperator.say()
+                        org.perlonjava.operators.IOOperator.say(list, fh);
                         break;
                     }
 
@@ -680,6 +714,39 @@ public class BytecodeInterpreter {
                     }
 
                     // =================================================================
+                    // REFERENCE OPERATIONS
+                    // =================================================================
+
+                    case Opcodes.CREATE_REF: {
+                        // Create reference: rd = rs.createReference()
+                        int rd = bytecode[pc++] & 0xFF;
+                        int rs = bytecode[pc++] & 0xFF;
+                        RuntimeBase value = registers[rs];
+                        registers[rd] = value.createReference();
+                        break;
+                    }
+
+                    case Opcodes.DEREF: {
+                        // Dereference: rd = rs (dereferencing depends on context)
+                        // For now, just copy the reference - proper dereferencing
+                        // is context-dependent and handled by specific operators
+                        int rd = bytecode[pc++] & 0xFF;
+                        int rs = bytecode[pc++] & 0xFF;
+                        registers[rd] = registers[rs];
+                        break;
+                    }
+
+                    case Opcodes.GET_TYPE: {
+                        // Get type: rd = new RuntimeScalar(rs.type)
+                        int rd = bytecode[pc++] & 0xFF;
+                        int rs = bytecode[pc++] & 0xFF;
+                        RuntimeScalar value = (RuntimeScalar) registers[rs];
+                        // RuntimeScalar.type is an int constant from RuntimeScalarType
+                        registers[rd] = new RuntimeScalar(value.type);
+                        break;
+                    }
+
+                    // =================================================================
                     // EVAL BLOCK SUPPORT
                     // =================================================================
 
@@ -763,6 +830,39 @@ public class BytecodeInterpreter {
                         }
                         break;
                     }
+
+                    // =================================================================
+                    // STRING OPERATIONS
+                    // =================================================================
+
+                    case Opcodes.JOIN: {
+                        // String join: rd = join(separator, list)
+                        int rd = bytecode[pc++] & 0xFF;
+                        int separatorReg = bytecode[pc++] & 0xFF;
+                        int listReg = bytecode[pc++] & 0xFF;
+
+                        RuntimeScalar separator = (RuntimeScalar) registers[separatorReg];
+                        RuntimeBase list = registers[listReg];
+
+                        // Call StringOperators.joinForInterpolation (doesn't warn on undef)
+                        registers[rd] = org.perlonjava.operators.StringOperators.joinForInterpolation(separator, list);
+                        break;
+                    }
+
+                    case Opcodes.SELECT: {
+                        // Select default output filehandle: rd = IOOperator.select(list, SCALAR)
+                        int rd = bytecode[pc++] & 0xFF;
+                        int listReg = bytecode[pc++] & 0xFF;
+
+                        RuntimeList list = (RuntimeList) registers[listReg];
+                        RuntimeScalar result = org.perlonjava.operators.IOOperator.select(list, RuntimeContextType.SCALAR);
+                        registers[rd] = result;
+                        break;
+                    }
+
+                    // =================================================================
+                    // SLOW OPERATIONS
+                    // =================================================================
 
                     case Opcodes.SLOW_OP: {
                         // Dispatch to slow operation handler
