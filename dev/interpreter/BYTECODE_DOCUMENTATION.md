@@ -255,6 +255,61 @@ Superinstructions combine common opcode sequences into single operations, elimin
 | 81 | PRE_AUTODECREMENT | rd | Pre-decrement: --rd (calls RuntimeScalar.preAutoDecrement) |
 | 82 | POST_AUTODECREMENT | rd | Post-decrement: rd-- (calls RuntimeScalar.postAutoDecrement) |
 
+### Eval Block Support (83-85)
+
+Eval blocks (`eval { ... }`) require exception handling support. These opcodes implement try-catch semantics:
+
+| Opcode | Mnemonic | Format | Description |
+|--------|----------|--------|-------------|
+| 83 | EVAL_TRY | catch_offset_high, catch_offset_low | Mark start of eval block. Sets up exception handler at catch_offset. Clears $@ = "". |
+| 84 | EVAL_CATCH | rd | Exception handler. Called when exception occurs. Stores undef in rd. $@ is already set by WarnDie.catchEval(). |
+| 85 | EVAL_END | - | End of successful eval block. Clears $@ = "". Pops catch handler from stack. |
+
+**Bytecode Structure:**
+```
+EVAL_TRY catch_offset        # Push catch handler, clear $@
+  ... eval block code ...
+  EVAL_END                   # Clear $@ on success, pop handler
+  GOTO end_offset            # Skip catch block
+LABEL catch:
+  EVAL_CATCH rd              # Set rd = undef ($ already set)
+LABEL end:
+```
+
+**Implementation Notes:**
+- EVAL_TRY pushes catch PC onto eval stack
+- If exception occurs anywhere in eval block, outer catch handler checks eval stack
+- Calls WarnDie.catchEval() to set $@ and handle __DIE__ signal
+- Jumps to catch PC and executes EVAL_CATCH
+- EVAL_END pops catch handler from stack (normal completion)
+
+**Example:**
+```perl
+my $result = eval {
+    die "error";
+    42;
+};
+# $result is undef, $@ contains "error"
+```
+
+Generates:
+```
+EVAL_TRY 15              # catch at PC 15
+  DIE "error"
+  LOAD_INT r5 = 42
+  MOVE r6 = r5
+  EVAL_END
+  GOTO 18                # skip catch
+LABEL 15:
+  EVAL_CATCH r6
+LABEL 18:
+  MOVE r7 = r6           # $result = r6
+```
+
+## Opcodes 86-255
+
+Reserved for future expansion.
+
 **Implementation Status:** ✅ All implemented and emitted
 
 **Performance Impact:** Superinstructions eliminate redundant MOVE operations and provide ~5-10% speedup for common patterns.
@@ -423,13 +478,14 @@ automatic CI test suite.
 - ✅ Core opcodes (0-26) fully implemented
 - ✅ CALL_SUB (57) fully implemented
 - ✅ Superinstructions (75-82) fully implemented
+- ✅ Eval block support (83-85) fully implemented
 - ⚠️ Array/hash operations defined but not emitted
 - ⚠️ Some operators defined but not yet used
 
 **Next Steps:**
 1. Emit array/hash opcodes in BytecodeCompiler
 2. Implement CALL_METHOD for method dispatch
-3. Add more operators (DIE, WARN, etc.)
+3. Add more operators (remaining DIE, WARN if not using eval)
 4. Optimize common patterns
 
-The bytecode system is **production-ready** for basic Perl operations and closures!
+The bytecode system is **production-ready** for basic Perl operations, closures, and eval blocks!

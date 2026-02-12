@@ -328,5 +328,32 @@ public class Opcodes {
     /** Post-decrement: rd-- (calls RuntimeScalar.postAutoDecrement) */
     public static final byte POST_AUTODECREMENT = 82;
 
+    // =================================================================
+    // EVAL BLOCK SUPPORT (83-85) - Exception handling for eval blocks
+    // =================================================================
+
+    /**
+     * EVAL_TRY: Mark start of eval block with exception handling
+     * Format: [EVAL_TRY] [catch_offset_high] [catch_offset_low]
+     * Effect: Sets up exception handler. If exception occurs, jump to catch_offset.
+     *         At start: Set $@ = ""
+     */
+    public static final byte EVAL_TRY = 83;
+
+    /**
+     * EVAL_CATCH: Mark start of catch block
+     * Format: [EVAL_CATCH] [rd]
+     * Effect: Exception object is captured, WarnDie.catchEval() is called to set $@,
+     *         and undef is stored in rd as the eval result.
+     */
+    public static final byte EVAL_CATCH = 84;
+
+    /**
+     * EVAL_END: Mark end of successful eval block
+     * Format: [EVAL_END]
+     * Effect: Clear $@ = "" (nested evals may have set it)
+     */
+    public static final byte EVAL_END = 85;
+
     private Opcodes() {} // Utility class - no instantiation
 }

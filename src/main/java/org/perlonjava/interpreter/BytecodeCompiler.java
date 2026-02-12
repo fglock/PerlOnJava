@@ -26,6 +26,9 @@ public class BytecodeCompiler implements Visitor {
     private final List<String> stringPool = new ArrayList<>();
     private final Map<String, Integer> registerMap = new HashMap<>();
 
+    // Token index tracking for error reporting
+    private final Map<Integer, Integer> pcToTokenIndex = new HashMap<>();
+
     // Register allocation
     private int nextRegister = 3;  // 0=this, 1=@_, 2=wantarray
 
@@ -91,7 +94,8 @@ public class BytecodeCompiler implements Visitor {
             nextRegister,  // maxRegisters
             capturedVars,  // NOW POPULATED!
             sourceName,
-            sourceLine
+            sourceLine,
+            pcToTokenIndex  // Pass token index map for error reporting
         );
     }
 
@@ -677,6 +681,16 @@ public class BytecodeCompiler implements Visitor {
         bytecode.write(opcode);
     }
 
+    /**
+     * Emit opcode and track tokenIndex for error reporting.
+     * Use this for opcodes that may throw exceptions (DIE, method calls, etc.)
+     */
+    private void emitWithToken(byte opcode, int tokenIndex) {
+        int pc = bytecode.size();
+        pcToTokenIndex.put(pc, tokenIndex);
+        bytecode.write(opcode);
+    }
+
     private void emit(int value) {
         bytecode.write(value & 0xFF);
     }
@@ -704,7 +718,87 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(SubroutineNode node) {
-        throw new UnsupportedOperationException("Subroutines not yet implemented");
+        // For now, only handle anonymous subroutines used as eval blocks
+        if (node.useTryCatch) {
+            // This is an eval block: eval { ... }
+            visitEvalBlock(node);
+        } else {
+            // Regular named or anonymous subroutine - not yet supported
+            throw new UnsupportedOperationException("Named subroutines not yet implemented in interpreter");
+        }
+    }
+
+    /**
+     * Visit an eval block: eval { ... }
+     *
+     * Generates:
+     *   EVAL_TRY catch_offset    # Set up exception handler, clear $@
+     *   ... block bytecode ...
+     *   EVAL_END                 # Clear $@ on success
+     *   GOTO end
+     *   LABEL catch:
+     *   EVAL_CATCH rd            # Set $@, store undef in rd
+     *   LABEL end:
+     *
+     * The result is stored in lastResultReg.
+     */
+    private void visitEvalBlock(SubroutineNode node) {
+        int resultReg = allocateRegister();
+
+        // Emit EVAL_TRY with placeholder for catch offset
+        int tryPc = bytecode.size();
+        emitWithToken(Opcodes.EVAL_TRY, node.getIndex());
+        int catchOffsetPos = bytecode.size();
+        emit(0); // High byte placeholder
+        emit(0); // Low byte placeholder
+
+        // Compile the eval block body
+        node.block.accept(this);
+
+        // Store result from block
+        if (lastResultReg >= 0) {
+            emit(Opcodes.MOVE);
+            emit(resultReg);
+            emit(lastResultReg);
+        }
+
+        // Emit EVAL_END (clears $@)
+        emit(Opcodes.EVAL_END);
+
+        // Jump over catch block
+        int gotoEndPos = bytecode.size();
+        emit(Opcodes.GOTO);
+        int gotoEndOffsetPos = bytecode.size();
+        emit(0); // High byte placeholder
+        emit(0); // Low byte placeholder
+
+        // CATCH block starts here
+        int catchPc = bytecode.size();
+
+        // Patch EVAL_TRY with catch offset
+        int catchOffset = catchPc - tryPc;
+        byte[] bc = bytecode.toByteArray();
+        bc[catchOffsetPos] = (byte) ((catchOffset >> 8) & 0xFF);
+        bc[catchOffsetPos + 1] = (byte) (catchOffset & 0xFF);
+        bytecode.reset();
+        bytecode.write(bc, 0, bc.length);
+
+        // Emit EVAL_CATCH (sets $@, stores undef)
+        emit(Opcodes.EVAL_CATCH);
+        emit(resultReg);
+
+        // END label (after catch)
+        int endPc = bytecode.size();
+
+        // Patch GOTO to end
+        int gotoEndOffset = endPc - gotoEndPos;
+        bc = bytecode.toByteArray();
+        bc[gotoEndOffsetPos] = (byte) ((gotoEndOffset >> 8) & 0xFF);
+        bc[gotoEndOffsetPos + 1] = (byte) (gotoEndOffset & 0xFF);
+        bytecode.reset();
+        bytecode.write(bc, 0, bc.length);
+
+        lastResultReg = resultReg;
     }
 
     @Override

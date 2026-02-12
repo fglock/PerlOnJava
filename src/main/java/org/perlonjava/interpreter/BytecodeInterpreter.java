@@ -54,6 +54,11 @@ public class BytecodeInterpreter {
         int pc = 0;  // Program counter
         byte[] bytecode = code.bytecode;
 
+        // Eval block exception handling: stack of catch PCs
+        // When EVAL_TRY is executed, push the catch PC onto this stack
+        // When exception occurs, pop from stack and jump to catch PC
+        java.util.Stack<Integer> evalCatchStack = new java.util.Stack<>();
+
         try {
             // Main dispatch loop - JVM JIT optimizes switch to tableswitch (O(1) jump)
             while (pc < bytecode.length) {
@@ -623,6 +628,55 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    // =================================================================
+                    // EVAL BLOCK SUPPORT
+                    // =================================================================
+
+                    case Opcodes.EVAL_TRY: {
+                        // Start of eval block with exception handling
+                        // Format: [EVAL_TRY] [catch_offset_high] [catch_offset_low]
+
+                        int catchOffsetHigh = bytecode[pc++] & 0xFF;
+                        int catchOffsetLow = bytecode[pc++] & 0xFF;
+                        int catchOffset = (catchOffsetHigh << 8) | catchOffsetLow;
+                        int tryStartPc = pc - 3; // PC where EVAL_TRY opcode is
+                        int catchPc = tryStartPc + catchOffset;
+
+                        // Push catch PC onto eval stack
+                        evalCatchStack.push(catchPc);
+
+                        // Clear $@ at start of eval block
+                        GlobalVariable.setGlobalVariable("main::@", "");
+
+                        // Continue execution - if exception occurs, outer catch handler
+                        // will check evalCatchStack and jump to catchPc
+                        break;
+                    }
+
+                    case Opcodes.EVAL_END: {
+                        // End of successful eval block - clear $@ and pop catch stack
+                        GlobalVariable.setGlobalVariable("main::@", "");
+
+                        // Pop the catch PC from eval stack (we didn't need it)
+                        if (!evalCatchStack.isEmpty()) {
+                            evalCatchStack.pop();
+                        }
+                        break;
+                    }
+
+                    case Opcodes.EVAL_CATCH: {
+                        // Exception handler for eval block
+                        // Format: [EVAL_CATCH] [rd]
+                        // This is only reached when an exception is caught
+
+                        int rd = bytecode[pc++] & 0xFF;
+
+                        // WarnDie.catchEval() should have already been called to set $@
+                        // Just store undef as the eval result
+                        registers[rd] = RuntimeScalarCache.scalarUndef;
+                        break;
+                    }
+
                     default:
                         throw new RuntimeException(
                             "Unknown opcode: " + (opcode & 0xFF) +
@@ -635,8 +689,80 @@ public class BytecodeInterpreter {
             // Fell through end of bytecode - return empty list
             return new RuntimeList();
 
-        } catch (Exception e) {
-            // Add context to exceptions
+        } catch (Throwable e) {
+            // Check if we're inside an eval block
+            if (!evalCatchStack.isEmpty()) {
+                // Inside eval block - catch the exception
+                int catchPc = evalCatchStack.pop();
+
+                // Call WarnDie.catchEval() to set $@
+                WarnDie.catchEval(e);
+
+                // Jump to catch block and continue execution
+                pc = catchPc;
+
+                // Continue executing from catch block
+                try {
+                    while (pc < bytecode.length) {
+                        byte opcode = bytecode[pc++];
+
+                        // We're now at EVAL_CATCH opcode - execute it and continue
+                        if (opcode == Opcodes.EVAL_CATCH) {
+                            int rd = bytecode[pc++] & 0xFF;
+                            registers[rd] = RuntimeScalarCache.scalarUndef;
+                            // Continue to next opcode (usually GOTO to end)
+                            continue;
+                        }
+
+                        // Execute remaining opcodes normally
+                        // This is a simplified loop - in a real implementation,
+                        // we'd need to handle all opcodes here too
+                        // For now, just handle RETURN and GOTO
+                        switch (opcode) {
+                            case Opcodes.RETURN: {
+                                int retReg = bytecode[pc++] & 0xFF;
+                                RuntimeBase retVal = registers[retReg];
+                                if (retVal == null) {
+                                    return new RuntimeList();
+                                } else if (retVal instanceof RuntimeList) {
+                                    return (RuntimeList) retVal;
+                                } else if (retVal instanceof RuntimeScalar) {
+                                    return new RuntimeList(retVal);
+                                } else {
+                                    return new RuntimeList(retVal);
+                                }
+                            }
+                            case Opcodes.GOTO: {
+                                int offsetHigh = bytecode[pc++] & 0xFF;
+                                int offsetLow = bytecode[pc++] & 0xFF;
+                                int offset = (offsetHigh << 8) | offsetLow;
+                                pc = pc - 3 + offset; // Jump relative to GOTO opcode
+                                break;
+                            }
+                            default:
+                                // Unexpected opcode after EVAL_CATCH
+                                throw new RuntimeException(
+                                    "Unexpected opcode after EVAL_CATCH: " + (opcode & 0xFF)
+                                );
+                        }
+
+                        // If we got here, we've executed the catch block
+                        // Return empty list (eval failed)
+                        return new RuntimeList();
+                    }
+
+                    return new RuntimeList();
+                } catch (Exception catchE) {
+                    // Exception in catch block - propagate
+                    throw new RuntimeException(
+                        "Interpreter error in eval catch block in " + code.sourceName + ":" + code.sourceLine +
+                        " at pc=" + pc + ": " + catchE.getMessage(),
+                        catchE
+                    );
+                }
+            }
+
+            // Not in eval block - propagate exception
             throw new RuntimeException(
                 "Interpreter error in " + code.sourceName + ":" + code.sourceLine +
                 " at pc=" + pc + ": " + e.getMessage(),
