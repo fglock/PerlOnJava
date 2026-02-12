@@ -456,6 +456,9 @@ public class Opcodes {
     /** Slow op ID: rd = eval(rs_string) - dynamic code evaluation */
     public static final int SLOWOP_EVAL_STRING = 19;
 
+    /** Slow op ID: rd = select(rs_list) - set/get default output filehandle */
+    public static final int SLOWOP_SELECT = 20;
+
     // =================================================================
     // OPCODES 88-255: RESERVED FOR FUTURE FAST OPERATIONS
     // =================================================================

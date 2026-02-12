@@ -139,6 +139,9 @@ public class SlowOpcodeHandler {
             case Opcodes.SLOWOP_EVAL_STRING:
                 return executeEvalString(bytecode, pc, registers, code);
 
+            case Opcodes.SLOWOP_SELECT:
+                return executeSelect(bytecode, pc, registers);
+
             default:
                 throw new RuntimeException(
                     "Unknown slow operation ID: " + slowOpId +
@@ -173,6 +176,7 @@ public class SlowOpcodeHandler {
             case Opcodes.SLOWOP_SHMWRITE -> "shmwrite";
             case Opcodes.SLOWOP_SYSCALL -> "syscall";
             case Opcodes.SLOWOP_EVAL_STRING -> "eval";
+            case Opcodes.SLOWOP_SELECT -> "select";
             default -> "slowop_" + slowOpId;
         };
     }
@@ -498,6 +502,31 @@ public class SlowOpcodeHandler {
             registers,      // Current registers for variable access
             code.sourceName,
             code.sourceLine
+        );
+
+        registers[rd] = result;
+        return pc;
+    }
+
+    /**
+     * SLOW_SELECT: rd = select(listReg)
+     * Format: [SLOW_SELECT] [rd] [rs_list]
+     * Effect: Sets or gets the default output filehandle
+     */
+    private static int executeSelect(
+            byte[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+
+        int rd = bytecode[pc++] & 0xFF;
+        int listReg = bytecode[pc++] & 0xFF;
+
+        RuntimeList list = (RuntimeList) registers[listReg];
+
+        // Call IOOperator.select() which handles the logic
+        RuntimeScalar result = org.perlonjava.operators.IOOperator.select(
+            list,
+            org.perlonjava.runtime.RuntimeContextType.SCALAR
         );
 
         registers[rd] = result;
