@@ -189,11 +189,40 @@ public class InterpretedCode extends RuntimeCode {
                     int src = bytecode[pc++] & 0xFF;
                     sb.append("MOVE r").append(dest).append(" = r").append(src).append("\n");
                     break;
-                case Opcodes.LOAD_INT:
+                case Opcodes.LOAD_CONST:
                     int rd = bytecode[pc++] & 0xFF;
+                    int constIdx = bytecode[pc++] & 0xFF;
+                    sb.append("LOAD_CONST r").append(rd).append(" = constants[").append(constIdx).append("]");
+                    if (constants != null && constIdx < constants.length) {
+                        sb.append(" (").append(constants[constIdx]).append(")");
+                    }
+                    sb.append("\n");
+                    break;
+                case Opcodes.LOAD_INT:
+                    rd = bytecode[pc++] & 0xFF;
                     int value = readInt(bytecode, pc);
                     pc += 4;
                     sb.append("LOAD_INT r").append(rd).append(" = ").append(value).append("\n");
+                    break;
+                case Opcodes.LOAD_STRING:
+                    rd = bytecode[pc++] & 0xFF;
+                    int strIdx = bytecode[pc++] & 0xFF;
+                    sb.append("LOAD_STRING r").append(rd).append(" = \"");
+                    if (stringPool != null && strIdx < stringPool.length) {
+                        String str = stringPool[strIdx];
+                        // Escape special characters for readability
+                        str = str.replace("\\", "\\\\")
+                                 .replace("\n", "\\n")
+                                 .replace("\r", "\\r")
+                                 .replace("\t", "\\t")
+                                 .replace("\"", "\\\"");
+                        sb.append(str);
+                    }
+                    sb.append("\"\n");
+                    break;
+                case Opcodes.LOAD_UNDEF:
+                    rd = bytecode[pc++] & 0xFF;
+                    sb.append("LOAD_UNDEF r").append(rd).append("\n");
                     break;
                 case Opcodes.LOAD_GLOBAL_SCALAR:
                     rd = bytecode[pc++] & 0xFF;
