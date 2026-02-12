@@ -849,6 +849,17 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.SELECT: {
+                        // Select default output filehandle: rd = IOOperator.select(list, SCALAR)
+                        int rd = bytecode[pc++] & 0xFF;
+                        int listReg = bytecode[pc++] & 0xFF;
+
+                        RuntimeList list = (RuntimeList) registers[listReg];
+                        RuntimeScalar result = org.perlonjava.operators.IOOperator.select(list, RuntimeContextType.SCALAR);
+                        registers[rd] = result;
+                        break;
+                    }
+
                     // =================================================================
                     // SLOW OPERATIONS
                     // =================================================================
