@@ -87,6 +87,16 @@ public class InterpretedCode extends RuntimeCode {
     }
 
     /**
+     * Override RuntimeCode.defined() to return true for InterpretedCode.
+     * InterpretedCode doesn't use methodHandle, so the parent defined() check fails.
+     * But InterpretedCode instances are always "defined" - they contain executable bytecode.
+     */
+    @Override
+    public boolean defined() {
+        return true;
+    }
+
+    /**
      * Create an InterpretedCode with captured variables (for closures).
      *
      * @param capturedVars The variables to capture from outer scope
@@ -194,7 +204,15 @@ public class InterpretedCode extends RuntimeCode {
                     int constIdx = bytecode[pc++] & 0xFF;
                     sb.append("LOAD_CONST r").append(rd).append(" = constants[").append(constIdx).append("]");
                     if (constants != null && constIdx < constants.length) {
-                        sb.append(" (").append(constants[constIdx]).append(")");
+                        Object obj = constants[constIdx];
+                        sb.append(" (");
+                        if (obj instanceof RuntimeScalar) {
+                            RuntimeScalar scalar = (RuntimeScalar) obj;
+                            sb.append("RuntimeScalar{type=").append(scalar.type).append(", value=").append(scalar.value.getClass().getSimpleName()).append("}");
+                        } else {
+                            sb.append(obj);
+                        }
+                        sb.append(")");
                     }
                     sb.append("\n");
                     break;
