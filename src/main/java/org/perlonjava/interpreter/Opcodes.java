@@ -453,6 +453,9 @@ public class Opcodes {
     /** Slow op ID: rd = syscall(rs_number, rs_args...) */
     public static final int SLOWOP_SYSCALL = 18;
 
+    /** Slow op ID: rd = eval(rs_string) - dynamic code evaluation */
+    public static final int SLOWOP_EVAL_STRING = 19;
+
     // =================================================================
     // OPCODES 88-255: RESERVED FOR FUTURE FAST OPERATIONS
     // =================================================================

@@ -707,6 +707,30 @@ public class BytecodeCompiler implements Visitor {
                 emit(undefReg);
             }
             lastResultReg = -1; // No result after die
+        } else if (op.equals("eval")) {
+            // eval $string;
+            if (node.operand != null) {
+                // Evaluate eval operand (the code string)
+                node.operand.accept(this);
+                int stringReg = lastResultReg;
+
+                // Allocate register for result
+                int rd = allocateRegister();
+
+                // Emit SLOW_OP with SLOWOP_EVAL_STRING
+                emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                emit(Opcodes.SLOWOP_EVAL_STRING);
+                emit(rd);
+                emit(stringReg);
+
+                lastResultReg = rd;
+            } else {
+                // eval; (no operand - return undef)
+                int undefReg = allocateRegister();
+                emit(Opcodes.LOAD_UNDEF);
+                emit(undefReg);
+                lastResultReg = undefReg;
+            }
         } else {
             throw new UnsupportedOperationException("Unsupported operator: " + op);
         }
