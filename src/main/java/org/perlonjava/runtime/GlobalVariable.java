@@ -32,7 +32,7 @@ public class GlobalVariable {
     // Maps fully-qualified names (package::subname) to indicate they should be called
     // as user-defined subroutines instead of built-in operators
     public static final Map<String, Boolean> isSubs = new HashMap<>();
-    static final Map<String, RuntimeScalar> globalCodeRefs = new HashMap<>();
+    public static final Map<String, RuntimeScalar> globalCodeRefs = new HashMap<>();
     static final Map<String, RuntimeGlob> globalIORefs = new HashMap<>();
     static final Map<String, RuntimeFormat> globalFormatRefs = new HashMap<>();
 

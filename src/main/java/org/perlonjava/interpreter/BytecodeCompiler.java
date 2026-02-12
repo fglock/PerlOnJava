@@ -3,7 +3,10 @@ package org.perlonjava.interpreter;
 import org.perlonjava.astnode.*;
 import org.perlonjava.astvisitor.Visitor;
 import org.perlonjava.codegen.EmitterContext;
+import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.runtime.*;
+import org.perlonjava.symbols.ScopedSymbolTable;
+import org.perlonjava.symbols.SymbolTable;
 
 import java.io.ByteArrayOutputStream;
 import java.util.*;
@@ -24,16 +27,29 @@ public class BytecodeCompiler implements Visitor {
     private final ByteArrayOutputStream bytecode = new ByteArrayOutputStream();
     private final List<Object> constants = new ArrayList<>();
     private final List<String> stringPool = new ArrayList<>();
-    private final Map<String, Integer> registerMap = new HashMap<>();
+
+    // Simple variable-to-register mapping for the interpreter
+    // Each scope is a Map<String, Integer> mapping variable names to register indices
+    private final Stack<Map<String, Integer>> variableScopes = new Stack<>();
+
+    // Track current package name (for global variables)
+    private String currentPackage = "main";
 
     // Token index tracking for error reporting
     private final Map<Integer, Integer> pcToTokenIndex = new HashMap<>();
+    private int currentTokenIndex = -1;  // Track current token for error reporting
+
+    // Error reporting
+    private final ErrorMessageUtil errorUtil;
 
     // Register allocation
     private int nextRegister = 3;  // 0=this, 1=@_, 2=wantarray
 
     // Track last result register for expression chaining
     private int lastResultReg = -1;
+
+    // Track current calling context for subroutine calls
+    private int currentCallContext = RuntimeContextType.LIST; // Default to LIST
 
     // Closure support
     private RuntimeBase[] capturedVars;           // Captured variable values
@@ -44,9 +60,117 @@ public class BytecodeCompiler implements Visitor {
     private final String sourceName;
     private final int sourceLine;
 
-    public BytecodeCompiler(String sourceName, int sourceLine) {
+    public BytecodeCompiler(String sourceName, int sourceLine, ErrorMessageUtil errorUtil) {
         this.sourceName = sourceName;
         this.sourceLine = sourceLine;
+        this.errorUtil = errorUtil;
+
+        // Initialize with global scope containing the 3 reserved registers
+        Map<String, Integer> globalScope = new HashMap<>();
+        globalScope.put("this", 0);
+        globalScope.put("@_", 1);
+        globalScope.put("wantarray", 2);
+        variableScopes.push(globalScope);
+    }
+
+    // Legacy constructor for backward compatibility
+    public BytecodeCompiler(String sourceName, int sourceLine) {
+        this(sourceName, sourceLine, null);
+    }
+
+    /**
+     * Helper: Check if a variable exists in any scope.
+     */
+    private boolean hasVariable(String name) {
+        for (int i = variableScopes.size() - 1; i >= 0; i--) {
+            if (variableScopes.get(i).containsKey(name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Helper: Get the register index for a variable.
+     * Returns -1 if not found.
+     */
+    private int getVariableRegister(String name) {
+        for (int i = variableScopes.size() - 1; i >= 0; i--) {
+            Integer reg = variableScopes.get(i).get(name);
+            if (reg != null) {
+                return reg;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Helper: Add a variable to the current scope and return its register index.
+     * Allocates a new register.
+     */
+    private int addVariable(String name, String declType) {
+        int reg = allocateRegister();
+        variableScopes.peek().put(name, reg);
+        return reg;
+    }
+
+    /**
+     * Helper: Enter a new lexical scope.
+     */
+    private void enterScope() {
+        variableScopes.push(new HashMap<>());
+    }
+
+    /**
+     * Helper: Exit the current lexical scope.
+     */
+    private void exitScope() {
+        if (variableScopes.size() > 1) {
+            variableScopes.pop();
+        }
+    }
+
+    /**
+     * Helper: Get current package name for global variable resolution.
+     */
+    private String getCurrentPackage() {
+        return currentPackage;
+    }
+
+    /**
+     * Helper: Get all variable names in all scopes (for closure detection).
+     */
+    private String[] getVariableNames() {
+        Set<String> allVars = new HashSet<>();
+        for (Map<String, Integer> scope : variableScopes) {
+            allVars.addAll(scope.keySet());
+        }
+        return allVars.toArray(new String[0]);
+    }
+
+    /**
+     * Throw a compiler exception with proper error formatting.
+     * Uses PerlCompilerException which formats with line numbers and code context.
+     *
+     * @param message The error message
+     * @param tokenIndex The token index where the error occurred
+     */
+    private void throwCompilerException(String message, int tokenIndex) {
+        if (errorUtil != null && tokenIndex >= 0) {
+            throw new PerlCompilerException(tokenIndex, message, errorUtil);
+        } else {
+            // Fallback to simple error (no context available)
+            throw new RuntimeException(message);
+        }
+    }
+
+    /**
+     * Throw a compiler exception using the current token index.
+     *
+     * @param message The error message
+     */
+    private void throwCompilerException(String message) {
+        throwCompilerException(message, currentTokenIndex);
     }
 
     /**
@@ -167,9 +291,14 @@ public class BytecodeCompiler implements Visitor {
      */
     private Set<String> getLocalVariableNames(EmitterContext ctx) {
         Set<String> locals = new HashSet<>();
-        // This is a simplified version - we collect variables from registerMap
-        // which contains all lexically declared variables in the current compilation unit
-        locals.addAll(registerMap.keySet());
+        // Collect variables from all scopes
+        String[] varNames = getVariableNames();
+        for (String name : varNames) {
+            // Skip the 3 reserved registers (this, @_, wantarray)
+            if (!name.equals("this") && !name.equals("@_") && !name.equals("wantarray")) {
+                locals.add(name);
+            }
+        }
         return locals;
     }
 
@@ -211,7 +340,17 @@ public class BytecodeCompiler implements Visitor {
     public void visit(BlockNode node) {
         // Visit each statement in the block
         for (Node stmt : node.elements) {
+            // Standalone statements (not assignments) use VOID context
+            int savedContext = currentCallContext;
+
+            // If this is not an assignment or other value-using construct, use VOID context
+            if (!(stmt instanceof BinaryOperatorNode && ((BinaryOperatorNode) stmt).operator.equals("="))) {
+                currentCallContext = RuntimeContextType.VOID;
+            }
+
             stmt.accept(this);
+
+            currentCallContext = savedContext;
         }
     }
 
@@ -271,16 +410,16 @@ public class BytecodeCompiler implements Visitor {
         }
 
         // Check if it's a lexical variable (may have sigil or not)
-        if (registerMap.containsKey(varName)) {
+        if (hasVariable(varName)) {
             // Lexical variable - already has a register
-            lastResultReg = registerMap.get(varName);
+            lastResultReg = getVariableRegister(varName);
         } else {
             // Try with sigils
             boolean found = false;
             for (String sigil : sigils) {
                 String varNameWithSigil = sigil + varName;
-                if (registerMap.containsKey(varNameWithSigil)) {
-                    lastResultReg = registerMap.get(varNameWithSigil);
+                if (hasVariable(varNameWithSigil)) {
+                    lastResultReg = getVariableRegister(varNameWithSigil);
                     found = true;
                     break;
                 }
@@ -302,6 +441,9 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(BinaryOperatorNode node) {
+        // Track token index for error reporting
+        currentTokenIndex = node.getIndex();
+
         // Handle print/say early (special handling for filehandle)
         if (node.operator.equals("print") || node.operator.equals("say")) {
             // print/say FILEHANDLE LIST
@@ -333,6 +475,28 @@ public class BytecodeCompiler implements Visitor {
 
         // Handle assignment separately (doesn't follow standard left-right-op pattern)
         if (node.operator.equals("=")) {
+            // Determine the calling context for the RHS based on LHS type
+            int rhsContext = RuntimeContextType.LIST; // Default
+
+            // Check if LHS is a scalar assignment (my $x = ...)
+            if (node.left instanceof OperatorNode) {
+                OperatorNode leftOp = (OperatorNode) node.left;
+                if (leftOp.operator.equals("my") && leftOp.operand instanceof OperatorNode) {
+                    OperatorNode sigilOp = (OperatorNode) leftOp.operand;
+                    if (sigilOp.operator.equals("$")) {
+                        // Scalar assignment: use SCALAR context for RHS
+                        rhsContext = RuntimeContextType.SCALAR;
+                    }
+                } else if (leftOp.operator.equals("$")) {
+                    // Regular scalar assignment: $x = ...
+                    rhsContext = RuntimeContextType.SCALAR;
+                }
+            }
+
+            // Set the context for subroutine calls in RHS
+            int savedContext = currentCallContext;
+            currentCallContext = rhsContext;
+
             // Special case: my $x = value
             if (node.left instanceof OperatorNode) {
                 OperatorNode leftOp = (OperatorNode) node.left;
@@ -346,9 +510,39 @@ public class BytecodeCompiler implements Visitor {
                         if (sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode) {
                             String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
 
-                            // Allocate register for new lexical variable
-                            int reg = allocateRegister();
-                            registerMap.put(varName, reg);
+                            // Check if this variable is captured by named subs (Parser marks with id)
+                            if (sigilOp.id != 0) {
+                                // RETRIEVE the persistent variable (creates if doesn't exist)
+                                int beginId = sigilOp.id;
+                                int nameIdx = addToStringPool(varName);
+                                int reg = allocateRegister();
+
+                                emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                                emit(Opcodes.SLOWOP_RETRIEVE_BEGIN_SCALAR);
+                                emit(reg);
+                                emit(nameIdx);
+                                emit(beginId);
+
+                                // Now register contains a reference to the persistent RuntimeScalar
+                                // Store the initializer value INTO that RuntimeScalar
+                                node.right.accept(this);
+                                int valueReg = lastResultReg;
+
+                                // Set the value in the persistent scalar using SET_SCALAR
+                                // This calls .set() on the RuntimeScalar without overwriting the reference
+                                emit(Opcodes.SET_SCALAR);
+                                emit(reg);
+                                emit(valueReg);
+
+                                // Track this variable - map the name to the register we already allocated
+                                variableScopes.peek().put(varName, reg);
+                                lastResultReg = reg;
+                                return;
+                            }
+
+                            // Regular lexical variable (not captured)
+                            // Allocate register for new lexical variable and add to symbol table
+                            int reg = addVariable(varName, "my");
 
                             // Compile RHS
                             node.right.accept(this);
@@ -361,6 +555,108 @@ public class BytecodeCompiler implements Visitor {
 
                             lastResultReg = reg;
                             return;
+                        } else if (sigilOp.operator.equals("@") && sigilOp.operand instanceof IdentifierNode) {
+                            // Handle my @array = ...
+                            String varName = "@" + ((IdentifierNode) sigilOp.operand).name;
+
+                            // Check if this variable is captured by named subs
+                            if (sigilOp.id != 0) {
+                                // RETRIEVE the persistent array
+                                int beginId = sigilOp.id;
+                                int nameIdx = addToStringPool(varName);
+                                int arrayReg = allocateRegister();
+
+                                emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                                emit(Opcodes.SLOWOP_RETRIEVE_BEGIN_ARRAY);
+                                emit(arrayReg);
+                                emit(nameIdx);
+                                emit(beginId);
+
+                                // Compile RHS (should evaluate to a list)
+                                node.right.accept(this);
+                                int listReg = lastResultReg;
+
+                                // Populate array from list
+                                emit(Opcodes.ARRAY_SET_FROM_LIST);
+                                emit(arrayReg);
+                                emit(listReg);
+
+                                // Track this variable - map the name to the register we already allocated
+                                variableScopes.peek().put(varName, arrayReg);
+                                lastResultReg = arrayReg;
+                                return;
+                            }
+
+                            // Regular lexical array (not captured)
+                            // Allocate register for new lexical array and add to symbol table
+                            int arrayReg = addVariable(varName, "my");
+
+                            // Create empty array
+                            emit(Opcodes.NEW_ARRAY);
+                            emit(arrayReg);
+
+                            // Compile RHS (should evaluate to a list)
+                            node.right.accept(this);
+                            int listReg = lastResultReg;
+
+                            // Populate array from list using setFromList
+                            emit(Opcodes.ARRAY_SET_FROM_LIST);
+                            emit(arrayReg);
+                            emit(listReg);
+
+                            lastResultReg = arrayReg;
+                            return;
+                        } else if (sigilOp.operator.equals("%") && sigilOp.operand instanceof IdentifierNode) {
+                            // Handle my %hash = ...
+                            String varName = "%" + ((IdentifierNode) sigilOp.operand).name;
+
+                            // Check if this variable is captured by named subs
+                            if (sigilOp.id != 0) {
+                                // RETRIEVE the persistent hash
+                                int beginId = sigilOp.id;
+                                int nameIdx = addToStringPool(varName);
+                                int hashReg = allocateRegister();
+
+                                emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                                emit(Opcodes.SLOWOP_RETRIEVE_BEGIN_HASH);
+                                emit(hashReg);
+                                emit(nameIdx);
+                                emit(beginId);
+
+                                // Compile RHS (should evaluate to a list)
+                                node.right.accept(this);
+                                int listReg = lastResultReg;
+
+                                // Populate hash from list
+                                emit(Opcodes.HASH_SET_FROM_LIST);
+                                emit(hashReg);
+                                emit(listReg);
+
+                                // Track this variable - map the name to the register we already allocated
+                                variableScopes.peek().put(varName, hashReg);
+                                lastResultReg = hashReg;
+                                return;
+                            }
+
+                            // Regular lexical hash (not captured)
+                            // Allocate register for new lexical hash and add to symbol table
+                            int hashReg = addVariable(varName, "my");
+
+                            // Create empty hash
+                            emit(Opcodes.NEW_HASH);
+                            emit(hashReg);
+
+                            // Compile RHS (should evaluate to a list)
+                            node.right.accept(this);
+                            int listReg = lastResultReg;
+
+                            // Populate hash from list
+                            emit(Opcodes.HASH_SET_FROM_LIST);
+                            emit(hashReg);
+                            emit(listReg);
+
+                            lastResultReg = hashReg;
+                            return;
                         }
                     }
 
@@ -368,9 +664,8 @@ public class BytecodeCompiler implements Visitor {
                     if (myOperand instanceof IdentifierNode) {
                         String varName = ((IdentifierNode) myOperand).name;
 
-                        // Allocate register for new lexical variable
-                        int reg = allocateRegister();
-                        registerMap.put(varName, reg);
+                        // Allocate register for new lexical variable and add to symbol table
+                        int reg = addVariable(varName, "my");
 
                         // Compile RHS
                         node.right.accept(this);
@@ -383,6 +678,50 @@ public class BytecodeCompiler implements Visitor {
 
                         lastResultReg = reg;
                         return;
+                    }
+                }
+
+                // Special case: local $x = value
+                if (leftOp.operator.equals("local")) {
+                    // Extract variable from "local" operand
+                    Node localOperand = leftOp.operand;
+
+                    // Handle local $x (where $x is OperatorNode("$", IdentifierNode("x")))
+                    if (localOperand instanceof OperatorNode) {
+                        OperatorNode sigilOp = (OperatorNode) localOperand;
+                        if (sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode) {
+                            String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
+
+                            // Check if it's a lexical variable (should not be localized)
+                            if (hasVariable(varName)) {
+                                throwCompilerException("Can't localize lexical variable " + varName);
+                                return;
+                            }
+
+                            // It's a global variable - emit SLOW_OP to call GlobalRuntimeScalar.makeLocal()
+                            String packageName = getCurrentPackage();
+                            String globalVarName = packageName + "::" + ((IdentifierNode) sigilOp.operand).name;
+                            int nameIdx = addToStringPool(globalVarName);
+
+                            int localReg = allocateRegister();
+                            emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                            emit(Opcodes.SLOWOP_LOCAL_SCALAR);
+                            emit(localReg);
+                            emit(nameIdx);
+
+                            // Compile RHS
+                            node.right.accept(this);
+                            int valueReg = lastResultReg;
+
+                            // Assign value to the localized variable
+                            // The localized variable is a RuntimeScalar, so we use set() on it
+                            emit(Opcodes.STORE_GLOBAL_SCALAR);
+                            emit(nameIdx);
+                            emit(valueReg);
+
+                            lastResultReg = localReg;
+                            return;
+                        }
                     }
                 }
             }
@@ -404,8 +743,8 @@ public class BytecodeCompiler implements Visitor {
                         String rightLeftVarName = "$" + ((IdentifierNode) rightLeftOp.operand).name;
 
                         // Pattern match: $x = $x + $y (emit ADD_ASSIGN)
-                        if (leftVarName.equals(rightLeftVarName) && registerMap.containsKey(leftVarName)) {
-                            int targetReg = registerMap.get(leftVarName);
+                        if (leftVarName.equals(rightLeftVarName) && hasVariable(leftVarName)) {
+                            int targetReg = getVariableRegister(leftVarName);
 
                             // Compile RHS operand ($y)
                             rightBin.right.accept(this);
@@ -434,12 +773,13 @@ public class BytecodeCompiler implements Visitor {
                 if (leftOp.operator.equals("$") && leftOp.operand instanceof IdentifierNode) {
                     String varName = "$" + ((IdentifierNode) leftOp.operand).name;
 
-                    if (registerMap.containsKey(varName)) {
+                    if (hasVariable(varName)) {
                         // Lexical variable - copy to its register
-                        int targetReg = registerMap.get(varName);
+                        int targetReg = getVariableRegister(varName);
                         emit(Opcodes.MOVE);
                         emit(targetReg);
                         emit(valueReg);
+
                         lastResultReg = targetReg;
                     } else {
                         // Global variable
@@ -449,15 +789,63 @@ public class BytecodeCompiler implements Visitor {
                         emit(valueReg);
                         lastResultReg = valueReg;
                     }
+                } else if (leftOp.operator.equals("@") && leftOp.operand instanceof IdentifierNode) {
+                    // Array assignment: @array = ...
+                    String varName = "@" + ((IdentifierNode) leftOp.operand).name;
+
+                    int arrayReg;
+                    if (hasVariable(varName)) {
+                        // Lexical array
+                        arrayReg = getVariableRegister(varName);
+                    } else {
+                        // Global array - load it
+                        arrayReg = allocateRegister();
+                        String globalArrayName = "main::" + ((IdentifierNode) leftOp.operand).name;
+                        int nameIdx = addToStringPool(globalArrayName);
+                        emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                        emit(arrayReg);
+                        emit(nameIdx);
+                    }
+
+                    // Populate array from list using setFromList
+                    emit(Opcodes.ARRAY_SET_FROM_LIST);
+                    emit(arrayReg);
+                    emit(valueReg);
+
+                    lastResultReg = arrayReg;
+                } else if (leftOp.operator.equals("%") && leftOp.operand instanceof IdentifierNode) {
+                    // Hash assignment: %hash = ...
+                    String varName = "%" + ((IdentifierNode) leftOp.operand).name;
+
+                    int hashReg;
+                    if (hasVariable(varName)) {
+                        // Lexical hash
+                        hashReg = getVariableRegister(varName);
+                    } else {
+                        // Global hash - load it
+                        hashReg = allocateRegister();
+                        String globalHashName = "main::" + ((IdentifierNode) leftOp.operand).name;
+                        int nameIdx = addToStringPool(globalHashName);
+                        emit(Opcodes.LOAD_GLOBAL_HASH);
+                        emit(hashReg);
+                        emit(nameIdx);
+                    }
+
+                    // Populate hash from list using setFromList
+                    emit(Opcodes.HASH_SET_FROM_LIST);
+                    emit(hashReg);
+                    emit(valueReg);
+
+                    lastResultReg = hashReg;
                 } else {
-                    throw new RuntimeException("Assignment to non-scalar not yet supported");
+                    throw new RuntimeException("Assignment to unsupported operator: " + leftOp.operator);
                 }
             } else if (node.left instanceof IdentifierNode) {
                 String varName = ((IdentifierNode) node.left).name;
 
-                if (registerMap.containsKey(varName)) {
+                if (hasVariable(varName)) {
                     // Lexical variable - copy to its register
-                    int targetReg = registerMap.get(varName);
+                    int targetReg = getVariableRegister(varName);
                     emit(Opcodes.MOVE);
                     emit(targetReg);
                     emit(valueReg);
@@ -473,6 +861,9 @@ public class BytecodeCompiler implements Visitor {
             } else {
                 throw new RuntimeException("Assignment to non-identifier not yet supported: " + node.left.getClass().getSimpleName());
             }
+
+            // Restore the calling context
+            currentCallContext = savedContext;
             return;
         }
 
@@ -512,6 +903,12 @@ public class BytecodeCompiler implements Visitor {
                 emit(rs1);
                 emit(rs2);
             }
+            case "x" -> {
+                emit(Opcodes.REPEAT);
+                emit(rd);
+                emit(rs1);
+                emit(rs2);
+            }
             case "<=>" -> {
                 emit(Opcodes.COMPARE_NUM);
                 emit(rd);
@@ -542,8 +939,8 @@ public class BytecodeCompiler implements Visitor {
                 emit(rs1);
                 emit(rs2);
             }
-            case "()", "->" -> {
-                // Apply operator: $coderef->(args) or &subname(args)
+            case "(", "()", "->" -> {
+                // Apply operator: $coderef->(args) or &subname(args) or foo(args)
                 // left (rs1) = code reference (RuntimeScalar containing RuntimeCode or SubroutineNode)
                 // right (rs2) = arguments (should be RuntimeList from ListNode)
 
@@ -558,7 +955,7 @@ public class BytecodeCompiler implements Visitor {
                 emit(rd);  // Result register
                 emit(rs1); // Code reference register
                 emit(rs2); // Arguments register (RuntimeList to be converted to RuntimeArray)
-                emit(RuntimeContextType.SCALAR); // Context (TODO: detect from usage)
+                emit(currentCallContext); // Use current calling context
 
                 // Note: CALL_SUB may return RuntimeControlFlowList
                 // The interpreter will handle control flow propagation
@@ -683,7 +1080,140 @@ public class BytecodeCompiler implements Visitor {
                 emit(rs1);       // Closure register
                 emit(RuntimeContextType.LIST);  // Map always uses list context
             }
-            default -> throw new RuntimeException("Unsupported operator: " + node.operator);
+            case "[" -> {
+                // Array element access: $a[10] means get element 10 from array @a
+                // Also handles multidimensional: $a[0][1] means $a[0]->[1]
+                // left: OperatorNode("$", IdentifierNode("a")) OR BinaryOperatorNode (for chained access)
+                // right: ArrayLiteralNode(index_expression)
+
+                int arrayReg = -1; // Will be initialized in if/else branches
+
+                if (node.left instanceof OperatorNode) {
+                    // Simple case: $var[index]
+                    OperatorNode leftOp = (OperatorNode) node.left;
+                    if (!leftOp.operator.equals("$") || !(leftOp.operand instanceof IdentifierNode)) {
+                        throwCompilerException("Array access requires scalar dereference: $var[index]");
+                    }
+
+                    String varName = ((IdentifierNode) leftOp.operand).name;
+                    String arrayVarName = "@" + varName;
+
+                    // Get the array - check lexical first, then global
+                    if (hasVariable(arrayVarName)) {
+                        // Lexical array
+                        arrayReg = getVariableRegister(arrayVarName);
+                    } else {
+                        // Global array - load it
+                        arrayReg = allocateRegister();
+                        String globalArrayName = "main::" + varName;
+                        int nameIdx = addToStringPool(globalArrayName);
+                        emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                        emit(arrayReg);
+                        emit(nameIdx);
+                    }
+                } else if (node.left instanceof BinaryOperatorNode) {
+                    // Multidimensional case: $a[0][1] is really $a[0]->[1]
+                    // Compile left side (which returns a scalar containing an array reference)
+                    node.left.accept(this);
+                    int scalarReg = lastResultReg;
+
+                    // Dereference the array reference to get the actual array
+                    // Use SLOW_OP with SLOWOP_DEREF_ARRAY
+                    arrayReg = allocateRegister();
+                    emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                    emit(Opcodes.SLOWOP_DEREF_ARRAY);
+                    emit(arrayReg);
+                    emit(scalarReg);
+                } else {
+                    throwCompilerException("Array access requires variable or expression on left side");
+                }
+
+                // Evaluate index expression
+                // For ArrayLiteralNode, get the first element
+                if (!(node.right instanceof ArrayLiteralNode)) {
+                    throwCompilerException("Array access requires ArrayLiteralNode on right side");
+                }
+                ArrayLiteralNode indexNode = (ArrayLiteralNode) node.right;
+                if (indexNode.elements.isEmpty()) {
+                    throwCompilerException("Array access requires index expression");
+                }
+
+                // Compile the index expression
+                indexNode.elements.get(0).accept(this);
+                int indexReg = lastResultReg;
+
+                // Emit ARRAY_GET
+                emit(Opcodes.ARRAY_GET);
+                emit(rd);
+                emit(arrayReg);
+                emit(indexReg);
+            }
+            case "{" -> {
+                // Hash element access: $h{key} means get element 'key' from hash %h
+                // left: OperatorNode("$", IdentifierNode("h"))
+                // right: HashLiteralNode(key_expression)
+
+                if (!(node.left instanceof OperatorNode)) {
+                    throw new RuntimeException("Hash access requires variable on left side");
+                }
+                OperatorNode leftOp = (OperatorNode) node.left;
+                if (!leftOp.operator.equals("$") || !(leftOp.operand instanceof IdentifierNode)) {
+                    throw new RuntimeException("Hash access requires scalar dereference: $var{key}");
+                }
+
+                String varName = ((IdentifierNode) leftOp.operand).name;
+                String hashVarName = "%" + varName;
+
+                // Get the hash - check lexical first, then global
+                int hashReg;
+                if (hasVariable(hashVarName)) {
+                    // Lexical hash
+                    hashReg = getVariableRegister(hashVarName);
+                } else {
+                    // Global hash - load it
+                    hashReg = allocateRegister();
+                    String globalHashName = "main::" + varName;
+                    int nameIdx = addToStringPool(globalHashName);
+                    emit(Opcodes.LOAD_GLOBAL_HASH);
+                    emit(hashReg);
+                    emit(nameIdx);
+                }
+
+                // Evaluate key expression
+                // For HashLiteralNode, get the first element (should be the key)
+                if (!(node.right instanceof HashLiteralNode)) {
+                    throw new RuntimeException("Hash access requires HashLiteralNode on right side");
+                }
+                HashLiteralNode keyNode = (HashLiteralNode) node.right;
+                if (keyNode.elements.isEmpty()) {
+                    throw new RuntimeException("Hash access requires key expression");
+                }
+
+                // Compile the key expression
+                // Special case: bareword identifiers should be treated as string literals
+                int keyReg;
+                Node keyElement = keyNode.elements.get(0);
+                if (keyElement instanceof IdentifierNode) {
+                    // Bareword key - treat as string literal
+                    String keyStr = ((IdentifierNode) keyElement).name;
+                    keyReg = allocateRegister();
+                    int strIdx = addToStringPool(keyStr);
+                    emit(Opcodes.LOAD_STRING);
+                    emit(keyReg);
+                    emit(strIdx);
+                } else {
+                    // Expression key - evaluate normally
+                    keyElement.accept(this);
+                    keyReg = lastResultReg;
+                }
+
+                // Emit HASH_GET
+                emit(Opcodes.HASH_GET);
+                emit(rd);
+                emit(hashReg);
+                emit(keyReg);
+            }
+            default -> throwCompilerException("Unsupported operator: " + node.operator);
         }
 
         lastResultReg = rd;
@@ -691,36 +1221,179 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(OperatorNode node) {
+        // Track token index for error reporting
+        currentTokenIndex = node.getIndex();
+
         String op = node.operator;
 
         // Handle specific operators
         if (op.equals("my")) {
-            // my $x - variable declaration
-            // The operand will be OperatorNode("$", IdentifierNode("x"))
+            // my $x / my @x / my %x - variable declaration
+            // The operand will be OperatorNode("$"/"@"/"%", IdentifierNode("x"))
             if (node.operand instanceof OperatorNode) {
                 OperatorNode sigilOp = (OperatorNode) node.operand;
-                if (sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode) {
-                    String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
-                    int reg = allocateRegister();
-                    registerMap.put(varName, reg);
+                String sigil = sigilOp.operator;
 
-                    // Load undef initially
-                    emit(Opcodes.LOAD_UNDEF);
-                    emit(reg);
+                if (sigilOp.operand instanceof IdentifierNode) {
+                    String varName = sigil + ((IdentifierNode) sigilOp.operand).name;
+
+                    // Check if this variable is captured by closures (sigilOp.id != 0)
+                    if (sigilOp.id != 0) {
+                        // Variable is captured by compiled named subs
+                        // Store as persistent variable so both interpreted and compiled code can access it
+                        // Don't use a local register; instead load/store through persistent globals
+
+                        // For now, retrieve the persistent variable and store in register
+                        // This handles BEGIN-initialized variables
+                        int reg = allocateRegister();
+                        int nameIdx = addToStringPool(varName);
+
+                        switch (sigil) {
+                            case "$" -> {
+                                emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                                emit(Opcodes.SLOWOP_RETRIEVE_BEGIN_SCALAR);
+                                emit(reg);
+                                emit(nameIdx);
+                                emit(sigilOp.id);
+                                // Track this as a captured variable - map to the register we allocated
+                                variableScopes.peek().put(varName, reg);
+                            }
+                            case "@" -> {
+                                emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                                emit(Opcodes.SLOWOP_RETRIEVE_BEGIN_ARRAY);
+                                emit(reg);
+                                emit(nameIdx);
+                                emit(sigilOp.id);
+                                variableScopes.peek().put(varName, reg);
+                            }
+                            case "%" -> {
+                                emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                                emit(Opcodes.SLOWOP_RETRIEVE_BEGIN_HASH);
+                                emit(reg);
+                                emit(nameIdx);
+                                emit(sigilOp.id);
+                                variableScopes.peek().put(varName, reg);
+                            }
+                            default -> throwCompilerException("Unsupported variable type: " + sigil);
+                        }
+
+                        lastResultReg = reg;
+                        return;
+                    }
+
+                    // Regular lexical variable (not captured)
+                    int reg = addVariable(varName, "my");
+
+                    // Normal initialization: load undef/empty array/empty hash
+                    switch (sigil) {
+                        case "$" -> {
+                            emit(Opcodes.LOAD_UNDEF);
+                            emit(reg);
+                        }
+                        case "@" -> {
+                            emit(Opcodes.NEW_ARRAY);
+                            emit(reg);
+                        }
+                        case "%" -> {
+                            emit(Opcodes.NEW_HASH);
+                            emit(reg);
+                        }
+                        default -> throwCompilerException("Unsupported variable type: " + sigil);
+                    }
 
                     lastResultReg = reg;
                     return;
                 }
             }
             throw new RuntimeException("Unsupported my operand: " + node.operand.getClass().getSimpleName());
+        } else if (op.equals("our")) {
+            // our $x / our @x / our %x - package variable declaration
+            // The operand will be OperatorNode("$"/"@"/"%", IdentifierNode("x"))
+            if (node.operand instanceof OperatorNode) {
+                OperatorNode sigilOp = (OperatorNode) node.operand;
+                String sigil = sigilOp.operator;
+
+                if (sigilOp.operand instanceof IdentifierNode) {
+                    String varName = sigil + ((IdentifierNode) sigilOp.operand).name;
+
+                    // Check if already declared in current scope
+                    if (hasVariable(varName)) {
+                        // Already declared, just return the existing register
+                        lastResultReg = getVariableRegister(varName);
+                        return;
+                    }
+
+                    // Allocate register and add to symbol table
+                    int reg = addVariable(varName, "our");
+
+                    // Load from global variable
+                    // Get current package from symbol table
+                    String packageName = getCurrentPackage();
+                    String globalVarName = packageName + "::" + ((IdentifierNode) sigilOp.operand).name;
+                    int nameIdx = addToStringPool(globalVarName);
+
+                    switch (sigil) {
+                        case "$" -> {
+                            emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                            emit(reg);
+                            emit(nameIdx);
+                        }
+                        case "@" -> {
+                            emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                            emit(reg);
+                            emit(nameIdx);
+                        }
+                        case "%" -> {
+                            emit(Opcodes.LOAD_GLOBAL_HASH);
+                            emit(reg);
+                            emit(nameIdx);
+                        }
+                        default -> throwCompilerException("Unsupported variable type: " + sigil);
+                    }
+
+                    lastResultReg = reg;
+                    return;
+                }
+            }
+            throw new RuntimeException("Unsupported our operand: " + node.operand.getClass().getSimpleName());
+        } else if (op.equals("local")) {
+            // local $x - temporarily localize a global variable            // The operand will be OperatorNode("$", IdentifierNode("x"))
+            if (node.operand instanceof OperatorNode) {
+                OperatorNode sigilOp = (OperatorNode) node.operand;
+
+                if (sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode) {
+                    String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
+
+                    // Check if it's a lexical variable (should not be localized)
+                    if (hasVariable(varName)) {
+                        throwCompilerException("Can't localize lexical variable " + varName);
+                        return;
+                    }
+
+                    // It's a global variable - emit SLOW_OP to call GlobalRuntimeScalar.makeLocal()
+                    String packageName = getCurrentPackage();
+                    String globalVarName = packageName + "::" + ((IdentifierNode) sigilOp.operand).name;
+                    int nameIdx = addToStringPool(globalVarName);
+
+                    int rd = allocateRegister();
+                    emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                    emit(Opcodes.SLOWOP_LOCAL_SCALAR);
+                    emit(rd);
+                    emit(nameIdx);
+
+                    lastResultReg = rd;
+                    return;
+                }
+            }
+            throw new RuntimeException("Unsupported local operand: " + node.operand.getClass().getSimpleName());
         } else if (op.equals("$")) {
             // Scalar variable dereference: $x
             if (node.operand instanceof IdentifierNode) {
                 String varName = "$" + ((IdentifierNode) node.operand).name;
 
-                if (registerMap.containsKey(varName)) {
+                if (hasVariable(varName)) {
                     // Lexical variable - use existing register
-                    lastResultReg = registerMap.get(varName);
+                    lastResultReg = getVariableRegister(varName);
                 } else {
                     // Global variable - load it
                     // Add package prefix if not present (match compiler behavior)
@@ -753,14 +1426,113 @@ public class BytecodeCompiler implements Visitor {
                     return;
                 }
 
-                // For now, only support @_ - other arrays require global variable support
-                throw new RuntimeException("Array variables other than @_ not yet supported: " + varName);
+                // Check if it's a lexical array
+                if (hasVariable(varName)) {
+                    // Lexical array - use existing register
+                    lastResultReg = getVariableRegister(varName);
+                    return;
+                }
+
+                // Global array - load it
+                int rd = allocateRegister();
+                String globalArrayName = "main::" + ((IdentifierNode) node.operand).name;
+                int nameIdx = addToStringPool(globalArrayName);
+
+                emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                emit(rd);
+                emit(nameIdx);
+
+                lastResultReg = rd;
             } else {
-                throw new RuntimeException("Unsupported @ operand: " + node.operand.getClass().getSimpleName());
+                throwCompilerException("Unsupported @ operand: " + node.operand.getClass().getSimpleName());
+            }
+        } else if (op.equals("scalar")) {
+            // Scalar context: scalar(@array) or scalar(%hash) or scalar(expr)
+            // Forces scalar context on the operand
+            if (node.operand != null) {
+                // Special case: if operand is a ListNode with single array/hash variable,
+                // compile it directly in scalar context instead of list context
+                if (node.operand instanceof ListNode) {
+                    ListNode listNode = (ListNode) node.operand;
+                    if (listNode.elements.size() == 1) {
+                        Node elem = listNode.elements.get(0);
+                        if (elem instanceof OperatorNode) {
+                            OperatorNode opNode = (OperatorNode) elem;
+                            if (opNode.operator.equals("@")) {
+                                // scalar(@array) - get array size
+                                if (opNode.operand instanceof IdentifierNode) {
+                                    String varName = "@" + ((IdentifierNode) opNode.operand).name;
+
+                                    int arrayReg;
+                                    if (varName.equals("@_")) {
+                                        arrayReg = 1;
+                                    } else if (hasVariable(varName)) {
+                                        arrayReg = getVariableRegister(varName);
+                                    } else {
+                                        // Global array
+                                        arrayReg = allocateRegister();
+                                        String globalArrayName = "main::" + ((IdentifierNode) opNode.operand).name;
+                                        int nameIdx = addToStringPool(globalArrayName);
+                                        emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                                        emit(arrayReg);
+                                        emit(nameIdx);
+                                    }
+
+                                    // Emit ARRAY_SIZE
+                                    int rd = allocateRegister();
+                                    emit(Opcodes.ARRAY_SIZE);
+                                    emit(rd);
+                                    emit(arrayReg);
+
+                                    lastResultReg = rd;
+                                    return;
+                                }
+                            } else if (opNode.operator.equals("%")) {
+                                // scalar(%hash) - get hash size (not implemented yet)
+                                throwCompilerException("scalar(%hash) not yet implemented");
+                            }
+                        }
+                    }
+                }
+
+                // General case: compile operand and let ARRAY_SIZE handle type conversion
+                node.operand.accept(this);
+                int operandReg = lastResultReg;
+
+                int rd = allocateRegister();
+                emit(Opcodes.ARRAY_SIZE);
+                emit(rd);
+                emit(operandReg);
+
+                lastResultReg = rd;
+            } else {
+                throwCompilerException("scalar operator requires an operand");
             }
         } else if (op.equals("%")) {
             // Hash variable dereference: %x
-            throw new RuntimeException("Hash variables not yet supported");
+            if (node.operand instanceof IdentifierNode) {
+                String varName = "%" + ((IdentifierNode) node.operand).name;
+
+                // Check if it's a lexical hash
+                if (hasVariable(varName)) {
+                    // Lexical hash - use existing register
+                    lastResultReg = getVariableRegister(varName);
+                    return;
+                }
+
+                // Global hash - load it
+                int rd = allocateRegister();
+                String globalHashName = "main::" + ((IdentifierNode) node.operand).name;
+                int nameIdx = addToStringPool(globalHashName);
+
+                emit(Opcodes.LOAD_GLOBAL_HASH);
+                emit(rd);
+                emit(nameIdx);
+
+                lastResultReg = rd;
+            } else {
+                throwCompilerException("Unsupported % operand: " + node.operand.getClass().getSimpleName());
+            }
         } else if (op.equals("*")) {
             // Glob variable dereference: *x
             if (node.operand instanceof IdentifierNode) {
@@ -785,6 +1557,31 @@ public class BytecodeCompiler implements Visitor {
                 lastResultReg = rd;
             } else {
                 throw new RuntimeException("Unsupported * operand: " + node.operand.getClass().getSimpleName());
+            }
+        } else if (op.equals("&")) {
+            // Code reference: &subname
+            // Gets a reference to a named subroutine
+            if (node.operand instanceof IdentifierNode) {
+                IdentifierNode idNode = (IdentifierNode) node.operand;
+                String subName = idNode.name;
+
+                // Add package prefix if not present
+                if (!subName.contains("::")) {
+                    subName = "main::" + subName;
+                }
+
+                // Allocate register for code reference
+                int rd = allocateRegister();
+                int nameIdx = addToStringPool(subName);
+
+                // Emit LOAD_GLOBAL_CODE
+                emit(Opcodes.LOAD_GLOBAL_CODE);
+                emit(rd);
+                emit(nameIdx);
+
+                lastResultReg = rd;
+            } else {
+                throwCompilerException("Unsupported & operand: " + node.operand.getClass().getSimpleName());
             }
         } else if (op.equals("\\")) {
             // Reference operator: \$x, \@x, \%x, \*x, etc.
@@ -850,8 +1647,8 @@ public class BytecodeCompiler implements Visitor {
             if (node.operand instanceof IdentifierNode) {
                 String varName = ((IdentifierNode) node.operand).name;
 
-                if (registerMap.containsKey(varName)) {
-                    int varReg = registerMap.get(varName);
+                if (hasVariable(varName)) {
+                    int varReg = getVariableRegister(varName);
 
                     // Use optimized autoincrement/decrement opcodes
                     if (isPostfix) {
@@ -881,8 +1678,8 @@ public class BytecodeCompiler implements Visitor {
                 if (innerOp.operator.equals("$") && innerOp.operand instanceof IdentifierNode) {
                     String varName = "$" + ((IdentifierNode) innerOp.operand).name;
 
-                    if (registerMap.containsKey(varName)) {
-                        int varReg = registerMap.get(varName);
+                    if (hasVariable(varName)) {
+                        int varReg = getVariableRegister(varName);
 
                         // Use optimized autoincrement/decrement opcodes
                         if (isPostfix) {
@@ -951,6 +1748,35 @@ public class BytecodeCompiler implements Visitor {
                 emit(Opcodes.RAND);
                 emit(rd);
                 emit(oneReg);
+            }
+
+            lastResultReg = rd;
+        } else if (op.equals("sleep")) {
+            // sleep $seconds
+            // Calls Time.sleep(seconds)
+            int rd = allocateRegister();
+
+            if (node.operand != null) {
+                // sleep($seconds) - evaluate operand
+                node.operand.accept(this);
+                int secondsReg = lastResultReg;
+
+                // Emit SLOW_OP with SLOWOP_SLEEP
+                emit(Opcodes.SLOW_OP);
+                emit(Opcodes.SLOWOP_SLEEP);
+                emit(rd);
+                emit(secondsReg);
+            } else {
+                // sleep with no argument - defaults to infinity (but we'll use a large number)
+                int maxReg = allocateRegister();
+                emit(Opcodes.LOAD_INT);
+                emit(maxReg);
+                emitInt(Integer.MAX_VALUE);
+
+                emit(Opcodes.SLOW_OP);
+                emit(Opcodes.SLOWOP_SLEEP);
+                emit(rd);
+                emit(maxReg);
             }
 
             lastResultReg = rd;
@@ -1032,8 +1858,16 @@ public class BytecodeCompiler implements Visitor {
             }
 
             lastResultReg = rd;
+        } else if (op.equals("undef")) {
+            // undef operator - returns undefined value
+            // Can be used standalone: undef
+            // Or with an operand to undef a variable: undef $x (not implemented yet)
+            int undefReg = allocateRegister();
+            emit(Opcodes.LOAD_UNDEF);
+            emit(undefReg);
+            lastResultReg = undefReg;
         } else {
-            throw new UnsupportedOperationException("Unsupported operator: " + op);
+            throwCompilerException("Unsupported operator: " + op);
         }
     }
 
@@ -1247,9 +2081,83 @@ public class BytecodeCompiler implements Visitor {
             // Anonymous subroutine: sub { ... }
             visitAnonymousSubroutine(node);
         } else {
-            // Named subroutine - not yet supported
-            throw new UnsupportedOperationException("Named subroutines not yet implemented in interpreter: " + node.name);
+            // Named subroutine: sub foo { ... }
+            // NOTE: Named subs are compiled by the parser, not here.
+            // They use the JVM compiler which has full closure support.
+            // This is fine because compiled and interpreted code share the same RuntimeCode API.
+            visitNamedSubroutine(node);
         }
+    }
+
+    /**
+     * Visit a named subroutine: sub foo { ... }
+     *
+     * NOTE: In practice, named subroutines are compiled by the parser using the JVM compiler,
+     * not the interpreter. This method exists for completeness but may not be called for
+     * typical named sub definitions. The parser creates compiled RuntimeCode objects that
+     * interoperate seamlessly with interpreted code via the shared RuntimeCode.apply() API.
+     */
+    private void visitNamedSubroutine(SubroutineNode node) {
+        // Step 1: Collect outer variables used by this subroutine
+        Set<String> usedVars = new HashSet<>();
+        VariableCollectorVisitor collector = new VariableCollectorVisitor(usedVars);
+        node.block.accept(collector);
+
+        // Step 2: Filter to only include lexical variables that exist in current scope
+        List<String> closureVarNames = new ArrayList<>();
+        List<Integer> closureVarIndices = new ArrayList<>();
+
+        for (String varName : usedVars) {
+            int varIndex = getVariableRegister(varName);
+            if (varIndex != -1 && varIndex >= 3) {
+                closureVarNames.add(varName);
+                closureVarIndices.add(varIndex);
+            }
+        }
+
+        // Step 3: Create a new BytecodeCompiler for the subroutine body
+        BytecodeCompiler subCompiler = new BytecodeCompiler(this.sourceName, node.getIndex(), this.errorUtil);
+
+        // Step 4: Pre-populate sub-compiler's variable scope with captured variables
+        for (String varName : closureVarNames) {
+            subCompiler.addVariable(varName, "my");
+        }
+
+        // Step 5: Compile the subroutine body
+        InterpretedCode subCode = subCompiler.compile(node.block);
+
+        // Step 6: Emit bytecode to create closure with captured variables at RUNTIME
+        int codeReg = allocateRegister();
+
+        if (closureVarIndices.isEmpty()) {
+            RuntimeScalar codeScalar = new RuntimeScalar((RuntimeCode) subCode);
+            int constIdx = addToConstantPool(codeScalar);
+            emit(Opcodes.LOAD_CONST);
+            emit(codeReg);
+            emit(constIdx);
+        } else {
+            int templateIdx = addToConstantPool(subCode);
+            emit(Opcodes.CREATE_CLOSURE);
+            emit(codeReg);
+            emit(templateIdx);
+            emit(closureVarIndices.size());
+            for (int regIdx : closureVarIndices) {
+                emit(regIdx);
+            }
+        }
+
+        // Step 7: Store in global namespace
+        String fullName = node.name;
+        if (!fullName.contains("::")) {
+            fullName = "main::" + fullName;
+        }
+
+        int nameIdx = addToStringPool(fullName);
+        emit(Opcodes.STORE_GLOBAL_CODE);
+        emit(nameIdx);
+        emit(codeReg);
+
+        lastResultReg = -1;
     }
 
     /**
@@ -1260,26 +2168,64 @@ public class BytecodeCompiler implements Visitor {
      *
      * The result is an InterpretedCode wrapped in RuntimeScalar, stored in lastResultReg.
      */
+    /**
+     * Visit an anonymous subroutine: sub { ... }
+     *
+     * Compiles the subroutine body to bytecode with closure support.
+     * Anonymous subs capture lexical variables from the enclosing scope.
+     */
     private void visitAnonymousSubroutine(SubroutineNode node) {
-        // Create a new BytecodeCompiler for the subroutine body
-        BytecodeCompiler subCompiler = new BytecodeCompiler(this.sourceName, node.getIndex());
+        // Step 1: Collect outer variables used by this subroutine
+        Set<String> usedVars = new HashSet<>();
+        VariableCollectorVisitor collector = new VariableCollectorVisitor(usedVars);
+        node.block.accept(collector);
 
-        // Compile the subroutine body to InterpretedCode
+        // Step 2: Filter to only include lexical variables that exist in current scope
+        List<String> closureVarNames = new ArrayList<>();
+        List<Integer> closureVarIndices = new ArrayList<>();
+
+        for (String varName : usedVars) {
+            int varIndex = getVariableRegister(varName);
+            if (varIndex != -1 && varIndex >= 3) {
+                closureVarNames.add(varName);
+                closureVarIndices.add(varIndex);
+            }
+        }
+
+        // Step 3: Create a new BytecodeCompiler for the subroutine body
+        BytecodeCompiler subCompiler = new BytecodeCompiler(this.sourceName, node.getIndex(), this.errorUtil);
+
+        // Step 4: Pre-populate sub-compiler's variable scope with captured variables
+        for (String varName : closureVarNames) {
+            subCompiler.addVariable(varName, "my");
+        }
+
+        // Step 5: Compile the subroutine body
         InterpretedCode subCode = subCompiler.compile(node.block);
 
-        // Wrap InterpretedCode in RuntimeScalar
-        // Explicitly cast to RuntimeCode to ensure RuntimeScalar(RuntimeCode) constructor is called
-        RuntimeScalar codeScalar = new RuntimeScalar((RuntimeCode) subCode);
+        // Step 6: Create closure or simple code ref
+        int codeReg = allocateRegister();
 
-        // Store the wrapped code in constants pool and load it into a register
-        int constIdx = addToConstantPool(codeScalar);
-        int rd = allocateRegister();
+        if (closureVarIndices.isEmpty()) {
+            // No closures - just wrap the InterpretedCode
+            RuntimeScalar codeScalar = new RuntimeScalar((RuntimeCode) subCode);
+            int constIdx = addToConstantPool(codeScalar);
+            emit(Opcodes.LOAD_CONST);
+            emit(codeReg);
+            emit(constIdx);
+        } else {
+            // Has closures - emit CREATE_CLOSURE
+            int templateIdx = addToConstantPool(subCode);
+            emit(Opcodes.CREATE_CLOSURE);
+            emit(codeReg);
+            emit(templateIdx);
+            emit(closureVarIndices.size());
+            for (int regIdx : closureVarIndices) {
+                emit(regIdx);
+            }
+        }
 
-        emit(Opcodes.LOAD_CONST);
-        emit(rd);
-        emit(constIdx);
-
-        lastResultReg = rd;
+        lastResultReg = codeReg;
     }
 
     /**
@@ -1365,11 +2311,23 @@ public class BytecodeCompiler implements Visitor {
         int listReg = lastResultReg;
 
         // Step 2: Convert to RuntimeArray if needed
-        // TODO: Handle list-to-array conversion
-        int arrayReg = allocateRegister();
-        emit(Opcodes.CREATE_ARRAY);  // Placeholder - need to convert list to array
-        emit(arrayReg);
-        emit(listReg);
+        // Check if listReg contains an array or needs conversion
+        int arrayReg;
+
+        // If the list is an array variable (like @x), the register already contains the array
+        // Otherwise, we need to create a temporary array from the list
+        if (node.list instanceof OperatorNode && ((OperatorNode) node.list).operator.equals("@")) {
+            // Direct array variable - register contains RuntimeArray
+            arrayReg = listReg;
+        } else {
+            // Need to convert list to array
+            arrayReg = allocateRegister();
+            emit(Opcodes.NEW_ARRAY);
+            emit(arrayReg);
+            emit(Opcodes.ARRAY_SET_FROM_LIST);
+            emit(arrayReg);
+            emit(listReg);
+        }
 
         // Step 3: Allocate iterator index register
         int indexReg = allocateRegister();
@@ -1383,20 +2341,29 @@ public class BytecodeCompiler implements Visitor {
         emit(sizeReg);
         emit(arrayReg);
 
-        // Step 5: Allocate loop variable register
-        int varReg = allocateRegister();
+        // Step 5: Enter new scope for loop variable
+        enterScope();
+
+        // Step 6: Declare loop variable in the new scope
+        // CRITICAL: We must let addVariable allocate the register so it's synchronized
+        int varReg = -1;
         if (node.variable != null && node.variable instanceof OperatorNode) {
             OperatorNode varOp = (OperatorNode) node.variable;
             if (varOp.operator.equals("my") && varOp.operand instanceof OperatorNode) {
                 OperatorNode sigilOp = (OperatorNode) varOp.operand;
                 if (sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode) {
                     String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
-                    registerMap.put(varName, varReg);
+                    varReg = addVariable(varName, "my");
                 }
             }
         }
 
-        // Step 6: Loop start - check if index < size
+        // If no variable declared, allocate a temporary register
+        if (varReg == -1) {
+            varReg = allocateRegister();
+        }
+
+        // Step 7: Loop start - check if index < size
         int loopStartPc = bytecode.size();
 
         // Compare index with size
@@ -1412,30 +2379,33 @@ public class BytecodeCompiler implements Visitor {
         int loopEndJumpPc = bytecode.size();
         emitInt(0);  // Placeholder for jump target
 
-        // Step 7: Get array element and assign to loop variable
+        // Step 8: Get array element and assign to loop variable
         emit(Opcodes.ARRAY_GET);
         emit(varReg);
         emit(arrayReg);
         emit(indexReg);
 
-        // Step 8: Execute body
+        // Step 9: Execute body
         if (node.body != null) {
             node.body.accept(this);
         }
 
-        // Step 9: Increment index
+        // Step 10: Increment index
         emit(Opcodes.ADD_SCALAR_INT);
         emit(indexReg);
         emit(indexReg);
         emitInt(1);
 
-        // Step 10: Jump back to loop start
+        // Step 11: Jump back to loop start
         emit(Opcodes.GOTO);
         emitInt(loopStartPc);
 
-        // Step 11: Loop end - patch the forward jump
+        // Step 12: Loop end - patch the forward jump
         int loopEndPc = bytecode.size();
         patchJump(loopEndJumpPc, loopEndPc);
+
+        // Step 13: Exit scope
+        exitScope();
 
         lastResultReg = -1;  // For loop returns empty
     }

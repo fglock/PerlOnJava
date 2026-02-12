@@ -55,7 +55,7 @@ public class InterpreterTest {
             Node ast = parser.parse();
 
             // Step 4: Compile AST to interpreter bytecode
-            BytecodeCompiler compiler = new BytecodeCompiler(sourceName, sourceLine);
+            BytecodeCompiler compiler = new BytecodeCompiler(sourceName, sourceLine, errorUtil);
             InterpretedCode code = compiler.compile(ast);
 
             // Step 5: Execute via apply() (just like compiled code)
