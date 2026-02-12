@@ -27,6 +27,7 @@ public class InterpretedCode extends RuntimeCode {
     // Debug information (optional)
     public final String sourceName;        // Source file name (for stack traces)
     public final int sourceLine;           // Source line number
+    public final java.util.Map<Integer, Integer> pcToTokenIndex;  // Map bytecode PC to tokenIndex for error reporting
 
     /**
      * Constructor for InterpretedCode.
@@ -38,10 +39,12 @@ public class InterpretedCode extends RuntimeCode {
      * @param capturedVars  Captured variables for closure support (may be null)
      * @param sourceName    Source file name for debugging
      * @param sourceLine    Source line number for debugging
+     * @param pcToTokenIndex Map from bytecode PC to AST tokenIndex for error reporting
      */
     public InterpretedCode(byte[] bytecode, Object[] constants, String[] stringPool,
                           int maxRegisters, RuntimeBase[] capturedVars,
-                          String sourceName, int sourceLine) {
+                          String sourceName, int sourceLine,
+                          java.util.Map<Integer, Integer> pcToTokenIndex) {
         super(null, new java.util.ArrayList<>()); // Call RuntimeCode constructor with null prototype, empty attributes
         this.bytecode = bytecode;
         this.constants = constants;
@@ -50,6 +53,7 @@ public class InterpretedCode extends RuntimeCode {
         this.capturedVars = capturedVars;
         this.sourceName = sourceName;
         this.sourceLine = sourceLine;
+        this.pcToTokenIndex = pcToTokenIndex;
     }
 
     /**
@@ -96,7 +100,8 @@ public class InterpretedCode extends RuntimeCode {
             this.maxRegisters,
             capturedVars,  // New captured vars
             this.sourceName,
-            this.sourceLine
+            this.sourceLine,
+            this.pcToTokenIndex  // Preserve token index map
         );
     }
 
@@ -254,6 +259,22 @@ public class InterpretedCode extends RuntimeCode {
                     rd = bytecode[pc++] & 0xFF;
                     sb.append("POST_AUTODECREMENT r").append(rd).append("--\n");
                     break;
+                case Opcodes.EVAL_TRY: {
+                    int catchOffsetHigh = bytecode[pc++] & 0xFF;
+                    int catchOffsetLow = bytecode[pc++] & 0xFF;
+                    int catchOffset = (catchOffsetHigh << 8) | catchOffsetLow;
+                    int tryPc = pc - 3;
+                    int catchPc = tryPc + catchOffset;
+                    sb.append("EVAL_TRY catch_at=").append(catchPc).append("\n");
+                    break;
+                }
+                case Opcodes.EVAL_END:
+                    sb.append("EVAL_END\n");
+                    break;
+                case Opcodes.EVAL_CATCH:
+                    rd = bytecode[pc++] & 0xFF;
+                    sb.append("EVAL_CATCH r").append(rd).append("\n");
+                    break;
                 case Opcodes.CALL_SUB:
                     rd = bytecode[pc++] & 0xFF;
                     int coderefReg = bytecode[pc++] & 0xFF;
@@ -329,7 +350,7 @@ public class InterpretedCode extends RuntimeCode {
                 throw new IllegalStateException("Bytecode is required");
             }
             return new InterpretedCode(bytecode, constants, stringPool, maxRegisters,
-                                      capturedVars, sourceName, sourceLine);
+                                      capturedVars, sourceName, sourceLine, null);
         }
     }
 }
