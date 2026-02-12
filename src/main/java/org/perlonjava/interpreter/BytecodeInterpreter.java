@@ -477,7 +477,19 @@ public class BytecodeInterpreter {
                         int context = bytecode[pc++] & 0xFF;
 
                         RuntimeScalar codeRef = (RuntimeScalar) registers[coderefReg];
-                        RuntimeArray callArgs = (RuntimeArray) registers[argsReg];
+                        RuntimeBase argsBase = registers[argsReg];
+
+                        // Convert args to RuntimeArray if needed
+                        RuntimeArray callArgs;
+                        if (argsBase instanceof RuntimeArray) {
+                            callArgs = (RuntimeArray) argsBase;
+                        } else if (argsBase instanceof RuntimeList) {
+                            // Convert RuntimeList to RuntimeArray (from ListNode)
+                            callArgs = new RuntimeArray((RuntimeList) argsBase);
+                        } else {
+                            // Single scalar argument
+                            callArgs = new RuntimeArray((RuntimeScalar) argsBase);
+                        }
 
                         // RuntimeCode.apply works for both compiled AND interpreted code
                         RuntimeList result = RuntimeCode.apply(codeRef, "", callArgs, context);
@@ -716,6 +728,42 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    // =================================================================
+                    // LIST OPERATIONS
+                    // =================================================================
+
+                    case Opcodes.CREATE_LIST: {
+                        // Create RuntimeList from registers
+                        // Format: [CREATE_LIST] [rd] [count] [rs1] [rs2] ... [rsN]
+
+                        int rd = bytecode[pc++] & 0xFF;
+                        int count = bytecode[pc++] & 0xFF;
+
+                        // Optimize for common cases
+                        if (count == 0) {
+                            // Empty list - fastest path
+                            registers[rd] = new RuntimeList();
+                        } else if (count == 1) {
+                            // Single element - avoid loop overhead
+                            int rs = bytecode[pc++] & 0xFF;
+                            RuntimeList list = new RuntimeList();
+                            list.add(registers[rs]);
+                            registers[rd] = list;
+                        } else {
+                            // Multiple elements - preallocate and populate
+                            RuntimeList list = new RuntimeList();
+
+                            // Read all register indices and add elements
+                            for (int i = 0; i < count; i++) {
+                                int rs = bytecode[pc++] & 0xFF;
+                                list.add(registers[rs]);
+                            }
+
+                            registers[rd] = list;
+                        }
+                        break;
+                    }
+
                     default:
                         throw new RuntimeException(
                             "Unknown opcode: " + (opcode & 0xFF) +
@@ -732,73 +780,14 @@ public class BytecodeInterpreter {
             // Check if we're inside an eval block
             if (!evalCatchStack.isEmpty()) {
                 // Inside eval block - catch the exception
-                int catchPc = evalCatchStack.pop();
+                evalCatchStack.pop(); // Pop the catch handler
 
                 // Call WarnDie.catchEval() to set $@
                 WarnDie.catchEval(e);
 
-                // Jump to catch block and continue execution
-                pc = catchPc;
-
-                // Continue executing from catch block
-                try {
-                    while (pc < bytecode.length) {
-                        byte opcode = bytecode[pc++];
-
-                        // We're now at EVAL_CATCH opcode - execute it and continue
-                        if (opcode == Opcodes.EVAL_CATCH) {
-                            int rd = bytecode[pc++] & 0xFF;
-                            registers[rd] = RuntimeScalarCache.scalarUndef;
-                            // Continue to next opcode (usually GOTO to end)
-                            continue;
-                        }
-
-                        // Execute remaining opcodes normally
-                        // This is a simplified loop - in a real implementation,
-                        // we'd need to handle all opcodes here too
-                        // For now, just handle RETURN and GOTO
-                        switch (opcode) {
-                            case Opcodes.RETURN: {
-                                int retReg = bytecode[pc++] & 0xFF;
-                                RuntimeBase retVal = registers[retReg];
-                                if (retVal == null) {
-                                    return new RuntimeList();
-                                } else if (retVal instanceof RuntimeList) {
-                                    return (RuntimeList) retVal;
-                                } else if (retVal instanceof RuntimeScalar) {
-                                    return new RuntimeList(retVal);
-                                } else {
-                                    return new RuntimeList(retVal);
-                                }
-                            }
-                            case Opcodes.GOTO: {
-                                int offsetHigh = bytecode[pc++] & 0xFF;
-                                int offsetLow = bytecode[pc++] & 0xFF;
-                                int offset = (offsetHigh << 8) | offsetLow;
-                                pc = pc - 3 + offset; // Jump relative to GOTO opcode
-                                break;
-                            }
-                            default:
-                                // Unexpected opcode after EVAL_CATCH
-                                throw new RuntimeException(
-                                    "Unexpected opcode after EVAL_CATCH: " + (opcode & 0xFF)
-                                );
-                        }
-
-                        // If we got here, we've executed the catch block
-                        // Return empty list (eval failed)
-                        return new RuntimeList();
-                    }
-
-                    return new RuntimeList();
-                } catch (Exception catchE) {
-                    // Exception in catch block - propagate
-                    throw new RuntimeException(
-                        "Interpreter error in eval catch block in " + code.sourceName + ":" + code.sourceLine +
-                        " at pc=" + pc + ": " + catchE.getMessage(),
-                        catchE
-                    );
-                }
+                // Eval block failed - return empty list
+                // (The result will be undef in scalar context, empty in list context)
+                return new RuntimeList();
             }
 
             // Not in eval block - propagate exception

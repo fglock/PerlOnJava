@@ -355,5 +355,19 @@ public class Opcodes {
      */
     public static final byte EVAL_END = 85;
 
+    /**
+     * CREATE_LIST: Create RuntimeList from registers
+     * Format: [CREATE_LIST] [rd] [count] [rs1] [rs2] ... [rsN]
+     * Effect: rd = new RuntimeList(registers[rs1], registers[rs2], ..., registers[rsN])
+     *
+     * Highly optimized for common cases:
+     * - count=0: Creates empty RuntimeList
+     * - count=1: Creates RuntimeList with single element
+     * - count>1: Creates RuntimeList and adds all elements
+     *
+     * This is the most performance-critical opcode for list operations.
+     */
+    public static final byte CREATE_LIST = 86;
+
     private Opcodes() {} // Utility class - no instantiation
 }
