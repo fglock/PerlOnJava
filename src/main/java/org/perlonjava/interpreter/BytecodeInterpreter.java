@@ -427,20 +427,15 @@ public class BytecodeInterpreter {
                         int rd = bytecode[pc++] & 0xFF;
                         int listReg = bytecode[pc++] & 0xFF;
 
-                        // Convert RuntimeList to RuntimeArray
+                        // Convert to list (polymorphic - works for PerlRange, RuntimeList, etc.)
                         RuntimeBase source = registers[listReg];
-                        if (source instanceof RuntimeList) {
-                            registers[rd] = new RuntimeArray((RuntimeList) source);
-                        } else if (source instanceof RuntimeArray) {
-                            registers[rd] = source;  // Already an array
-                        } else if (source instanceof RuntimeScalar) {
-                            // Single scalar -> array with one element
-                            RuntimeArray arr = new RuntimeArray();
-                            arr.push((RuntimeScalar) source);
-                            registers[rd] = arr;
+                        if (source instanceof RuntimeArray) {
+                            // Already an array - pass through
+                            registers[rd] = source;
                         } else {
-                            // Empty or unknown -> empty array
-                            registers[rd] = new RuntimeArray();
+                            // Convert to list, then to array (works for PerlRange, RuntimeList, etc.)
+                            RuntimeList list = source.getList();
+                            registers[rd] = new RuntimeArray(list);
                         }
                         break;
                     }

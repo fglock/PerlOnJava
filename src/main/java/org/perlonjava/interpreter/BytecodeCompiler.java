@@ -561,6 +561,34 @@ public class BytecodeCompiler implements Visitor {
                 emit(rs1);
                 emit(rs2);
             }
+            case ".." -> {
+                // Range operator: start..end
+                // Create a PerlRange object which can be iterated or converted to a list
+
+                // Optimization: if both operands are constant numbers, create range at compile time
+                if (node.left instanceof NumberNode && node.right instanceof NumberNode) {
+                    try {
+                        int start = Integer.parseInt(((NumberNode) node.left).value);
+                        int end = Integer.parseInt(((NumberNode) node.right).value);
+
+                        // Create PerlRange with RuntimeScalarCache integers
+                        RuntimeScalar startScalar = RuntimeScalarCache.getScalarInt(start);
+                        RuntimeScalar endScalar = RuntimeScalarCache.getScalarInt(end);
+                        PerlRange range = PerlRange.createRange(startScalar, endScalar);
+
+                        // Store in constant pool and load
+                        int constIdx = addToConstantPool(range);
+                        emit(Opcodes.LOAD_CONST);
+                        emit(rd);
+                        emit(constIdx);
+                    } catch (NumberFormatException e) {
+                        throw new RuntimeException("Range operator requires integer values: " + e.getMessage());
+                    }
+                } else {
+                    // Runtime range creation - not yet implemented
+                    throw new RuntimeException("Range operator with non-constant values not yet implemented");
+                }
+            }
             default -> throw new RuntimeException("Unsupported operator: " + node.operator);
         }
 
