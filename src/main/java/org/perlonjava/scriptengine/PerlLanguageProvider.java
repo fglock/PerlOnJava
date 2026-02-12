@@ -321,7 +321,16 @@ public class PerlLanguageProvider {
                 ctx.compilerOptions.fileName,
                 1  // tokenIndex for error reporting
             );
-            return compiler.compile(ast);
+            InterpretedCode interpretedCode = compiler.compile(ast);
+
+            // If --disassemble is enabled, print the bytecode
+            if (ctx.compilerOptions.disassembleEnabled) {
+                System.out.println("=== Interpreter Bytecode ===");
+                System.out.println(interpretedCode.disassemble());
+                System.out.println("=== End Bytecode ===");
+            }
+
+            return interpretedCode;
         } else {
             // Compiler path - returns generated class instance
             ctx.logDebug("Compiling to JVM bytecode");
