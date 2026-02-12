@@ -871,6 +871,19 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.RANGE: {
+                        // Create range: rd = PerlRange.createRange(rs_start, rs_end)
+                        int rd = bytecode[pc++] & 0xFF;
+                        int startReg = bytecode[pc++] & 0xFF;
+                        int endReg = bytecode[pc++] & 0xFF;
+
+                        RuntimeScalar start = (RuntimeScalar) registers[startReg];
+                        RuntimeScalar end = (RuntimeScalar) registers[endReg];
+                        PerlRange range = PerlRange.createRange(start, end);
+                        registers[rd] = range;
+                        break;
+                    }
+
                     // =================================================================
                     // SLOW OPERATIONS
                     // =================================================================

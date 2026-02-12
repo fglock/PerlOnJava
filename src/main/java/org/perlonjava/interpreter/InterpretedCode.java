@@ -405,6 +405,12 @@ public class InterpretedCode extends RuntimeCode {
                     listReg = bytecode[pc++] & 0xFF;
                     sb.append("SELECT r").append(rd).append(" = select(r").append(listReg).append(")\n");
                     break;
+                case Opcodes.RANGE:
+                    rd = bytecode[pc++] & 0xFF;
+                    int startReg = bytecode[pc++] & 0xFF;
+                    int endReg = bytecode[pc++] & 0xFF;
+                    sb.append("RANGE r").append(rd).append(" = r").append(startReg).append("..r").append(endReg).append("\n");
+                    break;
                 case Opcodes.SLOW_OP: {
                     int slowOpId = bytecode[pc++] & 0xFF;
                     String opName = SlowOpcodeHandler.getSlowOpName(slowOpId);

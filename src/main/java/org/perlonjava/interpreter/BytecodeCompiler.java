@@ -585,8 +585,12 @@ public class BytecodeCompiler implements Visitor {
                         throw new RuntimeException("Range operator requires integer values: " + e.getMessage());
                     }
                 } else {
-                    // Runtime range creation - not yet implemented
-                    throw new RuntimeException("Range operator with non-constant values not yet implemented");
+                    // Runtime range creation using RANGE opcode
+                    // rs1 and rs2 already contain the start and end values
+                    emit(Opcodes.RANGE);
+                    emit(rd);
+                    emit(rs1);
+                    emit(rs2);
                 }
             }
             default -> throw new RuntimeException("Unsupported operator: " + node.operator);

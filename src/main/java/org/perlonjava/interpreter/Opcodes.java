@@ -383,6 +383,9 @@ public class Opcodes {
     /** Select default output filehandle: rd = IOOperator.select(rs_list, SCALAR) */
     public static final byte SELECT = 89;
 
+    /** Create range: rd = PerlRange.createRange(rs_start, rs_end) */
+    public static final byte RANGE = 90;
+
     // =================================================================
     // SLOW OPERATIONS (87) - Single opcode for rarely-used operations
     // =================================================================
