@@ -671,6 +671,18 @@ public class BytecodeCompiler implements Visitor {
                 int skipRightTarget = bytecode.size();
                 patchIntOffset(skipRightPos + 2, skipRightTarget);
             }
+            case "map" -> {
+                // Map operator: map { block } list
+                // rs1 = closure (SubroutineNode compiled to code reference)
+                // rs2 = list expression
+
+                // Emit MAP opcode
+                emit(Opcodes.MAP);
+                emit(rd);
+                emit(rs2);       // List register
+                emit(rs1);       // Closure register
+                emit(RuntimeContextType.LIST);  // Map always uses list context
+            }
             default -> throw new RuntimeException("Unsupported operator: " + node.operator);
         }
 
@@ -711,8 +723,15 @@ public class BytecodeCompiler implements Visitor {
                     lastResultReg = registerMap.get(varName);
                 } else {
                     // Global variable - load it
+                    // Add package prefix if not present (match compiler behavior)
+                    String globalVarName = varName;
+                    if (!globalVarName.contains("::")) {
+                        // Remove $ sigil, add package, restore sigil
+                        globalVarName = "main::" + varName.substring(1);
+                    }
+
                     int rd = allocateRegister();
-                    int nameIdx = addToStringPool(varName);
+                    int nameIdx = addToStringPool(globalVarName);
 
                     emit(Opcodes.LOAD_GLOBAL_SCALAR);
                     emit(rd);
@@ -907,6 +926,34 @@ public class BytecodeCompiler implements Visitor {
                 emit(undefReg);
             }
             lastResultReg = -1; // No result after return
+        } else if (op.equals("rand")) {
+            // rand() or rand($max)
+            // Calls Random.rand(max) where max defaults to 1
+            int rd = allocateRegister();
+
+            if (node.operand != null) {
+                // rand($max) - evaluate operand
+                node.operand.accept(this);
+                int maxReg = lastResultReg;
+
+                // Emit RAND opcode
+                emit(Opcodes.RAND);
+                emit(rd);
+                emit(maxReg);
+            } else {
+                // rand() with no argument - defaults to 1
+                int oneReg = allocateRegister();
+                emit(Opcodes.LOAD_INT);
+                emit(oneReg);
+                emitInt(1);
+
+                // Emit RAND opcode
+                emit(Opcodes.RAND);
+                emit(rd);
+                emit(oneReg);
+            }
+
+            lastResultReg = rd;
         } else if (op.equals("die")) {
             // die $message;
             if (node.operand != null) {
