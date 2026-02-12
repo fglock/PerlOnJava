@@ -5,6 +5,8 @@ import org.perlonjava.astnode.Node;
 import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.codegen.EmitterMethodCreator;
 import org.perlonjava.codegen.JavaClassInfo;
+import org.perlonjava.interpreter.BytecodeCompiler;
+import org.perlonjava.interpreter.InterpretedCode;
 import org.perlonjava.lexer.Lexer;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.parser.DataSection;
@@ -179,12 +181,12 @@ public class PerlLanguageProvider {
         // loses those declarations and causes strict-vars failures during codegen.
         ctx.symbolTable = ctx.symbolTable.snapShot();
         SpecialBlockParser.setCurrentScope(ctx.symbolTable);
-        Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(
-                ctx,
-                ast,
-                false   // no try-catch
-        );
-        return executeGeneratedClass(generatedClass, ctx, isTopLevelScript, callerContext);
+
+        // Compile to executable (compiler or interpreter based on flag)
+        Object codeInstance = compileToExecutable(ast, ctx);
+
+        // Execute (unified path for both backends)
+        return executeCode(codeInstance, ctx, isTopLevelScript, callerContext);
     }
 
     /**
@@ -231,26 +233,25 @@ public class PerlLanguageProvider {
         // Snapshot the symbol table as seen by the parser (includes lexical decls + pragma state).
         ctx.symbolTable = ctx.symbolTable.snapShot();
         SpecialBlockParser.setCurrentScope(ctx.symbolTable);
-        Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(
-                ctx,
-                ast,
-                false
-        );
+
+        // Compile to executable (compiler or interpreter based on flag)
+        Object codeInstance = compileToExecutable(ast, ctx);
 
         // executePerlAST is always called from BEGIN blocks which use VOID context
-        return executeGeneratedClass(generatedClass, ctx, false, RuntimeContextType.VOID);
+        return executeCode(codeInstance, ctx, false, RuntimeContextType.VOID);
     }
 
     /**
-     * Common method to execute the generated class and return the result.
+     * Common method to execute compiled code and return the result.
+     * Works with both interpreter (InterpretedCode) and compiler (generated class instance).
      *
-     * @param generatedClass The generated Java class.
-     * @param ctx            The emitter context.
-     * @param isMainProgram  Indicates if this is the main program.
-     * @param callerContext  The calling context (VOID, SCALAR, LIST) or -1 for default
+     * @param codeInstance  The compiled code instance (InterpretedCode or generated class)
+     * @param ctx           The emitter context.
+     * @param isMainProgram Indicates if this is the main program.
+     * @param callerContext The calling context (VOID, SCALAR, LIST) or -1 for default
      * @return The result of the Perl code execution.
      */
-    private static RuntimeList executeGeneratedClass(Class<?> generatedClass, EmitterContext ctx, boolean isMainProgram, int callerContext) throws Exception {
+    private static RuntimeList executeCode(Object codeInstance, EmitterContext ctx, boolean isMainProgram, int callerContext) throws Exception {
         runUnitcheckBlocks(ctx.unitcheckBlocks);
         if (isMainProgram) {
             runCheckBlocks();
@@ -260,10 +261,9 @@ public class PerlLanguageProvider {
             return null;
         }
 
-        Constructor<?> constructor = generatedClass.getConstructor();
-        Object instance = constructor.newInstance();
-
-        MethodHandle invoker = RuntimeCode.lookup.findVirtual(generatedClass, "apply", RuntimeCode.methodType);
+        // Get MethodHandle for apply() - works for both RuntimeCode subclasses and generated classes
+        Class<?> codeClass = codeInstance.getClass();
+        MethodHandle invoker = RuntimeCode.lookup.findVirtual(codeClass, "apply", RuntimeCode.methodType);
 
         RuntimeList result;
         try {
@@ -274,7 +274,7 @@ public class PerlLanguageProvider {
             // Use the caller's context if specified, otherwise use default behavior
             int executionContext = callerContext >= 0 ? callerContext :
                     (isMainProgram ? RuntimeContextType.VOID : RuntimeContextType.SCALAR);
-            result = (RuntimeList) invoker.invoke(instance, new RuntimeArray(), executionContext);
+            result = (RuntimeList) invoker.invoke(codeInstance, new RuntimeArray(), executionContext);
 
             try {
                 if (isMainProgram) {
@@ -301,6 +301,38 @@ public class PerlLanguageProvider {
 
         RuntimeIO.flushAllHandles();
         return result;
+    }
+
+    /**
+     * Compiles Perl AST to an executable instance (compiler or interpreter).
+     * This method provides a unified compilation path that chooses the backend
+     * based on CompilerOptions.useInterpreter.
+     *
+     * @param ast The abstract syntax tree to compile
+     * @param ctx The emitter context
+     * @return Object that has apply() method - either InterpretedCode or compiled class instance
+     * @throws Exception if compilation fails
+     */
+    private static Object compileToExecutable(Node ast, EmitterContext ctx) throws Exception {
+        if (ctx.compilerOptions.useInterpreter) {
+            // Interpreter path - returns InterpretedCode (extends RuntimeCode)
+            ctx.logDebug("Compiling to bytecode interpreter");
+            BytecodeCompiler compiler = new BytecodeCompiler(
+                ctx.compilerOptions.fileName,
+                1  // tokenIndex for error reporting
+            );
+            return compiler.compile(ast);
+        } else {
+            // Compiler path - returns generated class instance
+            ctx.logDebug("Compiling to JVM bytecode");
+            Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(
+                ctx,
+                ast,
+                false  // no try-catch
+            );
+            Constructor<?> constructor = generatedClass.getConstructor();
+            return constructor.newInstance();
+        }
     }
 
     /**
@@ -350,22 +382,13 @@ public class PerlLanguageProvider {
         parser.isTopLevelScript = false;  // Not top-level for compiled script
         Node ast = parser.parse();
 
-        // Compile to class
+        // Compile to class or bytecode based on flag
         ctx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
         ctx.symbolTable = ctx.symbolTable.snapShot();
         SpecialBlockParser.setCurrentScope(ctx.symbolTable);
-        Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(
-                ctx,
-                ast,
-                false  // no try-catch
-        );
 
-        // Create instance and return it (no cast to avoid ClassLoader issues)
-        Constructor<?> constructor = generatedClass.getConstructor();
-        Object instance = constructor.newInstance();
-
-        // Return instance directly (will be used with MethodHandle)
-        return instance;
+        // Use unified compilation path (works for JSR 223 too!)
+        return compileToExecutable(ast, ctx);
     }
 }
 
