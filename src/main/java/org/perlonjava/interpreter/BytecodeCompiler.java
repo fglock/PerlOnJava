@@ -2116,19 +2116,27 @@ public class BytecodeCompiler implements Visitor {
         } else if (op.equals("\\")) {
             // Reference operator: \$x, \@x, \%x, \*x, etc.
             if (node.operand != null) {
-                // Evaluate the operand
-                node.operand.accept(this);
-                int valueReg = lastResultReg;
+                // Compile operand in LIST context to get the actual value
+                // Example: \@array should get a reference to the array itself,
+                // not its size (which would happen in SCALAR context)
+                int savedContext = currentCallContext;
+                currentCallContext = RuntimeContextType.LIST;
+                try {
+                    node.operand.accept(this);
+                    int valueReg = lastResultReg;
 
-                // Allocate register for reference
-                int rd = allocateRegister();
+                    // Allocate register for reference
+                    int rd = allocateRegister();
 
-                // Emit CREATE_REF
-                emit(Opcodes.CREATE_REF);
-                emit(rd);
-                emit(valueReg);
+                    // Emit CREATE_REF
+                    emit(Opcodes.CREATE_REF);
+                    emit(rd);
+                    emit(valueReg);
 
-                lastResultReg = rd;
+                    lastResultReg = rd;
+                } finally {
+                    currentCallContext = savedContext;
+                }
             } else {
                 throw new RuntimeException("Reference operator requires operand");
             }
