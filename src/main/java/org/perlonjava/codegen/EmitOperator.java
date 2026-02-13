@@ -347,7 +347,7 @@ public class EmitOperator {
 
         // Push the formatted line number as a message using errorUtil for correct line tracking
         String fileName = emitterVisitor.ctx.errorUtil.getFileName();
-        int lineNumber = emitterVisitor.ctx.errorUtil.getLineNumber(node.tokenIndex);
+        int lineNumber = emitterVisitor.ctx.errorUtil.getLineNumberAccurate(node.tokenIndex);
         Node message = new StringNode(" at " + fileName + " line " + lineNumber, node.tokenIndex);
         message.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
 

@@ -2902,7 +2902,7 @@ public class BytecodeCompiler implements Visitor {
                 } else if (errorUtil != null) {
                     // Fallback to errorUtil if annotations not available
                     String fileName = errorUtil.getFileName();
-                    int lineNumber = errorUtil.getLineNumber(node.getIndex());
+                    int lineNumber = errorUtil.getLineNumberAccurate(node.getIndex());
                     locationMsg = " at " + fileName + " line " + lineNumber;
                 } else {
                     // Final fallback if neither available

@@ -978,7 +978,7 @@ public class ArgumentParser {
         }
 
         // Force line number to start at 1
-        parsedArgs.code = "# line 1\n" + parsedArgs.code;
+        // parsedArgs.code = "# line 1\n" + parsedArgs.code;
 
         String autoSplit = "";
         if (parsedArgs.autoSplit) {
