@@ -184,6 +184,9 @@ public class SlowOpcodeHandler {
             case Opcodes.SLOWOP_DELETE:
                 return executeDelete(bytecode, pc, registers);
 
+            case Opcodes.SLOWOP_DEREF_HASH:
+                return executeDerefHash(bytecode, pc, registers);
+
             default:
                 throw new RuntimeException(
                     "Unknown slow operation ID: " + slowOpId +
@@ -233,6 +236,7 @@ public class SlowOpcodeHandler {
             case Opcodes.SLOWOP_SPLIT -> "split";
             case Opcodes.SLOWOP_EXISTS -> "exists";
             case Opcodes.SLOWOP_DELETE -> "delete";
+            case Opcodes.SLOWOP_DEREF_HASH -> "deref_hash";
             default -> "slowop_" + slowOpId;
         };
     }
@@ -924,6 +928,41 @@ public class SlowOpcodeHandler {
             "delete() slow path not yet implemented in interpreter. " +
             "Use simple hash access: delete $hash{key}"
         );
+    }
+
+    /**
+     * Dereference hash reference for hashref access.
+     * Handles: $hashref->{key} where $hashref contains a hash reference
+     *
+     * @param bytecode  The bytecode array
+     * @param pc        Program counter (points after slowOpId)
+     * @param registers Register array
+     * @return Updated program counter
+     */
+    private static int executeDerefHash(
+            short[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+
+        int rd = bytecode[pc++];
+        int scalarReg = bytecode[pc++];
+
+        RuntimeBase scalarBase = registers[scalarReg];
+
+        // If it's already a hash, use it directly
+        if (scalarBase instanceof RuntimeHash) {
+            registers[rd] = scalarBase;
+            return pc;
+        }
+
+        // Otherwise, dereference as hash reference
+        RuntimeScalar scalar = scalarBase.scalar();
+
+        // Get the dereferenced hash using Perl's hash dereference semantics
+        RuntimeHash hash = scalar.hashDeref();
+
+        registers[rd] = hash;
+        return pc;
     }
 
     private SlowOpcodeHandler() {
