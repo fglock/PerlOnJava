@@ -557,6 +557,12 @@ public class Opcodes {
     /** Slow op ID: rd = deref_hash(scalar_ref) - dereference hash reference for hashref access */
     public static final int SLOWOP_DEREF_HASH = 35;
 
+    /** Slow op ID: rd = hash.getSlice(keys_list) - hash slice operation @hash{keys} */
+    public static final int SLOWOP_HASH_SLICE = 36;
+
+    /** Slow op ID: rd = hash.deleteSlice(keys_list) - hash slice delete operation delete @hash{keys} */
+    public static final int SLOWOP_HASH_SLICE_DELETE = 37;
+
     // =================================================================
     // OPCODES 93-255: RESERVED FOR FUTURE FAST OPERATIONS
     // =================================================================

@@ -187,6 +187,12 @@ public class SlowOpcodeHandler {
             case Opcodes.SLOWOP_DEREF_HASH:
                 return executeDerefHash(bytecode, pc, registers);
 
+            case Opcodes.SLOWOP_HASH_SLICE:
+                return executeHashSlice(bytecode, pc, registers);
+
+            case Opcodes.SLOWOP_HASH_SLICE_DELETE:
+                return executeHashSliceDelete(bytecode, pc, registers);
+
             default:
                 throw new RuntimeException(
                     "Unknown slow operation ID: " + slowOpId +
@@ -237,6 +243,8 @@ public class SlowOpcodeHandler {
             case Opcodes.SLOWOP_EXISTS -> "exists";
             case Opcodes.SLOWOP_DELETE -> "delete";
             case Opcodes.SLOWOP_DEREF_HASH -> "deref_hash";
+            case Opcodes.SLOWOP_HASH_SLICE -> "hash_slice";
+            case Opcodes.SLOWOP_HASH_SLICE_DELETE -> "hash_slice_delete";
             default -> "slowop_" + slowOpId;
         };
     }
@@ -962,6 +970,66 @@ public class SlowOpcodeHandler {
         RuntimeHash hash = scalar.hashDeref();
 
         registers[rd] = hash;
+        return pc;
+    }
+
+    /**
+     * SLOW_HASH_SLICE: rd = hash.getSlice(keys_list)
+     * Format: [SLOW_HASH_SLICE] [rd] [hashReg] [keysListReg]
+     * Effect: rd = RuntimeArray of values for the given keys
+     */
+    private static int executeHashSlice(
+            short[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+
+        int rd = bytecode[pc++];
+        int hashReg = bytecode[pc++];
+        int keysListReg = bytecode[pc++];
+
+        RuntimeHash hash = (RuntimeHash) registers[hashReg];
+        RuntimeList keysList = (RuntimeList) registers[keysListReg];
+
+        // Get values for all keys
+        RuntimeList valuesList = hash.getSlice(keysList);
+
+        // Convert to RuntimeArray for array assignment
+        RuntimeArray result = new RuntimeArray();
+        for (RuntimeBase elem : valuesList.elements) {
+            result.elements.add(elem.scalar());
+        }
+
+        registers[rd] = result;
+        return pc;
+    }
+
+    /**
+     * SLOW_HASH_SLICE_DELETE: rd = hash.deleteSlice(keys_list)
+     * Format: [SLOW_HASH_SLICE_DELETE] [rd] [hashReg] [keysListReg]
+     * Effect: rd = RuntimeList of deleted values
+     */
+    private static int executeHashSliceDelete(
+            short[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+
+        int rd = bytecode[pc++];
+        int hashReg = bytecode[pc++];
+        int keysListReg = bytecode[pc++];
+
+        RuntimeHash hash = (RuntimeHash) registers[hashReg];
+        RuntimeList keysList = (RuntimeList) registers[keysListReg];
+
+        // Delete values for all keys and return them
+        RuntimeList deletedValuesList = hash.deleteSlice(keysList);
+
+        // Convert to RuntimeArray for array assignment
+        RuntimeArray result = new RuntimeArray();
+        for (RuntimeBase elem : deletedValuesList.elements) {
+            result.elements.add(elem.scalar());
+        }
+
+        registers[rd] = result;
         return pc;
     }
 
