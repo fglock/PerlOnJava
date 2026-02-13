@@ -1355,6 +1355,19 @@ public class BytecodeCompiler implements Visitor {
                 emit(rs1);       // Closure register
                 emitInt(addToStringPool(currentPackage));  // Package name for sort
             }
+            case "split" -> {
+                // Split operator: split pattern, string
+                // rs1 = pattern (string or regex)
+                // rs2 = list containing string to split (and optional limit)
+
+                // Emit SLOW_OP with SLOWOP_SPLIT
+                emit(Opcodes.SLOW_OP);
+                emit(Opcodes.SLOWOP_SPLIT);
+                emit(rd);
+                emit(rs1);  // Pattern register
+                emit(rs2);  // Args register
+                emit(RuntimeContextType.LIST);  // Split uses list context
+            }
             case "[" -> {
                 // Array element access: $a[10] means get element 10 from array @a
                 // Array slice: @a[1,2,3] or @a[1..3] means get multiple elements

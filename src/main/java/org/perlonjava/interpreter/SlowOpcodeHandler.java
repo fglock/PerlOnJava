@@ -175,6 +175,9 @@ public class SlowOpcodeHandler {
             case Opcodes.SLOWOP_ARRAY_SLICE_SET:
                 return executeArraySliceSet(bytecode, pc, registers);
 
+            case Opcodes.SLOWOP_SPLIT:
+                return executeSplit(bytecode, pc, registers);
+
             default:
                 throw new RuntimeException(
                     "Unknown slow operation ID: " + slowOpId +
@@ -221,6 +224,7 @@ public class SlowOpcodeHandler {
             case Opcodes.SLOWOP_ARRAY_SLICE -> "array_slice";
             case Opcodes.SLOWOP_REVERSE -> "reverse";
             case Opcodes.SLOWOP_ARRAY_SLICE_SET -> "array_slice_set";
+            case Opcodes.SLOWOP_SPLIT -> "split";
             default -> "slowop_" + slowOpId;
         };
     }
@@ -847,6 +851,30 @@ public class SlowOpcodeHandler {
 
         array.setSlice(indices, values);
 
+        return pc;
+    }
+
+    /**
+     * SLOW_SPLIT: rd = Operator.split(pattern, args, ctx)
+     * Format: [SLOW_SPLIT] [rd] [patternReg] [argsReg] [ctx]
+     * Effect: rd = Operator.split(pattern, args, ctx)
+     */
+    private static int executeSplit(
+            byte[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+
+        int rd = bytecode[pc++] & 0xFF;
+        int patternReg = bytecode[pc++] & 0xFF;
+        int argsReg = bytecode[pc++] & 0xFF;
+        int ctx = bytecode[pc++] & 0xFF;
+
+        RuntimeScalar pattern = (RuntimeScalar) registers[patternReg];
+        RuntimeList args = (RuntimeList) registers[argsReg];
+
+        RuntimeList result = org.perlonjava.operators.Operator.split(pattern, args, ctx);
+
+        registers[rd] = result;
         return pc;
     }
 
