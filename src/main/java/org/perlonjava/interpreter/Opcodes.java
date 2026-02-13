@@ -539,6 +539,9 @@ public class Opcodes {
     /** Slow op ID: rd = array.getSlice(indices_list) - array slice operation */
     public static final int SLOWOP_ARRAY_SLICE = 29;
 
+    /** Slow op ID: rd = Operator.reverse(ctx, args...) - reverse array or string */
+    public static final int SLOWOP_REVERSE = 30;
+
     // =================================================================
     // OPCODES 93-255: RESERVED FOR FUTURE FAST OPERATIONS
     // =================================================================

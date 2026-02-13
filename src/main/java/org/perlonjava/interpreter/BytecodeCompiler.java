@@ -2408,6 +2408,42 @@ public class BytecodeCompiler implements Visitor {
             emit(argsListReg);
 
             lastResultReg = rd;
+        } else if (op.equals("reverse")) {
+            // Array/string reverse: reverse @array or reverse $string
+            // operand: ListNode containing arguments
+            if (node.operand == null || !(node.operand instanceof ListNode)) {
+                throwCompilerException("reverse requires arguments");
+            }
+
+            ListNode list = (ListNode) node.operand;
+
+            // Compile all arguments into registers
+            List<Integer> argRegs = new ArrayList<>();
+            for (Node arg : list.elements) {
+                arg.accept(this);
+                argRegs.add(lastResultReg);
+            }
+
+            // Create a RuntimeList from these registers
+            int argsListReg = allocateRegister();
+            emit(Opcodes.CREATE_LIST);
+            emit(argsListReg);
+            emit(argRegs.size());
+            for (int argReg : argRegs) {
+                emit(argReg);
+            }
+
+            // Allocate result register
+            int rd = allocateRegister();
+
+            // Emit SLOW_OP with SLOWOP_REVERSE
+            emit(Opcodes.SLOW_OP);
+            emit(Opcodes.SLOWOP_REVERSE);
+            emit(rd);
+            emit(argsListReg);
+            emit(RuntimeContextType.LIST);  // Context
+
+            lastResultReg = rd;
         } else {
             throwCompilerException("Unsupported operator: " + op);
         }

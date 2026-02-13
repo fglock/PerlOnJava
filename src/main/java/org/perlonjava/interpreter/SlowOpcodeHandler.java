@@ -169,6 +169,9 @@ public class SlowOpcodeHandler {
             case Opcodes.SLOWOP_ARRAY_SLICE:
                 return executeArraySlice(bytecode, pc, registers);
 
+            case Opcodes.SLOWOP_REVERSE:
+                return executeReverse(bytecode, pc, registers);
+
             default:
                 throw new RuntimeException(
                     "Unknown slow operation ID: " + slowOpId +
@@ -213,6 +216,7 @@ public class SlowOpcodeHandler {
             case Opcodes.SLOWOP_LOCAL_SCALAR -> "local_scalar";
             case Opcodes.SLOWOP_SPLICE -> "splice";
             case Opcodes.SLOWOP_ARRAY_SLICE -> "array_slice";
+            case Opcodes.SLOWOP_REVERSE -> "reverse";
             default -> "slowop_" + slowOpId;
         };
     }
@@ -791,6 +795,29 @@ public class SlowOpcodeHandler {
         RuntimeList indices = (RuntimeList) registers[indicesReg];
 
         RuntimeList result = array.getSlice(indices);
+
+        registers[rd] = result;
+        return pc;
+    }
+
+    /**
+     * SLOW_REVERSE: rd = Operator.reverse(ctx, args...)
+     * Format: [SLOW_REVERSE] [rd] [argsReg] [ctx]
+     * Effect: rd = Operator.reverse(ctx, args...)
+     */
+    private static int executeReverse(
+            byte[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+
+        int rd = bytecode[pc++] & 0xFF;
+        int argsReg = bytecode[pc++] & 0xFF;
+        int ctx = bytecode[pc++] & 0xFF;
+
+        RuntimeList argsList = (RuntimeList) registers[argsReg];
+        RuntimeBase[] args = argsList.elements.toArray(new RuntimeBase[0]);
+
+        RuntimeBase result = org.perlonjava.operators.Operator.reverse(ctx, args);
 
         registers[rd] = result;
         return pc;
