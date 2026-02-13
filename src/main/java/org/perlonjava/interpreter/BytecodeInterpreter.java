@@ -38,6 +38,11 @@ public class BytecodeInterpreter {
      * @return RuntimeList containing the result (may be RuntimeControlFlowList)
      */
     public static RuntimeList execute(InterpretedCode code, RuntimeArray args, int callContext, String subroutineName) {
+        // Track interpreter state for stack traces
+        String framePackageName = code.packageName != null ? code.packageName : "main";
+        String frameSubName = subroutineName != null ? subroutineName : (code.subName != null ? code.subName : "(eval)");
+        InterpreterState.push(code, framePackageName, frameSubName);
+
         // Pure register file (NOT stack-based - matches compiler for control flow correctness)
         RuntimeBase[] registers = new RuntimeBase[code.maxRegisters];
 
@@ -863,18 +868,13 @@ public class BytecodeInterpreter {
                     // =================================================================
 
                     case Opcodes.DIE: {
-                        // Die with message: die(rs)
-                        int dieRs = bytecode[pc++];
-                        RuntimeBase message = registers[dieRs];
+                        // Die with message and precomputed location: die(msgReg, locationReg)
+                        int msgReg = bytecode[pc++];
+                        int locationReg = bytecode[pc++];
+                        RuntimeBase message = registers[msgReg];
+                        RuntimeScalar where = (RuntimeScalar) registers[locationReg];
 
-                        // Get token index for this die location if available
-                        Integer tokenIndex = code.pcToTokenIndex != null
-                                ? code.pcToTokenIndex.get(pc - 2) // PC before we read register
-                                : null;
-
-                        // Call WarnDie.die() with proper parameters
-                        // die(RuntimeBase message, RuntimeScalar where, String fileName, int lineNumber)
-                        RuntimeScalar where = new RuntimeScalar(" at " + code.sourceName + " line " + code.sourceLine);
+                        // Call WarnDie.die() with precomputed location (zero overhead!)
                         WarnDie.die(message, where, code.sourceName, code.sourceLine);
 
                         // Should never reach here (die throws exception)
@@ -1226,6 +1226,9 @@ public class BytecodeInterpreter {
                 " at pc=" + pc + ": " + e.getMessage(),
                 e
             );
+        } finally {
+            // Always pop the interpreter state
+            InterpreterState.pop();
         }
     }
 
