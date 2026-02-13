@@ -1510,6 +1510,95 @@ java -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=5005 \
      org.perlonjava.Main --eval 'my $x = 10; $x *= 2'
 ```
 
+### Critical Debugging Patterns (Learned from Array Operators Work)
+
+**1. Bare Blocks vs Loops (For3Node.isSimpleBlock)**
+
+For3Node represents both bare blocks `{ }` and real loops. The `isSimpleBlock` flag distinguishes them:
+- `isSimpleBlock = true`: Execute body once (bare block)
+- `isSimpleBlock = false`: Standard for/while loop
+
+**Bug Pattern:** Ignoring this flag causes infinite loops:
+```java
+// WRONG: Always creates loop bytecode
+@Override
+public void visit(For3Node node) {
+    emitLabel(startLabel);
+    // ... condition check ...
+    node.body.accept(this);
+    emit(Opcodes.GOTO);
+    emitInt(startLabel);  // INFINITE LOOP for bare blocks!
+}
+
+// RIGHT: Check isSimpleBlock first
+@Override
+public void visit(For3Node node) {
+    if (node.isSimpleBlock) {
+        // Bare block: execute once
+        if (node.body != null) {
+            node.body.accept(this);
+        }
+        lastResultReg = -1;
+        return;
+    }
+    // ... rest of loop handling ...
+}
+```
+
+**Location:** BytecodeCompiler.java:3152 (visit method)
+
+**2. Disassembler MUST Skip All Operands**
+
+When adding SLOW_OP operations, the disassembler must read/skip ALL operands or PC becomes misaligned:
+
+```java
+// WRONG: Default case doesn't skip operands
+default:
+    sb.append("SLOW_OP (operands not decoded)");
+    // PC not advanced! Next read will be wrong byte!
+    break;
+
+// RIGHT: Every case must read correct number of operands
+case Opcodes.SLOWOP_SPLIT:
+    rd = bytecode[pc++] & 0xFF;           // Skip rd
+    int patternReg = bytecode[pc++] & 0xFF;  // Skip pattern reg
+    int argsReg = bytecode[pc++] & 0xFF;     // Skip args reg
+    int ctx = bytecode[pc++] & 0xFF;         // Skip context
+    sb.append(" r").append(rd).append(" = split(r")
+      .append(patternReg).append(", r").append(argsReg)
+      .append(", ctx=").append(ctx).append(")");
+    break;
+```
+
+**Error Pattern:** "Index N out of bounds" in disassembler means a SLOW_OP case is missing or not skipping operands.
+
+**Location:** InterpretedCode.java disassemble() method
+
+**3. Scalar Context in Function Arguments (Known Issue)**
+
+Array element access returns wrong value when used directly in function arguments:
+
+```perl
+# WRONG RESULT:
+my @arr = (1, 2, 3);
+is($arr[1], 2, "test");  # gets: 1, expected: 2
+
+# WORKAROUND:
+my $x = $arr[1];
+is($x, 2, "test");  # WORKS: gets: 2, expected: 2
+```
+
+**Root Cause:** Bytecode calls ARRAY_SIZE after ARRAY_GET:
+```
+54: ARRAY_GET r13 = r3[r14]     # Gets element (value 2)
+58: ARRAY_SIZE r15 = size(r13)  # Converts to size (1) - BUG!
+70: CREATE_LIST r18 = [r15, ...] # Passes size instead of element
+```
+
+**Status:** Known issue, not fixed yet. Core array operators work correctly. This is a scalar context handling bug in function argument processing.
+
+**Location:** BytecodeCompiler.java around line 1998-2005 (scalar operator handling)
+
 ### Common Pitfalls
 
 **1. Forgetting to Increment PC:**
