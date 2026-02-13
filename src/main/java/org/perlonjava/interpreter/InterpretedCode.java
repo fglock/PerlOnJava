@@ -303,6 +303,12 @@ public class InterpretedCode extends RuntimeCode {
                     rs2 = bytecode[pc++];
                     sb.append("MOD_SCALAR r").append(rd).append(" = r").append(rs1).append(" % r").append(rs2).append("\n");
                     break;
+                case Opcodes.POW_SCALAR:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    rs2 = bytecode[pc++];
+                    sb.append("POW_SCALAR r").append(rd).append(" = r").append(rs1).append(" ** r").append(rs2).append("\n");
+                    break;
                 case Opcodes.NEG_SCALAR:
                     rd = bytecode[pc++];
                     int rsNeg = bytecode[pc++];
@@ -582,6 +588,40 @@ public class InterpretedCode extends RuntimeCode {
                     rs = bytecode[pc++];
                     sb.append("NOT r").append(rd).append(" = !r").append(rs).append("\n");
                     break;
+                case Opcodes.DEFINED:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("DEFINED r").append(rd).append(" = defined(r").append(rs).append(")\n");
+                    break;
+                case Opcodes.REF:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("REF r").append(rd).append(" = ref(r").append(rs).append(")\n");
+                    break;
+                case Opcodes.BLESS:
+                    rd = bytecode[pc++];
+                    int refReg = bytecode[pc++];
+                    int packageReg = bytecode[pc++];
+                    sb.append("BLESS r").append(rd).append(" = bless(r").append(refReg)
+                      .append(", r").append(packageReg).append(")\n");
+                    break;
+                case Opcodes.ISA:
+                    rd = bytecode[pc++];
+                    int objReg = bytecode[pc++];
+                    int pkgReg = bytecode[pc++];
+                    sb.append("ISA r").append(rd).append(" = isa(r").append(objReg)
+                      .append(", r").append(pkgReg).append(")\n");
+                    break;
+                case Opcodes.LIST_TO_SCALAR:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("LIST_TO_SCALAR r").append(rd).append(" = last_element(r").append(rs).append(")\n");
+                    break;
+                case Opcodes.SCALAR_TO_LIST:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("SCALAR_TO_LIST r").append(rd).append(" = to_list(r").append(rs).append(")\n");
+                    break;
                 case Opcodes.SLOW_OP: {
                     int slowOpId = bytecode[pc++];
                     String opName = SlowOpcodeHandler.getSlowOpName(slowOpId);
@@ -641,6 +681,15 @@ public class InterpretedCode extends RuntimeCode {
                             int sliceIndicesReg = bytecode[pc++];
                             sb.append(" r").append(rd).append(" = r").append(sliceArrayReg)
                               .append("[r").append(sliceIndicesReg).append("]");
+                            break;
+                        case Opcodes.SLOWOP_LIST_SLICE_FROM:
+                            // Format: [rd] [listReg] [startIndex as 2 shorts]
+                            rd = bytecode[pc++];
+                            int sliceFromListReg = bytecode[pc++];
+                            int startIndex = readInt(bytecode, pc);
+                            pc += 2;  // Skip the 2 shorts we just read
+                            sb.append(" r").append(rd).append(" = r").append(sliceFromListReg)
+                              .append("[").append(startIndex).append("..]");
                             break;
                         case Opcodes.SLOWOP_REVERSE:
                             // Format: [rd] [argsReg] [ctx]

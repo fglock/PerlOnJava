@@ -196,6 +196,12 @@ public class SlowOpcodeHandler {
             case Opcodes.SLOWOP_HASH_SLICE_SET:
                 return executeHashSliceSet(bytecode, pc, registers);
 
+            case Opcodes.SLOWOP_LIST_SLICE_FROM:
+                return executeListSliceFrom(bytecode, pc, registers);
+
+            case Opcodes.SLOWOP_LENGTH:
+                return executeLength(bytecode, pc, registers);
+
             default:
                 throw new RuntimeException(
                     "Unknown slow operation ID: " + slowOpId +
@@ -248,6 +254,9 @@ public class SlowOpcodeHandler {
             case Opcodes.SLOWOP_DEREF_HASH -> "deref_hash";
             case Opcodes.SLOWOP_HASH_SLICE -> "hash_slice";
             case Opcodes.SLOWOP_HASH_SLICE_DELETE -> "hash_slice_delete";
+            case Opcodes.SLOWOP_HASH_SLICE_SET -> "hash_slice_set";
+            case Opcodes.SLOWOP_LIST_SLICE_FROM -> "list_slice_from";
+            case Opcodes.SLOWOP_LENGTH -> "length";
             default -> "slowop_" + slowOpId;
         };
     }
@@ -1072,6 +1081,89 @@ public class SlowOpcodeHandler {
 
         // Set all key-value pairs
         hash.setSlice(keysList, valuesList);
+
+        return pc;
+    }
+
+    /**
+     * SLOWOP_LIST_SLICE_FROM: rd = list[start..]
+     * Extract a slice from a list starting at given index to the end
+     * Format: [SLOWOP_LIST_SLICE_FROM] [rd] [listReg] [startIndex]
+     */
+    private static int executeListSliceFrom(
+            short[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+
+        int rd = bytecode[pc++];
+        int listReg = bytecode[pc++];
+        // Read startIndex as 2 shorts (int = high 16 bits + low 16 bits)
+        int high = bytecode[pc++] & 0xFFFF;
+        int low = bytecode[pc++] & 0xFFFF;
+        int startIndex = (high << 16) | low;
+
+        RuntimeBase listBase = registers[listReg];
+        RuntimeList sourceList;
+
+        // Convert to RuntimeList if needed
+        if (listBase instanceof RuntimeList) {
+            sourceList = (RuntimeList) listBase;
+        } else if (listBase instanceof RuntimeArray) {
+            // Convert RuntimeArray to RuntimeList
+            sourceList = new RuntimeList();
+            for (RuntimeScalar elem : (RuntimeArray) listBase) {
+                sourceList.elements.add(elem);
+            }
+        } else {
+            // Single value - wrap in list
+            sourceList = new RuntimeList();
+            sourceList.elements.add(listBase.scalar());
+        }
+
+        // Extract slice from startIndex to end
+        RuntimeList result = new RuntimeList();
+        int size = sourceList.elements.size();
+
+        // Handle negative indices
+        if (startIndex < 0) {
+            startIndex = size + startIndex;
+        }
+
+        // Clamp to valid range
+        if (startIndex < 0) {
+            startIndex = 0;
+        }
+        if (startIndex > size) {
+            startIndex = size;
+        }
+
+        // Copy elements from startIndex to end
+        for (int i = startIndex; i < size; i++) {
+            result.elements.add(sourceList.elements.get(i));
+        }
+
+        registers[rd] = result;
+        return pc;
+    }
+
+    /**
+     * SLOWOP_LENGTH: rd = length(string)
+     * Get the length of a string
+     * Format: [SLOWOP_LENGTH] [rd] [stringReg]
+     */
+    private static int executeLength(
+            short[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+
+        int rd = bytecode[pc++];
+        int stringReg = bytecode[pc++];
+
+        RuntimeBase stringBase = registers[stringReg];
+        RuntimeScalar stringScalar = stringBase.scalar();
+
+        int length = stringScalar.toString().length();
+        registers[rd] = new RuntimeScalar(length);
 
         return pc;
     }

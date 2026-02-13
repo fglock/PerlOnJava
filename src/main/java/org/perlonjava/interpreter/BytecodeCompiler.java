@@ -1029,6 +1029,95 @@ public class BytecodeCompiler implements Visitor {
                     emitReg(valueReg);
 
                     lastResultReg = hashReg;
+                } else if (leftOp.operator.equals("our")) {
+                    // Assignment to our variable: our $x = value or our @x = value or our %x = value
+                    // Compile the our declaration first (which loads the global into a register)
+                    leftOp.accept(this);
+                    int targetReg = lastResultReg;
+
+                    // Now assign the RHS value to the target register
+                    // The target register contains either a scalar, array, or hash
+                    // We need to determine which and use the appropriate assignment
+
+                    // Extract the sigil from our operand
+                    if (leftOp.operand instanceof OperatorNode) {
+                        OperatorNode sigilOp = (OperatorNode) leftOp.operand;
+                        String sigil = sigilOp.operator;
+
+                        if (sigil.equals("$")) {
+                            // Scalar: use MOVE
+                            emit(Opcodes.MOVE);
+                            emitReg(targetReg);
+                            emitReg(valueReg);
+                        } else if (sigil.equals("@")) {
+                            // Array: use ARRAY_SET_FROM_LIST
+                            emit(Opcodes.ARRAY_SET_FROM_LIST);
+                            emitReg(targetReg);
+                            emitReg(valueReg);
+                        } else if (sigil.equals("%")) {
+                            // Hash: use HASH_SET_FROM_LIST
+                            emit(Opcodes.HASH_SET_FROM_LIST);
+                            emitReg(targetReg);
+                            emitReg(valueReg);
+                        }
+                    } else if (leftOp.operand instanceof ListNode) {
+                        // our ($a, $b) = ... - list declaration with assignment
+                        // The our statement already declared the variables and returned a list
+                        // We need to assign the RHS values to each variable
+                        ListNode listNode = (ListNode) leftOp.operand;
+
+                        // Convert RHS to list
+                        int rhsListReg = allocateRegister();
+                        emit(Opcodes.SCALAR_TO_LIST);
+                        emitReg(rhsListReg);
+                        emitReg(valueReg);
+
+                        // Assign each element
+                        for (int i = 0; i < listNode.elements.size(); i++) {
+                            Node element = listNode.elements.get(i);
+                            if (element instanceof OperatorNode) {
+                                OperatorNode sigilOp = (OperatorNode) element;
+                                String sigil = sigilOp.operator;
+
+                                if (sigilOp.operand instanceof IdentifierNode) {
+                                    String varName = sigil + ((IdentifierNode) sigilOp.operand).name;
+                                    int varReg = getVariableRegister(varName);
+
+                                    // Get i-th element from RHS
+                                    int indexReg = allocateRegister();
+                                    emit(Opcodes.LOAD_INT);
+                                    emitReg(indexReg);
+                                    emitInt(i);
+
+                                    int elemReg = allocateRegister();
+                                    emit(Opcodes.ARRAY_GET);
+                                    emitReg(elemReg);
+                                    emitReg(rhsListReg);
+                                    emitReg(indexReg);
+
+                                    // Assign to variable
+                                    if (sigil.equals("$")) {
+                                        emit(Opcodes.MOVE);
+                                        emitReg(varReg);
+                                        emitReg(elemReg);
+                                    } else if (sigil.equals("@")) {
+                                        emit(Opcodes.ARRAY_SET_FROM_LIST);
+                                        emitReg(varReg);
+                                        emitReg(elemReg);
+                                    } else if (sigil.equals("%")) {
+                                        emit(Opcodes.HASH_SET_FROM_LIST);
+                                        emitReg(varReg);
+                                        emitReg(elemReg);
+                                    }
+                                }
+                            }
+                        }
+                        lastResultReg = valueReg;
+                        currentCallContext = savedContext;
+                        return;
+                    }
+
+                    lastResultReg = targetReg;
                 } else {
                     throw new RuntimeException("Assignment to unsupported operator: " + leftOp.operator);
                 }
@@ -1374,6 +1463,156 @@ public class BytecodeCompiler implements Visitor {
                 }
 
                 throwCompilerException("Assignment to non-identifier not yet supported: " + node.left.getClass().getSimpleName());
+            } else if (node.left instanceof ListNode) {
+                // List assignment: ($a, $b) = ... or () = ...
+                // In scalar context, returns the number of elements on RHS
+                // In list context, returns the RHS list
+                ListNode listNode = (ListNode) node.left;
+
+                // Compile RHS in LIST context to get all elements
+                int savedRhsContext = currentCallContext;
+                currentCallContext = RuntimeContextType.LIST;
+                node.right.accept(this);
+                int rhsReg = lastResultReg;
+                currentCallContext = savedRhsContext;
+
+                // Convert RHS to RuntimeList if needed
+                int rhsListReg = allocateRegister();
+                emit(Opcodes.SCALAR_TO_LIST);
+                emitReg(rhsListReg);
+                emitReg(rhsReg);
+
+                // If the list is not empty, perform the assignment
+                if (!listNode.elements.isEmpty()) {
+                    // Assign each RHS element to corresponding LHS variable
+                    for (int i = 0; i < listNode.elements.size(); i++) {
+                        Node lhsElement = listNode.elements.get(i);
+
+                        // Get the i-th element from RHS list
+                        int indexReg = allocateRegister();
+                        emit(Opcodes.LOAD_INT);
+                        emitReg(indexReg);
+                        emitInt(i);
+
+                        int elementReg = allocateRegister();
+                        emit(Opcodes.ARRAY_GET);
+                        emitReg(elementReg);
+                        emitReg(rhsListReg);
+                        emitReg(indexReg);
+
+                        // Assign to LHS element
+                        if (lhsElement instanceof OperatorNode) {
+                            OperatorNode lhsOp = (OperatorNode) lhsElement;
+                            if (lhsOp.operator.equals("$") && lhsOp.operand instanceof IdentifierNode) {
+                                String varName = "$" + ((IdentifierNode) lhsOp.operand).name;
+
+                                if (hasVariable(varName)) {
+                                    int targetReg = getVariableRegister(varName);
+                                    if (capturedVarIndices != null && capturedVarIndices.containsKey(varName)) {
+                                        emit(Opcodes.SET_SCALAR);
+                                        emitReg(targetReg);
+                                        emitReg(elementReg);
+                                    } else {
+                                        emit(Opcodes.MOVE);
+                                        emitReg(targetReg);
+                                        emitReg(elementReg);
+                                    }
+                                } else {
+                                    int nameIdx = addToStringPool(varName);
+                                    emit(Opcodes.STORE_GLOBAL_SCALAR);
+                                    emit(nameIdx);
+                                    emitReg(elementReg);
+                                }
+                            } else if (lhsOp.operator.equals("@") && lhsOp.operand instanceof IdentifierNode) {
+                                // Array slurp: ($a, @rest) = ...
+                                // Collect remaining elements into a RuntimeList
+                                String varName = "@" + ((IdentifierNode) lhsOp.operand).name;
+
+                                int arrayReg;
+                                if (hasVariable(varName)) {
+                                    arrayReg = getVariableRegister(varName);
+                                } else {
+                                    arrayReg = allocateRegister();
+                                    String globalArrayName = NameNormalizer.normalizeVariableName(
+                                        ((IdentifierNode) lhsOp.operand).name,
+                                        getCurrentPackage()
+                                    );
+                                    int nameIdx = addToStringPool(globalArrayName);
+                                    emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                                    emitReg(arrayReg);
+                                    emit(nameIdx);
+                                }
+
+                                // Create a list of remaining indices
+                                // Use SLOWOP_LIST_SLICE_FROM to get list[i..]
+                                int remainingListReg = allocateRegister();
+                                emit(Opcodes.SLOW_OP);
+                                emit(Opcodes.SLOWOP_LIST_SLICE_FROM);
+                                emitReg(remainingListReg);
+                                emitReg(rhsListReg);
+                                emitInt(i);  // Start index
+
+                                // Populate array from remaining elements
+                                emit(Opcodes.ARRAY_SET_FROM_LIST);
+                                emitReg(arrayReg);
+                                emitReg(remainingListReg);
+
+                                // Array slurp consumes all remaining elements
+                                break;
+                            } else if (lhsOp.operator.equals("%") && lhsOp.operand instanceof IdentifierNode) {
+                                // Hash slurp: ($a, %rest) = ...
+                                String varName = "%" + ((IdentifierNode) lhsOp.operand).name;
+
+                                int hashReg;
+                                if (hasVariable(varName)) {
+                                    hashReg = getVariableRegister(varName);
+                                } else {
+                                    hashReg = allocateRegister();
+                                    String globalHashName = NameNormalizer.normalizeVariableName(
+                                        ((IdentifierNode) lhsOp.operand).name,
+                                        getCurrentPackage()
+                                    );
+                                    int nameIdx = addToStringPool(globalHashName);
+                                    emit(Opcodes.LOAD_GLOBAL_HASH);
+                                    emitReg(hashReg);
+                                    emit(nameIdx);
+                                }
+
+                                // Get remaining elements from list
+                                int remainingListReg = allocateRegister();
+                                emit(Opcodes.SLOW_OP);
+                                emit(Opcodes.SLOWOP_LIST_SLICE_FROM);
+                                emitReg(remainingListReg);
+                                emitReg(rhsListReg);
+                                emitInt(i);  // Start index
+
+                                // Populate hash from remaining elements
+                                emit(Opcodes.HASH_SET_FROM_LIST);
+                                emitReg(hashReg);
+                                emitReg(remainingListReg);
+
+                                // Hash slurp consumes all remaining elements
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // Return value depends on savedContext (the context this assignment was called in)
+                if (savedContext == RuntimeContextType.SCALAR) {
+                    // In scalar context, list assignment returns the count of RHS elements
+                    int countReg = allocateRegister();
+                    emit(Opcodes.ARRAY_SIZE);
+                    emitReg(countReg);
+                    emitReg(rhsListReg);
+                    lastResultReg = countReg;
+                } else {
+                    // In list context, return the RHS value
+                    lastResultReg = rhsListReg;
+                }
+
+                currentCallContext = savedContext;
+                return;
             } else {
                 throwCompilerException("Assignment to non-identifier not yet supported: " + node.left.getClass().getSimpleName());
             }
@@ -1529,6 +1768,12 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(rs1);
                 emitReg(rs2);
             }
+            case "**" -> {
+                emit(Opcodes.POW_SCALAR);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
             case "." -> {
                 emit(Opcodes.CONCAT);
                 emitReg(rd);
@@ -1543,6 +1788,30 @@ public class BytecodeCompiler implements Visitor {
             }
             case "<=>" -> {
                 emit(Opcodes.COMPARE_NUM);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
+            case "cmp" -> {
+                emit(Opcodes.COMPARE_STR);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
+            case "bless" -> {
+                // bless $ref, "Package" or bless $ref (defaults to current package)
+                // rs1 = reference to bless
+                // rs2 = package name (or undef for current package)
+                emit(Opcodes.BLESS);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
+            case "isa" -> {
+                // $obj isa "Package" - check if object is instance of package
+                // rs1 = object/reference
+                // rs2 = package name
+                emit(Opcodes.ISA);
                 emitReg(rd);
                 emitReg(rs1);
                 emitReg(rs2);
@@ -2095,33 +2364,50 @@ public class BytecodeCompiler implements Visitor {
             emitReg(keyReg);
             }
             case "push" -> {
-                // Array push: push(@array, values...)
-                // left: OperatorNode("@", IdentifierNode("array"))
+                // Array push: push(@array, values...) or push(@$ref, values...)
+                // left: OperatorNode("@", IdentifierNode("array")) or OperatorNode("@", OperatorNode("$", ...))
                 // right: ListNode with values to push
 
                 if (!(node.left instanceof OperatorNode)) {
                     throwCompilerException("push requires array variable");
                 }
                 OperatorNode leftOp = (OperatorNode) node.left;
-                if (!leftOp.operator.equals("@") || !(leftOp.operand instanceof IdentifierNode)) {
+                if (!leftOp.operator.equals("@")) {
                     throwCompilerException("push requires array variable: push @array, values");
                 }
 
-                String varName = "@" + ((IdentifierNode) leftOp.operand).name;
+                int arrayReg = -1;  // Will be assigned in if/else blocks
 
-                // Get the array - check lexical first, then global
-                int arrayReg;
-                if (hasVariable(varName)) {
-                    // Lexical array
-                    arrayReg = getVariableRegister(varName);
-                } else {
-                    // Global array - load it
+                if (leftOp.operand instanceof IdentifierNode) {
+                    // push @array
+                    String varName = "@" + ((IdentifierNode) leftOp.operand).name;
+
+                    // Get the array - check lexical first, then global
+                    if (hasVariable(varName)) {
+                        // Lexical array
+                        arrayReg = getVariableRegister(varName);
+                    } else {
+                        // Global array - load it
+                        arrayReg = allocateRegister();
+                        String globalArrayName = getCurrentPackage() + "::" + ((IdentifierNode) leftOp.operand).name;
+                        int nameIdx = addToStringPool(globalArrayName);
+                        emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                        emitReg(arrayReg);
+                        emit(nameIdx);
+                    }
+                } else if (leftOp.operand instanceof OperatorNode) {
+                    // push @$ref - dereference first
+                    leftOp.operand.accept(this);
+                    int refReg = lastResultReg;
+
+                    // Dereference to get the array
                     arrayReg = allocateRegister();
-                    String globalArrayName = getCurrentPackage() + "::" + ((IdentifierNode) leftOp.operand).name;
-                    int nameIdx = addToStringPool(globalArrayName);
-                    emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                    emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                    emit(Opcodes.SLOWOP_DEREF_ARRAY);
                     emitReg(arrayReg);
-                    emit(nameIdx);
+                    emitReg(refReg);
+                } else {
+                    throwCompilerException("push requires array variable or dereferenced array: push @array or push @$ref");
                 }
 
                 // Evaluate the values to push (right operand)
@@ -2138,33 +2424,53 @@ public class BytecodeCompiler implements Visitor {
                 lastResultReg = arrayReg;
             }
             case "unshift" -> {
-                // Array unshift: unshift(@array, values...)
-                // left: OperatorNode("@", IdentifierNode("array"))
+                // Array unshift: unshift(@array, values...) or unshift(@$ref, values...)
+                // left: OperatorNode("@", IdentifierNode("array")) or OperatorNode("@", OperatorNode("$", ...))
                 // right: ListNode with values to unshift
 
                 if (!(node.left instanceof OperatorNode)) {
                     throwCompilerException("unshift requires array variable");
                 }
                 OperatorNode leftOp = (OperatorNode) node.left;
-                if (!leftOp.operator.equals("@") || !(leftOp.operand instanceof IdentifierNode)) {
+                if (!leftOp.operator.equals("@")) {
                     throwCompilerException("unshift requires array variable: unshift @array, values");
                 }
 
-                String varName = "@" + ((IdentifierNode) leftOp.operand).name;
+                int arrayReg = -1;  // Will be assigned in if/else blocks
 
-                // Get the array - check lexical first, then global
-                int arrayReg;
-                if (hasVariable(varName)) {
-                    // Lexical array
-                    arrayReg = getVariableRegister(varName);
-                } else {
-                    // Global array - load it
+                if (leftOp.operand instanceof IdentifierNode) {
+                    // unshift @array
+                    String varName = "@" + ((IdentifierNode) leftOp.operand).name;
+
+                    // Get the array - check lexical first, then global
+                    if (hasVariable(varName)) {
+                        // Lexical array
+                        arrayReg = getVariableRegister(varName);
+                    } else {
+                        // Global array - load it
+                        arrayReg = allocateRegister();
+                        String globalArrayName = NameNormalizer.normalizeVariableName(
+                            ((IdentifierNode) leftOp.operand).name,
+                            getCurrentPackage()
+                        );
+                        int nameIdx = addToStringPool(globalArrayName);
+                        emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                        emitReg(arrayReg);
+                        emit(nameIdx);
+                    }
+                } else if (leftOp.operand instanceof OperatorNode) {
+                    // unshift @$ref - dereference first
+                    leftOp.operand.accept(this);
+                    int refReg = lastResultReg;
+
+                    // Dereference to get the array
                     arrayReg = allocateRegister();
-                    String globalArrayName = getCurrentPackage() + "::" + ((IdentifierNode) leftOp.operand).name;
-                    int nameIdx = addToStringPool(globalArrayName);
-                    emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                    emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                    emit(Opcodes.SLOWOP_DEREF_ARRAY);
                     emitReg(arrayReg);
-                    emit(nameIdx);
+                    emitReg(refReg);
+                } else {
+                    throwCompilerException("unshift requires array variable or dereferenced array: unshift @array or unshift @$ref");
                 }
 
                 // Evaluate the values to unshift (right operand)
@@ -2303,6 +2609,96 @@ public class BytecodeCompiler implements Visitor {
                     lastResultReg = reg;
                     return;
                 }
+            } else if (node.operand instanceof ListNode) {
+                // my ($x, $y, @rest) - list of variable declarations
+                ListNode listNode = (ListNode) node.operand;
+                List<Integer> varRegs = new ArrayList<>();
+
+                for (Node element : listNode.elements) {
+                    if (element instanceof OperatorNode) {
+                        OperatorNode sigilOp = (OperatorNode) element;
+                        String sigil = sigilOp.operator;
+
+                        if (sigilOp.operand instanceof IdentifierNode) {
+                            String varName = sigil + ((IdentifierNode) sigilOp.operand).name;
+
+                            // Check if this variable is captured by closures
+                            if (sigilOp.id != 0) {
+                                // Variable is captured - use persistent storage
+                                int reg = allocateRegister();
+                                int nameIdx = addToStringPool(varName);
+
+                                switch (sigil) {
+                                    case "$" -> {
+                                        emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                                        emit(Opcodes.SLOWOP_RETRIEVE_BEGIN_SCALAR);
+                                        emitReg(reg);
+                                        emit(nameIdx);
+                                        emit(sigilOp.id);
+                                        variableScopes.peek().put(varName, reg);
+                                    }
+                                    case "@" -> {
+                                        emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                                        emit(Opcodes.SLOWOP_RETRIEVE_BEGIN_ARRAY);
+                                        emitReg(reg);
+                                        emit(nameIdx);
+                                        emit(sigilOp.id);
+                                        variableScopes.peek().put(varName, reg);
+                                    }
+                                    case "%" -> {
+                                        emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                                        emit(Opcodes.SLOWOP_RETRIEVE_BEGIN_HASH);
+                                        emitReg(reg);
+                                        emit(nameIdx);
+                                        emit(sigilOp.id);
+                                        variableScopes.peek().put(varName, reg);
+                                    }
+                                    default -> throwCompilerException("Unsupported variable type in list declaration: " + sigil);
+                                }
+
+                                varRegs.add(reg);
+                            } else {
+                                // Regular lexical variable
+                                int reg = addVariable(varName, "my");
+
+                                // Initialize the variable
+                                switch (sigil) {
+                                    case "$" -> {
+                                        emit(Opcodes.LOAD_UNDEF);
+                                        emitReg(reg);
+                                    }
+                                    case "@" -> {
+                                        emit(Opcodes.NEW_ARRAY);
+                                        emitReg(reg);
+                                    }
+                                    case "%" -> {
+                                        emit(Opcodes.NEW_HASH);
+                                        emitReg(reg);
+                                    }
+                                    default -> throwCompilerException("Unsupported variable type in list declaration: " + sigil);
+                                }
+
+                                varRegs.add(reg);
+                            }
+                        } else {
+                            throwCompilerException("my list declaration requires identifier: " + sigilOp.operand.getClass().getSimpleName());
+                        }
+                    } else {
+                        throwCompilerException("my list declaration requires scalar/array/hash: " + element.getClass().getSimpleName());
+                    }
+                }
+
+                // Return a list of the declared variables
+                int resultReg = allocateRegister();
+                emit(Opcodes.CREATE_LIST);
+                emitReg(resultReg);
+                emit(varRegs.size());
+                for (int varReg : varRegs) {
+                    emitReg(varReg);
+                }
+
+                lastResultReg = resultReg;
+                return;
             }
             throw new RuntimeException("Unsupported my operand: " + node.operand.getClass().getSimpleName());
         } else if (op.equals("our")) {
@@ -2353,6 +2749,74 @@ public class BytecodeCompiler implements Visitor {
                     lastResultReg = reg;
                     return;
                 }
+            } else if (node.operand instanceof ListNode) {
+                // our ($x, $y) - list of package variable declarations
+                ListNode listNode = (ListNode) node.operand;
+                List<Integer> varRegs = new ArrayList<>();
+
+                String packageName = getCurrentPackage();
+
+                for (Node element : listNode.elements) {
+                    if (element instanceof OperatorNode) {
+                        OperatorNode sigilOp = (OperatorNode) element;
+                        String sigil = sigilOp.operator;
+
+                        if (sigilOp.operand instanceof IdentifierNode) {
+                            String varName = sigil + ((IdentifierNode) sigilOp.operand).name;
+
+                            int reg;
+                            // Check if already declared in current scope
+                            if (hasVariable(varName)) {
+                                // Already declared, just use existing register
+                                reg = getVariableRegister(varName);
+                            } else {
+                                // Allocate register and add to symbol table
+                                reg = addVariable(varName, "our");
+
+                                // Load from global variable
+                                String globalVarName = packageName + "::" + ((IdentifierNode) sigilOp.operand).name;
+                                int nameIdx = addToStringPool(globalVarName);
+
+                                switch (sigil) {
+                                    case "$" -> {
+                                        emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                                        emitReg(reg);
+                                        emit(nameIdx);
+                                    }
+                                    case "@" -> {
+                                        emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                                        emitReg(reg);
+                                        emit(nameIdx);
+                                    }
+                                    case "%" -> {
+                                        emit(Opcodes.LOAD_GLOBAL_HASH);
+                                        emitReg(reg);
+                                        emit(nameIdx);
+                                    }
+                                    default -> throwCompilerException("Unsupported variable type in list declaration: " + sigil);
+                                }
+                            }
+
+                            varRegs.add(reg);
+                        } else {
+                            throwCompilerException("our list declaration requires identifier: " + sigilOp.operand.getClass().getSimpleName());
+                        }
+                    } else {
+                        throwCompilerException("our list declaration requires scalar/array/hash: " + element.getClass().getSimpleName());
+                    }
+                }
+
+                // Return a list of the declared variables
+                int resultReg = allocateRegister();
+                emit(Opcodes.CREATE_LIST);
+                emitReg(resultReg);
+                emit(varRegs.size());
+                for (int varReg : varRegs) {
+                    emitReg(varReg);
+                }
+
+                lastResultReg = resultReg;
+                return;
             }
             throw new RuntimeException("Unsupported our operand: " + node.operand.getClass().getSimpleName());
         } else if (op.equals("local")) {
@@ -2483,6 +2947,21 @@ public class BytecodeCompiler implements Visitor {
                 // Note: We don't check scalar context here because dereferencing
                 // should return the array itself. The slice or other operation
                 // will handle scalar context conversion if needed.
+            } else if (node.operand instanceof BlockNode) {
+                // @{ block } - evaluate block and dereference the result
+                // The block should return an arrayref
+                BlockNode blockNode = (BlockNode) node.operand;
+                blockNode.accept(this);
+                int refReg = lastResultReg;
+
+                // Dereference to get the array
+                int rd = allocateRegister();
+                emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                emit(Opcodes.SLOWOP_DEREF_ARRAY);
+                emitReg(rd);
+                emitReg(refReg);
+
+                lastResultReg = rd;
             } else {
                 throwCompilerException("Unsupported @ operand: " + node.operand.getClass().getSimpleName());
             }
@@ -2707,6 +3186,54 @@ public class BytecodeCompiler implements Visitor {
             } else {
                 throw new RuntimeException("NOT operator requires operand");
             }
+        } else if (op.equals("defined")) {
+            // Defined operator: defined($x)
+            // Check if value is defined (not undef)
+            if (node.operand != null) {
+                node.operand.accept(this);
+                int rs = lastResultReg;
+
+                // Allocate result register
+                int rd = allocateRegister();
+
+                // Emit DEFINED opcode
+                emit(Opcodes.DEFINED);
+                emitReg(rd);
+                emitReg(rs);
+
+                lastResultReg = rd;
+            } else {
+                throw new RuntimeException("defined operator requires operand");
+            }
+        } else if (op.equals("ref")) {
+            // Ref operator: ref($x)
+            // Get reference type (blessed class name or base type)
+            if (node.operand == null) {
+                throwCompilerException("ref requires an argument");
+            }
+
+            // Compile the operand
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (list.elements.isEmpty()) {
+                    throwCompilerException("ref requires an argument");
+                }
+                // Get first element
+                list.elements.get(0).accept(this);
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+
+            // Allocate result register
+            int rd = allocateRegister();
+
+            // Emit REF opcode
+            emit(Opcodes.REF);
+            emitReg(rd);
+            emitReg(argReg);
+
+            lastResultReg = rd;
         } else if (op.equals("++") || op.equals("--") || op.equals("++postfix") || op.equals("--postfix")) {
             // Pre/post increment/decrement
             boolean isPostfix = op.endsWith("postfix");
@@ -3026,8 +3553,8 @@ public class BytecodeCompiler implements Visitor {
 
             lastResultReg = rd;
         } else if (op.equals("pop")) {
-            // Array pop: $x = pop @array
-            // operand: ListNode containing OperatorNode("@", IdentifierNode)
+            // Array pop: $x = pop @array or $x = pop @$ref
+            // operand: ListNode containing OperatorNode("@", IdentifierNode or OperatorNode)
             if (node.operand == null || !(node.operand instanceof ListNode)) {
                 throwCompilerException("pop requires array argument");
             }
@@ -3038,25 +3565,42 @@ public class BytecodeCompiler implements Visitor {
             }
 
             OperatorNode arrayOp = (OperatorNode) list.elements.get(0);
-            if (!arrayOp.operator.equals("@") || !(arrayOp.operand instanceof IdentifierNode)) {
+            if (!arrayOp.operator.equals("@")) {
                 throwCompilerException("pop requires array variable: pop @array");
             }
 
-            String varName = "@" + ((IdentifierNode) arrayOp.operand).name;
+            int arrayReg = -1;  // Will be assigned in if/else blocks
 
-            // Get the array - check lexical first, then global
-            int arrayReg;
-            if (hasVariable(varName)) {
-                // Lexical array
-                arrayReg = getVariableRegister(varName);
-            } else {
-                // Global array - load it
+            if (arrayOp.operand instanceof IdentifierNode) {
+                // pop @array
+                String varName = "@" + ((IdentifierNode) arrayOp.operand).name;
+
+                // Get the array - check lexical first, then global
+                if (hasVariable(varName)) {
+                    // Lexical array
+                    arrayReg = getVariableRegister(varName);
+                } else {
+                    // Global array - load it
+                    arrayReg = allocateRegister();
+                    String globalArrayName = NameNormalizer.normalizeVariableName(((IdentifierNode) arrayOp.operand).name, getCurrentPackage());
+                    int nameIdx = addToStringPool(globalArrayName);
+                    emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                    emitReg(arrayReg);
+                    emit(nameIdx);
+                }
+            } else if (arrayOp.operand instanceof OperatorNode) {
+                // pop @$ref - dereference first
+                arrayOp.operand.accept(this);
+                int refReg = lastResultReg;
+
+                // Dereference to get the array
                 arrayReg = allocateRegister();
-                String globalArrayName = NameNormalizer.normalizeVariableName(((IdentifierNode) arrayOp.operand).name, getCurrentPackage());
-                int nameIdx = addToStringPool(globalArrayName);
-                emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                emit(Opcodes.SLOWOP_DEREF_ARRAY);
                 emitReg(arrayReg);
-                emit(nameIdx);
+                emitReg(refReg);
+            } else {
+                throwCompilerException("pop requires array variable or dereferenced array: pop @array or pop @$ref");
             }
 
             // Allocate result register
@@ -3069,8 +3613,8 @@ public class BytecodeCompiler implements Visitor {
 
             lastResultReg = rd;
         } else if (op.equals("shift")) {
-            // Array shift: $x = shift @array
-            // operand: ListNode containing OperatorNode("@", IdentifierNode)
+            // Array shift: $x = shift @array or $x = shift @$ref
+            // operand: ListNode containing OperatorNode("@", IdentifierNode or OperatorNode)
             if (node.operand == null || !(node.operand instanceof ListNode)) {
                 throwCompilerException("shift requires array argument");
             }
@@ -3081,25 +3625,42 @@ public class BytecodeCompiler implements Visitor {
             }
 
             OperatorNode arrayOp = (OperatorNode) list.elements.get(0);
-            if (!arrayOp.operator.equals("@") || !(arrayOp.operand instanceof IdentifierNode)) {
+            if (!arrayOp.operator.equals("@")) {
                 throwCompilerException("shift requires array variable: shift @array");
             }
 
-            String varName = "@" + ((IdentifierNode) arrayOp.operand).name;
+            int arrayReg = -1;  // Will be assigned in if/else blocks
 
-            // Get the array - check lexical first, then global
-            int arrayReg;
-            if (hasVariable(varName)) {
-                // Lexical array
-                arrayReg = getVariableRegister(varName);
-            } else {
-                // Global array - load it
+            if (arrayOp.operand instanceof IdentifierNode) {
+                // shift @array
+                String varName = "@" + ((IdentifierNode) arrayOp.operand).name;
+
+                // Get the array - check lexical first, then global
+                if (hasVariable(varName)) {
+                    // Lexical array
+                    arrayReg = getVariableRegister(varName);
+                } else {
+                    // Global array - load it
+                    arrayReg = allocateRegister();
+                    String globalArrayName = NameNormalizer.normalizeVariableName(((IdentifierNode) arrayOp.operand).name, getCurrentPackage());
+                    int nameIdx = addToStringPool(globalArrayName);
+                    emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                    emitReg(arrayReg);
+                    emit(nameIdx);
+                }
+            } else if (arrayOp.operand instanceof OperatorNode) {
+                // shift @$ref - dereference first
+                arrayOp.operand.accept(this);
+                int refReg = lastResultReg;
+
+                // Dereference to get the array
                 arrayReg = allocateRegister();
-                String globalArrayName = NameNormalizer.normalizeVariableName(((IdentifierNode) arrayOp.operand).name, getCurrentPackage());
-                int nameIdx = addToStringPool(globalArrayName);
-                emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                emit(Opcodes.SLOWOP_DEREF_ARRAY);
                 emitReg(arrayReg);
-                emit(nameIdx);
+                emitReg(refReg);
+            } else {
+                throwCompilerException("shift requires array variable or dereferenced array: shift @array or shift @$ref");
             }
 
             // Allocate result register
@@ -3125,28 +3686,45 @@ public class BytecodeCompiler implements Visitor {
 
             // First element is the array
             OperatorNode arrayOp = (OperatorNode) list.elements.get(0);
-            if (!arrayOp.operator.equals("@") || !(arrayOp.operand instanceof IdentifierNode)) {
+            if (!arrayOp.operator.equals("@")) {
                 throwCompilerException("splice requires array variable: splice @array, ...");
             }
 
-            String varName = "@" + ((IdentifierNode) arrayOp.operand).name;
+            int arrayReg = -1;  // Will be assigned in if/else blocks
 
-            // Get the array - check lexical first, then global
-            int arrayReg;
-            if (hasVariable(varName)) {
-                // Lexical array
-                arrayReg = getVariableRegister(varName);
-            } else {
-                // Global array - load it
+            if (arrayOp.operand instanceof IdentifierNode) {
+                // splice @array
+                String varName = "@" + ((IdentifierNode) arrayOp.operand).name;
+
+                // Get the array - check lexical first, then global
+                if (hasVariable(varName)) {
+                    // Lexical array
+                    arrayReg = getVariableRegister(varName);
+                } else {
+                    // Global array - load it
+                    arrayReg = allocateRegister();
+                    String globalArrayName = NameNormalizer.normalizeVariableName(
+                        ((IdentifierNode) arrayOp.operand).name,
+                        getCurrentPackage()
+                    );
+                    int nameIdx = addToStringPool(globalArrayName);
+                    emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                    emitReg(arrayReg);
+                    emit(nameIdx);
+                }
+            } else if (arrayOp.operand instanceof OperatorNode) {
+                // splice @$ref - dereference first
+                arrayOp.operand.accept(this);
+                int refReg = lastResultReg;
+
+                // Dereference to get the array
                 arrayReg = allocateRegister();
-                String globalArrayName = NameNormalizer.normalizeVariableName(
-                    ((IdentifierNode) arrayOp.operand).name,
-                    getCurrentPackage()
-                );
-                int nameIdx = addToStringPool(globalArrayName);
-                emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                emit(Opcodes.SLOWOP_DEREF_ARRAY);
                 emitReg(arrayReg);
-                emit(nameIdx);
+                emitReg(refReg);
+            } else {
+                throwCompilerException("splice requires array variable or dereferenced array: splice @array or splice @$ref");
             }
 
             // Create a list with the remaining arguments (offset, length, replacement values)
@@ -3558,6 +4136,117 @@ public class BytecodeCompiler implements Visitor {
             emit(Opcodes.HASH_VALUES);
             emitReg(rd);
             emitReg(hashReg);
+
+            lastResultReg = rd;
+        } else if (op.equals("$#")) {
+            // $#array - get last index of array (size - 1)
+            // operand: array variable (OperatorNode("@" ...) or IdentifierNode)
+            if (node.operand == null) {
+                throwCompilerException("$# requires an array argument");
+            }
+
+            int arrayReg = -1;
+
+            // Handle different operand types
+            if (node.operand instanceof OperatorNode) {
+                OperatorNode operandOp = (OperatorNode) node.operand;
+
+                if (operandOp.operator.equals("@") && operandOp.operand instanceof IdentifierNode) {
+                    // $#@array or $#array (both work)
+                    String varName = "@" + ((IdentifierNode) operandOp.operand).name;
+
+                    if (hasVariable(varName)) {
+                        arrayReg = getVariableRegister(varName);
+                    } else {
+                        arrayReg = allocateRegister();
+                        String globalArrayName = NameNormalizer.normalizeVariableName(
+                            ((IdentifierNode) operandOp.operand).name,
+                            getCurrentPackage()
+                        );
+                        int nameIdx = addToStringPool(globalArrayName);
+                        emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                        emitReg(arrayReg);
+                        emit(nameIdx);
+                    }
+                } else if (operandOp.operator.equals("$")) {
+                    // $#$ref - dereference first
+                    operandOp.accept(this);
+                    int refReg = lastResultReg;
+
+                    arrayReg = allocateRegister();
+                    emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                    emit(Opcodes.SLOWOP_DEREF_ARRAY);
+                    emitReg(arrayReg);
+                    emitReg(refReg);
+                } else {
+                    throwCompilerException("$# requires array variable or dereferenced array");
+                }
+            } else if (node.operand instanceof IdentifierNode) {
+                // $#array (without @)
+                String varName = "@" + ((IdentifierNode) node.operand).name;
+
+                if (hasVariable(varName)) {
+                    arrayReg = getVariableRegister(varName);
+                } else {
+                    arrayReg = allocateRegister();
+                    String globalArrayName = NameNormalizer.normalizeVariableName(
+                        ((IdentifierNode) node.operand).name,
+                        getCurrentPackage()
+                    );
+                    int nameIdx = addToStringPool(globalArrayName);
+                    emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                    emitReg(arrayReg);
+                    emit(nameIdx);
+                }
+            } else {
+                throwCompilerException("$# requires array variable");
+            }
+
+            // Get array size
+            int sizeReg = allocateRegister();
+            emit(Opcodes.ARRAY_SIZE);
+            emitReg(sizeReg);
+            emitReg(arrayReg);
+
+            // Subtract 1 to get last index
+            int oneReg = allocateRegister();
+            emit(Opcodes.LOAD_INT);
+            emitReg(oneReg);
+            emitInt(1);
+
+            int rd = allocateRegister();
+            emit(Opcodes.SUB_SCALAR);
+            emitReg(rd);
+            emitReg(sizeReg);
+            emitReg(oneReg);
+
+            lastResultReg = rd;
+        } else if (op.equals("length")) {
+            // length($string) - get string length
+            // operand: ListNode containing the string argument
+            if (node.operand == null) {
+                throwCompilerException("length requires an argument");
+            }
+
+            // Compile the operand
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (list.elements.isEmpty()) {
+                    throwCompilerException("length requires an argument");
+                }
+                // Get first element
+                list.elements.get(0).accept(this);
+            } else {
+                node.operand.accept(this);
+            }
+            int stringReg = lastResultReg;
+
+            // Call length builtin using SLOW_OP
+            int rd = allocateRegister();
+            emit(Opcodes.SLOW_OP);
+            emit(Opcodes.SLOWOP_LENGTH);
+            emitReg(rd);
+            emitReg(stringReg);
 
             lastResultReg = rd;
         } else {
