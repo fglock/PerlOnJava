@@ -187,7 +187,14 @@ public class BytecodeInterpreter {
                         int nameIdx = bytecode[pc++];
                         int srcReg = bytecode[pc++];
                         String name = code.stringPool[nameIdx];
-                        GlobalVariable.getGlobalVariable(name).set((RuntimeScalar) registers[srcReg]);
+
+                        // Convert to scalar if needed
+                        RuntimeBase value = registers[srcReg];
+                        RuntimeScalar scalarValue = (value instanceof RuntimeScalar)
+                            ? (RuntimeScalar) value
+                            : value.scalar();
+
+                        GlobalVariable.getGlobalVariable(name).set(scalarValue);
                         break;
                     }
 
@@ -421,10 +428,30 @@ public class BytecodeInterpreter {
                         int rd = bytecode[pc++];
                         int rs1 = bytecode[pc++];
                         int rs2 = bytecode[pc++];
-                        registers[rd] = CompareOperators.spaceship(
-                            (RuntimeScalar) registers[rs1],
-                            (RuntimeScalar) registers[rs2]
-                        );
+
+                        // Convert operands to scalar if needed
+                        RuntimeBase val1 = registers[rs1];
+                        RuntimeBase val2 = registers[rs2];
+                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+
+                        registers[rd] = CompareOperators.spaceship(s1, s2);
+                        break;
+                    }
+
+                    case Opcodes.COMPARE_STR: {
+                        // String comparison: rd = rs1 cmp rs2
+                        int rd = bytecode[pc++];
+                        int rs1 = bytecode[pc++];
+                        int rs2 = bytecode[pc++];
+
+                        // Convert operands to scalar if needed
+                        RuntimeBase val1 = registers[rs1];
+                        RuntimeBase val2 = registers[rs2];
+                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+
+                        registers[rd] = CompareOperators.cmp(s1, s2);
                         break;
                     }
 
@@ -433,10 +460,14 @@ public class BytecodeInterpreter {
                         int rd = bytecode[pc++];
                         int rs1 = bytecode[pc++];
                         int rs2 = bytecode[pc++];
-                        registers[rd] = CompareOperators.equalTo(
-                            (RuntimeScalar) registers[rs1],
-                            (RuntimeScalar) registers[rs2]
-                        );
+
+                        // Convert operands to scalar if needed
+                        RuntimeBase val1 = registers[rs1];
+                        RuntimeBase val2 = registers[rs2];
+                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+
+                        registers[rd] = CompareOperators.equalTo(s1, s2);
                         break;
                     }
 
@@ -445,10 +476,14 @@ public class BytecodeInterpreter {
                         int rd = bytecode[pc++];
                         int rs1 = bytecode[pc++];
                         int rs2 = bytecode[pc++];
-                        registers[rd] = CompareOperators.lessThan(
-                            (RuntimeScalar) registers[rs1],
-                            (RuntimeScalar) registers[rs2]
-                        );
+
+                        // Convert operands to scalar if needed
+                        RuntimeBase val1 = registers[rs1];
+                        RuntimeBase val2 = registers[rs2];
+                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+
+                        registers[rd] = CompareOperators.lessThan(s1, s2);
                         break;
                     }
 
@@ -457,10 +492,14 @@ public class BytecodeInterpreter {
                         int rd = bytecode[pc++];
                         int rs1 = bytecode[pc++];
                         int rs2 = bytecode[pc++];
-                        registers[rd] = CompareOperators.greaterThan(
-                            (RuntimeScalar) registers[rs1],
-                            (RuntimeScalar) registers[rs2]
-                        );
+
+                        // Convert operands to scalar if needed
+                        RuntimeBase val1 = registers[rs1];
+                        RuntimeBase val2 = registers[rs2];
+                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+
+                        registers[rd] = CompareOperators.greaterThan(s1, s2);
                         break;
                     }
 
@@ -469,10 +508,14 @@ public class BytecodeInterpreter {
                         int rd = bytecode[pc++];
                         int rs1 = bytecode[pc++];
                         int rs2 = bytecode[pc++];
-                        registers[rd] = CompareOperators.notEqualTo(
-                            (RuntimeScalar) registers[rs1],
-                            (RuntimeScalar) registers[rs2]
-                        );
+
+                        // Convert operands to scalar if needed
+                        RuntimeBase val1 = registers[rs1];
+                        RuntimeBase val2 = registers[rs2];
+                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+
+                        registers[rd] = CompareOperators.notEqualTo(s1, s2);
                         break;
                     }
 
