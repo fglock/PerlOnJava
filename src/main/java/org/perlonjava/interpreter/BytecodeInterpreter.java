@@ -548,24 +548,12 @@ public class BytecodeInterpreter {
                     }
 
                     case Opcodes.ARRAY_SIZE: {
-                        // Array size: rd = scalar(@array) or scalar(list)
+                        // Array size: rd = scalar(@array) or scalar(value)
+                        // Use polymorphic scalar() method - arrays return size, scalars return themselves
                         int rd = bytecode[pc++];
                         int operandReg = bytecode[pc++];
                         RuntimeBase operand = registers[operandReg];
-
-                        if (operand instanceof RuntimeArray) {
-                            int size = ((RuntimeArray) operand).size();
-                            registers[rd] = new RuntimeScalar(size);
-                        } else if (operand instanceof RuntimeList) {
-                            int size = ((RuntimeList) operand).size();
-                            registers[rd] = new RuntimeScalar(size);
-                        } else if (operand instanceof RuntimeScalar) {
-                            // Scalar in scalar context - return the scalar itself unchanged
-                            registers[rd] = (RuntimeScalar) operand;
-                        } else {
-                            throw new RuntimeException("ARRAY_SIZE: register " + operandReg + " contains unexpected type: " +
-                                (operand == null ? "null" : operand.getClass().getName()));
-                        }
+                        registers[rd] = operand.scalar();
                         break;
                     }
 
