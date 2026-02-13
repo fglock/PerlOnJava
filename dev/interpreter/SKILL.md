@@ -868,6 +868,566 @@ MUL_ASSIGN r5 *= r3    # r5 = r5 * r3
 
 **Update opcode count** in all documentation (update to reflect current implemented opcodes: 0-82, 87, 99).
 
+### Adding Support for Existing Perl Operators
+
+When adding support for Perl built-in operators (push, pop, shift, unshift, etc.) that already have opcodes defined:
+
+#### Pattern 1: Binary Operators (push, unshift)
+
+**Parse Structure:** `BinaryOperatorNode` with operator name, left = array variable, right = values
+- Example: `push @array, 1, 2, 3` → BinaryOperatorNode("push", left=@array, right=ListNode)
+
+**Steps:**
+
+1. **Determine if opcode exists** - Check Opcodes.java for the operation
+   - ARRAY_PUSH (44), ARRAY_UNSHIFT (47) already defined
+
+2. **Add case to BytecodeCompiler.visit(BinaryOperatorNode)** - Add to switch statement around line 1000-1400:
+
+```java
+case "push" -> {
+    // Array push: push(@array, values...)
+    // left: OperatorNode("@", IdentifierNode("array"))
+    // right: ListNode with values to push
+
+    // Validate left operand is array variable
+    if (!(node.left instanceof OperatorNode)) {
+        throwCompilerException("push requires array variable");
+    }
+    OperatorNode leftOp = (OperatorNode) node.left;
+    if (!leftOp.operator.equals("@") || !(leftOp.operand instanceof IdentifierNode)) {
+        throwCompilerException("push requires array variable: push @array, values");
+    }
+
+    String varName = "@" + ((IdentifierNode) leftOp.operand).name;
+
+    // Get the array - check lexical first, then global
+    int arrayReg;
+    if (hasVariable(varName)) {
+        // Lexical array
+        arrayReg = getVariableRegister(varName);
+    } else {
+        // Global array - load it
+        arrayReg = allocateRegister();
+        String globalArrayName = getCurrentPackage() + "::" + ((IdentifierNode) leftOp.operand).name;
+        int nameIdx = addToStringPool(globalArrayName);
+        emit(Opcodes.LOAD_GLOBAL_ARRAY);
+        emit(arrayReg);
+        emit(nameIdx);
+    }
+
+    // Evaluate the values to push (right operand)
+    node.right.accept(this);
+    int valuesReg = lastResultReg;
+
+    // Emit ARRAY_PUSH
+    emit(Opcodes.ARRAY_PUSH);
+    emit(arrayReg);
+    emit(valuesReg);
+
+    // Set result register
+    lastResultReg = arrayReg;
+}
+```
+
+**Important Notes:**
+- Use `getCurrentPackage()` instead of hardcoded `"main::"` for global variables
+- Handle both lexical and global arrays
+- Validate operator structure before processing
+
+3. **Add case to BytecodeInterpreter.execute()** - If opcode not yet implemented:
+
+```java
+case Opcodes.ARRAY_PUSH: {
+    // Array push: push(@array, value)
+    int arrayReg = bytecode[pc++] & 0xFF;
+    int valueReg = bytecode[pc++] & 0xFF;
+    RuntimeArray arr = (RuntimeArray) registers[arrayReg];
+    RuntimeBase val = registers[valueReg];  // Use RuntimeBase, not RuntimeScalar
+    arr.push(val);  // RuntimeArray.push() can handle RuntimeList
+    break;
+}
+```
+
+**Important:** Use `RuntimeBase` not `RuntimeScalar` for values that might be lists. RuntimeArray.push() handles RuntimeList by calling `value.addToArray()`.
+
+#### Pattern 2: Unary Operators (pop, shift, unaryMinus)
+
+**Parse Structure:** `OperatorNode` with operator name and operand
+- Example: `my $x = pop @array` → OperatorNode("pop", operand=ListNode[@array])
+- Example: `-$x` → OperatorNode("unaryMinus", operand=$x)
+
+**Steps:**
+
+1. **Add case to BytecodeCompiler.visit(OperatorNode)** - Add to if/else chain around line 1900-2100:
+
+```java
+} else if (op.equals("pop")) {
+    // Array pop: $x = pop @array
+    // operand: ListNode containing OperatorNode("@", IdentifierNode)
+    if (node.operand == null || !(node.operand instanceof ListNode)) {
+        throwCompilerException("pop requires array argument");
+    }
+
+    ListNode list = (ListNode) node.operand;
+    if (list.elements.isEmpty() || !(list.elements.get(0) instanceof OperatorNode)) {
+        throwCompilerException("pop requires array variable");
+    }
+
+    OperatorNode arrayOp = (OperatorNode) list.elements.get(0);
+    if (!arrayOp.operator.equals("@") || !(arrayOp.operand instanceof IdentifierNode)) {
+        throwCompilerException("pop requires array variable: pop @array");
+    }
+
+    String varName = "@" + ((IdentifierNode) arrayOp.operand).name;
+
+    // Get the array - check lexical first, then global
+    int arrayReg;
+    if (hasVariable(varName)) {
+        // Lexical array
+        arrayReg = getVariableRegister(varName);
+    } else {
+        // Global array - load it
+        arrayReg = allocateRegister();
+        String globalArrayName = getCurrentPackage() + "::" + ((IdentifierNode) arrayOp.operand).name;
+        int nameIdx = addToStringPool(globalArrayName);
+        emit(Opcodes.LOAD_GLOBAL_ARRAY);
+        emit(arrayReg);
+        emit(nameIdx);
+    }
+
+    // Allocate result register
+    int rd = allocateRegister();
+
+    // Emit ARRAY_POP
+    emit(Opcodes.ARRAY_POP);
+    emit(rd);
+    emit(arrayReg);
+
+    lastResultReg = rd;
+}
+```
+
+For simple unary operators like negation:
+
+```java
+} else if (op.equals("unaryMinus")) {
+    // Unary minus: -$x
+    // Compile operand
+    node.operand.accept(this);
+    int operandReg = lastResultReg;
+
+    // Allocate result register
+    int rd = allocateRegister();
+
+    // Emit NEG_SCALAR
+    emit(Opcodes.NEG_SCALAR);
+    emit(rd);
+    emit(operandReg);
+
+    lastResultReg = rd;
+}
+```
+
+2. **Add case to BytecodeInterpreter.execute()** - If not yet implemented:
+
+```java
+case Opcodes.ARRAY_POP: {
+    // Array pop: rd = pop(@array)
+    int rd = bytecode[pc++] & 0xFF;
+    int arrayReg = bytecode[pc++] & 0xFF;
+    RuntimeArray arr = (RuntimeArray) registers[arrayReg];
+    registers[rd] = RuntimeArray.pop(arr);  // Static method
+    break;
+}
+```
+
+**Important:** Check if the runtime method is static or instance. Most RuntimeArray operations are static methods.
+
+### When to Use SLOW_OP
+
+Some operations are too complex for a dedicated fast opcode or are used infrequently. Use the SLOW_OP mechanism:
+
+**Example: splice operation (SLOWOP_SPLICE)**
+
+1. **Add slow op constant to Opcodes.java:**
+```java
+/** Slow op ID: rd = Operator.splice(array, args_list) - splice array operation */
+public static final int SLOWOP_SPLICE = 28;
+```
+
+2. **Add case to SlowOpcodeHandler.execute():**
+```java
+case Opcodes.SLOWOP_SPLICE:
+    return executeSplice(bytecode, pc, registers);
+```
+
+3. **Implement handler in SlowOpcodeHandler:**
+```java
+private static int executeSplice(
+        byte[] bytecode,
+        int pc,
+        RuntimeBase[] registers) {
+
+    int rd = bytecode[pc++] & 0xFF;
+    int arrayReg = bytecode[pc++] & 0xFF;
+    int argsReg = bytecode[pc++] & 0xFF;
+
+    RuntimeArray array = (RuntimeArray) registers[arrayReg];
+    RuntimeList args = (RuntimeList) registers[argsReg];
+
+    RuntimeList result = org.perlonjava.operators.Operator.splice(array, args);
+
+    registers[rd] = result;
+    return pc;
+}
+```
+
+4. **Update getSlowOpName() in SlowOpcodeHandler:**
+```java
+case Opcodes.SLOWOP_SPLICE -> "splice";
+```
+
+5. **Emit from BytecodeCompiler:**
+```java
+} else if (op.equals("splice")) {
+    // Parse operands, get array register
+    // Compile arguments into a list
+    int argsListReg = allocateRegister();
+    emit(Opcodes.CREATE_LIST);
+    emit(argsListReg);
+    emit(argRegs.size());
+    for (int argReg : argRegs) {
+        emit(argReg);
+    }
+
+    int rd = allocateRegister();
+    emit(Opcodes.SLOW_OP);
+    emit(Opcodes.SLOWOP_SPLICE);
+    emit(rd);
+    emit(arrayReg);
+    emit(argsListReg);
+
+    lastResultReg = rd;
+}
+```
+
+**When to use SLOW_OP:**
+- Operation is rarely used (<1% of execution)
+- Operation requires complex argument handling
+- Operation already has a good runtime implementation in Operator.java
+- Want to preserve fast opcode space (0-99) for hot path operations
+
+**Benefits:**
+- Only uses 1 byte of opcode space (SLOW_OP = 87)
+- Keeps main interpreter switch compact
+- Easy to add without affecting hot path performance
+
+#### Common Patterns and Gotchas
+
+**1. Package Names:**
+- Always use `NameNormalizer.normalizeVariableName()` for global variables, not manual construction
+- Pattern: `String globalName = NameNormalizer.normalizeVariableName(simpleName, getCurrentPackage());`
+- This handles special variables, caching, and proper package resolution
+- Example:
+  ```java
+  // Good:
+  String globalArrayName = NameNormalizer.normalizeVariableName(
+      ((IdentifierNode) leftOp.operand).name,
+      getCurrentPackage()
+  );
+
+  // Avoid:
+  String globalArrayName = getCurrentPackage() + "::" + ((IdentifierNode) leftOp.operand).name;
+  ```
+
+**2. Lexical vs Global Variables:**
+```java
+int arrayReg;
+if (hasVariable(varName)) {
+    // Lexical: already in a register
+    arrayReg = getVariableRegister(varName);
+} else {
+    // Global: need to load it
+    arrayReg = allocateRegister();
+    String globalName = getCurrentPackage() + "::" + simpleName;
+    int nameIdx = addToStringPool(globalName);
+    emit(Opcodes.LOAD_GLOBAL_ARRAY);  // or LOAD_GLOBAL_HASH, LOAD_GLOBAL_SCALAR
+    emit(arrayReg);
+    emit(nameIdx);
+}
+```
+
+**3. Runtime Method Signatures:**
+- Check if methods are static: `RuntimeArray.pop(arr)` not `arr.pop()`
+- Check parameter types: use `RuntimeBase` for values that might be lists
+- Pattern: Look at how the compiler's EmitterVisitor calls the same runtime method
+
+**4. Parse Structure:**
+- Use `./jperl --parse -E 'code'` to see how Perl code is parsed
+- Binary operators: `BinaryOperatorNode(operator, left, right)`
+- Unary operators: `OperatorNode(operator, operand)`
+- Function calls with multiple args: Usually `OperatorNode(name, ListNode(args))`
+
+**5. Error Messages:**
+- Use `throwCompilerException()` for clear error messages
+- Include the expected syntax in the error message
+- Example: `throwCompilerException("push requires array variable: push @array, values")`
+
+#### Testing New Operators
+
+After implementing:
+
+```bash
+# Build
+make
+
+# Test manually
+./jperl --interpreter -E 'my @a = (1,2); push @a, 3; say $a[-1]'
+
+# Test disassembly
+./jperl --disassemble -E 'my @a = (1,2); push @a, 3'
+
+# Run test file
+./jperl --interpreter src/test/resources/unit/array.t
+```
+
+### Common Parse Structures Reference
+
+Use `./jperl --parse -E 'code'` to understand how Perl constructs are represented in the AST. Here are common patterns:
+
+#### Array Operations
+
+**Array Slice (read):**
+```perl
+my @slice = @array[1..3];
+```
+Parse structure:
+```
+BinaryOperatorNode: =
+  OperatorNode: my
+    OperatorNode: @              # Slice uses @ sigil
+      IdentifierNode: 'slice'
+  BinaryOperatorNode: [
+    OperatorNode: @               # Source array with @ sigil
+      IdentifierNode: 'array'
+    ArrayLiteralNode:
+      BinaryOperatorNode: ..      # Range operator
+        NumberNode: 1
+        NumberNode: 3
+```
+
+**Array Slice (assignment):**
+```perl
+@array[1, 3, 5] = (20, 30, 40);
+```
+Parse structure:
+```
+BinaryOperatorNode: =
+  BinaryOperatorNode: [          # Left side is slice expression
+    OperatorNode: @
+      IdentifierNode: 'array'
+    ArrayLiteralNode:            # List of indices
+      NumberNode: 1
+      NumberNode: 3
+      NumberNode: 5
+  ListNode:                      # Right side is values
+    NumberNode: 20
+    NumberNode: 30
+    NumberNode: 40
+```
+
+**Key differences:**
+- Single element: `$array[1]` uses `$` sigil (OperatorNode: "$")
+- Slice: `@array[1,2,3]` uses `@` sigil (OperatorNode: "@")
+- Slice indices can be a range (`1..3`) or list (`1, 3, 5`)
+
+#### List Operators with Blocks
+
+**map:**
+```perl
+my @doubled = map { $_ * 2 } @array;
+```
+Parse structure:
+```
+BinaryOperatorNode: map
+  SubroutineNode:               # Anonymous subroutine (the block)
+    BlockNode:
+      BinaryOperatorNode: *
+        OperatorNode: $
+          IdentifierNode: '_'
+        NumberNode: 2
+  ListNode:                     # Input list
+    OperatorNode: @
+      IdentifierNode: 'array'
+```
+
+**grep:**
+```perl
+my @evens = grep { $_ % 2 == 0 } @array;
+```
+Same structure as `map`, with BinaryOperatorNode("grep", SubroutineNode, ListNode)
+
+**sort:**
+```perl
+my @sorted = sort { $a <=> $b } @array;
+```
+Same structure, with BinaryOperatorNode("sort", SubroutineNode, ListNode)
+
+#### Simple List Operators
+
+**reverse:**
+```perl
+my @reversed = reverse @array;
+```
+Parse structure:
+```
+OperatorNode: reverse
+  ListNode:
+    OperatorNode: @
+      IdentifierNode: 'array'
+```
+
+**join:**
+```perl
+my $joined = join ", ", @array;
+```
+Parse structure:
+```
+BinaryOperatorNode: join
+  StringNode: ', '              # Separator (left)
+  ListNode:                     # List to join (right)
+    OperatorNode: @
+      IdentifierNode: 'array'
+```
+
+**splice:**
+```perl
+splice @array, 2, 1, (10, 11);
+```
+Parse structure:
+```
+OperatorNode: splice
+  ListNode:                     # All arguments as list
+    OperatorNode: @             # Array to splice
+      IdentifierNode: 'array'
+    NumberNode: 2               # Offset
+    NumberNode: 1               # Length
+    ListNode:                   # Replacement values
+      NumberNode: 10
+      NumberNode: 11
+```
+
+#### Implementation Patterns by Parse Structure
+
+**Pattern 1: OperatorNode with ListNode operand**
+- Examples: pop, shift, reverse, splice
+- First list element is usually the array
+- Remaining elements are parameters
+- Implementation: Extract array from list, process remaining args
+
+**Pattern 2: BinaryOperatorNode with array left, values right**
+- Examples: push, unshift
+- Left: Array variable (OperatorNode: "@")
+- Right: Values to add (ListNode)
+- Implementation: Get array register, compile values, emit opcode
+
+**Pattern 3: BinaryOperatorNode with block and list**
+- Examples: map, grep, sort
+- Left: SubroutineNode (the code block)
+- Right: ListNode (input data)
+- Implementation: Compile block to closure, compile list, call operator
+
+**Detailed Implementation for Pattern 3 (grep, map, sort):**
+
+1. **AST Structure**: BinaryOperatorNode where:
+   - `left` = SubroutineNode (anonymous sub representing the block)
+   - `right` = ListNode (input data)
+
+2. **BytecodeCompiler Implementation**:
+   ```java
+   case "grep" -> {
+       // Compile SubroutineNode (left operand) to closure
+       // This is handled automatically by visit(SubroutineNode)
+       // Result will be in lastResultReg as a RuntimeScalar containing RuntimeCode
+
+       // rs1 = closure register
+       // rs2 = list register
+
+       emit(Opcodes.GREP);
+       emit(rd);           // Result register
+       emit(rs2);          // List register
+       emit(rs1);          // Closure register
+       emit(RuntimeContextType.LIST);  // Context
+   }
+   ```
+
+3. **BytecodeInterpreter Implementation**:
+   ```java
+   case Opcodes.GREP: {
+       int rd = bytecode[pc++] & 0xFF;
+       int listReg = bytecode[pc++] & 0xFF;
+       int closureReg = bytecode[pc++] & 0xFF;
+       int ctx = bytecode[pc++] & 0xFF;
+
+       RuntimeBase listBase = registers[listReg];
+       RuntimeList list = listBase.getList();
+       RuntimeScalar closure = (RuntimeScalar) registers[closureReg];
+       RuntimeList result = org.perlonjava.operators.ListOperators.grep(list, closure, ctx);
+       registers[rd] = result;
+       break;
+   }
+   ```
+
+4. **Disassembler** (InterpretedCode.java):
+   ```java
+   case Opcodes.GREP:
+       rd = bytecode[pc++] & 0xFF;
+       rs1 = bytecode[pc++] & 0xFF;  // list register
+       rs2 = bytecode[pc++] & 0xFF;  // closure register
+       int grepCtx = bytecode[pc++] & 0xFF;
+       sb.append("GREP r").append(rd).append(" = grep(r").append(rs1)
+         .append(", r").append(rs2).append(", ctx=").append(grepCtx).append(")\n");
+       break;
+   ```
+
+5. **Sort is special**: Uses package name instead of context:
+   ```java
+   emit(Opcodes.SORT);
+   emit(rd);
+   emit(rs2);       // List register
+   emit(rs1);       // Closure register
+   emitInt(addToStringPool(currentPackage));  // Package name (4 bytes)
+   ```
+
+**Pattern 4: BinaryOperatorNode with separator and list**
+- Example: join
+- Left: Separator value
+- Right: ListNode to join
+- Implementation: Compile both operands, emit opcode
+
+#### Step 6: Update Documentation
+
+**BYTECODE_DOCUMENTATION.md:**
+```markdown
+### MUL_ASSIGN (83)
+
+**Format:** `[MUL_ASSIGN] [rd] [rs]`
+
+**Effect:** `rd = rd * rs`
+
+**Description:**
+Superinstruction that multiplies destination register by source register.
+Equivalent to ADD_SCALAR followed by MOVE, but eliminates intermediate register.
+
+**Example:**
+```
+MUL_ASSIGN r5 *= r3    # r5 = r5 * r3
+```
+```
+
+**Update opcode count** in all documentation (update to reflect current implemented opcodes: 0-82, 87, 99).
+
 #### Step 6: Test Thoroughly
 
 **Create Test Case:**
@@ -949,6 +1509,95 @@ java -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=5005 \
      -cp build/libs/perlonjava-*-all.jar \
      org.perlonjava.Main --eval 'my $x = 10; $x *= 2'
 ```
+
+### Critical Debugging Patterns (Learned from Array Operators Work)
+
+**1. Bare Blocks vs Loops (For3Node.isSimpleBlock)**
+
+For3Node represents both bare blocks `{ }` and real loops. The `isSimpleBlock` flag distinguishes them:
+- `isSimpleBlock = true`: Execute body once (bare block)
+- `isSimpleBlock = false`: Standard for/while loop
+
+**Bug Pattern:** Ignoring this flag causes infinite loops:
+```java
+// WRONG: Always creates loop bytecode
+@Override
+public void visit(For3Node node) {
+    emitLabel(startLabel);
+    // ... condition check ...
+    node.body.accept(this);
+    emit(Opcodes.GOTO);
+    emitInt(startLabel);  // INFINITE LOOP for bare blocks!
+}
+
+// RIGHT: Check isSimpleBlock first
+@Override
+public void visit(For3Node node) {
+    if (node.isSimpleBlock) {
+        // Bare block: execute once
+        if (node.body != null) {
+            node.body.accept(this);
+        }
+        lastResultReg = -1;
+        return;
+    }
+    // ... rest of loop handling ...
+}
+```
+
+**Location:** BytecodeCompiler.java:3152 (visit method)
+
+**2. Disassembler MUST Skip All Operands**
+
+When adding SLOW_OP operations, the disassembler must read/skip ALL operands or PC becomes misaligned:
+
+```java
+// WRONG: Default case doesn't skip operands
+default:
+    sb.append("SLOW_OP (operands not decoded)");
+    // PC not advanced! Next read will be wrong byte!
+    break;
+
+// RIGHT: Every case must read correct number of operands
+case Opcodes.SLOWOP_SPLIT:
+    rd = bytecode[pc++] & 0xFF;           // Skip rd
+    int patternReg = bytecode[pc++] & 0xFF;  // Skip pattern reg
+    int argsReg = bytecode[pc++] & 0xFF;     // Skip args reg
+    int ctx = bytecode[pc++] & 0xFF;         // Skip context
+    sb.append(" r").append(rd).append(" = split(r")
+      .append(patternReg).append(", r").append(argsReg)
+      .append(", ctx=").append(ctx).append(")");
+    break;
+```
+
+**Error Pattern:** "Index N out of bounds" in disassembler means a SLOW_OP case is missing or not skipping operands.
+
+**Location:** InterpretedCode.java disassemble() method
+
+**3. Scalar Context in Function Arguments (Known Issue)**
+
+Array element access returns wrong value when used directly in function arguments:
+
+```perl
+# WRONG RESULT:
+my @arr = (1, 2, 3);
+is($arr[1], 2, "test");  # gets: 1, expected: 2
+
+# WORKAROUND:
+my $x = $arr[1];
+is($x, 2, "test");  # WORKS: gets: 2, expected: 2
+```
+
+**Root Cause:** Bytecode calls ARRAY_SIZE after ARRAY_GET:
+```
+54: ARRAY_GET r13 = r3[r14]     # Gets element (value 2)
+58: ARRAY_SIZE r15 = size(r13)  # Converts to size (1) - BUG!
+70: CREATE_LIST r18 = [r15, ...] # Passes size instead of element
+```
+
+**Status:** Known issue, not fixed yet. Core array operators work correctly. This is a scalar context handling bug in function argument processing.
+
+**Location:** BytecodeCompiler.java around line 1998-2005 (scalar operator handling)
 
 ### Common Pitfalls
 

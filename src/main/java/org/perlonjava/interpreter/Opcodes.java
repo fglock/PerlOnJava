@@ -437,6 +437,12 @@ public class Opcodes {
      * Used to set the value in a persistent scalar without overwriting the reference */
     public static final byte SET_SCALAR = 99;
 
+    /** Grep operator: rd = ListOperators.grep(list_reg, closure_reg, context) */
+    public static final byte GREP = 100;
+
+    /** Sort operator: rd = ListOperators.sort(list_reg, closure_reg, package_name) */
+    public static final byte SORT = 101;
+
     // =================================================================
     // Slow Operation IDs (0-255)
     // =================================================================
@@ -526,6 +532,21 @@ public class Opcodes {
 
     /** Slow op ID: rd = GlobalRuntimeScalar.makeLocal(var_name) - temporarily localize global variable */
     public static final int SLOWOP_LOCAL_SCALAR = 27;
+
+    /** Slow op ID: rd = Operator.splice(array, args_list) - splice array operation */
+    public static final int SLOWOP_SPLICE = 28;
+
+    /** Slow op ID: rd = array.getSlice(indices_list) - array slice operation */
+    public static final int SLOWOP_ARRAY_SLICE = 29;
+
+    /** Slow op ID: rd = Operator.reverse(ctx, args...) - reverse array or string */
+    public static final int SLOWOP_REVERSE = 30;
+
+    /** Slow op ID: array.setSlice(indices, values) - array slice assignment */
+    public static final int SLOWOP_ARRAY_SLICE_SET = 31;
+
+    /** Slow op ID: rd = Operator.split(pattern, args, ctx) - split string into array */
+    public static final int SLOWOP_SPLIT = 32;
 
     // =================================================================
     // OPCODES 93-255: RESERVED FOR FUTURE FAST OPERATIONS

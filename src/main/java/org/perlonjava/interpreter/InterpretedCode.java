@@ -262,6 +262,11 @@ public class InterpretedCode extends RuntimeCode {
                     int nameIdx = bytecode[pc++] & 0xFF;
                     sb.append("LOAD_GLOBAL_SCALAR r").append(rd).append(" = $").append(stringPool[nameIdx]).append("\n");
                     break;
+                case Opcodes.LOAD_GLOBAL_CODE:
+                    rd = bytecode[pc++] & 0xFF;
+                    nameIdx = bytecode[pc++] & 0xFF;
+                    sb.append("LOAD_GLOBAL_CODE r").append(rd).append(" = &").append(stringPool[nameIdx]).append("\n");
+                    break;
                 case Opcodes.STORE_GLOBAL_SCALAR:
                     nameIdx = bytecode[pc++] & 0xFF;
                     int srcReg = bytecode[pc++] & 0xFF;
@@ -272,6 +277,30 @@ public class InterpretedCode extends RuntimeCode {
                     int rs1 = bytecode[pc++] & 0xFF;
                     int rs2 = bytecode[pc++] & 0xFF;
                     sb.append("ADD_SCALAR r").append(rd).append(" = r").append(rs1).append(" + r").append(rs2).append("\n");
+                    break;
+                case Opcodes.SUB_SCALAR:
+                    rd = bytecode[pc++] & 0xFF;
+                    rs1 = bytecode[pc++] & 0xFF;
+                    rs2 = bytecode[pc++] & 0xFF;
+                    sb.append("SUB_SCALAR r").append(rd).append(" = r").append(rs1).append(" - r").append(rs2).append("\n");
+                    break;
+                case Opcodes.MUL_SCALAR:
+                    rd = bytecode[pc++] & 0xFF;
+                    rs1 = bytecode[pc++] & 0xFF;
+                    rs2 = bytecode[pc++] & 0xFF;
+                    sb.append("MUL_SCALAR r").append(rd).append(" = r").append(rs1).append(" * r").append(rs2).append("\n");
+                    break;
+                case Opcodes.DIV_SCALAR:
+                    rd = bytecode[pc++] & 0xFF;
+                    rs1 = bytecode[pc++] & 0xFF;
+                    rs2 = bytecode[pc++] & 0xFF;
+                    sb.append("DIV_SCALAR r").append(rd).append(" = r").append(rs1).append(" / r").append(rs2).append("\n");
+                    break;
+                case Opcodes.MOD_SCALAR:
+                    rd = bytecode[pc++] & 0xFF;
+                    rs1 = bytecode[pc++] & 0xFF;
+                    rs2 = bytecode[pc++] & 0xFF;
+                    sb.append("MOD_SCALAR r").append(rd).append(" = r").append(rs1).append(" % r").append(rs2).append("\n");
                     break;
                 case Opcodes.ADD_SCALAR_INT:
                     rd = bytecode[pc++] & 0xFF;
@@ -490,6 +519,23 @@ public class InterpretedCode extends RuntimeCode {
                     sb.append("MAP r").append(rd).append(" = map(r").append(rs1)
                       .append(", r").append(rs2).append(", ctx=").append(mapCtx).append(")\n");
                     break;
+                case Opcodes.GREP:
+                    rd = bytecode[pc++] & 0xFF;
+                    rs1 = bytecode[pc++] & 0xFF;  // list register
+                    rs2 = bytecode[pc++] & 0xFF;  // closure register
+                    int grepCtx = bytecode[pc++] & 0xFF;  // context
+                    sb.append("GREP r").append(rd).append(" = grep(r").append(rs1)
+                      .append(", r").append(rs2).append(", ctx=").append(grepCtx).append(")\n");
+                    break;
+                case Opcodes.SORT:
+                    rd = bytecode[pc++] & 0xFF;
+                    rs1 = bytecode[pc++] & 0xFF;  // list register
+                    rs2 = bytecode[pc++] & 0xFF;  // closure register
+                    int pkgIdx = readInt(bytecode, pc);
+                    pc += 4;
+                    sb.append("SORT r").append(rd).append(" = sort(r").append(rs1)
+                      .append(", r").append(rs2).append(", pkg=").append(stringPool[pkgIdx]).append(")\n");
+                    break;
                 case Opcodes.NEW_ARRAY:
                     rd = bytecode[pc++] & 0xFF;
                     sb.append("NEW_ARRAY r").append(rd).append(" = new RuntimeArray()\n");
@@ -573,6 +619,47 @@ public class InterpretedCode extends RuntimeCode {
                             int localNameIdx = bytecode[pc++] & 0xFF;
                             String localVarName = stringPool[localNameIdx];
                             sb.append(" r").append(rd).append(" = local ").append(localVarName);
+                            break;
+                        case Opcodes.SLOWOP_SPLICE:
+                            // Format: [rd] [arrayReg] [argsReg]
+                            rd = bytecode[pc++] & 0xFF;
+                            int spliceArrayReg = bytecode[pc++] & 0xFF;
+                            int spliceArgsReg = bytecode[pc++] & 0xFF;
+                            sb.append(" r").append(rd).append(" = splice(r").append(spliceArrayReg)
+                              .append(", r").append(spliceArgsReg).append(")");
+                            break;
+                        case Opcodes.SLOWOP_ARRAY_SLICE:
+                            // Format: [rd] [arrayReg] [indicesReg]
+                            rd = bytecode[pc++] & 0xFF;
+                            int sliceArrayReg = bytecode[pc++] & 0xFF;
+                            int sliceIndicesReg = bytecode[pc++] & 0xFF;
+                            sb.append(" r").append(rd).append(" = r").append(sliceArrayReg)
+                              .append("[r").append(sliceIndicesReg).append("]");
+                            break;
+                        case Opcodes.SLOWOP_REVERSE:
+                            // Format: [rd] [argsReg] [ctx]
+                            rd = bytecode[pc++] & 0xFF;
+                            int reverseArgsReg = bytecode[pc++] & 0xFF;
+                            int reverseCtx = bytecode[pc++] & 0xFF;
+                            sb.append(" r").append(rd).append(" = reverse(r").append(reverseArgsReg)
+                              .append(", ctx=").append(reverseCtx).append(")");
+                            break;
+                        case Opcodes.SLOWOP_ARRAY_SLICE_SET:
+                            // Format: [arrayReg] [indicesReg] [valuesReg]
+                            int setArrayReg = bytecode[pc++] & 0xFF;
+                            int setIndicesReg = bytecode[pc++] & 0xFF;
+                            int setValuesReg = bytecode[pc++] & 0xFF;
+                            sb.append(" r").append(setArrayReg).append("[r").append(setIndicesReg)
+                              .append("] = r").append(setValuesReg);
+                            break;
+                        case Opcodes.SLOWOP_SPLIT:
+                            // Format: [rd] [patternReg] [argsReg] [ctx]
+                            rd = bytecode[pc++] & 0xFF;
+                            int splitPatternReg = bytecode[pc++] & 0xFF;
+                            int splitArgsReg = bytecode[pc++] & 0xFF;
+                            int splitCtx = bytecode[pc++] & 0xFF;
+                            sb.append(" r").append(rd).append(" = split(r").append(splitPatternReg)
+                              .append(", r").append(splitArgsReg).append(", ctx=").append(splitCtx).append(")");
                             break;
                         default:
                             sb.append(" (operands not decoded)");
