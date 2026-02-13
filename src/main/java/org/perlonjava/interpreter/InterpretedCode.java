@@ -514,6 +514,23 @@ public class InterpretedCode extends RuntimeCode {
                     sb.append("MAP r").append(rd).append(" = map(r").append(rs1)
                       .append(", r").append(rs2).append(", ctx=").append(mapCtx).append(")\n");
                     break;
+                case Opcodes.GREP:
+                    rd = bytecode[pc++] & 0xFF;
+                    rs1 = bytecode[pc++] & 0xFF;  // list register
+                    rs2 = bytecode[pc++] & 0xFF;  // closure register
+                    int grepCtx = bytecode[pc++] & 0xFF;  // context
+                    sb.append("GREP r").append(rd).append(" = grep(r").append(rs1)
+                      .append(", r").append(rs2).append(", ctx=").append(grepCtx).append(")\n");
+                    break;
+                case Opcodes.SORT:
+                    rd = bytecode[pc++] & 0xFF;
+                    rs1 = bytecode[pc++] & 0xFF;  // list register
+                    rs2 = bytecode[pc++] & 0xFF;  // closure register
+                    int pkgIdx = readInt(bytecode, pc);
+                    pc += 4;
+                    sb.append("SORT r").append(rd).append(" = sort(r").append(rs1)
+                      .append(", r").append(rs2).append(", pkg=").append(stringPool[pkgIdx]).append(")\n");
+                    break;
                 case Opcodes.NEW_ARRAY:
                     rd = bytecode[pc++] & 0xFF;
                     sb.append("NEW_ARRAY r").append(rd).append(" = new RuntimeArray()\n");
