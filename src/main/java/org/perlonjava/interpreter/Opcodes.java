@@ -563,6 +563,9 @@ public class Opcodes {
     /** Slow op ID: rd = hash.deleteSlice(keys_list) - hash slice delete operation delete @hash{keys} */
     public static final int SLOWOP_HASH_SLICE_DELETE = 37;
 
+    /** Slow op ID: hash.setSlice(keys_list, values_list) - hash slice assignment @hash{keys} = values */
+    public static final int SLOWOP_HASH_SLICE_SET = 38;
+
     // =================================================================
     // OPCODES 93-255: RESERVED FOR FUTURE FAST OPERATIONS
     // =================================================================
