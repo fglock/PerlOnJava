@@ -1701,15 +1701,24 @@ public class BytecodeCompiler implements Visitor {
             }
             case "{" -> {
                 // Hash element access: $h{key} means get element 'key' from hash %h
-                // left: OperatorNode("$", IdentifierNode("h"))
+                // Hash slice access: @h{keys} returns multiple values as array
+                // left: OperatorNode("$", IdentifierNode("h")) or OperatorNode("@", ...)
                 // right: HashLiteralNode(key_expression)
 
+                currentTokenIndex = node.getIndex();  // Track token for error reporting
+
                 if (!(node.left instanceof OperatorNode)) {
-                    throw new RuntimeException("Hash access requires variable on left side");
+                    throwCompilerException("Hash access requires variable on left side");
                 }
                 OperatorNode leftOp = (OperatorNode) node.left;
+
+                // Check for hash slice: @hash{keys}
+                if (leftOp.operator.equals("@")) {
+                    throwCompilerException("Hash slice (@hash{keys}) not yet implemented in interpreter");
+                }
+
                 if (!leftOp.operator.equals("$") || !(leftOp.operand instanceof IdentifierNode)) {
-                    throw new RuntimeException("Hash access requires scalar dereference: $var{key}");
+                    throwCompilerException("Hash access requires scalar dereference: $var{key}");
                 }
 
                 String varName = ((IdentifierNode) leftOp.operand).name;
@@ -1733,11 +1742,11 @@ public class BytecodeCompiler implements Visitor {
                 // Evaluate key expression
                 // For HashLiteralNode, get the first element (should be the key)
                 if (!(node.right instanceof HashLiteralNode)) {
-                    throw new RuntimeException("Hash access requires HashLiteralNode on right side");
+                    throwCompilerException("Hash access requires HashLiteralNode on right side");
                 }
                 HashLiteralNode keyNode = (HashLiteralNode) node.right;
                 if (keyNode.elements.isEmpty()) {
-                    throw new RuntimeException("Hash access requires key expression");
+                    throwCompilerException("Hash access requires key expression");
                 }
 
                 // Compile the key expression
