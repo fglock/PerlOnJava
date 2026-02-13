@@ -416,22 +416,43 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(NumberNode node) {
-        // Emit LOAD_INT: rd = RuntimeScalarCache.getScalarInt(value)
+        // Handle number literals with proper Perl semantics
         int rd = allocateRegister();
 
+        // Remove underscores which Perl allows as digit separators (e.g., 10_000_000)
+        String value = node.value.replace("_", "");
+
         try {
-            if (node.value.contains(".")) {
-                // TODO: Handle double values properly
-                int intValue = (int) Double.parseDouble(node.value);
+            // Use ScalarUtils.isInteger() for consistent number parsing with compiler
+            boolean isInteger = org.perlonjava.runtime.ScalarUtils.isInteger(value);
+
+            // For 32-bit Perl emulation, check if this is a large integer
+            // that needs to be stored as a string to preserve precision
+            boolean isLargeInteger = !isInteger && value.matches("^-?\\d+$");
+
+            if (isInteger) {
+                // Regular integer - use LOAD_INT to create mutable scalar
+                // Note: We don't use RuntimeScalarCache here because MOVE just copies references,
+                // and we need mutable scalars for variables (++, --, etc.)
+                int intValue = Integer.parseInt(value);
                 emit(Opcodes.LOAD_INT);
                 emit(rd);
                 emitInt(intValue);
+            } else if (isLargeInteger) {
+                // Large integer - store as string to preserve precision (32-bit Perl emulation)
+                int strIdx = addToStringPool(value);
+                emit(Opcodes.LOAD_STRING);
+                emit(rd);
+                emit(strIdx);
             } else {
-                int intValue = Integer.parseInt(node.value);
-                emit(Opcodes.LOAD_INT);
+                // Floating-point number - create RuntimeScalar with double value
+                RuntimeScalar doubleScalar = new RuntimeScalar(Double.parseDouble(value));
+                int constIdx = addToConstantPool(doubleScalar);
+                emit(Opcodes.LOAD_CONST);
                 emit(rd);
-                emitInt(intValue);
+                emit(constIdx);
             }
+
         } catch (NumberFormatException e) {
             throw new RuntimeException("Invalid number: " + node.value, e);
         }
@@ -1050,8 +1071,12 @@ public class BytecodeCompiler implements Visitor {
                 // Optimization: if both operands are constant numbers, create range at compile time
                 if (node.left instanceof NumberNode && node.right instanceof NumberNode) {
                     try {
-                        int start = Integer.parseInt(((NumberNode) node.left).value);
-                        int end = Integer.parseInt(((NumberNode) node.right).value);
+                        // Remove underscores for parsing (Perl allows them as digit separators)
+                        String startStr = ((NumberNode) node.left).value.replace("_", "");
+                        String endStr = ((NumberNode) node.right).value.replace("_", "");
+
+                        int start = Integer.parseInt(startStr);
+                        int end = Integer.parseInt(endStr);
 
                         // Create PerlRange with RuntimeScalarCache integers
                         RuntimeScalar startScalar = RuntimeScalarCache.getScalarInt(start);
