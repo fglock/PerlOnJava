@@ -3150,8 +3150,20 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(For3Node node) {
-        // For3Node: C-style for loop
+        // For3Node: C-style for loop or bare block
         // for (init; condition; increment) { body }
+        // { body }  (bare block - isSimpleBlock=true)
+
+        // Handle bare blocks (simple blocks) differently - they execute once, not loop
+        if (node.isSimpleBlock) {
+            // Simple bare block: { statements; }
+            // Just execute the body once, no loop
+            if (node.body != null) {
+                node.body.accept(this);
+            }
+            lastResultReg = -1;  // Block returns empty
+            return;
+        }
 
         // Step 1: Execute initialization
         if (node.initialization != null) {
