@@ -615,6 +615,47 @@ public class InterpretedCode extends RuntimeCode {
                             String localVarName = stringPool[localNameIdx];
                             sb.append(" r").append(rd).append(" = local ").append(localVarName);
                             break;
+                        case Opcodes.SLOWOP_SPLICE:
+                            // Format: [rd] [arrayReg] [argsReg]
+                            rd = bytecode[pc++] & 0xFF;
+                            int spliceArrayReg = bytecode[pc++] & 0xFF;
+                            int spliceArgsReg = bytecode[pc++] & 0xFF;
+                            sb.append(" r").append(rd).append(" = splice(r").append(spliceArrayReg)
+                              .append(", r").append(spliceArgsReg).append(")");
+                            break;
+                        case Opcodes.SLOWOP_ARRAY_SLICE:
+                            // Format: [rd] [arrayReg] [indicesReg]
+                            rd = bytecode[pc++] & 0xFF;
+                            int sliceArrayReg = bytecode[pc++] & 0xFF;
+                            int sliceIndicesReg = bytecode[pc++] & 0xFF;
+                            sb.append(" r").append(rd).append(" = r").append(sliceArrayReg)
+                              .append("[r").append(sliceIndicesReg).append("]");
+                            break;
+                        case Opcodes.SLOWOP_REVERSE:
+                            // Format: [rd] [argsReg] [ctx]
+                            rd = bytecode[pc++] & 0xFF;
+                            int reverseArgsReg = bytecode[pc++] & 0xFF;
+                            int reverseCtx = bytecode[pc++] & 0xFF;
+                            sb.append(" r").append(rd).append(" = reverse(r").append(reverseArgsReg)
+                              .append(", ctx=").append(reverseCtx).append(")");
+                            break;
+                        case Opcodes.SLOWOP_ARRAY_SLICE_SET:
+                            // Format: [arrayReg] [indicesReg] [valuesReg]
+                            int setArrayReg = bytecode[pc++] & 0xFF;
+                            int setIndicesReg = bytecode[pc++] & 0xFF;
+                            int setValuesReg = bytecode[pc++] & 0xFF;
+                            sb.append(" r").append(setArrayReg).append("[r").append(setIndicesReg)
+                              .append("] = r").append(setValuesReg);
+                            break;
+                        case Opcodes.SLOWOP_SPLIT:
+                            // Format: [rd] [patternReg] [argsReg] [ctx]
+                            rd = bytecode[pc++] & 0xFF;
+                            int splitPatternReg = bytecode[pc++] & 0xFF;
+                            int splitArgsReg = bytecode[pc++] & 0xFF;
+                            int splitCtx = bytecode[pc++] & 0xFF;
+                            sb.append(" r").append(rd).append(" = split(r").append(splitPatternReg)
+                              .append(", r").append(splitArgsReg).append(", ctx=").append(splitCtx).append(")");
+                            break;
                         default:
                             sb.append(" (operands not decoded)");
                             break;
