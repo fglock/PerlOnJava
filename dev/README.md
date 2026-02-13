@@ -24,6 +24,11 @@ This directory contains development resources, tools and experimental code for P
   - Advanced threading patterns (TestThreadEval.pl)
   - Core language extensions (core_global_override.pl)
 
+- **interpreter/** - Interpreter mode development resources
+    - Documentation
+    - Architecture design documents (architecture/ subdirectory)
+    - Test files for interpreter-specific features (tests/ subdirectory)
+
 - **prompts/** - LLM prompts for development assistance
   - Code generation and conversion
   - Documentation improvements

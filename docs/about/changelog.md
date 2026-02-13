@@ -3,14 +3,56 @@
 Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 
 
-- [Completed Milestones](#completed-milestones)
-- [Work in progress](#work-in-progress)
-- [Upcoming Milestones](#upcoming-milestones)
-- [Future Development Areas](#future-development-areas)
+## v5.42.3: Unreleased - Next minor version
 
-## Completed Milestones
+- Non-local control flow: `last`/`next`/`redo`/`goto LABEL`
+- Tail call with trampoline for `goto &NAME` and `goto __SUB__`
+- Add modules: `TOML`.
+- Bugfix: operator override in Time::Hires now works.
+- Bugfix: internal temp variables are now pre-initialized.
+- Optimization: faster list assignment.
+- Optimization: faster type resolution in Perl scalars.
+- Optimization: `make` now runs tests in parallel.
+- Optimization: A workaround is implemented to Java 64k bytes segment limit.
+- New command line option: `--interpreter` to run PerlOnJava as an interpreter instead of JVM compiler.
+  - `./jperl --interpreter --disassemble -e 'print "Hello, World!\n"'`
+- Planned release date: 2026-02-10.
 
-- **v5.42.2**: 250k Tests, Class Features, System V IPC, Sockets, and More
+- Work in Progress
+  - PerlIO
+    - `get_layers`
+  - Term::ReadLine
+  - Term::ReadKey
+  - FileHandle
+  - File::Temp
+  - File::Path
+  - File::Copy
+  - IO::File
+  - IO::Handle
+    - `ungetc`
+    - Auto-bless filehandle into IO::Handle subclass
+  - IO::Seekable
+  - Filter::Simple
+  - Math::BigInt
+  - Text::ParseWords
+  - Text::Tabs
+  - Locale::Maketext::Simple
+  - Params::Check
+  - SelectSaver
+  - locale pragma
+  - utf8 pragma
+  - bytes pragma
+  - threads pragma
+  - warnings pragma
+  - vmsish pragma
+  - Constant folding - in ConstantFoldingVisitor.java
+  - `method` keyword
+  - Overload operators: `++`, `--`.
+  - String interpolation fixes.
+  - Command line option `-C`
+
+
+## v5.42.2: 250k Tests, Class Features, System V IPC, Sockets, and More
 
   - Add Perl 5.38+ Class Features
     - Class keyword with block syntax fully working
@@ -55,7 +97,7 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   - Bugfix in nested heredocs.
  
 
-- **v5.42.1**: 150k Tests, Extended Operators, and More Perl 5 Features
+## v5.42.1: 150k Tests, Extended Operators, and More Perl 5 Features
 
   - Add operators: `getlogin`, `getpwnam`, `getpwuid`, `getgrnam`, `getgrgid`, `getpwent`, `getgrent`, `setpwent`, `setgrent`, `endpwent`, `endgrent`, `gethostbyname`, `gethostbyaddr`, `getservbyname`, `getservbyport`, `getprotobyname`, `getprotobynumber`, `reset`.
   - Add overload operators: `<=>`, `cmp`, `<`, `<=`, `>`, `>=`, `==`, `!=`, `lt`, `le`, `gt`, `ge`, `eq`, `ne`, `qr`.
@@ -69,7 +111,7 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   - Bugfix: fixed vstring with codepoints above 65535.
 
 
-- **v5.42.0**: 100k Tests Passed, Tie Support, and Total Compatibility
+## v5.42.0: 100k Tests Passed, Tie Support, and Total Compatibility
   - Add `tie`, `tied`, `untie` operators.
   - Add all `tie` types: scalar, array, hash, and handle.
   - Add operators: `sysread`, `syswrite`, `kill`, `utime`, `chown`, `waitpid`, `umask`, `readlink`, `link`, `symlink`, `rename`.
@@ -94,7 +136,7 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   - Bugfix: fixed foreach loops with global variables.
 
 
-- **v3.1.0**: Tracks Perl 5.42.0
+## v3.1.0: Tracks Perl 5.42.0
   - Update Perl version to `5.42.0`.
   - Added features: `keyword_all`, `keyword_any`
 
@@ -130,7 +172,7 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   - Debian package can be created with `make deb`.
 
 
-- **v3.0.0**: Performance Boost, New Modules, and Streamlined Configuration
+## v3.0.0: Performance Boost, New Modules, and Streamlined Configuration
   - Added `--upgrade` option to `Configure.pl` to upgrade dependencies.
   - Added `Dockerfile` configuration.
   - Added `Time::HiRes`, `Benchmark` modules.
@@ -140,7 +182,7 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   - Use `int` instead of `enum` to reduce the memory overhead of scalar variables.
 
 
-- **v2.3.0**: Modern Perl Features, Expanded Modules, and Developer Tools
+## v2.3.0: Modern Perl Features, Expanded Modules, and Developer Tools
   - Project description updated in `README.md` to "A Perl Distribution for the JVM"
   - Added module porting guide at `docs/PORTING_MODULES.md`
   - Added wrapper scripts (`jperl`/`jperl.bat`) for easier command-line usage
@@ -166,7 +208,7 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
     Maven:  `mvn versions:use-latest-versions`.
     Gradle: `./gradlew useLatestVersions`.
 
-- **v2.2.0**: Core modules
+## v2.2.0: Core modules
   - Perl version is now v5.40.0
   - `for` loop can iterate over multiple values at the same time.
   - `for` loop variables are aliased.
@@ -179,7 +221,7 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   - Added Links to Perl on JVM resources in README - https://github.com/fglock/PerlOnJava/tree/master#additional-information-and-resources
   - Added [SUPPORT.md](docs/SUPPORT.md)
  
-- **v2.1.0**: Core modules and optimization
+## v2.1.0: Core modules and optimization
   - Added `Getopt::Long`, `JSON` modules.
   - Optimized `print` to `STDOUT`/`STDERR` performance by running in a separate thread.
   - Added `subs` pragma.
@@ -190,7 +232,7 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   - Added `CORE::GLOBAL` and core function overrides.
   - Added hexadecimal floating point numbers.
 
-- **v2.0.0**: Towards a Complete Perl Port on the JVM
+## v2.0.0: Towards a Complete Perl Port on the JVM
   - Added unmodified core Perl modules `File::Basename`, `File::Find`, `Data::Dumper`, `Term::ANSIColor`, `Time::Local`, `HTTP::Date`, `HTTP::CookieJar`.
   - Added `Cwd`, `File::Spec`, `File::Spec::Functions`, `HTTP::Tiny` modules.
   - "use feature" implemented: `fc`, `say`, `current_sub`, `isa`, `state`, `try`, `bitwise`, `postderef`.
@@ -206,7 +248,7 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   - Added directory operators.
   - Added regex patterns: `[[:ascii:]]`, `[[:print:]]`, `(?#comment)`, and the `/xx` modifier.
 
-- **v1.11.0**: Compile-time Features
+## v1.11.0: Compile-time Features
   - Added `BEGIN`, `CHECK`, `UNITCHECK`, `INIT`, `END` blocks.
   - Added subroutine hoisting: Invoking subroutines before their actual declaration in the code.
   - Improved Exporter.pm, glob assignment.
@@ -217,7 +259,7 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   - Added operators: `fileno`, `getc`, `prototype`.
   - Added `\N{U+hex}` operator in double quoted strings and regex.
 
-- **v1.10.0**: Operators and Special Variables
+## v1.10.0: Operators and Special Variables
   - Error messages mimic those in Perl for consistency.
   - Added `$.`, `$]`, `$^V`, `${^LAST_FH}`, `$SIG{__DIE__}`, `$SIG{__WARN__}` special variables.
   - Added command line switches `-E`, `-p`, `-n`, `-i`, `-0`, `-a`, `-F`, `-m`, `-M`, `-g`, `-l`, `-x`, `-?`.
@@ -232,7 +274,7 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   - Added lvalue subroutines.
   - CI/CD runs in Ubuntu and Windows
  
-- **v1.9.0**: Operators and Special Variables
+## v1.9.0: Operators and Special Variables
   - Added bitwise string operators.
   - Added lvalue `substr`, lvalue `vec`
   - Fix `%b` specifier in `sprintf`
@@ -248,7 +290,7 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   - Added `local` dynamic variables.
   - Tests in `src/test/resources` are executed automatically.
 
-- **v1.8.0**: Operators
+## v1.8.0: Operators
   - Added `continue` blocks and loop operators `next`, `last`, `redo`; a bare-block is a loop
   - Added bitwise operators `vec`, `pack`, `unpack`
   - Added `srand`, `crypt`, `exit`, ellipsis statement (`...`)
@@ -258,13 +300,13 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   - Completed `chomp` operator; fixed `qw//` operator, `defined-or` and `x=`
   - Added modules: `parent`, `Test::More`
 
-- **v1.7.0**: Performance Improvements
+## v1.7.0: Performance Improvements
   - Focus on optimizing the execution engine for better performance.
   - Improve error handling and debugging tools to make development easier. More detailed debugging symbols added to the bytecode. Added `Carp` module.
   - Moved Perl standard library modules into the jar file.
   - More tests and various bug fixes
 
-- **v1.6.0**: Module System and Standard Library Enhancements
+## v1.6.0: Module System and Standard Library Enhancements
   - Module system for improved code organization and reuse
   - Core Perl module operators: `do FILE`, `require`, `caller`, `use`, `no`
   - Module special subroutines: `import`, `unimport`
@@ -273,31 +315,31 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   - Standard library ported modules: `Data::Dumper`, `Symbol`, `strict`
   - Expanded documentation and usage examples
 
-- **v1.5.0**: Regex operators
+## v1.5.0: Regex operators
   - Added Regular expressions and pattern matching: m//, pos, qr//, quotemeta, s///, split
   - More complete set of operations on strings, numbers, arrays, hashes, lists
   - More special variables
   - More tests and various bug fixes
 
-- **v1.4.0**: I/O operators
+## v1.4.0: I/O operators
   - File i/o operators, STDOUT, STDERR, STDIN
   - TAP (Perl standard) tests
 
-- **v1.3.0**: Added Objects.
+## v1.3.0: Added Objects.
   - Objects and object operators, UNIVERSAL class
   - Array and List related operators
   - More tests and various bug fixes
 
-- **v1.2.0**: Added Namespaces and named subroutines.
+## v1.2.0: Added Namespaces and named subroutines.
   - Added typeglobs
   - Added more operators
 
-- **v1.1.0**: Established architecture and added key features. The system now supports benchmarks and tests.
+## v1.1.0: Established architecture and added key features. The system now supports benchmarks and tests.
   - JSR 223 integration
   - Support for closures
   - Eval-string functionality
   - Enhanced statements, data types, and call context
 
-- **v1.0.0**: Initial proof of concept for the parser and execution engine.
+## v1.0.0: Initial proof of concept for the parser and execution engine.
 
 

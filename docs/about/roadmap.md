@@ -58,54 +58,6 @@ The following areas are currently under active development to enhance the functi
 
 ## Upcoming Milestones
 
-- **v5.42.3**: Next minor version
-
-  - Non-local control flow: `last`/`next`/`redo`/`goto LABEL`
-  - Tail call with trampoline for `goto &NAME` and `goto __SUB__`
-  - Add modules: `TOML`.
-  - Bugfix: operator override in Time::Hires now works.
-  - Bugfix: internal temp variables are now pre-initialized.
-  - Optimization: faster list assignment.
-  - Optimization: faster type resolution in Perl scalars.
-  - Optimization: `make` now runs tests in parallel.
-  - Optimization: A workaround is implemented to Java 64k bytes segment limit.
-  - New command line option: `--interpreter` to run PerlOnJava as an interpreter instead of JVM compiler.
-    - `./jperl --interpreter --disassemble -e 'print "Hello, World!\n"'`
-  - Planned release date: 2026-02-10.
-
-- Work in Progress
-  - PerlIO
-    - `get_layers`
-  - Term::ReadLine
-  - Term::ReadKey
-  - FileHandle
-  - File::Temp
-  - File::Path
-  - File::Copy
-  - IO::File
-  - IO::Handle
-    - `ungetc`
-    - Auto-bless filehandle into IO::Handle subclass
-  - IO::Seekable
-  - Filter::Simple
-  - Math::BigInt
-  - Text::ParseWords
-  - Text::Tabs
-  - Locale::Maketext::Simple
-  - Params::Check
-  - SelectSaver
-  - locale pragma
-  - utf8 pragma
-  - bytes pragma
-  - threads pragma
-  - warnings pragma
-  - vmsish pragma
-  - Constant folding - in ConstantFoldingVisitor.java
-  - `method` keyword
-  - Overload operators: `++`, `--`.
-  - String interpolation fixes.
-  - Command line option `-C`
-
 ### v4.0.0 Milestone (Planned Release Date: 2026-05-10)
 
 **Objective:** Enhance core functionality and improve developer experience with a focus on integration and performance.
