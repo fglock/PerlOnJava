@@ -1372,11 +1372,25 @@ public class BytecodeInterpreter {
     private static String formatInterpreterError(InterpretedCode code, int errorPc, Throwable e) {
         StringBuilder sb = new StringBuilder();
 
-        // Try to get line number from pcToTokenIndex map
-        Integer tokenIndex = (code.pcToTokenIndex != null) ? code.pcToTokenIndex.get(errorPc) : null;
+        // Try to get token index from pcToTokenIndex map
+        // Use floorEntry to find the nearest token index before or at errorPc
+        Integer tokenIndex = null;
+        if (code.pcToTokenIndex != null && !code.pcToTokenIndex.isEmpty()) {
+            var entry = code.pcToTokenIndex.floorEntry(errorPc);
+            if (entry != null) {
+                tokenIndex = entry.getValue();
+            }
+        }
 
-        if (tokenIndex != null) {
-            // We have token index information
+        if (tokenIndex != null && code.errorUtil != null) {
+            // We have token index and errorUtil - convert to line number
+            int lineNumber = code.errorUtil.getLineNumber(tokenIndex);
+            sb.append("Interpreter error in ").append(code.sourceName)
+              .append(" line ").append(lineNumber)
+              .append(" (pc=").append(errorPc).append("): ")
+              .append(e.getMessage());
+        } else if (tokenIndex != null) {
+            // We have token index but no errorUtil
             sb.append("Interpreter error in ").append(code.sourceName)
               .append(" at token ").append(tokenIndex)
               .append(" (pc=").append(errorPc).append("): ")
@@ -1384,9 +1398,9 @@ public class BytecodeInterpreter {
         } else {
             // No token index available, use source line from code
             sb.append("Interpreter error in ").append(code.sourceName)
-              .append(":").append(code.sourceLine)
-              .append(" at pc=").append(errorPc)
-              .append(": ").append(e.getMessage());
+              .append(" line ").append(code.sourceLine)
+              .append(" (pc=").append(errorPc).append("): ")
+              .append(e.getMessage());
         }
 
         return sb.toString();
