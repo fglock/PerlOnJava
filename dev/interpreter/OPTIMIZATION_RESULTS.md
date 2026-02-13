@@ -222,3 +222,96 @@ The interpreter is production-ready for:
 achieving native Perl performance where compilation overhead would dominate.
 
 Next steps: Profile-guided optimization to identify highest-impact improvements for general code.
+
+## Phase 2: Array Operator Optimizations (2026-02-13)
+
+### Optimizations Implemented
+
+#### 1. Context Propagation
+- **Problem**: Array operations returning size instead of array in LIST context
+- **Solution**: Implemented try-finally blocks for context restoration (matching codegen)
+- **Impact**: Fixed `\@array` creating reference to size instead of array
+- **Tests**: array.t tests 1-22 now pass
+
+#### 2. Variable Scoping  
+- **Problem**: Bare blocks not cleaning up lexical variables
+- **Solution**: Added enterScope()/exitScope() to For3Node bare block handling
+- **Impact**: Fixed variable shadowing bugs (`my $array` in inner block)
+- **Tests**: Proper cleanup after scope exit
+
+#### 3. Register Allocation Fix (Critical)
+- **Problem**: Register wraparound at 256 causing silent aliasing bugs
+  - Register indices stored as bytes (0-255)
+  - After 255 allocations, wrapped to 0, overwriting lexical variables
+  - Manifested as "RuntimeScalar instead of RuntimeArray" errors
+- **Solution**: Converted bytecode from `byte[]` to `short[]`
+  - Registers now support 0-65,535 (16-bit unsigned)
+  - Cleaner implementation (no bit-packing)
+  - Integer constants stored as 2 shorts
+- **Impact**: Eliminated entire class of aliasing bugs
+- **Tests**: All 51 array.t tests now pass
+
+#### 4. Performance Optimizations
+- **Removed 0xFFFF masks**: Unnecessary for most values, kept only in readInt()
+- **Polymorphic scalar()**: Replaced instanceof checks with polymorphic method call
+- **Benefits**: 
+  - Fewer instructions per operation
+  - Better branch prediction
+  - Simpler, more maintainable code
+
+### Loop Increment Benchmark (100M iterations)
+
+**Test Code:**
+```perl
+my $sum = 0;
+for (my $i = 0; $i < 100_000_000; $i++) {
+    $sum += $i;
+}
+```
+
+**Results:**
+
+| Implementation      | Time   | Relative to Perl 5 | Throughput  |
+|---------------------|--------|-------------------|-------------|
+| Perl 5              | 1.53s  | 1.00x (baseline)  | 65.4M ops/s |
+| PerlOnJava Compiler | 0.86s  | **1.78x faster** ⚡ | 116.3M ops/s |
+| PerlOnJava Interp   | 1.80s  | 0.85x (15% slower) | 55.6M ops/s |
+
+**Analysis:**
+
+✅ **Compiler mode exceeds Perl 5 by 78%**
+- JVM JIT (C2 compiler) optimizes tight loops extremely well
+- Unboxed integer operations provide significant speedup
+- Production-ready for CPU-intensive workloads
+
+✅ **Interpreter competitive with Perl 5**
+- Only 15% slower despite being a pure interpreter
+- Switch-based dispatch with tableswitch working well
+- Excellent for development, debugging, and eval STRING use cases
+
+**Key Achievements:**
+1. ✅ All 51 array.t tests pass with interpreter
+2. ✅ Context propagation working correctly
+3. ✅ Register management handles large subroutines (65K registers)
+4. ✅ Performance competitive with Perl 5 interpreter
+5. ✅ Compiler mode significantly faster than Perl 5
+
+### Production Readiness
+
+**Compiler Mode: ✅ Production Ready**
+- 78% faster than Perl 5 for numeric code
+- Mature, well-tested
+- Best for long-running applications
+
+**Interpreter Mode: ✅ Ready for Specific Use Cases**
+- Primary: Dynamic eval STRING (46x faster than compilation)
+- Secondary: Development/debugging, one-off scripts
+- Array operators fully functional
+- 15% slower than Perl 5, but acceptable for its use cases
+
+**Recommended Strategy:**
+- Use compiler by default for production
+- Use interpreter for:
+  - eval STRING with dynamic/unique code
+  - Development and testing (faster iteration)
+  - Short-lived scripts where compilation overhead dominates
