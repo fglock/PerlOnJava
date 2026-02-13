@@ -166,6 +166,9 @@ public class SlowOpcodeHandler {
             case Opcodes.SLOWOP_SPLICE:
                 return executeSplice(bytecode, pc, registers);
 
+            case Opcodes.SLOWOP_ARRAY_SLICE:
+                return executeArraySlice(bytecode, pc, registers);
+
             default:
                 throw new RuntimeException(
                     "Unknown slow operation ID: " + slowOpId +
@@ -209,6 +212,7 @@ public class SlowOpcodeHandler {
             case Opcodes.SLOWOP_RETRIEVE_BEGIN_HASH -> "retrieve_begin_hash";
             case Opcodes.SLOWOP_LOCAL_SCALAR -> "local_scalar";
             case Opcodes.SLOWOP_SPLICE -> "splice";
+            case Opcodes.SLOWOP_ARRAY_SLICE -> "array_slice";
             default -> "slowop_" + slowOpId;
         };
     }
@@ -764,6 +768,29 @@ public class SlowOpcodeHandler {
         RuntimeList args = (RuntimeList) registers[argsReg];
 
         RuntimeList result = org.perlonjava.operators.Operator.splice(array, args);
+
+        registers[rd] = result;
+        return pc;
+    }
+
+    /**
+     * SLOWOP_ARRAY_SLICE: Get array slice
+     * Format: [SLOWOP_ARRAY_SLICE] [rd] [arrayReg] [indicesReg]
+     * Effect: rd = array.getSlice(indices)
+     */
+    private static int executeArraySlice(
+            byte[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+
+        int rd = bytecode[pc++] & 0xFF;
+        int arrayReg = bytecode[pc++] & 0xFF;
+        int indicesReg = bytecode[pc++] & 0xFF;
+
+        RuntimeArray array = (RuntimeArray) registers[arrayReg];
+        RuntimeList indices = (RuntimeList) registers[indicesReg];
+
+        RuntimeList result = array.getSlice(indices);
 
         registers[rd] = result;
         return pc;
