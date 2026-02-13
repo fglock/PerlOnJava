@@ -1098,6 +1098,98 @@ public class BytecodeCompiler implements Visitor {
                     lastResultReg = assignValueReg;
                     currentCallContext = savedContext;
                     return;
+                } else if (leftBin.operator.equals("{")) {
+                    // Hash element assignment: $hash{key} = value
+
+                    // 1. Get hash variable (leftBin.left)
+                    int hashReg;
+                    if (leftBin.left instanceof OperatorNode) {
+                        OperatorNode hashOp = (OperatorNode) leftBin.left;
+                        if (hashOp.operator.equals("$")) {
+                            // $hash{key} - dereference to get hash
+                            if (!(hashOp.operand instanceof IdentifierNode)) {
+                                throwCompilerException("Hash assignment requires identifier");
+                                return;
+                            }
+                            String varName = ((IdentifierNode) hashOp.operand).name;
+                            String hashVarName = "%" + varName;
+
+                            if (hasVariable(hashVarName)) {
+                                // Lexical hash
+                                hashReg = getVariableRegister(hashVarName);
+                            } else {
+                                // Global hash - load it
+                                hashReg = allocateRegister();
+                                String globalHashName = NameNormalizer.normalizeVariableName(
+                                    varName,
+                                    getCurrentPackage()
+                                );
+                                int nameIdx = addToStringPool(globalHashName);
+                                emit(Opcodes.LOAD_GLOBAL_HASH);
+                                emitReg(hashReg);
+                                emit(nameIdx);
+                            }
+                        } else {
+                            throwCompilerException("Hash assignment requires scalar dereference: $var{key}");
+                            return;
+                        }
+                    } else if (leftBin.left instanceof BinaryOperatorNode) {
+                        // Nested: $hash{outer}{inner} = value
+                        // Compile left side (returns scalar containing hash reference)
+                        leftBin.left.accept(this);
+                        int scalarReg = lastResultReg;
+
+                        // TODO: Dereference hash reference (autovivification)
+                        // For now, throw unsupported
+                        throwCompilerException("Nested hash assignment not yet implemented");
+                        return;
+                    } else {
+                        throwCompilerException("Hash assignment requires variable or expression on left side");
+                        return;
+                    }
+
+                    // 2. Compile key expression
+                    if (!(leftBin.right instanceof HashLiteralNode)) {
+                        throwCompilerException("Hash assignment requires HashLiteralNode on right side");
+                        return;
+                    }
+                    HashLiteralNode keyNode = (HashLiteralNode) leftBin.right;
+                    if (keyNode.elements.isEmpty()) {
+                        throwCompilerException("Hash key required for assignment");
+                        return;
+                    }
+
+                    // Compile the key
+                    // Special case: IdentifierNode in hash access is autoquoted (bareword key)
+                    int keyReg;
+                    Node keyElement = keyNode.elements.get(0);
+                    if (keyElement instanceof IdentifierNode) {
+                        // Bareword key: $hash{key} -> key is autoquoted to "key"
+                        String keyString = ((IdentifierNode) keyElement).name;
+                        keyReg = allocateRegister();
+                        int keyIdx = addToStringPool(keyString);
+                        emit(Opcodes.LOAD_STRING);
+                        emitReg(keyReg);
+                        emit(keyIdx);
+                    } else {
+                        // Expression key: $hash{$var} or $hash{func()}
+                        keyElement.accept(this);
+                        keyReg = lastResultReg;
+                    }
+
+                    // 3. Compile RHS value
+                    node.right.accept(this);
+                    int hashValueReg = lastResultReg;
+
+                    // 4. Emit HASH_SET
+                    emit(Opcodes.HASH_SET);
+                    emitReg(hashReg);
+                    emitReg(keyReg);
+                    emitReg(hashValueReg);
+
+                    lastResultReg = hashValueReg;
+                    currentCallContext = savedContext;
+                    return;
                 }
 
                 throwCompilerException("Assignment to non-identifier not yet supported: " + node.left.getClass().getSimpleName());
