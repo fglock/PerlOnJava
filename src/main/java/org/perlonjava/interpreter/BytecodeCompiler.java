@@ -1020,6 +1020,84 @@ public class BytecodeCompiler implements Visitor {
                     }
                 }
 
+                // Handle single element array assignment
+                // For: $array[index] = value or $matrix[3][0] = value
+                if (leftBin.operator.equals("[")) {
+                    int arrayReg;
+
+                    // Check if left side is a variable or multidimensional access
+                    if (leftBin.left instanceof OperatorNode) {
+                        OperatorNode arrayOp = (OperatorNode) leftBin.left;
+
+                        // Single element assignment: $array[index] = value
+                        if (arrayOp.operator.equals("$") && arrayOp.operand instanceof IdentifierNode) {
+                            String varName = ((IdentifierNode) arrayOp.operand).name;
+                            String arrayVarName = "@" + varName;
+
+                            // Get the array register
+                            if (hasVariable(arrayVarName)) {
+                                // Lexical array
+                                arrayReg = getVariableRegister(arrayVarName);
+                            } else {
+                                // Global array - load it
+                                arrayReg = allocateRegister();
+                                String globalArrayName = NameNormalizer.normalizeVariableName(
+                                    varName,
+                                    getCurrentPackage()
+                                );
+                                int nameIdx = addToStringPool(globalArrayName);
+                                emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                                emit(arrayReg);
+                                emit(nameIdx);
+                            }
+                        } else {
+                            throwCompilerException("Assignment requires scalar dereference: $var[index]");
+                            return;
+                        }
+                    } else if (leftBin.left instanceof BinaryOperatorNode) {
+                        // Multidimensional case: $matrix[3][0] = value
+                        // Compile left side (which returns a scalar containing an array reference)
+                        leftBin.left.accept(this);
+                        int scalarReg = lastResultReg;
+
+                        // Dereference the array reference to get the actual array
+                        arrayReg = allocateRegister();
+                        emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                        emit(Opcodes.SLOWOP_DEREF_ARRAY);
+                        emit(arrayReg);
+                        emit(scalarReg);
+                    } else {
+                        throwCompilerException("Array assignment requires variable or expression on left side");
+                        return;
+                    }
+
+                    // Compile index expression
+                    if (!(leftBin.right instanceof ArrayLiteralNode)) {
+                        throwCompilerException("Array assignment requires ArrayLiteralNode on right side");
+                    }
+                    ArrayLiteralNode indexNode = (ArrayLiteralNode) leftBin.right;
+                    if (indexNode.elements.isEmpty()) {
+                        throwCompilerException("Array assignment requires index expression");
+                    }
+
+                    indexNode.elements.get(0).accept(this);
+                    int indexReg = lastResultReg;
+
+                    // Compile RHS value
+                    node.right.accept(this);
+                    int assignValueReg = lastResultReg;
+
+                    // Emit ARRAY_SET
+                    emit(Opcodes.ARRAY_SET);
+                    emit(arrayReg);
+                    emit(indexReg);
+                    emit(assignValueReg);
+
+                    lastResultReg = assignValueReg;
+                    currentCallContext = savedContext;
+                    return;
+                }
+
                 throwCompilerException("Assignment to non-identifier not yet supported: " + node.left.getClass().getSimpleName());
             } else {
                 throwCompilerException("Assignment to non-identifier not yet supported: " + node.left.getClass().getSimpleName());
