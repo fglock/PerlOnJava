@@ -554,6 +554,9 @@ public class Opcodes {
     /** Slow opcode for delete operator (fallback) */
     public static final int SLOWOP_DELETE = 34;
 
+    /** Slow op ID: rd = deref_hash(scalar_ref) - dereference hash reference for hashref access */
+    public static final int SLOWOP_DEREF_HASH = 35;
+
     // =================================================================
     // OPCODES 93-255: RESERVED FOR FUTURE FAST OPERATIONS
     // =================================================================

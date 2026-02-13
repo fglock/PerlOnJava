@@ -1204,6 +1204,97 @@ public class BytecodeCompiler implements Visitor {
             }
         }
 
+        // Handle -> operator specially for hashref/arrayref dereference
+        if (node.operator.equals("->")) {
+            currentTokenIndex = node.getIndex();  // Track token for error reporting
+
+            if (node.right instanceof HashLiteralNode) {
+                // Hashref dereference: $ref->{key}
+                // left: scalar containing hash reference
+                // right: HashLiteralNode containing key
+
+                // Compile the reference (left side)
+                node.left.accept(this);
+                int scalarRefReg = lastResultReg;
+
+                // Dereference the scalar to get the actual hash
+                int hashReg = allocateRegister();
+                emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                emit(Opcodes.SLOWOP_DEREF_HASH);
+                emitReg(hashReg);
+                emitReg(scalarRefReg);
+
+                // Get the key
+                HashLiteralNode keyNode = (HashLiteralNode) node.right;
+                if (keyNode.elements.isEmpty()) {
+                    throwCompilerException("Hash dereference requires key");
+                }
+
+                // Compile the key - handle bareword autoquoting
+                int keyReg;
+                Node keyElement = keyNode.elements.get(0);
+                if (keyElement instanceof IdentifierNode) {
+                    // Bareword key: $ref->{key} -> key is autoquoted
+                    String keyString = ((IdentifierNode) keyElement).name;
+                    keyReg = allocateRegister();
+                    int keyIdx = addToStringPool(keyString);
+                    emit(Opcodes.LOAD_STRING);
+                    emitReg(keyReg);
+                    emit(keyIdx);
+                } else {
+                    // Expression key: $ref->{$var}
+                    keyElement.accept(this);
+                    keyReg = lastResultReg;
+                }
+
+                // Access hash element
+                int rd = allocateRegister();
+                emit(Opcodes.HASH_GET);
+                emitReg(rd);
+                emitReg(hashReg);
+                emitReg(keyReg);
+
+                lastResultReg = rd;
+                return;
+            } else if (node.right instanceof ArrayLiteralNode) {
+                // Arrayref dereference: $ref->[index]
+                // left: scalar containing array reference
+                // right: ArrayLiteralNode containing index
+
+                // Compile the reference (left side)
+                node.left.accept(this);
+                int scalarRefReg = lastResultReg;
+
+                // Dereference the scalar to get the actual array
+                int arrayReg = allocateRegister();
+                emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                emit(Opcodes.SLOWOP_DEREF_ARRAY);
+                emitReg(arrayReg);
+                emitReg(scalarRefReg);
+
+                // Get the index
+                ArrayLiteralNode indexNode = (ArrayLiteralNode) node.right;
+                if (indexNode.elements.isEmpty()) {
+                    throwCompilerException("Array dereference requires index");
+                }
+
+                // Compile the index expression
+                indexNode.elements.get(0).accept(this);
+                int indexReg = lastResultReg;
+
+                // Access array element
+                int rd = allocateRegister();
+                emit(Opcodes.ARRAY_GET);
+                emitReg(rd);
+                emitReg(arrayReg);
+                emitReg(indexReg);
+
+                lastResultReg = rd;
+                return;
+            }
+            // Otherwise, fall through to normal -> handling (method call)
+        }
+
         // Compile left and right operands
         node.left.accept(this);
         int rs1 = lastResultReg;
