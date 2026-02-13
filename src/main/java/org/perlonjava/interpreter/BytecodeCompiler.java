@@ -1995,7 +1995,10 @@ public class BytecodeCompiler implements Visitor {
                     }
                 }
 
-                // General case: compile operand and let ARRAY_SIZE handle type conversion
+                // General case: compile operand and apply scalar context
+                // ARRAY_SIZE will:
+                // - Convert arrays/hashes to their size
+                // - Pass through scalars unchanged
                 node.operand.accept(this);
                 int operandReg = lastResultReg;
 
