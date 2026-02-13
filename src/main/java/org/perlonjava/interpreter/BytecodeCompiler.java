@@ -1184,6 +1184,30 @@ public class BytecodeCompiler implements Visitor {
                 emit(rs1);       // Closure register
                 emit(RuntimeContextType.LIST);  // Map always uses list context
             }
+            case "grep" -> {
+                // Grep operator: grep { block } list
+                // rs1 = closure (SubroutineNode compiled to code reference)
+                // rs2 = list expression
+
+                // Emit GREP opcode
+                emit(Opcodes.GREP);
+                emit(rd);
+                emit(rs2);       // List register
+                emit(rs1);       // Closure register
+                emit(RuntimeContextType.LIST);  // Grep uses list context
+            }
+            case "sort" -> {
+                // Sort operator: sort { block } list
+                // rs1 = closure (SubroutineNode compiled to code reference)
+                // rs2 = list expression
+
+                // Emit SORT opcode
+                emit(Opcodes.SORT);
+                emit(rd);
+                emit(rs2);       // List register
+                emit(rs1);       // Closure register
+                emitInt(addToStringPool(currentPackage));  // Package name for sort
+            }
             case "[" -> {
                 // Array element access: $a[10] means get element 10 from array @a
                 // Array slice: @a[1,2,3] or @a[1..3] means get multiple elements

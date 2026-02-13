@@ -1076,6 +1076,38 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.GREP: {
+                        // Grep operator: rd = ListOperators.grep(list, closure, ctx)
+                        int rd = bytecode[pc++] & 0xFF;
+                        int listReg = bytecode[pc++] & 0xFF;
+                        int closureReg = bytecode[pc++] & 0xFF;
+                        int ctx = bytecode[pc++] & 0xFF;
+
+                        RuntimeBase listBase = registers[listReg];
+                        RuntimeList list = listBase.getList();
+                        RuntimeScalar closure = (RuntimeScalar) registers[closureReg];
+                        RuntimeList result = org.perlonjava.operators.ListOperators.grep(list, closure, ctx);
+                        registers[rd] = result;
+                        break;
+                    }
+
+                    case Opcodes.SORT: {
+                        // Sort operator: rd = ListOperators.sort(list, closure, package)
+                        int rd = bytecode[pc++] & 0xFF;
+                        int listReg = bytecode[pc++] & 0xFF;
+                        int closureReg = bytecode[pc++] & 0xFF;
+                        int packageIdx = readInt(bytecode, pc);
+                        pc += 4;
+
+                        RuntimeBase listBase = registers[listReg];
+                        RuntimeList list = listBase.getList();
+                        RuntimeScalar closure = (RuntimeScalar) registers[closureReg];
+                        String packageName = code.stringPool[packageIdx];
+                        RuntimeList result = org.perlonjava.operators.ListOperators.sort(list, closure, packageName);
+                        registers[rd] = result;
+                        break;
+                    }
+
                     case Opcodes.NEW_ARRAY: {
                         // Create empty array: rd = new RuntimeArray()
                         int rd = bytecode[pc++] & 0xFF;

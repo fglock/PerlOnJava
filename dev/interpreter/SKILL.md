@@ -1338,6 +1338,68 @@ OperatorNode: splice
 - Right: ListNode (input data)
 - Implementation: Compile block to closure, compile list, call operator
 
+**Detailed Implementation for Pattern 3 (grep, map, sort):**
+
+1. **AST Structure**: BinaryOperatorNode where:
+   - `left` = SubroutineNode (anonymous sub representing the block)
+   - `right` = ListNode (input data)
+
+2. **BytecodeCompiler Implementation**:
+   ```java
+   case "grep" -> {
+       // Compile SubroutineNode (left operand) to closure
+       // This is handled automatically by visit(SubroutineNode)
+       // Result will be in lastResultReg as a RuntimeScalar containing RuntimeCode
+
+       // rs1 = closure register
+       // rs2 = list register
+
+       emit(Opcodes.GREP);
+       emit(rd);           // Result register
+       emit(rs2);          // List register
+       emit(rs1);          // Closure register
+       emit(RuntimeContextType.LIST);  // Context
+   }
+   ```
+
+3. **BytecodeInterpreter Implementation**:
+   ```java
+   case Opcodes.GREP: {
+       int rd = bytecode[pc++] & 0xFF;
+       int listReg = bytecode[pc++] & 0xFF;
+       int closureReg = bytecode[pc++] & 0xFF;
+       int ctx = bytecode[pc++] & 0xFF;
+
+       RuntimeBase listBase = registers[listReg];
+       RuntimeList list = listBase.getList();
+       RuntimeScalar closure = (RuntimeScalar) registers[closureReg];
+       RuntimeList result = org.perlonjava.operators.ListOperators.grep(list, closure, ctx);
+       registers[rd] = result;
+       break;
+   }
+   ```
+
+4. **Disassembler** (InterpretedCode.java):
+   ```java
+   case Opcodes.GREP:
+       rd = bytecode[pc++] & 0xFF;
+       rs1 = bytecode[pc++] & 0xFF;  // list register
+       rs2 = bytecode[pc++] & 0xFF;  // closure register
+       int grepCtx = bytecode[pc++] & 0xFF;
+       sb.append("GREP r").append(rd).append(" = grep(r").append(rs1)
+         .append(", r").append(rs2).append(", ctx=").append(grepCtx).append(")\n");
+       break;
+   ```
+
+5. **Sort is special**: Uses package name instead of context:
+   ```java
+   emit(Opcodes.SORT);
+   emit(rd);
+   emit(rs2);       // List register
+   emit(rs1);       // Closure register
+   emitInt(addToStringPool(currentPackage));  // Package name (4 bytes)
+   ```
+
 **Pattern 4: BinaryOperatorNode with separator and list**
 - Example: join
 - Left: Separator value

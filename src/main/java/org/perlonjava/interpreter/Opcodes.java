@@ -437,6 +437,12 @@ public class Opcodes {
      * Used to set the value in a persistent scalar without overwriting the reference */
     public static final byte SET_SCALAR = 99;
 
+    /** Grep operator: rd = ListOperators.grep(list_reg, closure_reg, context) */
+    public static final byte GREP = 100;
+
+    /** Sort operator: rd = ListOperators.sort(list_reg, closure_reg, package_name) */
+    public static final byte SORT = 101;
+
     // =================================================================
     // Slow Operation IDs (0-255)
     // =================================================================
