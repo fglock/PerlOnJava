@@ -550,7 +550,7 @@ public class StatementResolver {
                 case "..." -> {
                     TokenUtils.consume(parser);
                     yield dieWarnNode(parser, "die", new ListNode(List.of(
-                            new StringNode("Unimplemented", parser.tokenIndex)), parser.tokenIndex));
+                            new StringNode("Unimplemented", parser.tokenIndex)), parser.tokenIndex), parser.tokenIndex);
                 }
 
                 case "{" -> {
