@@ -530,6 +530,35 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     }
 
     /**
+     * Set multiple hash elements from key and value lists (slice assignment).
+     *
+     * @param keys   The RuntimeList containing the keys.
+     * @param values The RuntimeList containing the values.
+     */
+    public void setSlice(RuntimeList keys, RuntimeList values) {
+        if (this.type == AUTOVIVIFY_HASH) {
+            AutovivificationHash.vivify(this);
+        }
+
+        // Iterate through keys and values in parallel
+        Iterator<RuntimeScalar> keyIter = keys.iterator();
+        Iterator<RuntimeScalar> valueIter = values.iterator();
+
+        while (keyIter.hasNext()) {
+            RuntimeScalar keyScalar = keyIter.next();
+            String key = keyScalar.toString();  // Convert key to string
+            RuntimeScalar value;
+            if (valueIter.hasNext()) {
+                value = valueIter.next();
+            } else {
+                // If we run out of values, use undef
+                value = new RuntimeScalar();
+            }
+            this.put(key, value);
+        }
+    }
+
+    /**
      * The keys() operator for hashes.
      *
      * @return A RuntimeArray containing the keys of the hash.

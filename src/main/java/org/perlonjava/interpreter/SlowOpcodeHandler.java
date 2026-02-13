@@ -193,6 +193,9 @@ public class SlowOpcodeHandler {
             case Opcodes.SLOWOP_HASH_SLICE_DELETE:
                 return executeHashSliceDelete(bytecode, pc, registers);
 
+            case Opcodes.SLOWOP_HASH_SLICE_SET:
+                return executeHashSliceSet(bytecode, pc, registers);
+
             default:
                 throw new RuntimeException(
                     "Unknown slow operation ID: " + slowOpId +
@@ -1030,6 +1033,46 @@ public class SlowOpcodeHandler {
         }
 
         registers[rd] = result;
+        return pc;
+    }
+
+    /**
+     * SLOW_HASH_SLICE_SET: hash.setSlice(keys_list, values_list)
+     * Format: [SLOW_HASH_SLICE_SET] [hashReg] [keysListReg] [valuesListReg]
+     * Effect: Assign values to multiple hash keys (slice assignment)
+     */
+    private static int executeHashSliceSet(
+            short[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+
+        int hashReg = bytecode[pc++];
+        int keysListReg = bytecode[pc++];
+        int valuesListReg = bytecode[pc++];
+
+        RuntimeHash hash = (RuntimeHash) registers[hashReg];
+        RuntimeList keysList = (RuntimeList) registers[keysListReg];
+        RuntimeBase valuesBase = registers[valuesListReg];
+
+        // Convert values to RuntimeList if needed
+        RuntimeList valuesList;
+        if (valuesBase instanceof RuntimeList) {
+            valuesList = (RuntimeList) valuesBase;
+        } else if (valuesBase instanceof RuntimeArray) {
+            // Convert RuntimeArray to RuntimeList
+            valuesList = new RuntimeList();
+            for (RuntimeScalar elem : (RuntimeArray) valuesBase) {
+                valuesList.elements.add(elem);
+            }
+        } else {
+            // Single value - wrap in list
+            valuesList = new RuntimeList();
+            valuesList.elements.add(valuesBase.scalar());
+        }
+
+        // Set all key-value pairs
+        hash.setSlice(keysList, valuesList);
+
         return pc;
     }
 

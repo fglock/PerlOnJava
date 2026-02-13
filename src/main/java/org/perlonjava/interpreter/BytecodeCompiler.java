@@ -1099,13 +1099,96 @@ public class BytecodeCompiler implements Visitor {
                     currentCallContext = savedContext;
                     return;
                 } else if (leftBin.operator.equals("{")) {
-                    // Hash element assignment: $hash{key} = value
+                    // Hash element/slice assignment
+                    // $hash{key} = value (scalar element)
+                    // @hash{keys} = values (slice)
 
                     // 1. Get hash variable (leftBin.left)
                     int hashReg;
                     if (leftBin.left instanceof OperatorNode) {
                         OperatorNode hashOp = (OperatorNode) leftBin.left;
-                        if (hashOp.operator.equals("$")) {
+
+                        // Check for hash slice assignment: @hash{keys} = values
+                        if (hashOp.operator.equals("@")) {
+                            // Hash slice assignment
+                            if (!(hashOp.operand instanceof IdentifierNode)) {
+                                throwCompilerException("Hash slice assignment requires identifier");
+                                return;
+                            }
+                            String varName = ((IdentifierNode) hashOp.operand).name;
+                            String hashVarName = "%" + varName;
+
+                            // Get the hash - check lexical first, then global
+                            if (hasVariable(hashVarName)) {
+                                // Lexical hash
+                                hashReg = getVariableRegister(hashVarName);
+                            } else {
+                                // Global hash - load it
+                                hashReg = allocateRegister();
+                                String globalHashName = NameNormalizer.normalizeVariableName(
+                                    varName,
+                                    getCurrentPackage()
+                                );
+                                int nameIdx = addToStringPool(globalHashName);
+                                emit(Opcodes.LOAD_GLOBAL_HASH);
+                                emitReg(hashReg);
+                                emit(nameIdx);
+                            }
+
+                            // Get the keys from HashLiteralNode
+                            if (!(leftBin.right instanceof HashLiteralNode)) {
+                                throwCompilerException("Hash slice assignment requires HashLiteralNode");
+                                return;
+                            }
+                            HashLiteralNode keysNode = (HashLiteralNode) leftBin.right;
+                            if (keysNode.elements.isEmpty()) {
+                                throwCompilerException("Hash slice assignment requires at least one key");
+                                return;
+                            }
+
+                            // Compile all keys into a list
+                            List<Integer> keyRegs = new ArrayList<>();
+                            for (Node keyElement : keysNode.elements) {
+                                if (keyElement instanceof IdentifierNode) {
+                                    // Bareword key - autoquote
+                                    String keyString = ((IdentifierNode) keyElement).name;
+                                    int keyReg = allocateRegister();
+                                    int keyIdx = addToStringPool(keyString);
+                                    emit(Opcodes.LOAD_STRING);
+                                    emitReg(keyReg);
+                                    emit(keyIdx);
+                                    keyRegs.add(keyReg);
+                                } else {
+                                    // Expression key
+                                    keyElement.accept(this);
+                                    keyRegs.add(lastResultReg);
+                                }
+                            }
+
+                            // Create a RuntimeList from key registers
+                            int keysListReg = allocateRegister();
+                            emit(Opcodes.CREATE_LIST);
+                            emitReg(keysListReg);
+                            emit(keyRegs.size());
+                            for (int keyReg : keyRegs) {
+                                emitReg(keyReg);
+                            }
+
+                            // Compile RHS values
+                            node.right.accept(this);
+                            int valuesReg = lastResultReg;
+
+                            // Emit SLOW_OP with SLOWOP_HASH_SLICE_SET
+                            emit(Opcodes.SLOW_OP);
+                            emit(Opcodes.SLOWOP_HASH_SLICE_SET);
+                            emitReg(hashReg);
+                            emitReg(keysListReg);
+                            emitReg(valuesReg);
+
+                            lastResultReg = valuesReg;
+                            currentCallContext = savedContext;
+                            return;
+                        } else if (hashOp.operator.equals("$")) {
                             // $hash{key} - dereference to get hash
                             if (!(hashOp.operand instanceof IdentifierNode)) {
                                 throwCompilerException("Hash assignment requires identifier");
@@ -1720,8 +1803,6 @@ public class BytecodeCompiler implements Visitor {
                     // Hash slice: @hash{'key1', 'key2'} returns array of values
                     // Hashref slice: @$hashref{'key1', 'key2'} dereferences then slices
 
-                    int hashReg;
-
                     if (leftOp.operand instanceof IdentifierNode) {
                         // Direct hash slice: @hash{keys}
                         String varName = ((IdentifierNode) leftOp.operand).name;
@@ -1809,61 +1890,93 @@ public class BytecodeCompiler implements Visitor {
                     return;
                 }
 
-                if (!leftOp.operator.equals("$") || !(leftOp.operand instanceof IdentifierNode)) {
-                    throwCompilerException("Hash access requires scalar dereference: $var{key}");
+                // Handle scalar hash access: $hash{key} or $hash{outer}{inner}
+                if (!leftOp.operator.equals("$")) {
+                    throwCompilerException("Hash access requires $ or @ sigil");
                 }
 
-                String varName = ((IdentifierNode) leftOp.operand).name;
-                String hashVarName = "%" + varName;
+                // Check if it's simple ($var) or nested ($expr{key})
+                if (leftOp.operand instanceof IdentifierNode) {
+                    // Simple: $hash{key}
+                    String varName = ((IdentifierNode) leftOp.operand).name;
+                    String hashVarName = "%" + varName;
 
-                // Get the hash - check lexical first, then global
-                int hashReg;
-                if (hasVariable(hashVarName)) {
-                    // Lexical hash
-                    hashReg = getVariableRegister(hashVarName);
+                    // Get the hash - check lexical first, then global
+                    if (hasVariable(hashVarName)) {
+                        // Lexical hash
+                        hashReg = getVariableRegister(hashVarName);
+                    } else {
+                        // Global hash - load it
+                        hashReg = allocateRegister();
+                        String globalHashName = "main::" + varName;
+                        int nameIdx = addToStringPool(globalHashName);
+                        emit(Opcodes.LOAD_GLOBAL_HASH);
+                        emitReg(hashReg);
+                        emit(nameIdx);
+                    }
                 } else {
-                    // Global hash - load it
+                    // Nested or complex: $hash{outer}{inner} or $func()->{key}
+                    // Compile the left side (returns a scalar containing hash reference)
+                    leftOp.operand.accept(this);
+                    int scalarReg = lastResultReg;
+
+                    // Dereference to get the hash
                     hashReg = allocateRegister();
-                    String globalHashName = "main::" + varName;
-                    int nameIdx = addToStringPool(globalHashName);
-                    emit(Opcodes.LOAD_GLOBAL_HASH);
+                    emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                    emit(Opcodes.SLOWOP_DEREF_HASH);
                     emitReg(hashReg);
-                    emit(nameIdx);
+                    emitReg(scalarReg);
                 }
+            } else if (node.left instanceof BinaryOperatorNode) {
+                // Nested access where left is already a hash access
+                // e.g., $hash{outer}{inner} - the outer "{" is evaluated
+                node.left.accept(this);
+                int scalarReg = lastResultReg;
 
-                // Evaluate key expression
-                // For HashLiteralNode, get the first element (should be the key)
-                if (!(node.right instanceof HashLiteralNode)) {
-                    throwCompilerException("Hash access requires HashLiteralNode on right side");
-                }
-                HashLiteralNode keyNode = (HashLiteralNode) node.right;
-                if (keyNode.elements.isEmpty()) {
-                    throwCompilerException("Hash access requires key expression");
-                }
-
-                // Compile the key expression
-                // Special case: bareword identifiers should be treated as string literals
-                int keyReg;
-                Node keyElement = keyNode.elements.get(0);
-                if (keyElement instanceof IdentifierNode) {
-                    // Bareword key - treat as string literal
-                    String keyStr = ((IdentifierNode) keyElement).name;
-                    keyReg = allocateRegister();
-                    int strIdx = addToStringPool(keyStr);
-                    emit(Opcodes.LOAD_STRING);
-                    emitReg(keyReg);
-                    emit(strIdx);
-                } else {
-                    // Expression key - evaluate normally
-                    keyElement.accept(this);
-                    keyReg = lastResultReg;
-                }
-
-                // Emit HASH_GET
-                emit(Opcodes.HASH_GET);
-                emitReg(rd);
+                // Dereference to get the hash
+                hashReg = allocateRegister();
+                emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                emit(Opcodes.SLOWOP_DEREF_HASH);
                 emitReg(hashReg);
+                emitReg(scalarReg);
+            } else {
+                throwCompilerException("Hash access requires variable or expression on left side");
+                return;
+            }
+
+            // Common code for all scalar hash access paths
+            // Evaluate key expression
+            if (!(node.right instanceof HashLiteralNode)) {
+                throwCompilerException("Hash access requires HashLiteralNode on right side");
+            }
+            HashLiteralNode keyNode = (HashLiteralNode) node.right;
+            if (keyNode.elements.isEmpty()) {
+                throwCompilerException("Hash access requires key expression");
+            }
+
+            // Compile the key expression
+            // Special case: bareword identifiers should be treated as string literals
+            int keyReg;
+            Node keyElement = keyNode.elements.get(0);
+            if (keyElement instanceof IdentifierNode) {
+                // Bareword key - treat as string literal
+                String keyStr = ((IdentifierNode) keyElement).name;
+                keyReg = allocateRegister();
+                int strIdx = addToStringPool(keyStr);
+                emit(Opcodes.LOAD_STRING);
                 emitReg(keyReg);
+                emit(strIdx);
+            } else {
+                // Expression key - evaluate normally
+                keyElement.accept(this);
+                keyReg = lastResultReg;
+            }
+
+            // Emit HASH_GET
+            emit(Opcodes.HASH_GET);
+            emitReg(rd);
+            emitReg(hashReg);
+            emitReg(keyReg);
             }
             case "push" -> {
                 // Array push: push(@array, values...)
@@ -2961,22 +3074,83 @@ public class BytecodeCompiler implements Visitor {
             if (arg instanceof BinaryOperatorNode && ((BinaryOperatorNode) arg).operator.equals("{")) {
                 BinaryOperatorNode hashAccess = (BinaryOperatorNode) arg;
 
-                // Compile hash (left side)
-                hashAccess.left.accept(this);
-                int hashReg = lastResultReg;
+                // Get hash register (need to handle $hash{key} -> %hash)
+                int hashReg;
+                if (hashAccess.left instanceof OperatorNode) {
+                    OperatorNode leftOp = (OperatorNode) hashAccess.left;
+                    if (leftOp.operator.equals("$") && leftOp.operand instanceof IdentifierNode) {
+                        // Simple: exists $hash{key} -> get %hash
+                        String varName = ((IdentifierNode) leftOp.operand).name;
+                        String hashVarName = "%" + varName;
+
+                        if (hasVariable(hashVarName)) {
+                            // Lexical hash
+                            hashReg = getVariableRegister(hashVarName);
+                        } else {
+                            // Global hash - load it
+                            hashReg = allocateRegister();
+                            String globalHashName = NameNormalizer.normalizeVariableName(
+                                varName,
+                                getCurrentPackage()
+                            );
+                            int nameIdx = addToStringPool(globalHashName);
+                            emit(Opcodes.LOAD_GLOBAL_HASH);
+                            emitReg(hashReg);
+                            emit(nameIdx);
+                        }
+                    } else {
+                        // Complex: dereference needed
+                        leftOp.operand.accept(this);
+                        int scalarReg = lastResultReg;
+
+                        hashReg = allocateRegister();
+                        emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                        emit(Opcodes.SLOWOP_DEREF_HASH);
+                        emitReg(hashReg);
+                        emitReg(scalarReg);
+                    }
+                } else if (hashAccess.left instanceof BinaryOperatorNode) {
+                    // Nested: exists $hash{outer}{inner}
+                    hashAccess.left.accept(this);
+                    int scalarReg = lastResultReg;
+
+                    hashReg = allocateRegister();
+                    emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                    emit(Opcodes.SLOWOP_DEREF_HASH);
+                    emitReg(hashReg);
+                    emitReg(scalarReg);
+                } else {
+                    throwCompilerException("Hash access requires variable or expression on left side");
+                    return;
+                }
 
                 // Compile key (right side contains HashLiteralNode)
+                int keyReg;
                 if (hashAccess.right instanceof HashLiteralNode) {
                     HashLiteralNode keyNode = (HashLiteralNode) hashAccess.right;
                     if (!keyNode.elements.isEmpty()) {
-                        keyNode.elements.get(0).accept(this);
+                        Node keyElement = keyNode.elements.get(0);
+                        if (keyElement instanceof IdentifierNode) {
+                            // Bareword key - autoquote
+                            String keyString = ((IdentifierNode) keyElement).name;
+                            keyReg = allocateRegister();
+                            int keyIdx = addToStringPool(keyString);
+                            emit(Opcodes.LOAD_STRING);
+                            emitReg(keyReg);
+                            emit(keyIdx);
+                        } else {
+                            // Expression key
+                            keyElement.accept(this);
+                            keyReg = lastResultReg;
+                        }
                     } else {
                         throwCompilerException("Hash key required for exists");
+                        return;
                     }
                 } else {
                     hashAccess.right.accept(this);
+                    keyReg = lastResultReg;
                 }
-                int keyReg = lastResultReg;
 
                 // Emit HASH_EXISTS
                 int rd = allocateRegister();
@@ -3094,22 +3268,83 @@ public class BytecodeCompiler implements Visitor {
                 }
 
                 // Single key delete: delete $hash{key}
-                // Compile hash (left side)
-                hashAccess.left.accept(this);
-                int hashReg = lastResultReg;
+                // Get hash register (need to handle $hash{key} -> %hash)
+                int hashReg;
+                if (hashAccess.left instanceof OperatorNode) {
+                    OperatorNode leftOp = (OperatorNode) hashAccess.left;
+                    if (leftOp.operator.equals("$") && leftOp.operand instanceof IdentifierNode) {
+                        // Simple: delete $hash{key} -> get %hash
+                        String varName = ((IdentifierNode) leftOp.operand).name;
+                        String hashVarName = "%" + varName;
+
+                        if (hasVariable(hashVarName)) {
+                            // Lexical hash
+                            hashReg = getVariableRegister(hashVarName);
+                        } else {
+                            // Global hash - load it
+                            hashReg = allocateRegister();
+                            String globalHashName = NameNormalizer.normalizeVariableName(
+                                varName,
+                                getCurrentPackage()
+                            );
+                            int nameIdx = addToStringPool(globalHashName);
+                            emit(Opcodes.LOAD_GLOBAL_HASH);
+                            emitReg(hashReg);
+                            emit(nameIdx);
+                        }
+                    } else {
+                        // Complex: dereference needed
+                        leftOp.operand.accept(this);
+                        int scalarReg = lastResultReg;
+
+                        hashReg = allocateRegister();
+                        emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                        emit(Opcodes.SLOWOP_DEREF_HASH);
+                        emitReg(hashReg);
+                        emitReg(scalarReg);
+                    }
+                } else if (hashAccess.left instanceof BinaryOperatorNode) {
+                    // Nested: delete $hash{outer}{inner}
+                    hashAccess.left.accept(this);
+                    int scalarReg = lastResultReg;
+
+                    hashReg = allocateRegister();
+                    emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                    emit(Opcodes.SLOWOP_DEREF_HASH);
+                    emitReg(hashReg);
+                    emitReg(scalarReg);
+                } else {
+                    throwCompilerException("Hash access requires variable or expression on left side");
+                    return;
+                }
 
                 // Compile key (right side contains HashLiteralNode)
+                int keyReg;
                 if (hashAccess.right instanceof HashLiteralNode) {
                     HashLiteralNode keyNode = (HashLiteralNode) hashAccess.right;
                     if (!keyNode.elements.isEmpty()) {
-                        keyNode.elements.get(0).accept(this);
+                        Node keyElement = keyNode.elements.get(0);
+                        if (keyElement instanceof IdentifierNode) {
+                            // Bareword key - autoquote
+                            String keyString = ((IdentifierNode) keyElement).name;
+                            keyReg = allocateRegister();
+                            int keyIdx = addToStringPool(keyString);
+                            emit(Opcodes.LOAD_STRING);
+                            emitReg(keyReg);
+                            emit(keyIdx);
+                        } else {
+                            // Expression key
+                            keyElement.accept(this);
+                            keyReg = lastResultReg;
+                        }
                     } else {
                         throwCompilerException("Hash key required for delete");
+                        return;
                     }
                 } else {
                     hashAccess.right.accept(this);
+                    keyReg = lastResultReg;
                 }
-                int keyReg = lastResultReg;
 
                 // Emit HASH_DELETE
                 int rd = allocateRegister();
