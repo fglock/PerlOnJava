@@ -629,6 +629,18 @@ public class BytecodeCompiler implements Visitor {
                             node.right.accept(this);
                             int valueReg = lastResultReg;
 
+                            // If scalar context and RHS is an array variable, convert to size
+                            if (rhsContext == RuntimeContextType.SCALAR &&
+                                node.right instanceof OperatorNode &&
+                                ((OperatorNode) node.right).operator.equals("@")) {
+                                // Emit ARRAY_SIZE to convert array to scalar (size)
+                                int sizeReg = allocateRegister();
+                                emit(Opcodes.ARRAY_SIZE);
+                                emit(sizeReg);
+                                emit(valueReg);
+                                valueReg = sizeReg;
+                            }
+
                             // Move to variable register
                             emit(Opcodes.MOVE);
                             emit(reg);
@@ -1904,27 +1916,47 @@ public class BytecodeCompiler implements Visitor {
 
                 // Special case: @_ is register 1
                 if (varName.equals("@_")) {
-                    lastResultReg = 1; // @_ is always in register 1
+                    int arrayReg = 1; // @_ is always in register 1
+
+                    // Check if we're in scalar context - if so, return array size
+                    if (currentCallContext == RuntimeContextType.SCALAR) {
+                        int rd = allocateRegister();
+                        emit(Opcodes.ARRAY_SIZE);
+                        emit(rd);
+                        emit(arrayReg);
+                        lastResultReg = rd;
+                    } else {
+                        lastResultReg = arrayReg;
+                    }
                     return;
                 }
 
                 // Check if it's a lexical array
+                int arrayReg;
                 if (hasVariable(varName)) {
                     // Lexical array - use existing register
-                    lastResultReg = getVariableRegister(varName);
-                    return;
+                    arrayReg = getVariableRegister(varName);
+                } else {
+                    // Global array - load it
+                    arrayReg = allocateRegister();
+                    String globalArrayName = NameNormalizer.normalizeVariableName(((IdentifierNode) node.operand).name, getCurrentPackage());
+                    int nameIdx = addToStringPool(globalArrayName);
+
+                    emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                    emit(arrayReg);
+                    emit(nameIdx);
                 }
 
-                // Global array - load it
-                int rd = allocateRegister();
-                String globalArrayName = NameNormalizer.normalizeVariableName(((IdentifierNode) node.operand).name, getCurrentPackage());
-                int nameIdx = addToStringPool(globalArrayName);
-
-                emit(Opcodes.LOAD_GLOBAL_ARRAY);
-                emit(rd);
-                emit(nameIdx);
-
-                lastResultReg = rd;
+                // Check if we're in scalar context - if so, return array size
+                if (currentCallContext == RuntimeContextType.SCALAR) {
+                    int rd = allocateRegister();
+                    emit(Opcodes.ARRAY_SIZE);
+                    emit(rd);
+                    emit(arrayReg);
+                    lastResultReg = rd;
+                } else {
+                    lastResultReg = arrayReg;
+                }
             } else if (node.operand instanceof OperatorNode) {
                 // Dereference: @$arrayref or @{$hashref}
                 OperatorNode operandOp = (OperatorNode) node.operand;
@@ -1943,6 +1975,9 @@ public class BytecodeCompiler implements Visitor {
                 emit(refReg);
 
                 lastResultReg = rd;
+                // Note: We don't check scalar context here because dereferencing
+                // should return the array itself. The slice or other operation
+                // will handle scalar context conversion if needed.
             } else {
                 throwCompilerException("Unsupported @ operand: " + node.operand.getClass().getSimpleName());
             }
