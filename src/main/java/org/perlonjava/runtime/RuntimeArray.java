@@ -687,6 +687,29 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     }
 
     /**
+     * Sets a slice of the array.
+     *
+     * @param indices A RuntimeList containing the indices to set.
+     * @param values A RuntimeList containing the values to set at those indices.
+     */
+    public void setSlice(RuntimeList indices, RuntimeList values) {
+        if (this.type == AUTOVIVIFY_ARRAY) {
+            AutovivificationArray.vivify(this);
+        }
+
+        // Iterate through indices and values in parallel
+        Iterator<RuntimeBase> valueIter = values.elements.iterator();
+        for (RuntimeScalar index : indices) {
+            if (!valueIter.hasNext()) {
+                break;  // No more values to assign
+            }
+            RuntimeBase value = valueIter.next();
+            // Get the element at index and set its value
+            this.get(index).set((RuntimeScalar) value);
+        }
+    }
+
+    /**
      * Gets the keys of the array.
      *
      * @return A RuntimeArray representing the keys.

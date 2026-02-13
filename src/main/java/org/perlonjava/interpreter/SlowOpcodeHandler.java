@@ -172,6 +172,9 @@ public class SlowOpcodeHandler {
             case Opcodes.SLOWOP_REVERSE:
                 return executeReverse(bytecode, pc, registers);
 
+            case Opcodes.SLOWOP_ARRAY_SLICE_SET:
+                return executeArraySliceSet(bytecode, pc, registers);
+
             default:
                 throw new RuntimeException(
                     "Unknown slow operation ID: " + slowOpId +
@@ -217,6 +220,7 @@ public class SlowOpcodeHandler {
             case Opcodes.SLOWOP_SPLICE -> "splice";
             case Opcodes.SLOWOP_ARRAY_SLICE -> "array_slice";
             case Opcodes.SLOWOP_REVERSE -> "reverse";
+            case Opcodes.SLOWOP_ARRAY_SLICE_SET -> "array_slice_set";
             default -> "slowop_" + slowOpId;
         };
     }
@@ -820,6 +824,29 @@ public class SlowOpcodeHandler {
         RuntimeBase result = org.perlonjava.operators.Operator.reverse(ctx, args);
 
         registers[rd] = result;
+        return pc;
+    }
+
+    /**
+     * SLOW_ARRAY_SLICE_SET: array.setSlice(indices, values)
+     * Format: [SLOW_ARRAY_SLICE_SET] [arrayReg] [indicesReg] [valuesReg]
+     * Effect: Sets array elements at indices to values
+     */
+    private static int executeArraySliceSet(
+            byte[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+
+        int arrayReg = bytecode[pc++] & 0xFF;
+        int indicesReg = bytecode[pc++] & 0xFF;
+        int valuesReg = bytecode[pc++] & 0xFF;
+
+        RuntimeArray array = (RuntimeArray) registers[arrayReg];
+        RuntimeList indices = (RuntimeList) registers[indicesReg];
+        RuntimeList values = (RuntimeList) registers[valuesReg];
+
+        array.setSlice(indices, values);
+
         return pc;
     }
 

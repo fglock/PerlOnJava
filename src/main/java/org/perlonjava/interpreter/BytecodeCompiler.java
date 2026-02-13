@@ -952,8 +952,77 @@ public class BytecodeCompiler implements Visitor {
                     emit(valueReg);
                     lastResultReg = valueReg;
                 }
+            } else if (node.left instanceof BinaryOperatorNode) {
+                BinaryOperatorNode leftBin = (BinaryOperatorNode) node.left;
+
+                // Handle array slice assignment: @array[1, 3, 5] = (20, 30, 40)
+                if (leftBin.operator.equals("[") && leftBin.left instanceof OperatorNode) {
+                    OperatorNode arrayOp = (OperatorNode) leftBin.left;
+
+                    // Must be @array (not $array)
+                    if (arrayOp.operator.equals("@") && arrayOp.operand instanceof IdentifierNode) {
+                        String varName = "@" + ((IdentifierNode) arrayOp.operand).name;
+
+                        // Get the array register
+                        int arrayReg;
+                        if (hasVariable(varName)) {
+                            // Lexical array
+                            arrayReg = getVariableRegister(varName);
+                        } else {
+                            // Global array - load it
+                            arrayReg = allocateRegister();
+                            String globalArrayName = NameNormalizer.normalizeVariableName(
+                                ((IdentifierNode) arrayOp.operand).name,
+                                getCurrentPackage()
+                            );
+                            int nameIdx = addToStringPool(globalArrayName);
+                            emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                            emit(arrayReg);
+                            emit(nameIdx);
+                        }
+
+                        // Compile indices (right side of [])
+                        // ArrayLiteralNode contains the indices
+                        if (!(leftBin.right instanceof ArrayLiteralNode)) {
+                            throwCompilerException("Array slice assignment requires index list");
+                        }
+
+                        ArrayLiteralNode indicesNode = (ArrayLiteralNode) leftBin.right;
+                        List<Integer> indexRegs = new ArrayList<>();
+                        for (Node indexNode : indicesNode.elements) {
+                            indexNode.accept(this);
+                            indexRegs.add(lastResultReg);
+                        }
+
+                        // Create indices list
+                        int indicesReg = allocateRegister();
+                        emit(Opcodes.CREATE_LIST);
+                        emit(indicesReg);
+                        emit(indexRegs.size());
+                        for (int indexReg : indexRegs) {
+                            emit(indexReg);
+                        }
+
+                        // Compile values (RHS of assignment)
+                        node.right.accept(this);
+                        int valuesReg = lastResultReg;
+
+                        // Emit SLOW_OP with SLOWOP_ARRAY_SLICE_SET
+                        emit(Opcodes.SLOW_OP);
+                        emit(Opcodes.SLOWOP_ARRAY_SLICE_SET);
+                        emit(arrayReg);
+                        emit(indicesReg);
+                        emit(valuesReg);
+
+                        lastResultReg = arrayReg;
+                        currentCallContext = savedContext;
+                        return;
+                    }
+                }
+
+                throwCompilerException("Assignment to non-identifier not yet supported: " + node.left.getClass().getSimpleName());
             } else {
-                throw new RuntimeException("Assignment to non-identifier not yet supported: " + node.left.getClass().getSimpleName());
+                throwCompilerException("Assignment to non-identifier not yet supported: " + node.left.getClass().getSimpleName());
             }
 
             // Restore the calling context
