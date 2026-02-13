@@ -48,11 +48,12 @@ PRINT r2                 # print r2
 
 ### Performance Characteristics
 
-**Current Performance (as of Phase 3):**
+**Current Performance (as of Phase 4):**
 - **46.84M ops/sec** (simple for loop benchmark)
 - **1.75x slower** than compiler (within 2-5x target ✓)
-- **Tableswitch optimization**: Dense opcodes (0-82) enable O(1) dispatch
+- **Tableswitch optimization**: Dense opcodes (0-99) enable O(1) dispatch
 - **Superinstructions**: Eliminate intermediate MOVE operations
+- **Variable sharing**: Interpreter and compiled code share lexical variables via persistent storage
 
 **Performance vs. Compiler:**
 - Compiler: ~82M ops/sec (after JIT warmup)
@@ -66,7 +67,7 @@ PRINT r2                 # print r2
 - **STATUS.md** - Current implementation status and feature completeness
 - **TESTING.md** - How to test and benchmark the interpreter
 - **OPTIMIZATION_RESULTS.md** - Optimization history and performance measurements
-- **BYTECODE_DOCUMENTATION.md** - Complete reference for all 83 opcodes (0-82)
+- **BYTECODE_DOCUMENTATION.md** - Complete reference for all opcodes (0-99 + SLOW_OP)
 - **CLOSURE_IMPLEMENTATION_COMPLETE.md** - Closure architecture and bidirectional calling
 - **SKILL.md** (this file) - Developer guide for continuing interpreter development
 - **architecture/** - Design documents and architectural decisions
@@ -75,17 +76,24 @@ PRINT r2                 # print r2
 ### Source Code (`src/main/java/org/perlonjava/interpreter/`)
 
 **Core Interpreter:**
-- **Opcodes.java** - Opcode constants (0-82) organized by category
+- **Opcodes.java** - Opcode constants (0-99 + SLOW_OP) organized by category
 - **BytecodeInterpreter.java** - Main execution loop with unified switch statement
 - **BytecodeCompiler.java** - AST to bytecode compiler with register allocation
 - **InterpretedCode.java** - Bytecode container with disassembler for debugging
+- **SlowOpcodeHandler.java** - Handler for rare operations (system calls, socket operations)
 
 **Support Classes:**
+- **VariableCaptureAnalyzer.java** - Analyzes which variables are captured by named subroutines
 - **VariableCollectorVisitor.java** - Detects closure variables for capture analysis
+
+### Test Code (`src/test/java/org/perlonjava/interpreter/`)
+
+**Test Harnesses (standalone with main() methods):**
 - **ForLoopBenchmark.java** - Performance benchmarking harness
 - **ForLoopTest.java** - Java test harness for for-loop execution
 - **InterpreterTest.java** - General interpreter functionality tests
 - **ClosureTest.java** - Closure and anonymous subroutine tests
+- **EvalStringTest.java** - Test harness for eval STRING functionality
 
 ### Opcode Categories (Opcodes.java)
 
@@ -103,6 +111,136 @@ Opcodes are organized into functional categories:
 10. **References** (68-72): CREATE_REF, DEREF, GET_TYPE, GET_REFTYPE, BLESS
 11. **Error Handling** (73-74): DIE, WARN
 12. **Superinstructions** (75-82): INC_REG, DEC_REG, ADD_ASSIGN, ADD_ASSIGN_INT, etc.
+13. **SLOW_OP Gateway** (87): Single gateway for 256 rare operations (system calls, sockets)
+14. **Variable Aliasing** (99): SET_SCALAR (sets value without overwriting reference)
+
+**Implemented Opcodes:** 0-82, 87, 99 (dense numbering with gaps reserved for future use)
+
+## Variable Sharing Between Interpreter and Compiled Code
+
+### Overview
+
+**Status:** ✅ Implemented (PR #191)
+
+The interpreter now supports seamless variable sharing between interpreted main scripts and compiled named subroutines. Variables declared in the interpreted scope are accessible to compiled code and vice versa, maintaining proper aliasing semantics.
+
+### Implementation
+
+When a variable is captured by a named subroutine, the interpreter:
+
+1. **Analyzes captures** - `VariableCaptureAnalyzer` identifies which variables need persistent storage
+2. **Retrieves from persistent storage** - Uses `SLOWOP_RETRIEVE_BEGIN_*` opcodes to get the persistent variable
+3. **Stores reference in register** - The register contains a reference to the persistent RuntimeScalar/Array/Hash
+4. **Preserves aliasing** - All operations work on the same object, so changes are visible to both interpreter and compiled code
+
+### Key Components
+
+**VariableCaptureAnalyzer.java:**
+- Scans main script AST for named subroutine definitions
+- Identifies which outer variables each subroutine references
+- Returns set of captured variable names that need persistent storage
+
+**SET_SCALAR Opcode (99):**
+```java
+// Format: SET_SCALAR rd rs
+// Effect: ((RuntimeScalar)registers[rd]).set((RuntimeScalar)registers[rs])
+// Purpose: Sets value without overwriting the reference (preserves aliasing)
+```
+
+**SLOWOP_RETRIEVE_BEGIN_* Opcodes:**
+- `SLOWOP_RETRIEVE_BEGIN_SCALAR` (19) - Retrieves persistent scalar variable
+- `SLOWOP_RETRIEVE_BEGIN_ARRAY` (20) - Retrieves persistent array variable
+- `SLOWOP_RETRIEVE_BEGIN_HASH` (21) - Retrieves persistent hash variable
+
+### Persistent Storage Naming
+
+Variables use the BEGIN naming scheme: `PerlOnJava::_BEGIN_<id>::varname`
+
+Example: `$width` with `ast.id = 5` becomes `PerlOnJava::_BEGIN_5::width`
+
+### Example
+
+```perl
+my $width = 20;  # Interpreted: stored in persistent global + register
+
+sub neighbors {  # Compiled subroutine
+    return $width * 2;  # Accesses same persistent global
+}
+
+print neighbors();  # 40
+$width = 30;        # Update visible to both
+print neighbors();  # 60
+```
+
+**Generated Bytecode:**
+```
+SLOW_OP
+SLOWOP_RETRIEVE_BEGIN_SCALAR r0, "width", 5  # Get persistent variable
+LOAD_INT r1, 20                               # Load initial value
+SET_SCALAR r0, r1                             # Set value (preserves ref)
+```
+
+### Context Detection (wantarray)
+
+**Status:** ✅ Implemented
+
+The interpreter properly detects calling context (VOID/SCALAR/LIST) for subroutine calls:
+
+**RuntimeContextType Values:**
+- `VOID` (0) - No return value expected
+- `SCALAR` (1) - Single value expected
+- `LIST` (2) - List of values expected
+
+**Detection Strategy:**
+- Based on assignment target type
+- `my $x = sub()` → SCALAR context
+- `my @x = sub()` → LIST context
+- `sub(); other_code()` → VOID context
+
+**Implementation in BytecodeCompiler.java:**
+```java
+// Determine context from LHS type
+int rhsContext = RuntimeContextType.LIST;  // Default
+if (node.left instanceof OperatorNode) {
+    OperatorNode leftOp = (OperatorNode) node.left;
+    if (leftOp.operator.equals("my") && leftOp.operand instanceof OperatorNode) {
+        OperatorNode sigilOp = (OperatorNode) leftOp.operand;
+        if (sigilOp.operator.equals("$")) {
+            rhsContext = RuntimeContextType.SCALAR;
+        }
+    }
+}
+```
+
+## Error Reporting
+
+### throwCompilerException(String message, int tokenIndex)
+
+The BytecodeCompiler uses `throwCompilerException(String message, int tokenIndex)` to report errors with proper context:
+
+**Purpose:**
+- Provides accurate error messages with filename and line number
+- Transforms token index into source location
+- Consistent error reporting across interpreter and compiler
+
+**Usage Example:**
+```java
+if (invalidCondition) {
+    throwCompilerException("Invalid operation: " + details, node.getIndex());
+}
+```
+
+**Output Format:**
+```
+Error at file.pl line 42: Invalid operation: details
+  42: my $x = invalid_code_here;
+           ^
+```
+
+**Benefits:**
+- Users see exact source location of errors
+- Easier debugging of interpreter bytecode generation
+- Consistent with compiler error reporting
 
 ## Testing & Benchmarking
 
@@ -127,10 +265,13 @@ make test-perl5                   # Perl 5 core test suite
 ./jperl dev/interpreter/tests/closure_test.t
 ./jperl dev/interpreter/tests/*.t
 
-# Java test harnesses (direct execution)
-java -cp build/classes/java/main org.perlonjava.interpreter.ForLoopTest
-java -cp build/classes/java/main org.perlonjava.interpreter.InterpreterTest
-java -cp build/classes/java/main org.perlonjava.interpreter.ClosureTest
+# Java test harnesses - Use Gradle (recommended, handles classpath automatically):
+./gradlew run -PmainClass=org.perlonjava.interpreter.ForLoopTest
+./gradlew run -PmainClass=org.perlonjava.interpreter.InterpreterTest
+./gradlew run -PmainClass=org.perlonjava.interpreter.ClosureTest
+
+# Or direct execution (requires correct classpath with dependencies):
+# java -cp "build/classes/java/main:build/classes/java/test:lib/*" org.perlonjava.interpreter.ForLoopTest
 ```
 
 ### Running Benchmarks
@@ -142,7 +283,7 @@ java -cp build/classes/java/main org.perlonjava.interpreter.ClosureTest
 
 **Direct Java (requires classpath setup):**
 ```bash
-java -cp "build/classes/java/main:build/libs/*" \
+java -cp "build/classes/java/main:build/classes/java/test:build/libs/*" \
      org.perlonjava.interpreter.ForLoopBenchmark
 ```
 
@@ -319,7 +460,7 @@ public static int execute(...) {
 - **Tableswitch x2**: Both switches use dense numbering
 - **Easy Extension**: Add slow ops without affecting main loop
 
-**Implemented Slow Operations (19 defined, 236 slots remaining):**
+**Implemented Slow Operations (22 defined, 233 slots remaining):**
 
 | ID | Name | Description |
 |----|------|-------------|
@@ -342,6 +483,9 @@ public static int execute(...) {
 | 16 | SLOWOP_LISTEN | Listen for connections |
 | 17 | SLOWOP_ACCEPT | Accept connection |
 | 18 | SLOWOP_SHUTDOWN | Shutdown socket |
+| 19 | SLOWOP_RETRIEVE_BEGIN_SCALAR | Retrieve persistent scalar variable |
+| 20 | SLOWOP_RETRIEVE_BEGIN_ARRAY | Retrieve persistent array variable |
+| 21 | SLOWOP_RETRIEVE_BEGIN_HASH | Retrieve persistent hash variable |
 
 **Usage Example:**
 ```
@@ -363,7 +507,7 @@ Bytecode:     [SLOW_OP] [0] [operands...]  # 0 = SLOWOP_CHOWN
 
 ## Optimization Strategies
 
-### Completed Optimizations (Phases 1-3)
+### Completed Optimizations (Phases 1-4)
 
 **1. Dense Opcodes (10-15% speedup)**
 - Renumbered opcodes to 0-82 with no gaps
@@ -384,6 +528,22 @@ Bytecode:     [SLOW_OP] [0] [operands...]  # 0 = SLOWOP_CHOWN
   - `ADD_ASSIGN` (77): `r0 = r0 + r1`
   - `ADD_ASSIGN_INT` (78): `r0 = r0 + immediate_int`
   - `LOOP_PLUS_PLUS` (82): Combined increment + compare + branch
+
+**4. Variable Sharing Implementation (correctness improvement)**
+- Seamless variable sharing between interpreted and compiled code
+- Persistent storage using BEGIN mechanism
+- Maintains proper aliasing semantics
+- Enables examples/life.pl and other mixed-mode programs
+
+**5. Context Detection (correctness improvement)**
+- Proper VOID/SCALAR/LIST context detection for subroutine calls
+- Based on assignment target type
+- Matches Perl semantics for wantarray
+
+**6. SET_SCALAR Opcode (correctness improvement)**
+- Opcode 99: Sets value without overwriting reference
+- Preserves variable aliasing between interpreter and compiled code
+- Critical for shared variable semantics
 
 ### Future Optimization Opportunities
 
@@ -729,7 +889,7 @@ MUL_ASSIGN r5 *= r3    # r5 = r5 * r3
 ```
 ```
 
-**Update opcode count** in all documentation (currently 83 opcodes → 84 opcodes).
+**Update opcode count** in all documentation (update to reflect current implemented opcodes: 0-82, 87, 99).
 
 #### Step 6: Test Thoroughly
 
@@ -907,6 +1067,60 @@ After any change to BytecodeInterpreter.java or Opcodes.java:
 4. **Check JIT compilation:**
    Look for "made not entrant" or "made zombie" messages indicating deoptimization.
 
+## Next Steps
+
+### High Priority
+
+1. **Test Coverage for Variable Sharing**
+   - Add more test cases for mixed interpreter/compiled scenarios
+   - Test edge cases: array elements, hash elements, references
+   - Test nested subroutines and complex capture patterns
+
+2. **Performance Optimization**
+   - Profile examples/life.pl to identify hot paths
+   - Consider unboxed int registers for loop counters
+   - Evaluate inline caching opportunities for global variable access
+
+3. **Error Handling Improvements**
+   - Ensure all compiler errors use throwCompilerException with proper tokenIndex
+   - Add error context for common mistakes (undefined variables, type mismatches)
+   - Improve error messages for bytecode generation failures
+
+### Medium Priority
+
+4. **Additional Slow Operations**
+   - Implement remaining system call opcodes (currently 19/255 used)
+   - Socket operations, file locking, IPC primitives
+   - Keep main loop compact by using SLOW_OP gateway
+
+5. **More Superinstructions**
+   - `SUB_ASSIGN`, `MUL_ASSIGN`, `DIV_ASSIGN` for compound assignments
+   - `ARRAY_GET_INT` with unboxed index for faster array access
+   - Profile to identify most common operation patterns
+
+6. **Documentation Updates**
+   - Update BYTECODE_DOCUMENTATION.md with SET_SCALAR and variable sharing
+   - Add examples of mixed interpreter/compiled programs
+   - Document best practices for performance
+
+### Low Priority
+
+7. **Specialized Loop Dispatcher**
+   - Detect simple counting loops at compile time
+   - Generate tight loop with inlined body (no switch overhead)
+   - Could provide 20-40% speedup for numeric loops
+
+8. **Direct Field Access**
+   - Access RuntimeScalar.ivalue/svalue directly instead of getters
+   - Trade-off: Breaks encapsulation but 10-20% faster
+   - Consider only for verified hot paths
+
+9. **Unboxed Register Optimization**
+   - Parallel int[] intRegisters array for unboxed integers
+   - Track which registers are unboxed
+   - Box only when needed (calls, returns, type coercion)
+   - Potential 30-50% speedup for numeric code
+
 ## Summary
 
 The PerlOnJava interpreter is a production-ready, high-performance bytecode interpreter that:
@@ -914,8 +1128,18 @@ The PerlOnJava interpreter is a production-ready, high-performance bytecode inte
 - **Executes Perl bytecode** at 46.84M ops/sec (1.75x slower than compiler)
 - **Shares 100% of runtime APIs** with the compiler (zero duplication)
 - **Supports closures** and bidirectional calling (compiled ↔ interpreted)
-- **Uses dense opcodes** (0-82) for optimal JVM tableswitch dispatch
+- **Shares variables** between interpreter and compiled code with proper aliasing
+- **Uses dense opcodes** (0-99) for optimal JVM tableswitch dispatch
 - **Implements superinstructions** to eliminate overhead
+- **Detects context** (VOID/SCALAR/LIST) for proper wantarray semantics
+- **Reports errors** with accurate filename and line numbers
+
+**Recent Achievements (Phase 4):**
+- ✅ Variable sharing implementation (PR #191)
+- ✅ SET_SCALAR opcode for reference preservation
+- ✅ Context detection for subroutine calls
+- ✅ SLOWOP_RETRIEVE_BEGIN_* opcodes for persistent variables
+- ✅ examples/life.pl now runs correctly in interpreter mode
 
 Future optimizations (unboxed ints, inline caching, specialized loops) can potentially reach 1.2-1.5x slower than compiler while maintaining the benefits of interpretation.
 
@@ -924,5 +1148,6 @@ For questions or contributions, refer to:
 - **TESTING.md** - Testing procedures
 - **BYTECODE_DOCUMENTATION.md** - Complete opcode reference
 - **CLOSURE_IMPLEMENTATION_COMPLETE.md** - Closure architecture
+- **SKILL.md** (this file) - Developer guide and next steps
 
 Happy hacking!
