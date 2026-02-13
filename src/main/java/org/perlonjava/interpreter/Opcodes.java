@@ -527,6 +527,9 @@ public class Opcodes {
     /** Slow op ID: rd = GlobalRuntimeScalar.makeLocal(var_name) - temporarily localize global variable */
     public static final int SLOWOP_LOCAL_SCALAR = 27;
 
+    /** Slow op ID: rd = Operator.splice(array, args_list) - splice array operation */
+    public static final int SLOWOP_SPLICE = 28;
+
     // =================================================================
     // OPCODES 93-255: RESERVED FOR FUTURE FAST OPERATIONS
     // =================================================================

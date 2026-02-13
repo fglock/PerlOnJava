@@ -894,7 +894,7 @@ public class BytecodeCompiler implements Visitor {
                     } else {
                         // Global array - load it
                         arrayReg = allocateRegister();
-                        String globalArrayName = "main::" + ((IdentifierNode) leftOp.operand).name;
+                        String globalArrayName = NameNormalizer.normalizeVariableName(((IdentifierNode) leftOp.operand).name, getCurrentPackage());
                         int nameIdx = addToStringPool(globalArrayName);
                         emit(Opcodes.LOAD_GLOBAL_ARRAY);
                         emit(arrayReg);
@@ -918,7 +918,7 @@ public class BytecodeCompiler implements Visitor {
                     } else {
                         // Global hash - load it
                         hashReg = allocateRegister();
-                        String globalHashName = "main::" + ((IdentifierNode) leftOp.operand).name;
+                        String globalHashName = NameNormalizer.normalizeVariableName(((IdentifierNode) leftOp.operand).name, getCurrentPackage());
                         int nameIdx = addToStringPool(globalHashName);
                         emit(Opcodes.LOAD_GLOBAL_HASH);
                         emit(hashReg);
@@ -1311,6 +1311,92 @@ public class BytecodeCompiler implements Visitor {
                 emit(hashReg);
                 emit(keyReg);
             }
+            case "push" -> {
+                // Array push: push(@array, values...)
+                // left: OperatorNode("@", IdentifierNode("array"))
+                // right: ListNode with values to push
+
+                if (!(node.left instanceof OperatorNode)) {
+                    throwCompilerException("push requires array variable");
+                }
+                OperatorNode leftOp = (OperatorNode) node.left;
+                if (!leftOp.operator.equals("@") || !(leftOp.operand instanceof IdentifierNode)) {
+                    throwCompilerException("push requires array variable: push @array, values");
+                }
+
+                String varName = "@" + ((IdentifierNode) leftOp.operand).name;
+
+                // Get the array - check lexical first, then global
+                int arrayReg;
+                if (hasVariable(varName)) {
+                    // Lexical array
+                    arrayReg = getVariableRegister(varName);
+                } else {
+                    // Global array - load it
+                    arrayReg = allocateRegister();
+                    String globalArrayName = getCurrentPackage() + "::" + ((IdentifierNode) leftOp.operand).name;
+                    int nameIdx = addToStringPool(globalArrayName);
+                    emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                    emit(arrayReg);
+                    emit(nameIdx);
+                }
+
+                // Evaluate the values to push (right operand)
+                node.right.accept(this);
+                int valuesReg = lastResultReg;
+
+                // Emit ARRAY_PUSH
+                emit(Opcodes.ARRAY_PUSH);
+                emit(arrayReg);
+                emit(valuesReg);
+
+                // push returns the new size of the array
+                // For now, just return the array itself
+                lastResultReg = arrayReg;
+            }
+            case "unshift" -> {
+                // Array unshift: unshift(@array, values...)
+                // left: OperatorNode("@", IdentifierNode("array"))
+                // right: ListNode with values to unshift
+
+                if (!(node.left instanceof OperatorNode)) {
+                    throwCompilerException("unshift requires array variable");
+                }
+                OperatorNode leftOp = (OperatorNode) node.left;
+                if (!leftOp.operator.equals("@") || !(leftOp.operand instanceof IdentifierNode)) {
+                    throwCompilerException("unshift requires array variable: unshift @array, values");
+                }
+
+                String varName = "@" + ((IdentifierNode) leftOp.operand).name;
+
+                // Get the array - check lexical first, then global
+                int arrayReg;
+                if (hasVariable(varName)) {
+                    // Lexical array
+                    arrayReg = getVariableRegister(varName);
+                } else {
+                    // Global array - load it
+                    arrayReg = allocateRegister();
+                    String globalArrayName = getCurrentPackage() + "::" + ((IdentifierNode) leftOp.operand).name;
+                    int nameIdx = addToStringPool(globalArrayName);
+                    emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                    emit(arrayReg);
+                    emit(nameIdx);
+                }
+
+                // Evaluate the values to unshift (right operand)
+                node.right.accept(this);
+                int valuesReg = lastResultReg;
+
+                // Emit ARRAY_UNSHIFT
+                emit(Opcodes.ARRAY_UNSHIFT);
+                emit(arrayReg);
+                emit(valuesReg);
+
+                // unshift returns the new size of the array
+                // For now, just return the array itself
+                lastResultReg = arrayReg;
+            }
             default -> throwCompilerException("Unsupported operator: " + node.operator);
         }
 
@@ -1533,7 +1619,7 @@ public class BytecodeCompiler implements Visitor {
 
                 // Global array - load it
                 int rd = allocateRegister();
-                String globalArrayName = "main::" + ((IdentifierNode) node.operand).name;
+                String globalArrayName = NameNormalizer.normalizeVariableName(((IdentifierNode) node.operand).name, getCurrentPackage());
                 int nameIdx = addToStringPool(globalArrayName);
 
                 emit(Opcodes.LOAD_GLOBAL_ARRAY);
@@ -1569,7 +1655,7 @@ public class BytecodeCompiler implements Visitor {
                                     } else {
                                         // Global array
                                         arrayReg = allocateRegister();
-                                        String globalArrayName = "main::" + ((IdentifierNode) opNode.operand).name;
+                                        String globalArrayName = NameNormalizer.normalizeVariableName(((IdentifierNode) opNode.operand).name, getCurrentPackage());
                                         int nameIdx = addToStringPool(globalArrayName);
                                         emit(Opcodes.LOAD_GLOBAL_ARRAY);
                                         emit(arrayReg);
@@ -1620,7 +1706,7 @@ public class BytecodeCompiler implements Visitor {
 
                 // Global hash - load it
                 int rd = allocateRegister();
-                String globalHashName = "main::" + ((IdentifierNode) node.operand).name;
+                String globalHashName = NameNormalizer.normalizeVariableName(((IdentifierNode) node.operand).name, getCurrentPackage());
                 int nameIdx = addToStringPool(globalHashName);
 
                 emit(Opcodes.LOAD_GLOBAL_HASH);
@@ -1999,6 +2085,173 @@ public class BytecodeCompiler implements Visitor {
             emit(Opcodes.LOAD_UNDEF);
             emit(undefReg);
             lastResultReg = undefReg;
+        } else if (op.equals("unaryMinus")) {
+            // Unary minus: -$x
+            // Compile operand
+            node.operand.accept(this);
+            int operandReg = lastResultReg;
+
+            // Allocate result register
+            int rd = allocateRegister();
+
+            // Emit NEG_SCALAR
+            emit(Opcodes.NEG_SCALAR);
+            emit(rd);
+            emit(operandReg);
+
+            lastResultReg = rd;
+        } else if (op.equals("pop")) {
+            // Array pop: $x = pop @array
+            // operand: ListNode containing OperatorNode("@", IdentifierNode)
+            if (node.operand == null || !(node.operand instanceof ListNode)) {
+                throwCompilerException("pop requires array argument");
+            }
+
+            ListNode list = (ListNode) node.operand;
+            if (list.elements.isEmpty() || !(list.elements.get(0) instanceof OperatorNode)) {
+                throwCompilerException("pop requires array variable");
+            }
+
+            OperatorNode arrayOp = (OperatorNode) list.elements.get(0);
+            if (!arrayOp.operator.equals("@") || !(arrayOp.operand instanceof IdentifierNode)) {
+                throwCompilerException("pop requires array variable: pop @array");
+            }
+
+            String varName = "@" + ((IdentifierNode) arrayOp.operand).name;
+
+            // Get the array - check lexical first, then global
+            int arrayReg;
+            if (hasVariable(varName)) {
+                // Lexical array
+                arrayReg = getVariableRegister(varName);
+            } else {
+                // Global array - load it
+                arrayReg = allocateRegister();
+                String globalArrayName = NameNormalizer.normalizeVariableName(((IdentifierNode) arrayOp.operand).name, getCurrentPackage());
+                int nameIdx = addToStringPool(globalArrayName);
+                emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                emit(arrayReg);
+                emit(nameIdx);
+            }
+
+            // Allocate result register
+            int rd = allocateRegister();
+
+            // Emit ARRAY_POP
+            emit(Opcodes.ARRAY_POP);
+            emit(rd);
+            emit(arrayReg);
+
+            lastResultReg = rd;
+        } else if (op.equals("shift")) {
+            // Array shift: $x = shift @array
+            // operand: ListNode containing OperatorNode("@", IdentifierNode)
+            if (node.operand == null || !(node.operand instanceof ListNode)) {
+                throwCompilerException("shift requires array argument");
+            }
+
+            ListNode list = (ListNode) node.operand;
+            if (list.elements.isEmpty() || !(list.elements.get(0) instanceof OperatorNode)) {
+                throwCompilerException("shift requires array variable");
+            }
+
+            OperatorNode arrayOp = (OperatorNode) list.elements.get(0);
+            if (!arrayOp.operator.equals("@") || !(arrayOp.operand instanceof IdentifierNode)) {
+                throwCompilerException("shift requires array variable: shift @array");
+            }
+
+            String varName = "@" + ((IdentifierNode) arrayOp.operand).name;
+
+            // Get the array - check lexical first, then global
+            int arrayReg;
+            if (hasVariable(varName)) {
+                // Lexical array
+                arrayReg = getVariableRegister(varName);
+            } else {
+                // Global array - load it
+                arrayReg = allocateRegister();
+                String globalArrayName = NameNormalizer.normalizeVariableName(((IdentifierNode) arrayOp.operand).name, getCurrentPackage());
+                int nameIdx = addToStringPool(globalArrayName);
+                emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                emit(arrayReg);
+                emit(nameIdx);
+            }
+
+            // Allocate result register
+            int rd = allocateRegister();
+
+            // Emit ARRAY_SHIFT
+            emit(Opcodes.ARRAY_SHIFT);
+            emit(rd);
+            emit(arrayReg);
+
+            lastResultReg = rd;
+        } else if (op.equals("splice")) {
+            // Array splice: splice @array, offset, length, @list
+            // operand: ListNode containing [@array, offset, length, replacement_list]
+            if (node.operand == null || !(node.operand instanceof ListNode)) {
+                throwCompilerException("splice requires array and arguments");
+            }
+
+            ListNode list = (ListNode) node.operand;
+            if (list.elements.isEmpty() || !(list.elements.get(0) instanceof OperatorNode)) {
+                throwCompilerException("splice requires array variable");
+            }
+
+            // First element is the array
+            OperatorNode arrayOp = (OperatorNode) list.elements.get(0);
+            if (!arrayOp.operator.equals("@") || !(arrayOp.operand instanceof IdentifierNode)) {
+                throwCompilerException("splice requires array variable: splice @array, ...");
+            }
+
+            String varName = "@" + ((IdentifierNode) arrayOp.operand).name;
+
+            // Get the array - check lexical first, then global
+            int arrayReg;
+            if (hasVariable(varName)) {
+                // Lexical array
+                arrayReg = getVariableRegister(varName);
+            } else {
+                // Global array - load it
+                arrayReg = allocateRegister();
+                String globalArrayName = NameNormalizer.normalizeVariableName(
+                    ((IdentifierNode) arrayOp.operand).name,
+                    getCurrentPackage()
+                );
+                int nameIdx = addToStringPool(globalArrayName);
+                emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                emit(arrayReg);
+                emit(nameIdx);
+            }
+
+            // Create a list with the remaining arguments (offset, length, replacement values)
+            // Compile each remaining argument and collect them into a RuntimeList
+            List<Integer> argRegs = new ArrayList<>();
+            for (int i = 1; i < list.elements.size(); i++) {
+                list.elements.get(i).accept(this);
+                argRegs.add(lastResultReg);
+            }
+
+            // Create a RuntimeList from these registers
+            int argsListReg = allocateRegister();
+            emit(Opcodes.CREATE_LIST);
+            emit(argsListReg);
+            emit(argRegs.size());
+            for (int argReg : argRegs) {
+                emit(argReg);
+            }
+
+            // Allocate result register
+            int rd = allocateRegister();
+
+            // Emit SLOW_OP with SLOWOP_SPLICE
+            emit(Opcodes.SLOW_OP);
+            emit(Opcodes.SLOWOP_SPLICE);
+            emit(rd);
+            emit(arrayReg);
+            emit(argsListReg);
+
+            lastResultReg = rd;
         } else {
             throwCompilerException("Unsupported operator: " + op);
         }
