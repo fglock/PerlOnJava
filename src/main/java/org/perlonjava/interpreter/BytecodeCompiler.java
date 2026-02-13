@@ -991,6 +991,12 @@ public class BytecodeCompiler implements Visitor {
                 emit(rs1);
                 emit(rs2);
             }
+            case "%" -> {
+                emit(Opcodes.MOD_SCALAR);
+                emit(rd);
+                emit(rs1);
+                emit(rs2);
+            }
             case "." -> {
                 emit(Opcodes.CONCAT);
                 emit(rd);
@@ -1180,34 +1186,110 @@ public class BytecodeCompiler implements Visitor {
             }
             case "[" -> {
                 // Array element access: $a[10] means get element 10 from array @a
+                // Array slice: @a[1,2,3] or @a[1..3] means get multiple elements
                 // Also handles multidimensional: $a[0][1] means $a[0]->[1]
-                // left: OperatorNode("$", IdentifierNode("a")) OR BinaryOperatorNode (for chained access)
-                // right: ArrayLiteralNode(index_expression)
+                // left: OperatorNode("$", IdentifierNode("a")) for element access
+                //       OperatorNode("@", IdentifierNode("a")) for array slice
+                // right: ArrayLiteralNode(index_expression or indices)
 
                 int arrayReg = -1; // Will be initialized in if/else branches
 
                 if (node.left instanceof OperatorNode) {
-                    // Simple case: $var[index]
                     OperatorNode leftOp = (OperatorNode) node.left;
-                    if (!leftOp.operator.equals("$") || !(leftOp.operand instanceof IdentifierNode)) {
-                        throwCompilerException("Array access requires scalar dereference: $var[index]");
-                    }
 
-                    String varName = ((IdentifierNode) leftOp.operand).name;
-                    String arrayVarName = "@" + varName;
+                    // Check if this is an array slice (@array[...]) or element access ($array[...])
+                    if (leftOp.operator.equals("@")) {
+                        // Array slice: @array[1,2,3] or @array[1..3] or @$arrayref[1..3]
 
-                    // Get the array - check lexical first, then global
-                    if (hasVariable(arrayVarName)) {
-                        // Lexical array
-                        arrayReg = getVariableRegister(arrayVarName);
-                    } else {
-                        // Global array - load it
-                        arrayReg = allocateRegister();
-                        String globalArrayName = "main::" + varName;
-                        int nameIdx = addToStringPool(globalArrayName);
-                        emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                        if (leftOp.operand instanceof IdentifierNode) {
+                            // Simple case: @array[indices]
+                            String varName = "@" + ((IdentifierNode) leftOp.operand).name;
+
+                            // Get the array - check lexical first, then global
+                            if (hasVariable(varName)) {
+                                // Lexical array
+                                arrayReg = getVariableRegister(varName);
+                            } else {
+                                // Global array - load it
+                                arrayReg = allocateRegister();
+                                String globalArrayName = NameNormalizer.normalizeVariableName(
+                                    ((IdentifierNode) leftOp.operand).name,
+                                    getCurrentPackage()
+                                );
+                                int nameIdx = addToStringPool(globalArrayName);
+                                emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                                emit(arrayReg);
+                                emit(nameIdx);
+                            }
+                        } else {
+                            // Complex case: @$arrayref[indices] or @{expr}[indices]
+                            // Compile the operand to get the array (which might involve dereferencing)
+                            leftOp.accept(this);
+                            arrayReg = lastResultReg;
+                        }
+
+                        // Evaluate the indices
+                        if (!(node.right instanceof ArrayLiteralNode)) {
+                            throwCompilerException("Array slice requires ArrayLiteralNode on right side");
+                        }
+                        ArrayLiteralNode indicesNode = (ArrayLiteralNode) node.right;
+                        if (indicesNode.elements.isEmpty()) {
+                            throwCompilerException("Array slice requires index expressions");
+                        }
+
+                        // Compile all indices into a list
+                        List<Integer> indexRegs = new ArrayList<>();
+                        for (Node indexExpr : indicesNode.elements) {
+                            indexExpr.accept(this);
+                            indexRegs.add(lastResultReg);
+                        }
+
+                        // Create a RuntimeList from these index registers
+                        int indicesListReg = allocateRegister();
+                        emit(Opcodes.CREATE_LIST);
+                        emit(indicesListReg);
+                        emit(indexRegs.size());
+                        for (int indexReg : indexRegs) {
+                            emit(indexReg);
+                        }
+
+                        // Emit SLOW_OP with SLOWOP_ARRAY_SLICE
+                        emit(Opcodes.SLOW_OP);
+                        emit(Opcodes.SLOWOP_ARRAY_SLICE);
+                        emit(rd);
                         emit(arrayReg);
-                        emit(nameIdx);
+                        emit(indicesListReg);
+
+                        // Array slice returns a list
+                        lastResultReg = rd;
+                        return;
+                    } else if (leftOp.operator.equals("$")) {
+                        // Single element access: $var[index]
+                        if (!(leftOp.operand instanceof IdentifierNode)) {
+                            throwCompilerException("Array access requires scalar dereference: $var[index]");
+                        }
+
+                        String varName = ((IdentifierNode) leftOp.operand).name;
+                        String arrayVarName = "@" + varName;
+
+                        // Get the array - check lexical first, then global
+                        if (hasVariable(arrayVarName)) {
+                            // Lexical array
+                            arrayReg = getVariableRegister(arrayVarName);
+                        } else {
+                            // Global array - load it
+                            arrayReg = allocateRegister();
+                            String globalArrayName = NameNormalizer.normalizeVariableName(
+                                varName,
+                                getCurrentPackage()
+                            );
+                            int nameIdx = addToStringPool(globalArrayName);
+                            emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                            emit(arrayReg);
+                            emit(nameIdx);
+                        }
+                    } else {
+                        throwCompilerException("Array access requires scalar ($) or array (@) dereference");
                     }
                 } else if (node.left instanceof BinaryOperatorNode) {
                     // Multidimensional case: $a[0][1] is really $a[0]->[1]
@@ -1396,6 +1478,38 @@ public class BytecodeCompiler implements Visitor {
                 // unshift returns the new size of the array
                 // For now, just return the array itself
                 lastResultReg = arrayReg;
+            }
+            case "+=" -> {
+                // Compound assignment: $var += $value
+                // left: variable (OperatorNode)
+                // right: value expression
+
+                if (!(node.left instanceof OperatorNode)) {
+                    throwCompilerException("+= requires variable on left side");
+                }
+                OperatorNode leftOp = (OperatorNode) node.left;
+                if (!leftOp.operator.equals("$") || !(leftOp.operand instanceof IdentifierNode)) {
+                    throwCompilerException("+= requires scalar variable: $var += value");
+                }
+
+                String varName = "$" + ((IdentifierNode) leftOp.operand).name;
+
+                // Get the variable register
+                if (!hasVariable(varName)) {
+                    throwCompilerException("+= requires existing variable: " + varName);
+                }
+                int varReg = getVariableRegister(varName);
+
+                // Compile the right side
+                node.right.accept(this);
+                int valueReg = lastResultReg;
+
+                // Emit ADD_ASSIGN
+                emit(Opcodes.ADD_ASSIGN);
+                emit(varReg);
+                emit(valueReg);
+
+                lastResultReg = varReg;
             }
             default -> throwCompilerException("Unsupported operator: " + node.operator);
         }
@@ -1600,7 +1714,7 @@ public class BytecodeCompiler implements Visitor {
                 throw new RuntimeException("Unsupported $ operand: " + node.operand.getClass().getSimpleName());
             }
         } else if (op.equals("@")) {
-            // Array variable dereference: @x or @_
+            // Array variable dereference: @x or @_ or @$arrayref
             if (node.operand instanceof IdentifierNode) {
                 String varName = "@" + ((IdentifierNode) node.operand).name;
 
@@ -1625,6 +1739,24 @@ public class BytecodeCompiler implements Visitor {
                 emit(Opcodes.LOAD_GLOBAL_ARRAY);
                 emit(rd);
                 emit(nameIdx);
+
+                lastResultReg = rd;
+            } else if (node.operand instanceof OperatorNode) {
+                // Dereference: @$arrayref or @{$hashref}
+                OperatorNode operandOp = (OperatorNode) node.operand;
+
+                // Compile the reference
+                operandOp.accept(this);
+                int refReg = lastResultReg;
+
+                // Dereference to get the array
+                // The reference should contain a RuntimeArray
+                // For @$scalar, we need to dereference it
+                int rd = allocateRegister();
+                emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                emit(Opcodes.SLOWOP_DEREF_ARRAY);
+                emit(rd);
+                emit(refReg);
 
                 lastResultReg = rd;
             } else {

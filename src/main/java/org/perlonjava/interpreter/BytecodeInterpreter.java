@@ -321,6 +321,18 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.MOD_SCALAR: {
+                        // Modulus: rd = rs1 % rs2
+                        int rd = bytecode[pc++] & 0xFF;
+                        int rs1 = bytecode[pc++] & 0xFF;
+                        int rs2 = bytecode[pc++] & 0xFF;
+                        registers[rd] = MathOperators.modulus(
+                            (RuntimeScalar) registers[rs1],
+                            (RuntimeScalar) registers[rs2]
+                        );
+                        break;
+                    }
+
                     case Opcodes.NEG_SCALAR: {
                         // Negation: rd = -rs
                         int rd = bytecode[pc++] & 0xFF;

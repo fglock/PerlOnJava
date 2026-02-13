@@ -530,6 +530,9 @@ public class Opcodes {
     /** Slow op ID: rd = Operator.splice(array, args_list) - splice array operation */
     public static final int SLOWOP_SPLICE = 28;
 
+    /** Slow op ID: rd = array.getSlice(indices_list) - array slice operation */
+    public static final int SLOWOP_ARRAY_SLICE = 29;
+
     // =================================================================
     // OPCODES 93-255: RESERVED FOR FUTURE FAST OPERATIONS
     // =================================================================
