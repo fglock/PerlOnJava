@@ -80,16 +80,8 @@ public class BytecodeInterpreter {
 
                         if (retVal == null) {
                             return new RuntimeList();
-                        } else if (retVal instanceof RuntimeList) {
-                            return (RuntimeList) retVal;
-                        } else if (retVal instanceof RuntimeScalar) {
-                            return new RuntimeList((RuntimeScalar) retVal);
-                        } else if (retVal instanceof RuntimeArray) {
-                            return ((RuntimeArray) retVal).getList();
-                        } else {
-                            // Shouldn't happen, but handle gracefully
-                            return new RuntimeList(new RuntimeScalar(retVal.toString()));
                         }
+                        return retVal.getList();
                     }
 
                     case Opcodes.GOTO: {
