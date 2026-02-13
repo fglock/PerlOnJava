@@ -36,7 +36,7 @@ public class BytecodeCompiler implements Visitor {
     private String currentPackage = "main";
 
     // Token index tracking for error reporting
-    private final Map<Integer, Integer> pcToTokenIndex = new HashMap<>();
+    private final TreeMap<Integer, Integer> pcToTokenIndex = new TreeMap<>();
     private int currentTokenIndex = -1;  // Track current token for error reporting
 
     // Error reporting
@@ -279,7 +279,8 @@ public class BytecodeCompiler implements Visitor {
             sourceName,
             sourceLine,
             pcToTokenIndex,  // Pass token index map for error reporting
-            variableRegistry  // Variable registry for eval STRING
+            variableRegistry,  // Variable registry for eval STRING
+            errorUtil  // Pass error util for line number lookup
         );
     }
 
@@ -400,6 +401,13 @@ public class BytecodeCompiler implements Visitor {
     public void visit(BlockNode node) {
         // Visit each statement in the block
         for (Node stmt : node.elements) {
+            // Track line number for this statement (like codegen's setDebugInfoLineNumber)
+            if (stmt != null) {
+                int tokenIndex = stmt.getIndex();
+                int pc = bytecode.size();
+                pcToTokenIndex.put(pc, tokenIndex);
+            }
+
             // Standalone statements (not assignments) use VOID context
             int savedContext = currentCallContext;
 

@@ -2,6 +2,7 @@ package org.perlonjava.interpreter;
 
 import org.perlonjava.runtime.*;
 import java.util.Map;
+import java.util.TreeMap;
 
 /**
  * Interpreted bytecode that extends RuntimeCode.
@@ -29,7 +30,8 @@ public class InterpretedCode extends RuntimeCode {
     // Debug information (optional)
     public final String sourceName;        // Source file name (for stack traces)
     public final int sourceLine;           // Source line number
-    public final java.util.Map<Integer, Integer> pcToTokenIndex;  // Map bytecode PC to tokenIndex for error reporting
+    public final TreeMap<Integer, Integer> pcToTokenIndex;  // Map bytecode PC to tokenIndex for error reporting (TreeMap for floorEntry lookup)
+    public final ErrorMessageUtil errorUtil; // For converting token index to line numbers
 
     /**
      * Constructor for InterpretedCode.
@@ -43,12 +45,14 @@ public class InterpretedCode extends RuntimeCode {
      * @param sourceLine    Source line number for debugging
      * @param pcToTokenIndex Map from bytecode PC to AST tokenIndex for error reporting
      * @param variableRegistry Variable name → register index mapping (for eval STRING)
+     * @param errorUtil     Error message utility for line number lookup
      */
     public InterpretedCode(short[] bytecode, Object[] constants, String[] stringPool,
                           int maxRegisters, RuntimeBase[] capturedVars,
                           String sourceName, int sourceLine,
-                          java.util.Map<Integer, Integer> pcToTokenIndex,
-                          Map<String, Integer> variableRegistry) {
+                          TreeMap<Integer, Integer> pcToTokenIndex,
+                          Map<String, Integer> variableRegistry,
+                          ErrorMessageUtil errorUtil) {
         super(null, new java.util.ArrayList<>()); // Call RuntimeCode constructor with null prototype, empty attributes
         this.bytecode = bytecode;
         this.constants = constants;
@@ -59,6 +63,7 @@ public class InterpretedCode extends RuntimeCode {
         this.sourceLine = sourceLine;
         this.pcToTokenIndex = pcToTokenIndex;
         this.variableRegistry = variableRegistry;
+        this.errorUtil = errorUtil;
     }
 
     // Legacy constructor for backward compatibility
@@ -67,7 +72,21 @@ public class InterpretedCode extends RuntimeCode {
                           String sourceName, int sourceLine,
                           java.util.Map<Integer, Integer> pcToTokenIndex) {
         this(bytecode, constants, stringPool, maxRegisters, capturedVars,
-             sourceName, sourceLine, pcToTokenIndex, null);
+             sourceName, sourceLine,
+             pcToTokenIndex instanceof TreeMap ? (TreeMap<Integer, Integer>)pcToTokenIndex : new TreeMap<>(pcToTokenIndex),
+             null, null);
+    }
+
+    // Legacy constructor with variableRegistry but no errorUtil
+    public InterpretedCode(short[] bytecode, Object[] constants, String[] stringPool,
+                          int maxRegisters, RuntimeBase[] capturedVars,
+                          String sourceName, int sourceLine,
+                          java.util.Map<Integer, Integer> pcToTokenIndex,
+                          Map<String, Integer> variableRegistry) {
+        this(bytecode, constants, stringPool, maxRegisters, capturedVars,
+             sourceName, sourceLine,
+             pcToTokenIndex instanceof TreeMap ? (TreeMap<Integer, Integer>)pcToTokenIndex : new TreeMap<>(pcToTokenIndex),
+             variableRegistry, null);
     }
 
     /**
@@ -126,7 +145,8 @@ public class InterpretedCode extends RuntimeCode {
             this.sourceName,
             this.sourceLine,
             this.pcToTokenIndex,  // Preserve token index map
-            this.variableRegistry  // Preserve variable registry
+            this.variableRegistry,  // Preserve variable registry
+            this.errorUtil  // Preserve error util
         );
     }
 
