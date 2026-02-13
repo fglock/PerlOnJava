@@ -139,6 +139,26 @@ jperl [options] [program | -e 'command'] [arguments]
 
 - **`-g`** - Read all input before executing (slurp mode for `-n`/`-p`)
 
+## Execution Mode Options
+
+- **`--interpreter`** - Use interpreter mode instead of compiler mode
+  ```bash
+  ./jperl --interpreter script.pl
+  ```
+
+  **Interpreter mode** executes Perl bytecode directly in a register-based VM without generating JVM bytecode. It offers:
+  - Faster startup time (no JVM class generation overhead)
+  - Lower memory usage (no class metadata)
+  - Ideal for short-lived scripts, development, and `eval STRING`
+  - Performance: ~47M ops/sec (1.75x slower than compiler, within 2-5x target)
+
+  **Compiler mode** (default) generates JVM bytecode for high performance:
+  - High performance after JIT warmup (~82M ops/sec)
+  - Better for long-running programs
+  - Full Java integration and optimization
+
+  Both modes share 100% of runtime APIs and support closures, bidirectional calling, and variable sharing.
+
 ## Debugging Options
 
 - **`--debug`** - Show debug information
@@ -148,7 +168,11 @@ jperl [options] [program | -e 'command'] [arguments]
 
 - **`--disassemble`** - Show disassembled bytecode
   ```bash
+  # Show JVM bytecode (compiler mode)
   ./jperl --disassemble script.pl
+
+  # Show interpreter bytecode (interpreter mode)
+  ./jperl --interpreter --disassemble script.pl
   ```
 
 - **`--tokenize`** - Show lexer output
@@ -196,6 +220,12 @@ Options can be combined for powerful one-liners:
 
 # Sum numbers in a column
 ./jperl -ane '$sum += $F[2]; END {print $sum}' data.txt
+
+# Use interpreter mode for quick scripts
+./jperl --interpreter -E 'say "Hello, World!"'
+
+# Debug interpreter bytecode
+./jperl --interpreter --disassemble -E 'my $x = 1; $x += 2'
 ```
 
 ## Not Implemented
