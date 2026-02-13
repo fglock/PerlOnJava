@@ -24,7 +24,7 @@ import java.util.*;
  * - Generate 3-address code (rd = rs1 op rs2)
  */
 public class BytecodeCompiler implements Visitor {
-    private final ByteArrayOutputStream bytecode = new ByteArrayOutputStream();
+    private final List<Short> bytecode = new ArrayList<>();
     private final List<Object> constants = new ArrayList<>();
     private final List<String> stringPool = new ArrayList<>();
 
@@ -271,7 +271,7 @@ public class BytecodeCompiler implements Visitor {
 
         // Build InterpretedCode
         return new InterpretedCode(
-            bytecode.toByteArray(),
+            toShortArray(),
             constants.toArray(),
             stringPool.toArray(new String[0]),
             nextRegister,  // maxRegisters
@@ -436,20 +436,20 @@ public class BytecodeCompiler implements Visitor {
                 // and we need mutable scalars for variables (++, --, etc.)
                 int intValue = Integer.parseInt(value);
                 emit(Opcodes.LOAD_INT);
-                emit(rd);
+                emitReg(rd);
                 emitInt(intValue);
             } else if (isLargeInteger) {
                 // Large integer - store as string to preserve precision (32-bit Perl emulation)
                 int strIdx = addToStringPool(value);
                 emit(Opcodes.LOAD_STRING);
-                emit(rd);
+                emitReg(rd);
                 emit(strIdx);
             } else {
                 // Floating-point number - create RuntimeScalar with double value
                 RuntimeScalar doubleScalar = new RuntimeScalar(Double.parseDouble(value));
                 int constIdx = addToConstantPool(doubleScalar);
                 emit(Opcodes.LOAD_CONST);
-                emit(rd);
+                emitReg(rd);
                 emit(constIdx);
             }
 
@@ -467,7 +467,7 @@ public class BytecodeCompiler implements Visitor {
         int strIndex = addToStringPool(node.value);
 
         emit(Opcodes.LOAD_STRING);
-        emit(rd);
+        emitReg(rd);
         emit(strIndex);
 
         lastResultReg = rd;
@@ -512,7 +512,7 @@ public class BytecodeCompiler implements Visitor {
                 int nameIdx = addToStringPool(varName);
 
                 emit(Opcodes.LOAD_GLOBAL_SCALAR);
-                emit(rd);
+                emitReg(rd);
                 emit(nameIdx);
 
                 lastResultReg = rd;
@@ -541,13 +541,13 @@ public class BytecodeCompiler implements Visitor {
 
             // Emit PRINT or SAY with both registers
             emit(node.operator.equals("say") ? Opcodes.SAY : Opcodes.PRINT);
-            emit(contentReg);
-            emit(filehandleReg);
+            emitReg(contentReg);
+            emitReg(filehandleReg);
 
             // print/say return 1 on success
             int rd = allocateRegister();
             emit(Opcodes.LOAD_INT);
-            emit(rd);
+            emitReg(rd);
             emitInt(1);
 
             lastResultReg = rd;
@@ -601,7 +601,7 @@ public class BytecodeCompiler implements Visitor {
 
                                 emitWithToken(Opcodes.SLOW_OP, node.getIndex());
                                 emit(Opcodes.SLOWOP_RETRIEVE_BEGIN_SCALAR);
-                                emit(reg);
+                                emitReg(reg);
                                 emit(nameIdx);
                                 emit(beginId);
 
@@ -613,8 +613,8 @@ public class BytecodeCompiler implements Visitor {
                                 // Set the value in the persistent scalar using SET_SCALAR
                                 // This calls .set() on the RuntimeScalar without overwriting the reference
                                 emit(Opcodes.SET_SCALAR);
-                                emit(reg);
-                                emit(valueReg);
+                                emitReg(reg);
+                                emitReg(valueReg);
 
                                 // Track this variable - map the name to the register we already allocated
                                 variableScopes.peek().put(varName, reg);
@@ -633,8 +633,8 @@ public class BytecodeCompiler implements Visitor {
 
                             // Move to variable register
                             emit(Opcodes.MOVE);
-                            emit(reg);
-                            emit(valueReg);
+                            emitReg(reg);
+                            emitReg(valueReg);
 
                             lastResultReg = reg;
                             return;
@@ -651,7 +651,7 @@ public class BytecodeCompiler implements Visitor {
 
                                 emitWithToken(Opcodes.SLOW_OP, node.getIndex());
                                 emit(Opcodes.SLOWOP_RETRIEVE_BEGIN_ARRAY);
-                                emit(arrayReg);
+                                emitReg(arrayReg);
                                 emit(nameIdx);
                                 emit(beginId);
 
@@ -661,8 +661,8 @@ public class BytecodeCompiler implements Visitor {
 
                                 // Populate array from list
                                 emit(Opcodes.ARRAY_SET_FROM_LIST);
-                                emit(arrayReg);
-                                emit(listReg);
+                                emitReg(arrayReg);
+                                emitReg(listReg);
 
                                 // Track this variable - map the name to the register we already allocated
                                 variableScopes.peek().put(varName, arrayReg);
@@ -676,7 +676,7 @@ public class BytecodeCompiler implements Visitor {
 
                             // Create empty array
                             emit(Opcodes.NEW_ARRAY);
-                            emit(arrayReg);
+                            emitReg(arrayReg);
 
                             // Compile RHS (should evaluate to a list)
                             node.right.accept(this);
@@ -684,8 +684,8 @@ public class BytecodeCompiler implements Visitor {
 
                             // Populate array from list using setFromList
                             emit(Opcodes.ARRAY_SET_FROM_LIST);
-                            emit(arrayReg);
-                            emit(listReg);
+                            emitReg(arrayReg);
+                            emitReg(listReg);
 
                             lastResultReg = arrayReg;
                             return;
@@ -702,7 +702,7 @@ public class BytecodeCompiler implements Visitor {
 
                                 emitWithToken(Opcodes.SLOW_OP, node.getIndex());
                                 emit(Opcodes.SLOWOP_RETRIEVE_BEGIN_HASH);
-                                emit(hashReg);
+                                emitReg(hashReg);
                                 emit(nameIdx);
                                 emit(beginId);
 
@@ -712,8 +712,8 @@ public class BytecodeCompiler implements Visitor {
 
                                 // Populate hash from list
                                 emit(Opcodes.HASH_SET_FROM_LIST);
-                                emit(hashReg);
-                                emit(listReg);
+                                emitReg(hashReg);
+                                emitReg(listReg);
 
                                 // Track this variable - map the name to the register we already allocated
                                 variableScopes.peek().put(varName, hashReg);
@@ -727,7 +727,7 @@ public class BytecodeCompiler implements Visitor {
 
                             // Create empty hash
                             emit(Opcodes.NEW_HASH);
-                            emit(hashReg);
+                            emitReg(hashReg);
 
                             // Compile RHS (should evaluate to a list)
                             node.right.accept(this);
@@ -735,8 +735,8 @@ public class BytecodeCompiler implements Visitor {
 
                             // Populate hash from list
                             emit(Opcodes.HASH_SET_FROM_LIST);
-                            emit(hashReg);
-                            emit(listReg);
+                            emitReg(hashReg);
+                            emitReg(listReg);
 
                             lastResultReg = hashReg;
                             return;
@@ -756,8 +756,8 @@ public class BytecodeCompiler implements Visitor {
 
                         // Move to variable register
                         emit(Opcodes.MOVE);
-                        emit(reg);
-                        emit(valueReg);
+                        emitReg(reg);
+                        emitReg(valueReg);
 
                         lastResultReg = reg;
                         return;
@@ -789,7 +789,7 @@ public class BytecodeCompiler implements Visitor {
                             int localReg = allocateRegister();
                             emitWithToken(Opcodes.SLOW_OP, node.getIndex());
                             emit(Opcodes.SLOWOP_LOCAL_SCALAR);
-                            emit(localReg);
+                            emitReg(localReg);
                             emit(nameIdx);
 
                             // Compile RHS
@@ -800,7 +800,7 @@ public class BytecodeCompiler implements Visitor {
                             // The localized variable is a RuntimeScalar, so we use set() on it
                             emit(Opcodes.STORE_GLOBAL_SCALAR);
                             emit(nameIdx);
-                            emit(valueReg);
+                            emitReg(valueReg);
 
                             lastResultReg = localReg;
                             return;
@@ -839,8 +839,8 @@ public class BytecodeCompiler implements Visitor {
 
                             // Emit ADD_ASSIGN instead of ADD_SCALAR + MOVE
                             emit(Opcodes.ADD_ASSIGN);
-                            emit(targetReg);
-                            emit(rhsReg);
+                            emitReg(targetReg);
+                            emitReg(rhsReg);
 
                             lastResultReg = targetReg;
                             return;
@@ -867,13 +867,13 @@ public class BytecodeCompiler implements Visitor {
                         if (capturedVarIndices != null && capturedVarIndices.containsKey(varName)) {
                             // Captured variable - use SET_SCALAR to preserve aliasing
                             emit(Opcodes.SET_SCALAR);
-                            emit(targetReg);
-                            emit(valueReg);
+                            emitReg(targetReg);
+                            emitReg(valueReg);
                         } else {
                             // Regular lexical - use MOVE
                             emit(Opcodes.MOVE);
-                            emit(targetReg);
-                            emit(valueReg);
+                            emitReg(targetReg);
+                            emitReg(valueReg);
                         }
 
                         lastResultReg = targetReg;
@@ -882,7 +882,7 @@ public class BytecodeCompiler implements Visitor {
                         int nameIdx = addToStringPool(varName);
                         emit(Opcodes.STORE_GLOBAL_SCALAR);
                         emit(nameIdx);
-                        emit(valueReg);
+                        emitReg(valueReg);
                         lastResultReg = valueReg;
                     }
                 } else if (leftOp.operator.equals("@") && leftOp.operand instanceof IdentifierNode) {
@@ -899,14 +899,14 @@ public class BytecodeCompiler implements Visitor {
                         String globalArrayName = NameNormalizer.normalizeVariableName(((IdentifierNode) leftOp.operand).name, getCurrentPackage());
                         int nameIdx = addToStringPool(globalArrayName);
                         emit(Opcodes.LOAD_GLOBAL_ARRAY);
-                        emit(arrayReg);
+                        emitReg(arrayReg);
                         emit(nameIdx);
                     }
 
                     // Populate array from list using setFromList
                     emit(Opcodes.ARRAY_SET_FROM_LIST);
-                    emit(arrayReg);
-                    emit(valueReg);
+                    emitReg(arrayReg);
+                    emitReg(valueReg);
 
                     lastResultReg = arrayReg;
                 } else if (leftOp.operator.equals("%") && leftOp.operand instanceof IdentifierNode) {
@@ -923,14 +923,14 @@ public class BytecodeCompiler implements Visitor {
                         String globalHashName = NameNormalizer.normalizeVariableName(((IdentifierNode) leftOp.operand).name, getCurrentPackage());
                         int nameIdx = addToStringPool(globalHashName);
                         emit(Opcodes.LOAD_GLOBAL_HASH);
-                        emit(hashReg);
+                        emitReg(hashReg);
                         emit(nameIdx);
                     }
 
                     // Populate hash from list using setFromList
                     emit(Opcodes.HASH_SET_FROM_LIST);
-                    emit(hashReg);
-                    emit(valueReg);
+                    emitReg(hashReg);
+                    emitReg(valueReg);
 
                     lastResultReg = hashReg;
                 } else {
@@ -943,15 +943,15 @@ public class BytecodeCompiler implements Visitor {
                     // Lexical variable - copy to its register
                     int targetReg = getVariableRegister(varName);
                     emit(Opcodes.MOVE);
-                    emit(targetReg);
-                    emit(valueReg);
+                    emitReg(targetReg);
+                    emitReg(valueReg);
                     lastResultReg = targetReg;
                 } else {
                     // Global variable
                     int nameIdx = addToStringPool(varName);
                     emit(Opcodes.STORE_GLOBAL_SCALAR);
                     emit(nameIdx);
-                    emit(valueReg);
+                    emitReg(valueReg);
                     lastResultReg = valueReg;
                 }
             } else if (node.left instanceof BinaryOperatorNode) {
@@ -979,7 +979,7 @@ public class BytecodeCompiler implements Visitor {
                             );
                             int nameIdx = addToStringPool(globalArrayName);
                             emit(Opcodes.LOAD_GLOBAL_ARRAY);
-                            emit(arrayReg);
+                            emitReg(arrayReg);
                             emit(nameIdx);
                         }
 
@@ -999,10 +999,10 @@ public class BytecodeCompiler implements Visitor {
                         // Create indices list
                         int indicesReg = allocateRegister();
                         emit(Opcodes.CREATE_LIST);
-                        emit(indicesReg);
+                        emitReg(indicesReg);
                         emit(indexRegs.size());
                         for (int indexReg : indexRegs) {
-                            emit(indexReg);
+                            emitReg(indexReg);
                         }
 
                         // Compile values (RHS of assignment)
@@ -1012,9 +1012,9 @@ public class BytecodeCompiler implements Visitor {
                         // Emit SLOW_OP with SLOWOP_ARRAY_SLICE_SET
                         emit(Opcodes.SLOW_OP);
                         emit(Opcodes.SLOWOP_ARRAY_SLICE_SET);
-                        emit(arrayReg);
-                        emit(indicesReg);
-                        emit(valuesReg);
+                        emitReg(arrayReg);
+                        emitReg(indicesReg);
+                        emitReg(valuesReg);
 
                         lastResultReg = arrayReg;
                         currentCallContext = savedContext;
@@ -1049,7 +1049,7 @@ public class BytecodeCompiler implements Visitor {
                                 );
                                 int nameIdx = addToStringPool(globalArrayName);
                                 emit(Opcodes.LOAD_GLOBAL_ARRAY);
-                                emit(arrayReg);
+                                emitReg(arrayReg);
                                 emit(nameIdx);
                             }
                         } else {
@@ -1066,8 +1066,8 @@ public class BytecodeCompiler implements Visitor {
                         arrayReg = allocateRegister();
                         emitWithToken(Opcodes.SLOW_OP, node.getIndex());
                         emit(Opcodes.SLOWOP_DEREF_ARRAY);
-                        emit(arrayReg);
-                        emit(scalarReg);
+                        emitReg(arrayReg);
+                        emitReg(scalarReg);
                     } else {
                         throwCompilerException("Array assignment requires variable or expression on left side");
                         return;
@@ -1091,9 +1091,9 @@ public class BytecodeCompiler implements Visitor {
 
                     // Emit ARRAY_SET
                     emit(Opcodes.ARRAY_SET);
-                    emit(arrayReg);
-                    emit(indexReg);
-                    emit(assignValueReg);
+                    emitReg(arrayReg);
+                    emitReg(indexReg);
+                    emitReg(assignValueReg);
 
                     lastResultReg = assignValueReg;
                     currentCallContext = savedContext;
@@ -1126,69 +1126,69 @@ public class BytecodeCompiler implements Visitor {
         switch (node.operator) {
             case "+" -> {
                 emit(Opcodes.ADD_SCALAR);
-                emit(rd);
-                emit(rs1);
-                emit(rs2);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
             }
             case "-" -> {
                 emit(Opcodes.SUB_SCALAR);
-                emit(rd);
-                emit(rs1);
-                emit(rs2);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
             }
             case "*" -> {
                 emit(Opcodes.MUL_SCALAR);
-                emit(rd);
-                emit(rs1);
-                emit(rs2);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
             }
             case "%" -> {
                 emit(Opcodes.MOD_SCALAR);
-                emit(rd);
-                emit(rs1);
-                emit(rs2);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
             }
             case "." -> {
                 emit(Opcodes.CONCAT);
-                emit(rd);
-                emit(rs1);
-                emit(rs2);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
             }
             case "x" -> {
                 emit(Opcodes.REPEAT);
-                emit(rd);
-                emit(rs1);
-                emit(rs2);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
             }
             case "<=>" -> {
                 emit(Opcodes.COMPARE_NUM);
-                emit(rd);
-                emit(rs1);
-                emit(rs2);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
             }
             case "==" -> {
                 emit(Opcodes.EQ_NUM);
-                emit(rd);
-                emit(rs1);
-                emit(rs2);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
             }
             case "<" -> {
                 emit(Opcodes.LT_NUM);
-                emit(rd);
-                emit(rs1);
-                emit(rs2);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
             }
             case ">" -> {
                 emit(Opcodes.GT_NUM);
-                emit(rd);
-                emit(rs1);
-                emit(rs2);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
             }
             case "!=" -> {
                 emit(Opcodes.NE_NUM);
-                emit(rd);
-                emit(rs1);
-                emit(rs2);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
             }
             case "(", "()", "->" -> {
                 // Apply operator: $coderef->(args) or &subname(args) or foo(args)
@@ -1203,9 +1203,9 @@ public class BytecodeCompiler implements Visitor {
 
                 // Emit CALL_SUB: rd = coderef.apply(args, context)
                 emit(Opcodes.CALL_SUB);
-                emit(rd);  // Result register
-                emit(rs1); // Code reference register
-                emit(rs2); // Arguments register (RuntimeList to be converted to RuntimeArray)
+                emitReg(rd);  // Result register
+                emitReg(rs1); // Code reference register
+                emitReg(rs2); // Arguments register (RuntimeList to be converted to RuntimeArray)
                 emit(currentCallContext); // Use current calling context
 
                 // Note: CALL_SUB may return RuntimeControlFlowList
@@ -1217,9 +1217,9 @@ public class BytecodeCompiler implements Visitor {
                 // right (rs2) = list of elements
 
                 emit(Opcodes.JOIN);
-                emit(rd);
-                emit(rs1);
-                emit(rs2);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
             }
             case ".." -> {
                 // Range operator: start..end
@@ -1243,7 +1243,7 @@ public class BytecodeCompiler implements Visitor {
                         // Store in constant pool and load
                         int constIdx = addToConstantPool(range);
                         emit(Opcodes.LOAD_CONST);
-                        emit(rd);
+                        emitReg(rd);
                         emit(constIdx);
                     } catch (NumberFormatException e) {
                         throw new RuntimeException("Range operator requires integer values: " + e.getMessage());
@@ -1252,9 +1252,9 @@ public class BytecodeCompiler implements Visitor {
                     // Runtime range creation using RANGE opcode
                     // rs1 and rs2 already contain the start and end values
                     emit(Opcodes.RANGE);
-                    emit(rd);
-                    emit(rs1);
-                    emit(rs2);
+                    emitReg(rd);
+                    emitReg(rs1);
+                    emitReg(rs2);
                 }
             }
             case "&&", "and" -> {
@@ -1269,22 +1269,22 @@ public class BytecodeCompiler implements Visitor {
                 // Left operand is already in rs1
                 // Move to result register
                 emit(Opcodes.MOVE);
-                emit(rd);
-                emit(rs1);
+                emitReg(rd);
+                emitReg(rs1);
 
                 // Mark position for forward jump
                 int skipRightPos = bytecode.size();
 
                 // Emit conditional jump: if (!rd) skip right evaluation
                 emit(Opcodes.GOTO_IF_FALSE);
-                emit(rd);
+                emitReg(rd);
                 emitInt(0); // Placeholder for offset (will be patched)
 
                 // Right operand is already in rs2
                 // Move to result register (overwriting left value)
                 emit(Opcodes.MOVE);
-                emit(rd);
-                emit(rs2);
+                emitReg(rd);
+                emitReg(rs2);
 
                 // Patch the forward jump offset
                 int skipRightTarget = bytecode.size();
@@ -1302,22 +1302,22 @@ public class BytecodeCompiler implements Visitor {
                 // Left operand is already in rs1
                 // Move to result register
                 emit(Opcodes.MOVE);
-                emit(rd);
-                emit(rs1);
+                emitReg(rd);
+                emitReg(rs1);
 
                 // Mark position for forward jump
                 int skipRightPos = bytecode.size();
 
                 // Emit conditional jump: if (rd) skip right evaluation
                 emit(Opcodes.GOTO_IF_TRUE);
-                emit(rd);
+                emitReg(rd);
                 emitInt(0); // Placeholder for offset (will be patched)
 
                 // Right operand is already in rs2
                 // Move to result register (overwriting left value)
                 emit(Opcodes.MOVE);
-                emit(rd);
-                emit(rs2);
+                emitReg(rd);
+                emitReg(rs2);
 
                 // Patch the forward jump offset
                 int skipRightTarget = bytecode.size();
@@ -1330,9 +1330,9 @@ public class BytecodeCompiler implements Visitor {
 
                 // Emit MAP opcode
                 emit(Opcodes.MAP);
-                emit(rd);
-                emit(rs2);       // List register
-                emit(rs1);       // Closure register
+                emitReg(rd);
+                emitReg(rs2);       // List register
+                emitReg(rs1);       // Closure register
                 emit(RuntimeContextType.LIST);  // Map always uses list context
             }
             case "grep" -> {
@@ -1342,9 +1342,9 @@ public class BytecodeCompiler implements Visitor {
 
                 // Emit GREP opcode
                 emit(Opcodes.GREP);
-                emit(rd);
-                emit(rs2);       // List register
-                emit(rs1);       // Closure register
+                emitReg(rd);
+                emitReg(rs2);       // List register
+                emitReg(rs1);       // Closure register
                 emit(RuntimeContextType.LIST);  // Grep uses list context
             }
             case "sort" -> {
@@ -1354,9 +1354,9 @@ public class BytecodeCompiler implements Visitor {
 
                 // Emit SORT opcode
                 emit(Opcodes.SORT);
-                emit(rd);
-                emit(rs2);       // List register
-                emit(rs1);       // Closure register
+                emitReg(rd);
+                emitReg(rs2);       // List register
+                emitReg(rs1);       // Closure register
                 emitInt(addToStringPool(currentPackage));  // Package name for sort
             }
             case "split" -> {
@@ -1367,9 +1367,9 @@ public class BytecodeCompiler implements Visitor {
                 // Emit SLOW_OP with SLOWOP_SPLIT
                 emit(Opcodes.SLOW_OP);
                 emit(Opcodes.SLOWOP_SPLIT);
-                emit(rd);
-                emit(rs1);  // Pattern register
-                emit(rs2);  // Args register
+                emitReg(rd);
+                emitReg(rs1);  // Pattern register
+                emitReg(rs2);  // Args register
                 emit(RuntimeContextType.LIST);  // Split uses list context
             }
             case "[" -> {
@@ -1406,7 +1406,7 @@ public class BytecodeCompiler implements Visitor {
                                 );
                                 int nameIdx = addToStringPool(globalArrayName);
                                 emit(Opcodes.LOAD_GLOBAL_ARRAY);
-                                emit(arrayReg);
+                                emitReg(arrayReg);
                                 emit(nameIdx);
                             }
                         } else {
@@ -1435,18 +1435,18 @@ public class BytecodeCompiler implements Visitor {
                         // Create a RuntimeList from these index registers
                         int indicesListReg = allocateRegister();
                         emit(Opcodes.CREATE_LIST);
-                        emit(indicesListReg);
+                        emitReg(indicesListReg);
                         emit(indexRegs.size());
                         for (int indexReg : indexRegs) {
-                            emit(indexReg);
+                            emitReg(indexReg);
                         }
 
                         // Emit SLOW_OP with SLOWOP_ARRAY_SLICE
                         emit(Opcodes.SLOW_OP);
                         emit(Opcodes.SLOWOP_ARRAY_SLICE);
-                        emit(rd);
-                        emit(arrayReg);
-                        emit(indicesListReg);
+                        emitReg(rd);
+                        emitReg(arrayReg);
+                        emitReg(indicesListReg);
 
                         // Array slice returns a list
                         lastResultReg = rd;
@@ -1473,7 +1473,7 @@ public class BytecodeCompiler implements Visitor {
                             );
                             int nameIdx = addToStringPool(globalArrayName);
                             emit(Opcodes.LOAD_GLOBAL_ARRAY);
-                            emit(arrayReg);
+                            emitReg(arrayReg);
                             emit(nameIdx);
                         }
                     } else {
@@ -1490,8 +1490,8 @@ public class BytecodeCompiler implements Visitor {
                     arrayReg = allocateRegister();
                     emitWithToken(Opcodes.SLOW_OP, node.getIndex());
                     emit(Opcodes.SLOWOP_DEREF_ARRAY);
-                    emit(arrayReg);
-                    emit(scalarReg);
+                    emitReg(arrayReg);
+                    emitReg(scalarReg);
                 } else {
                     throwCompilerException("Array access requires variable or expression on left side");
                 }
@@ -1512,9 +1512,9 @@ public class BytecodeCompiler implements Visitor {
 
                 // Emit ARRAY_GET
                 emit(Opcodes.ARRAY_GET);
-                emit(rd);
-                emit(arrayReg);
-                emit(indexReg);
+                emitReg(rd);
+                emitReg(arrayReg);
+                emitReg(indexReg);
             }
             case "{" -> {
                 // Hash element access: $h{key} means get element 'key' from hash %h
@@ -1543,7 +1543,7 @@ public class BytecodeCompiler implements Visitor {
                     String globalHashName = "main::" + varName;
                     int nameIdx = addToStringPool(globalHashName);
                     emit(Opcodes.LOAD_GLOBAL_HASH);
-                    emit(hashReg);
+                    emitReg(hashReg);
                     emit(nameIdx);
                 }
 
@@ -1567,7 +1567,7 @@ public class BytecodeCompiler implements Visitor {
                     keyReg = allocateRegister();
                     int strIdx = addToStringPool(keyStr);
                     emit(Opcodes.LOAD_STRING);
-                    emit(keyReg);
+                    emitReg(keyReg);
                     emit(strIdx);
                 } else {
                     // Expression key - evaluate normally
@@ -1577,9 +1577,9 @@ public class BytecodeCompiler implements Visitor {
 
                 // Emit HASH_GET
                 emit(Opcodes.HASH_GET);
-                emit(rd);
-                emit(hashReg);
-                emit(keyReg);
+                emitReg(rd);
+                emitReg(hashReg);
+                emitReg(keyReg);
             }
             case "push" -> {
                 // Array push: push(@array, values...)
@@ -1607,7 +1607,7 @@ public class BytecodeCompiler implements Visitor {
                     String globalArrayName = getCurrentPackage() + "::" + ((IdentifierNode) leftOp.operand).name;
                     int nameIdx = addToStringPool(globalArrayName);
                     emit(Opcodes.LOAD_GLOBAL_ARRAY);
-                    emit(arrayReg);
+                    emitReg(arrayReg);
                     emit(nameIdx);
                 }
 
@@ -1617,8 +1617,8 @@ public class BytecodeCompiler implements Visitor {
 
                 // Emit ARRAY_PUSH
                 emit(Opcodes.ARRAY_PUSH);
-                emit(arrayReg);
-                emit(valuesReg);
+                emitReg(arrayReg);
+                emitReg(valuesReg);
 
                 // push returns the new size of the array
                 // For now, just return the array itself
@@ -1650,7 +1650,7 @@ public class BytecodeCompiler implements Visitor {
                     String globalArrayName = getCurrentPackage() + "::" + ((IdentifierNode) leftOp.operand).name;
                     int nameIdx = addToStringPool(globalArrayName);
                     emit(Opcodes.LOAD_GLOBAL_ARRAY);
-                    emit(arrayReg);
+                    emitReg(arrayReg);
                     emit(nameIdx);
                 }
 
@@ -1660,8 +1660,8 @@ public class BytecodeCompiler implements Visitor {
 
                 // Emit ARRAY_UNSHIFT
                 emit(Opcodes.ARRAY_UNSHIFT);
-                emit(arrayReg);
-                emit(valuesReg);
+                emitReg(arrayReg);
+                emitReg(valuesReg);
 
                 // unshift returns the new size of the array
                 // For now, just return the array itself
@@ -1694,8 +1694,8 @@ public class BytecodeCompiler implements Visitor {
 
                 // Emit ADD_ASSIGN
                 emit(Opcodes.ADD_ASSIGN);
-                emit(varReg);
-                emit(valueReg);
+                emitReg(varReg);
+                emitReg(valueReg);
 
                 lastResultReg = varReg;
             }
@@ -1738,7 +1738,7 @@ public class BytecodeCompiler implements Visitor {
                             case "$" -> {
                                 emitWithToken(Opcodes.SLOW_OP, node.getIndex());
                                 emit(Opcodes.SLOWOP_RETRIEVE_BEGIN_SCALAR);
-                                emit(reg);
+                                emitReg(reg);
                                 emit(nameIdx);
                                 emit(sigilOp.id);
                                 // Track this as a captured variable - map to the register we allocated
@@ -1747,7 +1747,7 @@ public class BytecodeCompiler implements Visitor {
                             case "@" -> {
                                 emitWithToken(Opcodes.SLOW_OP, node.getIndex());
                                 emit(Opcodes.SLOWOP_RETRIEVE_BEGIN_ARRAY);
-                                emit(reg);
+                                emitReg(reg);
                                 emit(nameIdx);
                                 emit(sigilOp.id);
                                 variableScopes.peek().put(varName, reg);
@@ -1755,7 +1755,7 @@ public class BytecodeCompiler implements Visitor {
                             case "%" -> {
                                 emitWithToken(Opcodes.SLOW_OP, node.getIndex());
                                 emit(Opcodes.SLOWOP_RETRIEVE_BEGIN_HASH);
-                                emit(reg);
+                                emitReg(reg);
                                 emit(nameIdx);
                                 emit(sigilOp.id);
                                 variableScopes.peek().put(varName, reg);
@@ -1774,15 +1774,15 @@ public class BytecodeCompiler implements Visitor {
                     switch (sigil) {
                         case "$" -> {
                             emit(Opcodes.LOAD_UNDEF);
-                            emit(reg);
+                            emitReg(reg);
                         }
                         case "@" -> {
                             emit(Opcodes.NEW_ARRAY);
-                            emit(reg);
+                            emitReg(reg);
                         }
                         case "%" -> {
                             emit(Opcodes.NEW_HASH);
-                            emit(reg);
+                            emitReg(reg);
                         }
                         default -> throwCompilerException("Unsupported variable type: " + sigil);
                     }
@@ -1821,17 +1821,17 @@ public class BytecodeCompiler implements Visitor {
                     switch (sigil) {
                         case "$" -> {
                             emit(Opcodes.LOAD_GLOBAL_SCALAR);
-                            emit(reg);
+                            emitReg(reg);
                             emit(nameIdx);
                         }
                         case "@" -> {
                             emit(Opcodes.LOAD_GLOBAL_ARRAY);
-                            emit(reg);
+                            emitReg(reg);
                             emit(nameIdx);
                         }
                         case "%" -> {
                             emit(Opcodes.LOAD_GLOBAL_HASH);
-                            emit(reg);
+                            emitReg(reg);
                             emit(nameIdx);
                         }
                         default -> throwCompilerException("Unsupported variable type: " + sigil);
@@ -1864,7 +1864,7 @@ public class BytecodeCompiler implements Visitor {
                     int rd = allocateRegister();
                     emitWithToken(Opcodes.SLOW_OP, node.getIndex());
                     emit(Opcodes.SLOWOP_LOCAL_SCALAR);
-                    emit(rd);
+                    emitReg(rd);
                     emit(nameIdx);
 
                     lastResultReg = rd;
@@ -1893,7 +1893,7 @@ public class BytecodeCompiler implements Visitor {
                     int nameIdx = addToStringPool(globalVarName);
 
                     emit(Opcodes.LOAD_GLOBAL_SCALAR);
-                    emit(rd);
+                    emitReg(rd);
                     emit(nameIdx);
 
                     lastResultReg = rd;
@@ -1914,8 +1914,8 @@ public class BytecodeCompiler implements Visitor {
                     if (currentCallContext == RuntimeContextType.SCALAR) {
                         int rd = allocateRegister();
                         emit(Opcodes.ARRAY_SIZE);
-                        emit(rd);
-                        emit(arrayReg);
+                        emitReg(rd);
+                        emitReg(arrayReg);
                         lastResultReg = rd;
                     } else {
                         lastResultReg = arrayReg;
@@ -1935,7 +1935,7 @@ public class BytecodeCompiler implements Visitor {
                     int nameIdx = addToStringPool(globalArrayName);
 
                     emit(Opcodes.LOAD_GLOBAL_ARRAY);
-                    emit(arrayReg);
+                    emitReg(arrayReg);
                     emit(nameIdx);
                 }
 
@@ -1943,8 +1943,8 @@ public class BytecodeCompiler implements Visitor {
                 if (currentCallContext == RuntimeContextType.SCALAR) {
                     int rd = allocateRegister();
                     emit(Opcodes.ARRAY_SIZE);
-                    emit(rd);
-                    emit(arrayReg);
+                    emitReg(rd);
+                    emitReg(arrayReg);
                     lastResultReg = rd;
                 } else {
                     lastResultReg = arrayReg;
@@ -1963,8 +1963,8 @@ public class BytecodeCompiler implements Visitor {
                 int rd = allocateRegister();
                 emitWithToken(Opcodes.SLOW_OP, node.getIndex());
                 emit(Opcodes.SLOWOP_DEREF_ARRAY);
-                emit(rd);
-                emit(refReg);
+                emitReg(rd);
+                emitReg(refReg);
 
                 lastResultReg = rd;
                 // Note: We don't check scalar context here because dereferencing
@@ -2001,15 +2001,15 @@ public class BytecodeCompiler implements Visitor {
                                         String globalArrayName = NameNormalizer.normalizeVariableName(((IdentifierNode) opNode.operand).name, getCurrentPackage());
                                         int nameIdx = addToStringPool(globalArrayName);
                                         emit(Opcodes.LOAD_GLOBAL_ARRAY);
-                                        emit(arrayReg);
+                                        emitReg(arrayReg);
                                         emit(nameIdx);
                                     }
 
                                     // Emit ARRAY_SIZE
                                     int rd = allocateRegister();
                                     emit(Opcodes.ARRAY_SIZE);
-                                    emit(rd);
-                                    emit(arrayReg);
+                                    emitReg(rd);
+                                    emitReg(arrayReg);
 
                                     lastResultReg = rd;
                                     return;
@@ -2031,8 +2031,8 @@ public class BytecodeCompiler implements Visitor {
 
                 int rd = allocateRegister();
                 emit(Opcodes.ARRAY_SIZE);
-                emit(rd);
-                emit(operandReg);
+                emitReg(rd);
+                emitReg(operandReg);
 
                 lastResultReg = rd;
             } else {
@@ -2056,7 +2056,7 @@ public class BytecodeCompiler implements Visitor {
                 int nameIdx = addToStringPool(globalHashName);
 
                 emit(Opcodes.LOAD_GLOBAL_HASH);
-                emit(rd);
+                emitReg(rd);
                 emit(nameIdx);
 
                 lastResultReg = rd;
@@ -2081,7 +2081,7 @@ public class BytecodeCompiler implements Visitor {
                 // Emit SLOW_OP with SLOWOP_LOAD_GLOB
                 emitWithToken(Opcodes.SLOW_OP, node.getIndex());
                 emit(Opcodes.SLOWOP_LOAD_GLOB);
-                emit(rd);
+                emitReg(rd);
                 emit(nameIdx);
 
                 lastResultReg = rd;
@@ -2106,7 +2106,7 @@ public class BytecodeCompiler implements Visitor {
 
                 // Emit LOAD_GLOBAL_CODE
                 emit(Opcodes.LOAD_GLOBAL_CODE);
-                emit(rd);
+                emitReg(rd);
                 emit(nameIdx);
 
                 lastResultReg = rd;
@@ -2130,8 +2130,8 @@ public class BytecodeCompiler implements Visitor {
 
                     // Emit CREATE_REF
                     emit(Opcodes.CREATE_REF);
-                    emit(rd);
-                    emit(valueReg);
+                    emitReg(rd);
+                    emitReg(valueReg);
 
                     lastResultReg = rd;
                 } finally {
@@ -2156,7 +2156,7 @@ public class BytecodeCompiler implements Visitor {
                 int rs = lastResultReg;
 
                 emit(op.equals("say") ? Opcodes.SAY : Opcodes.PRINT);
-                emit(rs);
+                emitReg(rs);
             }
         } else if (op.equals("not")) {
             // Logical NOT operator: not $x
@@ -2170,8 +2170,8 @@ public class BytecodeCompiler implements Visitor {
 
                 // Emit NOT opcode
                 emit(Opcodes.NOT);
-                emit(rd);
-                emit(rs);
+                emitReg(rd);
+                emitReg(rs);
 
                 lastResultReg = rd;
             } else {
@@ -2204,7 +2204,7 @@ public class BytecodeCompiler implements Visitor {
                             emit(Opcodes.PRE_AUTODECREMENT);
                         }
                     }
-                    emit(varReg);
+                    emitReg(varReg);
 
                     lastResultReg = varReg;
                 } else {
@@ -2233,7 +2233,7 @@ public class BytecodeCompiler implements Visitor {
                                 emit(Opcodes.PRE_AUTODECREMENT);
                             }
                         }
-                        emit(varReg);
+                        emitReg(varReg);
 
                         lastResultReg = varReg;
                     } else {
@@ -2248,7 +2248,7 @@ public class BytecodeCompiler implements Visitor {
                         // Load global variable
                         int globalReg = allocateRegister();
                         emit(Opcodes.LOAD_GLOBAL_SCALAR);
-                        emit(globalReg);
+                        emitReg(globalReg);
                         emit(nameIdx);
 
                         // Apply increment/decrement
@@ -2265,12 +2265,12 @@ public class BytecodeCompiler implements Visitor {
                                 emit(Opcodes.PRE_AUTODECREMENT);
                             }
                         }
-                        emit(globalReg);
+                        emitReg(globalReg);
 
                         // Store back to global variable
                         emit(Opcodes.STORE_GLOBAL_SCALAR);
                         emit(nameIdx);
-                        emit(globalReg);
+                        emitReg(globalReg);
 
                         lastResultReg = globalReg;
                     }
@@ -2285,15 +2285,15 @@ public class BytecodeCompiler implements Visitor {
 
                 // Emit RETURN with expression register
                 emitWithToken(Opcodes.RETURN, node.getIndex());
-                emit(exprReg);
+                emitReg(exprReg);
             } else {
                 // return; (no value - return empty list/undef)
                 int undefReg = allocateRegister();
                 emit(Opcodes.LOAD_UNDEF);
-                emit(undefReg);
+                emitReg(undefReg);
 
                 emitWithToken(Opcodes.RETURN, node.getIndex());
-                emit(undefReg);
+                emitReg(undefReg);
             }
             lastResultReg = -1; // No result after return
         } else if (op.equals("rand")) {
@@ -2308,19 +2308,19 @@ public class BytecodeCompiler implements Visitor {
 
                 // Emit RAND opcode
                 emit(Opcodes.RAND);
-                emit(rd);
-                emit(maxReg);
+                emitReg(rd);
+                emitReg(maxReg);
             } else {
                 // rand() with no argument - defaults to 1
                 int oneReg = allocateRegister();
                 emit(Opcodes.LOAD_INT);
-                emit(oneReg);
+                emitReg(oneReg);
                 emitInt(1);
 
                 // Emit RAND opcode
                 emit(Opcodes.RAND);
-                emit(rd);
-                emit(oneReg);
+                emitReg(rd);
+                emitReg(oneReg);
             }
 
             lastResultReg = rd;
@@ -2337,19 +2337,19 @@ public class BytecodeCompiler implements Visitor {
                 // Emit SLOW_OP with SLOWOP_SLEEP
                 emit(Opcodes.SLOW_OP);
                 emit(Opcodes.SLOWOP_SLEEP);
-                emit(rd);
-                emit(secondsReg);
+                emitReg(rd);
+                emitReg(secondsReg);
             } else {
                 // sleep with no argument - defaults to infinity (but we'll use a large number)
                 int maxReg = allocateRegister();
                 emit(Opcodes.LOAD_INT);
-                emit(maxReg);
+                emitReg(maxReg);
                 emitInt(Integer.MAX_VALUE);
 
                 emit(Opcodes.SLOW_OP);
                 emit(Opcodes.SLOWOP_SLEEP);
-                emit(rd);
-                emit(maxReg);
+                emitReg(rd);
+                emitReg(maxReg);
             }
 
             lastResultReg = rd;
@@ -2362,16 +2362,16 @@ public class BytecodeCompiler implements Visitor {
 
                 // Emit DIE with message register
                 emitWithToken(Opcodes.DIE, node.getIndex());
-                emit(msgReg);
+                emitReg(msgReg);
             } else {
                 // die; (no message - use $@)
                 // For now, emit with undef register
                 int undefReg = allocateRegister();
                 emit(Opcodes.LOAD_UNDEF);
-                emit(undefReg);
+                emitReg(undefReg);
 
                 emitWithToken(Opcodes.DIE, node.getIndex());
-                emit(undefReg);
+                emitReg(undefReg);
             }
             lastResultReg = -1; // No result after die
         } else if (op.equals("eval")) {
@@ -2387,15 +2387,15 @@ public class BytecodeCompiler implements Visitor {
                 // Emit SLOW_OP with SLOWOP_EVAL_STRING
                 emitWithToken(Opcodes.SLOW_OP, node.getIndex());
                 emit(Opcodes.SLOWOP_EVAL_STRING);
-                emit(rd);
-                emit(stringReg);
+                emitReg(rd);
+                emitReg(stringReg);
 
                 lastResultReg = rd;
             } else {
                 // eval; (no operand - return undef)
                 int undefReg = allocateRegister();
                 emit(Opcodes.LOAD_UNDEF);
-                emit(undefReg);
+                emitReg(undefReg);
                 lastResultReg = undefReg;
             }
         } else if (op.equals("select")) {
@@ -2414,20 +2414,20 @@ public class BytecodeCompiler implements Visitor {
 
                 // Emit SELECT opcode
                 emitWithToken(Opcodes.SELECT, node.getIndex());
-                emit(rd);
-                emit(listReg);
+                emitReg(rd);
+                emitReg(listReg);
             } else {
                 // select() with no arguments - returns current filehandle
                 // Create empty list
                 emit(Opcodes.CREATE_LIST);
                 int listReg = allocateRegister();
-                emit(listReg);
+                emitReg(listReg);
                 emit(0); // count = 0
 
                 // Emit SELECT opcode
                 emitWithToken(Opcodes.SELECT, node.getIndex());
-                emit(rd);
-                emit(listReg);
+                emitReg(rd);
+                emitReg(listReg);
             }
 
             lastResultReg = rd;
@@ -2437,7 +2437,7 @@ public class BytecodeCompiler implements Visitor {
             // Or with an operand to undef a variable: undef $x (not implemented yet)
             int undefReg = allocateRegister();
             emit(Opcodes.LOAD_UNDEF);
-            emit(undefReg);
+            emitReg(undefReg);
             lastResultReg = undefReg;
         } else if (op.equals("unaryMinus")) {
             // Unary minus: -$x
@@ -2450,8 +2450,8 @@ public class BytecodeCompiler implements Visitor {
 
             // Emit NEG_SCALAR
             emit(Opcodes.NEG_SCALAR);
-            emit(rd);
-            emit(operandReg);
+            emitReg(rd);
+            emitReg(operandReg);
 
             lastResultReg = rd;
         } else if (op.equals("pop")) {
@@ -2484,7 +2484,7 @@ public class BytecodeCompiler implements Visitor {
                 String globalArrayName = NameNormalizer.normalizeVariableName(((IdentifierNode) arrayOp.operand).name, getCurrentPackage());
                 int nameIdx = addToStringPool(globalArrayName);
                 emit(Opcodes.LOAD_GLOBAL_ARRAY);
-                emit(arrayReg);
+                emitReg(arrayReg);
                 emit(nameIdx);
             }
 
@@ -2493,8 +2493,8 @@ public class BytecodeCompiler implements Visitor {
 
             // Emit ARRAY_POP
             emit(Opcodes.ARRAY_POP);
-            emit(rd);
-            emit(arrayReg);
+            emitReg(rd);
+            emitReg(arrayReg);
 
             lastResultReg = rd;
         } else if (op.equals("shift")) {
@@ -2527,7 +2527,7 @@ public class BytecodeCompiler implements Visitor {
                 String globalArrayName = NameNormalizer.normalizeVariableName(((IdentifierNode) arrayOp.operand).name, getCurrentPackage());
                 int nameIdx = addToStringPool(globalArrayName);
                 emit(Opcodes.LOAD_GLOBAL_ARRAY);
-                emit(arrayReg);
+                emitReg(arrayReg);
                 emit(nameIdx);
             }
 
@@ -2536,8 +2536,8 @@ public class BytecodeCompiler implements Visitor {
 
             // Emit ARRAY_SHIFT
             emit(Opcodes.ARRAY_SHIFT);
-            emit(rd);
-            emit(arrayReg);
+            emitReg(rd);
+            emitReg(arrayReg);
 
             lastResultReg = rd;
         } else if (op.equals("splice")) {
@@ -2574,7 +2574,7 @@ public class BytecodeCompiler implements Visitor {
                 );
                 int nameIdx = addToStringPool(globalArrayName);
                 emit(Opcodes.LOAD_GLOBAL_ARRAY);
-                emit(arrayReg);
+                emitReg(arrayReg);
                 emit(nameIdx);
             }
 
@@ -2589,10 +2589,10 @@ public class BytecodeCompiler implements Visitor {
             // Create a RuntimeList from these registers
             int argsListReg = allocateRegister();
             emit(Opcodes.CREATE_LIST);
-            emit(argsListReg);
+            emitReg(argsListReg);
             emit(argRegs.size());
             for (int argReg : argRegs) {
-                emit(argReg);
+                emitReg(argReg);
             }
 
             // Allocate result register
@@ -2601,9 +2601,9 @@ public class BytecodeCompiler implements Visitor {
             // Emit SLOW_OP with SLOWOP_SPLICE
             emit(Opcodes.SLOW_OP);
             emit(Opcodes.SLOWOP_SPLICE);
-            emit(rd);
-            emit(arrayReg);
-            emit(argsListReg);
+            emitReg(rd);
+            emitReg(arrayReg);
+            emitReg(argsListReg);
 
             lastResultReg = rd;
         } else if (op.equals("reverse")) {
@@ -2625,10 +2625,10 @@ public class BytecodeCompiler implements Visitor {
             // Create a RuntimeList from these registers
             int argsListReg = allocateRegister();
             emit(Opcodes.CREATE_LIST);
-            emit(argsListReg);
+            emitReg(argsListReg);
             emit(argRegs.size());
             for (int argReg : argRegs) {
-                emit(argReg);
+                emitReg(argReg);
             }
 
             // Allocate result register
@@ -2637,8 +2637,8 @@ public class BytecodeCompiler implements Visitor {
             // Emit SLOW_OP with SLOWOP_REVERSE
             emit(Opcodes.SLOW_OP);
             emit(Opcodes.SLOWOP_REVERSE);
-            emit(rd);
-            emit(argsListReg);
+            emitReg(rd);
+            emitReg(argsListReg);
             emit(RuntimeContextType.LIST);  // Context
 
             lastResultReg = rd;
@@ -2653,8 +2653,8 @@ public class BytecodeCompiler implements Visitor {
 
     private int allocateRegister() {
         int reg = nextRegister++;
-        if (reg > 255) {
-            throwCompilerException("Too many registers: exceeded 255 register limit. " +
+        if (reg > 65535) {
+            throwCompilerException("Too many registers: exceeded 65535 register limit. " +
                     "Consider breaking this code into smaller subroutines.");
         }
         return reg;
@@ -2679,7 +2679,7 @@ public class BytecodeCompiler implements Visitor {
     }
 
     private void emit(byte opcode) {
-        bytecode.write(opcode);
+        bytecode.add((short)(opcode & 0xFF));
     }
 
     /**
@@ -2689,56 +2689,71 @@ public class BytecodeCompiler implements Visitor {
     private void emitWithToken(byte opcode, int tokenIndex) {
         int pc = bytecode.size();
         pcToTokenIndex.put(pc, tokenIndex);
-        bytecode.write(opcode);
+        bytecode.add((short)(opcode & 0xFF));
     }
 
     private void emit(int value) {
-        bytecode.write(value & 0xFF);
+        bytecode.add((short)value);
     }
 
     private void emitInt(int value) {
-        bytecode.write((value >> 24) & 0xFF);
-        bytecode.write((value >> 16) & 0xFF);
-        bytecode.write((value >> 8) & 0xFF);
-        bytecode.write(value & 0xFF);
+        bytecode.add((short)((value >> 16) & 0xFFFF));  // High 16 bits
+        bytecode.add((short)(value & 0xFFFF));           // Low 16 bits
     }
 
     /**
-     * Emit a 2-byte short value (big-endian for jump offsets).
+     * Emit a short value (register index, small immediate, etc.).
      */
     private void emitShort(int value) {
-        bytecode.write((value >> 8) & 0xFF);
-        bytecode.write(value & 0xFF);
+        bytecode.add((short)value);
     }
 
     /**
-     * Patch a 4-byte int offset at the specified position.
+     * Emit a register index as a short value.
+     * Registers are now 16-bit (0-65535) instead of 8-bit (0-255).
+     */
+    private void emitReg(int register) {
+        bytecode.add((short)register);
+    }
+
+    /**
+     * Patch a 2-short (4-byte) int offset at the specified position.
      * Used for forward jumps where the target is unknown at emit time.
      */
     private void patchIntOffset(int position, int target) {
-        byte[] bytes = bytecode.toByteArray();
-        // Store absolute target address (not relative offset)
-        bytes[position] = (byte)((target >> 24) & 0xFF);
-        bytes[position + 1] = (byte)((target >> 16) & 0xFF);
-        bytes[position + 2] = (byte)((target >> 8) & 0xFF);
-        bytes[position + 3] = (byte)(target & 0xFF);
-        // Rebuild the stream with patched bytes
-        bytecode.reset();
-        bytecode.write(bytes, 0, bytes.length);
+        // Store absolute target address (not relative offset) as 2 shorts
+        bytecode.set(position, (short)((target >> 16) & 0xFFFF));      // High 16 bits
+        bytecode.set(position + 1, (short)(target & 0xFFFF));          // Low 16 bits
     }
 
     /**
-     * Patch a 2-byte short offset at the specified position.
+     * Helper for forward jumps - emit placeholder and return position for later patching.
+     */
+    private void emitJumpPlaceholder() {
+        emitInt(0);  // 2 shorts (4 bytes) placeholder
+    }
+
+    private void patchJump(int placeholderPos, int target) {
+        patchIntOffset(placeholderPos, target);
+    }
+
+    /**
+     * Patch a short offset at the specified position.
      * Used for forward jumps where the target is unknown at emit time.
      */
     private void patchShortOffset(int position, int target) {
-        byte[] bytes = bytecode.toByteArray();
-        // Store absolute target address (not relative offset)
-        bytes[position] = (byte)((target >> 8) & 0xFF);
-        bytes[position + 1] = (byte)(target & 0xFF);
-        // Rebuild the stream with patched bytes
-        bytecode.reset();
-        bytecode.write(bytes, 0, bytes.length);
+        bytecode.set(position, (short)target);
+    }
+
+    /**
+     * Convert List<Short> bytecode to short[] array.
+     */
+    private short[] toShortArray() {
+        short[] result = new short[bytecode.size()];
+        for (int i = 0; i < bytecode.size(); i++) {
+            result[i] = bytecode.get(i);
+        }
+        return result;
     }
 
     // =========================================================================
@@ -2758,14 +2773,14 @@ public class BytecodeCompiler implements Visitor {
             // Create empty RuntimeList
             int listReg = allocateRegister();
             emit(Opcodes.CREATE_LIST);
-            emit(listReg);
+            emitReg(listReg);
             emit(0); // count = 0
 
             // Convert to RuntimeArray reference (CREATE_ARRAY now returns reference!)
             int refReg = allocateRegister();
             emit(Opcodes.CREATE_ARRAY);
-            emit(refReg);
-            emit(listReg);
+            emitReg(refReg);
+            emitReg(listReg);
 
             lastResultReg = refReg;
             return;
@@ -2781,19 +2796,19 @@ public class BytecodeCompiler implements Visitor {
         // Create RuntimeList with all elements
         int listReg = allocateRegister();
         emit(Opcodes.CREATE_LIST);
-        emit(listReg);
+        emitReg(listReg);
         emit(node.elements.size()); // count
 
         // Emit register numbers for each element
         for (int elemReg : elementRegs) {
-            emit(elemReg);
+            emitReg(elemReg);
         }
 
         // Convert list to array reference (CREATE_ARRAY now returns reference!)
         int refReg = allocateRegister();
         emit(Opcodes.CREATE_ARRAY);
-        emit(refReg);
-        emit(listReg);
+        emitReg(refReg);
+        emitReg(listReg);
 
         lastResultReg = refReg;
     }
@@ -2812,14 +2827,14 @@ public class BytecodeCompiler implements Visitor {
         if (node.elements.isEmpty()) {
             int listReg = allocateRegister();
             emit(Opcodes.CREATE_LIST);
-            emit(listReg);
+            emitReg(listReg);
             emit(0); // count = 0
 
             // Create hash reference (CREATE_HASH now returns reference!)
             int refReg = allocateRegister();
             emit(Opcodes.CREATE_HASH);
-            emit(refReg);
-            emit(listReg);
+            emitReg(refReg);
+            emitReg(listReg);
 
             lastResultReg = refReg;
             return;
@@ -2836,19 +2851,19 @@ public class BytecodeCompiler implements Visitor {
         // Arrays will be included as-is; RuntimeHash.createHash() will flatten them
         int listReg = allocateRegister();
         emit(Opcodes.CREATE_LIST);
-        emit(listReg);
+        emitReg(listReg);
         emit(node.elements.size()); // count
 
         // Emit register numbers for each element
         for (int elemReg : elementRegs) {
-            emit(elemReg);
+            emitReg(elemReg);
         }
 
         // Create hash reference (CREATE_HASH now returns reference!)
         int refReg = allocateRegister();
         emit(Opcodes.CREATE_HASH);
-        emit(refReg);
-        emit(listReg);
+        emitReg(refReg);
+        emitReg(listReg);
 
         lastResultReg = refReg;
     }
@@ -2914,12 +2929,12 @@ public class BytecodeCompiler implements Visitor {
             RuntimeScalar codeScalar = new RuntimeScalar((RuntimeCode) subCode);
             int constIdx = addToConstantPool(codeScalar);
             emit(Opcodes.LOAD_CONST);
-            emit(codeReg);
+            emitReg(codeReg);
             emit(constIdx);
         } else {
             int templateIdx = addToConstantPool(subCode);
             emit(Opcodes.CREATE_CLOSURE);
-            emit(codeReg);
+            emitReg(codeReg);
             emit(templateIdx);
             emit(closureVarIndices.size());
             for (int regIdx : closureVarIndices) {
@@ -2936,7 +2951,7 @@ public class BytecodeCompiler implements Visitor {
         int nameIdx = addToStringPool(fullName);
         emit(Opcodes.STORE_GLOBAL_CODE);
         emit(nameIdx);
-        emit(codeReg);
+        emitReg(codeReg);
 
         lastResultReg = -1;
     }
@@ -2992,13 +3007,13 @@ public class BytecodeCompiler implements Visitor {
             RuntimeScalar codeScalar = new RuntimeScalar((RuntimeCode) subCode);
             int constIdx = addToConstantPool(codeScalar);
             emit(Opcodes.LOAD_CONST);
-            emit(codeReg);
+            emitReg(codeReg);
             emit(constIdx);
         } else {
             // Has closures - emit CREATE_CLOSURE
             int templateIdx = addToConstantPool(subCode);
             emit(Opcodes.CREATE_CLOSURE);
-            emit(codeReg);
+            emitReg(codeReg);
             emit(templateIdx);
             emit(closureVarIndices.size());
             for (int regIdx : closureVarIndices) {
@@ -3039,8 +3054,8 @@ public class BytecodeCompiler implements Visitor {
         // Store result from block
         if (lastResultReg >= 0) {
             emit(Opcodes.MOVE);
-            emit(resultReg);
-            emit(lastResultReg);
+            emitReg(resultReg);
+            emitReg(lastResultReg);
         }
 
         // Emit EVAL_END (clears $@)
@@ -3056,28 +3071,20 @@ public class BytecodeCompiler implements Visitor {
         // CATCH block starts here
         int catchPc = bytecode.size();
 
-        // Patch EVAL_TRY with catch offset
+        // Patch EVAL_TRY with catch offset (as a single short)
         int catchOffset = catchPc - tryPc;
-        byte[] bc = bytecode.toByteArray();
-        bc[catchOffsetPos] = (byte) ((catchOffset >> 8) & 0xFF);
-        bc[catchOffsetPos + 1] = (byte) (catchOffset & 0xFF);
-        bytecode.reset();
-        bytecode.write(bc, 0, bc.length);
+        bytecode.set(catchOffsetPos, (short)catchOffset);
 
         // Emit EVAL_CATCH (sets $@, stores undef)
         emit(Opcodes.EVAL_CATCH);
-        emit(resultReg);
+        emitReg(resultReg);
 
         // END label (after catch)
         int endPc = bytecode.size();
 
-        // Patch GOTO to end
+        // Patch GOTO to end (as a single short)
         int gotoEndOffset = endPc - gotoEndPos;
-        bc = bytecode.toByteArray();
-        bc[gotoEndOffsetPos] = (byte) ((gotoEndOffset >> 8) & 0xFF);
-        bc[gotoEndOffsetPos + 1] = (byte) (gotoEndOffset & 0xFF);
-        bytecode.reset();
-        bytecode.write(bc, 0, bc.length);
+        bytecode.set(gotoEndOffsetPos, (short)gotoEndOffset);
 
         lastResultReg = resultReg;
     }
@@ -3104,23 +3111,23 @@ public class BytecodeCompiler implements Visitor {
             // Need to convert list to array
             arrayReg = allocateRegister();
             emit(Opcodes.NEW_ARRAY);
-            emit(arrayReg);
+            emitReg(arrayReg);
             emit(Opcodes.ARRAY_SET_FROM_LIST);
-            emit(arrayReg);
-            emit(listReg);
+            emitReg(arrayReg);
+            emitReg(listReg);
         }
 
         // Step 3: Allocate iterator index register
         int indexReg = allocateRegister();
         emit(Opcodes.LOAD_INT);
-        emit(indexReg);
+        emitReg(indexReg);
         emitInt(0);
 
         // Step 4: Allocate array size register
         int sizeReg = allocateRegister();
         emit(Opcodes.ARRAY_SIZE);
-        emit(sizeReg);
-        emit(arrayReg);
+        emitReg(sizeReg);
+        emitReg(arrayReg);
 
         // Step 5: Enter new scope for loop variable
         enterScope();
@@ -3150,21 +3157,21 @@ public class BytecodeCompiler implements Visitor {
         // Compare index with size
         int cmpReg = allocateRegister();
         emit(Opcodes.LT_NUM);
-        emit(cmpReg);
-        emit(indexReg);
-        emit(sizeReg);
+        emitReg(cmpReg);
+        emitReg(indexReg);
+        emitReg(sizeReg);
 
         // If false, jump to end (we'll patch this later)
         emit(Opcodes.GOTO_IF_FALSE);
-        emit(cmpReg);
+        emitReg(cmpReg);
         int loopEndJumpPc = bytecode.size();
         emitInt(0);  // Placeholder for jump target
 
         // Step 8: Get array element and assign to loop variable
         emit(Opcodes.ARRAY_GET);
-        emit(varReg);
-        emit(arrayReg);
-        emit(indexReg);
+        emitReg(varReg);
+        emitReg(arrayReg);
+        emitReg(indexReg);
 
         // Step 9: Execute body
         if (node.body != null) {
@@ -3173,8 +3180,8 @@ public class BytecodeCompiler implements Visitor {
 
         // Step 10: Increment index
         emit(Opcodes.ADD_SCALAR_INT);
-        emit(indexReg);
-        emit(indexReg);
+        emitReg(indexReg);
+        emitReg(indexReg);
         emitInt(1);
 
         // Step 11: Jump back to loop start
@@ -3231,13 +3238,13 @@ public class BytecodeCompiler implements Visitor {
         } else {
             // No condition means infinite loop - load true
             emit(Opcodes.LOAD_INT);
-            emit(condReg);
+            emitReg(condReg);
             emitInt(1);
         }
 
         // Step 4: If condition is false, jump to end
         emit(Opcodes.GOTO_IF_FALSE);
-        emit(condReg);
+        emitReg(condReg);
         int loopEndJumpPc = bytecode.size();
         emitInt(0);  // Placeholder for jump target (will be patched)
 
@@ -3276,7 +3283,7 @@ public class BytecodeCompiler implements Visitor {
         // Mark position for forward jump to else/end
         int ifFalsePos = bytecode.size();
         emit(Opcodes.GOTO_IF_FALSE);
-        emit(condReg);
+        emitReg(condReg);
         emitInt(0); // Placeholder for else/end target
 
         // Compile then block
@@ -3303,8 +3310,8 @@ public class BytecodeCompiler implements Visitor {
             // If they differ, move else result to then result register
             if (thenResultReg >= 0 && elseResultReg >= 0 && thenResultReg != elseResultReg) {
                 emit(Opcodes.MOVE);
-                emit(thenResultReg);
-                emit(elseResultReg);
+                emitReg(thenResultReg);
+                emitReg(elseResultReg);
             }
 
             // Patch goto-end jump to here
@@ -3343,7 +3350,7 @@ public class BytecodeCompiler implements Visitor {
         // Mark position for forward jump to false expression
         int ifFalsePos = bytecode.size();
         emit(Opcodes.GOTO_IF_FALSE);
-        emit(condReg);
+        emitReg(condReg);
         emitInt(0); // Placeholder for false_label
 
         // Compile true expression
@@ -3352,8 +3359,8 @@ public class BytecodeCompiler implements Visitor {
 
         // Move true result to rd
         emit(Opcodes.MOVE);
-        emit(rd);
-        emit(trueReg);
+        emitReg(rd);
+        emitReg(trueReg);
 
         // Jump over false expression
         int gotoEndPos = bytecode.size();
@@ -3370,8 +3377,8 @@ public class BytecodeCompiler implements Visitor {
 
         // Move false result to rd
         emit(Opcodes.MOVE);
-        emit(rd);
-        emit(falseReg);
+        emitReg(rd);
+        emitReg(falseReg);
 
         // Patch goto-end jump to here
         int endPos = bytecode.size();
@@ -3411,7 +3418,7 @@ public class BytecodeCompiler implements Visitor {
             // Return empty RuntimeList
             int listReg = allocateRegister();
             emit(Opcodes.CREATE_LIST);
-            emit(listReg);
+            emitReg(listReg);
             emit(0); // count = 0
             lastResultReg = listReg;
             return;
@@ -3429,9 +3436,9 @@ public class BytecodeCompiler implements Visitor {
 
                 int listReg = allocateRegister();
                 emit(Opcodes.CREATE_LIST);
-                emit(listReg);
+                emitReg(listReg);
                 emit(1); // count = 1
-                emit(elemReg);
+                emitReg(elemReg);
                 lastResultReg = listReg;
             } finally {
                 currentCallContext = savedContext;
@@ -3454,38 +3461,17 @@ public class BytecodeCompiler implements Visitor {
             // Create RuntimeList with all elements
             int listReg = allocateRegister();
             emit(Opcodes.CREATE_LIST);
-            emit(listReg);
+            emitReg(listReg);
             emit(node.elements.size()); // count
 
             // Emit register numbers for each element
             for (int elemReg : elementRegs) {
-                emit(elemReg);
+                emitReg(elemReg);
             }
 
             lastResultReg = listReg;
         } finally {
             currentCallContext = savedContext;
         }
-    }
-
-    // =========================================================================
-    // HELPER METHODS
-    // =========================================================================
-
-    /**
-     * Patch a forward jump instruction with the actual target offset.
-     *
-     * @param jumpPc The PC where the 4-byte jump target was emitted
-     * @param targetPc The actual target PC to jump to
-     */
-    private void patchJump(int jumpPc, int targetPc) {
-        byte[] bc = bytecode.toByteArray();
-        bc[jumpPc] = (byte) ((targetPc >> 24) & 0xFF);
-        bc[jumpPc + 1] = (byte) ((targetPc >> 16) & 0xFF);
-        bc[jumpPc + 2] = (byte) ((targetPc >> 8) & 0xFF);
-        bc[jumpPc + 3] = (byte) (targetPc & 0xFF);
-        // Reset bytecode stream with patched data
-        bytecode.reset();
-        bytecode.write(bc, 0, bc.length);
     }
 }

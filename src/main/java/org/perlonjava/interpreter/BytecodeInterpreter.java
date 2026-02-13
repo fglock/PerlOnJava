@@ -52,7 +52,7 @@ public class BytecodeInterpreter {
         }
 
         int pc = 0;  // Program counter
-        byte[] bytecode = code.bytecode;
+        short[] bytecode = code.bytecode;
 
         // Eval block exception handling: stack of catch PCs
         // When EVAL_TRY is executed, push the catch PC onto this stack
@@ -62,7 +62,7 @@ public class BytecodeInterpreter {
         try {
             // Main dispatch loop - JVM JIT optimizes switch to tableswitch (O(1) jump)
             while (pc < bytecode.length) {
-                byte opcode = bytecode[pc++];
+                short opcode = bytecode[pc++];
 
                 switch (opcode) {
                     // =================================================================
@@ -75,7 +75,7 @@ public class BytecodeInterpreter {
 
                     case Opcodes.RETURN: {
                         // Return from subroutine: return rd
-                        int retReg = bytecode[pc++] & 0xFF;
+                        int retReg = bytecode[pc++] & 0xFFFF;
                         RuntimeBase retVal = registers[retReg];
 
                         if (retVal == null) {
@@ -93,9 +93,9 @@ public class BytecodeInterpreter {
 
                     case Opcodes.GOTO_IF_FALSE: {
                         // Conditional jump: if (!rs) pc = offset
-                        int condReg = bytecode[pc++] & 0xFF;
+                        int condReg = bytecode[pc++] & 0xFFFF;
                         int target = readInt(bytecode, pc);
-                        pc += 4;
+                        pc += 2;
 
                         RuntimeScalar cond = (RuntimeScalar) registers[condReg];
                         if (!cond.getBoolean()) {
@@ -106,9 +106,9 @@ public class BytecodeInterpreter {
 
                     case Opcodes.GOTO_IF_TRUE: {
                         // Conditional jump: if (rs) pc = offset
-                        int condReg = bytecode[pc++] & 0xFF;
+                        int condReg = bytecode[pc++] & 0xFFFF;
                         int target = readInt(bytecode, pc);
-                        pc += 4;
+                        pc += 2;
 
                         RuntimeScalar cond = (RuntimeScalar) registers[condReg];
                         if (cond.getBoolean()) {
@@ -123,25 +123,25 @@ public class BytecodeInterpreter {
 
                     case Opcodes.MOVE: {
                         // Register copy: rd = rs
-                        int dest = bytecode[pc++] & 0xFF;
-                        int src = bytecode[pc++] & 0xFF;
+                        int dest = bytecode[pc++] & 0xFFFF;
+                        int src = bytecode[pc++] & 0xFFFF;
                         registers[dest] = registers[src];
                         break;
                     }
 
                     case Opcodes.LOAD_CONST: {
                         // Load from constant pool: rd = constants[index]
-                        int rd = bytecode[pc++] & 0xFF;
-                        int constIndex = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int constIndex = bytecode[pc++] & 0xFFFF;
                         registers[rd] = (RuntimeBase) code.constants[constIndex];
                         break;
                     }
 
                     case Opcodes.LOAD_INT: {
                         // Load integer: rd = immediate (create NEW mutable scalar, not cached)
-                        int rd = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
                         int value = readInt(bytecode, pc);
-                        pc += 4;
+                        pc += 2;
                         // Create NEW RuntimeScalar (mutable) instead of using cache
                         // This is needed for local variables that may be modified (++/--)
                         registers[rd] = new RuntimeScalar(value);
@@ -150,15 +150,15 @@ public class BytecodeInterpreter {
 
                     case Opcodes.LOAD_STRING: {
                         // Load string: rd = new RuntimeScalar(stringPool[index])
-                        int rd = bytecode[pc++] & 0xFF;
-                        int strIndex = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int strIndex = bytecode[pc++] & 0xFFFF;
                         registers[rd] = new RuntimeScalar(code.stringPool[strIndex]);
                         break;
                     }
 
                     case Opcodes.LOAD_UNDEF: {
                         // Load undef: rd = new RuntimeScalar()
-                        int rd = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
                         registers[rd] = new RuntimeScalar();
                         break;
                     }
@@ -169,8 +169,8 @@ public class BytecodeInterpreter {
 
                     case Opcodes.LOAD_GLOBAL_SCALAR: {
                         // Load global scalar: rd = GlobalVariable.getGlobalVariable(name)
-                        int rd = bytecode[pc++] & 0xFF;
-                        int nameIdx = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int nameIdx = bytecode[pc++] & 0xFFFF;
                         String name = code.stringPool[nameIdx];
                         // Uses SAME GlobalVariable as compiled code
                         registers[rd] = GlobalVariable.getGlobalVariable(name);
@@ -179,8 +179,8 @@ public class BytecodeInterpreter {
 
                     case Opcodes.STORE_GLOBAL_SCALAR: {
                         // Store global scalar: GlobalVariable.getGlobalVariable(name).set(rs)
-                        int nameIdx = bytecode[pc++] & 0xFF;
-                        int srcReg = bytecode[pc++] & 0xFF;
+                        int nameIdx = bytecode[pc++] & 0xFFFF;
+                        int srcReg = bytecode[pc++] & 0xFFFF;
                         String name = code.stringPool[nameIdx];
                         GlobalVariable.getGlobalVariable(name).set((RuntimeScalar) registers[srcReg]);
                         break;
@@ -188,8 +188,8 @@ public class BytecodeInterpreter {
 
                     case Opcodes.LOAD_GLOBAL_ARRAY: {
                         // Load global array: rd = GlobalVariable.getGlobalArray(name)
-                        int rd = bytecode[pc++] & 0xFF;
-                        int nameIdx = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int nameIdx = bytecode[pc++] & 0xFFFF;
                         String name = code.stringPool[nameIdx];
                         registers[rd] = GlobalVariable.getGlobalArray(name);
                         break;
@@ -197,8 +197,8 @@ public class BytecodeInterpreter {
 
                     case Opcodes.LOAD_GLOBAL_HASH: {
                         // Load global hash: rd = GlobalVariable.getGlobalHash(name)
-                        int rd = bytecode[pc++] & 0xFF;
-                        int nameIdx = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int nameIdx = bytecode[pc++] & 0xFFFF;
                         String name = code.stringPool[nameIdx];
                         registers[rd] = GlobalVariable.getGlobalHash(name);
                         break;
@@ -206,8 +206,8 @@ public class BytecodeInterpreter {
 
                     case Opcodes.LOAD_GLOBAL_CODE: {
                         // Load global code: rd = GlobalVariable.getGlobalCodeRef(name)
-                        int rd = bytecode[pc++] & 0xFF;
-                        int nameIdx = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int nameIdx = bytecode[pc++] & 0xFFFF;
                         String name = code.stringPool[nameIdx];
                         registers[rd] = GlobalVariable.getGlobalCodeRef(name);
                         break;
@@ -215,8 +215,8 @@ public class BytecodeInterpreter {
 
                     case Opcodes.STORE_GLOBAL_CODE: {
                         // Store global code: GlobalVariable.globalCodeRefs.put(name, codeRef)
-                        int nameIdx = bytecode[pc++] & 0xFF;
-                        int codeReg = bytecode[pc++] & 0xFF;
+                        int nameIdx = bytecode[pc++] & 0xFFFF;
+                        int codeReg = bytecode[pc++] & 0xFFFF;
                         String name = code.stringPool[nameIdx];
                         RuntimeScalar codeRef = (RuntimeScalar) registers[codeReg];
                         // Store the code reference in the global namespace
@@ -227,9 +227,9 @@ public class BytecodeInterpreter {
                     case Opcodes.CREATE_CLOSURE: {
                         // Create closure with captured variables
                         // Format: CREATE_CLOSURE rd template_idx num_captures reg1 reg2 ...
-                        int rd = bytecode[pc++] & 0xFF;
-                        int templateIdx = bytecode[pc++] & 0xFF;
-                        int numCaptures = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int templateIdx = bytecode[pc++] & 0xFFFF;
+                        int numCaptures = bytecode[pc++] & 0xFFFF;
 
                         // Get the template InterpretedCode from constants
                         InterpretedCode template = (InterpretedCode) code.constants[templateIdx];
@@ -237,7 +237,7 @@ public class BytecodeInterpreter {
                         // Capture the current register values
                         RuntimeBase[] capturedVars = new RuntimeBase[numCaptures];
                         for (int i = 0; i < numCaptures; i++) {
-                            int captureReg = bytecode[pc++] & 0xFF;
+                            int captureReg = bytecode[pc++] & 0xFFFF;
                             capturedVars[i] = registers[captureReg];
                         }
 
@@ -262,8 +262,8 @@ public class BytecodeInterpreter {
                     case Opcodes.SET_SCALAR: {
                         // Set scalar value: registers[rd].set(registers[rs])
                         // Used to set the value in a persistent scalar without overwriting the reference
-                        int rd = bytecode[pc++] & 0xFF;
-                        int rs = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int rs = bytecode[pc++] & 0xFFFF;
                         ((RuntimeScalar) registers[rd]).set((RuntimeScalar) registers[rs]);
                         break;
                     }
@@ -274,9 +274,9 @@ public class BytecodeInterpreter {
 
                     case Opcodes.ADD_SCALAR: {
                         // Addition: rd = rs1 + rs2
-                        int rd = bytecode[pc++] & 0xFF;
-                        int rs1 = bytecode[pc++] & 0xFF;
-                        int rs2 = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int rs1 = bytecode[pc++] & 0xFFFF;
+                        int rs2 = bytecode[pc++] & 0xFFFF;
                         // Calls SAME method as compiled code
                         registers[rd] = MathOperators.add(
                             (RuntimeScalar) registers[rs1],
@@ -287,9 +287,9 @@ public class BytecodeInterpreter {
 
                     case Opcodes.SUB_SCALAR: {
                         // Subtraction: rd = rs1 - rs2
-                        int rd = bytecode[pc++] & 0xFF;
-                        int rs1 = bytecode[pc++] & 0xFF;
-                        int rs2 = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int rs1 = bytecode[pc++] & 0xFFFF;
+                        int rs2 = bytecode[pc++] & 0xFFFF;
                         registers[rd] = MathOperators.subtract(
                             (RuntimeScalar) registers[rs1],
                             (RuntimeScalar) registers[rs2]
@@ -299,9 +299,9 @@ public class BytecodeInterpreter {
 
                     case Opcodes.MUL_SCALAR: {
                         // Multiplication: rd = rs1 * rs2
-                        int rd = bytecode[pc++] & 0xFF;
-                        int rs1 = bytecode[pc++] & 0xFF;
-                        int rs2 = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int rs1 = bytecode[pc++] & 0xFFFF;
+                        int rs2 = bytecode[pc++] & 0xFFFF;
                         registers[rd] = MathOperators.multiply(
                             (RuntimeScalar) registers[rs1],
                             (RuntimeScalar) registers[rs2]
@@ -311,9 +311,9 @@ public class BytecodeInterpreter {
 
                     case Opcodes.DIV_SCALAR: {
                         // Division: rd = rs1 / rs2
-                        int rd = bytecode[pc++] & 0xFF;
-                        int rs1 = bytecode[pc++] & 0xFF;
-                        int rs2 = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int rs1 = bytecode[pc++] & 0xFFFF;
+                        int rs2 = bytecode[pc++] & 0xFFFF;
                         registers[rd] = MathOperators.divide(
                             (RuntimeScalar) registers[rs1],
                             (RuntimeScalar) registers[rs2]
@@ -323,9 +323,9 @@ public class BytecodeInterpreter {
 
                     case Opcodes.MOD_SCALAR: {
                         // Modulus: rd = rs1 % rs2
-                        int rd = bytecode[pc++] & 0xFF;
-                        int rs1 = bytecode[pc++] & 0xFF;
-                        int rs2 = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int rs1 = bytecode[pc++] & 0xFFFF;
+                        int rs2 = bytecode[pc++] & 0xFFFF;
                         registers[rd] = MathOperators.modulus(
                             (RuntimeScalar) registers[rs1],
                             (RuntimeScalar) registers[rs2]
@@ -335,8 +335,8 @@ public class BytecodeInterpreter {
 
                     case Opcodes.NEG_SCALAR: {
                         // Negation: rd = -rs
-                        int rd = bytecode[pc++] & 0xFF;
-                        int rs = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int rs = bytecode[pc++] & 0xFFFF;
                         registers[rd] = MathOperators.unaryMinus((RuntimeScalar) registers[rs]);
                         break;
                     }
@@ -344,10 +344,10 @@ public class BytecodeInterpreter {
                     // Specialized unboxed operations (rare optimizations)
                     case Opcodes.ADD_SCALAR_INT: {
                         // Addition with immediate: rd = rs + immediate
-                        int rd = bytecode[pc++] & 0xFF;
-                        int rs = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int rs = bytecode[pc++] & 0xFFFF;
                         int immediate = readInt(bytecode, pc);
-                        pc += 4;
+                        pc += 2;
                         // Calls specialized unboxed method (rare optimization)
                         registers[rd] = MathOperators.add(
                             (RuntimeScalar) registers[rs],
@@ -362,9 +362,9 @@ public class BytecodeInterpreter {
 
                     case Opcodes.CONCAT: {
                         // String concatenation: rd = rs1 . rs2
-                        int rd = bytecode[pc++] & 0xFF;
-                        int rs1 = bytecode[pc++] & 0xFF;
-                        int rs2 = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int rs1 = bytecode[pc++] & 0xFFFF;
+                        int rs2 = bytecode[pc++] & 0xFFFF;
                         registers[rd] = StringOperators.stringConcat(
                             (RuntimeScalar) registers[rs1],
                             (RuntimeScalar) registers[rs2]
@@ -374,9 +374,9 @@ public class BytecodeInterpreter {
 
                     case Opcodes.REPEAT: {
                         // String/list repetition: rd = rs1 x rs2
-                        int rd = bytecode[pc++] & 0xFF;
-                        int rs1 = bytecode[pc++] & 0xFF;
-                        int rs2 = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int rs1 = bytecode[pc++] & 0xFFFF;
+                        int rs2 = bytecode[pc++] & 0xFFFF;
                         // Call Operator.repeat(base, count, context)
                         // Context: 1 = scalar context (for string repetition)
                         registers[rd] = Operator.repeat(
@@ -389,8 +389,8 @@ public class BytecodeInterpreter {
 
                     case Opcodes.LENGTH: {
                         // String length: rd = length(rs)
-                        int rd = bytecode[pc++] & 0xFF;
-                        int rs = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int rs = bytecode[pc++] & 0xFFFF;
                         registers[rd] = StringOperators.length((RuntimeScalar) registers[rs]);
                         break;
                     }
@@ -401,9 +401,9 @@ public class BytecodeInterpreter {
 
                     case Opcodes.COMPARE_NUM: {
                         // Numeric comparison: rd = rs1 <=> rs2
-                        int rd = bytecode[pc++] & 0xFF;
-                        int rs1 = bytecode[pc++] & 0xFF;
-                        int rs2 = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int rs1 = bytecode[pc++] & 0xFFFF;
+                        int rs2 = bytecode[pc++] & 0xFFFF;
                         registers[rd] = CompareOperators.spaceship(
                             (RuntimeScalar) registers[rs1],
                             (RuntimeScalar) registers[rs2]
@@ -413,9 +413,9 @@ public class BytecodeInterpreter {
 
                     case Opcodes.EQ_NUM: {
                         // Numeric equality: rd = (rs1 == rs2)
-                        int rd = bytecode[pc++] & 0xFF;
-                        int rs1 = bytecode[pc++] & 0xFF;
-                        int rs2 = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int rs1 = bytecode[pc++] & 0xFFFF;
+                        int rs2 = bytecode[pc++] & 0xFFFF;
                         registers[rd] = CompareOperators.equalTo(
                             (RuntimeScalar) registers[rs1],
                             (RuntimeScalar) registers[rs2]
@@ -425,9 +425,9 @@ public class BytecodeInterpreter {
 
                     case Opcodes.LT_NUM: {
                         // Less than: rd = (rs1 < rs2)
-                        int rd = bytecode[pc++] & 0xFF;
-                        int rs1 = bytecode[pc++] & 0xFF;
-                        int rs2 = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int rs1 = bytecode[pc++] & 0xFFFF;
+                        int rs2 = bytecode[pc++] & 0xFFFF;
                         registers[rd] = CompareOperators.lessThan(
                             (RuntimeScalar) registers[rs1],
                             (RuntimeScalar) registers[rs2]
@@ -437,9 +437,9 @@ public class BytecodeInterpreter {
 
                     case Opcodes.GT_NUM: {
                         // Greater than: rd = (rs1 > rs2)
-                        int rd = bytecode[pc++] & 0xFF;
-                        int rs1 = bytecode[pc++] & 0xFF;
-                        int rs2 = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int rs1 = bytecode[pc++] & 0xFFFF;
+                        int rs2 = bytecode[pc++] & 0xFFFF;
                         registers[rd] = CompareOperators.greaterThan(
                             (RuntimeScalar) registers[rs1],
                             (RuntimeScalar) registers[rs2]
@@ -449,9 +449,9 @@ public class BytecodeInterpreter {
 
                     case Opcodes.NE_NUM: {
                         // Not equal: rd = (rs1 != rs2)
-                        int rd = bytecode[pc++] & 0xFF;
-                        int rs1 = bytecode[pc++] & 0xFF;
-                        int rs2 = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int rs1 = bytecode[pc++] & 0xFFFF;
+                        int rs2 = bytecode[pc++] & 0xFFFF;
                         registers[rd] = CompareOperators.notEqualTo(
                             (RuntimeScalar) registers[rs1],
                             (RuntimeScalar) registers[rs2]
@@ -465,8 +465,8 @@ public class BytecodeInterpreter {
 
                     case Opcodes.NOT: {
                         // Logical NOT: rd = !rs
-                        int rd = bytecode[pc++] & 0xFF;
-                        int rs = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int rs = bytecode[pc++] & 0xFFFF;
                         RuntimeScalar val = (RuntimeScalar) registers[rs];
                         registers[rd] = val.getBoolean() ?
                             RuntimeScalarCache.scalarFalse : RuntimeScalarCache.scalarTrue;
@@ -479,9 +479,9 @@ public class BytecodeInterpreter {
 
                     case Opcodes.ARRAY_GET: {
                         // Array element access: rd = array[index]
-                        int rd = bytecode[pc++] & 0xFF;
-                        int arrayReg = bytecode[pc++] & 0xFF;
-                        int indexReg = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int arrayReg = bytecode[pc++] & 0xFFFF;
+                        int indexReg = bytecode[pc++] & 0xFFFF;
 
                         // Check type
                         if (!(registers[arrayReg] instanceof RuntimeArray)) {
@@ -499,9 +499,9 @@ public class BytecodeInterpreter {
 
                     case Opcodes.ARRAY_SET: {
                         // Array element store: array[index] = value
-                        int arrayReg = bytecode[pc++] & 0xFF;
-                        int indexReg = bytecode[pc++] & 0xFF;
-                        int valueReg = bytecode[pc++] & 0xFF;
+                        int arrayReg = bytecode[pc++] & 0xFFFF;
+                        int indexReg = bytecode[pc++] & 0xFFFF;
+                        int valueReg = bytecode[pc++] & 0xFFFF;
                         RuntimeArray arr = (RuntimeArray) registers[arrayReg];
                         RuntimeScalar idx = (RuntimeScalar) registers[indexReg];
                         RuntimeScalar val = (RuntimeScalar) registers[valueReg];
@@ -511,8 +511,8 @@ public class BytecodeInterpreter {
 
                     case Opcodes.ARRAY_PUSH: {
                         // Array push: push(@array, value)
-                        int arrayReg = bytecode[pc++] & 0xFF;
-                        int valueReg = bytecode[pc++] & 0xFF;
+                        int arrayReg = bytecode[pc++] & 0xFFFF;
+                        int valueReg = bytecode[pc++] & 0xFFFF;
                         RuntimeArray arr = (RuntimeArray) registers[arrayReg];
                         RuntimeBase val = registers[valueReg];
                         arr.push(val);
@@ -521,8 +521,8 @@ public class BytecodeInterpreter {
 
                     case Opcodes.ARRAY_POP: {
                         // Array pop: rd = pop(@array)
-                        int rd = bytecode[pc++] & 0xFF;
-                        int arrayReg = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int arrayReg = bytecode[pc++] & 0xFFFF;
                         RuntimeArray arr = (RuntimeArray) registers[arrayReg];
                         registers[rd] = RuntimeArray.pop(arr);
                         break;
@@ -530,8 +530,8 @@ public class BytecodeInterpreter {
 
                     case Opcodes.ARRAY_SHIFT: {
                         // Array shift: rd = shift(@array)
-                        int rd = bytecode[pc++] & 0xFF;
-                        int arrayReg = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int arrayReg = bytecode[pc++] & 0xFFFF;
                         RuntimeArray arr = (RuntimeArray) registers[arrayReg];
                         registers[rd] = RuntimeArray.shift(arr);
                         break;
@@ -539,8 +539,8 @@ public class BytecodeInterpreter {
 
                     case Opcodes.ARRAY_UNSHIFT: {
                         // Array unshift: unshift(@array, value)
-                        int arrayReg = bytecode[pc++] & 0xFF;
-                        int valueReg = bytecode[pc++] & 0xFF;
+                        int arrayReg = bytecode[pc++] & 0xFFFF;
+                        int valueReg = bytecode[pc++] & 0xFFFF;
                         RuntimeArray arr = (RuntimeArray) registers[arrayReg];
                         RuntimeBase val = registers[valueReg];
                         RuntimeArray.unshift(arr, val);
@@ -549,8 +549,8 @@ public class BytecodeInterpreter {
 
                     case Opcodes.ARRAY_SIZE: {
                         // Array size: rd = scalar(@array) or scalar(list)
-                        int rd = bytecode[pc++] & 0xFF;
-                        int operandReg = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int operandReg = bytecode[pc++] & 0xFFFF;
                         RuntimeBase operand = registers[operandReg];
 
                         if (operand instanceof RuntimeArray) {
@@ -572,8 +572,8 @@ public class BytecodeInterpreter {
                     case Opcodes.CREATE_ARRAY: {
                         // Create array reference from list: rd = new RuntimeArray(rs_list).createReference()
                         // Array literals always return references in Perl
-                        int rd = bytecode[pc++] & 0xFF;
-                        int listReg = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int listReg = bytecode[pc++] & 0xFFFF;
 
                         // Convert to list (polymorphic - works for PerlRange, RuntimeList, etc.)
                         RuntimeBase source = registers[listReg];
@@ -598,9 +598,9 @@ public class BytecodeInterpreter {
 
                     case Opcodes.HASH_GET: {
                         // Hash element access: rd = hash{key}
-                        int rd = bytecode[pc++] & 0xFF;
-                        int hashReg = bytecode[pc++] & 0xFF;
-                        int keyReg = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int hashReg = bytecode[pc++] & 0xFFFF;
+                        int keyReg = bytecode[pc++] & 0xFFFF;
                         RuntimeHash hash = (RuntimeHash) registers[hashReg];
                         RuntimeScalar key = (RuntimeScalar) registers[keyReg];
                         // Uses RuntimeHash API directly
@@ -610,9 +610,9 @@ public class BytecodeInterpreter {
 
                     case Opcodes.HASH_SET: {
                         // Hash element store: hash{key} = value
-                        int hashReg = bytecode[pc++] & 0xFF;
-                        int keyReg = bytecode[pc++] & 0xFF;
-                        int valueReg = bytecode[pc++] & 0xFF;
+                        int hashReg = bytecode[pc++] & 0xFFFF;
+                        int keyReg = bytecode[pc++] & 0xFFFF;
+                        int valueReg = bytecode[pc++] & 0xFFFF;
                         RuntimeHash hash = (RuntimeHash) registers[hashReg];
                         RuntimeScalar key = (RuntimeScalar) registers[keyReg];
                         RuntimeScalar val = (RuntimeScalar) registers[valueReg];
@@ -627,10 +627,10 @@ public class BytecodeInterpreter {
                     case Opcodes.CALL_SUB: {
                         // Call subroutine: rd = coderef->(args)
                         // May return RuntimeControlFlowList!
-                        int rd = bytecode[pc++] & 0xFF;
-                        int coderefReg = bytecode[pc++] & 0xFF;
-                        int argsReg = bytecode[pc++] & 0xFF;
-                        int context = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int coderefReg = bytecode[pc++] & 0xFFFF;
+                        int argsReg = bytecode[pc++] & 0xFFFF;
+                        int context = bytecode[pc++] & 0xFFFF;
 
                         RuntimeScalar codeRef = (RuntimeScalar) registers[coderefReg];
                         RuntimeBase argsBase = registers[argsReg];
@@ -666,8 +666,8 @@ public class BytecodeInterpreter {
 
                     case Opcodes.CREATE_LAST: {
                         // Create LAST control flow: rd = RuntimeControlFlowList(LAST, label)
-                        int rd = bytecode[pc++] & 0xFF;
-                        int labelIdx = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int labelIdx = bytecode[pc++] & 0xFFFF;
                         String label = labelIdx == 255 ? null : code.stringPool[labelIdx];
                         registers[rd] = new RuntimeControlFlowList(
                             ControlFlowType.LAST, label,
@@ -678,8 +678,8 @@ public class BytecodeInterpreter {
 
                     case Opcodes.CREATE_NEXT: {
                         // Create NEXT control flow: rd = RuntimeControlFlowList(NEXT, label)
-                        int rd = bytecode[pc++] & 0xFF;
-                        int labelIdx = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int labelIdx = bytecode[pc++] & 0xFFFF;
                         String label = labelIdx == 255 ? null : code.stringPool[labelIdx];
                         registers[rd] = new RuntimeControlFlowList(
                             ControlFlowType.NEXT, label,
@@ -690,8 +690,8 @@ public class BytecodeInterpreter {
 
                     case Opcodes.CREATE_REDO: {
                         // Create REDO control flow: rd = RuntimeControlFlowList(REDO, label)
-                        int rd = bytecode[pc++] & 0xFF;
-                        int labelIdx = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int labelIdx = bytecode[pc++] & 0xFFFF;
                         String label = labelIdx == 255 ? null : code.stringPool[labelIdx];
                         registers[rd] = new RuntimeControlFlowList(
                             ControlFlowType.REDO, label,
@@ -702,8 +702,8 @@ public class BytecodeInterpreter {
 
                     case Opcodes.IS_CONTROL_FLOW: {
                         // Check if value is control flow: rd = (rs instanceof RuntimeControlFlowList)
-                        int rd = bytecode[pc++] & 0xFF;
-                        int rs = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int rs = bytecode[pc++] & 0xFFFF;
                         boolean isControlFlow = registers[rs] instanceof RuntimeControlFlowList;
                         registers[rd] = isControlFlow ?
                             RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarFalse;
@@ -717,8 +717,8 @@ public class BytecodeInterpreter {
                     case Opcodes.PRINT: {
                         // Print to filehandle
                         // Format: [PRINT] [rs_content] [rs_filehandle]
-                        int contentReg = bytecode[pc++] & 0xFF;
-                        int filehandleReg = bytecode[pc++] & 0xFF;
+                        int contentReg = bytecode[pc++] & 0xFFFF;
+                        int filehandleReg = bytecode[pc++] & 0xFFFF;
 
                         Object val = registers[contentReg];
                         RuntimeScalar fh = (RuntimeScalar) registers[filehandleReg];
@@ -742,8 +742,8 @@ public class BytecodeInterpreter {
                     case Opcodes.SAY: {
                         // Say to filehandle
                         // Format: [SAY] [rs_content] [rs_filehandle]
-                        int contentReg = bytecode[pc++] & 0xFF;
-                        int filehandleReg = bytecode[pc++] & 0xFF;
+                        int contentReg = bytecode[pc++] & 0xFFFF;
+                        int filehandleReg = bytecode[pc++] & 0xFFFF;
 
                         Object val = registers[contentReg];
                         RuntimeScalar fh = (RuntimeScalar) registers[filehandleReg];
@@ -770,22 +770,22 @@ public class BytecodeInterpreter {
 
                     case Opcodes.INC_REG: {
                         // Increment register in-place: r++
-                        int rd = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
                         registers[rd] = MathOperators.add((RuntimeScalar) registers[rd], 1);
                         break;
                     }
 
                     case Opcodes.DEC_REG: {
                         // Decrement register in-place: r--
-                        int rd = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
                         registers[rd] = MathOperators.subtract((RuntimeScalar) registers[rd], 1);
                         break;
                     }
 
                     case Opcodes.ADD_ASSIGN: {
                         // Add and assign: rd = rd + rs
-                        int rd = bytecode[pc++] & 0xFF;
-                        int rs = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int rs = bytecode[pc++] & 0xFFFF;
                         registers[rd] = MathOperators.add(
                             (RuntimeScalar) registers[rd],
                             (RuntimeScalar) registers[rs]
@@ -795,37 +795,37 @@ public class BytecodeInterpreter {
 
                     case Opcodes.ADD_ASSIGN_INT: {
                         // Add immediate and assign: rd = rd + imm
-                        int rd = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
                         int immediate = readInt(bytecode, pc);
-                        pc += 4;
+                        pc += 2;
                         registers[rd] = MathOperators.add((RuntimeScalar) registers[rd], immediate);
                         break;
                     }
 
                     case Opcodes.PRE_AUTOINCREMENT: {
                         // Pre-increment: ++rd
-                        int rd = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
                         ((RuntimeScalar) registers[rd]).preAutoIncrement();
                         break;
                     }
 
                     case Opcodes.POST_AUTOINCREMENT: {
                         // Post-increment: rd++
-                        int rd = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
                         ((RuntimeScalar) registers[rd]).postAutoIncrement();
                         break;
                     }
 
                     case Opcodes.PRE_AUTODECREMENT: {
                         // Pre-decrement: --rd
-                        int rd = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
                         ((RuntimeScalar) registers[rd]).preAutoDecrement();
                         break;
                     }
 
                     case Opcodes.POST_AUTODECREMENT: {
                         // Post-decrement: rd--
-                        int rd = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
                         ((RuntimeScalar) registers[rd]).postAutoDecrement();
                         break;
                     }
@@ -836,7 +836,7 @@ public class BytecodeInterpreter {
 
                     case Opcodes.DIE: {
                         // Die with message: die(rs)
-                        int dieRs = bytecode[pc++] & 0xFF;
+                        int dieRs = bytecode[pc++] & 0xFFFF;
                         RuntimeBase message = registers[dieRs];
 
                         // Get token index for this die location if available
@@ -855,7 +855,7 @@ public class BytecodeInterpreter {
 
                     case Opcodes.WARN: {
                         // Warn with message: warn(rs)
-                        int warnRs = bytecode[pc++] & 0xFF;
+                        int warnRs = bytecode[pc++] & 0xFFFF;
                         RuntimeBase message = registers[warnRs];
 
                         // Get token index for this warn location if available
@@ -875,8 +875,8 @@ public class BytecodeInterpreter {
 
                     case Opcodes.CREATE_REF: {
                         // Create reference: rd = rs.createReference()
-                        int rd = bytecode[pc++] & 0xFF;
-                        int rs = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int rs = bytecode[pc++] & 0xFFFF;
                         RuntimeBase value = registers[rs];
                         registers[rd] = value.createReference();
                         break;
@@ -886,16 +886,16 @@ public class BytecodeInterpreter {
                         // Dereference: rd = rs (dereferencing depends on context)
                         // For now, just copy the reference - proper dereferencing
                         // is context-dependent and handled by specific operators
-                        int rd = bytecode[pc++] & 0xFF;
-                        int rs = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int rs = bytecode[pc++] & 0xFFFF;
                         registers[rd] = registers[rs];
                         break;
                     }
 
                     case Opcodes.GET_TYPE: {
                         // Get type: rd = new RuntimeScalar(rs.type)
-                        int rd = bytecode[pc++] & 0xFF;
-                        int rs = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int rs = bytecode[pc++] & 0xFFFF;
                         RuntimeScalar value = (RuntimeScalar) registers[rs];
                         // RuntimeScalar.type is an int constant from RuntimeScalarType
                         registers[rd] = new RuntimeScalar(value.type);
@@ -910,8 +910,8 @@ public class BytecodeInterpreter {
                         // Start of eval block with exception handling
                         // Format: [EVAL_TRY] [catch_offset_high] [catch_offset_low]
 
-                        int catchOffsetHigh = bytecode[pc++] & 0xFF;
-                        int catchOffsetLow = bytecode[pc++] & 0xFF;
+                        int catchOffsetHigh = bytecode[pc++] & 0xFFFF;
+                        int catchOffsetLow = bytecode[pc++] & 0xFFFF;
                         int catchOffset = (catchOffsetHigh << 8) | catchOffsetLow;
                         int tryStartPc = pc - 3; // PC where EVAL_TRY opcode is
                         int catchPc = tryStartPc + catchOffset;
@@ -943,7 +943,7 @@ public class BytecodeInterpreter {
                         // Format: [EVAL_CATCH] [rd]
                         // This is only reached when an exception is caught
 
-                        int rd = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
 
                         // WarnDie.catchEval() should have already been called to set $@
                         // Just store undef as the eval result
@@ -959,8 +959,8 @@ public class BytecodeInterpreter {
                         // Create RuntimeList from registers
                         // Format: [CREATE_LIST] [rd] [count] [rs1] [rs2] ... [rsN]
 
-                        int rd = bytecode[pc++] & 0xFF;
-                        int count = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int count = bytecode[pc++] & 0xFFFF;
 
                         // Optimize for common cases
                         if (count == 0) {
@@ -968,7 +968,7 @@ public class BytecodeInterpreter {
                             registers[rd] = new RuntimeList();
                         } else if (count == 1) {
                             // Single element - avoid loop overhead
-                            int rs = bytecode[pc++] & 0xFF;
+                            int rs = bytecode[pc++] & 0xFFFF;
                             RuntimeList list = new RuntimeList();
                             list.add(registers[rs]);
                             registers[rd] = list;
@@ -978,7 +978,7 @@ public class BytecodeInterpreter {
 
                             // Read all register indices and add elements
                             for (int i = 0; i < count; i++) {
-                                int rs = bytecode[pc++] & 0xFF;
+                                int rs = bytecode[pc++] & 0xFFFF;
                                 list.add(registers[rs]);
                             }
 
@@ -993,9 +993,9 @@ public class BytecodeInterpreter {
 
                     case Opcodes.JOIN: {
                         // String join: rd = join(separator, list)
-                        int rd = bytecode[pc++] & 0xFF;
-                        int separatorReg = bytecode[pc++] & 0xFF;
-                        int listReg = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int separatorReg = bytecode[pc++] & 0xFFFF;
+                        int listReg = bytecode[pc++] & 0xFFFF;
 
                         RuntimeScalar separator = (RuntimeScalar) registers[separatorReg];
                         RuntimeBase list = registers[listReg];
@@ -1007,8 +1007,8 @@ public class BytecodeInterpreter {
 
                     case Opcodes.SELECT: {
                         // Select default output filehandle: rd = IOOperator.select(list, SCALAR)
-                        int rd = bytecode[pc++] & 0xFF;
-                        int listReg = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int listReg = bytecode[pc++] & 0xFFFF;
 
                         RuntimeList list = (RuntimeList) registers[listReg];
                         RuntimeScalar result = org.perlonjava.operators.IOOperator.select(list, RuntimeContextType.SCALAR);
@@ -1018,9 +1018,9 @@ public class BytecodeInterpreter {
 
                     case Opcodes.RANGE: {
                         // Create range: rd = PerlRange.createRange(rs_start, rs_end)
-                        int rd = bytecode[pc++] & 0xFF;
-                        int startReg = bytecode[pc++] & 0xFF;
-                        int endReg = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int startReg = bytecode[pc++] & 0xFFFF;
+                        int endReg = bytecode[pc++] & 0xFFFF;
 
                         RuntimeBase startBase = registers[startReg];
                         RuntimeBase endBase = registers[endReg];
@@ -1040,8 +1040,8 @@ public class BytecodeInterpreter {
                         // Create hash reference from list: rd = RuntimeHash.createHash(rs_list).createReference()
                         // Hash literals always return references in Perl
                         // This flattens any arrays in the list and creates key-value pairs
-                        int rd = bytecode[pc++] & 0xFF;
-                        int listReg = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int listReg = bytecode[pc++] & 0xFFFF;
 
                         RuntimeBase list = registers[listReg];
                         RuntimeHash hash = RuntimeHash.createHash(list);
@@ -1053,8 +1053,8 @@ public class BytecodeInterpreter {
 
                     case Opcodes.RAND: {
                         // Random number: rd = Random.rand(max)
-                        int rd = bytecode[pc++] & 0xFF;
-                        int maxReg = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int maxReg = bytecode[pc++] & 0xFFFF;
 
                         RuntimeScalar max = (RuntimeScalar) registers[maxReg];
                         registers[rd] = org.perlonjava.operators.Random.rand(max);
@@ -1063,10 +1063,10 @@ public class BytecodeInterpreter {
 
                     case Opcodes.MAP: {
                         // Map operator: rd = ListOperators.map(list, closure, ctx)
-                        int rd = bytecode[pc++] & 0xFF;
-                        int listReg = bytecode[pc++] & 0xFF;
-                        int closureReg = bytecode[pc++] & 0xFF;
-                        int ctx = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int listReg = bytecode[pc++] & 0xFFFF;
+                        int closureReg = bytecode[pc++] & 0xFFFF;
+                        int ctx = bytecode[pc++] & 0xFFFF;
 
                         RuntimeBase listBase = registers[listReg];
                         RuntimeList list = listBase.getList();
@@ -1078,10 +1078,10 @@ public class BytecodeInterpreter {
 
                     case Opcodes.GREP: {
                         // Grep operator: rd = ListOperators.grep(list, closure, ctx)
-                        int rd = bytecode[pc++] & 0xFF;
-                        int listReg = bytecode[pc++] & 0xFF;
-                        int closureReg = bytecode[pc++] & 0xFF;
-                        int ctx = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int listReg = bytecode[pc++] & 0xFFFF;
+                        int closureReg = bytecode[pc++] & 0xFFFF;
+                        int ctx = bytecode[pc++] & 0xFFFF;
 
                         RuntimeBase listBase = registers[listReg];
                         RuntimeList list = listBase.getList();
@@ -1093,11 +1093,11 @@ public class BytecodeInterpreter {
 
                     case Opcodes.SORT: {
                         // Sort operator: rd = ListOperators.sort(list, closure, package)
-                        int rd = bytecode[pc++] & 0xFF;
-                        int listReg = bytecode[pc++] & 0xFF;
-                        int closureReg = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
+                        int listReg = bytecode[pc++] & 0xFFFF;
+                        int closureReg = bytecode[pc++] & 0xFFFF;
                         int packageIdx = readInt(bytecode, pc);
-                        pc += 4;
+                        pc += 2;
 
                         RuntimeBase listBase = registers[listReg];
                         RuntimeList list = listBase.getList();
@@ -1110,14 +1110,14 @@ public class BytecodeInterpreter {
 
                     case Opcodes.NEW_ARRAY: {
                         // Create empty array: rd = new RuntimeArray()
-                        int rd = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
                         registers[rd] = new RuntimeArray();
                         break;
                     }
 
                     case Opcodes.NEW_HASH: {
                         // Create empty hash: rd = new RuntimeHash()
-                        int rd = bytecode[pc++] & 0xFF;
+                        int rd = bytecode[pc++] & 0xFFFF;
                         registers[rd] = new RuntimeHash();
                         break;
                     }
@@ -1125,8 +1125,8 @@ public class BytecodeInterpreter {
                     case Opcodes.ARRAY_SET_FROM_LIST: {
                         // Set array content from list: array_reg.setFromList(list_reg)
                         // Format: [ARRAY_SET_FROM_LIST] [array_reg] [list_reg]
-                        int arrayReg = bytecode[pc++] & 0xFF;
-                        int listReg = bytecode[pc++] & 0xFF;
+                        int arrayReg = bytecode[pc++] & 0xFFFF;
+                        int listReg = bytecode[pc++] & 0xFFFF;
 
                         RuntimeArray array = (RuntimeArray) registers[arrayReg];
                         RuntimeBase listBase = registers[listReg];
@@ -1140,8 +1140,8 @@ public class BytecodeInterpreter {
                     case Opcodes.HASH_SET_FROM_LIST: {
                         // Set hash content from list: hash_reg = RuntimeHash.createHash(list_reg)
                         // Format: [HASH_SET_FROM_LIST] [hash_reg] [list_reg]
-                        int hashReg = bytecode[pc++] & 0xFF;
-                        int listReg = bytecode[pc++] & 0xFF;
+                        int hashReg = bytecode[pc++] & 0xFFFF;
+                        int listReg = bytecode[pc++] & 0xFFFF;
 
                         RuntimeHash existingHash = (RuntimeHash) registers[hashReg];
                         RuntimeBase listBase = registers[listReg];
@@ -1202,12 +1202,19 @@ public class BytecodeInterpreter {
     }
 
     /**
-     * Read a 32-bit big-endian integer from bytecode.
+     * Read a 32-bit integer from bytecode (stored as 2 shorts: high 16 bits, low 16 bits).
      */
-    private static int readInt(byte[] bytecode, int pc) {
-        return ((bytecode[pc] & 0xFF) << 24) |
-               ((bytecode[pc + 1] & 0xFF) << 16) |
-               ((bytecode[pc + 2] & 0xFF) << 8) |
-               (bytecode[pc + 3] & 0xFF);
+    private static int readInt(short[] bytecode, int pc) {
+        int high = bytecode[pc] & 0xFFFF;
+        int low = bytecode[pc + 1] & 0xFFFF;
+        return (high << 16) | low;
+    }
+
+    /**
+     * Read a 16-bit short from bytecode.
+     * Used for register indices (0-65535) and other 16-bit values.
+     */
+    private static int readShort(short[] bytecode, int pc) {
+        return bytecode[pc] & 0xFFFF;
     }
 }
