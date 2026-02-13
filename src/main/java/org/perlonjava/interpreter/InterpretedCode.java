@@ -302,6 +302,11 @@ public class InterpretedCode extends RuntimeCode {
                     rs2 = bytecode[pc++] & 0xFF;
                     sb.append("MOD_SCALAR r").append(rd).append(" = r").append(rs1).append(" % r").append(rs2).append("\n");
                     break;
+                case Opcodes.NEG_SCALAR:
+                    rd = bytecode[pc++] & 0xFF;
+                    int rsNeg = bytecode[pc++] & 0xFF;
+                    sb.append("NEG_SCALAR r").append(rd).append(" = -r").append(rsNeg).append("\n");
+                    break;
                 case Opcodes.ADD_SCALAR_INT:
                     rd = bytecode[pc++] & 0xFF;
                     int rs = bytecode[pc++] & 0xFF;
