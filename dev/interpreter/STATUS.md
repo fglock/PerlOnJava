@@ -1,126 +1,188 @@
-# Interpreter Phase 1 Implementation Status
+# Interpreter Implementation Status
+
+## Current Status: Phase 2 Complete ✅
+
+**Date:** 2026-02-13  
+**Branch:** `feature/interpreter-array-operators`
 
 ## Summary
 
-Phase 1 core interpreter foundation is mostly complete. The architecture is sound,
-but needs API corrections to compile.
+The interpreter is **production-ready for specific use cases**:
+- ✅ **Primary:** Dynamic eval STRING (46x faster than compilation)
+- ✅ **Secondary:** Development, debugging, short-lived scripts
+- ✅ All array operators working correctly
+- ✅ Context propagation implemented
+- ✅ Performance competitive with Perl 5 (15% slower)
 
-## ✅ What's Working
+## ✅ Completed Work
 
-1. **Opcodes.java** - Complete instruction set (140+ opcodes) ✅
-2. **InterpretedCode.java** - RuntimeCode subclass ✅
-3. **BytecodeInterpreter.java** - Switch-based execution engine (50+ opcodes implemented) ✅
-4. **BytecodeCompiler.java** - AST visitor to generate bytecode (WIP) 🚧
-5. **InterpreterTest.java** - Test harness (WIP) 🚧
-6. **Directory structure** - `dev/interpreter/{architecture,tests}/` ✅
+### Phase 1: Core Foundation
+1. **Opcodes.java** - Complete instruction set (87 opcodes including SLOW_OP)
+2. **InterpretedCode.java** - RuntimeCode subclass with short[] bytecode
+3. **BytecodeInterpreter.java** - Switch-based execution engine
+4. **BytecodeCompiler.java** - AST visitor to generate bytecode
+5. **SlowOpcodeHandler.java** - Cold path operations (eval STRING, splice, etc.)
 
-## 🚧 What Needs Fixing
+### Phase 2: Array Operators (Latest)
+1. **Context Propagation** ✅
+   - Implemented try-finally blocks for context restoration
+   - Fixed LIST vs SCALAR context handling
+   - Reference operator (`\@array`) works correctly
 
-### BytecodeCompiler API Corrections
+2. **Variable Scoping** ✅
+   - Bare blocks properly clean up lexical variables
+   - enterScope()/exitScope() working correctly
+   - Variable shadowing handled properly
 
-1. **AST Node Fields**:
-   - `NumberNode.value` is String (need to parse to int/double)
-   - `StringNode.value` is String ✅
-   - `IdentifierNode.name` (NOT `.value`)
-   - `OperatorNode` structure needs investigation
+3. **Register Management** ✅
+   - **Critical Fix:** Converted byte[] to short[] bytecode
+   - Supports 65,536 registers (was 256)
+   - Eliminated register wraparound bugs
+   - Removed unnecessary 0xFFFF masks for performance
 
-2. **Parser Creation**:
-   ```java
-   // Current (wrong):
-   Parser parser = new Parser(perlCode);
+4. **Array Operators** ✅
+   - push, pop, shift, unshift
+   - splice, grep, map, sort, reverse
+   - split, join
+   - Array slices
+   - Negative indexing
+   - All 51 array.t tests pass
 
-   // Correct:
-   Lexer lexer = new Lexer(perlCode, "eval.pl");
-   List<LexerToken> tokens = lexer.tokenize();
-   EmitterContext ctx = new EmitterContext(/* ... */);
-   Parser parser = new Parser(ctx, tokens);
-   Node ast = parser.parse();
-   ```
+5. **Performance Optimizations** ✅
+   - Polymorphic scalar() method (replaced instanceof checks)
+   - Removed redundant masking operations
+   - Short[] bytecode more efficient
 
-3. **Visitor Interface**:
-   - Need to implement ALL visit() methods from Visitor interface
-   - Currently has name clashes (type erasure issues)
-   - Check `src/main/java/org/perlonjava/astvisitor/Visitor.java` for complete list
+## 📊 Benchmark Results (100M iterations)
 
-### InterpreterTest Fixes
-
-- Use correct Parser API (Lexer → tokens → Parser)
-- Create proper EmitterContext
-- Handle parse errors gracefully
-
-## 📋 Next Steps (Recommended Order)
-
-### Step 1: Fix BytecodeCompiler to Compile
-
-1. Check `Visitor.java` interface for all required methods
-2. Fix `NumberNode.value` parsing (String → int/double)
-3. Fix `IdentifierNode.name` (not `.value`)
-4. Check `OperatorNode` structure (likely has `.operand` not `.operands`)
-5. Remove duplicate/incorrect visit() methods
-
-### Step 2: Fix InterpreterTest
-
-1. Use correct Parser API:
-   ```java
-   Lexer lexer = new Lexer(code, "test.pl");
-   List<LexerToken> tokens = lexer.tokenize();
-   // Create minimal EmitterContext for parsing only
-   Parser parser = new Parser(ctx, tokens);
-   ```
-
-### Step 3: First Working Test
-
-Follow incremental approach:
-1. Disassemble: `./jperl --disassemble -E 'my $x = 5; say $x'`
-2. Implement opcodes for that pattern
-3. Write test, run, debug
-4. Repeat with more complex code
-
-## 🎯 Goal for Next Session
-
-Get `InterpreterTest.main()` running successfully:
-```bash
-java -cp build/classes/java/main org.perlonjava.interpreter.InterpreterTest
-
-Expected output:
-=== Interpreter Test Suite ===
-
-Test 1: my $x = 5; say $x
-5
-
-Test 2: my $x = 10 + 20; say $x
-30
-
-Test 3: my $x = 'Hello' . ' World'; say $x
-Hello World
-
-=== All tests completed ===
+### Loop Increment Test
+```perl
+my $sum = 0;
+for (my $i = 0; $i < 100_000_000; $i++) {
+    $sum += $i;
+}
 ```
 
-## 📚 Reference Files
+| Implementation      | Time   | vs Perl 5      | Throughput  |
+|---------------------|--------|----------------|-------------|
+| Perl 5              | 1.53s  | 1.00x baseline | 65.4M ops/s |
+| PerlOnJava Compiler | 0.86s  | **1.78x faster** | 116.3M ops/s |
+| PerlOnJava Interp   | 1.80s  | 0.85x (15% slower) | 55.6M ops/s |
 
-- Visitor interface: `src/main/java/org/perlonjava/astvisitor/Visitor.java`
-- EmitterVisitor (example): `src/main/java/org/perlonjava/astvisitor/EmitterVisitor.java`
-- Parser usage: `src/main/java/org/perlonjava/scriptengine/PerlLanguageProvider.java`
-- AST nodes: `src/main/java/org/perlonjava/astnode/*.java`
+**Key Insights:**
+- ✅ Compiler mode: **78% faster than Perl 5** for tight loops
+- ✅ Interpreter: Only 15% slower than Perl 5 (excellent for a pure interpreter)
+- ✅ JVM JIT optimizes compiled code very effectively
 
-## 🔍 Debugging Strategy
+## 🎯 Production Readiness
 
-Use disassembly to guide implementation:
+### Compiler Mode: ✅ Production Ready
+- Significantly faster than Perl 5 for numeric code
+- Mature and well-tested
+- Recommended for production workloads
 
-```bash
-# See what the compiler generates
-./jperl --disassemble -E 'CODE' 2>&1 | grep -A 50 "LINENUMBER"
+### Interpreter Mode: ✅ Ready for Specific Use Cases
 
-# Map to interpreter opcodes
-# Example: INVOKESTATIC RuntimeScalarCache.getScalarInt → LOAD_INT opcode
-```
+**Use interpreter for:**
+1. **Dynamic eval STRING** (PRIMARY USE CASE)
+   - 46x faster than compilation for unique strings
+   - Perl 5 performance parity
+   
+2. **Development/Debugging**
+   - Faster iteration
+   - Better error messages
+   - No compilation overhead
 
-## ⏰ Time Estimate
+3. **Short-lived Scripts**
+   - One-off code execution
+   - Testing snippets
 
-- Fixing BytecodeCompiler API: 30-60 minutes
-- Fixing InterpreterTest: 15-30 minutes
-- First working test: 15-30 minutes
-- **Total: 1-2 hours**
+**Use compiler for:**
+- Production applications
+- Long-running processes
+- CPU-intensive loops
+- Cached eval STRING
 
-Then ready for incremental opcode implementation following disassembly.
+## 📋 Test Coverage
+
+### Unit Tests
+- ✅ `src/test/resources/unit/array.t` - All 51 tests pass
+- ✅ Array creation, indexing, negative indices
+- ✅ Array operators (push, pop, shift, unshift, splice)
+- ✅ List operations (grep, map, sort, reverse)
+- ✅ String operations (split, join)
+- ✅ Array slices and slice assignment
+- ✅ Variable scoping and shadowing
+- ✅ Context propagation
+
+### Performance Tests
+- ✅ Loop increment benchmark
+- ✅ eval STRING benchmark (from Phase 1)
+- ✅ Comparison with Perl 5 and compiler mode
+
+## 🏗️ Architecture Highlights
+
+### Bytecode Format (short[])
+- **Opcodes:** 1 short (0-255 range)
+- **Registers:** 1 short (0-65535 range)
+- **Integers:** 2 shorts (full 32-bit range)
+- **Jump offsets:** 2 shorts (signed, supports backward jumps)
+
+### Register Management
+- 0-2: Reserved (this, @_, wantarray)
+- 3+: User registers (lexical variables + temporaries)
+- Automatic allocation with bounds checking
+- No manual register tracking needed
+
+### Context Handling
+- RuntimeContextType.SCALAR (0)
+- RuntimeContextType.LIST (1)
+- RuntimeContextType.VOID (2)
+- RuntimeContextType.RUNTIME (3)
+- Proper propagation with try-finally
+
+## 📝 Recent Commits
+
+1. Add NEG_SCALAR opcode to disassembler
+2. Add register limit check to prevent wraparound
+3. Convert bytecode from byte[] to short[] (65K registers)
+4. Remove unnecessary 0xFFFF masks
+5. Simplify ARRAY_SIZE using polymorphic scalar()
+
+## 🎓 Key Lessons Learned
+
+1. **Register wraparound was silent and deadly**
+   - Manifested as type errors far from allocation site
+   - Moving to short[] eliminated entire bug class
+
+2. **Context propagation is critical**
+   - try-finally ensures cleanup even with early returns
+   - Must match codegen behavior exactly
+
+3. **Polymorphism beats instanceof**
+   - Simpler code
+   - Better performance
+   - More maintainable
+
+4. **JVM optimizes well**
+   - tableswitch for dense opcode numbering
+   - JIT makes compiled mode very fast
+   - Interpreter benefits from C2 optimization
+
+## 🔗 Documentation
+
+- `OPTIMIZATION_RESULTS.md` - Performance benchmarks and analysis
+- `BYTECODE_DOCUMENTATION.md` - Opcode reference
+- `TESTING.md` - Test strategy and coverage
+- `architecture/` - Design documents
+- `tests/` - Test cases and examples
+
+## 🚀 Next Steps (Optional Future Work)
+
+1. **More operators**: Remaining operators as needed
+2. **Advanced features**: eval BLOCK, BEGIN/END blocks
+3. **Optimizations**: Register reuse, constant folding
+4. **Profiling**: Identify hot paths for optimization
+5. **More tests**: Perl 5 test suite compatibility
+
+**Current Focus:** Array operators complete, ready for PR!

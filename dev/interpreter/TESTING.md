@@ -23,9 +23,7 @@ perl dev/tools/perl_test_runner.pl src/test/resources/unit/array.t
 
 ```
 src/test/resources/
-├── unit/           # Fast unit tests (core functionality, operators, syntax)
-├── perl5_t/t/      # Perl 5 core test suite
-└── perl5_t/[Module]/  # Perl 5 module tests
+└── unit/           # Fast unit tests (core functionality, operators, syntax)
 ```
 
 ## Benchmarks

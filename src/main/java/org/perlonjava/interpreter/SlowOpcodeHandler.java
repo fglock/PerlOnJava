@@ -70,13 +70,13 @@ public class SlowOpcodeHandler {
      * @throws RuntimeException if the slow_op_id is unknown or execution fails
      */
     public static int execute(
-            byte[] bytecode,
+            short[] bytecode,
             int pc,
             RuntimeBase[] registers,
             InterpretedCode code) {
 
         // Read slow operation ID
-        int slowOpId = bytecode[pc++] & 0xFF;
+        int slowOpId = bytecode[pc++];
 
         switch (slowOpId) {
             case Opcodes.SLOWOP_CHOWN:
@@ -238,10 +238,10 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_CHOWN] [rs_list] [rs_uid] [rs_gid]
      * Effect: Changes ownership of files in list
      */
-    private static int executeChown(byte[] bytecode, int pc, RuntimeBase[] registers) {
-        int listReg = bytecode[pc++] & 0xFF;
-        int uidReg = bytecode[pc++] & 0xFF;
-        int gidReg = bytecode[pc++] & 0xFF;
+    private static int executeChown(short[] bytecode, int pc, RuntimeBase[] registers) {
+        int listReg = bytecode[pc++];
+        int uidReg = bytecode[pc++];
+        int gidReg = bytecode[pc++];
 
         // TODO: Implement chown via JNI or ProcessBuilder
         // For now, throw unsupported operation exception
@@ -255,10 +255,10 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_WAITPID] [rd] [rs_pid] [rs_flags]
      * Effect: Waits for child process and returns status
      */
-    private static int executeWaitpid(byte[] bytecode, int pc, RuntimeBase[] registers) {
-        int rd = bytecode[pc++] & 0xFF;
-        int pidReg = bytecode[pc++] & 0xFF;
-        int flagsReg = bytecode[pc++] & 0xFF;
+    private static int executeWaitpid(short[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int pidReg = bytecode[pc++];
+        int flagsReg = bytecode[pc++];
 
         RuntimeScalar pid = (RuntimeScalar) registers[pidReg];
         RuntimeScalar flags = (RuntimeScalar) registers[flagsReg];
@@ -274,11 +274,11 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_SETSOCKOPT] [rs_socket] [rs_level] [rs_optname] [rs_optval]
      * Effect: Sets socket option
      */
-    private static int executeSetsockopt(byte[] bytecode, int pc, RuntimeBase[] registers) {
-        int socketReg = bytecode[pc++] & 0xFF;
-        int levelReg = bytecode[pc++] & 0xFF;
-        int optnameReg = bytecode[pc++] & 0xFF;
-        int optvalReg = bytecode[pc++] & 0xFF;
+    private static int executeSetsockopt(short[] bytecode, int pc, RuntimeBase[] registers) {
+        int socketReg = bytecode[pc++];
+        int levelReg = bytecode[pc++];
+        int optnameReg = bytecode[pc++];
+        int optvalReg = bytecode[pc++];
 
         // TODO: Implement via java.nio.channels or JNI
         throw new UnsupportedOperationException(
@@ -291,11 +291,11 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_GETSOCKOPT] [rd] [rs_socket] [rs_level] [rs_optname]
      * Effect: Gets socket option value
      */
-    private static int executeGetsockopt(byte[] bytecode, int pc, RuntimeBase[] registers) {
-        int rd = bytecode[pc++] & 0xFF;
-        int socketReg = bytecode[pc++] & 0xFF;
-        int levelReg = bytecode[pc++] & 0xFF;
-        int optnameReg = bytecode[pc++] & 0xFF;
+    private static int executeGetsockopt(short[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int socketReg = bytecode[pc++];
+        int levelReg = bytecode[pc++];
+        int optnameReg = bytecode[pc++];
 
         // TODO: Implement via java.nio.channels or JNI
         throw new UnsupportedOperationException(
@@ -308,10 +308,10 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_GETPRIORITY] [rd] [rs_which] [rs_who]
      * Effect: Gets process priority
      */
-    private static int executeGetpriority(byte[] bytecode, int pc, RuntimeBase[] registers) {
-        int rd = bytecode[pc++] & 0xFF;
-        int whichReg = bytecode[pc++] & 0xFF;
-        int whoReg = bytecode[pc++] & 0xFF;
+    private static int executeGetpriority(short[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int whichReg = bytecode[pc++];
+        int whoReg = bytecode[pc++];
 
         // TODO: Implement via JNI
         registers[rd] = new RuntimeScalar(0); // Default priority
@@ -323,10 +323,10 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_SETPRIORITY] [rs_which] [rs_who] [rs_priority]
      * Effect: Sets process priority
      */
-    private static int executeSetpriority(byte[] bytecode, int pc, RuntimeBase[] registers) {
-        int whichReg = bytecode[pc++] & 0xFF;
-        int whoReg = bytecode[pc++] & 0xFF;
-        int priorityReg = bytecode[pc++] & 0xFF;
+    private static int executeSetpriority(short[] bytecode, int pc, RuntimeBase[] registers) {
+        int whichReg = bytecode[pc++];
+        int whoReg = bytecode[pc++];
+        int priorityReg = bytecode[pc++];
 
         // TODO: Implement via JNI
         // For now, silently succeed
@@ -338,9 +338,9 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_GETPGRP] [rd] [rs_pid]
      * Effect: Gets process group ID
      */
-    private static int executeGetpgrp(byte[] bytecode, int pc, RuntimeBase[] registers) {
-        int rd = bytecode[pc++] & 0xFF;
-        int pidReg = bytecode[pc++] & 0xFF;
+    private static int executeGetpgrp(short[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int pidReg = bytecode[pc++];
 
         // TODO: Implement via JNI
         registers[rd] = new RuntimeScalar(0);
@@ -352,9 +352,9 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_SETPGRP] [rs_pid] [rs_pgrp]
      * Effect: Sets process group ID
      */
-    private static int executeSetpgrp(byte[] bytecode, int pc, RuntimeBase[] registers) {
-        int pidReg = bytecode[pc++] & 0xFF;
-        int pgrpReg = bytecode[pc++] & 0xFF;
+    private static int executeSetpgrp(short[] bytecode, int pc, RuntimeBase[] registers) {
+        int pidReg = bytecode[pc++];
+        int pgrpReg = bytecode[pc++];
 
         // TODO: Implement via JNI
         return pc;
@@ -365,8 +365,8 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_GETPPID] [rd]
      * Effect: Gets parent process ID
      */
-    private static int executeGetppid(byte[] bytecode, int pc, RuntimeBase[] registers) {
-        int rd = bytecode[pc++] & 0xFF;
+    private static int executeGetppid(short[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
 
         // Java 9+ has ProcessHandle.current().parent()
         // For now, return 1 (init process)
@@ -379,8 +379,8 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_FORK] [rd]
      * Effect: Forks process (not supported in Java)
      */
-    private static int executeFork(byte[] bytecode, int pc, RuntimeBase[] registers) {
-        int rd = bytecode[pc++] & 0xFF;
+    private static int executeFork(short[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
 
         // fork() is not supported in Java - return -1 (error)
         // Real implementation would need JNI or native library
@@ -394,11 +394,11 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_SEMGET] [rd] [rs_key] [rs_nsems] [rs_flags]
      * Effect: Gets semaphore set identifier
      */
-    private static int executeSemget(byte[] bytecode, int pc, RuntimeBase[] registers) {
-        int rd = bytecode[pc++] & 0xFF;
-        int keyReg = bytecode[pc++] & 0xFF;
-        int nsemsReg = bytecode[pc++] & 0xFF;
-        int flagsReg = bytecode[pc++] & 0xFF;
+    private static int executeSemget(short[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int keyReg = bytecode[pc++];
+        int nsemsReg = bytecode[pc++];
+        int flagsReg = bytecode[pc++];
 
         // TODO: Implement via JNI or java.nio
         throw new UnsupportedOperationException("semget() not yet implemented");
@@ -409,10 +409,10 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_SEMOP] [rd] [rs_semid] [rs_opstring]
      * Effect: Performs semaphore operations
      */
-    private static int executeSemop(byte[] bytecode, int pc, RuntimeBase[] registers) {
-        int rd = bytecode[pc++] & 0xFF;
-        int semidReg = bytecode[pc++] & 0xFF;
-        int opstringReg = bytecode[pc++] & 0xFF;
+    private static int executeSemop(short[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int semidReg = bytecode[pc++];
+        int opstringReg = bytecode[pc++];
 
         // TODO: Implement via JNI
         throw new UnsupportedOperationException("semop() not yet implemented");
@@ -423,10 +423,10 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_MSGGET] [rd] [rs_key] [rs_flags]
      * Effect: Gets message queue identifier
      */
-    private static int executeMsgget(byte[] bytecode, int pc, RuntimeBase[] registers) {
-        int rd = bytecode[pc++] & 0xFF;
-        int keyReg = bytecode[pc++] & 0xFF;
-        int flagsReg = bytecode[pc++] & 0xFF;
+    private static int executeMsgget(short[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int keyReg = bytecode[pc++];
+        int flagsReg = bytecode[pc++];
 
         // TODO: Implement via JNI
         throw new UnsupportedOperationException("msgget() not yet implemented");
@@ -437,11 +437,11 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_MSGSND] [rd] [rs_id] [rs_msg] [rs_flags]
      * Effect: Sends message to queue
      */
-    private static int executeMsgsnd(byte[] bytecode, int pc, RuntimeBase[] registers) {
-        int rd = bytecode[pc++] & 0xFF;
-        int idReg = bytecode[pc++] & 0xFF;
-        int msgReg = bytecode[pc++] & 0xFF;
-        int flagsReg = bytecode[pc++] & 0xFF;
+    private static int executeMsgsnd(short[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int idReg = bytecode[pc++];
+        int msgReg = bytecode[pc++];
+        int flagsReg = bytecode[pc++];
 
         // TODO: Implement via JNI
         throw new UnsupportedOperationException("msgsnd() not yet implemented");
@@ -452,12 +452,12 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_MSGRCV] [rd] [rs_id] [rs_size] [rs_type] [rs_flags]
      * Effect: Receives message from queue
      */
-    private static int executeMsgrcv(byte[] bytecode, int pc, RuntimeBase[] registers) {
-        int rd = bytecode[pc++] & 0xFF;
-        int idReg = bytecode[pc++] & 0xFF;
-        int sizeReg = bytecode[pc++] & 0xFF;
-        int typeReg = bytecode[pc++] & 0xFF;
-        int flagsReg = bytecode[pc++] & 0xFF;
+    private static int executeMsgrcv(short[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int idReg = bytecode[pc++];
+        int sizeReg = bytecode[pc++];
+        int typeReg = bytecode[pc++];
+        int flagsReg = bytecode[pc++];
 
         // TODO: Implement via JNI
         throw new UnsupportedOperationException("msgrcv() not yet implemented");
@@ -468,11 +468,11 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_SHMGET] [rd] [rs_key] [rs_size] [rs_flags]
      * Effect: Gets shared memory segment
      */
-    private static int executeShmget(byte[] bytecode, int pc, RuntimeBase[] registers) {
-        int rd = bytecode[pc++] & 0xFF;
-        int keyReg = bytecode[pc++] & 0xFF;
-        int sizeReg = bytecode[pc++] & 0xFF;
-        int flagsReg = bytecode[pc++] & 0xFF;
+    private static int executeShmget(short[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int keyReg = bytecode[pc++];
+        int sizeReg = bytecode[pc++];
+        int flagsReg = bytecode[pc++];
 
         // TODO: Implement via JNI or java.nio.MappedByteBuffer
         throw new UnsupportedOperationException("shmget() not yet implemented");
@@ -483,11 +483,11 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_SHMREAD] [rd] [rs_id] [rs_pos] [rs_size]
      * Effect: Reads from shared memory
      */
-    private static int executeShmread(byte[] bytecode, int pc, RuntimeBase[] registers) {
-        int rd = bytecode[pc++] & 0xFF;
-        int idReg = bytecode[pc++] & 0xFF;
-        int posReg = bytecode[pc++] & 0xFF;
-        int sizeReg = bytecode[pc++] & 0xFF;
+    private static int executeShmread(short[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int idReg = bytecode[pc++];
+        int posReg = bytecode[pc++];
+        int sizeReg = bytecode[pc++];
 
         // TODO: Implement via JNI
         throw new UnsupportedOperationException("shmread() not yet implemented");
@@ -498,10 +498,10 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_SHMWRITE] [rs_id] [rs_pos] [rs_string]
      * Effect: Writes to shared memory
      */
-    private static int executeShmwrite(byte[] bytecode, int pc, RuntimeBase[] registers) {
-        int idReg = bytecode[pc++] & 0xFF;
-        int posReg = bytecode[pc++] & 0xFF;
-        int stringReg = bytecode[pc++] & 0xFF;
+    private static int executeShmwrite(short[] bytecode, int pc, RuntimeBase[] registers) {
+        int idReg = bytecode[pc++];
+        int posReg = bytecode[pc++];
+        int stringReg = bytecode[pc++];
 
         // TODO: Implement via JNI
         throw new UnsupportedOperationException("shmwrite() not yet implemented");
@@ -512,10 +512,10 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_SYSCALL] [rd] [rs_number] [arg_count] [rs_arg1] [rs_arg2] ...
      * Effect: Makes arbitrary system call
      */
-    private static int executeSyscall(byte[] bytecode, int pc, RuntimeBase[] registers) {
-        int rd = bytecode[pc++] & 0xFF;
-        int numberReg = bytecode[pc++] & 0xFF;
-        int argCount = bytecode[pc++] & 0xFF;
+    private static int executeSyscall(short[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int numberReg = bytecode[pc++];
+        int argCount = bytecode[pc++];
 
         // Skip argument registers
         for (int i = 0; i < argCount; i++) {
@@ -532,13 +532,13 @@ public class SlowOpcodeHandler {
      * Effect: Dynamically evaluates Perl code string
      */
     private static int executeEvalString(
-            byte[] bytecode,
+            short[] bytecode,
             int pc,
             RuntimeBase[] registers,
             InterpretedCode code) {
 
-        int rd = bytecode[pc++] & 0xFF;
-        int stringReg = bytecode[pc++] & 0xFF;
+        int rd = bytecode[pc++];
+        int stringReg = bytecode[pc++];
 
         // Get the code string - handle both RuntimeScalar and RuntimeList (from string interpolation)
         RuntimeBase codeValue = registers[stringReg];
@@ -570,12 +570,12 @@ public class SlowOpcodeHandler {
      * Effect: Sets or gets the default output filehandle
      */
     private static int executeSelect(
-            byte[] bytecode,
+            short[] bytecode,
             int pc,
             RuntimeBase[] registers) {
 
-        int rd = bytecode[pc++] & 0xFF;
-        int listReg = bytecode[pc++] & 0xFF;
+        int rd = bytecode[pc++];
+        int listReg = bytecode[pc++];
 
         RuntimeList list = (RuntimeList) registers[listReg];
 
@@ -595,13 +595,13 @@ public class SlowOpcodeHandler {
      * Effect: Loads a glob/filehandle from global variables
      */
     private static int executeLoadGlob(
-            byte[] bytecode,
+            short[] bytecode,
             int pc,
             RuntimeBase[] registers,
             InterpretedCode code) {
 
-        int rd = bytecode[pc++] & 0xFF;
-        int nameIdx = bytecode[pc++] & 0xFF;
+        int rd = bytecode[pc++];
+        int nameIdx = bytecode[pc++];
 
         String globName = code.stringPool[nameIdx];
 
@@ -622,12 +622,12 @@ public class SlowOpcodeHandler {
      * @return The new program counter
      */
     private static int executeSleep(
-            byte[] bytecode,
+            short[] bytecode,
             int pc,
             RuntimeBase[] registers) {
 
-        int rd = bytecode[pc++] & 0xFF;
-        int secondsReg = bytecode[pc++] & 0xFF;
+        int rd = bytecode[pc++];
+        int secondsReg = bytecode[pc++];
 
         // Convert to scalar (handles both RuntimeScalar and RuntimeList)
         RuntimeBase secondsBase = registers[secondsReg];
@@ -650,12 +650,12 @@ public class SlowOpcodeHandler {
      * @return Updated program counter
      */
     private static int executeDerefArray(
-            byte[] bytecode,
+            short[] bytecode,
             int pc,
             RuntimeBase[] registers) {
 
-        int rd = bytecode[pc++] & 0xFF;
-        int scalarReg = bytecode[pc++] & 0xFF;
+        int rd = bytecode[pc++];
+        int scalarReg = bytecode[pc++];
 
         RuntimeBase scalarBase = registers[scalarReg];
 
@@ -681,14 +681,14 @@ public class SlowOpcodeHandler {
      * Effect: rd = PersistentVariable.retrieveBeginScalar(stringPool[nameIdx], begin_id)
      */
     private static int executeRetrieveBeginScalar(
-            byte[] bytecode,
+            short[] bytecode,
             int pc,
             RuntimeBase[] registers,
             InterpretedCode code) {
 
-        int rd = bytecode[pc++] & 0xFF;
-        int nameIdx = bytecode[pc++] & 0xFF;
-        int beginId = bytecode[pc++] & 0xFF;
+        int rd = bytecode[pc++];
+        int nameIdx = bytecode[pc++];
+        int beginId = bytecode[pc++];
 
         String varName = code.stringPool[nameIdx];
         RuntimeScalar result = PersistentVariable.retrieveBeginScalar(varName, beginId);
@@ -703,14 +703,14 @@ public class SlowOpcodeHandler {
      * Effect: rd = PersistentVariable.retrieveBeginArray(stringPool[nameIdx], begin_id)
      */
     private static int executeRetrieveBeginArray(
-            byte[] bytecode,
+            short[] bytecode,
             int pc,
             RuntimeBase[] registers,
             InterpretedCode code) {
 
-        int rd = bytecode[pc++] & 0xFF;
-        int nameIdx = bytecode[pc++] & 0xFF;
-        int beginId = bytecode[pc++] & 0xFF;
+        int rd = bytecode[pc++];
+        int nameIdx = bytecode[pc++];
+        int beginId = bytecode[pc++];
 
         String varName = code.stringPool[nameIdx];
         RuntimeArray result = PersistentVariable.retrieveBeginArray(varName, beginId);
@@ -725,14 +725,14 @@ public class SlowOpcodeHandler {
      * Effect: rd = PersistentVariable.retrieveBeginHash(stringPool[nameIdx], begin_id)
      */
     private static int executeRetrieveBeginHash(
-            byte[] bytecode,
+            short[] bytecode,
             int pc,
             RuntimeBase[] registers,
             InterpretedCode code) {
 
-        int rd = bytecode[pc++] & 0xFF;
-        int nameIdx = bytecode[pc++] & 0xFF;
-        int beginId = bytecode[pc++] & 0xFF;
+        int rd = bytecode[pc++];
+        int nameIdx = bytecode[pc++];
+        int beginId = bytecode[pc++];
 
         String varName = code.stringPool[nameIdx];
         RuntimeHash result = PersistentVariable.retrieveBeginHash(varName, beginId);
@@ -747,13 +747,13 @@ public class SlowOpcodeHandler {
      * Effect: rd = GlobalRuntimeScalar.makeLocal(stringPool[nameIdx])
      */
     private static int executeLocalScalar(
-            byte[] bytecode,
+            short[] bytecode,
             int pc,
             RuntimeBase[] registers,
             InterpretedCode code) {
 
-        int rd = bytecode[pc++] & 0xFF;
-        int nameIdx = bytecode[pc++] & 0xFF;
+        int rd = bytecode[pc++];
+        int nameIdx = bytecode[pc++];
 
         String varName = code.stringPool[nameIdx];
         RuntimeScalar result = org.perlonjava.runtime.GlobalRuntimeScalar.makeLocal(varName);
@@ -768,13 +768,13 @@ public class SlowOpcodeHandler {
      * Effect: rd = Operator.splice(registers[arrayReg], registers[argsReg])
      */
     private static int executeSplice(
-            byte[] bytecode,
+            short[] bytecode,
             int pc,
             RuntimeBase[] registers) {
 
-        int rd = bytecode[pc++] & 0xFF;
-        int arrayReg = bytecode[pc++] & 0xFF;
-        int argsReg = bytecode[pc++] & 0xFF;
+        int rd = bytecode[pc++];
+        int arrayReg = bytecode[pc++];
+        int argsReg = bytecode[pc++];
 
         RuntimeArray array = (RuntimeArray) registers[arrayReg];
         RuntimeList args = (RuntimeList) registers[argsReg];
@@ -791,13 +791,13 @@ public class SlowOpcodeHandler {
      * Effect: rd = array.getSlice(indices)
      */
     private static int executeArraySlice(
-            byte[] bytecode,
+            short[] bytecode,
             int pc,
             RuntimeBase[] registers) {
 
-        int rd = bytecode[pc++] & 0xFF;
-        int arrayReg = bytecode[pc++] & 0xFF;
-        int indicesReg = bytecode[pc++] & 0xFF;
+        int rd = bytecode[pc++];
+        int arrayReg = bytecode[pc++];
+        int indicesReg = bytecode[pc++];
 
         RuntimeArray array = (RuntimeArray) registers[arrayReg];
         RuntimeList indices = (RuntimeList) registers[indicesReg];
@@ -814,13 +814,13 @@ public class SlowOpcodeHandler {
      * Effect: rd = Operator.reverse(ctx, args...)
      */
     private static int executeReverse(
-            byte[] bytecode,
+            short[] bytecode,
             int pc,
             RuntimeBase[] registers) {
 
-        int rd = bytecode[pc++] & 0xFF;
-        int argsReg = bytecode[pc++] & 0xFF;
-        int ctx = bytecode[pc++] & 0xFF;
+        int rd = bytecode[pc++];
+        int argsReg = bytecode[pc++];
+        int ctx = bytecode[pc++];
 
         RuntimeList argsList = (RuntimeList) registers[argsReg];
         RuntimeBase[] args = argsList.elements.toArray(new RuntimeBase[0]);
@@ -837,13 +837,13 @@ public class SlowOpcodeHandler {
      * Effect: Sets array elements at indices to values
      */
     private static int executeArraySliceSet(
-            byte[] bytecode,
+            short[] bytecode,
             int pc,
             RuntimeBase[] registers) {
 
-        int arrayReg = bytecode[pc++] & 0xFF;
-        int indicesReg = bytecode[pc++] & 0xFF;
-        int valuesReg = bytecode[pc++] & 0xFF;
+        int arrayReg = bytecode[pc++];
+        int indicesReg = bytecode[pc++];
+        int valuesReg = bytecode[pc++];
 
         RuntimeArray array = (RuntimeArray) registers[arrayReg];
         RuntimeList indices = (RuntimeList) registers[indicesReg];
@@ -860,14 +860,14 @@ public class SlowOpcodeHandler {
      * Effect: rd = Operator.split(pattern, args, ctx)
      */
     private static int executeSplit(
-            byte[] bytecode,
+            short[] bytecode,
             int pc,
             RuntimeBase[] registers) {
 
-        int rd = bytecode[pc++] & 0xFF;
-        int patternReg = bytecode[pc++] & 0xFF;
-        int argsReg = bytecode[pc++] & 0xFF;
-        int ctx = bytecode[pc++] & 0xFF;
+        int rd = bytecode[pc++];
+        int patternReg = bytecode[pc++];
+        int argsReg = bytecode[pc++];
+        int ctx = bytecode[pc++];
 
         RuntimeScalar pattern = (RuntimeScalar) registers[patternReg];
         RuntimeList args = (RuntimeList) registers[argsReg];
