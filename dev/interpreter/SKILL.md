@@ -86,15 +86,6 @@ PRINT r2                 # print r2
 - **VariableCaptureAnalyzer.java** - Analyzes which variables are captured by named subroutines
 - **VariableCollectorVisitor.java** - Detects closure variables for capture analysis
 
-### Test Code (`src/test/java/org/perlonjava/interpreter/`)
-
-**Test Harnesses (standalone with main() methods):**
-- **ForLoopBenchmark.java** - Performance benchmarking harness
-- **ForLoopTest.java** - Java test harness for for-loop execution
-- **InterpreterTest.java** - General interpreter functionality tests
-- **ClosureTest.java** - Closure and anonymous subroutine tests
-- **EvalStringTest.java** - Test harness for eval STRING functionality
-
 ### Opcode Categories (Opcodes.java)
 
 Opcodes are organized into functional categories:
@@ -264,27 +255,13 @@ make test-perl5                   # Perl 5 core test suite
 ./jperl dev/interpreter/tests/for_loop_test.pl
 ./jperl dev/interpreter/tests/closure_test.t
 ./jperl dev/interpreter/tests/*.t
-
-# Java test harnesses - Use Gradle (recommended, handles classpath automatically):
-./gradlew run -PmainClass=org.perlonjava.interpreter.ForLoopTest
-./gradlew run -PmainClass=org.perlonjava.interpreter.InterpreterTest
-./gradlew run -PmainClass=org.perlonjava.interpreter.ClosureTest
-
-# Or direct execution (requires correct classpath with dependencies):
-# java -cp "build/classes/java/main:build/classes/java/test:lib/*" org.perlonjava.interpreter.ForLoopTest
 ```
 
 ### Running Benchmarks
 
-**Recommended Method (via Gradle):**
+**Using Perl benchmark script:**
 ```bash
-./gradlew run -PmainClass=org.perlonjava.interpreter.ForLoopBenchmark
-```
-
-**Direct Java (requires classpath setup):**
-```bash
-java -cp "build/classes/java/main:build/classes/java/test:build/libs/*" \
-     org.perlonjava.interpreter.ForLoopBenchmark
+./jperl dev/interpreter/tests/for_loop_benchmark.pl
 ```
 
 **Benchmark Output Example:**
@@ -308,10 +285,10 @@ Interpreted code is 1.82x slower than compiled code
 - TAP (Test Anything Protocol) output
 - Run via `perl dev/tools/perl_test_runner.pl`
 
-**Java Test Harnesses:**
-- Custom main() methods with timing
-- Direct bytecode execution
-- Compare interpreter vs. compiler performance
+**Perl Benchmark Scripts (.pl files):**
+- Located in `dev/interpreter/tests/`
+- Run with `./jperl` to compare interpreter vs. compiler performance
+- Example: `./jperl dev/interpreter/tests/for_loop_benchmark.pl`
 
 ## Dispatch Architecture & CPU Cache Optimization
 
@@ -932,7 +909,7 @@ Should see `tableswitch` (not `lookupswitch`). If you see `lookupswitch`, you've
 
 **Run Benchmarks:**
 ```bash
-./gradlew run -PmainClass=org.perlonjava.interpreter.ForLoopBenchmark
+./jperl dev/interpreter/tests/for_loop_benchmark.pl
 ```
 
 Check that performance hasn't regressed. New superinstruction should improve performance for matching patterns.
@@ -1047,7 +1024,7 @@ After any change to BytecodeInterpreter.java or Opcodes.java:
 
 1. **Run benchmark:**
    ```bash
-   ./gradlew run -PmainClass=org.perlonjava.interpreter.ForLoopBenchmark
+   ./jperl dev/interpreter/tests/for_loop_benchmark.pl
    ```
 
 2. **Compare results:**
@@ -1055,16 +1032,7 @@ After any change to BytecodeInterpreter.java or Opcodes.java:
    - After: Should be ≥46.84M ops/sec (no regression)
    - New superinstruction: Should show improvement for matching patterns
 
-3. **Profile hot paths:**
-   ```bash
-   java -XX:+UnlockDiagnosticVMOptions \
-        -XX:+PrintCompilation \
-        -XX:+PrintInlining \
-        -cp build/libs/perlonjava-*-all.jar \
-        org.perlonjava.interpreter.ForLoopBenchmark
-   ```
-
-4. **Check JIT compilation:**
+3. **Check JIT compilation:**
    Look for "made not entrant" or "made zombie" messages indicating deoptimization.
 
 ## Next Steps
