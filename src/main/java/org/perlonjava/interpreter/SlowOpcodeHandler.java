@@ -178,6 +178,12 @@ public class SlowOpcodeHandler {
             case Opcodes.SLOWOP_SPLIT:
                 return executeSplit(bytecode, pc, registers);
 
+            case Opcodes.SLOWOP_EXISTS:
+                return executeExists(bytecode, pc, registers);
+
+            case Opcodes.SLOWOP_DELETE:
+                return executeDelete(bytecode, pc, registers);
+
             default:
                 throw new RuntimeException(
                     "Unknown slow operation ID: " + slowOpId +
@@ -225,6 +231,8 @@ public class SlowOpcodeHandler {
             case Opcodes.SLOWOP_REVERSE -> "reverse";
             case Opcodes.SLOWOP_ARRAY_SLICE_SET -> "array_slice_set";
             case Opcodes.SLOWOP_SPLIT -> "split";
+            case Opcodes.SLOWOP_EXISTS -> "exists";
+            case Opcodes.SLOWOP_DELETE -> "delete";
             default -> "slowop_" + slowOpId;
         };
     }
@@ -876,6 +884,46 @@ public class SlowOpcodeHandler {
 
         registers[rd] = result;
         return pc;
+    }
+
+    /**
+     * SLOW_EXISTS: rd = exists operand
+     * Format: [SLOW_EXISTS] [rd] [operandReg]
+     * Effect: rd = exists operand (fallback for non-simple cases)
+     */
+    private static int executeExists(
+            short[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+
+        int rd = bytecode[pc++];
+        int operandReg = bytecode[pc++];
+
+        // For now, throw unsupported - basic exists should use fast path
+        throw new UnsupportedOperationException(
+            "exists() slow path not yet implemented in interpreter. " +
+            "Use simple hash access: exists $hash{key}"
+        );
+    }
+
+    /**
+     * SLOW_DELETE: rd = delete operand
+     * Format: [SLOW_DELETE] [rd] [operandReg]
+     * Effect: rd = delete operand (fallback for non-simple cases)
+     */
+    private static int executeDelete(
+            short[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+
+        int rd = bytecode[pc++];
+        int operandReg = bytecode[pc++];
+
+        // For now, throw unsupported - basic delete should use fast path
+        throw new UnsupportedOperationException(
+            "delete() slow path not yet implemented in interpreter. " +
+            "Use simple hash access: delete $hash{key}"
+        );
     }
 
     private SlowOpcodeHandler() {
