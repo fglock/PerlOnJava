@@ -1599,6 +1599,49 @@ is($x, 2, "test");  # WORKS: gets: 2, expected: 2
 
 **Location:** BytecodeCompiler.java around line 1998-2005 (scalar operator handling)
 
+## Context Propagation (TODO)
+
+**Current Implementation:**
+The interpreter currently handles scalar context by converting values after compilation:
+```java
+// Current approach: Convert after compilation
+node.operand.accept(this);
+int operandReg = lastResultReg;
+emit(Opcodes.ARRAY_SIZE);  // Convert array to size
+```
+
+**Problem:**
+This approach doesn't work for all cases:
+```perl
+my $s = @array;  # Works: emits ARRAY_SIZE
+join(", ", @array);  # Broken: converts @array to size before join sees it
+```
+
+**Better Approach (like codegen):**
+Propagate `RuntimeContextType` through compilation:
+```java
+// Codegen approach: Propagate context
+node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+```
+
+**Implementation Plan:**
+1. Add `currentContext` field to BytecodeCompiler (like EmitterContext.contextType)
+2. Modify `visit()` methods to check `currentContext` and emit appropriate opcodes
+3. For `@` operator in SCALAR context: emit ARRAY_SIZE automatically
+4. For function calls: set context based on prototype/signature
+5. Remove post-compilation conversions
+
+**Benefits:**
+- Handles all Perl context semantics correctly
+- Matches codegen behavior exactly
+- Cleaner architecture - context flows naturally through AST
+
+**Files to Modify:**
+- BytecodeCompiler.java: Add context tracking and propagation
+- visit(OperatorNode) for "@": Check context, emit ARRAY_SIZE if scalar
+- visit(BinaryOperatorNode) for "=": Set RHS context based on LHS type
+- Function calls: Propagate correct context to arguments
+
 ### Common Pitfalls
 
 **1. Forgetting to Increment PC:**
