@@ -1797,7 +1797,42 @@ public class BytecodeCompiler implements Visitor {
 
                         lastResultReg = varReg;
                     } else {
-                        throw new RuntimeException("Increment/decrement of non-lexical variable not yet supported");
+                        // Global variable increment/decrement
+                        // Add package prefix if not present
+                        String globalVarName = varName;
+                        if (!globalVarName.contains("::")) {
+                            globalVarName = "main::" + varName.substring(1);
+                        }
+                        int nameIdx = addToStringPool(globalVarName);
+
+                        // Load global variable
+                        int globalReg = allocateRegister();
+                        emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                        emit(globalReg);
+                        emit(nameIdx);
+
+                        // Apply increment/decrement
+                        if (isPostfix) {
+                            if (isIncrement) {
+                                emit(Opcodes.POST_AUTOINCREMENT);
+                            } else {
+                                emit(Opcodes.POST_AUTODECREMENT);
+                            }
+                        } else {
+                            if (isIncrement) {
+                                emit(Opcodes.PRE_AUTOINCREMENT);
+                            } else {
+                                emit(Opcodes.PRE_AUTODECREMENT);
+                            }
+                        }
+                        emit(globalReg);
+
+                        // Store back to global variable
+                        emit(Opcodes.STORE_GLOBAL_SCALAR);
+                        emit(nameIdx);
+                        emit(globalReg);
+
+                        lastResultReg = globalReg;
                     }
                 }
             }
