@@ -2904,7 +2904,7 @@ public class BytecodeCompiler implements Visitor {
                 int locationReg = allocateRegister();
                 emit(Opcodes.LOAD_STRING);
                 emitReg(locationReg);
-                emitInt(addToStringPool(locationMsg));
+                emit(addToStringPool(locationMsg));
 
                 // Emit DIE with both message and precomputed location
                 emitWithToken(Opcodes.DIE, node.getIndex());

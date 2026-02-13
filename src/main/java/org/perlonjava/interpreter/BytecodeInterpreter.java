@@ -1221,6 +1221,12 @@ public class BytecodeInterpreter {
             }
 
             // Not in eval block - propagate exception
+            // If it's already a PerlDieException, re-throw as-is for proper formatting
+            if (e instanceof PerlDieException) {
+                throw (PerlDieException) e;
+            }
+
+            // Wrap other exceptions with interpreter context
             throw new RuntimeException(
                 "Interpreter error in " + code.sourceName + ":" + code.sourceLine +
                 " at pc=" + pc + ": " + e.getMessage(),
