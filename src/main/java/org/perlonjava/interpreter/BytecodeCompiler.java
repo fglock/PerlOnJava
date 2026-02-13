@@ -576,7 +576,8 @@ public class BytecodeCompiler implements Visitor {
 
             // Set the context for subroutine calls in RHS
             int savedContext = currentCallContext;
-            currentCallContext = rhsContext;
+            try {
+                currentCallContext = rhsContext;
 
             // Special case: my $x = value
             if (node.left instanceof OperatorNode) {
@@ -625,21 +626,10 @@ public class BytecodeCompiler implements Visitor {
                             // Allocate register for new lexical variable and add to symbol table
                             int reg = addVariable(varName, "my");
 
-                            // Compile RHS
+                            // Compile RHS in the appropriate context
+                            // @ operator will check currentCallContext and emit ARRAY_SIZE if needed
                             node.right.accept(this);
                             int valueReg = lastResultReg;
-
-                            // If scalar context and RHS is an array variable, convert to size
-                            if (rhsContext == RuntimeContextType.SCALAR &&
-                                node.right instanceof OperatorNode &&
-                                ((OperatorNode) node.right).operator.equals("@")) {
-                                // Emit ARRAY_SIZE to convert array to scalar (size)
-                                int sizeReg = allocateRegister();
-                                emit(Opcodes.ARRAY_SIZE);
-                                emit(sizeReg);
-                                emit(valueReg);
-                                valueReg = sizeReg;
-                            }
 
                             // Move to variable register
                             emit(Opcodes.MOVE);
@@ -1115,9 +1105,11 @@ public class BytecodeCompiler implements Visitor {
                 throwCompilerException("Assignment to non-identifier not yet supported: " + node.left.getClass().getSimpleName());
             }
 
-            // Restore the calling context
-            currentCallContext = savedContext;
             return;
+            } finally {
+                // Always restore the calling context
+                currentCallContext = savedContext;
+            }
         }
 
         // Compile left and right operands
@@ -3407,41 +3399,53 @@ public class BytecodeCompiler implements Visitor {
 
         // Fast path: single element
         // In list context, returns a RuntimeList with one element
-        // In scalar context, returns the element itself (but we don't track context yet)
+        // List elements should be evaluated in LIST context
         if (node.elements.size() == 1) {
-            // For now, always create a RuntimeList (LIST context behavior)
-            node.elements.get(0).accept(this);
-            int elemReg = lastResultReg;
+            int savedContext = currentCallContext;
+            currentCallContext = RuntimeContextType.LIST;
+            try {
+                node.elements.get(0).accept(this);
+                int elemReg = lastResultReg;
 
-            int listReg = allocateRegister();
-            emit(Opcodes.CREATE_LIST);
-            emit(listReg);
-            emit(1); // count = 1
-            emit(elemReg);
-            lastResultReg = listReg;
+                int listReg = allocateRegister();
+                emit(Opcodes.CREATE_LIST);
+                emit(listReg);
+                emit(1); // count = 1
+                emit(elemReg);
+                lastResultReg = listReg;
+            } finally {
+                currentCallContext = savedContext;
+            }
             return;
         }
 
         // General case: multiple elements
         // Evaluate each element into a register
-        int[] elementRegs = new int[node.elements.size()];
-        for (int i = 0; i < node.elements.size(); i++) {
-            node.elements.get(i).accept(this);
-            elementRegs[i] = lastResultReg;
+        // List elements should be evaluated in LIST context
+        int savedContext = currentCallContext;
+        currentCallContext = RuntimeContextType.LIST;
+        try {
+            int[] elementRegs = new int[node.elements.size()];
+            for (int i = 0; i < node.elements.size(); i++) {
+                node.elements.get(i).accept(this);
+                elementRegs[i] = lastResultReg;
+            }
+
+            // Create RuntimeList with all elements
+            int listReg = allocateRegister();
+            emit(Opcodes.CREATE_LIST);
+            emit(listReg);
+            emit(node.elements.size()); // count
+
+            // Emit register numbers for each element
+            for (int elemReg : elementRegs) {
+                emit(elemReg);
+            }
+
+            lastResultReg = listReg;
+        } finally {
+            currentCallContext = savedContext;
         }
-
-        // Create RuntimeList with all elements
-        int listReg = allocateRegister();
-        emit(Opcodes.CREATE_LIST);
-        emit(listReg);
-        emit(node.elements.size()); // count
-
-        // Emit register numbers for each element
-        for (int elemReg : elementRegs) {
-            emit(elemReg);
-        }
-
-        lastResultReg = listReg;
     }
 
     // =========================================================================
