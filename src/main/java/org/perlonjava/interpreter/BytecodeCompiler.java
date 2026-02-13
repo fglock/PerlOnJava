@@ -1712,9 +1712,98 @@ public class BytecodeCompiler implements Visitor {
                 }
                 OperatorNode leftOp = (OperatorNode) node.left;
 
-                // Check for hash slice: @hash{keys}
+                // Check for hash slice: @hash{keys} or hashref slice: @$hashref{keys}
                 if (leftOp.operator.equals("@")) {
-                    throwCompilerException("Hash slice (@hash{keys}) not yet implemented in interpreter");
+                    // Hash slice: @hash{'key1', 'key2'} returns array of values
+                    // Hashref slice: @$hashref{'key1', 'key2'} dereferences then slices
+
+                    int hashReg;
+
+                    if (leftOp.operand instanceof IdentifierNode) {
+                        // Direct hash slice: @hash{keys}
+                        String varName = ((IdentifierNode) leftOp.operand).name;
+                        String hashVarName = "%" + varName;
+
+                        // Get the hash - check lexical first, then global
+                        if (hasVariable(hashVarName)) {
+                            // Lexical hash
+                            hashReg = getVariableRegister(hashVarName);
+                        } else {
+                            // Global hash - load it
+                            hashReg = allocateRegister();
+                            String globalHashName = NameNormalizer.normalizeVariableName(
+                                varName,
+                                getCurrentPackage()
+                            );
+                            int nameIdx = addToStringPool(globalHashName);
+                            emit(Opcodes.LOAD_GLOBAL_HASH);
+                            emitReg(hashReg);
+                            emit(nameIdx);
+                        }
+                    } else if (leftOp.operand instanceof OperatorNode) {
+                        // Hashref slice: @$hashref{keys}
+                        // Compile the reference and dereference it
+                        leftOp.operand.accept(this);
+                        int scalarRefReg = lastResultReg;
+
+                        // Dereference to get the hash
+                        hashReg = allocateRegister();
+                        emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                        emit(Opcodes.SLOWOP_DEREF_HASH);
+                        emitReg(hashReg);
+                        emitReg(scalarRefReg);
+                    } else {
+                        throwCompilerException("Hash slice requires hash variable or reference");
+                        return;
+                    }
+
+                    // Get the keys from HashLiteralNode
+                    if (!(node.right instanceof HashLiteralNode)) {
+                        throwCompilerException("Hash slice requires HashLiteralNode");
+                    }
+                    HashLiteralNode keysNode = (HashLiteralNode) node.right;
+                    if (keysNode.elements.isEmpty()) {
+                        throwCompilerException("Hash slice requires at least one key");
+                    }
+
+                    // Compile all keys into a list
+                    List<Integer> keyRegs = new ArrayList<>();
+                    for (Node keyElement : keysNode.elements) {
+                        if (keyElement instanceof IdentifierNode) {
+                            // Bareword key - autoquote
+                            String keyString = ((IdentifierNode) keyElement).name;
+                            int keyReg = allocateRegister();
+                            int keyIdx = addToStringPool(keyString);
+                            emit(Opcodes.LOAD_STRING);
+                            emitReg(keyReg);
+                            emit(keyIdx);
+                            keyRegs.add(keyReg);
+                        } else {
+                            // Expression key
+                            keyElement.accept(this);
+                            keyRegs.add(lastResultReg);
+                        }
+                    }
+
+                    // Create a RuntimeList from key registers
+                    int keysListReg = allocateRegister();
+                    emit(Opcodes.CREATE_LIST);
+                    emitReg(keysListReg);
+                    emit(keyRegs.size());
+                    for (int keyReg : keyRegs) {
+                        emitReg(keyReg);
+                    }
+
+                    // Emit SLOW_OP with SLOWOP_HASH_SLICE
+                    int rdSlice = allocateRegister();
+                    emit(Opcodes.SLOW_OP);
+                    emit(Opcodes.SLOWOP_HASH_SLICE);
+                    emitReg(rdSlice);
+                    emitReg(hashReg);
+                    emitReg(keysListReg);
+
+                    lastResultReg = rdSlice;
+                    return;
                 }
 
                 if (!leftOp.operator.equals("$") || !(leftOp.operand instanceof IdentifierNode)) {
@@ -2921,10 +3010,87 @@ public class BytecodeCompiler implements Visitor {
 
             Node arg = list.elements.get(0);
 
-            // Handle hash access: $hash{key}
+            // Handle hash access: $hash{key} or hash slice delete: delete @hash{keys}
             if (arg instanceof BinaryOperatorNode && ((BinaryOperatorNode) arg).operator.equals("{")) {
                 BinaryOperatorNode hashAccess = (BinaryOperatorNode) arg;
 
+                // Check if it's a hash slice delete: delete @hash{keys}
+                if (hashAccess.left instanceof OperatorNode) {
+                    OperatorNode leftOp = (OperatorNode) hashAccess.left;
+                    if (leftOp.operator.equals("@")) {
+                        // Hash slice delete: delete @hash{'key1', 'key2'}
+                        // Use SLOW_OP for slice delete
+                        int hashReg;
+
+                        if (leftOp.operand instanceof IdentifierNode) {
+                            String varName = ((IdentifierNode) leftOp.operand).name;
+                            String hashVarName = "%" + varName;
+
+                            if (hasVariable(hashVarName)) {
+                                hashReg = getVariableRegister(hashVarName);
+                            } else {
+                                hashReg = allocateRegister();
+                                String globalHashName = NameNormalizer.normalizeVariableName(
+                                    varName,
+                                    getCurrentPackage()
+                                );
+                                int nameIdx = addToStringPool(globalHashName);
+                                emit(Opcodes.LOAD_GLOBAL_HASH);
+                                emitReg(hashReg);
+                                emit(nameIdx);
+                            }
+                        } else {
+                            throwCompilerException("Hash slice delete requires identifier");
+                            return;
+                        }
+
+                        // Get keys from HashLiteralNode
+                        if (!(hashAccess.right instanceof HashLiteralNode)) {
+                            throwCompilerException("Hash slice delete requires HashLiteralNode");
+                            return;
+                        }
+                        HashLiteralNode keysNode = (HashLiteralNode) hashAccess.right;
+
+                        // Compile all keys
+                        List<Integer> keyRegs = new ArrayList<>();
+                        for (Node keyElement : keysNode.elements) {
+                            if (keyElement instanceof IdentifierNode) {
+                                String keyString = ((IdentifierNode) keyElement).name;
+                                int keyReg = allocateRegister();
+                                int keyIdx = addToStringPool(keyString);
+                                emit(Opcodes.LOAD_STRING);
+                                emitReg(keyReg);
+                                emit(keyIdx);
+                                keyRegs.add(keyReg);
+                            } else {
+                                keyElement.accept(this);
+                                keyRegs.add(lastResultReg);
+                            }
+                        }
+
+                        // Create RuntimeList from keys
+                        int keysListReg = allocateRegister();
+                        emit(Opcodes.CREATE_LIST);
+                        emitReg(keysListReg);
+                        emit(keyRegs.size());
+                        for (int keyReg : keyRegs) {
+                            emitReg(keyReg);
+                        }
+
+                        // Use SLOW_OP for hash slice delete
+                        int rd = allocateRegister();
+                        emit(Opcodes.SLOW_OP);
+                        emit(Opcodes.SLOWOP_HASH_SLICE_DELETE);
+                        emitReg(rd);
+                        emitReg(hashReg);
+                        emitReg(keysListReg);
+
+                        lastResultReg = rd;
+                        return;
+                    }
+                }
+
+                // Single key delete: delete $hash{key}
                 // Compile hash (left side)
                 hashAccess.left.accept(this);
                 int hashReg = lastResultReg;
