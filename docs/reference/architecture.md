@@ -87,13 +87,13 @@ This document describes the internal architecture and compilation pipeline.
 │       ├── java/
 │       │   └── org/
 │       │       └── perlonjava/
-│       │           ├── PerlLanguageProviderTest.java
+│       │           ├── PerlScriptExecutionTest.java
 │       │           └── interpreter/
+│       │               ├── ClosureTest.java
+│       │               ├── EvalStringTest.java
 │       │               ├── ForLoopBenchmark.java
 │       │               ├── ForLoopTest.java
-│       │               ├── InterpreterTest.java
-│       │               ├── ClosureTest.java
-│       │               └── EvalStringTest.java
+│       │               └── InterpreterTest.java
 │       └── resources/
 │           └── Perl test files
 ├── build.gradle
