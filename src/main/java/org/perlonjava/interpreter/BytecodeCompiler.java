@@ -79,6 +79,58 @@ public class BytecodeCompiler implements Visitor {
     }
 
     /**
+     * Constructor for eval STRING with parent scope variable registry.
+     * Initializes variableScopes with variables from parent scope.
+     *
+     * @param sourceName Source name for error messages
+     * @param sourceLine Source line for error messages
+     * @param errorUtil Error message utility
+     * @param parentRegistry Variable registry from parent scope (for eval STRING)
+     */
+    public BytecodeCompiler(String sourceName, int sourceLine, ErrorMessageUtil errorUtil,
+                           Map<String, Integer> parentRegistry) {
+        this.sourceName = sourceName;
+        this.sourceLine = sourceLine;
+        this.errorUtil = errorUtil;
+
+        // Initialize with global scope containing the 3 reserved registers
+        // plus any variables from parent scope (for eval STRING)
+        Map<String, Integer> globalScope = new HashMap<>();
+        globalScope.put("this", 0);
+        globalScope.put("@_", 1);
+        globalScope.put("wantarray", 2);
+
+        if (parentRegistry != null) {
+            // Add parent scope variables (for eval STRING variable capture)
+            globalScope.putAll(parentRegistry);
+
+            // Mark parent scope variables as captured so assignments use SET_SCALAR
+            capturedVarIndices = new HashMap<>();
+            for (Map.Entry<String, Integer> entry : parentRegistry.entrySet()) {
+                String varName = entry.getKey();
+                int regIndex = entry.getValue();
+                // Skip reserved registers
+                if (regIndex >= 3) {
+                    capturedVarIndices.put(varName, regIndex);
+                }
+            }
+
+            // Adjust nextRegister to account for captured variables
+            // Find the maximum register index used by parent scope
+            int maxRegister = 2;  // Start with reserved registers (0-2)
+            for (Integer regIndex : parentRegistry.values()) {
+                if (regIndex > maxRegister) {
+                    maxRegister = regIndex;
+                }
+            }
+            // Next available register is one past the maximum used
+            this.nextRegister = maxRegister + 1;
+        }
+
+        variableScopes.push(globalScope);
+    }
+
+    /**
      * Helper: Check if a variable exists in any scope.
      */
     private boolean hasVariable(String name) {
@@ -210,6 +262,13 @@ public class BytecodeCompiler implements Visitor {
         emit(Opcodes.RETURN);
         emit(lastResultReg >= 0 ? lastResultReg : 0);
 
+        // Build variable registry for eval STRING support
+        // This maps variable names to their register indices for variable capture
+        Map<String, Integer> variableRegistry = new HashMap<>();
+        for (Map<String, Integer> scope : variableScopes) {
+            variableRegistry.putAll(scope);
+        }
+
         // Build InterpretedCode
         return new InterpretedCode(
             bytecode.toByteArray(),
@@ -219,7 +278,8 @@ public class BytecodeCompiler implements Visitor {
             capturedVars,  // NOW POPULATED!
             sourceName,
             sourceLine,
-            pcToTokenIndex  // Pass token index map for error reporting
+            pcToTokenIndex,  // Pass token index map for error reporting
+            variableRegistry  // Variable registry for eval STRING
         );
     }
 
@@ -356,22 +416,43 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(NumberNode node) {
-        // Emit LOAD_INT: rd = RuntimeScalarCache.getScalarInt(value)
+        // Handle number literals with proper Perl semantics
         int rd = allocateRegister();
 
+        // Remove underscores which Perl allows as digit separators (e.g., 10_000_000)
+        String value = node.value.replace("_", "");
+
         try {
-            if (node.value.contains(".")) {
-                // TODO: Handle double values properly
-                int intValue = (int) Double.parseDouble(node.value);
+            // Use ScalarUtils.isInteger() for consistent number parsing with compiler
+            boolean isInteger = org.perlonjava.runtime.ScalarUtils.isInteger(value);
+
+            // For 32-bit Perl emulation, check if this is a large integer
+            // that needs to be stored as a string to preserve precision
+            boolean isLargeInteger = !isInteger && value.matches("^-?\\d+$");
+
+            if (isInteger) {
+                // Regular integer - use LOAD_INT to create mutable scalar
+                // Note: We don't use RuntimeScalarCache here because MOVE just copies references,
+                // and we need mutable scalars for variables (++, --, etc.)
+                int intValue = Integer.parseInt(value);
                 emit(Opcodes.LOAD_INT);
                 emit(rd);
                 emitInt(intValue);
+            } else if (isLargeInteger) {
+                // Large integer - store as string to preserve precision (32-bit Perl emulation)
+                int strIdx = addToStringPool(value);
+                emit(Opcodes.LOAD_STRING);
+                emit(rd);
+                emit(strIdx);
             } else {
-                int intValue = Integer.parseInt(node.value);
-                emit(Opcodes.LOAD_INT);
+                // Floating-point number - create RuntimeScalar with double value
+                RuntimeScalar doubleScalar = new RuntimeScalar(Double.parseDouble(value));
+                int constIdx = addToConstantPool(doubleScalar);
+                emit(Opcodes.LOAD_CONST);
                 emit(rd);
-                emitInt(intValue);
+                emit(constIdx);
             }
+
         } catch (NumberFormatException e) {
             throw new RuntimeException("Invalid number: " + node.value, e);
         }
@@ -743,7 +824,11 @@ public class BytecodeCompiler implements Visitor {
                         String rightLeftVarName = "$" + ((IdentifierNode) rightLeftOp.operand).name;
 
                         // Pattern match: $x = $x + $y (emit ADD_ASSIGN)
-                        if (leftVarName.equals(rightLeftVarName) && hasVariable(leftVarName)) {
+                        // Skip optimization for captured variables (need SET_SCALAR)
+                        boolean isCaptured = capturedVarIndices != null &&
+                                            capturedVarIndices.containsKey(leftVarName);
+
+                        if (leftVarName.equals(rightLeftVarName) && hasVariable(leftVarName) && !isCaptured) {
                             int targetReg = getVariableRegister(leftVarName);
 
                             // Compile RHS operand ($y)
@@ -774,11 +859,20 @@ public class BytecodeCompiler implements Visitor {
                     String varName = "$" + ((IdentifierNode) leftOp.operand).name;
 
                     if (hasVariable(varName)) {
-                        // Lexical variable - copy to its register
+                        // Lexical variable - check if it's captured
                         int targetReg = getVariableRegister(varName);
-                        emit(Opcodes.MOVE);
-                        emit(targetReg);
-                        emit(valueReg);
+
+                        if (capturedVarIndices != null && capturedVarIndices.containsKey(varName)) {
+                            // Captured variable - use SET_SCALAR to preserve aliasing
+                            emit(Opcodes.SET_SCALAR);
+                            emit(targetReg);
+                            emit(valueReg);
+                        } else {
+                            // Regular lexical - use MOVE
+                            emit(Opcodes.MOVE);
+                            emit(targetReg);
+                            emit(valueReg);
+                        }
 
                         lastResultReg = targetReg;
                     } else {
@@ -977,8 +1071,12 @@ public class BytecodeCompiler implements Visitor {
                 // Optimization: if both operands are constant numbers, create range at compile time
                 if (node.left instanceof NumberNode && node.right instanceof NumberNode) {
                     try {
-                        int start = Integer.parseInt(((NumberNode) node.left).value);
-                        int end = Integer.parseInt(((NumberNode) node.right).value);
+                        // Remove underscores for parsing (Perl allows them as digit separators)
+                        String startStr = ((NumberNode) node.left).value.replace("_", "");
+                        String endStr = ((NumberNode) node.right).value.replace("_", "");
+
+                        int start = Integer.parseInt(startStr);
+                        int end = Integer.parseInt(endStr);
 
                         // Create PerlRange with RuntimeScalarCache integers
                         RuntimeScalar startScalar = RuntimeScalarCache.getScalarInt(start);
@@ -1699,7 +1797,42 @@ public class BytecodeCompiler implements Visitor {
 
                         lastResultReg = varReg;
                     } else {
-                        throw new RuntimeException("Increment/decrement of non-lexical variable not yet supported");
+                        // Global variable increment/decrement
+                        // Add package prefix if not present
+                        String globalVarName = varName;
+                        if (!globalVarName.contains("::")) {
+                            globalVarName = "main::" + varName.substring(1);
+                        }
+                        int nameIdx = addToStringPool(globalVarName);
+
+                        // Load global variable
+                        int globalReg = allocateRegister();
+                        emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                        emit(globalReg);
+                        emit(nameIdx);
+
+                        // Apply increment/decrement
+                        if (isPostfix) {
+                            if (isIncrement) {
+                                emit(Opcodes.POST_AUTOINCREMENT);
+                            } else {
+                                emit(Opcodes.POST_AUTODECREMENT);
+                            }
+                        } else {
+                            if (isIncrement) {
+                                emit(Opcodes.PRE_AUTOINCREMENT);
+                            } else {
+                                emit(Opcodes.PRE_AUTODECREMENT);
+                            }
+                        }
+                        emit(globalReg);
+
+                        // Store back to global variable
+                        emit(Opcodes.STORE_GLOBAL_SCALAR);
+                        emit(nameIdx);
+                        emit(globalReg);
+
+                        lastResultReg = globalReg;
                     }
                 }
             }

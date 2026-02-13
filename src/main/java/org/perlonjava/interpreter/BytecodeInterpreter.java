@@ -250,7 +250,8 @@ public class BytecodeInterpreter {
                             capturedVars,  // The captured variables!
                             template.sourceName,
                             template.sourceLine,
-                            template.pcToTokenIndex
+                            template.pcToTokenIndex,
+                            template.variableRegistry  // Preserve variable registry
                         );
 
                         // Wrap in RuntimeScalar
