@@ -79,6 +79,58 @@ public class BytecodeCompiler implements Visitor {
     }
 
     /**
+     * Constructor for eval STRING with parent scope variable registry.
+     * Initializes variableScopes with variables from parent scope.
+     *
+     * @param sourceName Source name for error messages
+     * @param sourceLine Source line for error messages
+     * @param errorUtil Error message utility
+     * @param parentRegistry Variable registry from parent scope (for eval STRING)
+     */
+    public BytecodeCompiler(String sourceName, int sourceLine, ErrorMessageUtil errorUtil,
+                           Map<String, Integer> parentRegistry) {
+        this.sourceName = sourceName;
+        this.sourceLine = sourceLine;
+        this.errorUtil = errorUtil;
+
+        // Initialize with global scope containing the 3 reserved registers
+        // plus any variables from parent scope (for eval STRING)
+        Map<String, Integer> globalScope = new HashMap<>();
+        globalScope.put("this", 0);
+        globalScope.put("@_", 1);
+        globalScope.put("wantarray", 2);
+
+        if (parentRegistry != null) {
+            // Add parent scope variables (for eval STRING variable capture)
+            globalScope.putAll(parentRegistry);
+
+            // Mark parent scope variables as captured so assignments use SET_SCALAR
+            capturedVarIndices = new HashMap<>();
+            for (Map.Entry<String, Integer> entry : parentRegistry.entrySet()) {
+                String varName = entry.getKey();
+                int regIndex = entry.getValue();
+                // Skip reserved registers
+                if (regIndex >= 3) {
+                    capturedVarIndices.put(varName, regIndex);
+                }
+            }
+
+            // Adjust nextRegister to account for captured variables
+            // Find the maximum register index used by parent scope
+            int maxRegister = 2;  // Start with reserved registers (0-2)
+            for (Integer regIndex : parentRegistry.values()) {
+                if (regIndex > maxRegister) {
+                    maxRegister = regIndex;
+                }
+            }
+            // Next available register is one past the maximum used
+            this.nextRegister = maxRegister + 1;
+        }
+
+        variableScopes.push(globalScope);
+    }
+
+    /**
      * Helper: Check if a variable exists in any scope.
      */
     private boolean hasVariable(String name) {
@@ -210,6 +262,13 @@ public class BytecodeCompiler implements Visitor {
         emit(Opcodes.RETURN);
         emit(lastResultReg >= 0 ? lastResultReg : 0);
 
+        // Build variable registry for eval STRING support
+        // This maps variable names to their register indices for variable capture
+        Map<String, Integer> variableRegistry = new HashMap<>();
+        for (Map<String, Integer> scope : variableScopes) {
+            variableRegistry.putAll(scope);
+        }
+
         // Build InterpretedCode
         return new InterpretedCode(
             bytecode.toByteArray(),
@@ -219,7 +278,8 @@ public class BytecodeCompiler implements Visitor {
             capturedVars,  // NOW POPULATED!
             sourceName,
             sourceLine,
-            pcToTokenIndex  // Pass token index map for error reporting
+            pcToTokenIndex,  // Pass token index map for error reporting
+            variableRegistry  // Variable registry for eval STRING
         );
     }
 
@@ -743,7 +803,11 @@ public class BytecodeCompiler implements Visitor {
                         String rightLeftVarName = "$" + ((IdentifierNode) rightLeftOp.operand).name;
 
                         // Pattern match: $x = $x + $y (emit ADD_ASSIGN)
-                        if (leftVarName.equals(rightLeftVarName) && hasVariable(leftVarName)) {
+                        // Skip optimization for captured variables (need SET_SCALAR)
+                        boolean isCaptured = capturedVarIndices != null &&
+                                            capturedVarIndices.containsKey(leftVarName);
+
+                        if (leftVarName.equals(rightLeftVarName) && hasVariable(leftVarName) && !isCaptured) {
                             int targetReg = getVariableRegister(leftVarName);
 
                             // Compile RHS operand ($y)
@@ -774,11 +838,20 @@ public class BytecodeCompiler implements Visitor {
                     String varName = "$" + ((IdentifierNode) leftOp.operand).name;
 
                     if (hasVariable(varName)) {
-                        // Lexical variable - copy to its register
+                        // Lexical variable - check if it's captured
                         int targetReg = getVariableRegister(varName);
-                        emit(Opcodes.MOVE);
-                        emit(targetReg);
-                        emit(valueReg);
+
+                        if (capturedVarIndices != null && capturedVarIndices.containsKey(varName)) {
+                            // Captured variable - use SET_SCALAR to preserve aliasing
+                            emit(Opcodes.SET_SCALAR);
+                            emit(targetReg);
+                            emit(valueReg);
+                        } else {
+                            // Regular lexical - use MOVE
+                            emit(Opcodes.MOVE);
+                            emit(targetReg);
+                            emit(valueReg);
+                        }
 
                         lastResultReg = targetReg;
                     } else {
