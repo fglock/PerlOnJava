@@ -441,7 +441,7 @@ public class SignatureParser {
                                     parser.tokenIndex)
                     ), parser.tokenIndex),
                     dieWarnNode(parser, "die", new ListNode(List.of(
-                            generateTooFewArgsMessage()), parser.tokenIndex)),
+                            generateTooFewArgsMessage()), parser.tokenIndex), parser.tokenIndex),
                     parser.tokenIndex);
         } else {
             // Without named parameters: check both min and max
@@ -457,7 +457,7 @@ public class SignatureParser {
                                     parser.tokenIndex)
                     ), parser.tokenIndex),
                     dieWarnNode(parser, "die", new ListNode(List.of(
-                            generateTooFewArgsMessage()), parser.tokenIndex)),
+                            generateTooFewArgsMessage()), parser.tokenIndex), parser.tokenIndex),
                     parser.tokenIndex);
             
             // Second check: @_ <= maxParams (too many arguments check)
@@ -470,7 +470,7 @@ public class SignatureParser {
                                     parser.tokenIndex)
                     ), parser.tokenIndex),
                     dieWarnNode(parser, "die", new ListNode(List.of(
-                            generateTooManyArgsMessage()), parser.tokenIndex)),
+                            generateTooManyArgsMessage()), parser.tokenIndex), parser.tokenIndex),
                     parser.tokenIndex);
             
             // Return both checks in sequence
