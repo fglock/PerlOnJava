@@ -548,6 +548,24 @@ public class Opcodes {
     /** Slow op ID: rd = Operator.split(pattern, args, ctx) - split string into array */
     public static final int SLOWOP_SPLIT = 32;
 
+    /** Slow opcode for exists operator (fallback) */
+    public static final int SLOWOP_EXISTS = 33;
+
+    /** Slow opcode for delete operator (fallback) */
+    public static final int SLOWOP_DELETE = 34;
+
+    /** Slow op ID: rd = deref_hash(scalar_ref) - dereference hash reference for hashref access */
+    public static final int SLOWOP_DEREF_HASH = 35;
+
+    /** Slow op ID: rd = hash.getSlice(keys_list) - hash slice operation @hash{keys} */
+    public static final int SLOWOP_HASH_SLICE = 36;
+
+    /** Slow op ID: rd = hash.deleteSlice(keys_list) - hash slice delete operation delete @hash{keys} */
+    public static final int SLOWOP_HASH_SLICE_DELETE = 37;
+
+    /** Slow op ID: hash.setSlice(keys_list, values_list) - hash slice assignment @hash{keys} = values */
+    public static final int SLOWOP_HASH_SLICE_SET = 38;
+
     // =================================================================
     // OPCODES 93-255: RESERVED FOR FUTURE FAST OPERATIONS
     // =================================================================
