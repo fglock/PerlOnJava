@@ -273,6 +273,30 @@ public class InterpretedCode extends RuntimeCode {
                     int rs2 = bytecode[pc++] & 0xFF;
                     sb.append("ADD_SCALAR r").append(rd).append(" = r").append(rs1).append(" + r").append(rs2).append("\n");
                     break;
+                case Opcodes.SUB_SCALAR:
+                    rd = bytecode[pc++] & 0xFF;
+                    rs1 = bytecode[pc++] & 0xFF;
+                    rs2 = bytecode[pc++] & 0xFF;
+                    sb.append("SUB_SCALAR r").append(rd).append(" = r").append(rs1).append(" - r").append(rs2).append("\n");
+                    break;
+                case Opcodes.MUL_SCALAR:
+                    rd = bytecode[pc++] & 0xFF;
+                    rs1 = bytecode[pc++] & 0xFF;
+                    rs2 = bytecode[pc++] & 0xFF;
+                    sb.append("MUL_SCALAR r").append(rd).append(" = r").append(rs1).append(" * r").append(rs2).append("\n");
+                    break;
+                case Opcodes.DIV_SCALAR:
+                    rd = bytecode[pc++] & 0xFF;
+                    rs1 = bytecode[pc++] & 0xFF;
+                    rs2 = bytecode[pc++] & 0xFF;
+                    sb.append("DIV_SCALAR r").append(rd).append(" = r").append(rs1).append(" / r").append(rs2).append("\n");
+                    break;
+                case Opcodes.MOD_SCALAR:
+                    rd = bytecode[pc++] & 0xFF;
+                    rs1 = bytecode[pc++] & 0xFF;
+                    rs2 = bytecode[pc++] & 0xFF;
+                    sb.append("MOD_SCALAR r").append(rd).append(" = r").append(rs1).append(" % r").append(rs2).append("\n");
+                    break;
                 case Opcodes.ADD_SCALAR_INT:
                     rd = bytecode[pc++] & 0xFF;
                     int rs = bytecode[pc++] & 0xFF;
