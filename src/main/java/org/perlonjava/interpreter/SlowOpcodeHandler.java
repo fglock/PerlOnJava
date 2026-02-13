@@ -520,8 +520,16 @@ public class SlowOpcodeHandler {
         int rd = bytecode[pc++] & 0xFF;
         int stringReg = bytecode[pc++] & 0xFF;
 
-        RuntimeScalar codeString = (RuntimeScalar) registers[stringReg];
-        String perlCode = codeString.toString();
+        // Get the code string - handle both RuntimeScalar and RuntimeList (from string interpolation)
+        RuntimeBase codeValue = registers[stringReg];
+        RuntimeScalar codeScalar;
+        if (codeValue instanceof RuntimeScalar) {
+            codeScalar = (RuntimeScalar) codeValue;
+        } else {
+            // Convert list to scalar (e.g., from string interpolation)
+            codeScalar = codeValue.scalar();
+        }
+        String perlCode = codeScalar.toString();
 
         // Call EvalStringHandler to parse, compile, and execute
         RuntimeScalar result = EvalStringHandler.evalString(
