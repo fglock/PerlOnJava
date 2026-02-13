@@ -178,6 +178,24 @@ public class SlowOpcodeHandler {
             case Opcodes.SLOWOP_SPLIT:
                 return executeSplit(bytecode, pc, registers);
 
+            case Opcodes.SLOWOP_EXISTS:
+                return executeExists(bytecode, pc, registers);
+
+            case Opcodes.SLOWOP_DELETE:
+                return executeDelete(bytecode, pc, registers);
+
+            case Opcodes.SLOWOP_DEREF_HASH:
+                return executeDerefHash(bytecode, pc, registers);
+
+            case Opcodes.SLOWOP_HASH_SLICE:
+                return executeHashSlice(bytecode, pc, registers);
+
+            case Opcodes.SLOWOP_HASH_SLICE_DELETE:
+                return executeHashSliceDelete(bytecode, pc, registers);
+
+            case Opcodes.SLOWOP_HASH_SLICE_SET:
+                return executeHashSliceSet(bytecode, pc, registers);
+
             default:
                 throw new RuntimeException(
                     "Unknown slow operation ID: " + slowOpId +
@@ -225,6 +243,11 @@ public class SlowOpcodeHandler {
             case Opcodes.SLOWOP_REVERSE -> "reverse";
             case Opcodes.SLOWOP_ARRAY_SLICE_SET -> "array_slice_set";
             case Opcodes.SLOWOP_SPLIT -> "split";
+            case Opcodes.SLOWOP_EXISTS -> "exists";
+            case Opcodes.SLOWOP_DELETE -> "delete";
+            case Opcodes.SLOWOP_DEREF_HASH -> "deref_hash";
+            case Opcodes.SLOWOP_HASH_SLICE -> "hash_slice";
+            case Opcodes.SLOWOP_HASH_SLICE_DELETE -> "hash_slice_delete";
             default -> "slowop_" + slowOpId;
         };
     }
@@ -875,6 +898,181 @@ public class SlowOpcodeHandler {
         RuntimeList result = org.perlonjava.operators.Operator.split(pattern, args, ctx);
 
         registers[rd] = result;
+        return pc;
+    }
+
+    /**
+     * SLOW_EXISTS: rd = exists operand
+     * Format: [SLOW_EXISTS] [rd] [operandReg]
+     * Effect: rd = exists operand (fallback for non-simple cases)
+     */
+    private static int executeExists(
+            short[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+
+        int rd = bytecode[pc++];
+        int operandReg = bytecode[pc++];
+
+        // For now, throw unsupported - basic exists should use fast path
+        throw new UnsupportedOperationException(
+            "exists() slow path not yet implemented in interpreter. " +
+            "Use simple hash access: exists $hash{key}"
+        );
+    }
+
+    /**
+     * SLOW_DELETE: rd = delete operand
+     * Format: [SLOW_DELETE] [rd] [operandReg]
+     * Effect: rd = delete operand (fallback for non-simple cases)
+     */
+    private static int executeDelete(
+            short[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+
+        int rd = bytecode[pc++];
+        int operandReg = bytecode[pc++];
+
+        // For now, throw unsupported - basic delete should use fast path
+        throw new UnsupportedOperationException(
+            "delete() slow path not yet implemented in interpreter. " +
+            "Use simple hash access: delete $hash{key}"
+        );
+    }
+
+    /**
+     * Dereference hash reference for hashref access.
+     * Handles: $hashref->{key} where $hashref contains a hash reference
+     *
+     * @param bytecode  The bytecode array
+     * @param pc        Program counter (points after slowOpId)
+     * @param registers Register array
+     * @return Updated program counter
+     */
+    private static int executeDerefHash(
+            short[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+
+        int rd = bytecode[pc++];
+        int scalarReg = bytecode[pc++];
+
+        RuntimeBase scalarBase = registers[scalarReg];
+
+        // If it's already a hash, use it directly
+        if (scalarBase instanceof RuntimeHash) {
+            registers[rd] = scalarBase;
+            return pc;
+        }
+
+        // Otherwise, dereference as hash reference
+        RuntimeScalar scalar = scalarBase.scalar();
+
+        // Get the dereferenced hash using Perl's hash dereference semantics
+        RuntimeHash hash = scalar.hashDeref();
+
+        registers[rd] = hash;
+        return pc;
+    }
+
+    /**
+     * SLOW_HASH_SLICE: rd = hash.getSlice(keys_list)
+     * Format: [SLOW_HASH_SLICE] [rd] [hashReg] [keysListReg]
+     * Effect: rd = RuntimeArray of values for the given keys
+     */
+    private static int executeHashSlice(
+            short[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+
+        int rd = bytecode[pc++];
+        int hashReg = bytecode[pc++];
+        int keysListReg = bytecode[pc++];
+
+        RuntimeHash hash = (RuntimeHash) registers[hashReg];
+        RuntimeList keysList = (RuntimeList) registers[keysListReg];
+
+        // Get values for all keys
+        RuntimeList valuesList = hash.getSlice(keysList);
+
+        // Convert to RuntimeArray for array assignment
+        RuntimeArray result = new RuntimeArray();
+        for (RuntimeBase elem : valuesList.elements) {
+            result.elements.add(elem.scalar());
+        }
+
+        registers[rd] = result;
+        return pc;
+    }
+
+    /**
+     * SLOW_HASH_SLICE_DELETE: rd = hash.deleteSlice(keys_list)
+     * Format: [SLOW_HASH_SLICE_DELETE] [rd] [hashReg] [keysListReg]
+     * Effect: rd = RuntimeList of deleted values
+     */
+    private static int executeHashSliceDelete(
+            short[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+
+        int rd = bytecode[pc++];
+        int hashReg = bytecode[pc++];
+        int keysListReg = bytecode[pc++];
+
+        RuntimeHash hash = (RuntimeHash) registers[hashReg];
+        RuntimeList keysList = (RuntimeList) registers[keysListReg];
+
+        // Delete values for all keys and return them
+        RuntimeList deletedValuesList = hash.deleteSlice(keysList);
+
+        // Convert to RuntimeArray for array assignment
+        RuntimeArray result = new RuntimeArray();
+        for (RuntimeBase elem : deletedValuesList.elements) {
+            result.elements.add(elem.scalar());
+        }
+
+        registers[rd] = result;
+        return pc;
+    }
+
+    /**
+     * SLOW_HASH_SLICE_SET: hash.setSlice(keys_list, values_list)
+     * Format: [SLOW_HASH_SLICE_SET] [hashReg] [keysListReg] [valuesListReg]
+     * Effect: Assign values to multiple hash keys (slice assignment)
+     */
+    private static int executeHashSliceSet(
+            short[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+
+        int hashReg = bytecode[pc++];
+        int keysListReg = bytecode[pc++];
+        int valuesListReg = bytecode[pc++];
+
+        RuntimeHash hash = (RuntimeHash) registers[hashReg];
+        RuntimeList keysList = (RuntimeList) registers[keysListReg];
+        RuntimeBase valuesBase = registers[valuesListReg];
+
+        // Convert values to RuntimeList if needed
+        RuntimeList valuesList;
+        if (valuesBase instanceof RuntimeList) {
+            valuesList = (RuntimeList) valuesBase;
+        } else if (valuesBase instanceof RuntimeArray) {
+            // Convert RuntimeArray to RuntimeList
+            valuesList = new RuntimeList();
+            for (RuntimeScalar elem : (RuntimeArray) valuesBase) {
+                valuesList.elements.add(elem);
+            }
+        } else {
+            // Single value - wrap in list
+            valuesList = new RuntimeList();
+            valuesList.elements.add(valuesBase.scalar());
+        }
+
+        // Set all key-value pairs
+        hash.setSlice(keysList, valuesList);
+
         return pc;
     }
 
