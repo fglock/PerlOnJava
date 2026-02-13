@@ -520,6 +520,102 @@ public class BytecodeCompiler implements Visitor {
         }
     }
 
+    /**
+     * Handle hash slice operations: @hash{keys} or @$hashref{keys}
+     * Must be called before automatic operand compilation to avoid compiling @ operator
+     */
+    private void handleHashSlice(BinaryOperatorNode node, OperatorNode leftOp) {
+        int hashReg;
+
+        // Hash slice: @hash{'key1', 'key2'} returns array of values
+        // Hashref slice: @$hashref{'key1', 'key2'} dereferences then slices
+
+        if (leftOp.operand instanceof IdentifierNode) {
+            // Direct hash slice: @hash{keys}
+            String varName = ((IdentifierNode) leftOp.operand).name;
+            String hashVarName = "%" + varName;
+
+            // Get the hash - check lexical first, then global
+            if (hasVariable(hashVarName)) {
+                // Lexical hash
+                hashReg = getVariableRegister(hashVarName);
+            } else {
+                // Global hash - load it
+                hashReg = allocateRegister();
+                String globalHashName = NameNormalizer.normalizeVariableName(
+                    varName,
+                    getCurrentPackage()
+                );
+                int nameIdx = addToStringPool(globalHashName);
+                emit(Opcodes.LOAD_GLOBAL_HASH);
+                emitReg(hashReg);
+                emit(nameIdx);
+            }
+        } else if (leftOp.operand instanceof OperatorNode) {
+            // Hashref slice: @$hashref{keys}
+            // Compile the reference and dereference it
+            leftOp.operand.accept(this);
+            int scalarRefReg = lastResultReg;
+
+            // Dereference to get the hash
+            hashReg = allocateRegister();
+            emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+            emit(Opcodes.SLOWOP_DEREF_HASH);
+            emitReg(hashReg);
+            emitReg(scalarRefReg);
+        } else {
+            throwCompilerException("Hash slice requires hash variable or reference");
+            return;
+        }
+
+        // Get the keys from HashLiteralNode
+        if (!(node.right instanceof HashLiteralNode)) {
+            throwCompilerException("Hash slice requires HashLiteralNode");
+        }
+        HashLiteralNode keysNode = (HashLiteralNode) node.right;
+        if (keysNode.elements.isEmpty()) {
+            throwCompilerException("Hash slice requires at least one key");
+        }
+
+        // Compile all keys into a list
+        List<Integer> keyRegs = new ArrayList<>();
+        for (Node keyElement : keysNode.elements) {
+            if (keyElement instanceof IdentifierNode) {
+                // Bareword key - autoquote
+                String keyString = ((IdentifierNode) keyElement).name;
+                int keyReg = allocateRegister();
+                int keyIdx = addToStringPool(keyString);
+                emit(Opcodes.LOAD_STRING);
+                emitReg(keyReg);
+                emit(keyIdx);
+                keyRegs.add(keyReg);
+            } else {
+                // Expression key
+                keyElement.accept(this);
+                keyRegs.add(lastResultReg);
+            }
+        }
+
+        // Create a RuntimeList from key registers
+        int keysListReg = allocateRegister();
+        emit(Opcodes.CREATE_LIST);
+        emitReg(keysListReg);
+        emit(keyRegs.size());
+        for (int keyReg : keyRegs) {
+            emitReg(keyReg);
+        }
+
+        // Emit SLOW_OP with SLOWOP_HASH_SLICE
+        int rdSlice = allocateRegister();
+        emit(Opcodes.SLOW_OP);
+        emit(Opcodes.SLOWOP_HASH_SLICE);
+        emitReg(rdSlice);
+        emitReg(hashReg);
+        emitReg(keysListReg);
+
+        lastResultReg = rdSlice;
+    }
+
     @Override
     public void visit(BinaryOperatorNode node) {
         // Track token index for error reporting
@@ -1380,6 +1476,23 @@ public class BytecodeCompiler implements Visitor {
             // Otherwise, fall through to normal -> handling (method call)
         }
 
+        // Handle {} operator specially for hash slice operations
+        // Must be before automatic operand compilation to avoid compiling @ operator
+        if (node.operator.equals("{")) {
+            currentTokenIndex = node.getIndex();
+
+            // Check if this is a hash slice: @hash{keys} or @$hashref{keys}
+            if (node.left instanceof OperatorNode) {
+                OperatorNode leftOp = (OperatorNode) node.left;
+                if (leftOp.operator.equals("@")) {
+                    // This is a hash slice - handle it specially
+                    handleHashSlice(node, leftOp);
+                    return;
+                }
+            }
+            // Otherwise, fall through to normal {} handling after operand compilation
+        }
+
         // Compile left and right operands
         node.left.accept(this);
         int rs1 = lastResultReg;
@@ -1826,6 +1939,9 @@ public class BytecodeCompiler implements Visitor {
                         }
                     } else if (leftOp.operand instanceof OperatorNode) {
                         // Hashref slice: @$hashref{keys}
+                        // DEBUG: Check if we reach this code
+                        System.err.println("DEBUG: Compiling hashref slice @$ref{keys}");
+
                         // Compile the reference and dereference it
                         leftOp.operand.accept(this);
                         int scalarRefReg = lastResultReg;
