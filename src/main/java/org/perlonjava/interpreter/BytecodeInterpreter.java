@@ -553,19 +553,19 @@ public class BytecodeInterpreter {
                         int operandReg = bytecode[pc++] & 0xFF;
                         RuntimeBase operand = registers[operandReg];
 
-                        int size;
                         if (operand instanceof RuntimeArray) {
-                            size = ((RuntimeArray) operand).size();
+                            int size = ((RuntimeArray) operand).size();
+                            registers[rd] = new RuntimeScalar(size);
                         } else if (operand instanceof RuntimeList) {
-                            size = ((RuntimeList) operand).size();
+                            int size = ((RuntimeList) operand).size();
+                            registers[rd] = new RuntimeScalar(size);
                         } else if (operand instanceof RuntimeScalar) {
-                            // Scalar in array context - treat as 1-element list
-                            size = 1;
+                            // Scalar in scalar context - return the scalar itself unchanged
+                            registers[rd] = (RuntimeScalar) operand;
                         } else {
                             throw new RuntimeException("ARRAY_SIZE: register " + operandReg + " contains unexpected type: " +
                                 (operand == null ? "null" : operand.getClass().getName()));
                         }
-                        registers[rd] = new RuntimeScalar(size);
                         break;
                     }
 
