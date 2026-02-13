@@ -941,13 +941,14 @@ public class OperatorParser {
     }
 
     static OperatorNode parseDieWarn(Parser parser, LexerToken token, int currentIndex) {
+        int dieKeywordIndex = currentIndex;  // Capture token position BEFORE parsing args
         ListNode operand = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
-        return dieWarnNode(parser, token.text, operand);
+        return dieWarnNode(parser, token.text, operand, dieKeywordIndex);
     }
 
-    static OperatorNode dieWarnNode(Parser parser, String operator, ListNode args) {
-        var node = new OperatorNode(operator, args, parser.tokenIndex);
-        node.setAnnotation("line", parser.ctx.errorUtil.getLineNumber(parser.tokenIndex));
+    static OperatorNode dieWarnNode(Parser parser, String operator, ListNode args, int tokenIndex) {
+        var node = new OperatorNode(operator, args, tokenIndex);
+        node.setAnnotation("line", parser.ctx.errorUtil.getLineNumberAccurate(tokenIndex));
         node.setAnnotation("file", parser.ctx.errorUtil.getFileName());
         return node;
     }

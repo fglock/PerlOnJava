@@ -229,5 +229,28 @@ public class ErrorMessageUtil {
         tokenIndex = index;
         return lastLineNumber;
     }
+
+    /**
+     * Get line number without relying on cache.
+     * Always counts from the last # line directive position.
+     * Safe for backwards iteration.
+     *
+     * @param index the index of the token
+     * @return the line number
+     */
+    public int getLineNumberAccurate(int index) {
+        int startIndex = Math.max(-1, tokenIndex);
+        int lineNumber = lastLineNumber;
+
+        for (int i = startIndex + 1; i <= index; i++) {
+            if (i < 0 || i >= tokens.size()) break;
+            LexerToken tok = tokens.get(i);
+            if (tok.type == LexerTokenType.EOF) break;
+            if (tok.type == LexerTokenType.NEWLINE) {
+                lineNumber++;
+            }
+        }
+        return lineNumber;
+    }
 }
 
