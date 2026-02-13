@@ -3195,11 +3195,18 @@ public class BytecodeCompiler implements Visitor {
         // Handle bare blocks (simple blocks) differently - they execute once, not loop
         if (node.isSimpleBlock) {
             // Simple bare block: { statements; }
-            // Just execute the body once, no loop
-            if (node.body != null) {
-                node.body.accept(this);
+            // Create a new scope for the block
+            enterScope();
+            try {
+                // Just execute the body once, no loop
+                if (node.body != null) {
+                    node.body.accept(this);
+                }
+                lastResultReg = -1;  // Block returns empty
+            } finally {
+                // Exit scope to clean up lexical variables
+                exitScope();
             }
-            lastResultReg = -1;  // Block returns empty
             return;
         }
 

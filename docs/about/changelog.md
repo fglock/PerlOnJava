@@ -16,6 +16,7 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 - Optimization: A workaround is implemented to Java 64k bytes segment limit.
 - New command line option: `--interpreter` to run PerlOnJava as an interpreter instead of JVM compiler.
   - `./jperl --interpreter --disassemble -e 'print "Hello, World!\n"'`
+  - The interpreter mode is useful for implementing debugging, for "Method too large" errors, and it can be faster for some eval STRING code.
 - Planned release date: 2026-02-10.
 
 - Work in Progress
