@@ -345,13 +345,13 @@ public class EmitOperator {
         // Accept the operand in LIST context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
 
-        // Push the formatted line number as a message.
-        Node message = new StringNode(" at " + node.getAnnotation("file") + " line " + node.getAnnotation("line"), node.tokenIndex);
+        // Push the formatted line number as a message using errorUtil for correct line tracking
+        String fileName = emitterVisitor.ctx.errorUtil.getFileName();
+        int lineNumber = emitterVisitor.ctx.errorUtil.getLineNumber(node.tokenIndex);
+        Node message = new StringNode(" at " + fileName + " line " + lineNumber, node.tokenIndex);
         message.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
 
-        String fileName = emitterVisitor.ctx.errorUtil.getFileName();
         mv.visitLdcInsn(fileName);
-        int lineNumber = emitterVisitor.ctx.errorUtil.getLineNumber(node.tokenIndex);
         mv.visitLdcInsn(lineNumber);
 
         emitOperator(node, emitterVisitor);

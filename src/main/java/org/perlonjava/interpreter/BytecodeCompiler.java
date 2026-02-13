@@ -2892,12 +2892,20 @@ public class BytecodeCompiler implements Visitor {
 
                 // Precompute location message at compile time (zero overhead!)
                 String locationMsg;
-                if (errorUtil != null) {
+                // Use annotation from AST node which has the correct line number
+                Object lineObj = node.getAnnotation("line");
+                Object fileObj = node.getAnnotation("file");
+                if (lineObj != null && fileObj != null) {
+                    String fileName = fileObj.toString();
+                    int lineNumber = Integer.parseInt(lineObj.toString());
+                    locationMsg = " at " + fileName + " line " + lineNumber;
+                } else if (errorUtil != null) {
+                    // Fallback to errorUtil if annotations not available
                     String fileName = errorUtil.getFileName();
                     int lineNumber = errorUtil.getLineNumber(node.getIndex());
                     locationMsg = " at " + fileName + " line " + lineNumber;
                 } else {
-                    // Fallback if errorUtil not available
+                    // Final fallback if neither available
                     locationMsg = " at " + sourceName + " line " + sourceLine;
                 }
 
