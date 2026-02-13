@@ -14,6 +14,8 @@ import org.perlonjava.CompilerOptions;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.ArrayList;
+
 
 /**
  * Handler for eval STRING operations in the interpreter.
@@ -76,32 +78,74 @@ public class EvalStringHandler {
             Parser parser = new Parser(ctx, tokens);
             Node ast = parser.parse();
 
-            // Step 3: Compile AST to interpreter bytecode
+            // Step 3: Build captured variables and adjusted registry for eval context
+            // Collect all parent scope variables (except reserved registers 0-2)
+            RuntimeBase[] capturedVars = new RuntimeBase[0];
+            Map<String, Integer> adjustedRegistry = null;
+
+            if (currentCode != null && currentCode.variableRegistry != null && registers != null) {
+                // Sort parent variables by register index for consistent ordering
+                List<Map.Entry<String, Integer>> sortedVars = new ArrayList<>(
+                    currentCode.variableRegistry.entrySet()
+                );
+                sortedVars.sort(Map.Entry.comparingByValue());
+
+                // Build capturedVars array and adjusted registry
+                // Captured variables will be placed at registers 3+ in eval'd code
+                List<RuntimeBase> capturedList = new ArrayList<>();
+                adjustedRegistry = new HashMap<>();
+
+                // Always include reserved registers in adjusted registry
+                adjustedRegistry.put("this", 0);
+                adjustedRegistry.put("@_", 1);
+                adjustedRegistry.put("wantarray", 2);
+
+                int captureIndex = 0;
+                for (Map.Entry<String, Integer> entry : sortedVars) {
+                    String varName = entry.getKey();
+                    int parentRegIndex = entry.getValue();
+
+                    // Skip reserved registers (they're handled separately in interpreter)
+                    if (parentRegIndex < 3) {
+                        continue;
+                    }
+
+                    if (parentRegIndex < registers.length) {
+                        capturedList.add(registers[parentRegIndex]);
+                        // Map to new register index starting at 3
+                        adjustedRegistry.put(varName, 3 + captureIndex);
+                        captureIndex++;
+                    }
+                }
+                capturedVars = capturedList.toArray(new RuntimeBase[0]);
+            }
+
+            // Step 4: Compile AST to interpreter bytecode with adjusted variable registry
             BytecodeCompiler compiler = new BytecodeCompiler(
                 sourceName + " (eval)",
-                sourceLine
+                sourceLine,
+                errorUtil,
+                adjustedRegistry  // Pass adjusted registry for variable capture
             );
             InterpretedCode evalCode = compiler.compile(ast);
 
-            // Step 4: Capture variables from outer scope if needed
-            // For now, we create a new closure with empty captured vars
-            // TODO: Implement proper variable capture detection
-            RuntimeBase[] capturedVars = new RuntimeBase[0];
-            if (currentCode != null && currentCode.capturedVars != null) {
-                // Share captured variables from parent scope
-                capturedVars = currentCode.capturedVars;
+            // Step 5: Attach captured variables to eval'd code
+            if (capturedVars.length > 0) {
+                evalCode = evalCode.withCapturedVars(capturedVars);
+            } else if (currentCode != null && currentCode.capturedVars != null) {
+                // Fallback: share captured variables from parent scope (nested evals)
+                evalCode = evalCode.withCapturedVars(currentCode.capturedVars);
             }
-            evalCode = evalCode.withCapturedVars(capturedVars);
 
-            // Step 5: Execute the compiled code
+            // Step 6: Execute the compiled code
             RuntimeArray args = new RuntimeArray();  // Empty @_
             RuntimeList result = evalCode.apply(args, RuntimeContextType.SCALAR);
 
-            // Step 6: Return scalar result
+            // Step 7: Return scalar result
             return result.scalar();
 
         } catch (Exception e) {
-            // Step 7: Handle errors - set $@ and return undef
+            // Step 8: Handle errors - set $@ and return undef
             WarnDie.catchEval(e);
             return RuntimeScalarCache.scalarUndef;
         }
