@@ -2038,6 +2038,23 @@ public class BytecodeCompiler implements Visitor {
             } else {
                 throwCompilerException("scalar operator requires an operand");
             }
+        } else if (op.equals("!")) {
+            // Logical NOT: !expr
+            if (node.operand == null) {
+                throwCompilerException("! operator requires an operand");
+            }
+
+            // Compile the operand
+            node.operand.accept(this);
+            int operandReg = lastResultReg;
+
+            // Emit NOT opcode
+            int rd = allocateRegister();
+            emit(Opcodes.NOT);
+            emitReg(rd);
+            emitReg(operandReg);
+
+            lastResultReg = rd;
         } else if (op.equals("%")) {
             // Hash variable dereference: %x
             if (node.operand instanceof IdentifierNode) {
@@ -2640,6 +2657,154 @@ public class BytecodeCompiler implements Visitor {
             emitReg(rd);
             emitReg(argsListReg);
             emit(RuntimeContextType.LIST);  // Context
+
+            lastResultReg = rd;
+        } else if (op.equals("exists")) {
+            // exists $hash{key} or exists $array[index]
+            // operand: ListNode containing the hash/array access
+            if (node.operand == null || !(node.operand instanceof ListNode)) {
+                throwCompilerException("exists requires an argument");
+            }
+
+            ListNode list = (ListNode) node.operand;
+            if (list.elements.isEmpty()) {
+                throwCompilerException("exists requires an argument");
+            }
+
+            Node arg = list.elements.get(0);
+
+            // Handle hash access: $hash{key}
+            if (arg instanceof BinaryOperatorNode && ((BinaryOperatorNode) arg).operator.equals("{")) {
+                BinaryOperatorNode hashAccess = (BinaryOperatorNode) arg;
+
+                // Compile hash (left side)
+                hashAccess.left.accept(this);
+                int hashReg = lastResultReg;
+
+                // Compile key (right side contains HashLiteralNode)
+                if (hashAccess.right instanceof HashLiteralNode) {
+                    HashLiteralNode keyNode = (HashLiteralNode) hashAccess.right;
+                    if (!keyNode.elements.isEmpty()) {
+                        keyNode.elements.get(0).accept(this);
+                    } else {
+                        throwCompilerException("Hash key required for exists");
+                    }
+                } else {
+                    hashAccess.right.accept(this);
+                }
+                int keyReg = lastResultReg;
+
+                // Emit HASH_EXISTS
+                int rd = allocateRegister();
+                emit(Opcodes.HASH_EXISTS);
+                emitReg(rd);
+                emitReg(hashReg);
+                emitReg(keyReg);
+
+                lastResultReg = rd;
+            } else {
+                // For now, use SLOW_OP for other cases (array exists, etc.)
+                arg.accept(this);
+                int argReg = lastResultReg;
+
+                int rd = allocateRegister();
+                emit(Opcodes.SLOW_OP);
+                emit(Opcodes.SLOWOP_EXISTS);
+                emitReg(rd);
+                emitReg(argReg);
+
+                lastResultReg = rd;
+            }
+        } else if (op.equals("delete")) {
+            // delete $hash{key} or delete @hash{@keys}
+            // operand: ListNode containing the hash/array access
+            if (node.operand == null || !(node.operand instanceof ListNode)) {
+                throwCompilerException("delete requires an argument");
+            }
+
+            ListNode list = (ListNode) node.operand;
+            if (list.elements.isEmpty()) {
+                throwCompilerException("delete requires an argument");
+            }
+
+            Node arg = list.elements.get(0);
+
+            // Handle hash access: $hash{key}
+            if (arg instanceof BinaryOperatorNode && ((BinaryOperatorNode) arg).operator.equals("{")) {
+                BinaryOperatorNode hashAccess = (BinaryOperatorNode) arg;
+
+                // Compile hash (left side)
+                hashAccess.left.accept(this);
+                int hashReg = lastResultReg;
+
+                // Compile key (right side contains HashLiteralNode)
+                if (hashAccess.right instanceof HashLiteralNode) {
+                    HashLiteralNode keyNode = (HashLiteralNode) hashAccess.right;
+                    if (!keyNode.elements.isEmpty()) {
+                        keyNode.elements.get(0).accept(this);
+                    } else {
+                        throwCompilerException("Hash key required for delete");
+                    }
+                } else {
+                    hashAccess.right.accept(this);
+                }
+                int keyReg = lastResultReg;
+
+                // Emit HASH_DELETE
+                int rd = allocateRegister();
+                emit(Opcodes.HASH_DELETE);
+                emitReg(rd);
+                emitReg(hashReg);
+                emitReg(keyReg);
+
+                lastResultReg = rd;
+            } else {
+                // For now, use SLOW_OP for other cases (hash slice delete, array delete, etc.)
+                arg.accept(this);
+                int argReg = lastResultReg;
+
+                int rd = allocateRegister();
+                emit(Opcodes.SLOW_OP);
+                emit(Opcodes.SLOWOP_DELETE);
+                emitReg(rd);
+                emitReg(argReg);
+
+                lastResultReg = rd;
+            }
+        } else if (op.equals("keys")) {
+            // keys %hash
+            // operand: hash variable (OperatorNode("%" ...) or other expression)
+            if (node.operand == null) {
+                throwCompilerException("keys requires a hash argument");
+            }
+
+            // Compile the hash operand
+            node.operand.accept(this);
+            int hashReg = lastResultReg;
+
+            // Emit HASH_KEYS
+            int rd = allocateRegister();
+            emit(Opcodes.HASH_KEYS);
+            emitReg(rd);
+            emitReg(hashReg);
+
+            lastResultReg = rd;
+        } else if (op.equals("values")) {
+            // values %hash
+            // operand: hash variable (OperatorNode("%" ...) or other expression)
+            if (node.operand == null) {
+                throwCompilerException("values requires a hash argument");
+            }
+
+            // Compile the hash operand
+            node.operand.accept(this);
+            int hashReg = lastResultReg;
+
+            // Emit HASH_VALUES
+            int rd = allocateRegister();
+            emit(Opcodes.HASH_VALUES);
+            emitReg(rd);
+            emitReg(hashReg);
 
             lastResultReg = rd;
         } else {

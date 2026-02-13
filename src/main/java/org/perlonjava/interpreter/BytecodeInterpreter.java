@@ -608,6 +608,46 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.HASH_EXISTS: {
+                        // Check if hash key exists: rd = exists $hash{key}
+                        int rd = bytecode[pc++];
+                        int hashReg = bytecode[pc++];
+                        int keyReg = bytecode[pc++];
+                        RuntimeHash hash = (RuntimeHash) registers[hashReg];
+                        RuntimeScalar key = (RuntimeScalar) registers[keyReg];
+                        registers[rd] = hash.exists(key);
+                        break;
+                    }
+
+                    case Opcodes.HASH_DELETE: {
+                        // Delete hash key: rd = delete $hash{key}
+                        int rd = bytecode[pc++];
+                        int hashReg = bytecode[pc++];
+                        int keyReg = bytecode[pc++];
+                        RuntimeHash hash = (RuntimeHash) registers[hashReg];
+                        RuntimeScalar key = (RuntimeScalar) registers[keyReg];
+                        registers[rd] = hash.delete(key);
+                        break;
+                    }
+
+                    case Opcodes.HASH_KEYS: {
+                        // Get hash keys: rd = keys %hash
+                        int rd = bytecode[pc++];
+                        int hashReg = bytecode[pc++];
+                        RuntimeHash hash = (RuntimeHash) registers[hashReg];
+                        registers[rd] = hash.keys();
+                        break;
+                    }
+
+                    case Opcodes.HASH_VALUES: {
+                        // Get hash values: rd = values %hash
+                        int rd = bytecode[pc++];
+                        int hashReg = bytecode[pc++];
+                        RuntimeHash hash = (RuntimeHash) registers[hashReg];
+                        registers[rd] = hash.values();
+                        break;
+                    }
+
                     // =================================================================
                     // SUBROUTINE CALLS
                     // =================================================================

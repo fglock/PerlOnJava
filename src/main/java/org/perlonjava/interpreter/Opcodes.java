@@ -548,6 +548,12 @@ public class Opcodes {
     /** Slow op ID: rd = Operator.split(pattern, args, ctx) - split string into array */
     public static final int SLOWOP_SPLIT = 32;
 
+    /** Slow opcode for exists operator (fallback) */
+    public static final int SLOWOP_EXISTS = 33;
+
+    /** Slow opcode for delete operator (fallback) */
+    public static final int SLOWOP_DELETE = 34;
+
     // =================================================================
     // OPCODES 93-255: RESERVED FOR FUTURE FAST OPERATIONS
     // =================================================================
