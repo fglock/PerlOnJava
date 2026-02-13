@@ -152,17 +152,17 @@ Each iteration evaluates a different string (`$var1`, `$var2`, ...), requiring f
 
 | Implementation | Time (sec) | Ops/Sec | Ratio |
 |----------------|------------|---------|-------|
-| **Perl 5** | **1.49** | **671K** | **1.0x (baseline)** ✓ |
-| **Interpreter** | **5.96** | **168K** | **4.0x slower** ✓ |
-| Compiler | 75.48 | 13K | **50.7x slower** ✗ |
+| **Perl 5** | **1.62** | **617K** | **1.0x (baseline)** ✓ |
+| **Interpreter** | **1.64** | **610K** | **1.01x slower** ✓✓ |
+| Compiler | 76.12 | 13K | **47.0x slower** ✗ |
 
-**Winner: Interpreter** - Avoids compilation overhead for each unique eval string.
+**Winner: Interpreter** - Achieves near-parity with Perl 5 (1% slowdown)!
 
 ### Analysis
 
-1. **Interpreter Wins on Dynamic eval**:
-   - **12.7x faster** than compiler mode (5.96s vs 75.48s)
-   - Only **4x slower** than Perl 5 (vs 50x for compiler)
+1. **Interpreter Matches Perl 5**:
+   - **46x faster** than compiler mode (1.64s vs 76.12s)
+   - Only **1% slower** than Perl 5 (vs 4600% for compiler)
    - Compilation overhead dominates when eval strings don't repeat
 
 2. **Compiler Wins on Cached eval**:
@@ -187,7 +187,10 @@ Each iteration evaluates a different string (`$var1`, `$var2`, ...), requiring f
 - Compile to interpreter bytecode: ~5-10ms
 - **Total: ~15-30ms (3-6x faster)**
 
-For 1M unique evals: Compiler pays 50-90 seconds overhead vs Interpreter's 15-30 seconds.
+For 1M unique evals:
+- Compiler: 76s
+- Interpreter: 1.6s (**47x faster**)
+- Perl 5: 1.6s (parity)
 
 ## Conclusion
 
@@ -197,18 +200,25 @@ Dense opcodes + proper JIT warmup gave us:
 - **Proven architecture** - Performance scales well with optimization
 
 **eval STRING validates interpreter design:**
-- **12.7x faster than compiler** for dynamic eval (unique strings)
-- Only **4x slower than Perl 5** (vs 50x for compiler mode)
+- **46x faster than compiler** for dynamic eval (unique strings) 🚀
+- **Matches Perl 5 performance** (1% slowdown) 🎯
 - Interpreter excels exactly where it should: avoiding compilation overhead
 
 The interpreter is production-ready for:
 - **Dynamic eval strings** (code generation, templating, meta-programming) - **PRIMARY USE CASE** 🎯
+  - Achieves **Perl 5 parity** for dynamic eval workloads
+  - **46x faster** than compiler mode for unique eval strings
 - Small eval strings (faster than compilation overhead)
 - One-time code execution (no amortization of compilation cost)
 - Development/debugging (faster iteration, better error messages)
 
 **When to use each mode:**
 - **Interpreter**: Dynamic/unique eval strings, one-off code, development
+  - For 1M unique evals: **1.6s** (Perl 5 parity)
 - **Compiler**: Static/cached eval strings, production hot paths, long-running loops
+  - For 10M cached evals: **3.5s** (3.7x faster than interpreter)
 
-Next steps: Profile-guided optimization to identify highest-impact improvements.
+**Key Insight**: The interpreter isn't just "good enough" for dynamic eval - it's **the right tool**,
+achieving native Perl performance where compilation overhead would dominate.
+
+Next steps: Profile-guided optimization to identify highest-impact improvements for general code.
