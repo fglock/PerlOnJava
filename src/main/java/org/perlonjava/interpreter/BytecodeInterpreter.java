@@ -502,8 +502,36 @@ public class BytecodeInterpreter {
                         int arrayReg = bytecode[pc++] & 0xFF;
                         int valueReg = bytecode[pc++] & 0xFF;
                         RuntimeArray arr = (RuntimeArray) registers[arrayReg];
-                        RuntimeScalar val = (RuntimeScalar) registers[valueReg];
+                        RuntimeBase val = registers[valueReg];
                         arr.push(val);
+                        break;
+                    }
+
+                    case Opcodes.ARRAY_POP: {
+                        // Array pop: rd = pop(@array)
+                        int rd = bytecode[pc++] & 0xFF;
+                        int arrayReg = bytecode[pc++] & 0xFF;
+                        RuntimeArray arr = (RuntimeArray) registers[arrayReg];
+                        registers[rd] = RuntimeArray.pop(arr);
+                        break;
+                    }
+
+                    case Opcodes.ARRAY_SHIFT: {
+                        // Array shift: rd = shift(@array)
+                        int rd = bytecode[pc++] & 0xFF;
+                        int arrayReg = bytecode[pc++] & 0xFF;
+                        RuntimeArray arr = (RuntimeArray) registers[arrayReg];
+                        registers[rd] = RuntimeArray.shift(arr);
+                        break;
+                    }
+
+                    case Opcodes.ARRAY_UNSHIFT: {
+                        // Array unshift: unshift(@array, value)
+                        int arrayReg = bytecode[pc++] & 0xFF;
+                        int valueReg = bytecode[pc++] & 0xFF;
+                        RuntimeArray arr = (RuntimeArray) registers[arrayReg];
+                        RuntimeBase val = registers[valueReg];
+                        RuntimeArray.unshift(arr, val);
                         break;
                     }
 

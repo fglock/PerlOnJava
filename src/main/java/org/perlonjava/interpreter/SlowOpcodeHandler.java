@@ -163,6 +163,9 @@ public class SlowOpcodeHandler {
             case Opcodes.SLOWOP_LOCAL_SCALAR:
                 return executeLocalScalar(bytecode, pc, registers, code);
 
+            case Opcodes.SLOWOP_SPLICE:
+                return executeSplice(bytecode, pc, registers);
+
             default:
                 throw new RuntimeException(
                     "Unknown slow operation ID: " + slowOpId +
@@ -205,6 +208,7 @@ public class SlowOpcodeHandler {
             case Opcodes.SLOWOP_RETRIEVE_BEGIN_ARRAY -> "retrieve_begin_array";
             case Opcodes.SLOWOP_RETRIEVE_BEGIN_HASH -> "retrieve_begin_hash";
             case Opcodes.SLOWOP_LOCAL_SCALAR -> "local_scalar";
+            case Opcodes.SLOWOP_SPLICE -> "splice";
             default -> "slowop_" + slowOpId;
         };
     }
@@ -737,6 +741,29 @@ public class SlowOpcodeHandler {
 
         String varName = code.stringPool[nameIdx];
         RuntimeScalar result = org.perlonjava.runtime.GlobalRuntimeScalar.makeLocal(varName);
+
+        registers[rd] = result;
+        return pc;
+    }
+
+    /**
+     * SLOWOP_SPLICE: Splice array operation
+     * Format: [SLOWOP_SPLICE] [rd] [arrayReg] [argsReg]
+     * Effect: rd = Operator.splice(registers[arrayReg], registers[argsReg])
+     */
+    private static int executeSplice(
+            byte[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+
+        int rd = bytecode[pc++] & 0xFF;
+        int arrayReg = bytecode[pc++] & 0xFF;
+        int argsReg = bytecode[pc++] & 0xFF;
+
+        RuntimeArray array = (RuntimeArray) registers[arrayReg];
+        RuntimeList args = (RuntimeList) registers[argsReg];
+
+        RuntimeList result = org.perlonjava.operators.Operator.splice(array, args);
 
         registers[rd] = result;
         return pc;
