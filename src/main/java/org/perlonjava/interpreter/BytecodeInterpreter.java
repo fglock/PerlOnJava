@@ -834,11 +834,22 @@ public class BytecodeInterpreter {
                         int filehandleReg = bytecode[pc++];
 
                         Object val = registers[contentReg];
-                        RuntimeScalar fh = (RuntimeScalar) registers[filehandleReg];
+
+                        // Filehandle should be scalar - convert if needed
+                        RuntimeBase fhBase = registers[filehandleReg];
+                        RuntimeScalar fh = (fhBase instanceof RuntimeScalar)
+                            ? (RuntimeScalar) fhBase
+                            : fhBase.scalar();
 
                         RuntimeList list;
                         if (val instanceof RuntimeList) {
                             list = (RuntimeList) val;
+                        } else if (val instanceof RuntimeArray) {
+                            // Convert RuntimeArray to RuntimeList
+                            list = new RuntimeList();
+                            for (RuntimeScalar elem : (RuntimeArray) val) {
+                                list.add(elem);
+                            }
                         } else if (val instanceof RuntimeScalar) {
                             // Convert scalar to single-element list
                             list = new RuntimeList();
@@ -859,11 +870,22 @@ public class BytecodeInterpreter {
                         int filehandleReg = bytecode[pc++];
 
                         Object val = registers[contentReg];
-                        RuntimeScalar fh = (RuntimeScalar) registers[filehandleReg];
+
+                        // Filehandle should be scalar - convert if needed
+                        RuntimeBase fhBase = registers[filehandleReg];
+                        RuntimeScalar fh = (fhBase instanceof RuntimeScalar)
+                            ? (RuntimeScalar) fhBase
+                            : fhBase.scalar();
 
                         RuntimeList list;
                         if (val instanceof RuntimeList) {
                             list = (RuntimeList) val;
+                        } else if (val instanceof RuntimeArray) {
+                            // Convert RuntimeArray to RuntimeList
+                            list = new RuntimeList();
+                            for (RuntimeScalar elem : (RuntimeArray) val) {
+                                list.add(elem);
+                            }
                         } else if (val instanceof RuntimeScalar) {
                             // Convert scalar to single-element list
                             list = new RuntimeList();
@@ -1145,7 +1167,12 @@ public class BytecodeInterpreter {
                         int separatorReg = bytecode[pc++];
                         int listReg = bytecode[pc++];
 
-                        RuntimeScalar separator = (RuntimeScalar) registers[separatorReg];
+                        // Separator should be scalar - convert if needed
+                        RuntimeBase separatorBase = registers[separatorReg];
+                        RuntimeScalar separator = (separatorBase instanceof RuntimeScalar)
+                            ? (RuntimeScalar) separatorBase
+                            : separatorBase.scalar();
+
                         RuntimeBase list = registers[listReg];
 
                         // Call StringOperators.joinForInterpolation (doesn't warn on undef)
@@ -1326,6 +1353,34 @@ public class BytecodeInterpreter {
             // Fell through end of bytecode - return empty list
             return new RuntimeList();
 
+        } catch (ClassCastException e) {
+            // Special handling for ClassCastException to show which opcode is failing
+            // Check if we're inside an eval block first
+            if (!evalCatchStack.isEmpty()) {
+                evalCatchStack.pop();
+                WarnDie.catchEval(e);
+                return new RuntimeList();
+            }
+
+            // Not in eval - show detailed error with bytecode context
+            int errorPc = Math.max(0, pc - 1); // Go back one instruction
+
+            // Show bytecode context (10 bytes before errorPc)
+            StringBuilder bcContext = new StringBuilder();
+            bcContext.append("\nBytecode context: [");
+            for (int i = Math.max(0, errorPc - 10); i < Math.min(bytecode.length, errorPc + 5); i++) {
+                if (i == errorPc) {
+                    bcContext.append(" >>>");
+                }
+                bcContext.append(String.format(" %02X", bytecode[i] & 0xFF));
+                if (i == errorPc) {
+                    bcContext.append("<<<");
+                }
+            }
+            bcContext.append(" ]");
+
+            String errorMessage = "ClassCastException" + bcContext + ": " + e.getMessage();
+            throw new RuntimeException(formatInterpreterError(code, errorPc, new Exception(errorMessage)), e);
         } catch (Throwable e) {
             // Check if we're inside an eval block
             if (!evalCatchStack.isEmpty()) {
