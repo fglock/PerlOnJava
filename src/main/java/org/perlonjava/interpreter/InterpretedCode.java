@@ -1,6 +1,7 @@
 package org.perlonjava.interpreter;
 
 import org.perlonjava.runtime.*;
+import java.util.Map;
 
 /**
  * Interpreted bytecode that extends RuntimeCode.
@@ -23,6 +24,7 @@ public class InterpretedCode extends RuntimeCode {
     public final String[] stringPool;      // String constants (variable names, etc.)
     public final int maxRegisters;         // Number of registers needed
     public final RuntimeBase[] capturedVars; // Closure support (captured from outer scope)
+    public final Map<String, Integer> variableRegistry; // Variable name → register index (for eval STRING)
 
     // Debug information (optional)
     public final String sourceName;        // Source file name (for stack traces)
@@ -40,11 +42,13 @@ public class InterpretedCode extends RuntimeCode {
      * @param sourceName    Source file name for debugging
      * @param sourceLine    Source line number for debugging
      * @param pcToTokenIndex Map from bytecode PC to AST tokenIndex for error reporting
+     * @param variableRegistry Variable name → register index mapping (for eval STRING)
      */
     public InterpretedCode(byte[] bytecode, Object[] constants, String[] stringPool,
                           int maxRegisters, RuntimeBase[] capturedVars,
                           String sourceName, int sourceLine,
-                          java.util.Map<Integer, Integer> pcToTokenIndex) {
+                          java.util.Map<Integer, Integer> pcToTokenIndex,
+                          Map<String, Integer> variableRegistry) {
         super(null, new java.util.ArrayList<>()); // Call RuntimeCode constructor with null prototype, empty attributes
         this.bytecode = bytecode;
         this.constants = constants;
@@ -54,6 +58,16 @@ public class InterpretedCode extends RuntimeCode {
         this.sourceName = sourceName;
         this.sourceLine = sourceLine;
         this.pcToTokenIndex = pcToTokenIndex;
+        this.variableRegistry = variableRegistry;
+    }
+
+    // Legacy constructor for backward compatibility
+    public InterpretedCode(byte[] bytecode, Object[] constants, String[] stringPool,
+                          int maxRegisters, RuntimeBase[] capturedVars,
+                          String sourceName, int sourceLine,
+                          java.util.Map<Integer, Integer> pcToTokenIndex) {
+        this(bytecode, constants, stringPool, maxRegisters, capturedVars,
+             sourceName, sourceLine, pcToTokenIndex, null);
     }
 
     /**
@@ -111,7 +125,8 @@ public class InterpretedCode extends RuntimeCode {
             capturedVars,  // New captured vars
             this.sourceName,
             this.sourceLine,
-            this.pcToTokenIndex  // Preserve token index map
+            this.pcToTokenIndex,  // Preserve token index map
+            this.variableRegistry  // Preserve variable registry
         );
     }
 
@@ -633,7 +648,7 @@ public class InterpretedCode extends RuntimeCode {
                 throw new IllegalStateException("Bytecode is required");
             }
             return new InterpretedCode(bytecode, constants, stringPool, maxRegisters,
-                                      capturedVars, sourceName, sourceLine, null);
+                                      capturedVars, sourceName, sourceLine, null, null);
         }
     }
 }
