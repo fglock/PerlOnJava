@@ -163,6 +163,21 @@ public class SlowOpcodeHandler {
             case Opcodes.SLOWOP_LOCAL_SCALAR:
                 return executeLocalScalar(bytecode, pc, registers, code);
 
+            case Opcodes.SLOWOP_SPLICE:
+                return executeSplice(bytecode, pc, registers);
+
+            case Opcodes.SLOWOP_ARRAY_SLICE:
+                return executeArraySlice(bytecode, pc, registers);
+
+            case Opcodes.SLOWOP_REVERSE:
+                return executeReverse(bytecode, pc, registers);
+
+            case Opcodes.SLOWOP_ARRAY_SLICE_SET:
+                return executeArraySliceSet(bytecode, pc, registers);
+
+            case Opcodes.SLOWOP_SPLIT:
+                return executeSplit(bytecode, pc, registers);
+
             default:
                 throw new RuntimeException(
                     "Unknown slow operation ID: " + slowOpId +
@@ -205,6 +220,11 @@ public class SlowOpcodeHandler {
             case Opcodes.SLOWOP_RETRIEVE_BEGIN_ARRAY -> "retrieve_begin_array";
             case Opcodes.SLOWOP_RETRIEVE_BEGIN_HASH -> "retrieve_begin_hash";
             case Opcodes.SLOWOP_LOCAL_SCALAR -> "local_scalar";
+            case Opcodes.SLOWOP_SPLICE -> "splice";
+            case Opcodes.SLOWOP_ARRAY_SLICE -> "array_slice";
+            case Opcodes.SLOWOP_REVERSE -> "reverse";
+            case Opcodes.SLOWOP_ARRAY_SLICE_SET -> "array_slice_set";
+            case Opcodes.SLOWOP_SPLIT -> "split";
             default -> "slowop_" + slowOpId;
         };
     }
@@ -737,6 +757,122 @@ public class SlowOpcodeHandler {
 
         String varName = code.stringPool[nameIdx];
         RuntimeScalar result = org.perlonjava.runtime.GlobalRuntimeScalar.makeLocal(varName);
+
+        registers[rd] = result;
+        return pc;
+    }
+
+    /**
+     * SLOWOP_SPLICE: Splice array operation
+     * Format: [SLOWOP_SPLICE] [rd] [arrayReg] [argsReg]
+     * Effect: rd = Operator.splice(registers[arrayReg], registers[argsReg])
+     */
+    private static int executeSplice(
+            byte[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+
+        int rd = bytecode[pc++] & 0xFF;
+        int arrayReg = bytecode[pc++] & 0xFF;
+        int argsReg = bytecode[pc++] & 0xFF;
+
+        RuntimeArray array = (RuntimeArray) registers[arrayReg];
+        RuntimeList args = (RuntimeList) registers[argsReg];
+
+        RuntimeList result = org.perlonjava.operators.Operator.splice(array, args);
+
+        registers[rd] = result;
+        return pc;
+    }
+
+    /**
+     * SLOWOP_ARRAY_SLICE: Get array slice
+     * Format: [SLOWOP_ARRAY_SLICE] [rd] [arrayReg] [indicesReg]
+     * Effect: rd = array.getSlice(indices)
+     */
+    private static int executeArraySlice(
+            byte[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+
+        int rd = bytecode[pc++] & 0xFF;
+        int arrayReg = bytecode[pc++] & 0xFF;
+        int indicesReg = bytecode[pc++] & 0xFF;
+
+        RuntimeArray array = (RuntimeArray) registers[arrayReg];
+        RuntimeList indices = (RuntimeList) registers[indicesReg];
+
+        RuntimeList result = array.getSlice(indices);
+
+        registers[rd] = result;
+        return pc;
+    }
+
+    /**
+     * SLOW_REVERSE: rd = Operator.reverse(ctx, args...)
+     * Format: [SLOW_REVERSE] [rd] [argsReg] [ctx]
+     * Effect: rd = Operator.reverse(ctx, args...)
+     */
+    private static int executeReverse(
+            byte[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+
+        int rd = bytecode[pc++] & 0xFF;
+        int argsReg = bytecode[pc++] & 0xFF;
+        int ctx = bytecode[pc++] & 0xFF;
+
+        RuntimeList argsList = (RuntimeList) registers[argsReg];
+        RuntimeBase[] args = argsList.elements.toArray(new RuntimeBase[0]);
+
+        RuntimeBase result = org.perlonjava.operators.Operator.reverse(ctx, args);
+
+        registers[rd] = result;
+        return pc;
+    }
+
+    /**
+     * SLOW_ARRAY_SLICE_SET: array.setSlice(indices, values)
+     * Format: [SLOW_ARRAY_SLICE_SET] [arrayReg] [indicesReg] [valuesReg]
+     * Effect: Sets array elements at indices to values
+     */
+    private static int executeArraySliceSet(
+            byte[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+
+        int arrayReg = bytecode[pc++] & 0xFF;
+        int indicesReg = bytecode[pc++] & 0xFF;
+        int valuesReg = bytecode[pc++] & 0xFF;
+
+        RuntimeArray array = (RuntimeArray) registers[arrayReg];
+        RuntimeList indices = (RuntimeList) registers[indicesReg];
+        RuntimeList values = (RuntimeList) registers[valuesReg];
+
+        array.setSlice(indices, values);
+
+        return pc;
+    }
+
+    /**
+     * SLOW_SPLIT: rd = Operator.split(pattern, args, ctx)
+     * Format: [SLOW_SPLIT] [rd] [patternReg] [argsReg] [ctx]
+     * Effect: rd = Operator.split(pattern, args, ctx)
+     */
+    private static int executeSplit(
+            byte[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+
+        int rd = bytecode[pc++] & 0xFF;
+        int patternReg = bytecode[pc++] & 0xFF;
+        int argsReg = bytecode[pc++] & 0xFF;
+        int ctx = bytecode[pc++] & 0xFF;
+
+        RuntimeScalar pattern = (RuntimeScalar) registers[patternReg];
+        RuntimeList args = (RuntimeList) registers[argsReg];
+
+        RuntimeList result = org.perlonjava.operators.Operator.split(pattern, args, ctx);
 
         registers[rd] = result;
         return pc;

@@ -321,6 +321,18 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.MOD_SCALAR: {
+                        // Modulus: rd = rs1 % rs2
+                        int rd = bytecode[pc++] & 0xFF;
+                        int rs1 = bytecode[pc++] & 0xFF;
+                        int rs2 = bytecode[pc++] & 0xFF;
+                        registers[rd] = MathOperators.modulus(
+                            (RuntimeScalar) registers[rs1],
+                            (RuntimeScalar) registers[rs2]
+                        );
+                        break;
+                    }
+
                     case Opcodes.NEG_SCALAR: {
                         // Negation: rd = -rs
                         int rd = bytecode[pc++] & 0xFF;
@@ -502,8 +514,36 @@ public class BytecodeInterpreter {
                         int arrayReg = bytecode[pc++] & 0xFF;
                         int valueReg = bytecode[pc++] & 0xFF;
                         RuntimeArray arr = (RuntimeArray) registers[arrayReg];
-                        RuntimeScalar val = (RuntimeScalar) registers[valueReg];
+                        RuntimeBase val = registers[valueReg];
                         arr.push(val);
+                        break;
+                    }
+
+                    case Opcodes.ARRAY_POP: {
+                        // Array pop: rd = pop(@array)
+                        int rd = bytecode[pc++] & 0xFF;
+                        int arrayReg = bytecode[pc++] & 0xFF;
+                        RuntimeArray arr = (RuntimeArray) registers[arrayReg];
+                        registers[rd] = RuntimeArray.pop(arr);
+                        break;
+                    }
+
+                    case Opcodes.ARRAY_SHIFT: {
+                        // Array shift: rd = shift(@array)
+                        int rd = bytecode[pc++] & 0xFF;
+                        int arrayReg = bytecode[pc++] & 0xFF;
+                        RuntimeArray arr = (RuntimeArray) registers[arrayReg];
+                        registers[rd] = RuntimeArray.shift(arr);
+                        break;
+                    }
+
+                    case Opcodes.ARRAY_UNSHIFT: {
+                        // Array unshift: unshift(@array, value)
+                        int arrayReg = bytecode[pc++] & 0xFF;
+                        int valueReg = bytecode[pc++] & 0xFF;
+                        RuntimeArray arr = (RuntimeArray) registers[arrayReg];
+                        RuntimeBase val = registers[valueReg];
+                        RuntimeArray.unshift(arr, val);
                         break;
                     }
 
@@ -1032,6 +1072,38 @@ public class BytecodeInterpreter {
                         RuntimeList list = listBase.getList();
                         RuntimeScalar closure = (RuntimeScalar) registers[closureReg];
                         RuntimeList result = org.perlonjava.operators.ListOperators.map(list, closure, ctx);
+                        registers[rd] = result;
+                        break;
+                    }
+
+                    case Opcodes.GREP: {
+                        // Grep operator: rd = ListOperators.grep(list, closure, ctx)
+                        int rd = bytecode[pc++] & 0xFF;
+                        int listReg = bytecode[pc++] & 0xFF;
+                        int closureReg = bytecode[pc++] & 0xFF;
+                        int ctx = bytecode[pc++] & 0xFF;
+
+                        RuntimeBase listBase = registers[listReg];
+                        RuntimeList list = listBase.getList();
+                        RuntimeScalar closure = (RuntimeScalar) registers[closureReg];
+                        RuntimeList result = org.perlonjava.operators.ListOperators.grep(list, closure, ctx);
+                        registers[rd] = result;
+                        break;
+                    }
+
+                    case Opcodes.SORT: {
+                        // Sort operator: rd = ListOperators.sort(list, closure, package)
+                        int rd = bytecode[pc++] & 0xFF;
+                        int listReg = bytecode[pc++] & 0xFF;
+                        int closureReg = bytecode[pc++] & 0xFF;
+                        int packageIdx = readInt(bytecode, pc);
+                        pc += 4;
+
+                        RuntimeBase listBase = registers[listReg];
+                        RuntimeList list = listBase.getList();
+                        RuntimeScalar closure = (RuntimeScalar) registers[closureReg];
+                        String packageName = code.stringPool[packageIdx];
+                        RuntimeList result = org.perlonjava.operators.ListOperators.sort(list, closure, packageName);
                         registers[rd] = result;
                         break;
                     }
