@@ -262,6 +262,11 @@ public class InterpretedCode extends RuntimeCode {
                     int nameIdx = bytecode[pc++] & 0xFF;
                     sb.append("LOAD_GLOBAL_SCALAR r").append(rd).append(" = $").append(stringPool[nameIdx]).append("\n");
                     break;
+                case Opcodes.LOAD_GLOBAL_CODE:
+                    rd = bytecode[pc++] & 0xFF;
+                    nameIdx = bytecode[pc++] & 0xFF;
+                    sb.append("LOAD_GLOBAL_CODE r").append(rd).append(" = &").append(stringPool[nameIdx]).append("\n");
+                    break;
                 case Opcodes.STORE_GLOBAL_SCALAR:
                     nameIdx = bytecode[pc++] & 0xFF;
                     int srcReg = bytecode[pc++] & 0xFF;
