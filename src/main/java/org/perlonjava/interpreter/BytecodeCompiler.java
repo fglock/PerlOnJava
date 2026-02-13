@@ -2890,9 +2890,26 @@ public class BytecodeCompiler implements Visitor {
                 node.operand.accept(this);
                 int msgReg = lastResultReg;
 
-                // Emit DIE with message register
+                // Precompute location message at compile time (zero overhead!)
+                String locationMsg;
+                if (errorUtil != null) {
+                    String fileName = errorUtil.getFileName();
+                    int lineNumber = errorUtil.getLineNumber(node.getIndex());
+                    locationMsg = " at " + fileName + " line " + lineNumber;
+                } else {
+                    // Fallback if errorUtil not available
+                    locationMsg = " at " + sourceName + " line " + sourceLine;
+                }
+
+                int locationReg = allocateRegister();
+                emit(Opcodes.LOAD_STRING);
+                emitReg(locationReg);
+                emitInt(addToStringPool(locationMsg));
+
+                // Emit DIE with both message and precomputed location
                 emitWithToken(Opcodes.DIE, node.getIndex());
                 emitReg(msgReg);
+                emitReg(locationReg);
             } else {
                 // die; (no message - use $@)
                 // For now, emit with undef register
@@ -2900,8 +2917,24 @@ public class BytecodeCompiler implements Visitor {
                 emit(Opcodes.LOAD_UNDEF);
                 emitReg(undefReg);
 
+                // Precompute location message for bare die
+                String locationMsg;
+                if (errorUtil != null) {
+                    String fileName = errorUtil.getFileName();
+                    int lineNumber = errorUtil.getLineNumber(node.getIndex());
+                    locationMsg = " at " + fileName + " line " + lineNumber;
+                } else {
+                    locationMsg = " at " + sourceName + " line " + sourceLine;
+                }
+
+                int locationReg = allocateRegister();
+                emit(Opcodes.LOAD_STRING);
+                emitReg(locationReg);
+                emitInt(addToStringPool(locationMsg));
+
                 emitWithToken(Opcodes.DIE, node.getIndex());
                 emitReg(undefReg);
+                emitReg(locationReg);
             }
             lastResultReg = -1; // No result after die
         } else if (op.equals("eval")) {

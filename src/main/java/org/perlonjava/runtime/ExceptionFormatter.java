@@ -1,6 +1,7 @@
 package org.perlonjava.runtime;
 
 import org.perlonjava.codegen.ByteCodeSourceMapper;
+import org.perlonjava.interpreter.InterpreterState;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -65,6 +66,25 @@ public class ExceptionFormatter {
                     stackTrace.add(entry);
                     lastFileName = callerInfo.filename() != null ? callerInfo.filename() : "";
                     callerStackIndex++;
+                }
+            } else if (element.getClassName().equals("org.perlonjava.interpreter.BytecodeInterpreter") &&
+                       element.getMethodName().equals("execute")) {
+                // Interpreter frame - get information from InterpreterState
+                var frame = InterpreterState.current();
+                if (frame != null && frame.code != null) {
+                    // Format the interpreter frame as a Perl stack entry
+                    String subName = frame.subroutineName;
+                    if (subName != null && !subName.isEmpty() && !subName.contains("::")) {
+                        subName = frame.packageName + "::" + subName;
+                    }
+
+                    var entry = new ArrayList<String>();
+                    entry.add(frame.packageName);
+                    entry.add(frame.code.sourceName);
+                    entry.add(String.valueOf(frame.code.sourceLine));
+                    entry.add(subName);  // Subroutine name
+                    stackTrace.add(entry);
+                    lastFileName = frame.code.sourceName != null ? frame.code.sourceName : "";
                 }
             } else if (element.getClassName().contains("org.perlonjava.anon") ||
                     element.getClassName().contains("org.perlonjava.perlmodule")) {
