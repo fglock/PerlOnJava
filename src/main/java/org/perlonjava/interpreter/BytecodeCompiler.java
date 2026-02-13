@@ -1135,14 +1135,16 @@ public class BytecodeCompiler implements Visitor {
                         }
                     } else if (leftBin.left instanceof BinaryOperatorNode) {
                         // Nested: $hash{outer}{inner} = value
-                        // Compile left side (returns scalar containing hash reference)
+                        // Compile left side (returns scalar containing hash reference or autovivifies)
                         leftBin.left.accept(this);
                         int scalarReg = lastResultReg;
 
-                        // TODO: Dereference hash reference (autovivification)
-                        // For now, throw unsupported
-                        throwCompilerException("Nested hash assignment not yet implemented");
-                        return;
+                        // Dereference to get the hash (with autovivification)
+                        hashReg = allocateRegister();
+                        emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                        emit(Opcodes.SLOWOP_DEREF_HASH);
+                        emitReg(hashReg);
+                        emitReg(scalarReg);
                     } else {
                         throwCompilerException("Hash assignment requires variable or expression on left side");
                         return;
@@ -1707,12 +1709,13 @@ public class BytecodeCompiler implements Visitor {
 
                 currentTokenIndex = node.getIndex();  // Track token for error reporting
 
-                if (!(node.left instanceof OperatorNode)) {
-                    throwCompilerException("Hash access requires variable on left side");
-                }
-                OperatorNode leftOp = (OperatorNode) node.left;
+                int hashReg;
 
-                // Check for hash slice: @hash{keys} or hashref slice: @$hashref{keys}
+                // Determine if this is a simple hash access or nested/ref access
+                if (node.left instanceof OperatorNode) {
+                    OperatorNode leftOp = (OperatorNode) node.left;
+
+                    // Check for hash slice: @hash{keys} or hashref slice: @$hashref{keys}
                 if (leftOp.operator.equals("@")) {
                     // Hash slice: @hash{'key1', 'key2'} returns array of values
                     // Hashref slice: @$hashref{'key1', 'key2'} dereferences then slices
