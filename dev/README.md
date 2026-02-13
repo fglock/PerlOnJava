@@ -25,13 +25,9 @@ This directory contains development resources, tools and experimental code for P
   - Core language extensions (core_global_override.pl)
 
 - **interpreter/** - Interpreter mode development resources
-    - Comprehensive documentation (SKILL.md, STATUS.md, TESTING.md, BYTECODE_DOCUMENTATION.md)
+    - Documentation
     - Architecture design documents (architecture/ subdirectory)
     - Test files for interpreter-specific features (tests/ subdirectory)
-    - Performance: ~47M ops/sec (1.75x slower than compiler, within 2-5x target)
-    - Register-based bytecode interpreter with tableswitch optimization
-    - Variable sharing between interpreted and compiled code
-    - Supports closures, bidirectional calling, and context detection
 
 - **prompts/** - LLM prompts for development assistance
   - Code generation and conversion

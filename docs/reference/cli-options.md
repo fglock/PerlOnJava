@@ -146,18 +146,15 @@ jperl [options] [program | -e 'command'] [arguments]
   ./jperl --interpreter script.pl
   ```
 
-  **Interpreter mode** executes Perl bytecode directly in a register-based VM without generating JVM bytecode. It offers:
-  - Faster startup time (no JVM class generation overhead)
-  - Lower memory usage (no class metadata)
-  - Ideal for short-lived scripts, development, and `eval STRING`
-  - Performance: ~47M ops/sec (1.75x slower than compiler, within 2-5x target)
-
   **Compiler mode** (default) generates JVM bytecode for high performance:
   - High performance after JIT warmup (~82M ops/sec)
   - Better for long-running programs
   - Full Java integration and optimization
 
-  Both modes share 100% of runtime APIs and support closures, bidirectional calling, and variable sharing.
+  **Interpreter mode** executes Perl bytecode directly in a register-based VM without generating JVM bytecode. It offers:
+  - Faster startup time (no JVM class generation overhead)
+  - Ideal for short-lived scripts and `eval STRING`
+  - Performance: ~47M ops/sec (1.75x slower than compiler, within 2-5x target)
 
 ## Debugging Options
 
