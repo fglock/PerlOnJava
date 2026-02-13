@@ -2652,7 +2652,12 @@ public class BytecodeCompiler implements Visitor {
     // =========================================================================
 
     private int allocateRegister() {
-        return nextRegister++;
+        int reg = nextRegister++;
+        if (reg > 255) {
+            throwCompilerException("Too many registers: exceeded 255 register limit. " +
+                    "Consider breaking this code into smaller subroutines.");
+        }
+        return reg;
     }
 
     private int addToStringPool(String str) {
