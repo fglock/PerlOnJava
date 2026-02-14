@@ -283,6 +283,16 @@ public class InterpretedCode extends RuntimeCode {
                     int nameIdx = bytecode[pc++];
                     sb.append("LOAD_GLOBAL_SCALAR r").append(rd).append(" = $").append(stringPool[nameIdx]).append("\n");
                     break;
+                case Opcodes.LOAD_GLOBAL_ARRAY:
+                    rd = bytecode[pc++];
+                    nameIdx = bytecode[pc++];
+                    sb.append("LOAD_GLOBAL_ARRAY r").append(rd).append(" = @").append(stringPool[nameIdx]).append("\n");
+                    break;
+                case Opcodes.LOAD_GLOBAL_HASH:
+                    rd = bytecode[pc++];
+                    nameIdx = bytecode[pc++];
+                    sb.append("LOAD_GLOBAL_HASH r").append(rd).append(" = %").append(stringPool[nameIdx]).append("\n");
+                    break;
                 case Opcodes.LOAD_GLOBAL_CODE:
                     rd = bytecode[pc++];
                     nameIdx = bytecode[pc++];
@@ -514,6 +524,18 @@ public class InterpretedCode extends RuntimeCode {
                     int ctx = bytecode[pc++];
                     sb.append("CALL_SUB r").append(rd).append(" = r").append(coderefReg)
                       .append("->(r").append(argsReg).append(", ctx=").append(ctx).append(")\n");
+                    break;
+                case Opcodes.CALL_METHOD:
+                    rd = bytecode[pc++];
+                    int invocantReg = bytecode[pc++];
+                    int methodReg = bytecode[pc++];
+                    int currentSubReg = bytecode[pc++];
+                    argsReg = bytecode[pc++];
+                    ctx = bytecode[pc++];
+                    sb.append("CALL_METHOD r").append(rd).append(" = r").append(invocantReg)
+                      .append("->r").append(methodReg)
+                      .append("(r").append(argsReg).append(", sub=r").append(currentSubReg)
+                      .append(", ctx=").append(ctx).append(")\n");
                     break;
                 case Opcodes.JOIN:
                     rd = bytecode[pc++];

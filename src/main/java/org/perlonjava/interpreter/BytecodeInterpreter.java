@@ -286,7 +286,12 @@ public class BytecodeInterpreter {
                         // Used to set the value in a persistent scalar without overwriting the reference
                         int rd = bytecode[pc++];
                         int rs = bytecode[pc++];
-                        ((RuntimeScalar) registers[rd]).set((RuntimeScalar) registers[rs]);
+                        // Auto-convert rs to scalar if needed
+                        RuntimeBase rsBase = registers[rs];
+                        RuntimeScalar rsScalar = (rsBase instanceof RuntimeScalar)
+                                ? (RuntimeScalar) rsBase
+                                : rsBase.scalar();
+                        ((RuntimeScalar) registers[rd]).set(rsScalar);
                         break;
                     }
 
@@ -870,7 +875,11 @@ public class BytecodeInterpreter {
                         int argsReg = bytecode[pc++];
                         int context = bytecode[pc++];
 
-                        RuntimeScalar codeRef = (RuntimeScalar) registers[coderefReg];
+                        // Auto-convert coderef to scalar if needed
+                        RuntimeBase codeRefBase = registers[coderefReg];
+                        RuntimeScalar codeRef = (codeRefBase instanceof RuntimeScalar)
+                                ? (RuntimeScalar) codeRefBase
+                                : codeRefBase.scalar();
                         RuntimeBase argsBase = registers[argsReg];
 
                         // Convert args to RuntimeArray if needed
@@ -888,7 +897,57 @@ public class BytecodeInterpreter {
                         // RuntimeCode.apply works for both compiled AND interpreted code
                         RuntimeList result = RuntimeCode.apply(codeRef, "", callArgs, context);
 
-                        registers[rd] = result;
+                        // Convert to scalar if called in scalar context
+                        if (context == RuntimeContextType.SCALAR) {
+                            registers[rd] = result.scalar();
+                        } else {
+                            registers[rd] = result;
+                        }
+
+                        // Check for control flow (last/next/redo/goto/tail-call)
+                        if (result.isNonLocalGoto()) {
+                            // Propagate control flow up the call stack
+                            return result;
+                        }
+                        break;
+                    }
+
+                    case Opcodes.CALL_METHOD: {
+                        // Call method: rd = RuntimeCode.call(invocant, method, currentSub, args, context)
+                        // May return RuntimeControlFlowList!
+                        int rd = bytecode[pc++];
+                        int invocantReg = bytecode[pc++];
+                        int methodReg = bytecode[pc++];
+                        int currentSubReg = bytecode[pc++];
+                        int argsReg = bytecode[pc++];
+                        int context = bytecode[pc++];
+
+                        RuntimeScalar invocant = (RuntimeScalar) registers[invocantReg];
+                        RuntimeScalar method = (RuntimeScalar) registers[methodReg];
+                        RuntimeScalar currentSub = (RuntimeScalar) registers[currentSubReg];
+                        RuntimeBase argsBase = registers[argsReg];
+
+                        // Convert args to RuntimeArray if needed
+                        RuntimeArray callArgs;
+                        if (argsBase instanceof RuntimeArray) {
+                            callArgs = (RuntimeArray) argsBase;
+                        } else if (argsBase instanceof RuntimeList) {
+                            // Convert RuntimeList to RuntimeArray (from ListNode)
+                            callArgs = new RuntimeArray((RuntimeList) argsBase);
+                        } else {
+                            // Single scalar argument
+                            callArgs = new RuntimeArray((RuntimeScalar) argsBase);
+                        }
+
+                        // RuntimeCode.call handles method resolution and dispatch
+                        RuntimeList result = RuntimeCode.call(invocant, method, currentSub, callArgs, context);
+
+                        // Convert to scalar if called in scalar context
+                        if (context == RuntimeContextType.SCALAR) {
+                            registers[rd] = result.scalar();
+                        } else {
+                            registers[rd] = result;
+                        }
 
                         // Check for control flow (last/next/redo/goto/tail-call)
                         if (result.isNonLocalGoto()) {
