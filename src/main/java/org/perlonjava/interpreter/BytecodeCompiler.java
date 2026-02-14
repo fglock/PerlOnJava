@@ -3761,6 +3761,7 @@ public class BytecodeCompiler implements Visitor {
             emitReg(rd);
             emitReg(arrayReg);
             emitReg(argsListReg);
+            emit(currentCallContext);  // Pass context for scalar/list conversion
 
             lastResultReg = rd;
         } else if (op.equals("reverse")) {
