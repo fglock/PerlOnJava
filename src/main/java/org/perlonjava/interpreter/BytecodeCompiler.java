@@ -4713,42 +4713,17 @@ public class BytecodeCompiler implements Visitor {
         node.list.accept(this);
         int listReg = lastResultReg;
 
-        // Step 2: Convert to RuntimeArray if needed
-        // Check if listReg contains an array or needs conversion
-        int arrayReg;
+        // Step 2: Create iterator from the list
+        // This works for RuntimeArray, RuntimeList, PerlRange, etc.
+        int iterReg = allocateRegister();
+        emit(Opcodes.ITERATOR_CREATE);
+        emitReg(iterReg);
+        emitReg(listReg);
 
-        // If the list is an array variable (like @x), the register already contains the array
-        // Otherwise, we need to create a temporary array from the list
-        if (node.list instanceof OperatorNode && ((OperatorNode) node.list).operator.equals("@")) {
-            // Direct array variable - register contains RuntimeArray
-            arrayReg = listReg;
-        } else {
-            // Need to convert list to array
-            arrayReg = allocateRegister();
-            emit(Opcodes.NEW_ARRAY);
-            emitReg(arrayReg);
-            emit(Opcodes.ARRAY_SET_FROM_LIST);
-            emitReg(arrayReg);
-            emitReg(listReg);
-        }
-
-        // Step 3: Allocate iterator index register
-        int indexReg = allocateRegister();
-        emit(Opcodes.LOAD_INT);
-        emitReg(indexReg);
-        emitInt(0);
-
-        // Step 4: Allocate array size register
-        int sizeReg = allocateRegister();
-        emit(Opcodes.ARRAY_SIZE);
-        emitReg(sizeReg);
-        emitReg(arrayReg);
-
-        // Step 5: Enter new scope for loop variable
+        // Step 3: Enter new scope for loop variable
         enterScope();
 
-        // Step 6: Declare loop variable in the new scope
-        // CRITICAL: We must let addVariable allocate the register so it's synchronized
+        // Step 4: Declare loop variable in the new scope
         int varReg = -1;
         if (node.variable != null && node.variable instanceof OperatorNode) {
             OperatorNode varOp = (OperatorNode) node.variable;
@@ -4766,48 +4741,40 @@ public class BytecodeCompiler implements Visitor {
             varReg = allocateRegister();
         }
 
-        // Step 7: Loop start - check if index < size
+        // Step 5: Loop start - check if iterator has next
         int loopStartPc = bytecode.size();
 
-        // Compare index with size
-        int cmpReg = allocateRegister();
-        emit(Opcodes.LT_NUM);
-        emitReg(cmpReg);
-        emitReg(indexReg);
-        emitReg(sizeReg);
+        // Check hasNext()
+        int hasNextReg = allocateRegister();
+        emit(Opcodes.ITERATOR_HAS_NEXT);
+        emitReg(hasNextReg);
+        emitReg(iterReg);
 
         // If false, jump to end (we'll patch this later)
         emit(Opcodes.GOTO_IF_FALSE);
-        emitReg(cmpReg);
+        emitReg(hasNextReg);
         int loopEndJumpPc = bytecode.size();
         emitInt(0);  // Placeholder for jump target
 
-        // Step 8: Get array element and assign to loop variable
-        emit(Opcodes.ARRAY_GET);
+        // Step 6: Get next element and assign to loop variable
+        emit(Opcodes.ITERATOR_NEXT);
         emitReg(varReg);
-        emitReg(arrayReg);
-        emitReg(indexReg);
+        emitReg(iterReg);
 
-        // Step 9: Execute body
+        // Step 7: Execute body
         if (node.body != null) {
             node.body.accept(this);
         }
 
-        // Step 10: Increment index
-        emit(Opcodes.ADD_SCALAR_INT);
-        emitReg(indexReg);
-        emitReg(indexReg);
-        emitInt(1);
-
-        // Step 11: Jump back to loop start
+        // Step 8: Jump back to loop start
         emit(Opcodes.GOTO);
         emitInt(loopStartPc);
 
-        // Step 12: Loop end - patch the forward jump
+        // Step 9: Loop end - patch the forward jump
         int loopEndPc = bytecode.size();
         patchJump(loopEndJumpPc, loopEndPc);
 
-        // Step 13: Exit scope
+        // Step 10: Exit scope
         exitScope();
 
         lastResultReg = -1;  // For loop returns empty

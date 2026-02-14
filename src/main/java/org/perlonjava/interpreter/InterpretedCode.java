@@ -632,6 +632,21 @@ public class InterpretedCode extends RuntimeCode {
                     sb.append("ISA r").append(rd).append(" = isa(r").append(objReg)
                       .append(", r").append(pkgReg).append(")\n");
                     break;
+                case Opcodes.ITERATOR_CREATE:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("ITERATOR_CREATE r").append(rd).append(" = r").append(rs).append(".iterator()\n");
+                    break;
+                case Opcodes.ITERATOR_HAS_NEXT:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("ITERATOR_HAS_NEXT r").append(rd).append(" = r").append(rs).append(".hasNext()\n");
+                    break;
+                case Opcodes.ITERATOR_NEXT:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("ITERATOR_NEXT r").append(rd).append(" = r").append(rs).append(".next()\n");
+                    break;
                 case Opcodes.LIST_TO_SCALAR:
                     rd = bytecode[pc++];
                     rs = bytecode[pc++];
