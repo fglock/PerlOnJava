@@ -2868,10 +2868,10 @@ public class BytecodeCompiler implements Visitor {
                 } else {
                     // Global variable - load it
                     // Add package prefix if not present (match compiler behavior)
-                    String globalVarName = varName;
+                    String globalVarName = varName.substring(1); // Remove $ sigil first
                     if (!globalVarName.contains("::")) {
-                        // Remove $ sigil, add package, restore sigil
-                        globalVarName = "main::" + varName.substring(1);
+                        // Add package prefix
+                        globalVarName = "main::" + globalVarName;
                     }
 
                     int rd = allocateRegister();
