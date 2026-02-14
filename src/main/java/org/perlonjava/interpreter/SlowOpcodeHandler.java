@@ -796,8 +796,9 @@ public class SlowOpcodeHandler {
 
     /**
      * SLOWOP_SPLICE: Splice array operation
-     * Format: [SLOWOP_SPLICE] [rd] [arrayReg] [argsReg]
+     * Format: [SLOWOP_SPLICE] [rd] [arrayReg] [argsReg] [context]
      * Effect: rd = Operator.splice(registers[arrayReg], registers[argsReg])
+     * In scalar context, returns last element removed (or undef if no elements removed)
      */
     private static int executeSplice(
             short[] bytecode,
@@ -807,13 +808,23 @@ public class SlowOpcodeHandler {
         int rd = bytecode[pc++];
         int arrayReg = bytecode[pc++];
         int argsReg = bytecode[pc++];
+        int context = bytecode[pc++];
 
         RuntimeArray array = (RuntimeArray) registers[arrayReg];
         RuntimeList args = (RuntimeList) registers[argsReg];
 
         RuntimeList result = org.perlonjava.operators.Operator.splice(array, args);
 
-        registers[rd] = result;
+        // In scalar context, return last element removed (Perl semantics)
+        if (context == RuntimeContextType.SCALAR) {
+            if (result.elements.isEmpty()) {
+                registers[rd] = new RuntimeScalar();  // undef
+            } else {
+                registers[rd] = result.elements.get(result.elements.size() - 1);
+            }
+        } else {
+            registers[rd] = result;
+        }
         return pc;
     }
 
