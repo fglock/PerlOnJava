@@ -443,6 +443,18 @@ public class Opcodes {
     /** Sort operator: rd = ListOperators.sort(list_reg, closure_reg, package_name) */
     public static final byte SORT = 101;
 
+    /** Defined operator: rd = defined(rs) - check if value is defined */
+    public static final byte DEFINED = 102;
+
+    /** Ref operator: rd = ref(rs) - get reference type as string */
+    public static final byte REF = 103;
+
+    /** Bless operator: rd = bless(rs_ref, rs_package) - bless a reference into a package */
+    public static final byte BLESS = 104;
+
+    /** ISA operator: rd = isa(rs_obj, rs_package) - check if object is instance of package */
+    public static final byte ISA = 105;
+
     // =================================================================
     // Slow Operation IDs (0-255)
     // =================================================================
@@ -565,6 +577,12 @@ public class Opcodes {
 
     /** Slow op ID: hash.setSlice(keys_list, values_list) - hash slice assignment @hash{keys} = values */
     public static final int SLOWOP_HASH_SLICE_SET = 38;
+
+    /** Slow op ID: rd = list[start..] - extract list slice from start index to end */
+    public static final int SLOWOP_LIST_SLICE_FROM = 39;
+
+    /** Slow op ID: rd = length(string) - get string length */
+    public static final int SLOWOP_LENGTH = 40;
 
     // =================================================================
     // OPCODES 93-255: RESERVED FOR FUTURE FAST OPERATIONS

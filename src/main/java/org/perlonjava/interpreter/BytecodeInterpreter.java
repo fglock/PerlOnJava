@@ -187,7 +187,14 @@ public class BytecodeInterpreter {
                         int nameIdx = bytecode[pc++];
                         int srcReg = bytecode[pc++];
                         String name = code.stringPool[nameIdx];
-                        GlobalVariable.getGlobalVariable(name).set((RuntimeScalar) registers[srcReg]);
+
+                        // Convert to scalar if needed
+                        RuntimeBase value = registers[srcReg];
+                        RuntimeScalar scalarValue = (value instanceof RuntimeScalar)
+                            ? (RuntimeScalar) value
+                            : value.scalar();
+
+                        GlobalVariable.getGlobalVariable(name).set(scalarValue);
                         break;
                     }
 
@@ -338,6 +345,18 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.POW_SCALAR: {
+                        // Exponentiation: rd = rs1 ** rs2
+                        int rd = bytecode[pc++];
+                        int rs1 = bytecode[pc++];
+                        int rs2 = bytecode[pc++];
+                        registers[rd] = MathOperators.pow(
+                            (RuntimeScalar) registers[rs1],
+                            (RuntimeScalar) registers[rs2]
+                        );
+                        break;
+                    }
+
                     case Opcodes.NEG_SCALAR: {
                         // Negation: rd = -rs
                         int rd = bytecode[pc++];
@@ -409,10 +428,30 @@ public class BytecodeInterpreter {
                         int rd = bytecode[pc++];
                         int rs1 = bytecode[pc++];
                         int rs2 = bytecode[pc++];
-                        registers[rd] = CompareOperators.spaceship(
-                            (RuntimeScalar) registers[rs1],
-                            (RuntimeScalar) registers[rs2]
-                        );
+
+                        // Convert operands to scalar if needed
+                        RuntimeBase val1 = registers[rs1];
+                        RuntimeBase val2 = registers[rs2];
+                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+
+                        registers[rd] = CompareOperators.spaceship(s1, s2);
+                        break;
+                    }
+
+                    case Opcodes.COMPARE_STR: {
+                        // String comparison: rd = rs1 cmp rs2
+                        int rd = bytecode[pc++];
+                        int rs1 = bytecode[pc++];
+                        int rs2 = bytecode[pc++];
+
+                        // Convert operands to scalar if needed
+                        RuntimeBase val1 = registers[rs1];
+                        RuntimeBase val2 = registers[rs2];
+                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+
+                        registers[rd] = CompareOperators.cmp(s1, s2);
                         break;
                     }
 
@@ -421,10 +460,14 @@ public class BytecodeInterpreter {
                         int rd = bytecode[pc++];
                         int rs1 = bytecode[pc++];
                         int rs2 = bytecode[pc++];
-                        registers[rd] = CompareOperators.equalTo(
-                            (RuntimeScalar) registers[rs1],
-                            (RuntimeScalar) registers[rs2]
-                        );
+
+                        // Convert operands to scalar if needed
+                        RuntimeBase val1 = registers[rs1];
+                        RuntimeBase val2 = registers[rs2];
+                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+
+                        registers[rd] = CompareOperators.equalTo(s1, s2);
                         break;
                     }
 
@@ -433,10 +476,14 @@ public class BytecodeInterpreter {
                         int rd = bytecode[pc++];
                         int rs1 = bytecode[pc++];
                         int rs2 = bytecode[pc++];
-                        registers[rd] = CompareOperators.lessThan(
-                            (RuntimeScalar) registers[rs1],
-                            (RuntimeScalar) registers[rs2]
-                        );
+
+                        // Convert operands to scalar if needed
+                        RuntimeBase val1 = registers[rs1];
+                        RuntimeBase val2 = registers[rs2];
+                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+
+                        registers[rd] = CompareOperators.lessThan(s1, s2);
                         break;
                     }
 
@@ -445,10 +492,14 @@ public class BytecodeInterpreter {
                         int rd = bytecode[pc++];
                         int rs1 = bytecode[pc++];
                         int rs2 = bytecode[pc++];
-                        registers[rd] = CompareOperators.greaterThan(
-                            (RuntimeScalar) registers[rs1],
-                            (RuntimeScalar) registers[rs2]
-                        );
+
+                        // Convert operands to scalar if needed
+                        RuntimeBase val1 = registers[rs1];
+                        RuntimeBase val2 = registers[rs2];
+                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+
+                        registers[rd] = CompareOperators.greaterThan(s1, s2);
                         break;
                     }
 
@@ -457,10 +508,14 @@ public class BytecodeInterpreter {
                         int rd = bytecode[pc++];
                         int rs1 = bytecode[pc++];
                         int rs2 = bytecode[pc++];
-                        registers[rd] = CompareOperators.notEqualTo(
-                            (RuntimeScalar) registers[rs1],
-                            (RuntimeScalar) registers[rs2]
-                        );
+
+                        // Convert operands to scalar if needed
+                        RuntimeBase val1 = registers[rs1];
+                        RuntimeBase val2 = registers[rs2];
+                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+
+                        registers[rd] = CompareOperators.notEqualTo(s1, s2);
                         break;
                     }
 
@@ -478,6 +533,61 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.DEFINED: {
+                        // Defined check: rd = defined(rs)
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        RuntimeBase val = registers[rs];
+                        boolean isDefined = val != null && val.getDefinedBoolean();
+                        registers[rd] = isDefined ?
+                            RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarFalse;
+                        break;
+                    }
+
+                    case Opcodes.REF: {
+                        // Ref check: rd = ref(rs) - returns blessed class name or type
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        RuntimeBase val = registers[rs];
+                        RuntimeScalar result;
+                        if (val instanceof RuntimeScalar) {
+                            result = org.perlonjava.operators.ReferenceOperators.ref((RuntimeScalar) val);
+                        } else {
+                            // For non-scalar types, convert to scalar first
+                            result = org.perlonjava.operators.ReferenceOperators.ref(val.scalar());
+                        }
+                        registers[rd] = result;
+                        break;
+                    }
+
+                    case Opcodes.BLESS: {
+                        // Bless: rd = bless(rs_ref, rs_package)
+                        int rd = bytecode[pc++];
+                        int refReg = bytecode[pc++];
+                        int packageReg = bytecode[pc++];
+                        RuntimeScalar ref = (RuntimeScalar) registers[refReg];
+                        RuntimeScalar packageName = (RuntimeScalar) registers[packageReg];
+                        registers[rd] = org.perlonjava.operators.ReferenceOperators.bless(ref, packageName);
+                        break;
+                    }
+
+                    case Opcodes.ISA: {
+                        // ISA: rd = isa(rs_obj, rs_package)
+                        int rd = bytecode[pc++];
+                        int objReg = bytecode[pc++];
+                        int packageReg = bytecode[pc++];
+                        RuntimeScalar obj = (RuntimeScalar) registers[objReg];
+                        RuntimeScalar packageName = (RuntimeScalar) registers[packageReg];
+                        // Create RuntimeArray with arguments
+                        RuntimeArray isaArgs = new RuntimeArray();
+                        isaArgs.push(obj);
+                        isaArgs.push(packageName);
+                        // Call Universal.isa
+                        RuntimeList result = org.perlonjava.perlmodule.Universal.isa(isaArgs, RuntimeContextType.SCALAR);
+                        registers[rd] = result.scalar();
+                        break;
+                    }
+
                     // =================================================================
                     // ARRAY OPERATIONS
                     // =================================================================
@@ -488,17 +598,24 @@ public class BytecodeInterpreter {
                         int arrayReg = bytecode[pc++];
                         int indexReg = bytecode[pc++];
 
-                        // Check type
-                        if (!(registers[arrayReg] instanceof RuntimeArray)) {
-                            throw new RuntimeException("ARRAY_GET: register " + arrayReg + " contains " +
-                                (registers[arrayReg] == null ? "null" : registers[arrayReg].getClass().getName()) +
-                                " instead of RuntimeArray");
-                        }
-
-                        RuntimeArray arr = (RuntimeArray) registers[arrayReg];
+                        RuntimeBase arrayBase = registers[arrayReg];
                         RuntimeScalar idx = (RuntimeScalar) registers[indexReg];
-                        // Uses RuntimeArray API directly
-                        registers[rd] = arr.get(idx.getInt());
+
+                        if (arrayBase instanceof RuntimeArray) {
+                            RuntimeArray arr = (RuntimeArray) arrayBase;
+                            registers[rd] = arr.get(idx.getInt());
+                        } else if (arrayBase instanceof RuntimeList) {
+                            RuntimeList list = (RuntimeList) arrayBase;
+                            int index = idx.getInt();
+                            if (index < 0) index = list.elements.size() + index;
+                            registers[rd] = (index >= 0 && index < list.elements.size())
+                                ? list.elements.get(index)
+                                : new RuntimeScalar();
+                        } else {
+                            throw new RuntimeException("ARRAY_GET: register " + arrayReg + " contains " +
+                                (arrayBase == null ? "null" : arrayBase.getClass().getName()) +
+                                " instead of RuntimeArray or RuntimeList");
+                        }
                         break;
                     }
 
@@ -555,10 +672,16 @@ public class BytecodeInterpreter {
                     case Opcodes.ARRAY_SIZE: {
                         // Array size: rd = scalar(@array) or scalar(value)
                         // Use polymorphic scalar() method - arrays return size, scalars return themselves
+                        // Special case for RuntimeList: return size, not last element
                         int rd = bytecode[pc++];
                         int operandReg = bytecode[pc++];
                         RuntimeBase operand = registers[operandReg];
-                        registers[rd] = operand.scalar();
+                        if (operand instanceof RuntimeList) {
+                            // For RuntimeList in list assignment context, return the count
+                            registers[rd] = new RuntimeScalar(((RuntimeList) operand).size());
+                        } else {
+                            registers[rd] = operand.scalar();
+                        }
                         break;
                     }
 
@@ -754,11 +877,22 @@ public class BytecodeInterpreter {
                         int filehandleReg = bytecode[pc++];
 
                         Object val = registers[contentReg];
-                        RuntimeScalar fh = (RuntimeScalar) registers[filehandleReg];
+
+                        // Filehandle should be scalar - convert if needed
+                        RuntimeBase fhBase = registers[filehandleReg];
+                        RuntimeScalar fh = (fhBase instanceof RuntimeScalar)
+                            ? (RuntimeScalar) fhBase
+                            : fhBase.scalar();
 
                         RuntimeList list;
                         if (val instanceof RuntimeList) {
                             list = (RuntimeList) val;
+                        } else if (val instanceof RuntimeArray) {
+                            // Convert RuntimeArray to RuntimeList
+                            list = new RuntimeList();
+                            for (RuntimeScalar elem : (RuntimeArray) val) {
+                                list.add(elem);
+                            }
                         } else if (val instanceof RuntimeScalar) {
                             // Convert scalar to single-element list
                             list = new RuntimeList();
@@ -779,11 +913,22 @@ public class BytecodeInterpreter {
                         int filehandleReg = bytecode[pc++];
 
                         Object val = registers[contentReg];
-                        RuntimeScalar fh = (RuntimeScalar) registers[filehandleReg];
+
+                        // Filehandle should be scalar - convert if needed
+                        RuntimeBase fhBase = registers[filehandleReg];
+                        RuntimeScalar fh = (fhBase instanceof RuntimeScalar)
+                            ? (RuntimeScalar) fhBase
+                            : fhBase.scalar();
 
                         RuntimeList list;
                         if (val instanceof RuntimeList) {
                             list = (RuntimeList) val;
+                        } else if (val instanceof RuntimeArray) {
+                            // Convert RuntimeArray to RuntimeList
+                            list = new RuntimeList();
+                            for (RuntimeScalar elem : (RuntimeArray) val) {
+                                list.add(elem);
+                            }
                         } else if (val instanceof RuntimeScalar) {
                             // Convert scalar to single-element list
                             list = new RuntimeList();
@@ -983,6 +1128,46 @@ public class BytecodeInterpreter {
                     // LIST OPERATIONS
                     // =================================================================
 
+                    case Opcodes.LIST_TO_SCALAR: {
+                        // Convert list to scalar context (returns size)
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        RuntimeBase val = registers[rs];
+                        if (val instanceof RuntimeList) {
+                            registers[rd] = new RuntimeScalar(((RuntimeList) val).elements.size());
+                        } else if (val instanceof RuntimeArray) {
+                            registers[rd] = new RuntimeScalar(((RuntimeArray) val).size());
+                        } else {
+                            // Already a scalar
+                            registers[rd] = val.scalar();
+                        }
+                        break;
+                    }
+
+                    case Opcodes.SCALAR_TO_LIST: {
+                        // Convert scalar to RuntimeList
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        RuntimeBase val = registers[rs];
+                        if (val instanceof RuntimeList) {
+                            // Already a list
+                            registers[rd] = val;
+                        } else if (val instanceof RuntimeArray) {
+                            // Convert array to list
+                            RuntimeList list = new RuntimeList();
+                            for (RuntimeScalar elem : (RuntimeArray) val) {
+                                list.elements.add(elem);
+                            }
+                            registers[rd] = list;
+                        } else {
+                            // Scalar to list - wrap in a list
+                            RuntimeList list = new RuntimeList();
+                            list.elements.add(val.scalar());
+                            registers[rd] = list;
+                        }
+                        break;
+                    }
+
                     case Opcodes.CREATE_LIST: {
                         // Create RuntimeList from registers
                         // Format: [CREATE_LIST] [rd] [count] [rs1] [rs2] ... [rsN]
@@ -1025,7 +1210,12 @@ public class BytecodeInterpreter {
                         int separatorReg = bytecode[pc++];
                         int listReg = bytecode[pc++];
 
-                        RuntimeScalar separator = (RuntimeScalar) registers[separatorReg];
+                        // Separator should be scalar - convert if needed
+                        RuntimeBase separatorBase = registers[separatorReg];
+                        RuntimeScalar separator = (separatorBase instanceof RuntimeScalar)
+                            ? (RuntimeScalar) separatorBase
+                            : separatorBase.scalar();
+
                         RuntimeBase list = registers[listReg];
 
                         // Call StringOperators.joinForInterpolation (doesn't warn on undef)
@@ -1206,6 +1396,34 @@ public class BytecodeInterpreter {
             // Fell through end of bytecode - return empty list
             return new RuntimeList();
 
+        } catch (ClassCastException e) {
+            // Special handling for ClassCastException to show which opcode is failing
+            // Check if we're inside an eval block first
+            if (!evalCatchStack.isEmpty()) {
+                evalCatchStack.pop();
+                WarnDie.catchEval(e);
+                return new RuntimeList();
+            }
+
+            // Not in eval - show detailed error with bytecode context
+            int errorPc = Math.max(0, pc - 1); // Go back one instruction
+
+            // Show bytecode context (10 bytes before errorPc)
+            StringBuilder bcContext = new StringBuilder();
+            bcContext.append("\nBytecode context: [");
+            for (int i = Math.max(0, errorPc - 10); i < Math.min(bytecode.length, errorPc + 5); i++) {
+                if (i == errorPc) {
+                    bcContext.append(" >>>");
+                }
+                bcContext.append(String.format(" %02X", bytecode[i] & 0xFF));
+                if (i == errorPc) {
+                    bcContext.append("<<<");
+                }
+            }
+            bcContext.append(" ]");
+
+            String errorMessage = "ClassCastException" + bcContext + ": " + e.getMessage();
+            throw new RuntimeException(formatInterpreterError(code, errorPc, new Exception(errorMessage)), e);
         } catch (Throwable e) {
             // Check if we're inside an eval block
             if (!evalCatchStack.isEmpty()) {
@@ -1226,12 +1444,9 @@ public class BytecodeInterpreter {
                 throw (PerlDieException) e;
             }
 
-            // Wrap other exceptions with interpreter context
-            throw new RuntimeException(
-                "Interpreter error in " + code.sourceName + ":" + code.sourceLine +
-                " at pc=" + pc + ": " + e.getMessage(),
-                e
-            );
+            // Wrap other exceptions with interpreter context including bytecode context
+            String errorMessage = formatInterpreterError(code, pc, e);
+            throw new RuntimeException(errorMessage, e);
         } finally {
             // Always pop the interpreter state
             InterpreterState.pop();
@@ -1246,5 +1461,46 @@ public class BytecodeInterpreter {
         int high = bytecode[pc] & 0xFFFF;      // Keep mask here - need full 32-bit range
         int low = bytecode[pc + 1] & 0xFFFF;   // Keep mask here - need full 32-bit range
         return (high << 16) | low;
+    }
+
+    /**
+     * Format an interpreter error with source location.
+     * Shows the error location using the pc-to-tokenIndex mapping if available.
+     */
+    private static String formatInterpreterError(InterpretedCode code, int errorPc, Throwable e) {
+        StringBuilder sb = new StringBuilder();
+
+        // Try to get token index from pcToTokenIndex map
+        // Use floorEntry to find the nearest token index before or at errorPc
+        Integer tokenIndex = null;
+        if (code.pcToTokenIndex != null && !code.pcToTokenIndex.isEmpty()) {
+            var entry = code.pcToTokenIndex.floorEntry(errorPc);
+            if (entry != null) {
+                tokenIndex = entry.getValue();
+            }
+        }
+
+        if (tokenIndex != null && code.errorUtil != null) {
+            // We have token index and errorUtil - convert to line number
+            int lineNumber = code.errorUtil.getLineNumber(tokenIndex);
+            sb.append("Interpreter error in ").append(code.sourceName)
+              .append(" line ").append(lineNumber)
+              .append(" (pc=").append(errorPc).append("): ")
+              .append(e.getMessage());
+        } else if (tokenIndex != null) {
+            // We have token index but no errorUtil
+            sb.append("Interpreter error in ").append(code.sourceName)
+              .append(" at token ").append(tokenIndex)
+              .append(" (pc=").append(errorPc).append("): ")
+              .append(e.getMessage());
+        } else {
+            // No token index available, use source line from code
+            sb.append("Interpreter error in ").append(code.sourceName)
+              .append(" line ").append(code.sourceLine)
+              .append(" (pc=").append(errorPc).append("): ")
+              .append(e.getMessage());
+        }
+
+        return sb.toString();
     }
 }
