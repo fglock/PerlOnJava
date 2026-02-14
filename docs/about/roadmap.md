@@ -17,6 +17,7 @@ The following areas are currently under active development to enhance the functi
   - Addressing indirect object special cases for `GetOpt::Long`.
   - Localizing regex variables.
   - Fix handling of global variable aliasing in `for`.
+  - When the compiler encounters a "Method too large" error, it should switch to the interpreter mode. The interpreter can compile larger blocks.
 
 - **Regex Subsystem**
   - Ongoing improvements and feature additions.
@@ -51,9 +52,11 @@ The following areas are currently under active development to enhance the functi
   - Inlining `map` and related blocks.
   - Inlining constant subroutines.
   - Prefetch named subroutines to lexical (`our`).
+  - If eval-STRING is called in the same place multiple times with different strings, it should switch to interpreter mode. The interpreter compiles faster.
 
 - **Compilation with GraalVM**
-  - Documenting preliminary results in [docs/GRAALVM.md](docs/GRAALVM.md).
+  - Documenting preliminary results in [dev/design/graalvm.md](dev/design/graalvm.md).
+  - GraalVM can use the interpreter mode.
 
 
 ## Upcoming Milestones
