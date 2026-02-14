@@ -102,7 +102,12 @@ public class BytecodeInterpreter {
                         int target = readInt(bytecode, pc);
                         pc += 2;
 
-                        RuntimeScalar cond = (RuntimeScalar) registers[condReg];
+                        // Convert to scalar if needed for boolean test
+                        RuntimeBase condBase = registers[condReg];
+                        RuntimeScalar cond = (condBase instanceof RuntimeScalar)
+                            ? (RuntimeScalar) condBase
+                            : condBase.scalar();
+
                         if (!cond.getBoolean()) {
                             pc = target;  // Jump - all registers stay valid!
                         }
@@ -115,7 +120,12 @@ public class BytecodeInterpreter {
                         int target = readInt(bytecode, pc);
                         pc += 2;
 
-                        RuntimeScalar cond = (RuntimeScalar) registers[condReg];
+                        // Convert to scalar if needed for boolean test
+                        RuntimeBase condBase = registers[condReg];
+                        RuntimeScalar cond = (condBase instanceof RuntimeScalar)
+                            ? (RuntimeScalar) condBase
+                            : condBase.scalar();
+
                         if (cond.getBoolean()) {
                             pc = target;
                         }
@@ -289,11 +299,15 @@ public class BytecodeInterpreter {
                         int rd = bytecode[pc++];
                         int rs1 = bytecode[pc++];
                         int rs2 = bytecode[pc++];
+
+                        // Convert to scalar if needed
+                        RuntimeBase val1 = registers[rs1];
+                        RuntimeBase val2 = registers[rs2];
+                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+
                         // Calls SAME method as compiled code
-                        registers[rd] = MathOperators.add(
-                            (RuntimeScalar) registers[rs1],
-                            (RuntimeScalar) registers[rs2]
-                        );
+                        registers[rd] = MathOperators.add(s1, s2);
                         break;
                     }
 
@@ -302,10 +316,14 @@ public class BytecodeInterpreter {
                         int rd = bytecode[pc++];
                         int rs1 = bytecode[pc++];
                         int rs2 = bytecode[pc++];
-                        registers[rd] = MathOperators.subtract(
-                            (RuntimeScalar) registers[rs1],
-                            (RuntimeScalar) registers[rs2]
-                        );
+
+                        // Convert to scalar if needed
+                        RuntimeBase val1 = registers[rs1];
+                        RuntimeBase val2 = registers[rs2];
+                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+
+                        registers[rd] = MathOperators.subtract(s1, s2);
                         break;
                     }
 
@@ -314,10 +332,14 @@ public class BytecodeInterpreter {
                         int rd = bytecode[pc++];
                         int rs1 = bytecode[pc++];
                         int rs2 = bytecode[pc++];
-                        registers[rd] = MathOperators.multiply(
-                            (RuntimeScalar) registers[rs1],
-                            (RuntimeScalar) registers[rs2]
-                        );
+
+                        // Convert to scalar if needed
+                        RuntimeBase val1 = registers[rs1];
+                        RuntimeBase val2 = registers[rs2];
+                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+
+                        registers[rd] = MathOperators.multiply(s1, s2);
                         break;
                     }
 
@@ -326,10 +348,14 @@ public class BytecodeInterpreter {
                         int rd = bytecode[pc++];
                         int rs1 = bytecode[pc++];
                         int rs2 = bytecode[pc++];
-                        registers[rd] = MathOperators.divide(
-                            (RuntimeScalar) registers[rs1],
-                            (RuntimeScalar) registers[rs2]
-                        );
+
+                        // Convert to scalar if needed
+                        RuntimeBase val1 = registers[rs1];
+                        RuntimeBase val2 = registers[rs2];
+                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+
+                        registers[rd] = MathOperators.divide(s1, s2);
                         break;
                     }
 
@@ -338,10 +364,14 @@ public class BytecodeInterpreter {
                         int rd = bytecode[pc++];
                         int rs1 = bytecode[pc++];
                         int rs2 = bytecode[pc++];
-                        registers[rd] = MathOperators.modulus(
-                            (RuntimeScalar) registers[rs1],
-                            (RuntimeScalar) registers[rs2]
-                        );
+
+                        // Convert to scalar if needed
+                        RuntimeBase val1 = registers[rs1];
+                        RuntimeBase val2 = registers[rs2];
+                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+
+                        registers[rd] = MathOperators.modulus(s1, s2);
                         break;
                     }
 
@@ -350,10 +380,14 @@ public class BytecodeInterpreter {
                         int rd = bytecode[pc++];
                         int rs1 = bytecode[pc++];
                         int rs2 = bytecode[pc++];
-                        registers[rd] = MathOperators.pow(
-                            (RuntimeScalar) registers[rs1],
-                            (RuntimeScalar) registers[rs2]
-                        );
+
+                        // Convert to scalar if needed
+                        RuntimeBase val1 = registers[rs1];
+                        RuntimeBase val2 = registers[rs2];
+                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+
+                        registers[rd] = MathOperators.pow(s1, s2);
                         break;
                     }
 

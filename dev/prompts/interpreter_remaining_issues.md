@@ -2,8 +2,8 @@
 
 ## Current Status
 - 50+ tests passing in demo.t
-- 7 out of 9 subtests fully passing
-- 2 subtests with minor failures
+- 8 out of 9 subtests fully passing
+- 1 subtest with minor failure
 
 ## Failing Tests
 
@@ -20,19 +20,7 @@ my @arr = (4, 8, 9, 7);
 my $result = splice @arr, 2, 2;  # Should return 7, not '97'
 ```
 
-### 2. Sort without block (1 test failing)
-**Issue**: `sort` without block doesn't sort at all
-- Expected: `'apple monkey zebra'` (alphabetically sorted)
-- Got: `'zebra apple monkey'` (original order)
-- **Root cause**: Sort implementation doesn't handle default string comparison
-- **Fix needed**: When no block provided, default to `$a cmp $b` behavior
-
-Test code:
-```perl
-my @sorted = sort qw(zebra apple monkey);  # Should default to cmp
-```
-
-### 3. done_testing() error
+### 2. done_testing() error
 **Issue**: Test framework hits "Not a CODE reference" error at end
 - Occurs in Test::Builder framework code (line 368)
 - Error happens when calling `done_testing()` at line 295
@@ -46,10 +34,16 @@ my @sorted = sort qw(zebra apple monkey);  # Should default to cmp
 ⚠️  Splice tests (8/9 - one scalar context issue)
 ✅ Map tests (2/2)
 ✅ Grep tests (2/2)
-⚠️  Sort tests (4/5 - sort without block issue)
+✅ Sort tests (5/5) - **FIXED!**
 ✅ Object tests (2/2)
+
+## Recently Fixed
+✅ **Sort without block** - Fixed package-qualified variable access in BytecodeCompiler
+  - Issue: Auto-generated comparison block `{ $main::a cmp $main::b }` wasn't removing $ sigil
+  - Fix: Always remove sigil before storing global variable name in string pool
+  - Now matches codegen behavior: `GlobalVariable.getGlobalVariable("main::a")`
 
 ## Next Steps
 1. Fix splice to be context-aware
-2. Fix sort default comparison
-3. Debug done_testing() CODE reference error
+2. Debug done_testing() CODE reference error
+
