@@ -190,6 +190,24 @@ public class PerlRange extends RuntimeBase implements Iterable<RuntimeScalar> {
     }
 
     /**
+     * Returns the start value of the range.
+     *
+     * @return A RuntimeScalar representing the start value.
+     */
+    public RuntimeScalar getStart() {
+        return start;
+    }
+
+    /**
+     * Returns the end value of the range.
+     *
+     * @return A RuntimeScalar representing the end value.
+     */
+    public RuntimeScalar getEnd() {
+        return end;
+    }
+
+    /**
      * Evaluates the boolean representation of the range.
      *
      * @return A boolean indicating the truthiness of the range.

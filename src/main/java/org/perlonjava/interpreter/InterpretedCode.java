@@ -245,8 +245,19 @@ public class InterpretedCode extends RuntimeCode {
                         if (obj instanceof RuntimeScalar) {
                             RuntimeScalar scalar = (RuntimeScalar) obj;
                             sb.append("RuntimeScalar{type=").append(scalar.type).append(", value=").append(scalar.value.getClass().getSimpleName()).append("}");
+                        } else if (obj instanceof org.perlonjava.runtime.PerlRange) {
+                            // Special handling for PerlRange to avoid expanding large ranges
+                            org.perlonjava.runtime.PerlRange range = (org.perlonjava.runtime.PerlRange) obj;
+                            sb.append("PerlRange{").append(range.getStart().toString()).append("..")
+                              .append(range.getEnd().toString()).append("}");
                         } else {
-                            sb.append(obj);
+                            // For other objects, show class name and limit string length
+                            String objStr = obj.toString();
+                            if (objStr.length() > 100) {
+                                sb.append(obj.getClass().getSimpleName()).append("{...}");
+                            } else {
+                                sb.append(objStr);
+                            }
                         }
                         sb.append(")");
                     }
