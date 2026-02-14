@@ -2974,15 +2974,28 @@ public class BytecodeCompiler implements Visitor {
             throw new RuntimeException("Unsupported local operand: " + node.operand.getClass().getSimpleName());
         } else if (op.equals("scalar")) {
             // Force scalar context: scalar(expr)
-            // Evaluates the operand in scalar context
-            int savedContext = currentCallContext;
-            currentCallContext = RuntimeContextType.SCALAR;
-            try {
-                node.operand.accept(this);
-                // Result is already in lastResultReg
-                // If it's a RuntimeList, it will be converted to scalar when used
-            } finally {
-                currentCallContext = savedContext;
+            // Evaluates the operand and converts the result to scalar
+            if (node.operand != null) {
+                // Evaluate operand in scalar context
+                int savedContext = currentCallContext;
+                currentCallContext = RuntimeContextType.SCALAR;
+                try {
+                    node.operand.accept(this);
+                    int operandReg = lastResultReg;
+
+                    // Emit ARRAY_SIZE to convert to scalar
+                    // This handles arrays/hashes (converts to size) and passes through scalars
+                    int rd = allocateRegister();
+                    emit(Opcodes.ARRAY_SIZE);
+                    emitReg(rd);
+                    emitReg(operandReg);
+
+                    lastResultReg = rd;
+                } finally {
+                    currentCallContext = savedContext;
+                }
+            } else {
+                throwCompilerException("scalar operator requires an operand");
             }
             return;
         } else if (op.equals("$")) {
@@ -5130,16 +5143,37 @@ public class BytecodeCompiler implements Visitor {
 
         // Fast path: empty list
         if (node.elements.isEmpty()) {
-            // Return empty RuntimeList
-            int listReg = allocateRegister();
-            emit(Opcodes.CREATE_LIST);
-            emitReg(listReg);
-            emit(0); // count = 0
-            lastResultReg = listReg;
+            // In SCALAR context, return undef; in LIST context, return empty list
+            if (currentCallContext == RuntimeContextType.SCALAR) {
+                int rd = allocateRegister();
+                emit(Opcodes.LOAD_UNDEF);
+                emitReg(rd);
+                lastResultReg = rd;
+            } else {
+                int listReg = allocateRegister();
+                emit(Opcodes.CREATE_LIST);
+                emitReg(listReg);
+                emit(0); // count = 0
+                lastResultReg = listReg;
+            }
             return;
         }
 
-        // Fast path: single element
+        // In SCALAR context, evaluate all elements except last for side effects
+        // and return only the last element's value (like compiled backend does)
+        if (currentCallContext == RuntimeContextType.SCALAR) {
+            // Evaluate all elements except the last in SCALAR context for side effects
+            for (int i = 0; i < node.elements.size() - 1; i++) {
+                node.elements.get(i).accept(this);
+                // Result is discarded (side effects only)
+            }
+            // Evaluate and keep the last element
+            node.elements.get(node.elements.size() - 1).accept(this);
+            // lastResultReg already contains the last element's value
+            return;
+        }
+
+        // Fast path: single element in LIST context
         // In list context, returns a RuntimeList with one element
         // List elements should be evaluated in LIST context
         if (node.elements.size() == 1) {
@@ -5161,7 +5195,7 @@ public class BytecodeCompiler implements Visitor {
             return;
         }
 
-        // General case: multiple elements
+        // General case: multiple elements in LIST context
         // Evaluate each element into a register
         // List elements should be evaluated in LIST context
         int savedContext = currentCallContext;
