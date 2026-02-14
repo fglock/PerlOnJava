@@ -4887,40 +4887,32 @@ public class BytecodeCompiler implements Visitor {
             varReg = allocateRegister();
         }
 
-        // Step 5: Loop start - check if iterator has next
+        // Step 5: Loop start - combined check/next/exit (superinstruction)
         int loopStartPc = bytecode.size();
 
-        // Check hasNext()
-        int hasNextReg = allocateRegister();
-        emit(Opcodes.ITERATOR_HAS_NEXT);
-        emitReg(hasNextReg);
-        emitReg(iterReg);
-
-        // If false, jump to end (we'll patch this later)
-        emit(Opcodes.GOTO_IF_FALSE);
-        emitReg(hasNextReg);
+        // Emit FOREACH_NEXT_OR_EXIT superinstruction
+        // This combines: hasNext check, next() call, and conditional exit
+        // Format: FOREACH_NEXT_OR_EXIT varReg, iterReg, exitOffset
+        emit(Opcodes.FOREACH_NEXT_OR_EXIT);
+        emitReg(varReg);        // destination register for element
+        emitReg(iterReg);       // iterator register
         int loopEndJumpPc = bytecode.size();
-        emitInt(0);  // Placeholder for jump target
+        emitInt(0);             // placeholder for exit offset (to be patched)
 
-        // Step 6: Get next element and assign to loop variable
-        emit(Opcodes.ITERATOR_NEXT);
-        emitReg(varReg);
-        emitReg(iterReg);
-
-        // Step 7: Execute body
+        // Step 6: Execute body
         if (node.body != null) {
             node.body.accept(this);
         }
 
-        // Step 8: Jump back to loop start
+        // Step 7: Jump back to loop start
         emit(Opcodes.GOTO);
         emitInt(loopStartPc);
 
-        // Step 9: Loop end - patch the forward jump
+        // Step 8: Loop end - patch the forward jump
         int loopEndPc = bytecode.size();
         patchJump(loopEndJumpPc, loopEndPc);
 
-        // Step 10: Exit scope
+        // Step 9: Exit scope
         exitScope();
 
         lastResultReg = -1;  // For loop returns empty
