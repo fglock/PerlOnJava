@@ -623,6 +623,54 @@ public class BytecodeInterpreter {
                     }
 
                     // =================================================================
+                    // ITERATOR OPERATIONS - For efficient foreach loops
+                    // =================================================================
+
+                    case Opcodes.ITERATOR_CREATE: {
+                        // Create iterator: rd = rs.iterator()
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+
+                        RuntimeBase iterable = registers[rs];
+                        java.util.Iterator<RuntimeScalar> iterator = iterable.iterator();
+
+                        // Store iterator as a constant (we need to preserve the Iterator object)
+                        // Wrap in RuntimeScalar for storage
+                        registers[rd] = new RuntimeScalar(iterator);
+                        break;
+                    }
+
+                    case Opcodes.ITERATOR_HAS_NEXT: {
+                        // Check iterator: rd = iterator.hasNext()
+                        int rd = bytecode[pc++];
+                        int iterReg = bytecode[pc++];
+
+                        RuntimeScalar iterScalar = (RuntimeScalar) registers[iterReg];
+                        @SuppressWarnings("unchecked")
+                        java.util.Iterator<RuntimeScalar> iterator =
+                            (java.util.Iterator<RuntimeScalar>) iterScalar.value;
+
+                        boolean hasNext = iterator.hasNext();
+                        registers[rd] = hasNext ? RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarFalse;
+                        break;
+                    }
+
+                    case Opcodes.ITERATOR_NEXT: {
+                        // Get next element: rd = iterator.next()
+                        int rd = bytecode[pc++];
+                        int iterReg = bytecode[pc++];
+
+                        RuntimeScalar iterScalar = (RuntimeScalar) registers[iterReg];
+                        @SuppressWarnings("unchecked")
+                        java.util.Iterator<RuntimeScalar> iterator =
+                            (java.util.Iterator<RuntimeScalar>) iterScalar.value;
+
+                        RuntimeScalar next = iterator.next();
+                        registers[rd] = next;
+                        break;
+                    }
+
+                    // =================================================================
                     // ARRAY OPERATIONS
                     // =================================================================
 
