@@ -702,12 +702,13 @@ public class InterpretedCode extends RuntimeCode {
                             sb.append(" r").append(rd).append(" = local ").append(localVarName);
                             break;
                         case Opcodes.SLOWOP_SPLICE:
-                            // Format: [rd] [arrayReg] [argsReg]
+                            // Format: [rd] [arrayReg] [argsReg] [context]
                             rd = bytecode[pc++];
                             int spliceArrayReg = bytecode[pc++];
                             int spliceArgsReg = bytecode[pc++];
+                            int spliceContext = bytecode[pc++];
                             sb.append(" r").append(rd).append(" = splice(r").append(spliceArrayReg)
-                              .append(", r").append(spliceArgsReg).append(")");
+                              .append(", r").append(spliceArgsReg).append(") ctx=").append(spliceContext);
                             break;
                         case Opcodes.SLOWOP_ARRAY_SLICE:
                             // Format: [rd] [arrayReg] [indicesReg]
