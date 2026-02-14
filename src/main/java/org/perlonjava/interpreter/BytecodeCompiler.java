@@ -663,10 +663,10 @@ public class BytecodeCompiler implements Visitor {
             // Determine the calling context for the RHS based on LHS type
             int rhsContext = RuntimeContextType.LIST; // Default
 
-            // Check if LHS is a scalar assignment (my $x = ...)
+            // Check if LHS is a scalar assignment (my $x = ... or our $x = ...)
             if (node.left instanceof OperatorNode) {
                 OperatorNode leftOp = (OperatorNode) node.left;
-                if (leftOp.operator.equals("my") && leftOp.operand instanceof OperatorNode) {
+                if ((leftOp.operator.equals("my") || leftOp.operator.equals("our")) && leftOp.operand instanceof OperatorNode) {
                     OperatorNode sigilOp = (OperatorNode) leftOp.operand;
                     if (sigilOp.operator.equals("$")) {
                         // Scalar assignment: use SCALAR context for RHS
@@ -1053,8 +1053,8 @@ public class BytecodeCompiler implements Visitor {
                         String sigil = sigilOp.operator;
 
                         if (sigil.equals("$")) {
-                            // Scalar: use MOVE
-                            emit(Opcodes.MOVE);
+                            // Scalar: use SET_SCALAR to modify value without breaking alias
+                            emit(Opcodes.SET_SCALAR);
                             emitReg(targetReg);
                             emitReg(valueReg);
                         } else if (sigil.equals("@")) {
@@ -1720,6 +1720,103 @@ public class BytecodeCompiler implements Visitor {
                 lastResultReg = rd;
                 return;
             }
+            // Code reference call: $code->() or $code->(@args)
+            // right is ListNode with arguments
+            else if (node.right instanceof ListNode) {
+                // This is a code reference call: $coderef->(args)
+                // Compile the code reference in scalar context
+                int savedContext = currentCallContext;
+                currentCallContext = RuntimeContextType.SCALAR;
+                node.left.accept(this);
+                int coderefReg = lastResultReg;
+
+                // Compile arguments in list context
+                currentCallContext = RuntimeContextType.LIST;
+                node.right.accept(this);
+                int argsReg = lastResultReg;
+                currentCallContext = savedContext;
+
+                // Allocate result register
+                int rd = allocateRegister();
+
+                // Emit CALL_SUB opcode
+                emit(Opcodes.CALL_SUB);
+                emitReg(rd);
+                emitReg(coderefReg);
+                emitReg(argsReg);
+                emit(currentCallContext);
+
+                lastResultReg = rd;
+                return;
+            }
+            // Method call: ->method() or ->$method()
+            // right is BinaryOperatorNode with operator "("
+            else if (node.right instanceof BinaryOperatorNode) {
+                BinaryOperatorNode rightCall = (BinaryOperatorNode) node.right;
+                if (rightCall.operator.equals("(")) {
+                    // object.call(method, arguments, context)
+                    Node invocantNode = node.left;
+                    Node methodNode = rightCall.left;
+                    Node argsNode = rightCall.right;
+
+                    // Convert class name to string if needed: Class->method()
+                    if (invocantNode instanceof IdentifierNode) {
+                        String className = ((IdentifierNode) invocantNode).name;
+                        invocantNode = new StringNode(className, ((IdentifierNode) invocantNode).getIndex());
+                    }
+
+                    // Convert method name to string if needed
+                    if (methodNode instanceof OperatorNode) {
+                        OperatorNode methodOp = (OperatorNode) methodNode;
+                        // &method is introduced by parser if method is predeclared
+                        if (methodOp.operator.equals("&")) {
+                            methodNode = methodOp.operand;
+                        }
+                    }
+                    if (methodNode instanceof IdentifierNode) {
+                        String methodName = ((IdentifierNode) methodNode).name;
+                        methodNode = new StringNode(methodName, ((IdentifierNode) methodNode).getIndex());
+                    }
+
+                    // Compile invocant in scalar context
+                    int savedContext = currentCallContext;
+                    currentCallContext = RuntimeContextType.SCALAR;
+                    invocantNode.accept(this);
+                    int invocantReg = lastResultReg;
+
+                    // Compile method name in scalar context
+                    methodNode.accept(this);
+                    int methodReg = lastResultReg;
+
+                    // Get currentSub (__SUB__ for SUPER:: resolution)
+                    int currentSubReg = allocateRegister();
+                    emit(Opcodes.LOAD_GLOBAL_CODE);
+                    emitReg(currentSubReg);
+                    int subIdx = addToStringPool("__SUB__");
+                    emit(subIdx);
+
+                    // Compile arguments in list context
+                    currentCallContext = RuntimeContextType.LIST;
+                    argsNode.accept(this);
+                    int argsReg = lastResultReg;
+                    currentCallContext = savedContext;
+
+                    // Allocate result register
+                    int rd = allocateRegister();
+
+                    // Emit CALL_METHOD
+                    emit(Opcodes.CALL_METHOD);
+                    emitReg(rd);
+                    emitReg(invocantReg);
+                    emitReg(methodReg);
+                    emitReg(currentSubReg);
+                    emitReg(argsReg);
+                    emit(currentCallContext);
+
+                    lastResultReg = rd;
+                    return;
+                }
+            }
             // Otherwise, fall through to normal -> handling (method call)
         }
 
@@ -1848,7 +1945,7 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(rs1);
                 emitReg(rs2);
             }
-            case "(", "()", "->" -> {
+            case "(", "()" -> {
                 // Apply operator: $coderef->(args) or &subname(args) or foo(args)
                 // left (rs1) = code reference (RuntimeScalar containing RuntimeCode or SubroutineNode)
                 // right (rs2) = arguments (should be RuntimeList from ListNode)
@@ -2729,10 +2826,11 @@ public class BytecodeCompiler implements Visitor {
                     // Allocate register and add to symbol table
                     int reg = addVariable(varName, "our");
 
-                    // Load from global variable
-                    // Get current package from symbol table
-                    String packageName = getCurrentPackage();
-                    String globalVarName = packageName + "::" + ((IdentifierNode) sigilOp.operand).name;
+                    // Load from global variable using normalized name
+                    String globalVarName = NameNormalizer.normalizeVariableName(
+                        ((IdentifierNode) sigilOp.operand).name,
+                        getCurrentPackage()
+                    );
                     int nameIdx = addToStringPool(globalVarName);
 
                     switch (sigil) {
@@ -2762,8 +2860,6 @@ public class BytecodeCompiler implements Visitor {
                 ListNode listNode = (ListNode) node.operand;
                 List<Integer> varRegs = new ArrayList<>();
 
-                String packageName = getCurrentPackage();
-
                 for (Node element : listNode.elements) {
                     if (element instanceof OperatorNode) {
                         OperatorNode sigilOp = (OperatorNode) element;
@@ -2781,8 +2877,11 @@ public class BytecodeCompiler implements Visitor {
                                 // Allocate register and add to symbol table
                                 reg = addVariable(varName, "our");
 
-                                // Load from global variable
-                                String globalVarName = packageName + "::" + ((IdentifierNode) sigilOp.operand).name;
+                                // Load from global variable using normalized name
+                                String globalVarName = NameNormalizer.normalizeVariableName(
+                                    ((IdentifierNode) sigilOp.operand).name,
+                                    getCurrentPackage()
+                                );
                                 int nameIdx = addToStringPool(globalVarName);
 
                                 switch (sigil) {
@@ -2857,6 +2956,19 @@ public class BytecodeCompiler implements Visitor {
                 }
             }
             throw new RuntimeException("Unsupported local operand: " + node.operand.getClass().getSimpleName());
+        } else if (op.equals("scalar")) {
+            // Force scalar context: scalar(expr)
+            // Evaluates the operand in scalar context
+            int savedContext = currentCallContext;
+            currentCallContext = RuntimeContextType.SCALAR;
+            try {
+                node.operand.accept(this);
+                // Result is already in lastResultReg
+                // If it's a RuntimeList, it will be converted to scalar when used
+            } finally {
+                currentCallContext = savedContext;
+            }
+            return;
         } else if (op.equals("$")) {
             // Scalar variable dereference: $x
             if (node.operand instanceof IdentifierNode) {
@@ -3159,13 +3271,17 @@ public class BytecodeCompiler implements Visitor {
             }
         } else if (op.equals("package")) {
             // Package declaration: package Foo;
-            // This is a compile-time directive that sets the namespace context.
-            // It doesn't generate any runtime bytecode.
-            // The operand is an IdentifierNode with the package name.
+            // This updates the current package context for subsequent variable declarations
+            if (node.operand instanceof IdentifierNode) {
+                String packageName = ((IdentifierNode) node.operand).name;
 
-            // Don't emit any bytecode - just leave lastResultReg unchanged
-            // (or set to -1 to indicate no result)
-            lastResultReg = -1;
+                // Update the current package for this compilation scope
+                currentPackage = packageName;
+
+                lastResultReg = -1;  // No runtime value
+            } else {
+                throwCompilerException("package operator requires an identifier");
+            }
         } else if (op.equals("say") || op.equals("print")) {
             // say/print $x
             if (node.operand != null) {
