@@ -1837,6 +1837,32 @@ public class BytecodeCompiler implements Visitor {
             // Otherwise, fall through to normal {} handling after operand compilation
         }
 
+        // Handle "join" operator specially to ensure proper context
+        // Left operand (separator) needs SCALAR context, right operand (list) needs LIST context
+        if (node.operator.equals("join")) {
+            // Save and set context for left operand (separator)
+            int savedContext = currentCallContext;
+            currentCallContext = RuntimeContextType.SCALAR;
+            node.left.accept(this);
+            int rs1 = lastResultReg;
+
+            // Set context for right operand (array/list)
+            currentCallContext = RuntimeContextType.LIST;
+            node.right.accept(this);
+            int rs2 = lastResultReg;
+            currentCallContext = savedContext;
+
+            // Emit JOIN opcode
+            int rd = allocateRegister();
+            emit(Opcodes.JOIN);
+            emitReg(rd);
+            emitReg(rs1);
+            emitReg(rs2);
+
+            lastResultReg = rd;
+            return;
+        }
+
         // Compile left and right operands
         node.left.accept(this);
         int rs1 = lastResultReg;
@@ -1965,16 +1991,6 @@ public class BytecodeCompiler implements Visitor {
 
                 // Note: CALL_SUB may return RuntimeControlFlowList
                 // The interpreter will handle control flow propagation
-            }
-            case "join" -> {
-                // String join: rd = join(separator, list)
-                // left (rs1) = separator (empty string for interpolation)
-                // right (rs2) = list of elements
-
-                emit(Opcodes.JOIN);
-                emitReg(rd);
-                emitReg(rs1);
-                emitReg(rs2);
             }
             case ".." -> {
                 // Range operator: start..end
