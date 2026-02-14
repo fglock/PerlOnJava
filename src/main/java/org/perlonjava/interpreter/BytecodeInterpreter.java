@@ -102,7 +102,12 @@ public class BytecodeInterpreter {
                         int target = readInt(bytecode, pc);
                         pc += 2;
 
-                        RuntimeScalar cond = (RuntimeScalar) registers[condReg];
+                        // Convert to scalar if needed for boolean test
+                        RuntimeBase condBase = registers[condReg];
+                        RuntimeScalar cond = (condBase instanceof RuntimeScalar)
+                            ? (RuntimeScalar) condBase
+                            : condBase.scalar();
+
                         if (!cond.getBoolean()) {
                             pc = target;  // Jump - all registers stay valid!
                         }
@@ -115,7 +120,12 @@ public class BytecodeInterpreter {
                         int target = readInt(bytecode, pc);
                         pc += 2;
 
-                        RuntimeScalar cond = (RuntimeScalar) registers[condReg];
+                        // Convert to scalar if needed for boolean test
+                        RuntimeBase condBase = registers[condReg];
+                        RuntimeScalar cond = (condBase instanceof RuntimeScalar)
+                            ? (RuntimeScalar) condBase
+                            : condBase.scalar();
+
                         if (cond.getBoolean()) {
                             pc = target;
                         }
@@ -276,7 +286,12 @@ public class BytecodeInterpreter {
                         // Used to set the value in a persistent scalar without overwriting the reference
                         int rd = bytecode[pc++];
                         int rs = bytecode[pc++];
-                        ((RuntimeScalar) registers[rd]).set((RuntimeScalar) registers[rs]);
+                        // Auto-convert rs to scalar if needed
+                        RuntimeBase rsBase = registers[rs];
+                        RuntimeScalar rsScalar = (rsBase instanceof RuntimeScalar)
+                                ? (RuntimeScalar) rsBase
+                                : rsBase.scalar();
+                        ((RuntimeScalar) registers[rd]).set(rsScalar);
                         break;
                     }
 
@@ -289,11 +304,15 @@ public class BytecodeInterpreter {
                         int rd = bytecode[pc++];
                         int rs1 = bytecode[pc++];
                         int rs2 = bytecode[pc++];
+
+                        // Convert to scalar if needed
+                        RuntimeBase val1 = registers[rs1];
+                        RuntimeBase val2 = registers[rs2];
+                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+
                         // Calls SAME method as compiled code
-                        registers[rd] = MathOperators.add(
-                            (RuntimeScalar) registers[rs1],
-                            (RuntimeScalar) registers[rs2]
-                        );
+                        registers[rd] = MathOperators.add(s1, s2);
                         break;
                     }
 
@@ -302,10 +321,14 @@ public class BytecodeInterpreter {
                         int rd = bytecode[pc++];
                         int rs1 = bytecode[pc++];
                         int rs2 = bytecode[pc++];
-                        registers[rd] = MathOperators.subtract(
-                            (RuntimeScalar) registers[rs1],
-                            (RuntimeScalar) registers[rs2]
-                        );
+
+                        // Convert to scalar if needed
+                        RuntimeBase val1 = registers[rs1];
+                        RuntimeBase val2 = registers[rs2];
+                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+
+                        registers[rd] = MathOperators.subtract(s1, s2);
                         break;
                     }
 
@@ -314,10 +337,14 @@ public class BytecodeInterpreter {
                         int rd = bytecode[pc++];
                         int rs1 = bytecode[pc++];
                         int rs2 = bytecode[pc++];
-                        registers[rd] = MathOperators.multiply(
-                            (RuntimeScalar) registers[rs1],
-                            (RuntimeScalar) registers[rs2]
-                        );
+
+                        // Convert to scalar if needed
+                        RuntimeBase val1 = registers[rs1];
+                        RuntimeBase val2 = registers[rs2];
+                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+
+                        registers[rd] = MathOperators.multiply(s1, s2);
                         break;
                     }
 
@@ -326,10 +353,14 @@ public class BytecodeInterpreter {
                         int rd = bytecode[pc++];
                         int rs1 = bytecode[pc++];
                         int rs2 = bytecode[pc++];
-                        registers[rd] = MathOperators.divide(
-                            (RuntimeScalar) registers[rs1],
-                            (RuntimeScalar) registers[rs2]
-                        );
+
+                        // Convert to scalar if needed
+                        RuntimeBase val1 = registers[rs1];
+                        RuntimeBase val2 = registers[rs2];
+                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+
+                        registers[rd] = MathOperators.divide(s1, s2);
                         break;
                     }
 
@@ -338,10 +369,14 @@ public class BytecodeInterpreter {
                         int rd = bytecode[pc++];
                         int rs1 = bytecode[pc++];
                         int rs2 = bytecode[pc++];
-                        registers[rd] = MathOperators.modulus(
-                            (RuntimeScalar) registers[rs1],
-                            (RuntimeScalar) registers[rs2]
-                        );
+
+                        // Convert to scalar if needed
+                        RuntimeBase val1 = registers[rs1];
+                        RuntimeBase val2 = registers[rs2];
+                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+
+                        registers[rd] = MathOperators.modulus(s1, s2);
                         break;
                     }
 
@@ -350,10 +385,14 @@ public class BytecodeInterpreter {
                         int rd = bytecode[pc++];
                         int rs1 = bytecode[pc++];
                         int rs2 = bytecode[pc++];
-                        registers[rd] = MathOperators.pow(
-                            (RuntimeScalar) registers[rs1],
-                            (RuntimeScalar) registers[rs2]
-                        );
+
+                        // Convert to scalar if needed
+                        RuntimeBase val1 = registers[rs1];
+                        RuntimeBase val2 = registers[rs2];
+                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+
+                        registers[rd] = MathOperators.pow(s1, s2);
                         break;
                     }
 
@@ -589,6 +628,54 @@ public class BytecodeInterpreter {
                     }
 
                     // =================================================================
+                    // ITERATOR OPERATIONS - For efficient foreach loops
+                    // =================================================================
+
+                    case Opcodes.ITERATOR_CREATE: {
+                        // Create iterator: rd = rs.iterator()
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+
+                        RuntimeBase iterable = registers[rs];
+                        java.util.Iterator<RuntimeScalar> iterator = iterable.iterator();
+
+                        // Store iterator as a constant (we need to preserve the Iterator object)
+                        // Wrap in RuntimeScalar for storage
+                        registers[rd] = new RuntimeScalar(iterator);
+                        break;
+                    }
+
+                    case Opcodes.ITERATOR_HAS_NEXT: {
+                        // Check iterator: rd = iterator.hasNext()
+                        int rd = bytecode[pc++];
+                        int iterReg = bytecode[pc++];
+
+                        RuntimeScalar iterScalar = (RuntimeScalar) registers[iterReg];
+                        @SuppressWarnings("unchecked")
+                        java.util.Iterator<RuntimeScalar> iterator =
+                            (java.util.Iterator<RuntimeScalar>) iterScalar.value;
+
+                        boolean hasNext = iterator.hasNext();
+                        registers[rd] = hasNext ? RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarFalse;
+                        break;
+                    }
+
+                    case Opcodes.ITERATOR_NEXT: {
+                        // Get next element: rd = iterator.next()
+                        int rd = bytecode[pc++];
+                        int iterReg = bytecode[pc++];
+
+                        RuntimeScalar iterScalar = (RuntimeScalar) registers[iterReg];
+                        @SuppressWarnings("unchecked")
+                        java.util.Iterator<RuntimeScalar> iterator =
+                            (java.util.Iterator<RuntimeScalar>) iterScalar.value;
+
+                        RuntimeScalar next = iterator.next();
+                        registers[rd] = next;
+                        break;
+                    }
+
+                    // =================================================================
                     // ARRAY OPERATIONS
                     // =================================================================
 
@@ -788,7 +875,11 @@ public class BytecodeInterpreter {
                         int argsReg = bytecode[pc++];
                         int context = bytecode[pc++];
 
-                        RuntimeScalar codeRef = (RuntimeScalar) registers[coderefReg];
+                        // Auto-convert coderef to scalar if needed
+                        RuntimeBase codeRefBase = registers[coderefReg];
+                        RuntimeScalar codeRef = (codeRefBase instanceof RuntimeScalar)
+                                ? (RuntimeScalar) codeRefBase
+                                : codeRefBase.scalar();
                         RuntimeBase argsBase = registers[argsReg];
 
                         // Convert args to RuntimeArray if needed
@@ -806,7 +897,57 @@ public class BytecodeInterpreter {
                         // RuntimeCode.apply works for both compiled AND interpreted code
                         RuntimeList result = RuntimeCode.apply(codeRef, "", callArgs, context);
 
-                        registers[rd] = result;
+                        // Convert to scalar if called in scalar context
+                        if (context == RuntimeContextType.SCALAR) {
+                            registers[rd] = result.scalar();
+                        } else {
+                            registers[rd] = result;
+                        }
+
+                        // Check for control flow (last/next/redo/goto/tail-call)
+                        if (result.isNonLocalGoto()) {
+                            // Propagate control flow up the call stack
+                            return result;
+                        }
+                        break;
+                    }
+
+                    case Opcodes.CALL_METHOD: {
+                        // Call method: rd = RuntimeCode.call(invocant, method, currentSub, args, context)
+                        // May return RuntimeControlFlowList!
+                        int rd = bytecode[pc++];
+                        int invocantReg = bytecode[pc++];
+                        int methodReg = bytecode[pc++];
+                        int currentSubReg = bytecode[pc++];
+                        int argsReg = bytecode[pc++];
+                        int context = bytecode[pc++];
+
+                        RuntimeScalar invocant = (RuntimeScalar) registers[invocantReg];
+                        RuntimeScalar method = (RuntimeScalar) registers[methodReg];
+                        RuntimeScalar currentSub = (RuntimeScalar) registers[currentSubReg];
+                        RuntimeBase argsBase = registers[argsReg];
+
+                        // Convert args to RuntimeArray if needed
+                        RuntimeArray callArgs;
+                        if (argsBase instanceof RuntimeArray) {
+                            callArgs = (RuntimeArray) argsBase;
+                        } else if (argsBase instanceof RuntimeList) {
+                            // Convert RuntimeList to RuntimeArray (from ListNode)
+                            callArgs = new RuntimeArray((RuntimeList) argsBase);
+                        } else {
+                            // Single scalar argument
+                            callArgs = new RuntimeArray((RuntimeScalar) argsBase);
+                        }
+
+                        // RuntimeCode.call handles method resolution and dispatch
+                        RuntimeList result = RuntimeCode.call(invocant, method, currentSub, callArgs, context);
+
+                        // Convert to scalar if called in scalar context
+                        if (context == RuntimeContextType.SCALAR) {
+                            registers[rd] = result.scalar();
+                        } else {
+                            registers[rd] = result;
+                        }
 
                         // Check for control flow (last/next/redo/goto/tail-call)
                         if (result.isNonLocalGoto()) {

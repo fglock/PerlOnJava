@@ -456,6 +456,19 @@ public class Opcodes {
     public static final byte ISA = 105;
 
     // =================================================================
+    // ITERATOR OPERATIONS (106-108) - For efficient foreach loops
+    // =================================================================
+
+    /** Create iterator: rd = rs.iterator() - get Iterator from Iterable */
+    public static final byte ITERATOR_CREATE = 106;
+
+    /** Check iterator: rd = iterator.hasNext() - returns boolean as RuntimeScalar */
+    public static final byte ITERATOR_HAS_NEXT = 107;
+
+    /** Get next element: rd = iterator.next() - returns RuntimeScalar */
+    public static final byte ITERATOR_NEXT = 108;
+
+    // =================================================================
     // Slow Operation IDs (0-255)
     // =================================================================
     // These are NOT opcodes - they are sub-operation identifiers
