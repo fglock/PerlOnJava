@@ -675,6 +675,33 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.FOREACH_NEXT_OR_EXIT: {
+                        // Superinstruction for foreach loops
+                        // Combines: hasNext check, next() call, and conditional exit
+                        // Format: FOREACH_NEXT_OR_EXIT rd, iterReg, exitOffset
+                        // If hasNext: rd = iterator.next(), continue to next instruction
+                        // Else: jump forward by exitOffset
+                        int rd = bytecode[pc++];
+                        int iterReg = bytecode[pc++];
+                        int exitOffset = readInt(bytecode, pc);
+                        pc += 2;  // Skip the int we just read
+
+                        RuntimeScalar iterScalar = (RuntimeScalar) registers[iterReg];
+                        @SuppressWarnings("unchecked")
+                        java.util.Iterator<RuntimeScalar> iterator =
+                            (java.util.Iterator<RuntimeScalar>) iterScalar.value;
+
+                        if (iterator.hasNext()) {
+                            // Get next element and continue to body
+                            registers[rd] = iterator.next();
+                            // Fall through to next instruction (body)
+                        } else {
+                            // Exit loop - jump forward
+                            pc += exitOffset;
+                        }
+                        break;
+                    }
+
                     // =================================================================
                     // ARRAY OPERATIONS
                     // =================================================================

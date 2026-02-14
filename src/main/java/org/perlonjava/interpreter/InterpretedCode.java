@@ -669,6 +669,15 @@ public class InterpretedCode extends RuntimeCode {
                     rs = bytecode[pc++];
                     sb.append("ITERATOR_NEXT r").append(rd).append(" = r").append(rs).append(".next()\n");
                     break;
+                case Opcodes.FOREACH_NEXT_OR_EXIT:
+                    rd = bytecode[pc++];
+                    int iterReg = bytecode[pc++];
+                    int exitOffset = readInt(bytecode, pc);
+                    pc += 2;
+                    sb.append("FOREACH_NEXT_OR_EXIT r").append(rd)
+                      .append(" = r").append(iterReg).append(".next() or exit(+")
+                      .append(exitOffset).append(")\n");
+                    break;
                 case Opcodes.LIST_TO_SCALAR:
                     rd = bytecode[pc++];
                     rs = bytecode[pc++];

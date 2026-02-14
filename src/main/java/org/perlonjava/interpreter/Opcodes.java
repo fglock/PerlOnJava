@@ -468,6 +468,12 @@ public class Opcodes {
     /** Get next element: rd = iterator.next() - returns RuntimeScalar */
     public static final byte ITERATOR_NEXT = 108;
 
+    /** Superinstruction for foreach loops: check hasNext, get next element, or jump forward if done
+     * Format: FOREACH_NEXT_OR_EXIT rd iter_reg exit_offset(int)
+     * If iterator.hasNext(): rd = iterator.next(), continue to next instruction
+     * Else: jump forward by exit_offset shorts */
+    public static final byte FOREACH_NEXT_OR_EXIT = 109;
+
     // =================================================================
     // Slow Operation IDs (0-255)
     // =================================================================
