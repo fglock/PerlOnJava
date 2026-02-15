@@ -468,10 +468,10 @@ public class Opcodes {
     /** Get next element: rd = iterator.next() - returns RuntimeScalar */
     public static final byte ITERATOR_NEXT = 108;
 
-    /** Superinstruction for foreach loops: check hasNext, get next element, or jump forward if done
-     * Format: FOREACH_NEXT_OR_EXIT rd iter_reg exit_offset(int)
+    /** Superinstruction for foreach loops: check hasNext, get next element, or jump to target if done
+     * Format: FOREACH_NEXT_OR_EXIT rd iter_reg exit_target(int)
      * If iterator.hasNext(): rd = iterator.next(), continue to next instruction
-     * Else: jump forward by exit_offset shorts */
+     * Else: pc = exit_target (absolute address, like GOTO) */
     public static final byte FOREACH_NEXT_OR_EXIT = 109;
 
     // =================================================================

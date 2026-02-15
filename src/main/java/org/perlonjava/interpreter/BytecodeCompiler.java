@@ -4891,13 +4891,13 @@ public class BytecodeCompiler implements Visitor {
         int loopStartPc = bytecode.size();
 
         // Emit FOREACH_NEXT_OR_EXIT superinstruction
-        // This combines: hasNext check, next() call, and conditional exit
-        // Format: FOREACH_NEXT_OR_EXIT varReg, iterReg, exitOffset
+        // This combines: hasNext check, next() call, and conditional jump
+        // Format: FOREACH_NEXT_OR_EXIT varReg, iterReg, exitTarget (absolute address)
         emit(Opcodes.FOREACH_NEXT_OR_EXIT);
         emitReg(varReg);        // destination register for element
         emitReg(iterReg);       // iterator register
         int loopEndJumpPc = bytecode.size();
-        emitInt(0);             // placeholder for exit offset (to be patched)
+        emitInt(0);             // placeholder for exit target (absolute, will be patched)
 
         // Step 6: Execute body
         if (node.body != null) {

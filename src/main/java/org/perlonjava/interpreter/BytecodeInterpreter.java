@@ -678,12 +678,12 @@ public class BytecodeInterpreter {
                     case Opcodes.FOREACH_NEXT_OR_EXIT: {
                         // Superinstruction for foreach loops
                         // Combines: hasNext check, next() call, and conditional exit
-                        // Format: FOREACH_NEXT_OR_EXIT rd, iterReg, exitOffset
+                        // Format: FOREACH_NEXT_OR_EXIT rd, iterReg, exitTarget
                         // If hasNext: rd = iterator.next(), continue to next instruction
-                        // Else: jump forward by exitOffset
+                        // Else: jump to exitTarget (absolute address)
                         int rd = bytecode[pc++];
                         int iterReg = bytecode[pc++];
-                        int exitOffset = readInt(bytecode, pc);
+                        int exitTarget = readInt(bytecode, pc);  // Absolute target address
                         pc += 2;  // Skip the int we just read
 
                         RuntimeScalar iterScalar = (RuntimeScalar) registers[iterReg];
@@ -696,8 +696,8 @@ public class BytecodeInterpreter {
                             registers[rd] = iterator.next();
                             // Fall through to next instruction (body)
                         } else {
-                            // Exit loop - jump forward
-                            pc += exitOffset;
+                            // Exit loop - jump to absolute target
+                            pc = exitTarget;  // ABSOLUTE jump, not relative!
                         }
                         break;
                     }
