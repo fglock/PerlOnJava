@@ -558,6 +558,44 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.EQ_STR: {
+                        // String equality: rd = (rs1 eq rs2)
+                        int rd = bytecode[pc++];
+                        int rs1 = bytecode[pc++];
+                        int rs2 = bytecode[pc++];
+
+                        // Convert operands to scalar if needed
+                        RuntimeBase val1 = registers[rs1];
+                        RuntimeBase val2 = registers[rs2];
+                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+
+                        // Use cmp and check if result is 0
+                        RuntimeScalar cmpResult = CompareOperators.cmp(s1, s2);
+                        boolean isEqual = (cmpResult.getInt() == 0);
+                        registers[rd] = isEqual ? RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarFalse;
+                        break;
+                    }
+
+                    case Opcodes.NE_STR: {
+                        // String inequality: rd = (rs1 ne rs2)
+                        int rd = bytecode[pc++];
+                        int rs1 = bytecode[pc++];
+                        int rs2 = bytecode[pc++];
+
+                        // Convert operands to scalar if needed
+                        RuntimeBase val1 = registers[rs1];
+                        RuntimeBase val2 = registers[rs2];
+                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+
+                        // Use cmp and check if result is not 0
+                        RuntimeScalar cmpResult = CompareOperators.cmp(s1, s2);
+                        boolean isNotEqual = (cmpResult.getInt() != 0);
+                        registers[rd] = isNotEqual ? RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarFalse;
+                        break;
+                    }
+
                     // =================================================================
                     // LOGICAL OPERATORS
                     // =================================================================
@@ -672,6 +710,93 @@ public class BytecodeInterpreter {
 
                         RuntimeScalar next = iterator.next();
                         registers[rd] = next;
+                        break;
+                    }
+
+                    case Opcodes.FOREACH_NEXT_OR_EXIT: {
+                        // Superinstruction for foreach loops
+                        // Combines: hasNext check, next() call, and conditional exit
+                        // Format: FOREACH_NEXT_OR_EXIT rd, iterReg, exitTarget
+                        // If hasNext: rd = iterator.next(), continue to next instruction
+                        // Else: jump to exitTarget (absolute address)
+                        int rd = bytecode[pc++];
+                        int iterReg = bytecode[pc++];
+                        int exitTarget = readInt(bytecode, pc);  // Absolute target address
+                        pc += 2;  // Skip the int we just read
+
+                        RuntimeScalar iterScalar = (RuntimeScalar) registers[iterReg];
+                        @SuppressWarnings("unchecked")
+                        java.util.Iterator<RuntimeScalar> iterator =
+                            (java.util.Iterator<RuntimeScalar>) iterScalar.value;
+
+                        if (iterator.hasNext()) {
+                            // Get next element and continue to body
+                            registers[rd] = iterator.next();
+                            // Fall through to next instruction (body)
+                        } else {
+                            // Exit loop - jump to absolute target
+                            pc = exitTarget;  // ABSOLUTE jump, not relative!
+                        }
+                        break;
+                    }
+
+                    // =================================================================
+                    // COMPOUND ASSIGNMENT OPERATORS (with overload support)
+                    // =================================================================
+
+                    case Opcodes.SUBTRACT_ASSIGN: {
+                        // Compound assignment: rd = rd -= rs (checks for (-= overload first)
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+
+                        RuntimeBase val1 = registers[rd];
+                        RuntimeBase val2 = registers[rs];
+                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+
+                        registers[rd] = MathOperators.subtractAssign(s1, s2);
+                        break;
+                    }
+
+                    case Opcodes.MULTIPLY_ASSIGN: {
+                        // Compound assignment: rd = rd *= rs (checks for (*= overload first)
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+
+                        RuntimeBase val1 = registers[rd];
+                        RuntimeBase val2 = registers[rs];
+                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+
+                        registers[rd] = MathOperators.multiplyAssign(s1, s2);
+                        break;
+                    }
+
+                    case Opcodes.DIVIDE_ASSIGN: {
+                        // Compound assignment: rd = rd /= rs (checks for (/= overload first)
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+
+                        RuntimeBase val1 = registers[rd];
+                        RuntimeBase val2 = registers[rs];
+                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+
+                        registers[rd] = MathOperators.divideAssign(s1, s2);
+                        break;
+                    }
+
+                    case Opcodes.MODULUS_ASSIGN: {
+                        // Compound assignment: rd = rd %= rs (checks for (%= overload first)
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+
+                        RuntimeBase val1 = registers[rd];
+                        RuntimeBase val2 = registers[rs];
+                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+
+                        registers[rd] = MathOperators.modulusAssign(s1, s2);
                         break;
                     }
 
