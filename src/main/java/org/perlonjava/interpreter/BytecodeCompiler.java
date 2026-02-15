@@ -1899,6 +1899,12 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(rs1);
                 emitReg(rs2);
             }
+            case "/" -> {
+                emit(Opcodes.DIV_SCALAR);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
             case "**" -> {
                 emit(Opcodes.POW_SCALAR);
                 emitReg(rd);
@@ -1970,6 +1976,70 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(rd);
                 emitReg(rs1);
                 emitReg(rs2);
+            }
+            case "eq" -> {
+                // String equality: $a eq $b
+                emit(Opcodes.EQ_STR);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
+            case "ne" -> {
+                // String inequality: $a ne $b
+                emit(Opcodes.NE_STR);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
+            case "lt", "gt", "le", "ge" -> {
+                // String comparisons using COMPARE_STR (like cmp)
+                // cmp returns: -1 if $a lt $b, 0 if equal, 1 if $a gt $b
+                int cmpReg = allocateRegister();
+                emit(Opcodes.COMPARE_STR);
+                emitReg(cmpReg);
+                emitReg(rs1);
+                emitReg(rs2);
+
+                // Compare result to 0
+                int zeroReg = allocateRegister();
+                emit(Opcodes.LOAD_INT);
+                emitReg(zeroReg);
+                emitInt(0);
+
+                // Emit appropriate comparison
+                switch (node.operator) {
+                    case "lt" -> emit(Opcodes.LT_NUM);  // cmp < 0
+                    case "gt" -> emit(Opcodes.GT_NUM);  // cmp > 0
+                    case "le" -> {
+                        // le: cmp <= 0, which is !(cmp > 0)
+                        int gtReg = allocateRegister();
+                        emit(Opcodes.GT_NUM);
+                        emitReg(gtReg);
+                        emitReg(cmpReg);
+                        emitReg(zeroReg);
+                        emit(Opcodes.NOT);
+                        emitReg(rd);
+                        emitReg(gtReg);
+                        lastResultReg = rd;
+                        return;
+                    }
+                    case "ge" -> {
+                        // ge: cmp >= 0, which is !(cmp < 0)
+                        int ltReg = allocateRegister();
+                        emit(Opcodes.LT_NUM);
+                        emitReg(ltReg);
+                        emitReg(cmpReg);
+                        emitReg(zeroReg);
+                        emit(Opcodes.NOT);
+                        emitReg(rd);
+                        emitReg(ltReg);
+                        lastResultReg = rd;
+                        return;
+                    }
+                }
+                emitReg(rd);
+                emitReg(cmpReg);
+                emitReg(zeroReg);
             }
             case "(", "()" -> {
                 // Apply operator: $coderef->(args) or &subname(args) or foo(args)
@@ -2636,6 +2706,46 @@ public class BytecodeCompiler implements Visitor {
                 emit(Opcodes.ADD_ASSIGN);
                 emitReg(varReg);
                 emitReg(valueReg);
+
+                lastResultReg = varReg;
+            }
+            case "-=", "*=", "/=", "%=" -> {
+                // Compound assignment: $var op= $value
+                // Expand to: $var = $var op $value
+                if (!(node.left instanceof OperatorNode)) {
+                    throwCompilerException(node.operator + " requires variable on left side");
+                }
+                OperatorNode leftOp = (OperatorNode) node.left;
+                if (!leftOp.operator.equals("$") || !(leftOp.operand instanceof IdentifierNode)) {
+                    throwCompilerException(node.operator + " requires scalar variable");
+                }
+
+                String varName = "$" + ((IdentifierNode) leftOp.operand).name;
+                if (!hasVariable(varName)) {
+                    throwCompilerException(node.operator + " requires existing variable: " + varName);
+                }
+                int varReg = getVariableRegister(varName);
+
+                // Compile the right side
+                node.right.accept(this);
+                int valueReg = lastResultReg;
+
+                // Emit appropriate operation and store result back
+                int resultReg = allocateRegister();
+                switch (node.operator) {
+                    case "-=" -> emit(Opcodes.SUB_SCALAR);
+                    case "*=" -> emit(Opcodes.MUL_SCALAR);
+                    case "/=" -> emit(Opcodes.DIV_SCALAR);
+                    case "%=" -> emit(Opcodes.MOD_SCALAR);
+                }
+                emitReg(resultReg);
+                emitReg(varReg);
+                emitReg(valueReg);
+
+                // Move result back to variable
+                emit(Opcodes.MOVE);
+                emitReg(varReg);
+                emitReg(resultReg);
 
                 lastResultReg = varReg;
             }
