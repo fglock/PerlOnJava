@@ -468,6 +468,18 @@ public class Opcodes {
     /** Get next element: rd = iterator.next() - returns RuntimeScalar */
     public static final byte ITERATOR_NEXT = 108;
 
+    /** Superinstruction for foreach loops: check hasNext, get next element, or jump to target if done
+     * Format: FOREACH_NEXT_OR_EXIT rd iter_reg exit_target(int)
+     * If iterator.hasNext(): rd = iterator.next(), continue to next instruction
+     * Else: pc = exit_target (absolute address, like GOTO) */
+    public static final byte FOREACH_NEXT_OR_EXIT = 109;
+
+    // Compound assignment operators with overload support
+    public static final byte SUBTRACT_ASSIGN = 110;
+    public static final byte MULTIPLY_ASSIGN = 111;
+    public static final byte DIVIDE_ASSIGN = 112;
+    public static final byte MODULUS_ASSIGN = 113;
+
     // =================================================================
     // Slow Operation IDs (0-255)
     // =================================================================

@@ -1899,6 +1899,12 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(rs1);
                 emitReg(rs2);
             }
+            case "/" -> {
+                emit(Opcodes.DIV_SCALAR);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
             case "**" -> {
                 emit(Opcodes.POW_SCALAR);
                 emitReg(rd);
@@ -1970,6 +1976,70 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(rd);
                 emitReg(rs1);
                 emitReg(rs2);
+            }
+            case "eq" -> {
+                // String equality: $a eq $b
+                emit(Opcodes.EQ_STR);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
+            case "ne" -> {
+                // String inequality: $a ne $b
+                emit(Opcodes.NE_STR);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
+            case "lt", "gt", "le", "ge" -> {
+                // String comparisons using COMPARE_STR (like cmp)
+                // cmp returns: -1 if $a lt $b, 0 if equal, 1 if $a gt $b
+                int cmpReg = allocateRegister();
+                emit(Opcodes.COMPARE_STR);
+                emitReg(cmpReg);
+                emitReg(rs1);
+                emitReg(rs2);
+
+                // Compare result to 0
+                int zeroReg = allocateRegister();
+                emit(Opcodes.LOAD_INT);
+                emitReg(zeroReg);
+                emitInt(0);
+
+                // Emit appropriate comparison
+                switch (node.operator) {
+                    case "lt" -> emit(Opcodes.LT_NUM);  // cmp < 0
+                    case "gt" -> emit(Opcodes.GT_NUM);  // cmp > 0
+                    case "le" -> {
+                        // le: cmp <= 0, which is !(cmp > 0)
+                        int gtReg = allocateRegister();
+                        emit(Opcodes.GT_NUM);
+                        emitReg(gtReg);
+                        emitReg(cmpReg);
+                        emitReg(zeroReg);
+                        emit(Opcodes.NOT);
+                        emitReg(rd);
+                        emitReg(gtReg);
+                        lastResultReg = rd;
+                        return;
+                    }
+                    case "ge" -> {
+                        // ge: cmp >= 0, which is !(cmp < 0)
+                        int ltReg = allocateRegister();
+                        emit(Opcodes.LT_NUM);
+                        emitReg(ltReg);
+                        emitReg(cmpReg);
+                        emitReg(zeroReg);
+                        emit(Opcodes.NOT);
+                        emitReg(rd);
+                        emitReg(ltReg);
+                        lastResultReg = rd;
+                        return;
+                    }
+                }
+                emitReg(rd);
+                emitReg(cmpReg);
+                emitReg(zeroReg);
             }
             case "(", "()" -> {
                 // Apply operator: $coderef->(args) or &subname(args) or foo(args)
@@ -2636,6 +2706,39 @@ public class BytecodeCompiler implements Visitor {
                 emit(Opcodes.ADD_ASSIGN);
                 emitReg(varReg);
                 emitReg(valueReg);
+
+                lastResultReg = varReg;
+            }
+            case "-=", "*=", "/=", "%=" -> {
+                // Compound assignment: $var op= $value
+                // Now uses *Assign opcodes which check for compound overloads first
+                if (!(node.left instanceof OperatorNode)) {
+                    throwCompilerException(node.operator + " requires variable on left side");
+                }
+                OperatorNode leftOp = (OperatorNode) node.left;
+                if (!leftOp.operator.equals("$") || !(leftOp.operand instanceof IdentifierNode)) {
+                    throwCompilerException(node.operator + " requires scalar variable");
+                }
+
+                String varName = "$" + ((IdentifierNode) leftOp.operand).name;
+                if (!hasVariable(varName)) {
+                    throwCompilerException(node.operator + " requires existing variable: " + varName);
+                }
+                int varReg = getVariableRegister(varName);
+
+                // Compile the right side
+                node.right.accept(this);
+                int valueReg = lastResultReg;
+
+                // Emit compound assignment opcode (checks for overloads)
+                switch (node.operator) {
+                    case "-=" -> emit(Opcodes.SUBTRACT_ASSIGN);
+                    case "*=" -> emit(Opcodes.MULTIPLY_ASSIGN);
+                    case "/=" -> emit(Opcodes.DIVIDE_ASSIGN);
+                    case "%=" -> emit(Opcodes.MODULUS_ASSIGN);
+                }
+                emitReg(varReg);  // destination (also left operand)
+                emitReg(valueReg); // right operand
 
                 lastResultReg = varReg;
             }
@@ -4887,40 +4990,32 @@ public class BytecodeCompiler implements Visitor {
             varReg = allocateRegister();
         }
 
-        // Step 5: Loop start - check if iterator has next
+        // Step 5: Loop start - combined check/next/exit (superinstruction)
         int loopStartPc = bytecode.size();
 
-        // Check hasNext()
-        int hasNextReg = allocateRegister();
-        emit(Opcodes.ITERATOR_HAS_NEXT);
-        emitReg(hasNextReg);
-        emitReg(iterReg);
-
-        // If false, jump to end (we'll patch this later)
-        emit(Opcodes.GOTO_IF_FALSE);
-        emitReg(hasNextReg);
+        // Emit FOREACH_NEXT_OR_EXIT superinstruction
+        // This combines: hasNext check, next() call, and conditional jump
+        // Format: FOREACH_NEXT_OR_EXIT varReg, iterReg, exitTarget (absolute address)
+        emit(Opcodes.FOREACH_NEXT_OR_EXIT);
+        emitReg(varReg);        // destination register for element
+        emitReg(iterReg);       // iterator register
         int loopEndJumpPc = bytecode.size();
-        emitInt(0);  // Placeholder for jump target
+        emitInt(0);             // placeholder for exit target (absolute, will be patched)
 
-        // Step 6: Get next element and assign to loop variable
-        emit(Opcodes.ITERATOR_NEXT);
-        emitReg(varReg);
-        emitReg(iterReg);
-
-        // Step 7: Execute body
+        // Step 6: Execute body
         if (node.body != null) {
             node.body.accept(this);
         }
 
-        // Step 8: Jump back to loop start
+        // Step 7: Jump back to loop start
         emit(Opcodes.GOTO);
         emitInt(loopStartPc);
 
-        // Step 9: Loop end - patch the forward jump
+        // Step 8: Loop end - patch the forward jump
         int loopEndPc = bytecode.size();
         patchJump(loopEndJumpPc, loopEndPc);
 
-        // Step 10: Exit scope
+        // Step 9: Exit scope
         exitScope();
 
         lastResultReg = -1;  // For loop returns empty

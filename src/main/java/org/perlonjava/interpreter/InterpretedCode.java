@@ -245,8 +245,19 @@ public class InterpretedCode extends RuntimeCode {
                         if (obj instanceof RuntimeScalar) {
                             RuntimeScalar scalar = (RuntimeScalar) obj;
                             sb.append("RuntimeScalar{type=").append(scalar.type).append(", value=").append(scalar.value.getClass().getSimpleName()).append("}");
+                        } else if (obj instanceof org.perlonjava.runtime.PerlRange) {
+                            // Special handling for PerlRange to avoid expanding large ranges
+                            org.perlonjava.runtime.PerlRange range = (org.perlonjava.runtime.PerlRange) obj;
+                            sb.append("PerlRange{").append(range.getStart().toString()).append("..")
+                              .append(range.getEnd().toString()).append("}");
                         } else {
-                            sb.append(obj);
+                            // For other objects, show class name and limit string length
+                            String objStr = obj.toString();
+                            if (objStr.length() > 100) {
+                                sb.append(obj.getClass().getSimpleName()).append("{...}");
+                            } else {
+                                sb.append(objStr);
+                            }
                         }
                         sb.append(")");
                     }
@@ -668,6 +679,35 @@ public class InterpretedCode extends RuntimeCode {
                     rd = bytecode[pc++];
                     rs = bytecode[pc++];
                     sb.append("ITERATOR_NEXT r").append(rd).append(" = r").append(rs).append(".next()\n");
+                    break;
+                case Opcodes.FOREACH_NEXT_OR_EXIT:
+                    rd = bytecode[pc++];
+                    int iterReg = bytecode[pc++];
+                    int exitTarget = readInt(bytecode, pc);  // Absolute target address
+                    pc += 2;
+                    sb.append("FOREACH_NEXT_OR_EXIT r").append(rd)
+                      .append(" = r").append(iterReg).append(".next() or goto ")
+                      .append(exitTarget).append("\n");
+                    break;
+                case Opcodes.SUBTRACT_ASSIGN:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("SUBTRACT_ASSIGN r").append(rd).append(" -= r").append(rs).append("\n");
+                    break;
+                case Opcodes.MULTIPLY_ASSIGN:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("MULTIPLY_ASSIGN r").append(rd).append(" *= r").append(rs).append("\n");
+                    break;
+                case Opcodes.DIVIDE_ASSIGN:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("DIVIDE_ASSIGN r").append(rd).append(" /= r").append(rs).append("\n");
+                    break;
+                case Opcodes.MODULUS_ASSIGN:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("MODULUS_ASSIGN r").append(rd).append(" %= r").append(rs).append("\n");
                     break;
                 case Opcodes.LIST_TO_SCALAR:
                     rd = bytecode[pc++];
