@@ -2711,7 +2711,7 @@ public class BytecodeCompiler implements Visitor {
             }
             case "-=", "*=", "/=", "%=" -> {
                 // Compound assignment: $var op= $value
-                // Expand to: $var = $var op $value
+                // Now uses *Assign opcodes which check for compound overloads first
                 if (!(node.left instanceof OperatorNode)) {
                     throwCompilerException(node.operator + " requires variable on left side");
                 }
@@ -2730,22 +2730,15 @@ public class BytecodeCompiler implements Visitor {
                 node.right.accept(this);
                 int valueReg = lastResultReg;
 
-                // Emit appropriate operation and store result back
-                int resultReg = allocateRegister();
+                // Emit compound assignment opcode (checks for overloads)
                 switch (node.operator) {
-                    case "-=" -> emit(Opcodes.SUB_SCALAR);
-                    case "*=" -> emit(Opcodes.MUL_SCALAR);
-                    case "/=" -> emit(Opcodes.DIV_SCALAR);
-                    case "%=" -> emit(Opcodes.MOD_SCALAR);
+                    case "-=" -> emit(Opcodes.SUBTRACT_ASSIGN);
+                    case "*=" -> emit(Opcodes.MULTIPLY_ASSIGN);
+                    case "/=" -> emit(Opcodes.DIVIDE_ASSIGN);
+                    case "%=" -> emit(Opcodes.MODULUS_ASSIGN);
                 }
-                emitReg(resultReg);
-                emitReg(varReg);
-                emitReg(valueReg);
-
-                // Move result back to variable
-                emit(Opcodes.MOVE);
-                emitReg(varReg);
-                emitReg(resultReg);
+                emitReg(varReg);  // destination (also left operand)
+                emitReg(valueReg); // right operand
 
                 lastResultReg = varReg;
             }

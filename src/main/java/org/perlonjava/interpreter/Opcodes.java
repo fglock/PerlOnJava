@@ -474,6 +474,12 @@ public class Opcodes {
      * Else: pc = exit_target (absolute address, like GOTO) */
     public static final byte FOREACH_NEXT_OR_EXIT = 109;
 
+    // Compound assignment operators with overload support
+    public static final byte SUBTRACT_ASSIGN = 110;
+    public static final byte MULTIPLY_ASSIGN = 111;
+    public static final byte DIVIDE_ASSIGN = 112;
+    public static final byte MODULUS_ASSIGN = 113;
+
     // =================================================================
     // Slow Operation IDs (0-255)
     // =================================================================
