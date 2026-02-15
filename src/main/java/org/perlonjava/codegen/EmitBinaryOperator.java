@@ -209,16 +209,31 @@ public class EmitBinaryOperator {
 
         if (operatorHandler != null) {
             // Use the new *Assign methods which check for compound overloads first
-            // These methods modify arg1 in place and return it
             EmitterVisitor scalarVisitor =
                     emitterVisitor.with(RuntimeContextType.SCALAR);
             MethodVisitor mv = emitterVisitor.ctx.mv;
 
-            // Load left (lvalue) and right operands
-            node.left.accept(scalarVisitor);
-            node.right.accept(scalarVisitor);
+            // We need to properly handle the lvalue by using spill slots
+            // This ensures the same object is both read and written
+            node.left.accept(scalarVisitor); // target - left parameter
+            int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+            boolean pooledLeft = leftSlot >= 0;
+            if (!pooledLeft) {
+                leftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            }
+            mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
+
+            node.right.accept(scalarVisitor); // right parameter
+
+            mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+            mv.visitInsn(Opcodes.SWAP); // swap so args are in right order (left, right)
+
+            if (pooledLeft) {
+                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+            }
 
             // Call the *Assign method (e.g., MathOperators.addAssign)
+            // This modifies arg1 in place and returns it
             mv.visitMethodInsn(
                     operatorHandler.methodType(),
                     operatorHandler.className(),
@@ -260,15 +275,20 @@ public class EmitBinaryOperator {
                 emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
             }
             // perform the operation
+            // Note: operands are already on the stack (left DUPped, then right)
             String baseOperator = node.operator.substring(0, node.operator.length() - 1);
-            // Create a BinaryOperatorNode for the base operation
-            BinaryOperatorNode baseOpNode = new BinaryOperatorNode(
-                    baseOperator,
-                    node.left,
-                    node.right,
-                    node.tokenIndex
-            );
-            EmitOperator.emitOperator(baseOpNode, scalarVisitor);
+            // Get the operator handler for the base operator and call it directly
+            OperatorHandler baseOpHandler = OperatorHandler.get(baseOperator);
+            if (baseOpHandler != null) {
+                mv.visitMethodInsn(
+                        baseOpHandler.methodType(),
+                        baseOpHandler.className(),
+                        baseOpHandler.methodName(),
+                        baseOpHandler.descriptor(),
+                        false);
+            } else {
+                throw new RuntimeException("No operator handler found for base operator: " + baseOperator);
+            }
             // assign to the Lvalue
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "set", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
             EmitOperator.handleVoidContext(emitterVisitor);
