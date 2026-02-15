@@ -289,6 +289,141 @@ public class MathOperators {
     }
 
     /**
+     * Compound assignment: +=
+     * Checks for (+= overload first, then falls back to (+ overload.
+     * Assigns the result back to the lvalue.
+     *
+     * @param arg1 The lvalue RuntimeScalar (will be modified).
+     * @param arg2 The rvalue RuntimeScalar.
+     * @return The modified arg1.
+     */
+    public static RuntimeScalar addAssign(RuntimeScalar arg1, RuntimeScalar arg2) {
+        // Check for (+= overload first
+        int blessId = blessedId(arg1);
+        int blessId2 = blessedId(arg2);
+        if (blessId < 0 || blessId2 < 0) {
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(+=", "+=");
+            if (result != null) {
+                // Compound overload found - assign result back to lvalue
+                arg1.set(result);
+                return arg1;
+            }
+        }
+        // Fall back to base operator (which already has (+ overload support)
+        RuntimeScalar result = add(arg1, arg2);
+        arg1.set(result);
+        return arg1;
+    }
+
+    /**
+     * Compound assignment: -=
+     * Checks for (-= overload first, then falls back to (- overload.
+     * Assigns the result back to the lvalue.
+     *
+     * @param arg1 The lvalue RuntimeScalar (will be modified).
+     * @param arg2 The rvalue RuntimeScalar.
+     * @return The modified arg1.
+     */
+    public static RuntimeScalar subtractAssign(RuntimeScalar arg1, RuntimeScalar arg2) {
+        // Check for (-= overload first
+        int blessId = blessedId(arg1);
+        int blessId2 = blessedId(arg2);
+        if (blessId < 0 || blessId2 < 0) {
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(-=", "-=");
+            if (result != null) {
+                // Compound overload found - assign result back to lvalue
+                arg1.set(result);
+                return arg1;
+            }
+        }
+        // Fall back to base operator (which already has (- overload support)
+        RuntimeScalar result = subtract(arg1, arg2);
+        arg1.set(result);
+        return arg1;
+    }
+
+    /**
+     * Compound assignment: *=
+     * Checks for (*= overload first, then falls back to (* overload.
+     * Assigns the result back to the lvalue.
+     *
+     * @param arg1 The lvalue RuntimeScalar (will be modified).
+     * @param arg2 The rvalue RuntimeScalar.
+     * @return The modified arg1.
+     */
+    public static RuntimeScalar multiplyAssign(RuntimeScalar arg1, RuntimeScalar arg2) {
+        // Check for (*= overload first
+        int blessId = blessedId(arg1);
+        int blessId2 = blessedId(arg2);
+        if (blessId < 0 || blessId2 < 0) {
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(*=", "*=");
+            if (result != null) {
+                // Compound overload found - assign result back to lvalue
+                arg1.set(result);
+                return arg1;
+            }
+        }
+        // Fall back to base operator (which already has (* overload support)
+        RuntimeScalar result = multiply(arg1, arg2);
+        arg1.set(result);
+        return arg1;
+    }
+
+    /**
+     * Compound assignment: /=
+     * Checks for (/= overload first, then falls back to (/ overload.
+     * Assigns the result back to the lvalue.
+     *
+     * @param arg1 The lvalue RuntimeScalar (will be modified).
+     * @param arg2 The rvalue RuntimeScalar.
+     * @return The modified arg1.
+     */
+    public static RuntimeScalar divideAssign(RuntimeScalar arg1, RuntimeScalar arg2) {
+        // Check for (/= overload first
+        int blessId = blessedId(arg1);
+        int blessId2 = blessedId(arg2);
+        if (blessId < 0 || blessId2 < 0) {
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(/=", "/=");
+            if (result != null) {
+                // Compound overload found - assign result back to lvalue
+                arg1.set(result);
+                return arg1;
+            }
+        }
+        // Fall back to base operator (which already has (/ overload support)
+        RuntimeScalar result = divide(arg1, arg2);
+        arg1.set(result);
+        return arg1;
+    }
+
+    /**
+     * Compound assignment: %=
+     * Checks for (%= overload first, then falls back to (% overload.
+     * Assigns the result back to the lvalue.
+     *
+     * @param arg1 The lvalue RuntimeScalar (will be modified).
+     * @param arg2 The rvalue RuntimeScalar.
+     * @return The modified arg1.
+     */
+    public static RuntimeScalar modulusAssign(RuntimeScalar arg1, RuntimeScalar arg2) {
+        // Check for (%= overload first
+        int blessId = blessedId(arg1);
+        int blessId2 = blessedId(arg2);
+        if (blessId < 0 || blessId2 < 0) {
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(%=", "%=");
+            if (result != null) {
+                // Compound overload found - assign result back to lvalue
+                arg1.set(result);
+                return arg1;
+            }
+        }
+        // Fall back to base operator (which already has (% overload support)
+        RuntimeScalar result = modulus(arg1, arg2);
+        arg1.set(result);
+        return arg1;
+    }
+
+    /**
      * Performs integer division operation on two RuntimeScalars.
      * This is used when "use integer" pragma is in effect.
      *

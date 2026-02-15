@@ -42,6 +42,13 @@ public record OperatorHandler(String className, String methodName, int methodTyp
         put("**", "pow", "org/perlonjava/operators/MathOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("atan2", "atan2", "org/perlonjava/operators/MathOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
 
+        // Compound assignment operators (with overload support)
+        put("+=", "addAssign", "org/perlonjava/operators/MathOperators");
+        put("-=", "subtractAssign", "org/perlonjava/operators/MathOperators");
+        put("*=", "multiplyAssign", "org/perlonjava/operators/MathOperators");
+        put("/=", "divideAssign", "org/perlonjava/operators/MathOperators");
+        put("%=", "modulusAssign", "org/perlonjava/operators/MathOperators");
+
         // Bitwise
         put("&", "bitwiseAnd", "org/perlonjava/operators/BitwiseOperators");
         put("|", "bitwiseOr", "org/perlonjava/operators/BitwiseOperators");

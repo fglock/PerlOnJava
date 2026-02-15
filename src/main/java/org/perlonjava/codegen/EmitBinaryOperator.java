@@ -201,49 +201,78 @@ public class EmitBinaryOperator {
     }
 
     static void handleCompoundAssignment(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
-        // compound assignment operators like `+=`
-        EmitterVisitor scalarVisitor =
-                emitterVisitor.with(RuntimeContextType.SCALAR); // execute operands in scalar context
-        MethodVisitor mv = emitterVisitor.ctx.mv;
-        node.left.accept(scalarVisitor); // target - left parameter
-        int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
-        boolean pooledLeft = leftSlot >= 0;
-        if (!pooledLeft) {
-            leftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-        }
-        mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
+        // Compound assignment operators like `+=`, `-=`, etc.
+        // These now have proper overload support via MathOperators.*Assign() methods
 
-        node.right.accept(scalarVisitor); // right parameter
-        int rightSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
-        boolean pooledRight = rightSlot >= 0;
-        if (!pooledRight) {
-            rightSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-        }
-        mv.visitVarInsn(Opcodes.ASTORE, rightSlot);
+        // Check if we have an operator handler for this compound operator
+        OperatorHandler operatorHandler = OperatorHandler.get(node.operator);
 
-        mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
-        mv.visitInsn(Opcodes.DUP);
-        mv.visitVarInsn(Opcodes.ALOAD, rightSlot);
+        if (operatorHandler != null) {
+            // Use the new *Assign methods which check for compound overloads first
+            // These methods modify arg1 in place and return it
+            EmitterVisitor scalarVisitor =
+                    emitterVisitor.with(RuntimeContextType.SCALAR);
+            MethodVisitor mv = emitterVisitor.ctx.mv;
 
-        if (pooledRight) {
-            emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+            // Load left (lvalue) and right operands
+            node.left.accept(scalarVisitor);
+            node.right.accept(scalarVisitor);
+
+            // Call the *Assign method (e.g., MathOperators.addAssign)
+            mv.visitMethodInsn(
+                    operatorHandler.methodType(),
+                    operatorHandler.className(),
+                    operatorHandler.methodName(),
+                    operatorHandler.descriptor(),
+                    false);
+
+            EmitOperator.handleVoidContext(emitterVisitor);
+        } else {
+            // Fallback for operators that don't have handlers yet (e.g., **=, <<=, etc.)
+            // Use the old approach: strip = and call base operator, then assign
+            EmitterVisitor scalarVisitor =
+                    emitterVisitor.with(RuntimeContextType.SCALAR); // execute operands in scalar context
+            MethodVisitor mv = emitterVisitor.ctx.mv;
+            node.left.accept(scalarVisitor); // target - left parameter
+            int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+            boolean pooledLeft = leftSlot >= 0;
+            if (!pooledLeft) {
+                leftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            }
+            mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
+
+            node.right.accept(scalarVisitor); // right parameter
+            int rightSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+            boolean pooledRight = rightSlot >= 0;
+            if (!pooledRight) {
+                rightSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            }
+            mv.visitVarInsn(Opcodes.ASTORE, rightSlot);
+
+            mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitVarInsn(Opcodes.ALOAD, rightSlot);
+
+            if (pooledRight) {
+                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+            }
+            if (pooledLeft) {
+                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+            }
+            // perform the operation
+            String baseOperator = node.operator.substring(0, node.operator.length() - 1);
+            // Create a BinaryOperatorNode for the base operation
+            BinaryOperatorNode baseOpNode = new BinaryOperatorNode(
+                    baseOperator,
+                    node.left,
+                    node.right,
+                    node.tokenIndex
+            );
+            EmitOperator.emitOperator(baseOpNode, scalarVisitor);
+            // assign to the Lvalue
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "set", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+            EmitOperator.handleVoidContext(emitterVisitor);
         }
-        if (pooledLeft) {
-            emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
-        }
-        // perform the operation
-        String baseOperator = node.operator.substring(0, node.operator.length() - 1);
-        // Create a BinaryOperatorNode for the base operation
-        BinaryOperatorNode baseOpNode = new BinaryOperatorNode(
-                baseOperator,
-                node.left,
-                node.right,
-                node.tokenIndex
-        );
-        EmitOperator.emitOperator(baseOpNode, scalarVisitor);
-        // assign to the Lvalue
-        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "set", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-        EmitOperator.handleVoidContext(emitterVisitor);
     }
 
     static void handleRangeOrFlipFlop(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
