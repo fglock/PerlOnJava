@@ -683,11 +683,11 @@ public class InterpretedCode extends RuntimeCode {
                 case Opcodes.FOREACH_NEXT_OR_EXIT:
                     rd = bytecode[pc++];
                     int iterReg = bytecode[pc++];
-                    int exitOffset = readInt(bytecode, pc);
+                    int exitTarget = readInt(bytecode, pc);  // Absolute target address
                     pc += 2;
                     sb.append("FOREACH_NEXT_OR_EXIT r").append(rd)
-                      .append(" = r").append(iterReg).append(".next() or exit(+")
-                      .append(exitOffset).append(")\n");
+                      .append(" = r").append(iterReg).append(".next() or goto ")
+                      .append(exitTarget).append("\n");
                     break;
                 case Opcodes.LIST_TO_SCALAR:
                     rd = bytecode[pc++];
