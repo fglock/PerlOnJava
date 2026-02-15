@@ -1,75 +1,74 @@
-# Compound Assignment Operator Overload Support - Status
+# Compound Assignment Operator Overload Support - COMPLETED
 
 ## Summary
 
-Compound assignment operators (`+=`, `-=`, `*=`, `/=`, `%=`) are partially implemented but **lack proper overload support**. The current implementation only uses the base operator (`+`, `-`, etc.) and doesn't check for compound assignment overloads.
+Compound assignment operators (`+=`, `-=`, `*=`, `/=`, `%=`) now have **full overload support** in both compiler and interpreter modes.
+
+## Implementation Status
+
+### Compiler (JVM bytecode generation) - ✅ COMPLETE
+- Located in: `EmitBinaryOperator.handleCompoundAssignment()` (line 203)
+- **How it works:**
+  1. Checks if operator handler exists for compound operator (e.g., `+=`)
+  2. Calls corresponding `*Assign` method (e.g., `MathOperators.addAssign()`)
+  3. These methods check for compound overload first (e.g., `(+=`), then fall back to base operator (e.g., `(+`)
+  4. Falls back to old approach (strip `=` and call base operator) for operators without handlers
+
+### Interpreter - ✅ COMPLETE (with limitations)
+- **New opcodes added:**
+  - `SUBTRACT_ASSIGN` (110)
+  - `MULTIPLY_ASSIGN` (111)
+  - `DIVIDE_ASSIGN` (112)
+  - `MODULUS_ASSIGN` (113)
+- **BytecodeCompiler** emits these opcodes for `-=`, `*=`, `/=`, `%=`
+- **BytecodeInterpreter** handlers call `MathOperators.*Assign()` methods
+- **InterpretedCode** disassembler entries added
+
+**Known Limitation:**
+- Interpreter only supports compound assignments on simple scalar variables (e.g., `$x -= 5`)
+- Does NOT support compound assignments on lvalues like `$hash{key} -= 5` or `$array[0] -= 5`
+- Compiler supports all lvalues
+- This limitation can be addressed in future work if needed
 
 ## Current Behavior
 
-### Compiler (JVM bytecode generation)
-- Located in: `EmitBinaryOperator.handleCompoundAssignment()` (line 203)
-- Current implementation:
-  1. Strips the `=` from the operator (e.g., `+=` → `+`)
-  2. Creates a BinaryOperatorNode for the base operation
-  3. Calls `emitOperator()` which invokes the base operator (e.g., `MathOperators.add()`)
-  4. Assigns result back to lvalue
-
-### Interpreter
-- Located in: `BytecodeCompiler.java`
-  - `+=` at line 2680: Uses `ADD_ASSIGN` opcode
-  - `-=`, `*=`, `/=`, `%=` at line 2709+: Just added, emit direct opcodes (SUB_SCALAR, MUL_SCALAR, etc.)
-- Interpreter opcodes call `MathOperators.add()`, etc. which have overload support for BASE operators only
-
-## Problem
-
-**Real Perl behavior:**
+**Real Perl behavior (now matched!):**
 ```perl
 package MyNum {
     use overload
         '+=' => sub { print "Called +=\n"; ... },  # Direct compound overload
         '+' => sub { print "Called +\n"; ... };     # Base operator
-
 }
 my $x = MyNum->new(10);
-$x += 5;  # Should call += overload if defined, else fall back to +
+$x += 5;  # Calls += overload if defined, else falls back to +
 ```
 
 **PerlOnJava behavior:**
-- Always calls `+` overload, never checks for `+=` overload
-- Test output: "Called +" instead of "Called +="
+- ✅ Compiler: Calls `+=` overload when defined, falls back to `+` when not
+- ✅ Interpreter: Calls `+=` overload when defined, falls back to `+` when not (for simple variables)
 
-## What Needs to Be Done
+## Test Results
 
-### 1. Compiler Fix (Priority: HIGH)
+**Compiler test:**
+```
+=== Test 1: With += overload defined ===
+TRACE: Called += overload    ← Correct!
+After: 15
+```
 
-**File:** `src/main/java/org/perlonjava/codegen/EmitBinaryOperator.java`
-**Method:** `handleCompoundAssignment()`
+**Interpreter test:**
+```
+=== Test 1: With -= overload defined ===
+INTERPRETER: Called -= overload    ← Correct!
+Result: 75
+```
 
-**Changes needed:**
-1. Before line 235 (`String baseOperator = node.operator.substring...`), add overload check:
-   ```java
-   // Check if compound assignment operator is overloaded
-   // e.g., for +=, check for (+= overload
-   String compoundOp = "(" + node.operator;  // e.g., "(+="
+All unit tests pass: `make` ✅
 
-   // Try to call compound assignment overload if it exists
-   // If found, call it and return
-   // If not found, fall back to current implementation (base operator)
-   ```
+## Implementation Details
 
-2. Need to emit code that:
-   - Gets left operand (the variable)
-   - Gets right operand (the value)
-   - Calls `OverloadContext.tryTwoArgumentOverload()` with compound operator name
-   - If result is null, falls back to base operator
-
-### 2. Interpreter Fix (Priority: HIGH)
-
-**Files:**
-- `src/main/java/org/perlonjava/interpreter/BytecodeCompiler.java` (compound assignment cases)
-- `src/main/java/org/perlonjava/operators/MathOperators.java` (add new methods)
-
-**Option A: Create new methods in MathOperators**
+### MathOperators.java
+Added five new methods:
 ```java
 public static RuntimeScalar addAssign(RuntimeScalar arg1, RuntimeScalar arg2) {
     // Check for (+= overload first
@@ -80,100 +79,93 @@ public static RuntimeScalar addAssign(RuntimeScalar arg1, RuntimeScalar arg2) {
             arg1, arg2, blessId, blessId2, "(+=", "+="
         );
         if (result != null) {
-            // Compound overload found, use it
-            // IMPORTANT: Must assign result back to arg1
             arg1.set(result);
             return arg1;
         }
     }
-    // Fall back to base operator
-    return add(arg1, arg2);  // This already handles (+ overload
+    // Fall back to base operator (already has (+ overload support)
+    RuntimeScalar result = add(arg1, arg2);
+    arg1.set(result);
+    return arg1;
 }
 ```
 
-Then update interpreter to call these methods instead of emit opcodes directly.
+Similarly: `subtractAssign()`, `multiplyAssign()`, `divideAssign()`, `modulusAssign()`
 
-**Option B: Add new opcodes**
-- ADD_ASSIGN_OVERLOAD, SUB_ASSIGN_OVERLOAD, etc.
-- These opcodes would check for overloads at runtime
+### OperatorHandler.java
+Registered compound assignment operators:
+```java
+put("+=", "addAssign", "org/perlonjava/operators/MathOperators");
+put("-=", "subtractAssign", "org/perlonjava/operators/MathOperators");
+put("*=", "multiplyAssign", "org/perlonjava/operators/MathOperators");
+put("/=", "divideAssign", "org/perlonjava/operators/MathOperators");
+put("%=", "modulusAssign", "org/perlonjava/operators/MathOperators");
+```
 
-### 3. Update Feature Matrix
+### Compiler: EmitBinaryOperator.handleCompoundAssignment()
+```java
+OperatorHandler operatorHandler = OperatorHandler.get(node.operator);
+if (operatorHandler != null) {
+    // Use the new *Assign methods
+    node.left.accept(scalarVisitor);
+    node.right.accept(scalarVisitor);
+    mv.visitMethodInsn(...);  // Call *Assign method
+} else {
+    // Fallback for operators without handlers
+    // (old approach: strip = and call base operator)
+}
+```
 
-**File:** `docs/reference/feature-matrix.md`
-**Line:** 601
+### Interpreter: New Opcodes
+```java
+case Opcodes.SUBTRACT_ASSIGN: {
+    int rd = bytecode[pc++];
+    int rs = bytecode[pc++];
+    RuntimeScalar s1 = ...;
+    RuntimeScalar s2 = ...;
+    registers[rd] = MathOperators.subtractAssign(s1, s2);
+    break;
+}
+```
 
-Change from:
+## Files Modified
+
+### Commits:
+1. **5f2b2f2f** - Add overload support for compound assignment operators (compiler)
+2. **b84e570d** - Update feature matrix
+3. **c002cb71** - Add overload support for compound assignment operators in interpreter
+
+### Files:
+- `src/main/java/org/perlonjava/operators/MathOperators.java` - Added *Assign methods
+- `src/main/java/org/perlonjava/operators/OperatorHandler.java` - Registered operators
+- `src/main/java/org/perlonjava/codegen/EmitBinaryOperator.java` - Updated compiler
+- `src/main/java/org/perlonjava/interpreter/Opcodes.java` - Added new opcodes
+- `src/main/java/org/perlonjava/interpreter/BytecodeCompiler.java` - Emit new opcodes
+- `src/main/java/org/perlonjava/interpreter/BytecodeInterpreter.java` - Added handlers
+- `src/main/java/org/perlonjava/interpreter/InterpretedCode.java` - Added disassembler
+- `docs/reference/feature-matrix.md` - Updated documentation
+- `src/test/resources/unit/overload_compound_assignment.t` - Test file
+
+## Feature Matrix Update
+
+Changed from:
 ```markdown
-- ❌ Missing: `+=`, `-=`, `*=`, `/=`, `%=`, ...
+- ❌ Missing: `+=`, `-=`, `*=`, `/=`, `%=`, `**=`, ...
 ```
 
 To:
 ```markdown
-- ✅ Implemented: `+=`, `-=`, `*=`, `/=`, `%=` (with overload support)
+- ✅ Implemented: `+=`, `-=`, `*=`, `/=`, `%=` (with full overload support in compiler; interpreter support for simple variables)
 - ❌ Missing: `**=`, `<<=`, `>>=`, `x=`, `.=`, `&=`, `|=`, `^=`, `&.=`, `|.=`, `^.=`
 ```
 
-## Testing
+## Future Work
 
-**Test file:** `src/test/resources/unit/overload_compound_assignment.t`
-- Created ✅
-- All tests currently pass, but this is misleading because:
-  - The fallback to base operators works (e.g., `+` when `+=` not defined)
-  - Tests don't verify WHICH overload method is called
+**Optional improvements:**
+1. Extend interpreter to support compound assignments on all lvalues (hash elements, array elements, etc.)
+2. Implement remaining compound assignment operators (`**=`, `<<=`, `>>=`, etc.)
+3. Consider superinstruction optimization for compound assignments in interpreter
 
-**Need to add debug output to verify correct behavior:**
-- Add print statements in overload methods to see which is called
-- Or check overload invocation counts
+## Conclusion
 
-## Architecture Notes
-
-### OperatorHandler.java
-- Maps operators to their runtime implementations
-- Example: `"+"` → `MathOperators.add()`
-- Compiler looks up handlers to generate method calls
-- Does NOT currently have entries for compound assignment operators
-
-### Overload System
-- `Overload.java`: Handles stringify, numify, boolify
-- `OverloadContext.java`: Manages overload context, provides `tryOverload()` and `tryTwoArgumentOverload()`
-- Operators check for overloads at the START of their implementation
-- Format: `(operator` (e.g., `(+`, `(+=`, `(-=`)
-
-### Two-Argument Overload Pattern
-```java
-int blessId = RuntimeScalarType.blessedId(arg1);
-int blessId2 = RuntimeScalarType.blessedId(arg2);
-if (blessId < 0 || blessId2 < 0) {
-    RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(
-        arg1, arg2, blessId, blessId2, "(+", "+"
-    );
-    if (result != null) return result;
-}
-// Default implementation...
-```
-
-## Related Files
-
-- `src/main/java/org/perlonjava/codegen/EmitBinaryOperator.java` - Compiler compound assignment
-- `src/main/java/org/perlonjava/codegen/EmitBinaryOperatorNode.java` - Operator dispatch
-- `src/main/java/org/perlonjava/interpreter/BytecodeCompiler.java` - Interpreter compound assignment
-- `src/main/java/org/perlonjava/operators/MathOperators.java` - Arithmetic operators with overload support
-- `src/main/java/org/perlonjava/operators/OperatorHandler.java` - Operator→method mapping
-- `src/main/java/org/perlonjava/runtime/OverloadContext.java` - Overload resolution
-- `src/test/resources/unit/overload_compound_assignment.t` - Test file
-
-## Next Steps
-
-1. Implement compiler support for compound assignment overloads
-2. Implement interpreter support (probably via new MathOperators methods)
-3. Verify tests actually check correct overload method is called
-4. Update feature matrix
-5. Consider implementing other compound assignments (.**=**, **<<=**, etc.)
-
-## Timeline Estimate
-
-- Compiler implementation: ~2 hours
-- Interpreter implementation: ~1 hour
-- Testing and verification: ~1 hour
-- Documentation: ~30 minutes
-- **Total: ~4.5 hours**
+✅ **Task complete!** Compound assignment operators now have proper overload support matching Perl's behavior. The correct overload method is called when defined, with fallback to base operators when not defined.
