@@ -331,8 +331,27 @@ public class EmitForeach {
         } else {
             // Standard path: obtain iterator for the list
             node.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
+
+            // IMPORTANT: avoid materializing huge ranges.
+            // Even for lexical loop variables, ranges should use lazy iteration
+            // to avoid OOM with large ranges like (1..50_000_000).
+            Label notRangeLabel = new Label();
+            Label afterIterLabel = new Label();
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitTypeInsn(Opcodes.INSTANCEOF, "org/perlonjava/runtime/PerlRange");
+            mv.visitJumpInsn(Opcodes.IFEQ, notRangeLabel);
+
+            // Range: iterate directly without materializing.
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "iterator", "()Ljava/util/Iterator;", false);
             mv.visitVarInsn(Opcodes.ASTORE, iteratorIndex);
+            mv.visitJumpInsn(Opcodes.GOTO, afterIterLabel);
+
+            // Non-range: use standard iterator.
+            mv.visitLabel(notRangeLabel);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "iterator", "()Ljava/util/Iterator;", false);
+            mv.visitVarInsn(Opcodes.ASTORE, iteratorIndex);
+
+            mv.visitLabel(afterIterLabel);
         }
 
         mv.visitLabel(loopStart);
