@@ -558,6 +558,44 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.EQ_STR: {
+                        // String equality: rd = (rs1 eq rs2)
+                        int rd = bytecode[pc++];
+                        int rs1 = bytecode[pc++];
+                        int rs2 = bytecode[pc++];
+
+                        // Convert operands to scalar if needed
+                        RuntimeBase val1 = registers[rs1];
+                        RuntimeBase val2 = registers[rs2];
+                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+
+                        // Use cmp and check if result is 0
+                        RuntimeScalar cmpResult = CompareOperators.cmp(s1, s2);
+                        boolean isEqual = (cmpResult.getInt() == 0);
+                        registers[rd] = isEqual ? RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarFalse;
+                        break;
+                    }
+
+                    case Opcodes.NE_STR: {
+                        // String inequality: rd = (rs1 ne rs2)
+                        int rd = bytecode[pc++];
+                        int rs1 = bytecode[pc++];
+                        int rs2 = bytecode[pc++];
+
+                        // Convert operands to scalar if needed
+                        RuntimeBase val1 = registers[rs1];
+                        RuntimeBase val2 = registers[rs2];
+                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+
+                        // Use cmp and check if result is not 0
+                        RuntimeScalar cmpResult = CompareOperators.cmp(s1, s2);
+                        boolean isNotEqual = (cmpResult.getInt() != 0);
+                        registers[rd] = isNotEqual ? RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarFalse;
+                        break;
+                    }
+
                     // =================================================================
                     // LOGICAL OPERATORS
                     // =================================================================
