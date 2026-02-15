@@ -689,6 +689,26 @@ public class InterpretedCode extends RuntimeCode {
                       .append(" = r").append(iterReg).append(".next() or goto ")
                       .append(exitTarget).append("\n");
                     break;
+                case Opcodes.SUBTRACT_ASSIGN:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("SUBTRACT_ASSIGN r").append(rd).append(" -= r").append(rs).append("\n");
+                    break;
+                case Opcodes.MULTIPLY_ASSIGN:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("MULTIPLY_ASSIGN r").append(rd).append(" *= r").append(rs).append("\n");
+                    break;
+                case Opcodes.DIVIDE_ASSIGN:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("DIVIDE_ASSIGN r").append(rd).append(" /= r").append(rs).append("\n");
+                    break;
+                case Opcodes.MODULUS_ASSIGN:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("MODULUS_ASSIGN r").append(rd).append(" %= r").append(rs).append("\n");
+                    break;
                 case Opcodes.LIST_TO_SCALAR:
                     rd = bytecode[pc++];
                     rs = bytecode[pc++];

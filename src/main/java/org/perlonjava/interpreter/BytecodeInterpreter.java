@@ -741,6 +741,66 @@ public class BytecodeInterpreter {
                     }
 
                     // =================================================================
+                    // COMPOUND ASSIGNMENT OPERATORS (with overload support)
+                    // =================================================================
+
+                    case Opcodes.SUBTRACT_ASSIGN: {
+                        // Compound assignment: rd = rd -= rs (checks for (-= overload first)
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+
+                        RuntimeBase val1 = registers[rd];
+                        RuntimeBase val2 = registers[rs];
+                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+
+                        registers[rd] = MathOperators.subtractAssign(s1, s2);
+                        break;
+                    }
+
+                    case Opcodes.MULTIPLY_ASSIGN: {
+                        // Compound assignment: rd = rd *= rs (checks for (*= overload first)
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+
+                        RuntimeBase val1 = registers[rd];
+                        RuntimeBase val2 = registers[rs];
+                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+
+                        registers[rd] = MathOperators.multiplyAssign(s1, s2);
+                        break;
+                    }
+
+                    case Opcodes.DIVIDE_ASSIGN: {
+                        // Compound assignment: rd = rd /= rs (checks for (/= overload first)
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+
+                        RuntimeBase val1 = registers[rd];
+                        RuntimeBase val2 = registers[rs];
+                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+
+                        registers[rd] = MathOperators.divideAssign(s1, s2);
+                        break;
+                    }
+
+                    case Opcodes.MODULUS_ASSIGN: {
+                        // Compound assignment: rd = rd %= rs (checks for (%= overload first)
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+
+                        RuntimeBase val1 = registers[rd];
+                        RuntimeBase val2 = registers[rs];
+                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+
+                        registers[rd] = MathOperators.modulusAssign(s1, s2);
+                        break;
+                    }
+
+                    // =================================================================
                     // ARRAY OPERATIONS
                     // =================================================================
 
