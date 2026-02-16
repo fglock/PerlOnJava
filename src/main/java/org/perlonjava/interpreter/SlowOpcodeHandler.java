@@ -3,81 +3,57 @@ package org.perlonjava.interpreter;
 import org.perlonjava.runtime.*;
 
 /**
- * Handler for rarely-used operations via SLOW_OP opcode.
+ * Handler for rarely-used operations called directly by BytecodeInterpreter.
  *
- * <p>This class handles "cold path" operations via a single SLOW_OP opcode (87)
- * that takes a slow_op_id byte parameter. This architecture:</p>
+ * <p>This class provides execution methods for "cold path" operations that are
+ * called directly from BytecodeInterpreter helper methods (executeSliceOps,
+ * executeListOps, executeSystemOps, executeMiscOps).</p>
  *
- * <ul>
- *   <li>Uses only ONE opcode number for ALL rare operations (efficient!)</li>
- *   <li>Supports 256 slow operations via slow_op_id parameter</li>
- *   <li>Keeps main BytecodeInterpreter switch compact (~10-15% faster)</li>
- *   <li>Improves CPU instruction cache utilization (smaller main loop)</li>
- *   <li>Preserves valuable opcode space (88-255) for future fast operations</li>
- * </ul>
+ * <h2>Architecture (Phase 5)</h2>
+ * <p>As of Phase 5, this class uses <strong>direct method calls</strong> instead of
+ * the old SLOWOP_* ID dispatch mechanism:</p>
  *
- * <h2>TODO: Deprecate This Class</h2>
- * <p><strong>This architecture is scheduled for deprecation.</strong> All methods in this class
- * are compatible with range-based delegation (like BytecodeInterpreter.executeComparisons()).
- * Future refactoring will:</p>
- * <ul>
- *   <li>Convert SLOWOP operations to direct opcodes (114-127, negative range)</li>
- *   <li>Move methods to BytecodeInterpreter with range-based delegation</li>
- *   <li>Delete this file completely</li>
- * </ul>
- * <p>Benefits: -1 byte per operation, -1 indirection, consistent architecture.</p>
- * <p><strong>See:</strong> dev/prompts/TODO_DEPRECATE_SLOW_OP.md for migration plan</p>
- *
- * <h2>Bytecode Format</h2>
  * <pre>
- * [SLOW_OP] [slow_op_id] [operands...]
- *
- * Example: waitpid
- * [87] [1] [rd] [rs_pid] [rs_flags]
- *  ^    ^
- *  |    |__ SLOWOP_WAITPID (1)
- *  |_______ SLOW_OP opcode (87)
- * </pre>
- *
- * <h2>Performance Trade-off</h2>
- * <p>Adds ~5ns overhead per slow operation but keeps hot path ~10-15% faster
- * by maintaining compact main interpreter loop. Since these operations are
- * rarely used (typically <1% of execution), the trade-off is excellent.</p>
- *
- * <h2>Architecture</h2>
- * <pre>
- * BytecodeInterpreter main loop:
+ * BytecodeInterpreter:
  *   switch (opcode) {
- *     case 0-86: Handle directly (hot path)
- *     case 87:   SlowOpcodeHandler.execute(...)  // All rare operations
- *     case 88-255: Future fast operations
+ *     case Opcodes.DEREF_ARRAY:
+ *       return SlowOpcodeHandler.executeDerefArray(bytecode, pc, registers);
+ *     case Opcodes.ARRAY_SLICE:
+ *       return SlowOpcodeHandler.executeArraySlice(bytecode, pc, registers);
+ *     ...
  *   }
  * </pre>
  *
- * <h2>Adding New Slow Operations</h2>
+ * <h2>Benefits of Direct Calls</h2>
+ * <ul>
+ *   <li>Eliminates SLOWOP_* ID indirection (no ID lookup overhead)</li>
+ *   <li>Simpler architecture: direct method calls instead of dispatch table</li>
+ *   <li>Better JIT optimization: methods can be inlined by C2 compiler</li>
+ *   <li>Clearer code: obvious which method handles each opcode</li>
+ * </ul>
+ *
+ * <h2>Performance Characteristics</h2>
+ * <p>Each operation adds one static method call (~5ns overhead) compared to
+ * inline handling in main execute() method. This is acceptable since these
+ * operations are rarely used (typically <1% of execution time).</p>
+ *
+ * <h2>Adding New Operations</h2>
  * <ol>
- *   <li>Add SLOWOP_XXX constant in Opcodes.java (next available ID)</li>
- *   <li>Add case in execute() method below</li>
- *   <li>Implement executeXxx() method</li>
- *   <li>Update getSlowOpName() for disassembler</li>
+ *   <li>Add opcode constant in Opcodes.java (next available opcode)</li>
+ *   <li>Add public static executeXxx() method in this class</li>
+ *   <li>Add case in BytecodeInterpreter helper method to call executeXxx()</li>
+ *   <li>Add disassembly case in InterpretedCode.java</li>
+ *   <li>Add emission logic in BytecodeCompiler.java</li>
  * </ol>
  *
- * @see Opcodes#SLOW_OP
- * @see Opcodes#SLOWOP_CHOWN
  * @see BytecodeInterpreter
- * @deprecated Scheduled for removal. Will be replaced with direct opcodes and range-based delegation.
+ * @see Opcodes
  */
 public class SlowOpcodeHandler {
 
-    // DEPRECATED: execute() method removed - SLOWOP_* constants no longer exist
-    // BytecodeInterpreter now calls executeXxx() methods directly
-
-    // DEPRECATED: executeById() method removed - SLOWOP_* constants no longer exist
-
-    // DEPRECATED: getSlowOpName() method removed - SLOWOP_* constants no longer exist
-
     // =================================================================
-    // IMPLEMENTATION METHODS
+    // SLICE AND DEREFERENCE OPERATIONS
+    // =================================================================
     // =================================================================
 
     /**
