@@ -3992,7 +3992,7 @@ public class BytecodeCompiler implements Visitor {
     }
 
     private void emit(short opcode) {
-        bytecode.add((short)(opcode & 0xFFFF));
+        bytecode.add(opcode);
     }
 
     /**
@@ -4002,7 +4002,7 @@ public class BytecodeCompiler implements Visitor {
     private void emitWithToken(short opcode, int tokenIndex) {
         int pc = bytecode.size();
         pcToTokenIndex.put(pc, tokenIndex);
-        bytecode.add((short)(opcode & 0xFFFF));
+        bytecode.add(opcode);
     }
 
     private void emit(int value) {
