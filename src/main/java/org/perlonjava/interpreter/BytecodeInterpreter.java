@@ -1167,13 +1167,11 @@ public class BytecodeInterpreter {
 
                     case Opcodes.EVAL_TRY: {
                         // Start of eval block with exception handling
-                        // Format: [EVAL_TRY] [catch_offset_high] [catch_offset_low]
+                        // Format: [EVAL_TRY] [catch_target_high] [catch_target_low]
+                        // catch_target is absolute bytecode address (4 bytes)
 
-                        int catchOffsetHigh = bytecode[pc++];
-                        int catchOffsetLow = bytecode[pc++];
-                        int catchOffset = (catchOffsetHigh << 8) | catchOffsetLow;
-                        int tryStartPc = pc - 3; // PC where EVAL_TRY opcode is
-                        int catchPc = tryStartPc + catchOffset;
+                        int catchPc = readInt(bytecode, pc);  // Read 4-byte absolute address
+                        pc += 2;  // Skip the 2 shorts we just read
 
                         // Push catch PC onto eval stack
                         evalCatchStack.push(catchPc);
