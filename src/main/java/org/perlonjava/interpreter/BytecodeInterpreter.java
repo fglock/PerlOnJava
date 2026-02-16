@@ -459,211 +459,31 @@ public class BytecodeInterpreter {
                     }
 
                     // =================================================================
-                    // COMPARISON OPERATORS
+                    // COMPARISON AND LOGICAL OPERATORS (opcodes 31-39) - Delegated
                     // =================================================================
 
-                    case Opcodes.COMPARE_NUM: {
-                        // Numeric comparison: rd = rs1 <=> rs2
-                        int rd = bytecode[pc++];
-                        int rs1 = bytecode[pc++];
-                        int rs2 = bytecode[pc++];
-
-                        // Convert operands to scalar if needed
-                        RuntimeBase val1 = registers[rs1];
-                        RuntimeBase val2 = registers[rs2];
-                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
-                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
-
-                        registers[rd] = CompareOperators.spaceship(s1, s2);
+                    case Opcodes.COMPARE_NUM:
+                    case Opcodes.COMPARE_STR:
+                    case Opcodes.EQ_NUM:
+                    case Opcodes.NE_NUM:
+                    case Opcodes.LT_NUM:
+                    case Opcodes.GT_NUM:
+                    case Opcodes.EQ_STR:
+                    case Opcodes.NE_STR:
+                    case Opcodes.NOT:
+                        pc = executeComparisons(opcode, bytecode, pc, registers);
                         break;
-                    }
-
-                    case Opcodes.COMPARE_STR: {
-                        // String comparison: rd = rs1 cmp rs2
-                        int rd = bytecode[pc++];
-                        int rs1 = bytecode[pc++];
-                        int rs2 = bytecode[pc++];
-
-                        // Convert operands to scalar if needed
-                        RuntimeBase val1 = registers[rs1];
-                        RuntimeBase val2 = registers[rs2];
-                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
-                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
-
-                        registers[rd] = CompareOperators.cmp(s1, s2);
-                        break;
-                    }
-
-                    case Opcodes.EQ_NUM: {
-                        // Numeric equality: rd = (rs1 == rs2)
-                        int rd = bytecode[pc++];
-                        int rs1 = bytecode[pc++];
-                        int rs2 = bytecode[pc++];
-
-                        // Convert operands to scalar if needed
-                        RuntimeBase val1 = registers[rs1];
-                        RuntimeBase val2 = registers[rs2];
-                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
-                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
-
-                        registers[rd] = CompareOperators.equalTo(s1, s2);
-                        break;
-                    }
-
-                    case Opcodes.LT_NUM: {
-                        // Less than: rd = (rs1 < rs2)
-                        int rd = bytecode[pc++];
-                        int rs1 = bytecode[pc++];
-                        int rs2 = bytecode[pc++];
-
-                        // Convert operands to scalar if needed
-                        RuntimeBase val1 = registers[rs1];
-                        RuntimeBase val2 = registers[rs2];
-                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
-                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
-
-                        registers[rd] = CompareOperators.lessThan(s1, s2);
-                        break;
-                    }
-
-                    case Opcodes.GT_NUM: {
-                        // Greater than: rd = (rs1 > rs2)
-                        int rd = bytecode[pc++];
-                        int rs1 = bytecode[pc++];
-                        int rs2 = bytecode[pc++];
-
-                        // Convert operands to scalar if needed
-                        RuntimeBase val1 = registers[rs1];
-                        RuntimeBase val2 = registers[rs2];
-                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
-                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
-
-                        registers[rd] = CompareOperators.greaterThan(s1, s2);
-                        break;
-                    }
-
-                    case Opcodes.NE_NUM: {
-                        // Not equal: rd = (rs1 != rs2)
-                        int rd = bytecode[pc++];
-                        int rs1 = bytecode[pc++];
-                        int rs2 = bytecode[pc++];
-
-                        // Convert operands to scalar if needed
-                        RuntimeBase val1 = registers[rs1];
-                        RuntimeBase val2 = registers[rs2];
-                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
-                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
-
-                        registers[rd] = CompareOperators.notEqualTo(s1, s2);
-                        break;
-                    }
-
-                    case Opcodes.EQ_STR: {
-                        // String equality: rd = (rs1 eq rs2)
-                        int rd = bytecode[pc++];
-                        int rs1 = bytecode[pc++];
-                        int rs2 = bytecode[pc++];
-
-                        // Convert operands to scalar if needed
-                        RuntimeBase val1 = registers[rs1];
-                        RuntimeBase val2 = registers[rs2];
-                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
-                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
-
-                        // Use cmp and check if result is 0
-                        RuntimeScalar cmpResult = CompareOperators.cmp(s1, s2);
-                        boolean isEqual = (cmpResult.getInt() == 0);
-                        registers[rd] = isEqual ? RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarFalse;
-                        break;
-                    }
-
-                    case Opcodes.NE_STR: {
-                        // String inequality: rd = (rs1 ne rs2)
-                        int rd = bytecode[pc++];
-                        int rs1 = bytecode[pc++];
-                        int rs2 = bytecode[pc++];
-
-                        // Convert operands to scalar if needed
-                        RuntimeBase val1 = registers[rs1];
-                        RuntimeBase val2 = registers[rs2];
-                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
-                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
-
-                        // Use cmp and check if result is not 0
-                        RuntimeScalar cmpResult = CompareOperators.cmp(s1, s2);
-                        boolean isNotEqual = (cmpResult.getInt() != 0);
-                        registers[rd] = isNotEqual ? RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarFalse;
-                        break;
-                    }
 
                     // =================================================================
-                    // LOGICAL OPERATORS
+                    // TYPE AND REFERENCE OPERATORS (opcodes 102-105) - Delegated
                     // =================================================================
 
-                    case Opcodes.NOT: {
-                        // Logical NOT: rd = !rs
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        RuntimeScalar val = (RuntimeScalar) registers[rs];
-                        registers[rd] = val.getBoolean() ?
-                            RuntimeScalarCache.scalarFalse : RuntimeScalarCache.scalarTrue;
+                    case Opcodes.DEFINED:
+                    case Opcodes.REF:
+                    case Opcodes.BLESS:
+                    case Opcodes.ISA:
+                        pc = executeTypeOps(opcode, bytecode, pc, registers, code);
                         break;
-                    }
-
-                    case Opcodes.DEFINED: {
-                        // Defined check: rd = defined(rs)
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        RuntimeBase val = registers[rs];
-                        boolean isDefined = val != null && val.getDefinedBoolean();
-                        registers[rd] = isDefined ?
-                            RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarFalse;
-                        break;
-                    }
-
-                    case Opcodes.REF: {
-                        // Ref check: rd = ref(rs) - returns blessed class name or type
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        RuntimeBase val = registers[rs];
-                        RuntimeScalar result;
-                        if (val instanceof RuntimeScalar) {
-                            result = org.perlonjava.operators.ReferenceOperators.ref((RuntimeScalar) val);
-                        } else {
-                            // For non-scalar types, convert to scalar first
-                            result = org.perlonjava.operators.ReferenceOperators.ref(val.scalar());
-                        }
-                        registers[rd] = result;
-                        break;
-                    }
-
-                    case Opcodes.BLESS: {
-                        // Bless: rd = bless(rs_ref, rs_package)
-                        int rd = bytecode[pc++];
-                        int refReg = bytecode[pc++];
-                        int packageReg = bytecode[pc++];
-                        RuntimeScalar ref = (RuntimeScalar) registers[refReg];
-                        RuntimeScalar packageName = (RuntimeScalar) registers[packageReg];
-                        registers[rd] = org.perlonjava.operators.ReferenceOperators.bless(ref, packageName);
-                        break;
-                    }
-
-                    case Opcodes.ISA: {
-                        // ISA: rd = isa(rs_obj, rs_package)
-                        int rd = bytecode[pc++];
-                        int objReg = bytecode[pc++];
-                        int packageReg = bytecode[pc++];
-                        RuntimeScalar obj = (RuntimeScalar) registers[objReg];
-                        RuntimeScalar packageName = (RuntimeScalar) registers[packageReg];
-                        // Create RuntimeArray with arguments
-                        RuntimeArray isaArgs = new RuntimeArray();
-                        isaArgs.push(obj);
-                        isaArgs.push(packageName);
-                        // Call Universal.isa
-                        RuntimeList result = org.perlonjava.perlmodule.Universal.isa(isaArgs, RuntimeContextType.SCALAR);
-                        registers[rd] = result.scalar();
-                        break;
-                    }
 
                     // =================================================================
                     // ITERATOR OPERATIONS - For efficient foreach loops
@@ -1637,16 +1457,77 @@ public class BytecodeInterpreter {
                     }
 
                     // =================================================================
-                    // SLOW OPERATIONS
+                    // PHASE 2: DIRECT OPCODES (114-154) - Range delegation
+                    // =================================================================
+                    // These operations were promoted from SLOW_OP for better performance.
+                    // Organized in CONTIGUOUS groups for JVM tableswitch optimization.
+
+                    // Group 1-2: Dereferencing and Slicing (114-121)
+                    case Opcodes.DEREF_ARRAY:
+                    case Opcodes.DEREF_HASH:
+                    case Opcodes.ARRAY_SLICE:
+                    case Opcodes.ARRAY_SLICE_SET:
+                    case Opcodes.HASH_SLICE:
+                    case Opcodes.HASH_SLICE_SET:
+                    case Opcodes.HASH_SLICE_DELETE:
+                    case Opcodes.LIST_SLICE_FROM:
+                        pc = executeSliceOps(opcode, bytecode, pc, registers, code);
+                        break;
+
+                    // Group 3-4: Array/String/Exists/Delete (122-127)
+                    case Opcodes.SPLICE:
+                    case Opcodes.REVERSE:
+                    case Opcodes.SPLIT:
+                    case Opcodes.LENGTH_OP:
+                    case Opcodes.EXISTS:
+                    case Opcodes.DELETE:
+                        pc = executeArrayStringOps(opcode, bytecode, pc, registers, code);
+                        break;
+
+                    // Group 5: Closure/Scope (128-131)
+                    case Opcodes.RETRIEVE_BEGIN_SCALAR:
+                    case Opcodes.RETRIEVE_BEGIN_ARRAY:
+                    case Opcodes.RETRIEVE_BEGIN_HASH:
+                    case Opcodes.LOCAL_SCALAR:
+                        pc = executeScopeOps(opcode, bytecode, pc, registers, code);
+                        break;
+
+                    // Group 6-8: System Calls and IPC (132-150)
+                    case Opcodes.CHOWN:
+                    case Opcodes.WAITPID:
+                    case Opcodes.FORK:
+                    case Opcodes.GETPPID:
+                    case Opcodes.GETPGRP:
+                    case Opcodes.SETPGRP:
+                    case Opcodes.GETPRIORITY:
+                    case Opcodes.SETPRIORITY:
+                    case Opcodes.GETSOCKOPT:
+                    case Opcodes.SETSOCKOPT:
+                    case Opcodes.SYSCALL:
+                    case Opcodes.SEMGET:
+                    case Opcodes.SEMOP:
+                    case Opcodes.MSGGET:
+                    case Opcodes.MSGSND:
+                    case Opcodes.MSGRCV:
+                    case Opcodes.SHMGET:
+                    case Opcodes.SHMREAD:
+                    case Opcodes.SHMWRITE:
+                        pc = executeSystemOps(opcode, bytecode, pc, registers);
+                        break;
+
+                    // Group 9: Special I/O (151-154)
+                    case Opcodes.EVAL_STRING:
+                    case Opcodes.SELECT_OP:
+                    case Opcodes.LOAD_GLOB:
+                    case Opcodes.SLEEP_OP:
+                        pc = executeSpecialIO(opcode, bytecode, pc, registers, code);
+                        break;
+
+                    // =================================================================
+                    // SLOW OPERATIONS (DEPRECATED)
                     // =================================================================
 
-                    case Opcodes.SLOW_OP: {
-                        // Dispatch to slow operation handler
-                        // Format: [SLOW_OP] [slow_op_id] [operands...]
-                        // The slow_op_id is a dense sequence (0,1,2...) for tableswitch optimization
-                        pc = SlowOpcodeHandler.execute(bytecode, pc, registers, code);
-                        break;
-                    }
+                    // DEPRECATED: SLOW_OP removed - all operations now use direct opcodes (114-154)
 
                     default:
                         // Unknown opcode
@@ -1716,6 +1597,818 @@ public class BytecodeInterpreter {
         } finally {
             // Always pop the interpreter state
             InterpreterState.pop();
+        }
+    }
+
+    /**
+     * Handle type and reference operations (opcodes 62-70, 102-105).
+     * Separated to keep main execute() under JIT compilation limit.
+     *
+     * @return Updated program counter
+     */
+    private static int executeTypeOps(short opcode, short[] bytecode, int pc,
+                                      RuntimeBase[] registers, InterpretedCode code) {
+        switch (opcode) {
+            case Opcodes.CREATE_LAST: {
+                int rd = bytecode[pc++];
+                int labelIdx = bytecode[pc++];
+                String label = labelIdx == 255 ? null : code.stringPool[labelIdx];
+                registers[rd] = new RuntimeControlFlowList(
+                    ControlFlowType.LAST, label,
+                    code.sourceName, code.sourceLine
+                );
+                return pc;
+            }
+
+            case Opcodes.CREATE_NEXT: {
+                int rd = bytecode[pc++];
+                int labelIdx = bytecode[pc++];
+                String label = labelIdx == 255 ? null : code.stringPool[labelIdx];
+                registers[rd] = new RuntimeControlFlowList(
+                    ControlFlowType.NEXT, label,
+                    code.sourceName, code.sourceLine
+                );
+                return pc;
+            }
+
+            case Opcodes.CREATE_REDO: {
+                int rd = bytecode[pc++];
+                int labelIdx = bytecode[pc++];
+                String label = labelIdx == 255 ? null : code.stringPool[labelIdx];
+                registers[rd] = new RuntimeControlFlowList(
+                    ControlFlowType.REDO, label,
+                    code.sourceName, code.sourceLine
+                );
+                return pc;
+            }
+
+            case Opcodes.CREATE_GOTO: {
+                int rd = bytecode[pc++];
+                int labelIdx = bytecode[pc++];
+                String label = labelIdx == 255 ? null : code.stringPool[labelIdx];
+                registers[rd] = new RuntimeControlFlowList(
+                    ControlFlowType.GOTO, label,
+                    code.sourceName, code.sourceLine
+                );
+                return pc;
+            }
+
+            case Opcodes.IS_CONTROL_FLOW: {
+                int rd = bytecode[pc++];
+                int rs = bytecode[pc++];
+                boolean isControlFlow = registers[rs] instanceof RuntimeControlFlowList;
+                registers[rd] = isControlFlow ?
+                    RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarFalse;
+                return pc;
+            }
+
+            case Opcodes.GET_CONTROL_FLOW_TYPE: {
+                int rd = bytecode[pc++];
+                int rs = bytecode[pc++];
+                RuntimeControlFlowList cf = (RuntimeControlFlowList) registers[rs];
+                registers[rd] = new RuntimeScalar(cf.marker.type.ordinal());
+                return pc;
+            }
+
+            case Opcodes.CREATE_REF: {
+                int rd = bytecode[pc++];
+                int rs = bytecode[pc++];
+                RuntimeBase value = registers[rs];
+                registers[rd] = value.createReference();
+                return pc;
+            }
+
+            case Opcodes.DEREF: {
+                int rd = bytecode[pc++];
+                int rs = bytecode[pc++];
+                registers[rd] = registers[rs];
+                return pc;
+            }
+
+            case Opcodes.GET_TYPE: {
+                int rd = bytecode[pc++];
+                int rs = bytecode[pc++];
+                RuntimeScalar value = (RuntimeScalar) registers[rs];
+                registers[rd] = new RuntimeScalar(value.type);
+                return pc;
+            }
+
+            case Opcodes.DEFINED: {
+                int rd = bytecode[pc++];
+                int rs = bytecode[pc++];
+                RuntimeBase val = registers[rs];
+                boolean isDefined = val != null && val.getDefinedBoolean();
+                registers[rd] = isDefined ?
+                    RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarFalse;
+                return pc;
+            }
+
+            case Opcodes.REF: {
+                int rd = bytecode[pc++];
+                int rs = bytecode[pc++];
+                RuntimeBase val = registers[rs];
+                RuntimeScalar result;
+                if (val instanceof RuntimeScalar) {
+                    result = org.perlonjava.operators.ReferenceOperators.ref((RuntimeScalar) val);
+                } else {
+                    result = org.perlonjava.operators.ReferenceOperators.ref(val.scalar());
+                }
+                registers[rd] = result;
+                return pc;
+            }
+
+            case Opcodes.BLESS: {
+                int rd = bytecode[pc++];
+                int refReg = bytecode[pc++];
+                int packageReg = bytecode[pc++];
+                RuntimeScalar ref = (RuntimeScalar) registers[refReg];
+                RuntimeScalar packageName = (RuntimeScalar) registers[packageReg];
+                registers[rd] = org.perlonjava.operators.ReferenceOperators.bless(ref, packageName);
+                return pc;
+            }
+
+            case Opcodes.ISA: {
+                int rd = bytecode[pc++];
+                int objReg = bytecode[pc++];
+                int packageReg = bytecode[pc++];
+                RuntimeScalar obj = (RuntimeScalar) registers[objReg];
+                RuntimeScalar packageName = (RuntimeScalar) registers[packageReg];
+                RuntimeArray isaArgs = new RuntimeArray();
+                isaArgs.push(obj);
+                isaArgs.push(packageName);
+                RuntimeList result = org.perlonjava.perlmodule.Universal.isa(isaArgs, RuntimeContextType.SCALAR);
+                registers[rd] = result.scalar();
+                return pc;
+            }
+
+            default:
+                throw new RuntimeException("Unknown type opcode: " + opcode);
+        }
+    }
+
+    /**
+     * Handle array and hash operations (opcodes 43-49, 51-56, 93-96).
+     * Separated to keep main execute() under JIT compilation limit.
+     *
+     * @return Updated program counter
+     */
+    private static int executeCollections(short opcode, short[] bytecode, int pc,
+                                          RuntimeBase[] registers, InterpretedCode code) {
+        switch (opcode) {
+            case Opcodes.ARRAY_SET: {
+                int arrayReg = bytecode[pc++];
+                int indexReg = bytecode[pc++];
+                int valueReg = bytecode[pc++];
+                RuntimeArray arr = (RuntimeArray) registers[arrayReg];
+                RuntimeScalar idx = (RuntimeScalar) registers[indexReg];
+                RuntimeScalar val = (RuntimeScalar) registers[valueReg];
+                arr.get(idx.getInt()).set(val);
+                return pc;
+            }
+
+            case Opcodes.ARRAY_PUSH: {
+                int arrayReg = bytecode[pc++];
+                int valueReg = bytecode[pc++];
+                RuntimeArray arr = (RuntimeArray) registers[arrayReg];
+                RuntimeBase val = registers[valueReg];
+                arr.push(val);
+                return pc;
+            }
+
+            case Opcodes.ARRAY_POP: {
+                int rd = bytecode[pc++];
+                int arrayReg = bytecode[pc++];
+                RuntimeArray arr = (RuntimeArray) registers[arrayReg];
+                registers[rd] = RuntimeArray.pop(arr);
+                return pc;
+            }
+
+            case Opcodes.ARRAY_SHIFT: {
+                int rd = bytecode[pc++];
+                int arrayReg = bytecode[pc++];
+                RuntimeArray arr = (RuntimeArray) registers[arrayReg];
+                registers[rd] = RuntimeArray.shift(arr);
+                return pc;
+            }
+
+            case Opcodes.ARRAY_UNSHIFT: {
+                int arrayReg = bytecode[pc++];
+                int valueReg = bytecode[pc++];
+                RuntimeArray arr = (RuntimeArray) registers[arrayReg];
+                RuntimeBase val = registers[valueReg];
+                RuntimeArray.unshift(arr, val);
+                return pc;
+            }
+
+            case Opcodes.ARRAY_SIZE: {
+                int rd = bytecode[pc++];
+                int operandReg = bytecode[pc++];
+                RuntimeBase operand = registers[operandReg];
+                if (operand instanceof RuntimeList) {
+                    registers[rd] = new RuntimeScalar(((RuntimeList) operand).size());
+                } else {
+                    registers[rd] = operand.scalar();
+                }
+                return pc;
+            }
+
+            case Opcodes.CREATE_ARRAY: {
+                int rd = bytecode[pc++];
+                int listReg = bytecode[pc++];
+                RuntimeBase source = registers[listReg];
+                RuntimeArray array;
+                if (source instanceof RuntimeArray) {
+                    array = (RuntimeArray) source;
+                } else {
+                    RuntimeList list = source.getList();
+                    array = new RuntimeArray(list);
+                }
+                registers[rd] = array.createReference();
+                return pc;
+            }
+
+            case Opcodes.HASH_SET: {
+                int hashReg = bytecode[pc++];
+                int keyReg = bytecode[pc++];
+                int valueReg = bytecode[pc++];
+                RuntimeHash hash = (RuntimeHash) registers[hashReg];
+                RuntimeScalar key = (RuntimeScalar) registers[keyReg];
+                RuntimeScalar val = (RuntimeScalar) registers[valueReg];
+                hash.put(key.toString(), val);
+                return pc;
+            }
+
+            case Opcodes.HASH_EXISTS: {
+                int rd = bytecode[pc++];
+                int hashReg = bytecode[pc++];
+                int keyReg = bytecode[pc++];
+                RuntimeHash hash = (RuntimeHash) registers[hashReg];
+                RuntimeScalar key = (RuntimeScalar) registers[keyReg];
+                registers[rd] = hash.exists(key);
+                return pc;
+            }
+
+            case Opcodes.HASH_DELETE: {
+                int rd = bytecode[pc++];
+                int hashReg = bytecode[pc++];
+                int keyReg = bytecode[pc++];
+                RuntimeHash hash = (RuntimeHash) registers[hashReg];
+                RuntimeScalar key = (RuntimeScalar) registers[keyReg];
+                registers[rd] = hash.delete(key);
+                return pc;
+            }
+
+            case Opcodes.HASH_KEYS: {
+                int rd = bytecode[pc++];
+                int hashReg = bytecode[pc++];
+                RuntimeHash hash = (RuntimeHash) registers[hashReg];
+                registers[rd] = hash.keys();
+                return pc;
+            }
+
+            case Opcodes.HASH_VALUES: {
+                int rd = bytecode[pc++];
+                int hashReg = bytecode[pc++];
+                RuntimeHash hash = (RuntimeHash) registers[hashReg];
+                registers[rd] = hash.values();
+                return pc;
+            }
+
+            case Opcodes.CREATE_HASH: {
+                int rd = bytecode[pc++];
+                int listReg = bytecode[pc++];
+                RuntimeBase list = registers[listReg];
+                RuntimeHash hash = RuntimeHash.createHash(list);
+                registers[rd] = hash.createReference();
+                return pc;
+            }
+
+            case Opcodes.NEW_ARRAY: {
+                int rd = bytecode[pc++];
+                registers[rd] = new RuntimeArray();
+                return pc;
+            }
+
+            case Opcodes.NEW_HASH: {
+                int rd = bytecode[pc++];
+                registers[rd] = new RuntimeHash();
+                return pc;
+            }
+
+            case Opcodes.ARRAY_SET_FROM_LIST: {
+                int arrayReg = bytecode[pc++];
+                int listReg = bytecode[pc++];
+                RuntimeArray array = (RuntimeArray) registers[arrayReg];
+                RuntimeBase listBase = registers[listReg];
+                RuntimeList list = listBase.getList();
+                array.setFromList(list);
+                return pc;
+            }
+
+            case Opcodes.HASH_SET_FROM_LIST: {
+                int hashReg = bytecode[pc++];
+                int listReg = bytecode[pc++];
+                RuntimeHash hash = (RuntimeHash) registers[hashReg];
+                RuntimeBase listBase = registers[listReg];
+                RuntimeList list = listBase.getList();
+                hash.setFromList(list);
+                return pc;
+            }
+
+            default:
+                throw new RuntimeException("Unknown collection opcode: " + opcode);
+        }
+    }
+
+    /**
+     * Handle arithmetic and string operations (opcodes 19-30, 110-113).
+     * Separated to keep main execute() under JIT compilation limit.
+     *
+     * @return Updated program counter
+     */
+    private static int executeArithmetic(short opcode, short[] bytecode, int pc,
+                                         RuntimeBase[] registers) {
+        switch (opcode) {
+            case Opcodes.MUL_SCALAR: {
+                int rd = bytecode[pc++];
+                int rs1 = bytecode[pc++];
+                int rs2 = bytecode[pc++];
+                RuntimeBase val1 = registers[rs1];
+                RuntimeBase val2 = registers[rs2];
+                RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+                registers[rd] = MathOperators.multiply(s1, s2);
+                return pc;
+            }
+
+            case Opcodes.DIV_SCALAR: {
+                int rd = bytecode[pc++];
+                int rs1 = bytecode[pc++];
+                int rs2 = bytecode[pc++];
+                RuntimeBase val1 = registers[rs1];
+                RuntimeBase val2 = registers[rs2];
+                RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+                registers[rd] = MathOperators.divide(s1, s2);
+                return pc;
+            }
+
+            case Opcodes.MOD_SCALAR: {
+                int rd = bytecode[pc++];
+                int rs1 = bytecode[pc++];
+                int rs2 = bytecode[pc++];
+                RuntimeBase val1 = registers[rs1];
+                RuntimeBase val2 = registers[rs2];
+                RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+                registers[rd] = MathOperators.modulus(s1, s2);
+                return pc;
+            }
+
+            case Opcodes.POW_SCALAR: {
+                int rd = bytecode[pc++];
+                int rs1 = bytecode[pc++];
+                int rs2 = bytecode[pc++];
+                RuntimeBase val1 = registers[rs1];
+                RuntimeBase val2 = registers[rs2];
+                RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+                registers[rd] = MathOperators.pow(s1, s2);
+                return pc;
+            }
+
+            case Opcodes.NEG_SCALAR: {
+                int rd = bytecode[pc++];
+                int rs = bytecode[pc++];
+                registers[rd] = MathOperators.unaryMinus((RuntimeScalar) registers[rs]);
+                return pc;
+            }
+
+            case Opcodes.ADD_SCALAR_INT: {
+                int rd = bytecode[pc++];
+                int rs = bytecode[pc++];
+                int immediate = readInt(bytecode, pc);
+                pc += 2;
+                registers[rd] = MathOperators.add(
+                    (RuntimeScalar) registers[rs],
+                    immediate
+                );
+                return pc;
+            }
+
+            case Opcodes.CONCAT: {
+                int rd = bytecode[pc++];
+                int rs1 = bytecode[pc++];
+                int rs2 = bytecode[pc++];
+                registers[rd] = StringOperators.stringConcat(
+                    (RuntimeScalar) registers[rs1],
+                    (RuntimeScalar) registers[rs2]
+                );
+                return pc;
+            }
+
+            case Opcodes.REPEAT: {
+                int rd = bytecode[pc++];
+                int rs1 = bytecode[pc++];
+                int rs2 = bytecode[pc++];
+                registers[rd] = Operator.repeat(
+                    registers[rs1],
+                    (RuntimeScalar) registers[rs2],
+                    1  // scalar context
+                );
+                return pc;
+            }
+
+            case Opcodes.LENGTH: {
+                int rd = bytecode[pc++];
+                int rs = bytecode[pc++];
+                registers[rd] = StringOperators.length((RuntimeScalar) registers[rs]);
+                return pc;
+            }
+
+            case Opcodes.SUBTRACT_ASSIGN: {
+                int rd = bytecode[pc++];
+                int rs = bytecode[pc++];
+                RuntimeBase val1 = registers[rd];
+                RuntimeBase val2 = registers[rs];
+                RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+                registers[rd] = MathOperators.subtractAssign(s1, s2);
+                return pc;
+            }
+
+            case Opcodes.MULTIPLY_ASSIGN: {
+                int rd = bytecode[pc++];
+                int rs = bytecode[pc++];
+                RuntimeBase val1 = registers[rd];
+                RuntimeBase val2 = registers[rs];
+                RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+                registers[rd] = MathOperators.multiplyAssign(s1, s2);
+                return pc;
+            }
+
+            case Opcodes.DIVIDE_ASSIGN: {
+                int rd = bytecode[pc++];
+                int rs = bytecode[pc++];
+                RuntimeBase val1 = registers[rd];
+                RuntimeBase val2 = registers[rs];
+                RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+                registers[rd] = MathOperators.divideAssign(s1, s2);
+                return pc;
+            }
+
+            case Opcodes.MODULUS_ASSIGN: {
+                int rd = bytecode[pc++];
+                int rs = bytecode[pc++];
+                RuntimeBase val1 = registers[rd];
+                RuntimeBase val2 = registers[rs];
+                RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+                registers[rd] = MathOperators.modulusAssign(s1, s2);
+                return pc;
+            }
+
+            // Phase 3: Promoted OperatorHandler operations (400+)
+            case Opcodes.OP_POW: {
+                // Power: rd = rs1 ** rs2
+                int rd = bytecode[pc++];
+                int rs1 = bytecode[pc++];
+                int rs2 = bytecode[pc++];
+                RuntimeBase val1 = registers[rs1];
+                RuntimeBase val2 = registers[rs2];
+                RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+                registers[rd] = MathOperators.pow(s1, s2);
+                return pc;
+            }
+
+            case Opcodes.OP_ABS: {
+                // Absolute value: rd = abs(rs)
+                int rd = bytecode[pc++];
+                int rs = bytecode[pc++];
+                RuntimeBase val = registers[rs];
+                RuntimeScalar s = (val instanceof RuntimeScalar) ? (RuntimeScalar) val : val.scalar();
+                registers[rd] = MathOperators.abs(s);
+                return pc;
+            }
+
+            case Opcodes.OP_INT: {
+                // Integer conversion: rd = int(rs)
+                int rd = bytecode[pc++];
+                int rs = bytecode[pc++];
+                RuntimeBase val = registers[rs];
+                RuntimeScalar s = (val instanceof RuntimeScalar) ? (RuntimeScalar) val : val.scalar();
+                registers[rd] = MathOperators.integer(s);
+                return pc;
+            }
+
+            default:
+                throw new RuntimeException("Unknown arithmetic opcode: " + opcode);
+        }
+    }
+
+    /**
+     * Handle comparison and logical operations (opcodes 31-41).
+     * Separated to keep main execute() under JIT compilation limit.
+     *
+     * @return Updated program counter
+     */
+    private static int executeComparisons(short opcode, short[] bytecode, int pc,
+                                          RuntimeBase[] registers) {
+        switch (opcode) {
+            case Opcodes.COMPARE_NUM: {
+                // Numeric comparison: rd = rs1 <=> rs2
+                int rd = bytecode[pc++];
+                int rs1 = bytecode[pc++];
+                int rs2 = bytecode[pc++];
+                RuntimeBase val1 = registers[rs1];
+                RuntimeBase val2 = registers[rs2];
+                RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+                registers[rd] = CompareOperators.spaceship(s1, s2);
+                return pc;
+            }
+
+            case Opcodes.COMPARE_STR: {
+                // String comparison: rd = rs1 cmp rs2
+                int rd = bytecode[pc++];
+                int rs1 = bytecode[pc++];
+                int rs2 = bytecode[pc++];
+                RuntimeBase val1 = registers[rs1];
+                RuntimeBase val2 = registers[rs2];
+                RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+                registers[rd] = CompareOperators.cmp(s1, s2);
+                return pc;
+            }
+
+            case Opcodes.EQ_NUM: {
+                // Numeric equality: rd = (rs1 == rs2)
+                int rd = bytecode[pc++];
+                int rs1 = bytecode[pc++];
+                int rs2 = bytecode[pc++];
+                RuntimeBase val1 = registers[rs1];
+                RuntimeBase val2 = registers[rs2];
+                RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+                registers[rd] = CompareOperators.equalTo(s1, s2);
+                return pc;
+            }
+
+            case Opcodes.LT_NUM: {
+                // Less than: rd = (rs1 < rs2)
+                int rd = bytecode[pc++];
+                int rs1 = bytecode[pc++];
+                int rs2 = bytecode[pc++];
+                RuntimeBase val1 = registers[rs1];
+                RuntimeBase val2 = registers[rs2];
+                RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+                registers[rd] = CompareOperators.lessThan(s1, s2);
+                return pc;
+            }
+
+            case Opcodes.GT_NUM: {
+                // Greater than: rd = (rs1 > rs2)
+                int rd = bytecode[pc++];
+                int rs1 = bytecode[pc++];
+                int rs2 = bytecode[pc++];
+                RuntimeBase val1 = registers[rs1];
+                RuntimeBase val2 = registers[rs2];
+                RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+                registers[rd] = CompareOperators.greaterThan(s1, s2);
+                return pc;
+            }
+
+            case Opcodes.NE_NUM: {
+                // Not equal: rd = (rs1 != rs2)
+                int rd = bytecode[pc++];
+                int rs1 = bytecode[pc++];
+                int rs2 = bytecode[pc++];
+                RuntimeBase val1 = registers[rs1];
+                RuntimeBase val2 = registers[rs2];
+                RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+                registers[rd] = CompareOperators.notEqualTo(s1, s2);
+                return pc;
+            }
+
+            case Opcodes.EQ_STR: {
+                // String equality: rd = (rs1 eq rs2)
+                int rd = bytecode[pc++];
+                int rs1 = bytecode[pc++];
+                int rs2 = bytecode[pc++];
+                RuntimeBase val1 = registers[rs1];
+                RuntimeBase val2 = registers[rs2];
+                RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+                RuntimeScalar cmpResult = CompareOperators.cmp(s1, s2);
+                boolean isEqual = (cmpResult.getInt() == 0);
+                registers[rd] = isEqual ? RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarFalse;
+                return pc;
+            }
+
+            case Opcodes.NE_STR: {
+                // String inequality: rd = (rs1 ne rs2)
+                int rd = bytecode[pc++];
+                int rs1 = bytecode[pc++];
+                int rs2 = bytecode[pc++];
+                RuntimeBase val1 = registers[rs1];
+                RuntimeBase val2 = registers[rs2];
+                RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+                RuntimeScalar cmpResult = CompareOperators.cmp(s1, s2);
+                boolean isNotEqual = (cmpResult.getInt() != 0);
+                registers[rd] = isNotEqual ? RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarFalse;
+                return pc;
+            }
+
+            case Opcodes.NOT: {
+                // Logical NOT: rd = !rs
+                int rd = bytecode[pc++];
+                int rs = bytecode[pc++];
+                RuntimeScalar val = (RuntimeScalar) registers[rs];
+                registers[rd] = val.getBoolean() ?
+                    RuntimeScalarCache.scalarFalse : RuntimeScalarCache.scalarTrue;
+                return pc;
+            }
+
+            case Opcodes.AND: {
+                // AND is short-circuit and handled in compiler typically
+                // If we get here, just do boolean and
+                int rd = bytecode[pc++];
+                int rs1 = bytecode[pc++];
+                int rs2 = bytecode[pc++];
+                RuntimeScalar v1 = ((RuntimeBase) registers[rs1]).scalar();
+                RuntimeScalar v2 = ((RuntimeBase) registers[rs2]).scalar();
+                registers[rd] = (v1.getBoolean() && v2.getBoolean()) ?
+                    RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarFalse;
+                return pc;
+            }
+
+            case Opcodes.OR: {
+                // OR is short-circuit and handled in compiler typically
+                // If we get here, just do boolean or
+                int rd = bytecode[pc++];
+                int rs1 = bytecode[pc++];
+                int rs2 = bytecode[pc++];
+                RuntimeScalar v1 = ((RuntimeBase) registers[rs1]).scalar();
+                RuntimeScalar v2 = ((RuntimeBase) registers[rs2]).scalar();
+                registers[rd] = (v1.getBoolean() || v2.getBoolean()) ?
+                    RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarFalse;
+                return pc;
+            }
+
+            default:
+                throw new RuntimeException("Unknown comparison opcode: " + opcode);
+        }
+    }
+
+    /**
+     * Execute slice operations (opcodes 114-121).
+     * Handles: DEREF_ARRAY, DEREF_HASH, *_SLICE, *_SLICE_SET, *_SLICE_DELETE, LIST_SLICE_FROM
+     * Direct dispatch to SlowOpcodeHandler methods (Phase 2 complete).
+     */
+    private static int executeSliceOps(short opcode, short[] bytecode, int pc,
+                                        RuntimeBase[] registers, InterpretedCode code) {
+        // Direct method calls - no SLOWOP_* constants needed!
+        switch (opcode) {
+            case Opcodes.DEREF_ARRAY:
+                return SlowOpcodeHandler.executeDerefArray(bytecode, pc, registers);
+            case Opcodes.DEREF_HASH:
+                return SlowOpcodeHandler.executeDerefHash(bytecode, pc, registers);
+            case Opcodes.ARRAY_SLICE:
+                return SlowOpcodeHandler.executeArraySlice(bytecode, pc, registers);
+            case Opcodes.ARRAY_SLICE_SET:
+                return SlowOpcodeHandler.executeArraySliceSet(bytecode, pc, registers);
+            case Opcodes.HASH_SLICE:
+                return SlowOpcodeHandler.executeHashSlice(bytecode, pc, registers);
+            case Opcodes.HASH_SLICE_SET:
+                return SlowOpcodeHandler.executeHashSliceSet(bytecode, pc, registers);
+            case Opcodes.HASH_SLICE_DELETE:
+                return SlowOpcodeHandler.executeHashSliceDelete(bytecode, pc, registers);
+            case Opcodes.LIST_SLICE_FROM:
+                return SlowOpcodeHandler.executeListSliceFrom(bytecode, pc, registers);
+            default:
+                throw new RuntimeException("Unknown slice opcode: " + opcode);
+        }
+    }
+
+    /**
+     * Execute array/string operations (opcodes 122-127).
+     * Handles: SPLICE, REVERSE, SPLIT, LENGTH_OP, EXISTS, DELETE
+     */
+    private static int executeArrayStringOps(short opcode, short[] bytecode, int pc,
+                                              RuntimeBase[] registers, InterpretedCode code) {
+        switch (opcode) {
+            case Opcodes.SPLICE:
+                return SlowOpcodeHandler.executeSplice(bytecode, pc, registers);
+            case Opcodes.REVERSE:
+                return SlowOpcodeHandler.executeReverse(bytecode, pc, registers);
+            case Opcodes.SPLIT:
+                return SlowOpcodeHandler.executeSplit(bytecode, pc, registers);
+            case Opcodes.LENGTH_OP:
+                return SlowOpcodeHandler.executeLength(bytecode, pc, registers);
+            case Opcodes.EXISTS:
+                return SlowOpcodeHandler.executeExists(bytecode, pc, registers);
+            case Opcodes.DELETE:
+                return SlowOpcodeHandler.executeDelete(bytecode, pc, registers);
+            default:
+                throw new RuntimeException("Unknown array/string opcode: " + opcode);
+        }
+    }
+
+    /**
+     * Execute closure/scope operations (opcodes 128-131).
+     * Handles: RETRIEVE_BEGIN_*, LOCAL_SCALAR
+     */
+    private static int executeScopeOps(short opcode, short[] bytecode, int pc,
+                                        RuntimeBase[] registers, InterpretedCode code) {
+        switch (opcode) {
+            case Opcodes.RETRIEVE_BEGIN_SCALAR:
+                return SlowOpcodeHandler.executeRetrieveBeginScalar(bytecode, pc, registers, code);
+            case Opcodes.RETRIEVE_BEGIN_ARRAY:
+                return SlowOpcodeHandler.executeRetrieveBeginArray(bytecode, pc, registers, code);
+            case Opcodes.RETRIEVE_BEGIN_HASH:
+                return SlowOpcodeHandler.executeRetrieveBeginHash(bytecode, pc, registers, code);
+            case Opcodes.LOCAL_SCALAR:
+                return SlowOpcodeHandler.executeLocalScalar(bytecode, pc, registers, code);
+            default:
+                throw new RuntimeException("Unknown scope opcode: " + opcode);
+        }
+    }
+
+    /**
+     * Execute system call and IPC operations (opcodes 132-150).
+     * Handles: CHOWN, WAITPID, FORK, GETPPID, *PGRP, *PRIORITY, *SOCKOPT,
+     *          SYSCALL, SEMGET, SEMOP, MSGGET, MSGSND, MSGRCV, SHMGET, SHMREAD, SHMWRITE
+     */
+    private static int executeSystemOps(short opcode, short[] bytecode, int pc,
+                                         RuntimeBase[] registers) {
+        switch (opcode) {
+            case Opcodes.CHOWN:
+                return SlowOpcodeHandler.executeChown(bytecode, pc, registers);
+            case Opcodes.WAITPID:
+                return SlowOpcodeHandler.executeWaitpid(bytecode, pc, registers);
+            case Opcodes.FORK:
+                return SlowOpcodeHandler.executeFork(bytecode, pc, registers);
+            case Opcodes.GETPPID:
+                return SlowOpcodeHandler.executeGetppid(bytecode, pc, registers);
+            case Opcodes.GETPGRP:
+                return SlowOpcodeHandler.executeGetpgrp(bytecode, pc, registers);
+            case Opcodes.SETPGRP:
+                return SlowOpcodeHandler.executeSetpgrp(bytecode, pc, registers);
+            case Opcodes.GETPRIORITY:
+                return SlowOpcodeHandler.executeGetpriority(bytecode, pc, registers);
+            case Opcodes.SETPRIORITY:
+                return SlowOpcodeHandler.executeSetpriority(bytecode, pc, registers);
+            case Opcodes.GETSOCKOPT:
+                return SlowOpcodeHandler.executeGetsockopt(bytecode, pc, registers);
+            case Opcodes.SETSOCKOPT:
+                return SlowOpcodeHandler.executeSetsockopt(bytecode, pc, registers);
+            case Opcodes.SYSCALL:
+                return SlowOpcodeHandler.executeSyscall(bytecode, pc, registers);
+            case Opcodes.SEMGET:
+                return SlowOpcodeHandler.executeSemget(bytecode, pc, registers);
+            case Opcodes.SEMOP:
+                return SlowOpcodeHandler.executeSemop(bytecode, pc, registers);
+            case Opcodes.MSGGET:
+                return SlowOpcodeHandler.executeMsgget(bytecode, pc, registers);
+            case Opcodes.MSGSND:
+                return SlowOpcodeHandler.executeMsgsnd(bytecode, pc, registers);
+            case Opcodes.MSGRCV:
+                return SlowOpcodeHandler.executeMsgrcv(bytecode, pc, registers);
+            case Opcodes.SHMGET:
+                return SlowOpcodeHandler.executeShmget(bytecode, pc, registers);
+            case Opcodes.SHMREAD:
+                return SlowOpcodeHandler.executeShmread(bytecode, pc, registers);
+            case Opcodes.SHMWRITE:
+                return SlowOpcodeHandler.executeShmwrite(bytecode, pc, registers);
+            default:
+                throw new RuntimeException("Unknown system opcode: " + opcode);
+        }
+    }
+
+    /**
+     * Execute special I/O operations (opcodes 151-154).
+     * Handles: EVAL_STRING, SELECT_OP, LOAD_GLOB, SLEEP_OP
+     */
+    private static int executeSpecialIO(short opcode, short[] bytecode, int pc,
+                                         RuntimeBase[] registers, InterpretedCode code) {
+        switch (opcode) {
+            case Opcodes.EVAL_STRING:
+                return SlowOpcodeHandler.executeEvalString(bytecode, pc, registers, code);
+            case Opcodes.SELECT_OP:
+                return SlowOpcodeHandler.executeSelect(bytecode, pc, registers);
+            case Opcodes.LOAD_GLOB:
+                return SlowOpcodeHandler.executeLoadGlob(bytecode, pc, registers, code);
+            case Opcodes.SLEEP_OP:
+                return SlowOpcodeHandler.executeSleep(bytecode, pc, registers);
+            default:
+                throw new RuntimeException("Unknown special I/O opcode: " + opcode);
         }
     }
 
