@@ -695,6 +695,11 @@ public class InterpretedCode extends RuntimeCode {
                     }
                     sb.append("])\n");
                     break;
+                case Opcodes.SET_SCALAR:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("SET_SCALAR r").append(rd).append(".set(r").append(rs).append(")\n");
+                    break;
                 case Opcodes.NOT:
                     rd = bytecode[pc++];
                     rs = bytecode[pc++];
@@ -794,6 +799,26 @@ public class InterpretedCode extends RuntimeCode {
                     rd = bytecode[pc++];
                     rs = bytecode[pc++];
                     sb.append("SCALAR_TO_LIST r").append(rd).append(" = to_list(r").append(rs).append(")\n");
+                    break;
+                case Opcodes.EVAL_STRING:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("EVAL_STRING r").append(rd).append(" = eval(r").append(rs).append(")\n");
+                    break;
+                case Opcodes.SELECT_OP:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("SELECT_OP r").append(rd).append(" = select(r").append(rs).append(")\n");
+                    break;
+                case Opcodes.LOAD_GLOB:
+                    rd = bytecode[pc++];
+                    nameIdx = bytecode[pc++];
+                    sb.append("LOAD_GLOB r").append(rd).append(" = *").append(stringPool[nameIdx]).append("\n");
+                    break;
+                case Opcodes.SLEEP_OP:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("SLEEP_OP r").append(rd).append(" = sleep(r").append(rs).append(")\n");
                     break;
                 // DEPRECATED: SLOW_OP case removed - opcode 87 is no longer emitted
                 // All operations now use direct opcodes (114-154)
