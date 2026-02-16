@@ -2222,6 +2222,18 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(rs1);
                 emitReg(rs2);
             }
+            case "<=" -> {
+                emit(Opcodes.LE_NUM);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
+            case ">=" -> {
+                emit(Opcodes.GE_NUM);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
             case "!=" -> {
                 emit(Opcodes.NE_NUM);
                 emitReg(rd);
@@ -3529,6 +3541,35 @@ public class BytecodeCompiler implements Visitor {
             emitReg(rd);
             emitReg(argReg);
             emitInt(packageIdx);
+
+            lastResultReg = rd;
+        } else if (op.equals("quoteRegex")) {
+            // Quote regex operator: qr{pattern}flags
+            // operand is a ListNode with [pattern, flags]
+            if (node.operand == null || !(node.operand instanceof ListNode)) {
+                throwCompilerException("quoteRegex requires pattern and flags");
+            }
+
+            ListNode operand = (ListNode) node.operand;
+            if (operand.elements.size() < 2) {
+                throwCompilerException("quoteRegex requires pattern and flags");
+            }
+
+            // Compile pattern and flags
+            operand.elements.get(0).accept(this);  // Pattern
+            int patternReg = lastResultReg;
+
+            operand.elements.get(1).accept(this);  // Flags
+            int flagsReg = lastResultReg;
+
+            // Allocate result register
+            int rd = allocateRegister();
+
+            // Emit QUOTE_REGEX opcode
+            emit(Opcodes.QUOTE_REGEX);
+            emitReg(rd);
+            emitReg(patternReg);
+            emitReg(flagsReg);
 
             lastResultReg = rd;
         } else if (op.equals("++") || op.equals("--") || op.equals("++postfix") || op.equals("--postfix")) {

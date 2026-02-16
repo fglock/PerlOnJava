@@ -468,6 +468,8 @@ public class BytecodeInterpreter {
                     case Opcodes.NE_NUM:
                     case Opcodes.LT_NUM:
                     case Opcodes.GT_NUM:
+                    case Opcodes.LE_NUM:
+                    case Opcodes.GE_NUM:
                     case Opcodes.EQ_STR:
                     case Opcodes.NE_STR:
                     case Opcodes.NOT:
@@ -483,6 +485,7 @@ public class BytecodeInterpreter {
                     case Opcodes.BLESS:
                     case Opcodes.ISA:
                     case Opcodes.PROTOTYPE:
+                    case Opcodes.QUOTE_REGEX:
                         pc = executeTypeOps(opcode, bytecode, pc, registers, code);
                         break;
 
@@ -1751,6 +1754,16 @@ public class BytecodeInterpreter {
                 return pc;
             }
 
+            case Opcodes.QUOTE_REGEX: {
+                int rd = bytecode[pc++];
+                int patternReg = bytecode[pc++];
+                int flagsReg = bytecode[pc++];
+                RuntimeScalar pattern = (RuntimeScalar) registers[patternReg];
+                RuntimeScalar flags = (RuntimeScalar) registers[flagsReg];
+                registers[rd] = org.perlonjava.regex.RuntimeRegex.getQuotedRegex(pattern, flags);
+                return pc;
+            }
+
             default:
                 throw new RuntimeException("Unknown type opcode: " + opcode);
         }
@@ -2190,6 +2203,32 @@ public class BytecodeInterpreter {
                 RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
                 RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
                 registers[rd] = CompareOperators.greaterThan(s1, s2);
+                return pc;
+            }
+
+            case Opcodes.LE_NUM: {
+                // Less than or equal: rd = (rs1 <= rs2)
+                int rd = bytecode[pc++];
+                int rs1 = bytecode[pc++];
+                int rs2 = bytecode[pc++];
+                RuntimeBase val1 = registers[rs1];
+                RuntimeBase val2 = registers[rs2];
+                RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+                registers[rd] = CompareOperators.lessThanOrEqual(s1, s2);
+                return pc;
+            }
+
+            case Opcodes.GE_NUM: {
+                // Greater than or equal: rd = (rs1 >= rs2)
+                int rd = bytecode[pc++];
+                int rs1 = bytecode[pc++];
+                int rs2 = bytecode[pc++];
+                RuntimeBase val1 = registers[rs1];
+                RuntimeBase val2 = registers[rs2];
+                RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+                registers[rd] = CompareOperators.greaterThanOrEqual(s1, s2);
                 return pc;
             }
 
