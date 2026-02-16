@@ -489,132 +489,251 @@ public class Opcodes {
     public static final short MODULUS_ASSIGN = 113;
 
     // =================================================================
+    // PHASE 2: SLOW_OP PROMOTIONS (114-154) - CONTIGUOUS RANGES
+    // =================================================================
+    // These operations were previously handled by SLOW_OP (opcode 87).
+    // Now promoted to direct opcodes for better performance (~5ns saved).
+    // IMPORTANT: Keep ranges CONTIGUOUS for JVM tableswitch optimization!
+
+    // Group 1: Dereferencing (114-115) - CONTIGUOUS
+    /** Dereference array for multidimensional access: rd = deref_array(rs) */
+    public static final short DEREF_ARRAY = 114;
+    /** Dereference hash for hashref access: rd = deref_hash(rs) */
+    public static final short DEREF_HASH = 115;
+
+    // Group 2: Slice Operations (116-121) - CONTIGUOUS
+    /** Array slice: rd = array.getSlice(indices_list) */
+    public static final short ARRAY_SLICE = 116;
+    /** Array slice assignment: array.setSlice(indices, values) */
+    public static final short ARRAY_SLICE_SET = 117;
+    /** Hash slice: rd = hash.getSlice(keys_list) */
+    public static final short HASH_SLICE = 118;
+    /** Hash slice assignment: hash.setSlice(keys, values) */
+    public static final short HASH_SLICE_SET = 119;
+    /** Hash slice delete: rd = hash.deleteSlice(keys_list) */
+    public static final short HASH_SLICE_DELETE = 120;
+    /** List slice from index: rd = list[start..] */
+    public static final short LIST_SLICE_FROM = 121;
+
+    // Group 3: Array/String Ops (122-125) - CONTIGUOUS
+    /** Splice array: rd = Operator.splice(array, args_list) */
+    public static final short SPLICE = 122;
+    /** Reverse array or string: rd = Operator.reverse(ctx, args...) */
+    public static final short REVERSE = 123;
+    /** Split string into array: rd = Operator.split(pattern, args, ctx) */
+    public static final short SPLIT = 124;
+    /** String length: rd = length(string) */
+    public static final short LENGTH_OP = 125;
+
+    // Group 4: Exists/Delete (126-127) - CONTIGUOUS
+    /** Exists operator: rd = exists(key) */
+    public static final short EXISTS = 126;
+    /** Delete operator: rd = delete(key) */
+    public static final short DELETE = 127;
+
+    // Group 5: Closure/Scope (128-131) - CONTIGUOUS
+    /** Retrieve BEGIN scalar: rd = PersistentVariable.retrieveBeginScalar(var_name, begin_id) */
+    public static final short RETRIEVE_BEGIN_SCALAR = 128;
+    /** Retrieve BEGIN array: rd = PersistentVariable.retrieveBeginArray(var_name, begin_id) */
+    public static final short RETRIEVE_BEGIN_ARRAY = 129;
+    /** Retrieve BEGIN hash: rd = PersistentVariable.retrieveBeginHash(var_name, begin_id) */
+    public static final short RETRIEVE_BEGIN_HASH = 130;
+    /** Localize global variable: rd = GlobalRuntimeScalar.makeLocal(var_name) */
+    public static final short LOCAL_SCALAR = 131;
+
+    // Group 6: System Calls (132-141) - CONTIGUOUS
+    /** chown(list, uid, gid) */
+    public static final short CHOWN = 132;
+    /** rd = waitpid(pid, flags) */
+    public static final short WAITPID = 133;
+    /** rd = fork() */
+    public static final short FORK = 134;
+    /** rd = getppid() */
+    public static final short GETPPID = 135;
+    /** rd = getpgrp(pid) */
+    public static final short GETPGRP = 136;
+    /** setpgrp(pid, pgrp) */
+    public static final short SETPGRP = 137;
+    /** rd = getpriority(which, who) */
+    public static final short GETPRIORITY = 138;
+    /** setpriority(which, who, priority) */
+    public static final short SETPRIORITY = 139;
+    /** rd = getsockopt(socket, level, optname) */
+    public static final short GETSOCKOPT = 140;
+    /** setsockopt(socket, level, optname, optval) */
+    public static final short SETSOCKOPT = 141;
+
+    // Group 7: IPC Operations (142-148) - CONTIGUOUS
+    /** rd = syscall(number, args...) */
+    public static final short SYSCALL = 142;
+    /** rd = semget(key, nsems, flags) */
+    public static final short SEMGET = 143;
+    /** rd = semop(semid, opstring) */
+    public static final short SEMOP = 144;
+    /** rd = msgget(key, flags) */
+    public static final short MSGGET = 145;
+    /** rd = msgsnd(id, msg, flags) */
+    public static final short MSGSND = 146;
+    /** rd = msgrcv(id, size, type, flags) */
+    public static final short MSGRCV = 147;
+    /** rd = shmget(key, size, flags) */
+    public static final short SHMGET = 148;
+
+    // Group 8: Shared Memory (149-150) - CONTIGUOUS
+    /** rd = shmread(id, pos, size) */
+    public static final short SHMREAD = 149;
+    /** shmwrite(id, pos, string) */
+    public static final short SHMWRITE = 150;
+
+    // Group 9: Special I/O (151-154) - CONTIGUOUS
+    /** rd = eval(string) - dynamic code evaluation */
+    public static final short EVAL_STRING = 151;
+    /** rd = select(list) - set/get default output filehandle */
+    public static final short SELECT_OP = 152;
+    /** rd = getGlobalIO(name) - load glob/filehandle from global variables */
+    public static final short LOAD_GLOB = 153;
+    /** rd = Time.sleep(seconds) - sleep for specified seconds */
+    public static final short SLEEP_OP = 154;
+
+    // =================================================================
+    // OPCODES 155-32767: RESERVED FOR FUTURE OPERATIONS
+    // =================================================================
+    // See TODO_SHORT_OPCODES.md for allocation plan:
+    // - 200-299: Reserved for core expansion
+    // - 300-399: Comparison operators (CONTIGUOUS blocks!)
+    // - 400-549: Arithmetic and bitwise operators (CONTIGUOUS blocks!)
+    // - 550-749: String and array operations (CONTIGUOUS blocks!)
+    // - 750-949: Hash operations (CONTIGUOUS blocks!)
+    // - 1000+: OperatorHandler promotions (200+ operators)
+
+    // =================================================================
     // Slow Operation IDs (0-255)
     // =================================================================
     // These are NOT opcodes - they are sub-operation identifiers
     // used by the SLOW_OP opcode.
+    // DEPRECATED: Being phased out in favor of direct opcodes above.
 
-    /** Slow op ID: chown(rs_list, rs_uid, rs_gid) */
+    /** @deprecated Use CHOWN opcode (132) instead */
     public static final int SLOWOP_CHOWN = 0;
 
-    /** Slow op ID: rd = waitpid(rs_pid, rs_flags) */
+    /** @deprecated Use WAITPID opcode (133) instead */
     public static final int SLOWOP_WAITPID = 1;
 
-    /** Slow op ID: setsockopt(rs_socket, rs_level, rs_optname, rs_optval) */
+    /** @deprecated Use SETSOCKOPT opcode (141) instead */
     public static final int SLOWOP_SETSOCKOPT = 2;
 
-    /** Slow op ID: rd = getsockopt(rs_socket, rs_level, rs_optname) */
+    /** @deprecated Use GETSOCKOPT opcode (140) instead */
     public static final int SLOWOP_GETSOCKOPT = 3;
 
-    /** Slow op ID: rd = getpriority(rs_which, rs_who) */
+    /** @deprecated Use GETPRIORITY opcode (138) instead */
     public static final int SLOWOP_GETPRIORITY = 4;
 
-    /** Slow op ID: setpriority(rs_which, rs_who, rs_priority) */
+    /** @deprecated Use SETPRIORITY opcode (139) instead */
     public static final int SLOWOP_SETPRIORITY = 5;
 
-    /** Slow op ID: rd = getpgrp(rs_pid) */
+    /** @deprecated Use GETPGRP opcode (136) instead */
     public static final int SLOWOP_GETPGRP = 6;
 
-    /** Slow op ID: setpgrp(rs_pid, rs_pgrp) */
+    /** @deprecated Use SETPGRP opcode (137) instead */
     public static final int SLOWOP_SETPGRP = 7;
 
-    /** Slow op ID: rd = getppid() */
+    /** @deprecated Use GETPPID opcode (135) instead */
     public static final int SLOWOP_GETPPID = 8;
 
-    /** Slow op ID: rd = fork() */
+    /** @deprecated Use FORK opcode (134) instead */
     public static final int SLOWOP_FORK = 9;
 
-    /** Slow op ID: rd = semget(rs_key, rs_nsems, rs_flags) */
+    /** @deprecated Use SEMGET opcode (143) instead */
     public static final int SLOWOP_SEMGET = 10;
 
-    /** Slow op ID: rd = semop(rs_semid, rs_opstring) */
+    /** @deprecated Use SEMOP opcode (144) instead */
     public static final int SLOWOP_SEMOP = 11;
 
-    /** Slow op ID: rd = msgget(rs_key, rs_flags) */
+    /** @deprecated Use MSGGET opcode (145) instead */
     public static final int SLOWOP_MSGGET = 12;
 
-    /** Slow op ID: rd = msgsnd(rs_id, rs_msg, rs_flags) */
+    /** @deprecated Use MSGSND opcode (146) instead */
     public static final int SLOWOP_MSGSND = 13;
 
-    /** Slow op ID: rd = msgrcv(rs_id, rs_size, rs_type, rs_flags) */
+    /** @deprecated Use MSGRCV opcode (147) instead */
     public static final int SLOWOP_MSGRCV = 14;
 
-    /** Slow op ID: rd = shmget(rs_key, rs_size, rs_flags) */
+    /** @deprecated Use SHMGET opcode (148) instead */
     public static final int SLOWOP_SHMGET = 15;
 
-    /** Slow op ID: rd = shmread(rs_id, rs_pos, rs_size) */
+    /** @deprecated Use SHMREAD opcode (149) instead */
     public static final int SLOWOP_SHMREAD = 16;
 
-    /** Slow op ID: shmwrite(rs_id, rs_pos, rs_string) */
+    /** @deprecated Use SHMWRITE opcode (150) instead */
     public static final int SLOWOP_SHMWRITE = 17;
 
-    /** Slow op ID: rd = syscall(rs_number, rs_args...) */
+    /** @deprecated Use SYSCALL opcode (142) instead */
     public static final int SLOWOP_SYSCALL = 18;
 
-    /** Slow op ID: rd = eval(rs_string) - dynamic code evaluation */
+    /** @deprecated Use EVAL_STRING opcode (151) instead */
     public static final int SLOWOP_EVAL_STRING = 19;
 
-    /** Slow op ID: rd = select(rs_list) - set/get default output filehandle */
+    /** @deprecated Use SELECT_OP opcode (152) instead */
     public static final int SLOWOP_SELECT = 20;
 
-    /** Slow op ID: rd = getGlobalIO(name) - load glob/filehandle from global variables */
+    /** @deprecated Use LOAD_GLOB opcode (153) instead */
     public static final int SLOWOP_LOAD_GLOB = 21;
 
-    /** Slow op ID: rd = Time.sleep(seconds) - sleep for specified seconds */
+    /** @deprecated Use SLEEP_OP opcode (154) instead */
     public static final int SLOWOP_SLEEP = 22;
 
-    /** Slow op ID: rd = deref_array(scalar_ref) - dereference array reference for multidimensional access */
+    /** @deprecated Use DEREF_ARRAY opcode (114) instead */
     public static final int SLOWOP_DEREF_ARRAY = 23;
 
-    /** Slow op ID: rd = PersistentVariable.retrieveBeginScalar(var_name, begin_id) - retrieve BEGIN scalar */
+    /** @deprecated Use RETRIEVE_BEGIN_SCALAR opcode (128) instead */
     public static final int SLOWOP_RETRIEVE_BEGIN_SCALAR = 24;
 
-    /** Slow op ID: rd = PersistentVariable.retrieveBeginArray(var_name, begin_id) - retrieve BEGIN array */
+    /** @deprecated Use RETRIEVE_BEGIN_ARRAY opcode (129) instead */
     public static final int SLOWOP_RETRIEVE_BEGIN_ARRAY = 25;
 
-    /** Slow op ID: rd = PersistentVariable.retrieveBeginHash(var_name, begin_id) - retrieve BEGIN hash */
+    /** @deprecated Use RETRIEVE_BEGIN_HASH opcode (130) instead */
     public static final int SLOWOP_RETRIEVE_BEGIN_HASH = 26;
 
-    /** Slow op ID: rd = GlobalRuntimeScalar.makeLocal(var_name) - temporarily localize global variable */
+    /** @deprecated Use LOCAL_SCALAR opcode (131) instead */
     public static final int SLOWOP_LOCAL_SCALAR = 27;
 
-    /** Slow op ID: rd = Operator.splice(array, args_list) - splice array operation */
+    /** @deprecated Use SPLICE opcode (122) instead */
     public static final int SLOWOP_SPLICE = 28;
 
-    /** Slow op ID: rd = array.getSlice(indices_list) - array slice operation */
+    /** @deprecated Use ARRAY_SLICE opcode (116) instead */
     public static final int SLOWOP_ARRAY_SLICE = 29;
 
-    /** Slow op ID: rd = Operator.reverse(ctx, args...) - reverse array or string */
+    /** @deprecated Use REVERSE opcode (123) instead */
     public static final int SLOWOP_REVERSE = 30;
 
-    /** Slow op ID: array.setSlice(indices, values) - array slice assignment */
+    /** @deprecated Use ARRAY_SLICE_SET opcode (117) instead */
     public static final int SLOWOP_ARRAY_SLICE_SET = 31;
 
-    /** Slow op ID: rd = Operator.split(pattern, args, ctx) - split string into array */
+    /** @deprecated Use SPLIT opcode (124) instead */
     public static final int SLOWOP_SPLIT = 32;
 
-    /** Slow opcode for exists operator (fallback) */
+    /** @deprecated Use EXISTS opcode (126) instead */
     public static final int SLOWOP_EXISTS = 33;
 
-    /** Slow opcode for delete operator (fallback) */
+    /** @deprecated Use DELETE opcode (127) instead */
     public static final int SLOWOP_DELETE = 34;
 
-    /** Slow op ID: rd = deref_hash(scalar_ref) - dereference hash reference for hashref access */
+    /** @deprecated Use DEREF_HASH opcode (115) instead */
     public static final int SLOWOP_DEREF_HASH = 35;
 
-    /** Slow op ID: rd = hash.getSlice(keys_list) - hash slice operation @hash{keys} */
+    /** @deprecated Use HASH_SLICE opcode (118) instead */
     public static final int SLOWOP_HASH_SLICE = 36;
 
-    /** Slow op ID: rd = hash.deleteSlice(keys_list) - hash slice delete operation delete @hash{keys} */
+    /** @deprecated Use HASH_SLICE_DELETE opcode (120) instead */
     public static final int SLOWOP_HASH_SLICE_DELETE = 37;
 
-    /** Slow op ID: hash.setSlice(keys_list, values_list) - hash slice assignment @hash{keys} = values */
+    /** @deprecated Use HASH_SLICE_SET opcode (119) instead */
     public static final int SLOWOP_HASH_SLICE_SET = 38;
 
-    /** Slow op ID: rd = list[start..] - extract list slice from start index to end */
+    /** @deprecated Use LIST_SLICE_FROM opcode (121) instead */
     public static final int SLOWOP_LIST_SLICE_FROM = 39;
 
-    /** Slow op ID: rd = length(string) - get string length */
+    /** @deprecated Use LENGTH_OP opcode (125) instead */
     public static final int SLOWOP_LENGTH = 40;
 
     // =================================================================
