@@ -299,10 +299,20 @@ public class InterpretedCode extends RuntimeCode {
                     nameIdx = bytecode[pc++];
                     sb.append("LOAD_GLOBAL_ARRAY r").append(rd).append(" = @").append(stringPool[nameIdx]).append("\n");
                     break;
+                case Opcodes.STORE_GLOBAL_ARRAY:
+                    nameIdx = bytecode[pc++];
+                    int storeArraySrcReg = bytecode[pc++];
+                    sb.append("STORE_GLOBAL_ARRAY @").append(stringPool[nameIdx]).append(" = r").append(storeArraySrcReg).append("\n");
+                    break;
                 case Opcodes.LOAD_GLOBAL_HASH:
                     rd = bytecode[pc++];
                     nameIdx = bytecode[pc++];
                     sb.append("LOAD_GLOBAL_HASH r").append(rd).append(" = %").append(stringPool[nameIdx]).append("\n");
+                    break;
+                case Opcodes.STORE_GLOBAL_HASH:
+                    nameIdx = bytecode[pc++];
+                    int storeHashSrcReg = bytecode[pc++];
+                    sb.append("STORE_GLOBAL_HASH %").append(stringPool[nameIdx]).append(" = r").append(storeHashSrcReg).append("\n");
                     break;
                 case Opcodes.LOAD_GLOBAL_CODE:
                     rd = bytecode[pc++];

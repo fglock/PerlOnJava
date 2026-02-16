@@ -208,6 +208,55 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.STORE_GLOBAL_ARRAY: {
+                        // Store global array: GlobalVariable.getGlobalArray(name).setFromList(list)
+                        int nameIdx = bytecode[pc++];
+                        int srcReg = bytecode[pc++];
+                        String name = code.stringPool[nameIdx];
+
+                        RuntimeArray globalArray = GlobalVariable.getGlobalArray(name);
+                        RuntimeBase value = registers[srcReg];
+
+                        if (value == null) {
+                            // Output disassembly around the error
+                            String disasm = code.disassemble();
+                            throw new PerlCompilerException("STORE_GLOBAL_ARRAY: Register r" + srcReg +
+                                " is null when storing to @" + name + " at pc=" + (pc-3) + "\n\nDisassembly:\n" + disasm);
+                        }
+
+                        // Clear and populate the global array from the source
+                        if (value instanceof RuntimeArray) {
+                            globalArray.elements.clear();
+                            globalArray.elements.addAll(((RuntimeArray) value).elements);
+                        } else if (value instanceof RuntimeList) {
+                            globalArray.setFromList((RuntimeList) value);
+                        } else {
+                            globalArray.setFromList(value.getList());
+                        }
+                        break;
+                    }
+
+                    case Opcodes.STORE_GLOBAL_HASH: {
+                        // Store global hash: GlobalVariable.getGlobalHash(name).setFromList(list)
+                        int nameIdx = bytecode[pc++];
+                        int srcReg = bytecode[pc++];
+                        String name = code.stringPool[nameIdx];
+
+                        RuntimeHash globalHash = GlobalVariable.getGlobalHash(name);
+                        RuntimeBase value = registers[srcReg];
+
+                        // Clear and populate the global hash from the source
+                        if (value instanceof RuntimeHash) {
+                            globalHash.elements.clear();
+                            globalHash.elements.putAll(((RuntimeHash) value).elements);
+                        } else if (value instanceof RuntimeList) {
+                            globalHash.setFromList((RuntimeList) value);
+                        } else {
+                            globalHash.setFromList(value.getList());
+                        }
+                        break;
+                    }
+
                     case Opcodes.LOAD_GLOBAL_ARRAY: {
                         // Load global array: rd = GlobalVariable.getGlobalArray(name)
                         int rd = bytecode[pc++];
