@@ -36,6 +36,10 @@ public class BytecodeCompiler implements Visitor {
     // Each scope is a Map<String, Integer> mapping variable names to register indices
     private final Stack<Map<String, Integer>> variableScopes = new Stack<>();
 
+    // Stack to save/restore register state when entering/exiting scopes
+    private final Stack<Integer> savedNextRegister = new Stack<>();
+    private final Stack<Integer> savedBaseRegister = new Stack<>();
+
     // Track current package name (for global variables)
     private String currentPackage = "main";
 
@@ -48,6 +52,8 @@ public class BytecodeCompiler implements Visitor {
 
     // Register allocation
     private int nextRegister = 3;  // 0=this, 1=@_, 2=wantarray
+    private int baseRegisterForStatement = 3;  // Reset point after each statement
+    private int maxRegisterEverUsed = 2;  // Track highest register ever allocated
 
     // Track last result register for expression chaining
     private int lastResultReg = -1;
@@ -129,6 +135,8 @@ public class BytecodeCompiler implements Visitor {
             }
             // Next available register is one past the maximum used
             this.nextRegister = maxRegister + 1;
+            this.maxRegisterEverUsed = maxRegister;
+            this.baseRegisterForStatement = this.nextRegister;
         }
 
         variableScopes.push(globalScope);
@@ -172,17 +180,32 @@ public class BytecodeCompiler implements Visitor {
 
     /**
      * Helper: Enter a new lexical scope.
+     * Saves current register allocation state so inner scopes don't
+     * interfere with outer scope register usage.
      */
     private void enterScope() {
         variableScopes.push(new HashMap<>());
+        // Save current register state
+        savedNextRegister.push(nextRegister);
+        savedBaseRegister.push(baseRegisterForStatement);
+        // Update base to protect all registers allocated before this scope
+        baseRegisterForStatement = nextRegister;
     }
 
     /**
      * Helper: Exit the current lexical scope.
+     * Restores register allocation state to what it was before entering the scope.
      */
     private void exitScope() {
         if (variableScopes.size() > 1) {
             variableScopes.pop();
+            // Restore register state
+            if (!savedNextRegister.isEmpty()) {
+                nextRegister = savedNextRegister.pop();
+            }
+            if (!savedBaseRegister.isEmpty()) {
+                baseRegisterForStatement = savedBaseRegister.pop();
+            }
         }
     }
 
@@ -278,7 +301,7 @@ public class BytecodeCompiler implements Visitor {
             toShortArray(),
             constants.toArray(),
             stringPool.toArray(new String[0]),
-            nextRegister,  // maxRegisters
+            maxRegisterEverUsed + 1,  // maxRegisters = highest register used + 1
             capturedVars,  // NOW POPULATED!
             sourceName,
             sourceLine,
@@ -403,6 +426,9 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(BlockNode node) {
+        // Blocks create a new lexical scope
+        enterScope();
+
         // Visit each statement in the block
         for (Node stmt : node.elements) {
             // Track line number for this statement (like codegen's setDebugInfoLineNumber)
@@ -423,7 +449,14 @@ public class BytecodeCompiler implements Visitor {
             stmt.accept(this);
 
             currentCallContext = savedContext;
+
+            // Recycle temporary registers after each statement
+            // enterScope() protects registers allocated before entering a scope
+            recycleTemporaryRegisters();
         }
+
+        // Exit scope restores register state
+        exitScope();
     }
 
     @Override
@@ -2293,72 +2326,6 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(rs1);
                 emitReg(rs2);
             }
-            case "&&", "and" -> {
-                // Logical AND with short-circuit evaluation
-                // Semantics: if left is false, return left; else evaluate and return right
-                // Implementation:
-                //   rd = left
-                //   if (!rd) goto skip_right
-                //   rd = right
-                //   skip_right:
-
-                // Left operand is already in rs1
-                // Move to result register
-                emit(Opcodes.MOVE);
-                emitReg(rd);
-                emitReg(rs1);
-
-                // Mark position for forward jump
-                int skipRightPos = bytecode.size();
-
-                // Emit conditional jump: if (!rd) skip right evaluation
-                emit(Opcodes.GOTO_IF_FALSE);
-                emitReg(rd);
-                emitInt(0); // Placeholder for offset (will be patched)
-
-                // Right operand is already in rs2
-                // Move to result register (overwriting left value)
-                emit(Opcodes.MOVE);
-                emitReg(rd);
-                emitReg(rs2);
-
-                // Patch the forward jump offset
-                int skipRightTarget = bytecode.size();
-                patchIntOffset(skipRightPos + 2, skipRightTarget);
-            }
-            case "||", "or" -> {
-                // Logical OR with short-circuit evaluation
-                // Semantics: if left is true, return left; else evaluate and return right
-                // Implementation:
-                //   rd = left
-                //   if (rd) goto skip_right
-                //   rd = right
-                //   skip_right:
-
-                // Left operand is already in rs1
-                // Move to result register
-                emit(Opcodes.MOVE);
-                emitReg(rd);
-                emitReg(rs1);
-
-                // Mark position for forward jump
-                int skipRightPos = bytecode.size();
-
-                // Emit conditional jump: if (rd) skip right evaluation
-                emit(Opcodes.GOTO_IF_TRUE);
-                emitReg(rd);
-                emitInt(0); // Placeholder for offset (will be patched)
-
-                // Right operand is already in rs2
-                // Move to result register (overwriting left value)
-                emit(Opcodes.MOVE);
-                emitReg(rd);
-                emitReg(rs2);
-
-                // Patch the forward jump offset
-                int skipRightTarget = bytecode.size();
-                patchIntOffset(skipRightPos + 2, skipRightTarget);
-            }
             case "map" -> {
                 // Map operator: map { block } list
                 // rs1 = closure (SubroutineNode compiled to code reference)
@@ -2763,7 +2730,86 @@ public class BytecodeCompiler implements Visitor {
             return;
         }
 
-        // Compile left and right operands
+        // Handle short-circuit operators specially - don't compile right operand yet!
+        if (node.operator.equals("&&") || node.operator.equals("and")) {
+            // Logical AND with short-circuit evaluation
+            // Only evaluate right side if left side is true
+
+            // Compile left operand
+            node.left.accept(this);
+            int rs1 = lastResultReg;
+
+            // Allocate result register and move left value to it
+            int rd = allocateRegister();
+            emit(Opcodes.MOVE);
+            emitReg(rd);
+            emitReg(rs1);
+
+            // Mark position for forward jump
+            int skipRightPos = bytecode.size();
+
+            // Emit conditional jump: if (!rd) skip right evaluation
+            emit(Opcodes.GOTO_IF_FALSE);
+            emitReg(rd);
+            emitInt(0); // Placeholder for offset (will be patched)
+
+            // NOW compile right operand (only executed if left was true)
+            node.right.accept(this);
+            int rs2 = lastResultReg;
+
+            // Move right result to rd (overwriting left value)
+            emit(Opcodes.MOVE);
+            emitReg(rd);
+            emitReg(rs2);
+
+            // Patch the forward jump offset
+            int skipRightTarget = bytecode.size();
+            patchIntOffset(skipRightPos + 2, skipRightTarget);
+
+            lastResultReg = rd;
+            return;
+        }
+
+        if (node.operator.equals("||") || node.operator.equals("or")) {
+            // Logical OR with short-circuit evaluation
+            // Only evaluate right side if left side is false
+
+            // Compile left operand
+            node.left.accept(this);
+            int rs1 = lastResultReg;
+
+            // Allocate result register and move left value to it
+            int rd = allocateRegister();
+            emit(Opcodes.MOVE);
+            emitReg(rd);
+            emitReg(rs1);
+
+            // Mark position for forward jump
+            int skipRightPos = bytecode.size();
+
+            // Emit conditional jump: if (rd) skip right evaluation
+            emit(Opcodes.GOTO_IF_TRUE);
+            emitReg(rd);
+            emitInt(0); // Placeholder for offset (will be patched)
+
+            // NOW compile right operand (only executed if left was false)
+            node.right.accept(this);
+            int rs2 = lastResultReg;
+
+            // Move right result to rd (overwriting left value)
+            emit(Opcodes.MOVE);
+            emitReg(rd);
+            emitReg(rs2);
+
+            // Patch the forward jump offset
+            int skipRightTarget = bytecode.size();
+            patchIntOffset(skipRightPos + 2, skipRightTarget);
+
+            lastResultReg = rd;
+            return;
+        }
+
+        // Compile left and right operands (for non-short-circuit operators)
         node.left.accept(this);
         int rs1 = lastResultReg;
 
@@ -4466,7 +4512,61 @@ public class BytecodeCompiler implements Visitor {
             throwCompilerException("Too many registers: exceeded 65535 register limit. " +
                     "Consider breaking this code into smaller subroutines.");
         }
+        // Track the highest register ever used for array sizing
+        if (reg > maxRegisterEverUsed) {
+            maxRegisterEverUsed = reg;
+        }
         return reg;
+    }
+
+    /**
+     * Get the highest register index currently used by variables (not temporaries).
+     * This is used to determine the reset point for register recycling.
+     */
+    private int getHighestVariableRegister() {
+        int maxReg = 2;  // Start with reserved registers (0=this, 1=@_, 2=wantarray)
+
+        // Check all variable scopes
+        for (Map<String, Integer> scope : variableScopes) {
+            for (Integer reg : scope.values()) {
+                if (reg > maxReg) {
+                    maxReg = reg;
+                }
+            }
+        }
+
+        // Also check captured variables
+        if (capturedVarIndices != null) {
+            for (Integer reg : capturedVarIndices.values()) {
+                if (reg > maxReg) {
+                    maxReg = reg;
+                }
+            }
+        }
+
+        return maxReg;
+    }
+
+    /**
+     * Reset temporary registers after a statement completes.
+     * This allows register reuse for the next statement, preventing register exhaustion
+     * in large scripts.
+     *
+     * IMPORTANT: Only resets registers that are truly temporary. Preserves:
+     * - Reserved registers (0-2)
+     * - All variables in all scopes
+     * - Captured variables (closures)
+     *
+     * NOTE: This assumes that by the end of a statement, all intermediate values
+     * have either been stored in variables or used/discarded. Any value that needs
+     * to persist must be in a variable, not just a temporary register.
+     */
+    private void recycleTemporaryRegisters() {
+        // Find highest variable register and reset nextRegister to one past it
+        baseRegisterForStatement = getHighestVariableRegister() + 1;
+        nextRegister = baseRegisterForStatement;
+
+        // DO NOT reset lastResultReg - BlockNode needs it to return the last statement's result
     }
 
     private int addToStringPool(String str) {
