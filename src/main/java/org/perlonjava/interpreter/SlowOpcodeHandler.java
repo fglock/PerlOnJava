@@ -90,6 +90,19 @@ public class SlowOpcodeHandler {
 
         // Read slow operation ID
         int slowOpId = bytecode[pc++];
+        return executeById(slowOpId, bytecode, pc, registers, code);
+    }
+
+    /**
+     * Execute slow operation by ID (without reading from bytecode).
+     * Used by BytecodeInterpreter's direct opcode handlers for delegation.
+     */
+    public static int executeById(
+            int slowOpId,
+            short[] bytecode,
+            int pc,
+            RuntimeBase[] registers,
+            InterpretedCode code) {
 
         switch (slowOpId) {
             case Opcodes.SLOWOP_CHOWN:
