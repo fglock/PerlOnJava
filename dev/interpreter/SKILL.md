@@ -48,10 +48,11 @@ PRINT r2                 # print r2
 
 ### Performance Characteristics
 
-**Current Performance (as of Phase 4):**
+**Current Performance (as of Phase 5):**
 - **46.84M ops/sec** (simple for loop benchmark)
 - **1.75x slower** than compiler (within 2-5x target ✓)
-- **Tableswitch optimization**: Dense opcodes (0-99) enable O(1) dispatch
+- **Tableswitch optimization**: Dense opcodes (0-157) enable O(1) dispatch
+- **Direct method calls**: SlowOpcodeHandler methods called directly (no SLOWOP_* indirection)
 - **Superinstructions**: Eliminate intermediate MOVE operations
 - **Variable sharing**: Interpreter and compiled code share lexical variables via persistent storage
 
@@ -59,6 +60,12 @@ PRINT r2                 # print r2
 - Compiler: ~82M ops/sec (after JIT warmup)
 - Interpreter: ~47M ops/sec (consistent, no warmup needed)
 - Trade-off: Slower execution for faster startup and lower memory
+
+**Phase 5 Optimizations (Completed):**
+- Removed SLOWOP_* ID constants (41 constants eliminated)
+- Direct method calls to SlowOpcodeHandler (eliminates ID mapping overhead)
+- Contiguous opcode numbering (0-157, no gaps) for optimal tableswitch
+- All interpreter methods under JIT limit and being compiled successfully
 
 ### JIT Compilation Limit & Method Size Management
 
@@ -135,7 +142,7 @@ This script checks all 5 methods (main execute + 4 secondary) and fails the buil
 ### Source Code (`src/main/java/org/perlonjava/interpreter/`)
 
 **Core Interpreter:**
-- **Opcodes.java** - Opcode constants (0-99 + SLOW_OP) organized by category
+- **Opcodes.java** - Opcode constants (0-157, contiguous) organized by category
 - **BytecodeInterpreter.java** - Main execution loop with range-based delegation to secondary methods
   - Main execute() method: Hot-path opcodes (loops, basic arithmetic, control flow)
   - executeComparisons(): Comparison and logical operators
@@ -144,7 +151,7 @@ This script checks all 5 methods (main execute + 4 secondary) and fails the buil
   - executeTypeOps(): Type and reference operations
 - **BytecodeCompiler.java** - AST to bytecode compiler with register allocation
 - **InterpretedCode.java** - Bytecode container with disassembler for debugging
-- **SlowOpcodeHandler.java** - Handler for rare operations (system calls, socket operations)
+- **SlowOpcodeHandler.java** - Direct method handlers for rare operations (no SLOWOP_* ID indirection)
 
 **Support Classes:**
 - **VariableCaptureAnalyzer.java** - Analyzes which variables are captured by named subroutines
@@ -176,7 +183,7 @@ Opcodes are organized into functional categories:
 13. **SLOW_OP Gateway** (87): Single gateway for 256 rare operations (system calls, sockets)
 14. **Variable Aliasing** (99): SET_SCALAR (sets value without overwriting reference)
 
-**Implemented Opcodes:** 0-82, 87, 99 (dense numbering with gaps reserved for future use)
+**Implemented Opcodes:** 0-157 (dense, contiguous numbering for tableswitch optimization)
 
 ## Variable Sharing Between Interpreter and Compiled Code
 
@@ -592,6 +599,15 @@ Bytecode:     [SLOW_OP] [0] [operands...]  # 0 = SLOWOP_CHOWN
 - Opcode 99: Sets value without overwriting reference
 - Preserves variable aliasing between interpreter and compiled code
 - Critical for shared variable semantics
+
+**7. Phase 5: SLOWOP_* Elimination and Opcode Contiguity (performance optimization)**
+- Removed all 41 SLOWOP_* ID constants from Opcodes.java
+- BytecodeInterpreter now calls SlowOpcodeHandler methods directly (no ID mapping)
+- Eliminated opcode gaps: moved Phase 3 opcodes from 400-402 to 155-157
+- All opcodes now contiguous (0-157) for optimal JVM tableswitch performance
+- Added array operators: slices, compound assignments, multidimensional access
+- Added hash operators: chained access ($hash{outer}{inner})
+- Performance validated: no regression, JIT compilation working correctly
 
 ### Future Optimization Opportunities
 
