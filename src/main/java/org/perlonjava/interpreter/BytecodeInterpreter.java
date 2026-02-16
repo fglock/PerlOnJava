@@ -1070,6 +1070,54 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.STRING_CONCAT_ASSIGN: {
+                        // String concatenation and assign: rd .= rs
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        registers[rd] = StringOperators.stringConcat(
+                            (RuntimeScalar) registers[rd],
+                            (RuntimeScalar) registers[rs]
+                        );
+                        break;
+                    }
+
+                    case Opcodes.PUSH_LOCAL_VARIABLE: {
+                        // Push variable to local stack: DynamicVariableManager.pushLocalVariable(rs)
+                        int rs = bytecode[pc++];
+                        org.perlonjava.runtime.DynamicVariableManager.pushLocalVariable(registers[rs]);
+                        break;
+                    }
+
+                    case Opcodes.STORE_GLOB: {
+                        // Store to glob: glob.set(value)
+                        int globReg = bytecode[pc++];
+                        int valueReg = bytecode[pc++];
+                        ((org.perlonjava.runtime.RuntimeGlob) registers[globReg]).set((RuntimeScalar) registers[valueReg]);
+                        break;
+                    }
+
+                    case Opcodes.OPEN: {
+                        // Open file: rd = IOOperator.open(ctx, args...)
+                        int rd = bytecode[pc++];
+                        int ctx = bytecode[pc++];
+                        int argsReg = bytecode[pc++];
+                        RuntimeArray argsArray = (RuntimeArray) registers[argsReg];
+                        RuntimeBase[] argsVarargs = argsArray.elements.toArray(new RuntimeBase[0]);
+                        registers[rd] = org.perlonjava.operators.IOOperator.open(ctx, argsVarargs);
+                        break;
+                    }
+
+                    case Opcodes.READLINE: {
+                        // Read line from filehandle: rd = Readline.readline(fh_ref, ctx)
+                        int rd = bytecode[pc++];
+                        int fhReg = bytecode[pc++];
+                        int ctx = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.Readline.readline(
+                            (RuntimeScalar) registers[fhReg], ctx
+                        );
+                        break;
+                    }
+
                     case Opcodes.PRE_AUTOINCREMENT: {
                         // Pre-increment: ++rd
                         int rd = bytecode[pc++];

@@ -634,8 +634,28 @@ public class Opcodes {
     /** Greater than or equal: rd = CompareOperators.numericGreaterThanOrEqual(rs1, rs2) */
     public static final short GE_NUM = 161;
 
+    /** String concatenation assignment: rd .= rs (appends rs to rd)
+     * Format: STRING_CONCAT_ASSIGN rd rs */
+    public static final short STRING_CONCAT_ASSIGN = 162;
+
+    /** Push variable to local stack: DynamicVariableManager.pushLocalVariable(rs)
+     * Format: PUSH_LOCAL_VARIABLE rs */
+    public static final short PUSH_LOCAL_VARIABLE = 163;
+
+    /** Store to glob: glob.set(rs)
+     * Format: STORE_GLOB globReg valueReg */
+    public static final short STORE_GLOB = 164;
+
+    /** Open file: rd = IOOperator.open(ctx, args...)
+     * Format: OPEN rd ctx argsReg */
+    public static final short OPEN = 165;
+
+    /** Read line from filehandle: rd = Readline.readline(fh_ref, ctx)
+     * Format: READLINE rd fhReg ctx */
+    public static final short READLINE = 166;
+
     // =================================================================
-    // OPCODES 162-32767: RESERVED FOR FUTURE OPERATIONS
+    // OPCODES 167-32767: RESERVED FOR FUTURE OPERATIONS
     // =================================================================
     // See PHASE3_OPERATOR_PROMOTIONS.md for promotion strategy.
     // All SLOWOP_* constants have been removed - use direct opcodes 114-154 instead.
