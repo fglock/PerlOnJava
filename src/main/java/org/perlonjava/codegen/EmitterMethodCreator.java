@@ -1451,6 +1451,163 @@ public class EmitterMethodCreator implements Opcodes {
         return loader.defineClass(javaClassNameDot, classData);
     }
 
+    // Feature flag for interpreter fallback
+    private static final boolean USE_INTERPRETER_FALLBACK =
+        System.getenv("JPERL_USE_INTERPRETER_FALLBACK") != null;
+
+    /**
+     * Unified factory method that returns RuntimeCode (either CompiledCode or InterpretedCode).
+     *
+     * This is the NEW API that replaces createClassWithMethod() for most use cases.
+     * It handles the "Method too large" exception by falling back to the interpreter
+     * when JPERL_USE_INTERPRETER_FALLBACK environment variable is set.
+     *
+     * DESIGN:
+     * - Try compiler first (createClassWithMethod)
+     * - On MethodTooLargeException: fall back to interpreter if flag enabled
+     * - Return CompiledCode or InterpretedCode (both extend RuntimeCode)
+     * - Call sites work with RuntimeCode interface, don't need to know which backend was used
+     *
+     * @param ctx         The emitter context containing information for code generation
+     * @param ast         The abstract syntax tree representing the method body
+     * @param useTryCatch Flag to enable try-catch in the generated class (for eval operator)
+     * @return RuntimeCode that can be either CompiledCode or InterpretedCode
+     */
+    public static org.perlonjava.runtime.RuntimeCode createRuntimeCode(
+            EmitterContext ctx, Node ast, boolean useTryCatch) {
+        try {
+            // Try compiler path
+            Class<?> generatedClass = createClassWithMethod(ctx, ast, useTryCatch);
+            return wrapAsCompiledCode(generatedClass, ctx);
+
+        } catch (MethodTooLargeException e) {
+            if (USE_INTERPRETER_FALLBACK) {
+                // Fall back to interpreter
+                System.err.println("Note: Method too large, using interpreter backend.");
+                return compileToInterpreter(ast, ctx, useTryCatch);
+            }
+
+            // If interpreter fallback disabled, re-throw to use existing AST splitter logic
+            throw e;
+        }
+    }
+
+    /**
+     * Wrap a compiled Class<?> as CompiledCode.
+     *
+     * This performs the same reflection steps that SubroutineParser.java currently does:
+     * 1. Get constructor
+     * 2. Create instance (codeObject)
+     * 3. Get MethodHandle for apply method
+     * 4. Set __SUB__ field
+     * 5. Return CompiledCode wrapper
+     *
+     * @param generatedClass The compiled JVM class
+     * @param ctx            The compiler context
+     * @return CompiledCode wrapping the compiled class
+     */
+    private static CompiledCode wrapAsCompiledCode(Class<?> generatedClass, EmitterContext ctx) {
+        try {
+            // Get the constructor (may have parameters for captured variables)
+            String[] env = (ctx.capturedEnv != null) ? ctx.capturedEnv : ctx.symbolTable.getVariableNames();
+
+            // Build parameter types for constructor
+            Class<?>[] parameterTypes = new Class<?>[Math.max(0, env.length - skipVariables)];
+            for (int i = skipVariables; i < env.length; i++) {
+                String descriptor = getVariableDescriptor(env[i]);
+                String className = descriptor.substring(1, descriptor.length() - 1).replace('/', '.');
+                parameterTypes[i - skipVariables] = Class.forName(className);
+            }
+
+            Constructor<?> constructor = generatedClass.getConstructor(parameterTypes);
+
+            // For now, we don't instantiate - that happens later when captured vars are available
+            // This is used for the factory pattern where the caller provides the parameters
+            // So we return a CompiledCode with null codeObject and null methodHandle
+            // The caller will instantiate it with the captured variables
+
+            // Actually, let's check if there are NO captured variables, then we can instantiate now
+            Object codeObject = null;
+            java.lang.invoke.MethodHandle methodHandle = null;
+
+            if (parameterTypes.length == 0) {
+                // No captured variables, can instantiate now
+                codeObject = constructor.newInstance();
+
+                // Get MethodHandle for apply method
+                methodHandle = org.perlonjava.runtime.RuntimeCode.lookup.findVirtual(
+                    generatedClass, "apply", org.perlonjava.runtime.RuntimeCode.methodType
+                );
+
+                // Set __SUB__ field
+                java.lang.reflect.Field field = generatedClass.getDeclaredField("__SUB__");
+                org.perlonjava.runtime.RuntimeScalar selfRef = new org.perlonjava.runtime.RuntimeScalar();
+                selfRef.type = org.perlonjava.runtime.RuntimeScalarType.CODE;
+                // Note: ctx doesn't have prototype field, it's set separately by caller
+                selfRef.value = new CompiledCode(methodHandle, codeObject, null, generatedClass, ctx);
+                field.set(codeObject, selfRef);
+
+                return (CompiledCode) selfRef.value;
+            } else {
+                // Has captured variables - caller must instantiate later
+                // Return a CompiledCode with null codeObject/methodHandle
+                // The caller will fill these in via reflection (see SubroutineParser pattern)
+                return new CompiledCode(null, null, null, generatedClass, ctx);
+            }
+
+        } catch (Exception e) {
+            throw new org.perlonjava.runtime.PerlCompilerException(
+                "Failed to wrap compiled class: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Compile AST to interpreter bytecode.
+     *
+     * This is the fallback path when JVM bytecode generation hits the 65535 byte limit.
+     * The interpreter has no size limits because it doesn't generate JVM bytecode.
+     *
+     * @param ast         The AST to compile
+     * @param ctx         The compiler context
+     * @param useTryCatch Whether to use try-catch (for eval)
+     * @return InterpretedCode ready to execute
+     */
+    private static org.perlonjava.interpreter.InterpretedCode compileToInterpreter(
+            Node ast, EmitterContext ctx, boolean useTryCatch) {
+
+        // Create bytecode compiler
+        org.perlonjava.interpreter.BytecodeCompiler compiler =
+            new org.perlonjava.interpreter.BytecodeCompiler(
+                ctx.errorUtil.getFileName(),
+                1,  // line number
+                ctx.errorUtil
+            );
+
+        // Compile AST to interpreter bytecode
+        org.perlonjava.interpreter.InterpretedCode code = compiler.compile(ast);
+
+        // Handle captured variables if needed (for closures)
+        if (ctx.capturedEnv != null && ctx.capturedEnv.length > skipVariables) {
+            // Extract captured variables from context
+            // Note: This is a simplified version - full implementation would need to
+            // access the actual RuntimeBase objects from the symbol table
+            org.perlonjava.runtime.RuntimeBase[] capturedVars =
+                new org.perlonjava.runtime.RuntimeBase[ctx.capturedEnv.length - skipVariables];
+
+            // For now, initialize with undef (actual values will be set by caller)
+            for (int i = 0; i < capturedVars.length; i++) {
+                capturedVars[i] = new org.perlonjava.runtime.RuntimeScalar();
+            }
+
+            code = code.withCapturedVars(capturedVars);
+        }
+
+        // Note: prototype will be set by caller if needed
+        // code.prototype is set via RuntimeCode fields
+
+        return code;
+    }
+
     public static void debugInspectClass(Class<?> generatedClass) {
         System.out.println("Class Information for: " + generatedClass.getName());
         System.out.println("===========================================");
