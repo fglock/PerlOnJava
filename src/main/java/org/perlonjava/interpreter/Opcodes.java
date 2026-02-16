@@ -607,6 +607,20 @@ public class Opcodes {
     // - 1000+: OperatorHandler promotions (200+ operators)
 
     // =================================================================
+    // PHASE 3: OPERATORHANDLER PROMOTIONS (400-499) - Math Operators
+    // =================================================================
+    // Promoted from OperatorHandler for 10-100x performance improvement.
+    // IMPORTANT: Keep CONTIGUOUS for JVM tableswitch optimization!
+
+    // Math Operators (400-409) - CONTIGUOUS
+    /** Power operator: rd = MathOperators.pow(rs1, rs2) - equivalent to rs1 ** rs2 */
+    public static final short OP_POW = 400;
+    /** Absolute value: rd = MathOperators.abs(rs) - equivalent to abs(rs) */
+    public static final short OP_ABS = 401;
+    /** Integer conversion: rd = MathOperators.integer(rs) - equivalent to int(rs) */
+    public static final short OP_INT = 402;
+
+    // =================================================================
     // Slow Operation IDs (0-255)
     // =================================================================
     // These are NOT opcodes - they are sub-operation identifiers

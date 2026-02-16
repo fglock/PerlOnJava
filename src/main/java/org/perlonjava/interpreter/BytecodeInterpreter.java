@@ -2077,6 +2077,40 @@ public class BytecodeInterpreter {
                 return pc;
             }
 
+            // Phase 3: Promoted OperatorHandler operations (400+)
+            case Opcodes.OP_POW: {
+                // Power: rd = rs1 ** rs2
+                int rd = bytecode[pc++];
+                int rs1 = bytecode[pc++];
+                int rs2 = bytecode[pc++];
+                RuntimeBase val1 = registers[rs1];
+                RuntimeBase val2 = registers[rs2];
+                RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+                registers[rd] = MathOperators.pow(s1, s2);
+                return pc;
+            }
+
+            case Opcodes.OP_ABS: {
+                // Absolute value: rd = abs(rs)
+                int rd = bytecode[pc++];
+                int rs = bytecode[pc++];
+                RuntimeBase val = registers[rs];
+                RuntimeScalar s = (val instanceof RuntimeScalar) ? (RuntimeScalar) val : val.scalar();
+                registers[rd] = MathOperators.abs(s);
+                return pc;
+            }
+
+            case Opcodes.OP_INT: {
+                // Integer conversion: rd = int(rs)
+                int rd = bytecode[pc++];
+                int rs = bytecode[pc++];
+                RuntimeBase val = registers[rs];
+                RuntimeScalar s = (val instanceof RuntimeScalar) ? (RuntimeScalar) val : val.scalar();
+                registers[rd] = MathOperators.integer(s);
+                return pc;
+            }
+
             default:
                 throw new RuntimeException("Unknown arithmetic opcode: " + opcode);
         }
