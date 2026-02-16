@@ -372,6 +372,32 @@ public class InterpretedCode extends RuntimeCode {
                     pc += 2;
                     sb.append("ADD_SCALAR_INT r").append(rd).append(" = r").append(rs).append(" + ").append(imm).append("\n");
                     break;
+                case Opcodes.SUB_SCALAR_INT:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    int subImm = readInt(bytecode, pc);
+                    pc += 2;
+                    sb.append("SUB_SCALAR_INT r").append(rd).append(" = r").append(rs).append(" - ").append(subImm).append("\n");
+                    break;
+                case Opcodes.MUL_SCALAR_INT:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    int mulImm = readInt(bytecode, pc);
+                    pc += 2;
+                    sb.append("MUL_SCALAR_INT r").append(rd).append(" = r").append(rs).append(" * ").append(mulImm).append("\n");
+                    break;
+                case Opcodes.CONCAT:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    rs2 = bytecode[pc++];
+                    sb.append("CONCAT r").append(rd).append(" = r").append(rs1).append(" . r").append(rs2).append("\n");
+                    break;
+                case Opcodes.REPEAT:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    rs2 = bytecode[pc++];
+                    sb.append("REPEAT r").append(rd).append(" = r").append(rs1).append(" x r").append(rs2).append("\n");
+                    break;
                 case Opcodes.LT_NUM:
                     rd = bytecode[pc++];
                     rs1 = bytecode[pc++];
@@ -857,6 +883,19 @@ public class InterpretedCode extends RuntimeCode {
                     int beginId = bytecode[pc++];
                     sb.append("RETRIEVE_BEGIN_SCALAR r").append(rd).append(" = BEGIN_").append(beginId)
                       .append("::").append(stringPool[nameIdx]).append("\n");
+                    break;
+                case Opcodes.SPLIT:
+                    rd = bytecode[pc++];
+                    int splitPatternReg = bytecode[pc++];
+                    int splitArgsReg = bytecode[pc++];
+                    int splitCtx = bytecode[pc++];
+                    sb.append("SPLIT r").append(rd).append(" = split(r").append(splitPatternReg)
+                      .append(", r").append(splitArgsReg).append(", ctx=").append(splitCtx).append(")\n");
+                    break;
+                case Opcodes.LOCAL_SCALAR:
+                    rd = bytecode[pc++];
+                    nameIdx = bytecode[pc++];
+                    sb.append("LOCAL_SCALAR r").append(rd).append(" = local $").append(stringPool[nameIdx]).append("\n");
                     break;
                 // DEPRECATED: SLOW_OP case removed - opcode 87 is no longer emitted
                 // All operations now use direct opcodes (114-154)
