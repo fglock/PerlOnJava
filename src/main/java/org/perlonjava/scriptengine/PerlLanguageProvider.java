@@ -335,13 +335,47 @@ public class PerlLanguageProvider {
         } else {
             // Compiler path - returns generated class instance
             ctx.logDebug("Compiling to JVM bytecode");
-            Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(
-                ctx,
-                ast,
-                false  // no try-catch
-            );
-            Constructor<?> constructor = generatedClass.getConstructor();
-            return constructor.newInstance();
+            try {
+                Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(
+                    ctx,
+                    ast,
+                    false  // no try-catch
+                );
+                Constructor<?> constructor = generatedClass.getConstructor();
+                return constructor.newInstance();
+            } catch (RuntimeException e) {
+                // Check if this is a "Method too large" error from ASM
+                if (e.getMessage() != null && e.getMessage().contains("Method too large")) {
+                    // When JPERL_USE_INTERPRETER_FALLBACK is set and compilation fails due to size,
+                    // automatically fall back to the interpreter backend
+                    boolean showFallback = System.getenv("JPERL_SHOW_FALLBACK") != null ||
+                                           System.getenv("JPERL_USE_INTERPRETER_FALLBACK") != null;
+                    if (showFallback) {
+                        System.err.println("Note: Method too large after AST splitting, using interpreter backend.");
+                    }
+
+                    // Fall back to interpreter path
+                    ctx.logDebug("Falling back to bytecode interpreter due to method size");
+                    BytecodeCompiler compiler = new BytecodeCompiler(
+                        ctx.compilerOptions.fileName,
+                        1,  // sourceLine (legacy parameter)
+                        ctx.errorUtil  // Pass errorUtil for proper error formatting with line numbers
+                    );
+                    InterpretedCode interpretedCode = compiler.compile(ast);
+
+                    // If --disassemble is enabled, print the bytecode
+                    if (ctx.compilerOptions.disassembleEnabled) {
+                        System.out.println("=== Interpreter Bytecode ===");
+                        System.out.println(interpretedCode.disassemble());
+                        System.out.println("=== End Bytecode ===");
+                    }
+
+                    return interpretedCode;
+                } else {
+                    // Not a size error, rethrow
+                    throw e;
+                }
+            }
         }
     }
 
