@@ -1,1900 +1,361 @@
 # PerlOnJava Interpreter Developer Guide
 
-## Table of Contents
-1. [Introduction & Architecture Overview](#introduction--architecture-overview)
-2. [File Organization](#file-organization)
-3. [Testing & Benchmarking](#testing--benchmarking)
-4. [Dispatch Architecture & Future CPU Cache Optimization](#dispatch-architecture--future-cpu-cache-optimization)
-5. [Optimization Strategies](#optimization-strategies)
-6. [Runtime Sharing (100% API Compatibility)](#runtime-sharing-100-api-compatibility)
-7. [Development Workflow](#development-workflow)
+## Quick Reference
 
-## Introduction & Architecture Overview
+**Performance:** 46.84M ops/sec (1.75x slower than compiler ✓)
+**Opcodes:** 0-157 (contiguous) for JVM tableswitch optimization
+**Runtime:** 100% API compatibility with compiler (zero duplication)
 
-### What is the Interpreter?
+## Core Files
 
-The PerlOnJava interpreter is a **pure register machine** that executes Perl bytecode directly without generating JVM bytecode. It complements the existing compiler by providing:
+- `Opcodes.java` - Opcode constants (0-157, contiguous)
+- `BytecodeInterpreter.java` - Execution loop with range-based delegation
+- `BytecodeCompiler.java` - AST to bytecode with register allocation
+- `InterpretedCode.java` - Bytecode container with disassembler
+- `SlowOpcodeHandler.java` - Handlers for rare operations (151-154)
 
-- **Faster startup**: No bytecode generation or JVM class loading overhead
-- **Lower memory footprint**: No class metadata or compiled method objects
-- **Dynamic evaluation**: Ideal for `eval STRING`, code generation, and REPL scenarios
-- **Closure support**: Captures and shares variables between compiled and interpreted code
+## Adding New Operators
 
-### Why It Exists
+### 1. Decide: Fast Opcode or SLOW_OP?
 
-While the PerlOnJava compiler generates optimized JVM bytecode, there are scenarios where interpretation is superior:
+**Use Fast Opcode when:**
+- Operation is used frequently (>1% of execution)
+- Simple 1-3 operand format
+- Performance-critical (loops, arithmetic)
 
-1. **eval STRING**: Dynamic code evaluated once doesn't justify compilation overhead
-2. **Short-lived scripts**: Scripts that run briefly and exit (startup time matters)
-3. **Development/debugging**: Faster edit-run cycles during development
-4. **Memory-constrained environments**: Lower memory usage than compiled code
+**Use SLOW_OP when:**
+- Operation is rarely used (<1% of execution)
+- Complex argument handling
+- System calls, I/O operations
 
-### Architecture: Pure Register Machine
+### 2. Adding a Fast Opcode
 
-The interpreter uses a **register-based architecture** (not stack-based like the JVM):
+**Example: Unary + operator (forces numeric/scalar context)**
 
-- **3-address code format**: `rd = rs1 op rs2` (destination = source1 operator source2)
-- **Unlimited virtual registers**: Each subroutine can use as many registers as needed
-- **Register allocation**: BytecodeCompiler assigns variables to register indices
-- **No stack manipulation**: Direct register-to-register operations
-
-**Example bytecode:**
-```
-LOAD_INT r0, 10          # r0 = 10
-LOAD_INT r1, 20          # r1 = 20
-ADD_SCALAR r2, r0, r1    # r2 = r0 + r1
-PRINT r2                 # print r2
-```
-
-### Performance Characteristics
-
-**Current Performance (as of Phase 5):**
-- **46.84M ops/sec** (simple for loop benchmark)
-- **1.75x slower** than compiler (within 2-5x target ✓)
-- **Tableswitch optimization**: Dense opcodes (0-157) enable O(1) dispatch
-- **Direct method calls**: SlowOpcodeHandler methods called directly (no SLOWOP_* indirection)
-- **Superinstructions**: Eliminate intermediate MOVE operations
-- **Variable sharing**: Interpreter and compiled code share lexical variables via persistent storage
-
-**Performance vs. Compiler:**
-- Compiler: ~82M ops/sec (after JIT warmup)
-- Interpreter: ~47M ops/sec (consistent, no warmup needed)
-- Trade-off: Slower execution for faster startup and lower memory
-
-**Phase 5 Optimizations (Completed):**
-- Removed SLOWOP_* ID constants (41 constants eliminated)
-- Direct method calls to SlowOpcodeHandler (eliminates ID mapping overhead)
-- Contiguous opcode numbering (0-157, no gaps) for optimal tableswitch
-- All interpreter methods under JIT limit and being compiled successfully
-
-### JIT Compilation Limit & Method Size Management
-
-**Critical Constraint:** The JVM refuses to JIT-compile methods larger than ~8000 bytes (controlled by `-XX:DontCompileHugeMethods`). When methods exceed this limit, they run in **interpreted mode**, causing 5-10x performance degradation.
-
-**Architecture: Range-Based Delegation**
-
-To keep the main `execute()` method under the JIT limit, cold-path opcodes are delegated to secondary methods:
-
-1. **executeComparisons()** - Comparison and logical operators (opcodes 31-41)
-   - COMPARE_NUM, COMPARE_STR, EQ_NUM, NE_NUM, LT_NUM, GT_NUM, EQ_STR, NE_STR, NOT
-   - Size: ~1089 bytes
-
-2. **executeArithmetic()** - Multiply, divide, and compound assignments (opcodes 19-30, 110-113)
-   - MUL_SCALAR, DIV_SCALAR, MOD_SCALAR, POW_SCALAR, NEG_SCALAR, CONCAT, REPEAT, LENGTH
-   - SUBTRACT_ASSIGN, MULTIPLY_ASSIGN, DIVIDE_ASSIGN, MODULUS_ASSIGN
-   - Size: ~1057 bytes
-
-3. **executeCollections()** - Array and hash operations (opcodes 43-49, 51-56, 93-96)
-   - ARRAY_SET, ARRAY_PUSH, ARRAY_POP, HASH_SET, HASH_EXISTS, HASH_DELETE, etc.
-   - Size: ~1025 bytes
-
-4. **executeTypeOps()** - Type and reference operations (opcodes 62-70, 102-105)
-   - DEFINED, REF, BLESS, ISA, CREATE_LAST, CREATE_NEXT, CREATE_REDO, CREATE_REF, DEREF
-   - Size: ~929 bytes
-
-**Hot-Path Opcodes (Kept Inline):**
-- Control flow: NOP, RETURN, GOTO, GOTO_IF_FALSE, GOTO_IF_TRUE
-- Register ops: MOVE, LOAD_CONST, LOAD_INT, LOAD_STRING, LOAD_UNDEF
-- Core arithmetic: ADD_SCALAR, SUB_SCALAR (used by loops)
-- Iteration: ITERATOR_CREATE, ITERATOR_HAS_NEXT, ITERATOR_NEXT, FOREACH_NEXT_OR_EXIT
-- Essential access: ARRAY_GET, HASH_GET
-
-**Current Sizes:**
-- Main execute(): 7270 bytes (under 7500-byte safe limit ✓)
-- All secondary methods: <1100 bytes each ✓
-
-**Enforcement:**
-
-Run `dev/tools/check-bytecode-size.sh` after changes to verify all methods stay under limit:
-
-```bash
-./dev/tools/check-bytecode-size.sh
-```
-
-This script checks all 5 methods (main execute + 4 secondary) and fails the build if any exceeds 7500 bytes.
-
-**If Methods Grow Too Large:**
-
-1. Move more opcodes from main execute() to secondary methods
-2. Split large secondary methods into smaller groups
-3. Keep hot-path opcodes (loops, basic arithmetic) inline for zero overhead
-4. Delegate cold-path opcodes (rare operations) to minimize cost
-
-**Performance Impact:**
-
-- Hot-path opcodes: Zero overhead (inline in main switch)
-- Cold-path opcodes: One static method call (~5-10ns overhead)
-- Overall: Negligible impact since cold ops are infrequent
-
-## File Organization
-
-### Documentation (`dev/interpreter/`)
-
-- **STATUS.md** - Current implementation status and feature completeness
-- **TESTING.md** - How to test and benchmark the interpreter
-- **OPTIMIZATION_RESULTS.md** - Optimization history and performance measurements
-- **BYTECODE_DOCUMENTATION.md** - Complete reference for all opcodes (0-99 + SLOW_OP)
-- **CLOSURE_IMPLEMENTATION_COMPLETE.md** - Closure architecture and bidirectional calling
-- **SKILL.md** (this file) - Developer guide for continuing interpreter development
-- **architecture/** - Design documents and architectural decisions
-- **tests/** - Interpreter-specific test files (.t and .pl format)
-
-### Source Code (`src/main/java/org/perlonjava/interpreter/`)
-
-**Core Interpreter:**
-- **Opcodes.java** - Opcode constants (0-157, contiguous) organized by category
-- **BytecodeInterpreter.java** - Main execution loop with range-based delegation to secondary methods
-  - Main execute() method: Hot-path opcodes (loops, basic arithmetic, control flow)
-  - executeComparisons(): Comparison and logical operators
-  - executeArithmetic(): Multiply, divide, compound assignments
-  - executeCollections(): Array and hash operations
-  - executeTypeOps(): Type and reference operations
-- **BytecodeCompiler.java** - AST to bytecode compiler with register allocation
-- **InterpretedCode.java** - Bytecode container with disassembler for debugging
-- **SlowOpcodeHandler.java** - Direct method handlers for rare operations (no SLOWOP_* ID indirection)
-
-**Support Classes:**
-- **VariableCaptureAnalyzer.java** - Analyzes which variables are captured by named subroutines
-- **VariableCollectorVisitor.java** - Detects closure variables for capture analysis
-
-### Build Tools (`dev/tools/`)
-
-- **check-bytecode-size.sh** - Verifies all interpreter methods stay under JIT compilation limit (7500 bytes)
-  - Run after modifications to BytecodeInterpreter.java
-  - Automatically checks main execute() and all secondary methods
-  - Prevents performance regressions from method size growth
-
-### Opcode Categories (Opcodes.java)
-
-Opcodes are organized into functional categories:
-
-1. **Control Flow** (0-6): RETURN, LABEL, GOTO, conditionals
-2. **Constants** (7-9): LOAD_INT, LOAD_STRING, LOAD_UNDEF
-3. **Variables** (10-16): GET_VAR, SET_VAR, CREATE_CLOSURE_VAR, GET_LOCAL_VAR
-4. **Arithmetic** (17-30): ADD, SUB, MUL, DIV, MOD, POW, NEG, etc.
-5. **Comparison** (31-41): COMPARE_NUM, COMPARE_STR, EQ, NE, LT, GT, LE, GE
-6. **Array Operations** (42-49): ARRAY_GET, ARRAY_SET, PUSH, POP, SHIFT, UNSHIFT
-7. **Hash Operations** (50-56): HASH_GET, HASH_SET, EXISTS, DELETE, KEYS, VALUES
-8. **Subroutine Calls** (57-59): CALL_SUB, CALL_METHOD, CALL_BUILTIN
-9. **Control Flow Specials** (60-67): CREATE_LAST, CREATE_NEXT, CREATE_REDO, CREATE_GOTO
-10. **References** (68-72): CREATE_REF, DEREF, GET_TYPE, GET_REFTYPE, BLESS
-11. **Error Handling** (73-74): DIE, WARN
-12. **Superinstructions** (75-82): INC_REG, DEC_REG, ADD_ASSIGN, ADD_ASSIGN_INT, etc.
-13. **SLOW_OP Gateway** (87): Single gateway for 256 rare operations (system calls, sockets)
-14. **Variable Aliasing** (99): SET_SCALAR (sets value without overwriting reference)
-
-**Implemented Opcodes:** 0-157 (dense, contiguous numbering for tableswitch optimization)
-
-## Variable Sharing Between Interpreter and Compiled Code
-
-### Overview
-
-**Status:** ✅ Implemented (PR #191)
-
-The interpreter now supports seamless variable sharing between interpreted main scripts and compiled named subroutines. Variables declared in the interpreted scope are accessible to compiled code and vice versa, maintaining proper aliasing semantics.
-
-### Implementation
-
-When a variable is captured by a named subroutine, the interpreter:
-
-1. **Analyzes captures** - `VariableCaptureAnalyzer` identifies which variables need persistent storage
-2. **Retrieves from persistent storage** - Uses `SLOWOP_RETRIEVE_BEGIN_*` opcodes to get the persistent variable
-3. **Stores reference in register** - The register contains a reference to the persistent RuntimeScalar/Array/Hash
-4. **Preserves aliasing** - All operations work on the same object, so changes are visible to both interpreter and compiled code
-
-### Key Components
-
-**VariableCaptureAnalyzer.java:**
-- Scans main script AST for named subroutine definitions
-- Identifies which outer variables each subroutine references
-- Returns set of captured variable names that need persistent storage
-
-**SET_SCALAR Opcode (99):**
+#### Step 2.1: Define in Opcodes.java
 ```java
-// Format: SET_SCALAR rd rs
-// Effect: ((RuntimeScalar)registers[rd]).set((RuntimeScalar)registers[rs])
-// Purpose: Sets value without overwriting the reference (preserves aliasing)
+// Find next available opcode number (currently 169+)
+/** Unary +: Forces numeric/scalar context on operand */
+public static final short UNARY_PLUS = 169;
 ```
 
-**SLOWOP_RETRIEVE_BEGIN_* Opcodes:**
-- `SLOWOP_RETRIEVE_BEGIN_SCALAR` (19) - Retrieves persistent scalar variable
-- `SLOWOP_RETRIEVE_BEGIN_ARRAY` (20) - Retrieves persistent array variable
-- `SLOWOP_RETRIEVE_BEGIN_HASH` (21) - Retrieves persistent hash variable
+**Critical: Keep opcodes contiguous! No gaps allowed.**
 
-### Persistent Storage Naming
-
-Variables use the BEGIN naming scheme: `PerlOnJava::_BEGIN_<id>::varname`
-
-Example: `$width` with `ast.id = 5` becomes `PerlOnJava::_BEGIN_5::width`
-
-### Example
-
-```perl
-my $width = 20;  # Interpreted: stored in persistent global + register
-
-sub neighbors {  # Compiled subroutine
-    return $width * 2;  # Accesses same persistent global
+#### Step 2.2: Implement in BytecodeInterpreter.java
+```java
+case Opcodes.UNARY_PLUS: {
+    int rd = bytecode[pc++];
+    int rs = bytecode[pc++];
+    // Force scalar context
+    RuntimeBase operand = registers[rs];
+    registers[rd] = operand.scalar();
+    break;
 }
-
-print neighbors();  # 40
-$width = 30;        # Update visible to both
-print neighbors();  # 60
 ```
 
-**Generated Bytecode:**
+#### Step 2.3: Emit in BytecodeCompiler.java
+```java
+} else if (op.equals("+")) {
+    // Unary + operator
+    int savedContext = currentCallContext;
+    currentCallContext = RuntimeContextType.SCALAR;
+    try {
+        node.operand.accept(this);
+        int operandReg = lastResultReg;
+
+        int rd = allocateRegister();
+        emit(Opcodes.ARRAY_SIZE);  // Converts array to size, passes through scalars
+        emitReg(rd);
+        emitReg(operandReg);
+
+        lastResultReg = rd;
+    } finally {
+        currentCallContext = savedContext;
+    }
+}
 ```
-SLOW_OP
-SLOWOP_RETRIEVE_BEGIN_SCALAR r0, "width", 5  # Get persistent variable
-LOAD_INT r1, 20                               # Load initial value
-SET_SCALAR r0, r1                             # Set value (preserves ref)
+
+#### Step 2.4: Add Disassembly (InterpretedCode.java)
+```java
+case Opcodes.UNARY_PLUS:
+    rd = bytecode[pc++];
+    rs = bytecode[pc++];
+    sb.append("UNARY_PLUS r").append(rd).append(" = +r").append(rs).append("\n");
+    break;
 ```
 
-### Context Detection (wantarray)
+**WARNING:** Missing disassembly cases cause PC misalignment! When disassembler hits unknown opcode, it doesn't advance PC for operands, corrupting all subsequent instructions.
 
-**Status:** ✅ Implemented
+### 3. Adding STORE_GLOBAL_* Opcodes
 
-The interpreter properly detects calling context (VOID/SCALAR/LIST) for subroutine calls:
+**Example: STORE_GLOBAL_ARRAY (13), STORE_GLOBAL_HASH (15)**
 
-**RuntimeContextType Values:**
-- `VOID` (0) - No return value expected
-- `SCALAR` (1) - Single value expected
-- `LIST` (2) - List of values expected
+These opcodes already existed but lacked interpreter/disassembly support.
 
-**Detection Strategy:**
-- Based on assignment target type
-- `my $x = sub()` → SCALAR context
-- `my @x = sub()` → LIST context
-- `sub(); other_code()` → VOID context
+#### Step 3.1: Implement Runtime in BytecodeInterpreter.java
+```java
+case Opcodes.STORE_GLOBAL_ARRAY: {
+    int nameIdx = bytecode[pc++];
+    int srcReg = bytecode[pc++];
+    String name = code.stringPool[nameIdx];
+
+    RuntimeArray globalArray = GlobalVariable.getGlobalArray(name);
+    RuntimeBase value = registers[srcReg];
+
+    // Clear and populate
+    if (value instanceof RuntimeArray) {
+        globalArray.elements.clear();
+        globalArray.elements.addAll(((RuntimeArray) value).elements);
+    } else if (value instanceof RuntimeList) {
+        globalArray.setFromList((RuntimeList) value);
+    } else {
+        globalArray.setFromList(value.getList());
+    }
+    break;
+}
+```
+
+**Key Insight:** Match compiler semantics exactly. Check compiler's EmitterVisitor or runtime methods to understand expected behavior.
+
+#### Step 3.2: Add Disassembly
+```java
+case Opcodes.STORE_GLOBAL_ARRAY:
+    nameIdx = bytecode[pc++];
+    int srcReg = bytecode[pc++];
+    sb.append("STORE_GLOBAL_ARRAY @").append(stringPool[nameIdx])
+      .append(" = r").append(srcReg).append("\n");
+    break;
+```
+
+### 4. Lvalue Subroutine Assignment
+
+**Perl Feature:** `f() = "X"` where f returns mutable reference
+
+**Parse Structure:**
+```
+BinaryOperatorNode: =
+  BinaryOperatorNode: (     # Function call
+    OperatorNode: &
+      IdentifierNode: 'f'
+    ListNode: []           # Arguments
+  StringNode: "X"
+```
 
 **Implementation in BytecodeCompiler.java:**
 ```java
-// Determine context from LHS type
-int rhsContext = RuntimeContextType.LIST;  // Default
-if (node.left instanceof OperatorNode) {
-    OperatorNode leftOp = (OperatorNode) node.left;
-    if (leftOp.operator.equals("my") && leftOp.operand instanceof OperatorNode) {
-        OperatorNode sigilOp = (OperatorNode) leftOp.operand;
-        if (sigilOp.operator.equals("$")) {
-            rhsContext = RuntimeContextType.SCALAR;
-        }
-    }
-}
-```
-
-## Error Reporting
-
-### throwCompilerException(String message, int tokenIndex)
-
-The BytecodeCompiler uses `throwCompilerException(String message, int tokenIndex)` to report errors with proper context:
-
-**Purpose:**
-- Provides accurate error messages with filename and line number
-- Transforms token index into source location
-- Consistent error reporting across interpreter and compiler
-
-**Usage Example:**
-```java
-if (invalidCondition) {
-    throwCompilerException("Invalid operation: " + details, node.getIndex());
-}
-```
-
-**Output Format:**
-```
-Error at file.pl line 42: Invalid operation: details
-  42: my $x = invalid_code_here;
-           ^
-```
-
-**Benefits:**
-- Users see exact source location of errors
-- Easier debugging of interpreter bytecode generation
-- Consistent with compiler error reporting
-
-## Testing & Benchmarking
-
-### Running Tests
-
-**Fast Unit Tests (seconds):**
-```bash
-make test-unit                    # All fast unit tests
-make                              # Build + fast tests (default)
-```
-
-**Comprehensive Tests (minutes):**
-```bash
-make test-all                     # All tests including Perl 5 core tests
-make test-perl5                   # Perl 5 core test suite
-```
-
-**Interpreter-Specific Tests:**
-```bash
-# Perl test files
-./jperl dev/interpreter/tests/for_loop_test.pl
-./jperl dev/interpreter/tests/closure_test.t
-./jperl dev/interpreter/tests/*.t
-```
-
-### Running Benchmarks
-
-**Using Perl benchmark script:**
-```bash
-./jperl dev/interpreter/tests/for_loop_benchmark.pl
-```
-
-**Benchmark Output Example:**
-```
-Compiler - 1000000 iterations: 11.72 ms (85.32M ops/sec)
-Interpreter - 1000000 iterations: 21.35 ms (46.84M ops/sec)
-Interpreted code is 1.82x slower than compiled code
-```
-
-### Performance Targets
-
-- **Interpreter Target**: 2-5x slower than compiler
-- **Current**: 1.75x slower ✓ (within target)
-- **Benchmark Loop**: 19.94M ops/sec (Phase 1 baseline)
-- **After Optimizations**: 46.84M ops/sec (2.35x improvement)
-
-### Test Frameworks
-
-**Perl Tests (.t files):**
-- Use Test::More framework
-- TAP (Test Anything Protocol) output
-- Run via `perl dev/tools/perl_test_runner.pl`
-
-**Perl Benchmark Scripts (.pl files):**
-- Located in `dev/interpreter/tests/`
-- Run with `./jperl` to compare interpreter vs. compiler performance
-- Example: `./jperl dev/interpreter/tests/for_loop_benchmark.pl`
-
-## Dispatch Architecture & CPU Cache Optimization
-
-### Current Design: Main Switch + SLOW_OP Gateway
-
-The interpreter uses **optimized dual-dispatch architecture** for maximum performance:
-
-**Main Switch (Opcodes 0-87):**
-```java
-public static RuntimeList execute(InterpretedCode code, RuntimeArray args, int callContext) {
-    RuntimeBase[] registers = new RuntimeBase[code.maxRegisters];
-    int pc = 0;
-    byte[] bytecode = code.bytecode;
-
-    while (pc < bytecode.length) {
-        byte opcode = bytecode[pc++];
-
-        switch (opcode) {
-            case Opcodes.RETURN: ...
-            case Opcodes.GOTO: ...
-            case Opcodes.LOAD_INT: ...
-            // ... hot path opcodes (0-86) ...
-            case Opcodes.CREATE_LIST: ...
-
-            case Opcodes.SLOW_OP:  // Gateway to rare operations
-                pc = SlowOpcodeHandler.execute(bytecode, pc, registers, code);
-                break;
-
-            default: throw new RuntimeException("Unknown opcode: " + opcode);
-        }
-    }
-}
-```
-
-**Slow Operation Handler (Separate Class):**
-```java
-// SlowOpcodeHandler.java
-public static int execute(byte[] bytecode, int pc, RuntimeBase[] registers, InterpretedCode code) {
-    int slowOpId = bytecode[pc++] & 0xFF;
-
-    switch (slowOpId) {  // Dense switch (0,1,2...) for tableswitch
-        case 0:  return executeChown(...);
-        case 1:  return executeWaitpid(...);
-        case 2:  return executeSetsockopt(...);
-        // ... up to 255 slow operations
-    }
-}
-```
-
-**Key Characteristics:**
-- Main switch: 87 opcodes (0-87) - compact for CPU i-cache
-- Dense numbering (no gaps) enables JVM tableswitch optimization (O(1))
-- SLOW_OP (87): Single gateway for 256 rare operations
-- SlowOpcodeHandler: Separate class with own dense switch (0-255)
-- Preserves opcodes 88-255 for future fast operations
-
-**Architecture Benefits:**
-1. **Opcode Space Efficiency**: Uses 1 opcode for 256 slow operations
-2. **CPU Cache Optimized**: Main loop stays compact (fits in i-cache)
-3. **Tableswitch x2**: Both main and slow switches use dense numbering
-4. **Easy Extension**: Add slow ops without consuming fast opcodes
-
-### Performance Characteristics
-
-**Main Switch (Hot Path):**
-- 87 dense opcodes (0-87)
-- ~10-15% speedup from tableswitch vs. lookupswitch
-- Fits in CPU L1 instruction cache (32-64KB)
-- No overhead for fast operations
-
-**SLOW_OP Gateway (Cold Path):**
-- Single opcode (87) with sub-operation ID parameter
-- Adds ~5ns overhead per slow operation
-- Worth it for <1% execution frequency
-- Keeps main loop compact (main benefit)
-
-**Bytecode Format:**
-```
-Fast operation:
-[OPCODE] [operands...]
-e.g., [ADD_SCALAR] [rd] [rs1] [rs2]
-
-Slow operation:
-[SLOW_OP] [slow_op_id] [operands...]
-e.g., [87] [1] [rd] [rs_pid] [rs_flags]
-         ^    ^
-         |    |__ SLOWOP_WAITPID (1)
-         |_______ SLOW_OP gateway
-```
-
-### JVM Tableswitch Optimization
-
-**Tableswitch** (used for dense cases):
-```java
-tableswitch {  // O(1) lookup via array index
-    0: goto label_0
-    1: goto label_1
-    2: goto label_2
-    ...
-}
-```
-
-**Lookupswitch** (used for sparse cases):
-```java
-lookupswitch {  // O(log n) lookup via binary search
-    10: goto label_10
-    50: goto label_50
-    100: goto label_100
-}
-```
-
-**Critical:** To maintain tableswitch, opcodes MUST be dense (no large gaps in numbering).
-
-### SLOW_OP Architecture (Implemented)
-
-**Design:** Single gateway opcode for all rarely-used operations.
-
-**Rationale:**
-- Consuming many opcode numbers (200-255) for rare operations wastes space
-- Main interpreter switch grows large, reducing CPU i-cache efficiency
-- Better: Use ONE opcode with sub-operation parameter
-
-**Implementation:**
-```java
-// Main interpreter switch
-case Opcodes.SLOW_OP:  // Opcode 87
-    pc = SlowOpcodeHandler.execute(bytecode, pc, registers, code);
-    break;
-
-// SlowOpcodeHandler.java
-public static int execute(...) {
-    int slowOpId = bytecode[pc++] & 0xFF;
-    switch (slowOpId) {  // Dense: 0, 1, 2, 3, ...
-        case SLOWOP_CHOWN: return executeChown(...);
-        case SLOWOP_WAITPID: return executeWaitpid(...);
-        case SLOWOP_SETSOCKOPT: return executeSetsockopt(...);
-        // ... 19 operations defined, 236 slots remaining
-    }
-}
-```
-
-**Benefits:**
-- **Opcode Efficiency**: 1 opcode for 256 slow operations
-- **Space Preservation**: Opcodes 88-255 available for future fast ops
-- **CPU Cache**: Main loop stays compact (87 cases vs 255+)
-- **Tableswitch x2**: Both switches use dense numbering
-- **Easy Extension**: Add slow ops without affecting main loop
-
-**Implemented Slow Operations (22 defined, 233 slots remaining):**
-
-| ID | Name | Description |
-|----|------|-------------|
-| 0 | SLOWOP_CHOWN | Change file ownership |
-| 1 | SLOWOP_WAITPID | Wait for process completion |
-| 2 | SLOWOP_SETSOCKOPT | Set socket options |
-| 3 | SLOWOP_GETSOCKOPT | Get socket options |
-| 4 | SLOWOP_FCNTL | File control operations |
-| 5 | SLOWOP_IOCTL | Device control operations |
-| 6 | SLOWOP_FLOCK | File locking |
-| 7 | SLOWOP_SEMOP | Semaphore operations |
-| 8 | SLOWOP_MSGCTL | Message queue control |
-| 9 | SLOWOP_SHMCTL | Shared memory control |
-| 10 | SLOWOP_GETPRIORITY | Get process priority |
-| 11 | SLOWOP_SETPRIORITY | Set process priority |
-| 12 | SLOWOP_SYSCALL | Generic system call |
-| 13 | SLOWOP_SOCKET | Create socket |
-| 14 | SLOWOP_BIND | Bind socket to address |
-| 15 | SLOWOP_CONNECT | Connect socket |
-| 16 | SLOWOP_LISTEN | Listen for connections |
-| 17 | SLOWOP_ACCEPT | Accept connection |
-| 18 | SLOWOP_SHUTDOWN | Shutdown socket |
-| 19 | SLOWOP_RETRIEVE_BEGIN_SCALAR | Retrieve persistent scalar variable |
-| 20 | SLOWOP_RETRIEVE_BEGIN_ARRAY | Retrieve persistent array variable |
-| 21 | SLOWOP_RETRIEVE_BEGIN_HASH | Retrieve persistent hash variable |
-
-**Usage Example:**
-```
-Perl code:    chown($uid, $gid, @files);
-Bytecode:     [SLOW_OP] [0] [operands...]  # 0 = SLOWOP_CHOWN
-```
-
-**Performance Characteristics:**
-- **Gateway overhead**: ~5ns per slow operation (method call + second switch)
-- **Worth it for**: Operations used <1% of execution time
-- **Main benefit**: Keeps main interpreter loop compact for CPU i-cache
-
-**Adding New Slow Operations:**
-1. Add constant to `Opcodes.java`: `SLOWOP_FOO = 19`
-2. Add case to `SlowOpcodeHandler.execute()`: `case 19: return executeFoo(...)`
-3. Implement handler: `private static int executeFoo(...)`
-4. Update disassembler in `InterpretedCode.java`
-5. Maintain dense numbering (no gaps)
-
-## Optimization Strategies
-
-### Completed Optimizations (Phases 1-4)
-
-**1. Dense Opcodes (10-15% speedup)**
-- Renumbered opcodes to 0-82 with no gaps
-- Enables JVM tableswitch (O(1)) instead of lookupswitch (O(log n))
-- Measured via bytecode disassembly verification
-
-**2. Better JIT Warmup (156% speedup)**
-- Increased warmup iterations from 100 to 1000
-- Allows JVM JIT compiler to optimize dispatch loop
-- Before: 18.28M ops/sec → After: 46.84M ops/sec
-
-**3. Superinstructions (5-10% speedup)**
-- Combined common patterns into single opcodes
-- Eliminates intermediate MOVE operations
-- Examples:
-  - `INC_REG` (75): `r0 = r0 + 1` (replaces ADD + MOVE)
-  - `DEC_REG` (76): `r0 = r0 - 1`
-  - `ADD_ASSIGN` (77): `r0 = r0 + r1`
-  - `ADD_ASSIGN_INT` (78): `r0 = r0 + immediate_int`
-  - `LOOP_PLUS_PLUS` (82): Combined increment + compare + branch
-
-**4. Variable Sharing Implementation (correctness improvement)**
-- Seamless variable sharing between interpreted and compiled code
-- Persistent storage using BEGIN mechanism
-- Maintains proper aliasing semantics
-- Enables examples/life.pl and other mixed-mode programs
-
-**5. Context Detection (correctness improvement)**
-- Proper VOID/SCALAR/LIST context detection for subroutine calls
-- Based on assignment target type
-- Matches Perl semantics for wantarray
-
-**6. SET_SCALAR Opcode (correctness improvement)**
-- Opcode 99: Sets value without overwriting reference
-- Preserves variable aliasing between interpreter and compiled code
-- Critical for shared variable semantics
-
-**7. Phase 5: SLOWOP_* Elimination and Opcode Contiguity (performance optimization)**
-- Removed all 41 SLOWOP_* ID constants from Opcodes.java
-- BytecodeInterpreter now calls SlowOpcodeHandler methods directly (no ID mapping)
-- Eliminated opcode gaps: moved Phase 3 opcodes from 400-402 to 155-157
-- All opcodes now contiguous (0-157) for optimal JVM tableswitch performance
-- Added array operators: slices, compound assignments, multidimensional access
-- Added hash operators: chained access ($hash{outer}{inner})
-- Performance validated: no regression, JIT compilation working correctly
-
-### Future Optimization Opportunities
-
-#### A. Unboxed Int Registers (30-50% potential speedup)
-
-**Problem:** Every integer operation currently boxes/unboxes:
-```java
-// Current (slow):
-registers[rd] = new RuntimeScalar((RuntimeScalar)registers[rs1]).getInt() + 1);
-
-// Proposed (fast):
-intRegisters[rd] = intRegisters[rs1] + 1;  // No boxing!
-```
-
-**Solution:**
-- Maintain parallel `int[] intRegisters` array
-- Track which registers contain unboxed ints
-- Box only when needed (calls, returns, type coercion)
-- Detect loop induction variables for unboxing
-
-**Implementation Steps:**
-1. Add `int[] intRegisters` field to BytecodeInterpreter
-2. Add `boolean[] isUnboxed` tracking array
-3. Add unboxed variants: `INC_REG_UNBOXED`, `ADD_SCALAR_INT_UNBOXED`
-4. BytecodeCompiler detects `my $i` loop variables and emits unboxed opcodes
-5. Box on register use in non-arithmetic contexts
-
-#### B. Inline Caching (30-50% potential speedup)
-
-**Problem:** Every method call, global variable access requires lookup:
-```java
-// Current (slow):
-RuntimeCode code = GlobalVariable.getGlobalCodeRef("main", "foo");  // Hashtable lookup!
-result = code.apply(...);
-```
-
-**Solution:**
-- Cache lookup results at call sites
-- Invalidate on global state changes
-- Polymorphic inline caches for method calls
-
-**Implementation Steps:**
-1. Add `InlineCache[] caches` field to InterpretedCode
-2. Cache structure: `{ String key, RuntimeCode cachedCode, int hitCount }`
-3. Modify CALL_SUB to check cache before lookup
-4. Invalidate caches on `sub foo { ... }` redefinition
-
-#### C. Additional Superinstructions (10-30% potential speedup)
-
-**Candidates:**
-- `SUB_ASSIGN` (83): `r0 = r0 - r1`
-- `MUL_ASSIGN` (84): `r0 = r0 * r1`
-- `DIV_ASSIGN` (85): `r0 = r0 / r1`
-- `ARRAY_GET_INT` (86): `r0 = array[int_index]` (unboxed index)
-- `LOAD_CONST_INT` (87): `r0 = immediate_int` (replace LOAD_INT + constant pool)
-
-**Adding SUB_ASSIGN Example:**
-```java
-// Opcodes.java
-public static final byte SUB_ASSIGN = 83;  // rd = rd - rs
-
-// BytecodeInterpreter.java
-case Opcodes.SUB_ASSIGN: {
-    int rd = bytecode[pc++] & 0xFF;
-    int rs = bytecode[pc++] & 0xFF;
-    registers[rd] = MathOperators.subtract(
-        (RuntimeScalar) registers[rd],
-        (RuntimeScalar) registers[rs]
-    );
-    break;
-}
-```
-
-#### D. Direct Field Access (10-20% potential speedup)
-
-**Problem:** Getter methods add overhead:
-```java
-// Current (slow):
-int value = ((RuntimeScalar) registers[rs]).getInt();  // Method call
-
-// Proposed (fast):
-int value = ((RuntimeScalar) registers[rs]).ivalue;    // Direct field access
-```
-
-**Solution:**
-- Access RuntimeScalar.ivalue, RuntimeScalar.svalue directly
-- Check RuntimeScalar.type first to ensure correct type
-- Only use for hot paths (ADD, SUB, COMPARE)
-
-**Trade-off:** Tight coupling to RuntimeScalar internals (breaks encapsulation).
-
-#### E. Separate Switch for Rare Opcodes (5-10% potential speedup)
-
-See [Dispatch Architecture](#dispatch-architecture--future-cpu-cache-optimization) section above.
-
-#### F. Specialized Loops (20-40% potential speedup)
-
-**Problem:** General dispatch loop has overhead for simple for-loops:
-```perl
-for (my $i = 0; $i < 1000000; $i++) { $sum += $i; }
-```
-
-**Solution:**
-- Detect simple counting loops at compile time
-- Generate specialized tight loop dispatcher
-- Inline loop body opcodes (no switch overhead)
-
-**Detection Criteria:**
-- Loop variable is integer (`my $i`)
-- Loop condition is simple comparison (`$i < N`)
-- Loop increment is `$i++` or `$i += 1`
-- Loop body has <20 opcodes
-
-**Implementation:**
-```java
-// Specialized loop executor (no switch!)
-for (int i = startValue; i < endValue; i++) {
-    // Inline loop body opcodes directly:
-    registers[rd] = MathOperators.add(
-        (RuntimeScalar) registers[sumReg],
-        new RuntimeScalar(i)
-    );
-}
-```
-
-## Runtime Sharing (100% API Compatibility)
-
-### Key Principle: Zero Duplication
-
-The interpreter and compiler share **IDENTICAL runtime APIs**. There is **NO duplicated logic** between the two execution modes.
-
-**Both Use Exactly the Same:**
-- `RuntimeCode.apply()` - Execute subroutines
-- `RuntimeScalar`, `RuntimeArray`, `RuntimeHash` - Data structures
-- `MathOperators`, `StringOperators`, `CompareOperators` - All operators
-- `GlobalVariable` - Global state (scalars, arrays, hashes, code refs)
-- `RuntimeContextType` - Calling context (void/scalar/list/runtime)
-- `RuntimeControlFlowList` - Control flow exceptions (last/next/redo/goto)
-
-### How It Works
-
-**Interpreter:** Direct Java method calls in switch cases
-```java
-case Opcodes.ADD_SCALAR: {
-    int rd = bytecode[pc++] & 0xFF;
-    int rs1 = bytecode[pc++] & 0xFF;
-    int rs2 = bytecode[pc++] & 0xFF;
-    registers[rd] = MathOperators.add(
-        (RuntimeScalar) registers[rs1],
-        (RuntimeScalar) registers[rs2]
-    );
-    break;
-}
-```
-
-**Compiler:** Generated JVM bytecode calls same method
-```java
-// Generated by EmitBinaryOperator.java
-ALOAD leftScalar          // Load first operand
-ALOAD rightScalar         // Load second operand
-INVOKESTATIC org/perlonjava/operators/MathOperators.add(
-    Lorg/perlonjava/runtime/RuntimeScalar;
-    Lorg/perlonjava/runtime/RuntimeScalar;
-)Lorg/perlonjava/runtime/RuntimeScalar;
-ASTORE result            // Store result
-```
-
-**Result:** Identical behavior, same semantics, same global state.
-
-### No Differences In:
-
-- **Method signatures** - Same parameters, same return types
-- **Semantics** - Same type coercion, overloading, context handling
-- **Global state** - Both modify same GlobalVariable.globalScalar, etc.
-- **Error handling** - Same exceptions (DieException, ControlFlowException)
-- **Closure behavior** - Both capture same variables, share same RuntimeScalar refs
-
-### Only Difference: Execution Timing
-
-- **Interpreter**: ~47M ops/sec (consistent, no warmup)
-- **Compiler**: ~82M ops/sec (after JIT warmup)
-
-The interpreter trades raw speed for faster startup and lower memory usage.
-
-### Bidirectional Calling
-
-**Compiled → Interpreted:**
-```perl
-sub compiled_sub {
-    my $code = eval 'sub { my $x = shift; return $x * 2; }';  # Interpreted closure
-    return $code->(21);  # Compiled code calls interpreted code
-}
-```
-
-**Interpreted → Compiled:**
-```perl
-sub compiled_helper { return shift() * 2; }
-
-my $code = eval 'sub {
-    my $x = shift;
-    return compiled_helper($x);  # Interpreted code calls compiled code
-}';
-```
-
-Both work seamlessly because they share the same RuntimeCode.apply() interface.
-
-### Closure Variable Sharing
-
-Closures capture variables as RuntimeScalar references:
-
-```perl
-my $x = 10;
-my $code = sub { $x += 1; return $x; };
-print $code->();  # 11
-print $code->();  # 12
-print $x;         # 12 (shared reference!)
-```
-
-**Compiled closure:**
-- Generates JVM field to hold RuntimeScalar reference
-- Loads field, calls methods on it
-
-**Interpreted closure:**
-- Stores RuntimeScalar reference in closure variables map
-- Retrieves from map, operates on same object
-
-**Result:** Both modify the SAME RuntimeScalar object in memory.
-
-## Development Workflow
-
-### Adding a New Opcode
-
-Follow these steps when adding a new opcode (e.g., a new superinstruction):
-
-#### Step 1: Define Opcode in Opcodes.java
-
-```java
-// Add to appropriate category section
-// Use next sequential number (currently 83+)
-
-/**
- * MUL_ASSIGN: rd = rd * rs
- * Format: [MUL_ASSIGN] [rd] [rs]
- * Effect: Multiplies register rd by register rs, stores result in rd
- */
-public static final byte MUL_ASSIGN = 83;  // rd = rd * rs
-```
-
-**Important:** Maintain dense numbering! No gaps between opcodes to preserve tableswitch optimization.
-
-#### Step 2: Implement in BytecodeInterpreter.java
-
-Add case to main switch statement (around line 62-632):
-
-```java
-case Opcodes.MUL_ASSIGN: {
-    // Decode operands from bytecode
-    int rd = bytecode[pc++] & 0xFF;
-    int rs = bytecode[pc++] & 0xFF;
-
-    // Call appropriate runtime method
-    registers[rd] = MathOperators.multiply(
-        (RuntimeScalar) registers[rd],
-        (RuntimeScalar) registers[rs]
-    );
-    break;
-}
-```
-
-**Pattern:**
-1. Decode operands (increment `pc` for each byte consumed)
-2. Call runtime methods (MathOperators, StringOperators, etc.)
-3. Store result in destination register
-
-#### Step 3: Emit in BytecodeCompiler.java
-
-Add emission logic in appropriate visit() method:
-
-```java
-// In visit(BinaryOperatorNode node) method
-if (node instanceof OperatorNode) {
-    OperatorNode binOp = (OperatorNode) node;
-
-    // Detect pattern: $var = $var * expr
-    if (binOp.left instanceof VariableNode &&
-        binOp.right instanceof BinaryOperatorNode) {
-
-        BinaryOperatorNode rightBin = (BinaryOperatorNode) binOp.right;
-        String leftVarName = ((VariableNode) binOp.left).variableName;
-
-        if (rightBin.left instanceof VariableNode) {
-            String rightLeftVarName = ((VariableNode) rightBin.left).variableName;
-
-            // Pattern match: $var = $var * expr
-            if (leftVarName.equals(rightLeftVarName) &&
-                rightBin.operator.equals("*")) {
-
-                int varReg = getOrAllocateRegister(leftVarName);
-                int rightRightReg = visit(rightBin.right);  // Evaluate right side
-
-                emit(Opcodes.MUL_ASSIGN);
-                emit(varReg);
-                emit(rightRightReg);
-                return varReg;  // Return destination register
-            }
-        }
-    }
-}
-```
-
-#### Step 4: Add to Disassembler (InterpretedCode.java)
-
-Add case to disassemble() switch statement (around line 100-300):
-
-```java
-case Opcodes.MUL_ASSIGN: {
-    int rd = bytecode[pc++] & 0xFF;
-    int rs = bytecode[pc++] & 0xFF;
-    sb.append(String.format("%-20s r%d *= r%d", "MUL_ASSIGN", rd, rs));
-    break;
-}
-```
-
-This enables debugging with `./jperl --disassemble script.pl`.
-
-#### Step 5: Update Documentation
-
-**BYTECODE_DOCUMENTATION.md:**
-```markdown
-### MUL_ASSIGN (83)
-
-**Format:** `[MUL_ASSIGN] [rd] [rs]`
-
-**Effect:** `rd = rd * rs`
-
-**Description:**
-Superinstruction that multiplies destination register by source register.
-Equivalent to ADD_SCALAR followed by MOVE, but eliminates intermediate register.
-
-**Example:**
-```
-MUL_ASSIGN r5 *= r3    # r5 = r5 * r3
-```
-```
-
-**Update opcode count** in all documentation (update to reflect current implemented opcodes: 0-82, 87, 99).
-
-### Adding Support for Existing Perl Operators
-
-When adding support for Perl built-in operators (push, pop, shift, unshift, etc.) that already have opcodes defined:
-
-#### Pattern 1: Binary Operators (push, unshift)
-
-**Parse Structure:** `BinaryOperatorNode` with operator name, left = array variable, right = values
-- Example: `push @array, 1, 2, 3` → BinaryOperatorNode("push", left=@array, right=ListNode)
-
-**Steps:**
-
-1. **Determine if opcode exists** - Check Opcodes.java for the operation
-   - ARRAY_PUSH (44), ARRAY_UNSHIFT (47) already defined
-
-2. **Add case to BytecodeCompiler.visit(BinaryOperatorNode)** - Add to switch statement around line 1000-1400:
-
-```java
-case "push" -> {
-    // Array push: push(@array, values...)
-    // left: OperatorNode("@", IdentifierNode("array"))
-    // right: ListNode with values to push
-
-    // Validate left operand is array variable
-    if (!(node.left instanceof OperatorNode)) {
-        throwCompilerException("push requires array variable");
-    }
-    OperatorNode leftOp = (OperatorNode) node.left;
-    if (!leftOp.operator.equals("@") || !(leftOp.operand instanceof IdentifierNode)) {
-        throwCompilerException("push requires array variable: push @array, values");
-    }
-
-    String varName = "@" + ((IdentifierNode) leftOp.operand).name;
-
-    // Get the array - check lexical first, then global
-    int arrayReg;
-    if (hasVariable(varName)) {
-        // Lexical array
-        arrayReg = getVariableRegister(varName);
-    } else {
-        // Global array - load it
-        arrayReg = allocateRegister();
-        String globalArrayName = getCurrentPackage() + "::" + ((IdentifierNode) leftOp.operand).name;
-        int nameIdx = addToStringPool(globalArrayName);
-        emit(Opcodes.LOAD_GLOBAL_ARRAY);
-        emit(arrayReg);
-        emit(nameIdx);
-    }
-
-    // Evaluate the values to push (right operand)
+// In compileAssignmentOperator(), before error throw:
+if (leftBin.operator.equals("(")) {
+    // Call function (returns RuntimeBaseProxy in lvalue context)
+    node.left.accept(this);
+    int lvalueReg = lastResultReg;
+
+    // Compile RHS
     node.right.accept(this);
-    int valuesReg = lastResultReg;
+    int rhsReg = lastResultReg;
 
-    // Emit ARRAY_PUSH
-    emit(Opcodes.ARRAY_PUSH);
-    emit(arrayReg);
-    emit(valuesReg);
+    // Assign using SET_SCALAR
+    emit(Opcodes.SET_SCALAR);
+    emitReg(lvalueReg);
+    emitReg(rhsReg);
 
-    // Set result register
-    lastResultReg = arrayReg;
+    lastResultReg = rhsReg;
+    currentCallContext = savedContext;
+    return;
 }
 ```
 
-**Important Notes:**
-- Use `getCurrentPackage()` instead of hardcoded `"main::"` for global variables
-- Handle both lexical and global arrays
-- Validate operator structure before processing
+**How It Works:**
+- Lvalue subroutines return RuntimeBaseProxy (extends RuntimeScalar)
+- RuntimeBaseProxy has `lvalue` field pointing to actual mutable location
+- SET_SCALAR calls `.set()` on the proxy, which delegates to the lvalue
+- Example: `substr($x,0,1)` returns proxy to first character of $x
 
-3. **Add case to BytecodeInterpreter.execute()** - If opcode not yet implemented:
-
-```java
-case Opcodes.ARRAY_PUSH: {
-    // Array push: push(@array, value)
-    int arrayReg = bytecode[pc++] & 0xFF;
-    int valueReg = bytecode[pc++] & 0xFF;
-    RuntimeArray arr = (RuntimeArray) registers[arrayReg];
-    RuntimeBase val = registers[valueReg];  // Use RuntimeBase, not RuntimeScalar
-    arr.push(val);  // RuntimeArray.push() can handle RuntimeList
-    break;
-}
-```
-
-**Important:** Use `RuntimeBase` not `RuntimeScalar` for values that might be lists. RuntimeArray.push() handles RuntimeList by calling `value.addToArray()`.
-
-#### Pattern 2: Unary Operators (pop, shift, unaryMinus)
-
-**Parse Structure:** `OperatorNode` with operator name and operand
-- Example: `my $x = pop @array` → OperatorNode("pop", operand=ListNode[@array])
-- Example: `-$x` → OperatorNode("unaryMinus", operand=$x)
-
-**Steps:**
-
-1. **Add case to BytecodeCompiler.visit(OperatorNode)** - Add to if/else chain around line 1900-2100:
-
-```java
-} else if (op.equals("pop")) {
-    // Array pop: $x = pop @array
-    // operand: ListNode containing OperatorNode("@", IdentifierNode)
-    if (node.operand == null || !(node.operand instanceof ListNode)) {
-        throwCompilerException("pop requires array argument");
-    }
-
-    ListNode list = (ListNode) node.operand;
-    if (list.elements.isEmpty() || !(list.elements.get(0) instanceof OperatorNode)) {
-        throwCompilerException("pop requires array variable");
-    }
-
-    OperatorNode arrayOp = (OperatorNode) list.elements.get(0);
-    if (!arrayOp.operator.equals("@") || !(arrayOp.operand instanceof IdentifierNode)) {
-        throwCompilerException("pop requires array variable: pop @array");
-    }
-
-    String varName = "@" + ((IdentifierNode) arrayOp.operand).name;
-
-    // Get the array - check lexical first, then global
-    int arrayReg;
-    if (hasVariable(varName)) {
-        // Lexical array
-        arrayReg = getVariableRegister(varName);
-    } else {
-        // Global array - load it
-        arrayReg = allocateRegister();
-        String globalArrayName = getCurrentPackage() + "::" + ((IdentifierNode) arrayOp.operand).name;
-        int nameIdx = addToStringPool(globalArrayName);
-        emit(Opcodes.LOAD_GLOBAL_ARRAY);
-        emit(arrayReg);
-        emit(nameIdx);
-    }
-
-    // Allocate result register
-    int rd = allocateRegister();
-
-    // Emit ARRAY_POP
-    emit(Opcodes.ARRAY_POP);
-    emit(rd);
-    emit(arrayReg);
-
-    lastResultReg = rd;
-}
-```
-
-For simple unary operators like negation:
-
-```java
-} else if (op.equals("unaryMinus")) {
-    // Unary minus: -$x
-    // Compile operand
-    node.operand.accept(this);
-    int operandReg = lastResultReg;
-
-    // Allocate result register
-    int rd = allocateRegister();
-
-    // Emit NEG_SCALAR
-    emit(Opcodes.NEG_SCALAR);
-    emit(rd);
-    emit(operandReg);
-
-    lastResultReg = rd;
-}
-```
-
-2. **Add case to BytecodeInterpreter.execute()** - If not yet implemented:
-
-```java
-case Opcodes.ARRAY_POP: {
-    // Array pop: rd = pop(@array)
-    int rd = bytecode[pc++] & 0xFF;
-    int arrayReg = bytecode[pc++] & 0xFF;
-    RuntimeArray arr = (RuntimeArray) registers[arrayReg];
-    registers[rd] = RuntimeArray.pop(arr);  // Static method
-    break;
-}
-```
-
-**Important:** Check if the runtime method is static or instance. Most RuntimeArray operations are static methods.
-
-### When to Use SLOW_OP
-
-Some operations are too complex for a dedicated fast opcode or are used infrequently. Use the SLOW_OP mechanism:
-
-**Example: splice operation (SLOWOP_SPLICE)**
-
-1. **Add slow op constant to Opcodes.java:**
-```java
-/** Slow op ID: rd = Operator.splice(array, args_list) - splice array operation */
-public static final int SLOWOP_SPLICE = 28;
-```
-
-2. **Add case to SlowOpcodeHandler.execute():**
-```java
-case Opcodes.SLOWOP_SPLICE:
-    return executeSplice(bytecode, pc, registers);
-```
-
-3. **Implement handler in SlowOpcodeHandler:**
-```java
-private static int executeSplice(
-        byte[] bytecode,
-        int pc,
-        RuntimeBase[] registers) {
-
-    int rd = bytecode[pc++] & 0xFF;
-    int arrayReg = bytecode[pc++] & 0xFF;
-    int argsReg = bytecode[pc++] & 0xFF;
-
-    RuntimeArray array = (RuntimeArray) registers[arrayReg];
-    RuntimeList args = (RuntimeList) registers[argsReg];
-
-    RuntimeList result = org.perlonjava.operators.Operator.splice(array, args);
-
-    registers[rd] = result;
-    return pc;
-}
-```
-
-4. **Update getSlowOpName() in SlowOpcodeHandler:**
-```java
-case Opcodes.SLOWOP_SPLICE -> "splice";
-```
-
-5. **Emit from BytecodeCompiler:**
-```java
-} else if (op.equals("splice")) {
-    // Parse operands, get array register
-    // Compile arguments into a list
-    int argsListReg = allocateRegister();
-    emit(Opcodes.CREATE_LIST);
-    emit(argsListReg);
-    emit(argRegs.size());
-    for (int argReg : argRegs) {
-        emit(argReg);
-    }
-
-    int rd = allocateRegister();
-    emit(Opcodes.SLOW_OP);
-    emit(Opcodes.SLOWOP_SPLICE);
-    emit(rd);
-    emit(arrayReg);
-    emit(argsListReg);
-
-    lastResultReg = rd;
-}
-```
-
-**When to use SLOW_OP:**
-- Operation is rarely used (<1% of execution)
-- Operation requires complex argument handling
-- Operation already has a good runtime implementation in Operator.java
-- Want to preserve fast opcode space (0-99) for hot path operations
-
-**Benefits:**
-- Only uses 1 byte of opcode space (SLOW_OP = 87)
-- Keeps main interpreter switch compact
-- Easy to add without affecting hot path performance
-
-#### Common Patterns and Gotchas
-
-**1. Package Names:**
-- Always use `NameNormalizer.normalizeVariableName()` for global variables, not manual construction
-- Pattern: `String globalName = NameNormalizer.normalizeVariableName(simpleName, getCurrentPackage());`
-- This handles special variables, caching, and proper package resolution
-- Example:
-  ```java
-  // Good:
-  String globalArrayName = NameNormalizer.normalizeVariableName(
-      ((IdentifierNode) leftOp.operand).name,
-      getCurrentPackage()
-  );
-
-  // Avoid:
-  String globalArrayName = getCurrentPackage() + "::" + ((IdentifierNode) leftOp.operand).name;
-  ```
-
-**2. Lexical vs Global Variables:**
-```java
-int arrayReg;
-if (hasVariable(varName)) {
-    // Lexical: already in a register
-    arrayReg = getVariableRegister(varName);
-} else {
-    // Global: need to load it
-    arrayReg = allocateRegister();
-    String globalName = getCurrentPackage() + "::" + simpleName;
-    int nameIdx = addToStringPool(globalName);
-    emit(Opcodes.LOAD_GLOBAL_ARRAY);  // or LOAD_GLOBAL_HASH, LOAD_GLOBAL_SCALAR
-    emit(arrayReg);
-    emit(nameIdx);
-}
-```
-
-**3. Runtime Method Signatures:**
-- Check if methods are static: `RuntimeArray.pop(arr)` not `arr.pop()`
-- Check parameter types: use `RuntimeBase` for values that might be lists
-- Pattern: Look at how the compiler's EmitterVisitor calls the same runtime method
-
-**4. Parse Structure:**
-- Use `./jperl --parse -E 'code'` to see how Perl code is parsed
-- Binary operators: `BinaryOperatorNode(operator, left, right)`
-- Unary operators: `OperatorNode(operator, operand)`
-- Function calls with multiple args: Usually `OperatorNode(name, ListNode(args))`
-
-**5. Error Messages:**
-- Use `throwCompilerException()` for clear error messages
-- Include the expected syntax in the error message
-- Example: `throwCompilerException("push requires array variable: push @array, values")`
-
-#### Testing New Operators
-
-After implementing:
+### 5. Testing New Operators
 
 ```bash
 # Build
 make
 
 # Test manually
-./jperl --interpreter -E 'my @a = (1,2); push @a, 3; say $a[-1]'
+./jperl -E 'my @x = (1,2,3); say +@x'  # Should print 3
 
-# Test disassembly
-./jperl --disassemble -E 'my @a = (1,2); push @a, 3'
+# Test disassembly (verifies PC advancement)
+./jperl --disassemble -E 'my @x; say +@x' 2>&1 | grep UNARY
 
-# Run test file
-./jperl --interpreter src/test/resources/unit/array.t
+# Run unit tests
+make test-unit
+
+# Verify tableswitch preserved
+javap -c -classpath build/classes/java/main \
+  org.perlonjava.interpreter.BytecodeInterpreter | grep -A 5 "switch"
 ```
 
-### Common Parse Structures Reference
+**Must see `tableswitch`, not `lookupswitch`!**
 
-Use `./jperl --parse -E 'code'` to understand how Perl constructs are represented in the AST. Here are common patterns:
-
-#### Array Operations
-
-**Array Slice (read):**
-```perl
-my @slice = @array[1..3];
+**Example output showing tableswitch:**
 ```
-Parse structure:
-```
-BinaryOperatorNode: =
-  OperatorNode: my
-    OperatorNode: @              # Slice uses @ sigil
-      IdentifierNode: 'slice'
-  BinaryOperatorNode: [
-    OperatorNode: @               # Source array with @ sigil
-      IdentifierNode: 'array'
-    ArrayLiteralNode:
-      BinaryOperatorNode: ..      # Range operator
-        NumberNode: 1
-        NumberNode: 3
+   148: tableswitch   { // 0 to 168
+                   0: 840
+                   1: 843
+                   2: 893
+                   3: 909
+                   4: 976
 ```
 
-**Array Slice (assignment):**
-```perl
-@array[1, 3, 5] = (20, 30, 40);
-```
-Parse structure:
-```
-BinaryOperatorNode: =
-  BinaryOperatorNode: [          # Left side is slice expression
-    OperatorNode: @
-      IdentifierNode: 'array'
-    ArrayLiteralNode:            # List of indices
-      NumberNode: 1
-      NumberNode: 3
-      NumberNode: 5
-  ListNode:                      # Right side is values
-    NumberNode: 20
-    NumberNode: 30
-    NumberNode: 40
-```
+**If you see `lookupswitch` instead, you've introduced gaps in opcode numbering!**
 
-**Key differences:**
-- Single element: `$array[1]` uses `$` sigil (OperatorNode: "$")
-- Slice: `@array[1,2,3]` uses `@` sigil (OperatorNode: "@")
-- Slice indices can be a range (`1..3`) or list (`1, 3, 5`)
+### Critical Lessons Learned
 
-#### List Operators with Blocks
+**1. Disassembly is NOT Optional**
+- Missing disassembly cases cause PC misalignment
+- All subsequent bytecode appears corrupted
+- Manifests as "Index N out of bounds" or "Unknown opcode"
+- **Always add disassembly case when adding opcode**
 
-**map:**
-```perl
-my @doubled = map { $_ * 2 } @array;
-```
-Parse structure:
-```
-BinaryOperatorNode: map
-  SubroutineNode:               # Anonymous subroutine (the block)
-    BlockNode:
-      BinaryOperatorNode: *
-        OperatorNode: $
-          IdentifierNode: '_'
-        NumberNode: 2
-  ListNode:                     # Input list
-    OperatorNode: @
-      IdentifierNode: 'array'
-```
+**2. Match Compiler Semantics Exactly**
+- Check EmitterVisitor or runtime methods
+- Don't guess - read the code
+- Example: `local $x` must call `makeLocal()`, not just assign
 
-**grep:**
-```perl
-my @evens = grep { $_ % 2 == 0 } @array;
-```
-Same structure as `map`, with BinaryOperatorNode("grep", SubroutineNode, ListNode)
+**3. Never Hide Problems**
+- Null checks can mask real bugs
+- If registers[N] is null, find why it wasn't initialized
+- Don't paper over the issue
 
-**sort:**
-```perl
-my @sorted = sort { $a <=> $b } @array;
-```
-Same structure, with BinaryOperatorNode("sort", SubroutineNode, ListNode)
+**4. Opcode Contiguity is Performance-Critical**
+- JVM uses tableswitch (O(1)) for dense opcodes
+- Gaps cause lookupswitch (O(log n)) - 10-15% slowdown
+- Always use next sequential number
 
-#### Simple List Operators
+**5. Error Messages Must Include Context**
+- Use `throwCompilerException(message, tokenIndex)`
+- Shows filename, line number, and code snippet
+- Makes debugging 10x easier
 
-**reverse:**
-```perl
-my @reversed = reverse @array;
-```
-Parse structure:
-```
-OperatorNode: reverse
-  ListNode:
-    OperatorNode: @
-      IdentifierNode: 'array'
-```
+## Common Pitfalls
 
-**join:**
-```perl
-my $joined = join ", ", @array;
-```
-Parse structure:
-```
-BinaryOperatorNode: join
-  StringNode: ', '              # Separator (left)
-  ListNode:                     # List to join (right)
-    OperatorNode: @
-      IdentifierNode: 'array'
-```
-
-**splice:**
-```perl
-splice @array, 2, 1, (10, 11);
-```
-Parse structure:
-```
-OperatorNode: splice
-  ListNode:                     # All arguments as list
-    OperatorNode: @             # Array to splice
-      IdentifierNode: 'array'
-    NumberNode: 2               # Offset
-    NumberNode: 1               # Length
-    ListNode:                   # Replacement values
-      NumberNode: 10
-      NumberNode: 11
-```
-
-#### Implementation Patterns by Parse Structure
-
-**Pattern 1: OperatorNode with ListNode operand**
-- Examples: pop, shift, reverse, splice
-- First list element is usually the array
-- Remaining elements are parameters
-- Implementation: Extract array from list, process remaining args
-
-**Pattern 2: BinaryOperatorNode with array left, values right**
-- Examples: push, unshift
-- Left: Array variable (OperatorNode: "@")
-- Right: Values to add (ListNode)
-- Implementation: Get array register, compile values, emit opcode
-
-**Pattern 3: BinaryOperatorNode with block and list**
-- Examples: map, grep, sort
-- Left: SubroutineNode (the code block)
-- Right: ListNode (input data)
-- Implementation: Compile block to closure, compile list, call operator
-
-**Detailed Implementation for Pattern 3 (grep, map, sort):**
-
-1. **AST Structure**: BinaryOperatorNode where:
-   - `left` = SubroutineNode (anonymous sub representing the block)
-   - `right` = ListNode (input data)
-
-2. **BytecodeCompiler Implementation**:
-   ```java
-   case "grep" -> {
-       // Compile SubroutineNode (left operand) to closure
-       // This is handled automatically by visit(SubroutineNode)
-       // Result will be in lastResultReg as a RuntimeScalar containing RuntimeCode
-
-       // rs1 = closure register
-       // rs2 = list register
-
-       emit(Opcodes.GREP);
-       emit(rd);           // Result register
-       emit(rs2);          // List register
-       emit(rs1);          // Closure register
-       emit(RuntimeContextType.LIST);  // Context
-   }
-   ```
-
-3. **BytecodeInterpreter Implementation**:
-   ```java
-   case Opcodes.GREP: {
-       int rd = bytecode[pc++] & 0xFF;
-       int listReg = bytecode[pc++] & 0xFF;
-       int closureReg = bytecode[pc++] & 0xFF;
-       int ctx = bytecode[pc++] & 0xFF;
-
-       RuntimeBase listBase = registers[listReg];
-       RuntimeList list = listBase.getList();
-       RuntimeScalar closure = (RuntimeScalar) registers[closureReg];
-       RuntimeList result = org.perlonjava.operators.ListOperators.grep(list, closure, ctx);
-       registers[rd] = result;
-       break;
-   }
-   ```
-
-4. **Disassembler** (InterpretedCode.java):
-   ```java
-   case Opcodes.GREP:
-       rd = bytecode[pc++] & 0xFF;
-       rs1 = bytecode[pc++] & 0xFF;  // list register
-       rs2 = bytecode[pc++] & 0xFF;  // closure register
-       int grepCtx = bytecode[pc++] & 0xFF;
-       sb.append("GREP r").append(rd).append(" = grep(r").append(rs1)
-         .append(", r").append(rs2).append(", ctx=").append(grepCtx).append(")\n");
-       break;
-   ```
-
-5. **Sort is special**: Uses package name instead of context:
-   ```java
-   emit(Opcodes.SORT);
-   emit(rd);
-   emit(rs2);       // List register
-   emit(rs1);       // Closure register
-   emitInt(addToStringPool(currentPackage));  // Package name (4 bytes)
-   ```
-
-**Pattern 4: BinaryOperatorNode with separator and list**
-- Example: join
-- Left: Separator value
-- Right: ListNode to join
-- Implementation: Compile both operands, emit opcode
-
-#### Step 6: Update Documentation
-
-**BYTECODE_DOCUMENTATION.md:**
-```markdown
-### MUL_ASSIGN (83)
-
-**Format:** `[MUL_ASSIGN] [rd] [rs]`
-
-**Effect:** `rd = rd * rs`
-
-**Description:**
-Superinstruction that multiplies destination register by source register.
-Equivalent to ADD_SCALAR followed by MOVE, but eliminates intermediate register.
-
-**Example:**
-```
-MUL_ASSIGN r5 *= r3    # r5 = r5 * r3
-```
-```
-
-**Update opcode count** in all documentation (update to reflect current implemented opcodes: 0-82, 87, 99).
-
-#### Step 6: Test Thoroughly
-
-**Create Test Case:**
-
-```perl
-# dev/interpreter/tests/mul_assign_test.t
-use strict;
-use warnings;
-use Test::More tests => 3;
-
-my $x = 5;
-$x *= 3;
-is($x, 15, "MUL_ASSIGN: scalar multiplication");
-
-my $y = 10;
-$y *= 2;
-$y *= 2;
-is($y, 40, "MUL_ASSIGN: chained multiplication");
-
-my $z = 7;
-$z *= 0;
-is($z, 0, "MUL_ASSIGN: multiply by zero");
-```
-
-**Run Tests:**
-```bash
-make dev                           # Clean rebuild
-./jperl dev/interpreter/tests/mul_assign_test.t
-make test-unit                     # All unit tests must pass
-```
-
-**Verify Tableswitch:**
-```bash
-javap -c -p -classpath build/classes/java/main \
-      org.perlonjava.interpreter.BytecodeInterpreter | grep -A 5 "switch"
-```
-
-Should see `tableswitch` (not `lookupswitch`). If you see `lookupswitch`, you've introduced a gap in numbering!
-
-**Run Benchmarks:**
-```bash
-./jperl dev/interpreter/tests/for_loop_benchmark.pl
-```
-
-Check that performance hasn't regressed. New superinstruction should improve performance for matching patterns.
-
-### Debugging Tips
-
-**Disassemble Bytecode:**
-```bash
-./jperl --disassemble -E 'my $x = 10; $x *= 2; print $x'
-```
-
-Output shows generated bytecode:
-```
-LOAD_INT r0, 10
-LOAD_INT r1, 2
-MUL_ASSIGN r0 *= r1
-PRINT r0
-```
-
-**Add Debug Logging:**
+**1. Forgetting PC Increment:**
 ```java
-case Opcodes.MUL_ASSIGN: {
-    int rd = bytecode[pc++] & 0xFF;
-    int rs = bytecode[pc++] & 0xFF;
-    System.err.printf("MUL_ASSIGN: r%d *= r%d (before: %s, %s)\n",
-        rd, rs, registers[rd], registers[rs]);
-    registers[rd] = MathOperators.multiply(...);
-    System.err.printf("  after: %s\n", registers[rd]);
-    break;
-}
-```
-
-**Use Java Debugger:**
-```bash
-# Add breakpoint in BytecodeInterpreter.java
-java -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=5005 \
-     -cp build/libs/perlonjava-*-all.jar \
-     org.perlonjava.Main --eval 'my $x = 10; $x *= 2'
-```
-
-### Critical Debugging Patterns (Learned from Array Operators Work)
-
-**1. Bare Blocks vs Loops (For3Node.isSimpleBlock)**
-
-For3Node represents both bare blocks `{ }` and real loops. The `isSimpleBlock` flag distinguishes them:
-- `isSimpleBlock = true`: Execute body once (bare block)
-- `isSimpleBlock = false`: Standard for/while loop
-
-**Bug Pattern:** Ignoring this flag causes infinite loops:
-```java
-// WRONG: Always creates loop bytecode
-@Override
-public void visit(For3Node node) {
-    emitLabel(startLabel);
-    // ... condition check ...
-    node.body.accept(this);
-    emit(Opcodes.GOTO);
-    emitInt(startLabel);  // INFINITE LOOP for bare blocks!
-}
-
-// RIGHT: Check isSimpleBlock first
-@Override
-public void visit(For3Node node) {
-    if (node.isSimpleBlock) {
-        // Bare block: execute once
-        if (node.body != null) {
-            node.body.accept(this);
-        }
-        lastResultReg = -1;
-        return;
-    }
-    // ... rest of loop handling ...
-}
-```
-
-**Location:** BytecodeCompiler.java:3152 (visit method)
-
-**2. Disassembler MUST Skip All Operands**
-
-When adding SLOW_OP operations, the disassembler must read/skip ALL operands or PC becomes misaligned:
-
-```java
-// WRONG: Default case doesn't skip operands
-default:
-    sb.append("SLOW_OP (operands not decoded)");
-    // PC not advanced! Next read will be wrong byte!
-    break;
-
-// RIGHT: Every case must read correct number of operands
-case Opcodes.SLOWOP_SPLIT:
-    rd = bytecode[pc++] & 0xFF;           // Skip rd
-    int patternReg = bytecode[pc++] & 0xFF;  // Skip pattern reg
-    int argsReg = bytecode[pc++] & 0xFF;     // Skip args reg
-    int ctx = bytecode[pc++] & 0xFF;         // Skip context
-    sb.append(" r").append(rd).append(" = split(r")
-      .append(patternReg).append(", r").append(argsReg)
-      .append(", ctx=").append(ctx).append(")");
-    break;
-```
-
-**Error Pattern:** "Index N out of bounds" in disassembler means a SLOW_OP case is missing or not skipping operands.
-
-**Location:** InterpretedCode.java disassemble() method
-
-**3. Scalar Context in Function Arguments (Known Issue)**
-
-Array element access returns wrong value when used directly in function arguments:
-
-```perl
-# WRONG RESULT:
-my @arr = (1, 2, 3);
-is($arr[1], 2, "test");  # gets: 1, expected: 2
-
-# WORKAROUND:
-my $x = $arr[1];
-is($x, 2, "test");  # WORKS: gets: 2, expected: 2
-```
-
-**Root Cause:** Bytecode calls ARRAY_SIZE after ARRAY_GET:
-```
-54: ARRAY_GET r13 = r3[r14]     # Gets element (value 2)
-58: ARRAY_SIZE r15 = size(r13)  # Converts to size (1) - BUG!
-70: CREATE_LIST r18 = [r15, ...] # Passes size instead of element
-```
-
-**Status:** Known issue, not fixed yet. Core array operators work correctly. This is a scalar context handling bug in function argument processing.
-
-**Location:** BytecodeCompiler.java around line 1998-2005 (scalar operator handling)
-
-## Context Propagation (TODO)
-
-**Current Implementation:**
-The interpreter currently handles scalar context by converting values after compilation:
-```java
-// Current approach: Convert after compilation
-node.operand.accept(this);
-int operandReg = lastResultReg;
-emit(Opcodes.ARRAY_SIZE);  // Convert array to size
-```
-
-**Problem:**
-This approach doesn't work for all cases:
-```perl
-my $s = @array;  # Works: emits ARRAY_SIZE
-join(", ", @array);  # Broken: converts @array to size before join sees it
-```
-
-**Better Approach (like codegen):**
-Propagate `RuntimeContextType` through compilation:
-```java
-// Codegen approach: Propagate context
-node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-```
-
-**Implementation Plan:**
-1. Add `currentContext` field to BytecodeCompiler (like EmitterContext.contextType)
-2. Modify `visit()` methods to check `currentContext` and emit appropriate opcodes
-3. For `@` operator in SCALAR context: emit ARRAY_SIZE automatically
-4. For function calls: set context based on prototype/signature
-5. Remove post-compilation conversions
-
-**Benefits:**
-- Handles all Perl context semantics correctly
-- Matches codegen behavior exactly
-- Cleaner architecture - context flows naturally through AST
-
-**Files to Modify:**
-- BytecodeCompiler.java: Add context tracking and propagation
-- visit(OperatorNode) for "@": Check context, emit ARRAY_SIZE if scalar
-- visit(BinaryOperatorNode) for "=": Set RHS context based on LHS type
-- Function calls: Propagate correct context to arguments
-
-### Common Pitfalls
-
-**1. Forgetting to Increment PC:**
-```java
-// WRONG: pc not incremented, will read same byte forever!
-case Opcodes.MUL_ASSIGN: {
-    int rd = bytecode[pc] & 0xFF;  // Missing pc++
-    int rs = bytecode[pc] & 0xFF;  // Missing pc++
-    ...
-}
+// WRONG: Infinite loop!
+int rd = bytecode[pc] & 0xFF;
 
 // RIGHT:
-int rd = bytecode[pc++] & 0xFF;
-int rs = bytecode[pc++] & 0xFF;
+int rd = bytecode[pc++];
 ```
 
-**2. Creating Gaps in Opcode Numbering:**
+**2. Opcode Gaps:**
 ```java
-// WRONG: Gap between 82 and 90 breaks tableswitch!
-public static final byte LOOP_PLUS_PLUS = 82;
-public static final byte MUL_ASSIGN = 90;  // Gap!
+// WRONG: Breaks tableswitch!
+public static final short OP_A = 82;
+public static final short OP_B = 90;  // Gap!
 
-// RIGHT: Sequential numbering
-public static final byte LOOP_PLUS_PLUS = 82;
-public static final byte MUL_ASSIGN = 83;  // No gap
+// RIGHT:
+public static final short OP_A = 82;
+public static final short OP_B = 83;  // Sequential
 ```
 
-**3. Incorrect Type Casting:**
+**3. Missing Disassembly:**
 ```java
-// WRONG: ClassCastException if register contains RuntimeArray!
-RuntimeScalar scalar = (RuntimeScalar) registers[rd];
+// WRONG: Causes PC misalignment!
+default:
+    sb.append("UNKNOWN\n");  // Doesn't read operands!
+    break;
 
-// RIGHT: Check type or use safe casting
-if (registers[rd] instanceof RuntimeScalar) {
-    RuntimeScalar scalar = (RuntimeScalar) registers[rd];
-    ...
-}
+// RIGHT: Every opcode must read its operands
+case Opcodes.MY_OP:
+    int rd = bytecode[pc++];
+    int rs = bytecode[pc++];
+    sb.append("MY_OP r").append(rd).append(", r").append(rs).append("\n");
+    break;
 ```
 
-**4. Not Handling Context:**
+## JIT Compilation Limit
+
+**Critical:** JVM refuses to JIT-compile methods >~8000 bytes, causing 5-10x slowdown.
+
+**Solution:** Delegate cold opcodes to secondary methods:
+- `executeComparisons()` - Comparison ops (31-41)
+- `executeArithmetic()` - Multiply, divide, compound (19-30, 110-113)
+- `executeCollections()` - Array/hash ops (43-56, 93-96)
+- `executeTypeOps()` - Type/reference ops (62-70, 102-105)
+
+**Monitor:** Run `dev/tools/check-bytecode-size.sh` after changes.
+
+## Performance Targets
+
+- **Current:** 46.84M ops/sec (1.75x slower than compiler ✓)
+- **Target:** 2-5x slower than compiler
+- **Compiler:** ~82M ops/sec (after JIT warmup)
+
+**Trade-off:** Slower execution for faster startup and lower memory.
+
+## Runtime Sharing (100% API Compatibility)
+
+Interpreter and compiler call **identical** runtime methods:
+- MathOperators, StringOperators, CompareOperators
+- RuntimeScalar, RuntimeArray, RuntimeHash
+- RuntimeCode.apply(), GlobalVariable
+- No duplicated logic whatsoever
+
+**Example:**
 ```java
-// WRONG: Ignores void/scalar/list context
-result = code.apply(args, RuntimeContextType.SCALAR);  // Always scalar!
+// Interpreter: Direct call
+registers[rd] = MathOperators.add(registers[rs1], registers[rs2]);
 
-// RIGHT: Propagate context from current execution
-result = code.apply(args, currentContext);
+// Compiler: Generated bytecode calls same method
+INVOKESTATIC org/perlonjava/operators/MathOperators.add(...)
 ```
 
-### Maintaining Dense Opcodes
+## Variable Sharing
 
-**Critical Rule:** Opcodes must be dense (no gaps) to preserve tableswitch optimization.
+**Captured Variables:**
+- Named subroutines can capture outer variables
+- Use persistent storage: `PerlOnJava::_BEGIN_<id>::varname`
+- SET_SCALAR preserves references (doesn't overwrite)
+- Both modes access same RuntimeScalar object
 
-**When adding opcodes:**
-- Use next sequential number (current max is 82, so use 83, 84, 85, ...)
-- Never skip numbers
-- Never delete opcodes without renumbering
-
-**If you must remove an opcode:**
-1. Renumber all subsequent opcodes to close the gap
-2. Update all references (Opcodes.java, BytecodeInterpreter.java, InterpretedCode.java)
-3. Run full test suite to catch missed references
-
-**Verify tableswitch after changes:**
-```bash
-javap -c -p -classpath build/classes/java/main \
-      org.perlonjava.interpreter.BytecodeInterpreter | grep "switch"
+**Example:**
+```perl
+my $x = 10;
+sub foo { return $x * 2; }  # Compiled, captures $x
+$x = 20;                     # Interpreted
+say foo();                   # 40 (sees updated value)
 ```
 
-### Performance Testing
+## Documentation
 
-After any change to BytecodeInterpreter.java or Opcodes.java:
-
-1. **Run benchmark:**
-   ```bash
-   ./jperl dev/interpreter/tests/for_loop_benchmark.pl
-   ```
-
-2. **Compare results:**
-   - Before: 46.84M ops/sec
-   - After: Should be ≥46.84M ops/sec (no regression)
-   - New superinstruction: Should show improvement for matching patterns
-
-3. **Check JIT compilation:**
-   Look for "made not entrant" or "made zombie" messages indicating deoptimization.
-
-## Next Steps
-
-### High Priority
-
-1. **Test Coverage for Variable Sharing**
-   - Add more test cases for mixed interpreter/compiled scenarios
-   - Test edge cases: array elements, hash elements, references
-   - Test nested subroutines and complex capture patterns
-
-2. **Performance Optimization**
-   - Profile examples/life.pl to identify hot paths
-   - Consider unboxed int registers for loop counters
-   - Evaluate inline caching opportunities for global variable access
-
-3. **Error Handling Improvements**
-   - Ensure all compiler errors use throwCompilerException with proper tokenIndex
-   - Add error context for common mistakes (undefined variables, type mismatches)
-   - Improve error messages for bytecode generation failures
-
-### Medium Priority
-
-4. **Additional Slow Operations**
-   - Implement remaining system call opcodes (currently 19/255 used)
-   - Socket operations, file locking, IPC primitives
-   - Keep main loop compact by using SLOW_OP gateway
-
-5. **More Superinstructions**
-   - `SUB_ASSIGN`, `MUL_ASSIGN`, `DIV_ASSIGN` for compound assignments
-   - `ARRAY_GET_INT` with unboxed index for faster array access
-   - Profile to identify most common operation patterns
-
-6. **Documentation Updates**
-   - Update BYTECODE_DOCUMENTATION.md with SET_SCALAR and variable sharing
-   - Add examples of mixed interpreter/compiled programs
-   - Document best practices for performance
-
-### Low Priority
-
-7. **Specialized Loop Dispatcher**
-   - Detect simple counting loops at compile time
-   - Generate tight loop with inlined body (no switch overhead)
-   - Could provide 20-40% speedup for numeric loops
-
-8. **Direct Field Access**
-   - Access RuntimeScalar.ivalue/svalue directly instead of getters
-   - Trade-off: Breaks encapsulation but 10-20% faster
-   - Consider only for verified hot paths
-
-9. **Unboxed Register Optimization**
-   - Parallel int[] intRegisters array for unboxed integers
-   - Track which registers are unboxed
-   - Box only when needed (calls, returns, type coercion)
-   - Potential 30-50% speedup for numeric code
-
-## Summary
-
-The PerlOnJava interpreter is a production-ready, high-performance bytecode interpreter that:
-
-- **Executes Perl bytecode** at 46.84M ops/sec (1.75x slower than compiler)
-- **Shares 100% of runtime APIs** with the compiler (zero duplication)
-- **Supports closures** and bidirectional calling (compiled ↔ interpreted)
-- **Shares variables** between interpreter and compiled code with proper aliasing
-- **Uses dense opcodes** (0-99) for optimal JVM tableswitch dispatch
-- **Implements superinstructions** to eliminate overhead
-- **Detects context** (VOID/SCALAR/LIST) for proper wantarray semantics
-- **Reports errors** with accurate filename and line numbers
-
-**Recent Achievements (Phase 4):**
-- ✅ Variable sharing implementation (PR #191)
-- ✅ SET_SCALAR opcode for reference preservation
-- ✅ Context detection for subroutine calls
-- ✅ SLOWOP_RETRIEVE_BEGIN_* opcodes for persistent variables
-- ✅ examples/life.pl now runs correctly in interpreter mode
-
-Future optimizations (unboxed ints, inline caching, specialized loops) can potentially reach 1.2-1.5x slower than compiler while maintaining the benefits of interpretation.
-
-For questions or contributions, refer to:
-- **STATUS.md** - Current implementation status
+- **STATUS.md** - Implementation status
 - **TESTING.md** - Testing procedures
 - **BYTECODE_DOCUMENTATION.md** - Complete opcode reference
 - **CLOSURE_IMPLEMENTATION_COMPLETE.md** - Closure architecture
-- **SKILL.md** (this file) - Developer guide and next steps
+- **SKILL.md** (this file) - Developer guide
 
-Happy hacking!
+## Next Steps
+
+**High Priority:**
+1. Complete missing disassembly cases (opcodes 62+)
+2. Test coverage for variable sharing edge cases
+3. Profile and optimize hot paths
+
+**Medium Priority:**
+4. Implement remaining slow operations (22/255 used)
+5. Add more superinstructions (compound assignments)
+6. Context propagation (like codegen's EmitterContext)
+
+**Low Priority:**
+7. Unboxed int registers (30-50% potential speedup)
+8. Inline caching for method calls/globals
+9. Specialized loop dispatcher
+
+## Summary
+
+The interpreter is production-ready with:
+- ✓ 46.84M ops/sec execution
+- ✓ 100% runtime API sharing
+- ✓ Closure and bidirectional calling support
+- ✓ Variable sharing with proper aliasing
+- ✓ Dense opcodes (0-157) for tableswitch
+- ✓ Context detection (VOID/SCALAR/LIST)
+- ✓ Accurate error reporting with filename/line
+
+**Key Learning:** Disassembly completeness is as important as runtime implementation. Missing disassembly cases corrupt PC and make debugging impossible.

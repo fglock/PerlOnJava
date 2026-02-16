@@ -208,6 +208,55 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.STORE_GLOBAL_ARRAY: {
+                        // Store global array: GlobalVariable.getGlobalArray(name).setFromList(list)
+                        int nameIdx = bytecode[pc++];
+                        int srcReg = bytecode[pc++];
+                        String name = code.stringPool[nameIdx];
+
+                        RuntimeArray globalArray = GlobalVariable.getGlobalArray(name);
+                        RuntimeBase value = registers[srcReg];
+
+                        if (value == null) {
+                            // Output disassembly around the error
+                            String disasm = code.disassemble();
+                            throw new PerlCompilerException("STORE_GLOBAL_ARRAY: Register r" + srcReg +
+                                " is null when storing to @" + name + " at pc=" + (pc-3) + "\n\nDisassembly:\n" + disasm);
+                        }
+
+                        // Clear and populate the global array from the source
+                        if (value instanceof RuntimeArray) {
+                            globalArray.elements.clear();
+                            globalArray.elements.addAll(((RuntimeArray) value).elements);
+                        } else if (value instanceof RuntimeList) {
+                            globalArray.setFromList((RuntimeList) value);
+                        } else {
+                            globalArray.setFromList(value.getList());
+                        }
+                        break;
+                    }
+
+                    case Opcodes.STORE_GLOBAL_HASH: {
+                        // Store global hash: GlobalVariable.getGlobalHash(name).setFromList(list)
+                        int nameIdx = bytecode[pc++];
+                        int srcReg = bytecode[pc++];
+                        String name = code.stringPool[nameIdx];
+
+                        RuntimeHash globalHash = GlobalVariable.getGlobalHash(name);
+                        RuntimeBase value = registers[srcReg];
+
+                        // Clear and populate the global hash from the source
+                        if (value instanceof RuntimeHash) {
+                            globalHash.elements.clear();
+                            globalHash.elements.putAll(((RuntimeHash) value).elements);
+                        } else if (value instanceof RuntimeList) {
+                            globalHash.setFromList((RuntimeList) value);
+                        } else {
+                            globalHash.setFromList(value.getList());
+                        }
+                        break;
+                    }
+
                     case Opcodes.LOAD_GLOBAL_ARRAY: {
                         // Load global array: rd = GlobalVariable.getGlobalArray(name)
                         int rd = bytecode[pc++];
@@ -468,6 +517,8 @@ public class BytecodeInterpreter {
                     case Opcodes.NE_NUM:
                     case Opcodes.LT_NUM:
                     case Opcodes.GT_NUM:
+                    case Opcodes.LE_NUM:
+                    case Opcodes.GE_NUM:
                     case Opcodes.EQ_STR:
                     case Opcodes.NE_STR:
                     case Opcodes.NOT:
@@ -482,6 +533,8 @@ public class BytecodeInterpreter {
                     case Opcodes.REF:
                     case Opcodes.BLESS:
                     case Opcodes.ISA:
+                    case Opcodes.PROTOTYPE:
+                    case Opcodes.QUOTE_REGEX:
                         pc = executeTypeOps(opcode, bytecode, pc, registers, code);
                         break;
 
@@ -1063,6 +1116,76 @@ public class BytecodeInterpreter {
                         int immediate = readInt(bytecode, pc);
                         pc += 2;
                         registers[rd] = MathOperators.add((RuntimeScalar) registers[rd], immediate);
+                        break;
+                    }
+
+                    case Opcodes.STRING_CONCAT_ASSIGN: {
+                        // String concatenation and assign: rd .= rs
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        registers[rd] = StringOperators.stringConcat(
+                            (RuntimeScalar) registers[rd],
+                            (RuntimeScalar) registers[rs]
+                        );
+                        break;
+                    }
+
+                    case Opcodes.PUSH_LOCAL_VARIABLE: {
+                        // Push variable to local stack: DynamicVariableManager.pushLocalVariable(rs)
+                        int rs = bytecode[pc++];
+                        org.perlonjava.runtime.DynamicVariableManager.pushLocalVariable(registers[rs]);
+                        break;
+                    }
+
+                    case Opcodes.STORE_GLOB: {
+                        // Store to glob: glob.set(value)
+                        int globReg = bytecode[pc++];
+                        int valueReg = bytecode[pc++];
+                        ((org.perlonjava.runtime.RuntimeGlob) registers[globReg]).set((RuntimeScalar) registers[valueReg]);
+                        break;
+                    }
+
+                    case Opcodes.OPEN: {
+                        // Open file: rd = IOOperator.open(ctx, args...)
+                        int rd = bytecode[pc++];
+                        int ctx = bytecode[pc++];
+                        int argsReg = bytecode[pc++];
+                        RuntimeArray argsArray = (RuntimeArray) registers[argsReg];
+                        RuntimeBase[] argsVarargs = argsArray.elements.toArray(new RuntimeBase[0]);
+                        registers[rd] = org.perlonjava.operators.IOOperator.open(ctx, argsVarargs);
+                        break;
+                    }
+
+                    case Opcodes.READLINE: {
+                        // Read line from filehandle: rd = Readline.readline(fh_ref, ctx)
+                        int rd = bytecode[pc++];
+                        int fhReg = bytecode[pc++];
+                        int ctx = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.Readline.readline(
+                            (RuntimeScalar) registers[fhReg], ctx
+                        );
+                        break;
+                    }
+
+                    case Opcodes.MATCH_REGEX: {
+                        // Match regex: rd = RuntimeRegex.matchRegex(string, regex, ctx)
+                        int rd = bytecode[pc++];
+                        int stringReg = bytecode[pc++];
+                        int regexReg = bytecode[pc++];
+                        int ctx = bytecode[pc++];
+                        registers[rd] = org.perlonjava.regex.RuntimeRegex.matchRegex(
+                            (RuntimeScalar) registers[stringReg],
+                            (RuntimeScalar) registers[regexReg],
+                            ctx
+                        );
+                        break;
+                    }
+
+                    case Opcodes.CHOMP: {
+                        // Chomp: rd = rs.chomp()
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        registers[rd] = registers[rs].chomp();
                         break;
                     }
 
@@ -1739,6 +1862,27 @@ public class BytecodeInterpreter {
                 return pc;
             }
 
+            case Opcodes.PROTOTYPE: {
+                int rd = bytecode[pc++];
+                int rs = bytecode[pc++];
+                int packageIdx = readInt(bytecode, pc);
+                pc += 2;  // readInt reads 2 shorts
+                RuntimeScalar codeRef = (RuntimeScalar) registers[rs];
+                String packageName = code.stringPool[packageIdx];
+                registers[rd] = RuntimeCode.prototype(codeRef, packageName);
+                return pc;
+            }
+
+            case Opcodes.QUOTE_REGEX: {
+                int rd = bytecode[pc++];
+                int patternReg = bytecode[pc++];
+                int flagsReg = bytecode[pc++];
+                RuntimeScalar pattern = (RuntimeScalar) registers[patternReg];
+                RuntimeScalar flags = (RuntimeScalar) registers[flagsReg];
+                registers[rd] = org.perlonjava.regex.RuntimeRegex.getQuotedRegex(pattern, flags);
+                return pc;
+            }
+
             default:
                 throw new RuntimeException("Unknown type opcode: " + opcode);
         }
@@ -2178,6 +2322,32 @@ public class BytecodeInterpreter {
                 RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
                 RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
                 registers[rd] = CompareOperators.greaterThan(s1, s2);
+                return pc;
+            }
+
+            case Opcodes.LE_NUM: {
+                // Less than or equal: rd = (rs1 <= rs2)
+                int rd = bytecode[pc++];
+                int rs1 = bytecode[pc++];
+                int rs2 = bytecode[pc++];
+                RuntimeBase val1 = registers[rs1];
+                RuntimeBase val2 = registers[rs2];
+                RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+                registers[rd] = CompareOperators.lessThanOrEqual(s1, s2);
+                return pc;
+            }
+
+            case Opcodes.GE_NUM: {
+                // Greater than or equal: rd = (rs1 >= rs2)
+                int rd = bytecode[pc++];
+                int rs1 = bytecode[pc++];
+                int rs2 = bytecode[pc++];
+                RuntimeBase val1 = registers[rs1];
+                RuntimeBase val2 = registers[rs2];
+                RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+                registers[rd] = CompareOperators.greaterThanOrEqual(s1, s2);
                 return pc;
             }
 

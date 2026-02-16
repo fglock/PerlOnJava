@@ -654,11 +654,12 @@ public class SubroutineParser {
             codeRef.value = new RuntimeCode(subName, attributes);
         }
 
-        RuntimeCode code = (RuntimeCode) codeRef.value;
-        code.prototype = prototype;
-        code.attributes = attributes;
-        code.subName = subName;
-        code.packageName = parser.ctx.symbolTable.getCurrentPackage();
+        // Initialize placeholder metadata (accessed via codeRef.value)
+        RuntimeCode placeholder = (RuntimeCode) codeRef.value;
+        placeholder.prototype = prototype;
+        placeholder.attributes = attributes;
+        placeholder.subName = subName;
+        placeholder.packageName = parser.ctx.symbolTable.getCurrentPackage();
 
         // Optimization - https://github.com/fglock/PerlOnJava/issues/8
         // Prepare capture variables
@@ -781,38 +782,77 @@ public class SubroutineParser {
                 new RuntimeArray()
         );
 
-        // Encapsulate the subroutine creation task in a Supplier
+        // Hybrid lazy/eager compilation approach:
+        // - Keep lazy compilation for normal code (preserves test compatibility)
+        // - The Supplier tries createRuntimeCode() which handles both normal compilation and interpreter fallback
+        // - For InterpretedCode, we replace codeRef.value (not just code fields)
+
         Supplier<Void> subroutineCreationTaskSupplier = () -> {
-            // Generate bytecode and load into a Class object
-            Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(newCtx, block, false);
+            // Try unified API (returns RuntimeCode - either CompiledCode or InterpretedCode)
+            org.perlonjava.runtime.RuntimeCode runtimeCode =
+                EmitterMethodCreator.createRuntimeCode(newCtx, block, false);
 
             try {
-                // Prepare constructor with the captured variable types
-                Class<?>[] parameterTypes = classList.toArray(new Class<?>[0]);
-                Constructor<?> constructor = generatedClass.getConstructor(parameterTypes);
+                if (runtimeCode instanceof org.perlonjava.codegen.CompiledCode) {
+                    // CompiledCode path - fill in the existing placeholder
+                    org.perlonjava.codegen.CompiledCode compiledCode =
+                        (org.perlonjava.codegen.CompiledCode) runtimeCode;
+                    Class<?> generatedClass = compiledCode.generatedClass;
 
-                // Instantiate the subroutine with the captured variables
-                Object[] parameters = paramList.toArray();
-                code.codeObject = constructor.newInstance(parameters);
+                    // Prepare constructor with the captured variable types
+                    Class<?>[] parameterTypes = classList.toArray(new Class<?>[0]);
+                    Constructor<?> constructor = generatedClass.getConstructor(parameterTypes);
 
-                // Retrieve the 'apply' method from the generated class
-                code.methodHandle = RuntimeCode.lookup.findVirtual(generatedClass, "apply", RuntimeCode.methodType);
+                    // Instantiate the subroutine with the captured variables
+                    Object[] parameters = paramList.toArray();
+                    placeholder.codeObject = constructor.newInstance(parameters);
 
-                // Set the __SUB__ instance field to codeRef
-                Field field = code.codeObject.getClass().getDeclaredField("__SUB__");
-                field.set(code.codeObject, codeRef);
+                    // Retrieve the 'apply' method from the generated class
+                    placeholder.methodHandle = RuntimeCode.lookup.findVirtual(generatedClass, "apply", RuntimeCode.methodType);
+
+                    // Set the __SUB__ instance field to codeRef
+                    Field field = placeholder.codeObject.getClass().getDeclaredField("__SUB__");
+                    field.set(placeholder.codeObject, codeRef);
+
+                } else if (runtimeCode instanceof org.perlonjava.interpreter.InterpretedCode) {
+                    // InterpretedCode path - replace codeRef.value entirely
+                    org.perlonjava.interpreter.InterpretedCode interpretedCode =
+                        (org.perlonjava.interpreter.InterpretedCode) runtimeCode;
+
+                    // Set captured variables if there are any
+                    if (!paramList.isEmpty()) {
+                        Object[] parameters = paramList.toArray();
+                        org.perlonjava.runtime.RuntimeBase[] capturedVars =
+                            new org.perlonjava.runtime.RuntimeBase[parameters.length];
+                        for (int i = 0; i < parameters.length; i++) {
+                            capturedVars[i] = (org.perlonjava.runtime.RuntimeBase) parameters[i];
+                        }
+                        interpretedCode = interpretedCode.withCapturedVars(capturedVars);
+                    }
+
+                    // Copy metadata from the placeholder
+                    interpretedCode.prototype = placeholder.prototype;
+                    interpretedCode.attributes = placeholder.attributes;
+                    interpretedCode.subName = placeholder.subName;
+                    interpretedCode.packageName = placeholder.packageName;
+
+                    // REPLACE the global reference
+                    codeRef.value = interpretedCode;
+                }
             } catch (Exception e) {
                 // Handle any exceptions during subroutine creation
                 throw new PerlCompilerException("Subroutine error: " + e.getMessage());
             }
 
-            // Clear the compilerThread once done
-            code.compilerSupplier = null;
+            // Clear the compilerSupplier once done (use the captured placeholder variable)
+            // This prevents the Supplier from being invoked multiple times
+            placeholder.compilerSupplier = null;
             return null;
         };
 
-        // Store the supplier for later execution
-        code.compilerSupplier = subroutineCreationTaskSupplier;
+        // Store the supplier in the placeholder
+        RuntimeCode placeholderForSupplier = (RuntimeCode) codeRef.value;
+        placeholderForSupplier.compilerSupplier = subroutineCreationTaskSupplier;
 
 
         // return an empty AST list
