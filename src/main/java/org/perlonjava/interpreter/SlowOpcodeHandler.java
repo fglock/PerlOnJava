@@ -16,6 +16,18 @@ import org.perlonjava.runtime.*;
  *   <li>Preserves valuable opcode space (88-255) for future fast operations</li>
  * </ul>
  *
+ * <h2>TODO: Deprecate This Class</h2>
+ * <p><strong>This architecture is scheduled for deprecation.</strong> All methods in this class
+ * are compatible with range-based delegation (like BytecodeInterpreter.executeComparisons()).
+ * Future refactoring will:</p>
+ * <ul>
+ *   <li>Convert SLOWOP operations to direct opcodes (114-127, negative range)</li>
+ *   <li>Move methods to BytecodeInterpreter with range-based delegation</li>
+ *   <li>Delete this file completely</li>
+ * </ul>
+ * <p>Benefits: -1 byte per operation, -1 indirection, consistent architecture.</p>
+ * <p><strong>See:</strong> dev/prompts/TODO_DEPRECATE_SLOW_OP.md for migration plan</p>
+ *
  * <h2>Bytecode Format</h2>
  * <pre>
  * [SLOW_OP] [slow_op_id] [operands...]
@@ -53,6 +65,7 @@ import org.perlonjava.runtime.*;
  * @see Opcodes#SLOW_OP
  * @see Opcodes#SLOWOP_CHOWN
  * @see BytecodeInterpreter
+ * @deprecated Scheduled for removal. Will be replaced with direct opcodes and range-based delegation.
  */
 public class SlowOpcodeHandler {
 
