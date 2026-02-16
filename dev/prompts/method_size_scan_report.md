@@ -3,6 +3,7 @@
 **Date**: 2026-02-16
 **Tool**: `dev/tools/scan-all-method-sizes.sh`
 **JVM Limit**: ~8000 bytes (methods larger than this won't JIT-compile)
+**Last Update**: 2026-02-16 - Phase 1 short opcodes migration complete
 
 ## Summary
 
@@ -114,6 +115,15 @@ Total methods analyzed: **4,013**
    - Extracted `compileVariableDeclaration()` for my/our/local handling
    - Extracted `compileVariableReference()` for sigil operators
    - Improves eval STRING and script startup compilation speed
+
+4. ✅ **Phase 1: Short Opcodes Migration** - Complete (2026-02-16)
+   - Changed opcode type from `byte` to `short` in Opcodes.java
+   - Updated BytecodeCompiler emit methods to accept short
+   - Unlocked 32,768 opcode space (from 256 slots)
+   - Room for 200+ OperatorHandler promotions + 41 SLOW_OP operations
+   - All methods remain under 8000-byte limit
+   - All unit tests passing
+   - Zero performance impact (infrastructure already used short internally)
 
 ### Future Improvements
 
