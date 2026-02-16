@@ -340,9 +340,20 @@ public class GlobalVariable {
         
         // Check if it's a user-defined subroutine
         RuntimeScalar var = globalCodeRefs.get(key);
+        System.err.println("DEBUG definedGlobalCodeRefAsScalar: key=" + key + ", var=" + var);
+        if (var != null) {
+            System.err.println("DEBUG definedGlobalCodeRefAsScalar: var.type=" + var.type + ", var.value=" + var.value);
+            System.err.println("DEBUG definedGlobalCodeRefAsScalar: var.value class=" + (var.value != null ? var.value.getClass().getName() : "null"));
+        }
         if (var != null && var.type == RuntimeScalarType.CODE && var.value instanceof RuntimeCode runtimeCode) {
             // Check if the subroutine has actual implementation (not just a placeholder)
-            return (runtimeCode.methodHandle != null || runtimeCode.compilerSupplier != null || runtimeCode.isBuiltin) ? scalarTrue : scalarFalse;
+            System.err.println("DEBUG definedGlobalCodeRefAsScalar: runtimeCode=" + runtimeCode);
+            System.err.println("DEBUG definedGlobalCodeRefAsScalar: methodHandle=" + runtimeCode.methodHandle);
+            System.err.println("DEBUG definedGlobalCodeRefAsScalar: compilerSupplier=" + runtimeCode.compilerSupplier);
+            System.err.println("DEBUG definedGlobalCodeRefAsScalar: isBuiltin=" + runtimeCode.isBuiltin);
+            boolean result = (runtimeCode.methodHandle != null || runtimeCode.compilerSupplier != null || runtimeCode.isBuiltin);
+            System.err.println("DEBUG definedGlobalCodeRefAsScalar: result=" + result);
+            return result ? scalarTrue : scalarFalse;
         }
         return scalarFalse;
     }
