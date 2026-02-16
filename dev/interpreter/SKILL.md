@@ -60,6 +60,65 @@ PRINT r2                 # print r2
 - Interpreter: ~47M ops/sec (consistent, no warmup needed)
 - Trade-off: Slower execution for faster startup and lower memory
 
+### JIT Compilation Limit & Method Size Management
+
+**Critical Constraint:** The JVM refuses to JIT-compile methods larger than ~8000 bytes (controlled by `-XX:DontCompileHugeMethods`). When methods exceed this limit, they run in **interpreted mode**, causing 5-10x performance degradation.
+
+**Architecture: Range-Based Delegation**
+
+To keep the main `execute()` method under the JIT limit, cold-path opcodes are delegated to secondary methods:
+
+1. **executeComparisons()** - Comparison and logical operators (opcodes 31-41)
+   - COMPARE_NUM, COMPARE_STR, EQ_NUM, NE_NUM, LT_NUM, GT_NUM, EQ_STR, NE_STR, NOT
+   - Size: ~1089 bytes
+
+2. **executeArithmetic()** - Multiply, divide, and compound assignments (opcodes 19-30, 110-113)
+   - MUL_SCALAR, DIV_SCALAR, MOD_SCALAR, POW_SCALAR, NEG_SCALAR, CONCAT, REPEAT, LENGTH
+   - SUBTRACT_ASSIGN, MULTIPLY_ASSIGN, DIVIDE_ASSIGN, MODULUS_ASSIGN
+   - Size: ~1057 bytes
+
+3. **executeCollections()** - Array and hash operations (opcodes 43-49, 51-56, 93-96)
+   - ARRAY_SET, ARRAY_PUSH, ARRAY_POP, HASH_SET, HASH_EXISTS, HASH_DELETE, etc.
+   - Size: ~1025 bytes
+
+4. **executeTypeOps()** - Type and reference operations (opcodes 62-70, 102-105)
+   - DEFINED, REF, BLESS, ISA, CREATE_LAST, CREATE_NEXT, CREATE_REDO, CREATE_REF, DEREF
+   - Size: ~929 bytes
+
+**Hot-Path Opcodes (Kept Inline):**
+- Control flow: NOP, RETURN, GOTO, GOTO_IF_FALSE, GOTO_IF_TRUE
+- Register ops: MOVE, LOAD_CONST, LOAD_INT, LOAD_STRING, LOAD_UNDEF
+- Core arithmetic: ADD_SCALAR, SUB_SCALAR (used by loops)
+- Iteration: ITERATOR_CREATE, ITERATOR_HAS_NEXT, ITERATOR_NEXT, FOREACH_NEXT_OR_EXIT
+- Essential access: ARRAY_GET, HASH_GET
+
+**Current Sizes:**
+- Main execute(): 7270 bytes (under 7500-byte safe limit ✓)
+- All secondary methods: <1100 bytes each ✓
+
+**Enforcement:**
+
+Run `dev/tools/check-bytecode-size.sh` after changes to verify all methods stay under limit:
+
+```bash
+./dev/tools/check-bytecode-size.sh
+```
+
+This script checks all 5 methods (main execute + 4 secondary) and fails the build if any exceeds 7500 bytes.
+
+**If Methods Grow Too Large:**
+
+1. Move more opcodes from main execute() to secondary methods
+2. Split large secondary methods into smaller groups
+3. Keep hot-path opcodes (loops, basic arithmetic) inline for zero overhead
+4. Delegate cold-path opcodes (rare operations) to minimize cost
+
+**Performance Impact:**
+
+- Hot-path opcodes: Zero overhead (inline in main switch)
+- Cold-path opcodes: One static method call (~5-10ns overhead)
+- Overall: Negligible impact since cold ops are infrequent
+
 ## File Organization
 
 ### Documentation (`dev/interpreter/`)
@@ -77,7 +136,12 @@ PRINT r2                 # print r2
 
 **Core Interpreter:**
 - **Opcodes.java** - Opcode constants (0-99 + SLOW_OP) organized by category
-- **BytecodeInterpreter.java** - Main execution loop with unified switch statement
+- **BytecodeInterpreter.java** - Main execution loop with range-based delegation to secondary methods
+  - Main execute() method: Hot-path opcodes (loops, basic arithmetic, control flow)
+  - executeComparisons(): Comparison and logical operators
+  - executeArithmetic(): Multiply, divide, compound assignments
+  - executeCollections(): Array and hash operations
+  - executeTypeOps(): Type and reference operations
 - **BytecodeCompiler.java** - AST to bytecode compiler with register allocation
 - **InterpretedCode.java** - Bytecode container with disassembler for debugging
 - **SlowOpcodeHandler.java** - Handler for rare operations (system calls, socket operations)
@@ -85,6 +149,13 @@ PRINT r2                 # print r2
 **Support Classes:**
 - **VariableCaptureAnalyzer.java** - Analyzes which variables are captured by named subroutines
 - **VariableCollectorVisitor.java** - Detects closure variables for capture analysis
+
+### Build Tools (`dev/tools/`)
+
+- **check-bytecode-size.sh** - Verifies all interpreter methods stay under JIT compilation limit (7500 bytes)
+  - Run after modifications to BytecodeInterpreter.java
+  - Automatically checks main execute() and all secondary methods
+  - Prevents performance regressions from method size growth
 
 ### Opcode Categories (Opcodes.java)
 
