@@ -1477,8 +1477,7 @@ public class EmitterMethodCreator implements Opcodes {
     private static final boolean USE_INTERPRETER_FALLBACK =
         System.getenv("JPERL_USE_INTERPRETER_FALLBACK") != null;
     private static final boolean SHOW_FALLBACK =
-        System.getenv("JPERL_SHOW_FALLBACK") != null ||
-        System.getenv("JPERL_USE_INTERPRETER_FALLBACK") != null;
+        System.getenv("JPERL_SHOW_FALLBACK") != null;
 
     /**
      * Unified factory method that returns RuntimeCode (either CompiledCode or InterpretedCode).
