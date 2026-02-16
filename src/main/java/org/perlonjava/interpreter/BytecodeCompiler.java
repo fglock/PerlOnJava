@@ -2616,6 +2616,16 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(rs1);
                 emit(currentCallContext);
             }
+            case "=~" -> {
+                // $string =~ /pattern/ - regex match
+                // rs1 = string to match against
+                // rs2 = compiled regex pattern
+                emit(Opcodes.MATCH_REGEX);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+                emit(currentCallContext);
+            }
             default -> throwCompilerException("Unsupported operator: " + operator, tokenIndex);
         }
 
@@ -3384,6 +3394,22 @@ public class BytecodeCompiler implements Visitor {
 
                     lastResultReg = rd;
                 }
+            } else if (node.operand instanceof BlockNode) {
+                // Block dereference: ${\0} or ${expr}
+                // Execute the block and dereference the result
+                BlockNode block = (BlockNode) node.operand;
+
+                // Compile the block
+                block.accept(this);
+                int blockResultReg = lastResultReg;
+
+                // Dereference the result
+                int rd = allocateRegister();
+                emitWithToken(Opcodes.DEREF, node.getIndex());
+                emitReg(rd);
+                emitReg(blockResultReg);
+
+                lastResultReg = rd;
             } else {
                 throwCompilerException("Unsupported $ operand: " + node.operand.getClass().getSimpleName());
             }
@@ -4805,6 +4831,77 @@ public class BytecodeCompiler implements Visitor {
             emitReg(argsReg);
 
             lastResultReg = rd;
+        } else if (op.equals("matchRegex")) {
+            // m/pattern/flags - create a regex and return it (for use with =~)
+            // operand: ListNode containing pattern string and flags string
+            if (node.operand == null || !(node.operand instanceof ListNode)) {
+                throwCompilerException("matchRegex requires pattern and flags");
+            }
+
+            ListNode args = (ListNode) node.operand;
+            if (args.elements.size() < 2) {
+                throwCompilerException("matchRegex requires pattern and flags");
+            }
+
+            // Compile pattern
+            args.elements.get(0).accept(this);
+            int patternReg = lastResultReg;
+
+            // Compile flags
+            args.elements.get(1).accept(this);
+            int flagsReg = lastResultReg;
+
+            // Create quoted regex using QUOTE_REGEX opcode
+            int rd = allocateRegister();
+            emit(Opcodes.QUOTE_REGEX);
+            emitReg(rd);
+            emitReg(patternReg);
+            emitReg(flagsReg);
+
+            lastResultReg = rd;
+        } else if (op.equals("chomp")) {
+            // chomp($x) or chomp - remove trailing newlines
+            if (node.operand == null) {
+                // chomp with no args - operates on $_
+                String varName = "$_";
+                int targetReg;
+                if (hasVariable(varName)) {
+                    targetReg = getVariableRegister(varName);
+                } else {
+                    targetReg = allocateRegister();
+                    int nameIdx = addToStringPool("main::_");
+                    emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                    emitReg(targetReg);
+                    emit(nameIdx);
+                }
+
+                int rd = allocateRegister();
+                emit(Opcodes.CHOMP);
+                emitReg(rd);
+                emitReg(targetReg);
+
+                lastResultReg = rd;
+            } else {
+                // chomp with argument
+                if (node.operand instanceof ListNode) {
+                    ListNode list = (ListNode) node.operand;
+                    if (!list.elements.isEmpty()) {
+                        list.elements.get(0).accept(this);
+                    } else {
+                        throwCompilerException("chomp requires an argument");
+                    }
+                } else {
+                    node.operand.accept(this);
+                }
+                int targetReg = lastResultReg;
+
+                int rd = allocateRegister();
+                emit(Opcodes.CHOMP);
+                emitReg(rd);
+                emitReg(targetReg);
+
+                lastResultReg = rd;
+            }
         } else {
             throwCompilerException("Unsupported operator: " + op);
         }

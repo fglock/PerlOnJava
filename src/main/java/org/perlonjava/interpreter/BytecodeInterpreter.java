@@ -1118,6 +1118,28 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.MATCH_REGEX: {
+                        // Match regex: rd = RuntimeRegex.matchRegex(string, regex, ctx)
+                        int rd = bytecode[pc++];
+                        int stringReg = bytecode[pc++];
+                        int regexReg = bytecode[pc++];
+                        int ctx = bytecode[pc++];
+                        registers[rd] = org.perlonjava.regex.RuntimeRegex.matchRegex(
+                            (RuntimeScalar) registers[stringReg],
+                            (RuntimeScalar) registers[regexReg],
+                            ctx
+                        );
+                        break;
+                    }
+
+                    case Opcodes.CHOMP: {
+                        // Chomp: rd = rs.chomp()
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        registers[rd] = registers[rs].chomp();
+                        break;
+                    }
+
                     case Opcodes.PRE_AUTOINCREMENT: {
                         // Pre-increment: ++rd
                         int rd = bytecode[pc++];
