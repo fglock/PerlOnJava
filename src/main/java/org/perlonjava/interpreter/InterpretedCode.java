@@ -411,6 +411,32 @@ public class InterpretedCode extends RuntimeCode {
                     pc += 2;
                     sb.append("ADD_ASSIGN_INT r").append(rd).append(" += ").append(imm).append("\n");
                     break;
+                case Opcodes.STRING_CONCAT_ASSIGN:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("STRING_CONCAT_ASSIGN r").append(rd).append(" .= r").append(rs).append("\n");
+                    break;
+                case Opcodes.PUSH_LOCAL_VARIABLE:
+                    rs = bytecode[pc++];
+                    sb.append("PUSH_LOCAL_VARIABLE r").append(rs).append("\n");
+                    break;
+                case Opcodes.STORE_GLOB:
+                    int globReg = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("STORE_GLOB r").append(globReg).append(" = r").append(rs).append("\n");
+                    break;
+                case Opcodes.OPEN:
+                    rd = bytecode[pc++];
+                    int openCtx = bytecode[pc++];
+                    int openArgs = bytecode[pc++];
+                    sb.append("OPEN r").append(rd).append(" = open(ctx=").append(openCtx).append(", r").append(openArgs).append(")\n");
+                    break;
+                case Opcodes.READLINE:
+                    rd = bytecode[pc++];
+                    int fhReg = bytecode[pc++];
+                    int readCtx = bytecode[pc++];
+                    sb.append("READLINE r").append(rd).append(" = readline(r").append(fhReg).append(", ctx=").append(readCtx).append(")\n");
+                    break;
                 case Opcodes.PRE_AUTOINCREMENT:
                     rd = bytecode[pc++];
                     sb.append("PRE_AUTOINCREMENT ++r").append(rd).append("\n");
