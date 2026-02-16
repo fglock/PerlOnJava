@@ -3498,6 +3498,39 @@ public class BytecodeCompiler implements Visitor {
             emitReg(argReg);
 
             lastResultReg = rd;
+        } else if (op.equals("prototype")) {
+            // Prototype operator: prototype(\&func) or prototype("func_name")
+            // Returns the prototype string for a subroutine
+            if (node.operand == null) {
+                throwCompilerException("prototype requires an argument");
+            }
+
+            // Compile the operand (code reference or function name)
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (list.elements.isEmpty()) {
+                    throwCompilerException("prototype requires an argument");
+                }
+                // Get first element
+                list.elements.get(0).accept(this);
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+
+            // Allocate result register
+            int rd = allocateRegister();
+
+            // Add current package to string pool
+            int packageIdx = addToStringPool(getCurrentPackage());
+
+            // Emit PROTOTYPE opcode
+            emit(Opcodes.PROTOTYPE);
+            emitReg(rd);
+            emitReg(argReg);
+            emitInt(packageIdx);
+
+            lastResultReg = rd;
         } else if (op.equals("++") || op.equals("--") || op.equals("++postfix") || op.equals("--postfix")) {
             // Pre/post increment/decrement
             boolean isPostfix = op.endsWith("postfix");

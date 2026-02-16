@@ -620,8 +620,12 @@ public class Opcodes {
     /** Integer conversion: rd = MathOperators.integer(rs) - equivalent to int(rs) */
     public static final short OP_INT = 157;
 
+    /** Prototype operator: rd = RuntimeCode.prototype(rs_coderef, package_name)
+     * Format: PROTOTYPE rd rs package_name_idx(int) */
+    public static final short PROTOTYPE = 158;
+
     // =================================================================
-    // OPCODES 403-32767: RESERVED FOR FUTURE OPERATIONS
+    // OPCODES 159-32767: RESERVED FOR FUTURE OPERATIONS
     // =================================================================
     // See PHASE3_OPERATOR_PROMOTIONS.md for promotion strategy.
     // All SLOWOP_* constants have been removed - use direct opcodes 114-154 instead.
