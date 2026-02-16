@@ -794,8 +794,7 @@ public class SubroutineParser {
 
             try {
                 if (runtimeCode instanceof org.perlonjava.codegen.CompiledCode) {
-                    // CompiledCode path - fill in the existing placeholder via codeRef.value
-                    RuntimeCode placeholderCode = (RuntimeCode) codeRef.value;
+                    // CompiledCode path - fill in the existing placeholder
                     org.perlonjava.codegen.CompiledCode compiledCode =
                         (org.perlonjava.codegen.CompiledCode) runtimeCode;
                     Class<?> generatedClass = compiledCode.generatedClass;
@@ -806,21 +805,17 @@ public class SubroutineParser {
 
                     // Instantiate the subroutine with the captured variables
                     Object[] parameters = paramList.toArray();
-                    placeholderCode.codeObject = constructor.newInstance(parameters);
+                    placeholder.codeObject = constructor.newInstance(parameters);
 
                     // Retrieve the 'apply' method from the generated class
-                    placeholderCode.methodHandle = RuntimeCode.lookup.findVirtual(generatedClass, "apply", RuntimeCode.methodType);
+                    placeholder.methodHandle = RuntimeCode.lookup.findVirtual(generatedClass, "apply", RuntimeCode.methodType);
 
                     // Set the __SUB__ instance field to codeRef
-                    Field field = placeholderCode.codeObject.getClass().getDeclaredField("__SUB__");
-                    field.set(placeholderCode.codeObject, codeRef);
-
-                    // Clear the compilerSupplier once done
-                    placeholderCode.compilerSupplier = null;
+                    Field field = placeholder.codeObject.getClass().getDeclaredField("__SUB__");
+                    field.set(placeholder.codeObject, codeRef);
 
                 } else if (runtimeCode instanceof org.perlonjava.interpreter.InterpretedCode) {
                     // InterpretedCode path - replace codeRef.value entirely
-                    RuntimeCode placeholderCode = (RuntimeCode) codeRef.value;
                     org.perlonjava.interpreter.InterpretedCode interpretedCode =
                         (org.perlonjava.interpreter.InterpretedCode) runtimeCode;
 
@@ -836,10 +831,10 @@ public class SubroutineParser {
                     }
 
                     // Copy metadata from the placeholder
-                    interpretedCode.prototype = placeholderCode.prototype;
-                    interpretedCode.attributes = placeholderCode.attributes;
-                    interpretedCode.subName = placeholderCode.subName;
-                    interpretedCode.packageName = placeholderCode.packageName;
+                    interpretedCode.prototype = placeholder.prototype;
+                    interpretedCode.attributes = placeholder.attributes;
+                    interpretedCode.subName = placeholder.subName;
+                    interpretedCode.packageName = placeholder.packageName;
 
                     // REPLACE the global reference
                     codeRef.value = interpretedCode;
@@ -849,6 +844,9 @@ public class SubroutineParser {
                 throw new PerlCompilerException("Subroutine error: " + e.getMessage());
             }
 
+            // Clear the compilerSupplier once done (use the captured placeholder variable)
+            // This prevents the Supplier from being invoked multiple times
+            placeholder.compilerSupplier = null;
             return null;
         };
 
