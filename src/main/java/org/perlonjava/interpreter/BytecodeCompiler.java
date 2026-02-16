@@ -2975,6 +2975,28 @@ public class BytecodeCompiler implements Visitor {
             return;
         }
 
+        // Handle function call operators specially to ensure arguments are in LIST context
+        if (node.operator.equals("(") || node.operator.equals("()")) {
+            // Function call: subname(args) or $coderef->(args)
+            // Save and set context for left operand (code reference)
+            int savedContext = currentCallContext;
+            currentCallContext = RuntimeContextType.SCALAR;
+            node.left.accept(this);
+            int rs1 = lastResultReg;
+
+            // Arguments must ALWAYS be evaluated in LIST context
+            // Even if the call itself is in SCALAR context (e.g., scalar(func()))
+            currentCallContext = RuntimeContextType.LIST;
+            node.right.accept(this);
+            int rs2 = lastResultReg;
+            currentCallContext = savedContext;
+
+            // Emit CALL_SUB opcode
+            int rd = compileBinaryOperatorSwitch(node.operator, rs1, rs2, node.getIndex());
+            lastResultReg = rd;
+            return;
+        }
+
         // Handle short-circuit operators specially - don't compile right operand yet!
         if (node.operator.equals("&&") || node.operator.equals("and")) {
             // Logical AND with short-circuit evaluation
@@ -3038,6 +3060,51 @@ public class BytecodeCompiler implements Visitor {
             emitInt(0); // Placeholder for offset (will be patched)
 
             // NOW compile right operand (only executed if left was false)
+            node.right.accept(this);
+            int rs2 = lastResultReg;
+
+            // Move right result to rd (overwriting left value)
+            emit(Opcodes.MOVE);
+            emitReg(rd);
+            emitReg(rs2);
+
+            // Patch the forward jump offset
+            int skipRightTarget = bytecode.size();
+            patchIntOffset(skipRightPos + 2, skipRightTarget);
+
+            lastResultReg = rd;
+            return;
+        }
+
+        if (node.operator.equals("//")) {
+            // Defined-OR with short-circuit evaluation
+            // Only evaluate right side if left side is undefined
+
+            // Compile left operand
+            node.left.accept(this);
+            int rs1 = lastResultReg;
+
+            // Allocate result register and move left value to it
+            int rd = allocateRegister();
+            emit(Opcodes.MOVE);
+            emitReg(rd);
+            emitReg(rs1);
+
+            // Check if left is defined
+            int definedReg = allocateRegister();
+            emit(Opcodes.DEFINED);
+            emitReg(definedReg);
+            emitReg(rd);
+
+            // Mark position for forward jump
+            int skipRightPos = bytecode.size();
+
+            // Emit conditional jump: if (defined) skip right evaluation
+            emit(Opcodes.GOTO_IF_TRUE);
+            emitReg(definedReg);
+            emitInt(0); // Placeholder for offset (will be patched)
+
+            // NOW compile right operand (only executed if left was undefined)
             node.right.accept(this);
             int rs2 = lastResultReg;
 
