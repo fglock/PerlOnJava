@@ -922,12 +922,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // CRITICAL: Run compilerSupplier BEFORE checking defined()
             // The compilerSupplier may replace runtimeScalar.value with InterpretedCode
             if (code.compilerSupplier != null) {
-                System.err.println("DEBUG RuntimeCode.apply(static): Running compilerSupplier for " + code.subName);
                 code.compilerSupplier.get();
                 // Reload code from runtimeScalar.value in case it was replaced
                 code = (RuntimeCode) runtimeScalar.value;
-                System.err.println("DEBUG RuntimeCode.apply(static): After compilerSupplier, code = " + code);
-                System.err.println("DEBUG RuntimeCode.apply(static): code.defined() = " + code.defined());
             }
 
             // Check if it's an unfilled forward declaration (not defined)
@@ -1053,6 +1050,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
 
             RuntimeCode code = (RuntimeCode) runtimeScalar.value;
+
+            // CRITICAL: Run compilerSupplier BEFORE checking defined()
+            // The compilerSupplier may replace runtimeScalar.value with InterpretedCode
+            if (code.compilerSupplier != null) {
+                code.compilerSupplier.get();
+                // Reload code from runtimeScalar.value in case it was replaced
+                code = (RuntimeCode) runtimeScalar.value;
+            }
+
             if (code.defined()) {
                 // Cast the value to RuntimeCode and call apply()
                 return code.apply(subroutineName, a, callContext);
@@ -1125,6 +1131,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             RuntimeArray a = list.getArrayOfAlias();
 
             RuntimeCode code = (RuntimeCode) runtimeScalar.value;
+
+            // CRITICAL: Run compilerSupplier BEFORE checking defined()
+            // The compilerSupplier may replace runtimeScalar.value with InterpretedCode
+            if (code.compilerSupplier != null) {
+                code.compilerSupplier.get();
+                // Reload code from runtimeScalar.value in case it was replaced
+                code = (RuntimeCode) runtimeScalar.value;
+            }
+
             if (code.defined()) {
                 // Cast the value to RuntimeCode and call apply()
                 return code.apply(subroutineName, a, callContext);
@@ -1275,12 +1290,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         try {
             // Wait for the compilerThread to finish if it exists
             if (this.compilerSupplier != null) {
-                System.err.println("DEBUG RuntimeCode.apply: Waiting for compilerSupplier to finish for " + this.subName);
-                System.err.println("DEBUG RuntimeCode.apply: this object = " + this);
                 this.compilerSupplier.get(); // Wait for the task to finish
-                System.err.println("DEBUG RuntimeCode.apply: compilerSupplier finished");
-                System.err.println("DEBUG RuntimeCode.apply: this.methodHandle = " + this.methodHandle);
-                System.err.println("DEBUG RuntimeCode.apply: this.defined() = " + this.defined());
             }
 
             if (isStatic) {
