@@ -350,10 +350,21 @@ public class EmitterMethodCreator implements Opcodes {
         boolean asmDebug = System.getenv("JPERL_ASM_DEBUG") != null;
         boolean showFallback = System.getenv("JPERL_SHOW_FALLBACK") != null ||
                                System.getenv("JPERL_USE_INTERPRETER_FALLBACK") != null;
+        boolean useInterpreterFallback = System.getenv("JPERL_USE_INTERPRETER_FALLBACK") != null;
+
         try {
             return getBytecodeInternal(ctx, ast, useTryCatch, false);
         } catch (MethodTooLargeException tooLarge) {
-            // Automatic retry with refactoring on "Method too large" error
+            // When interpreter fallback is enabled, skip AST splitter and let exception propagate
+            // The interpreter has no size limits, so AST splitting is unnecessary
+            if (useInterpreterFallback) {
+                if (showFallback) {
+                    System.err.println("Note: Method too large, skipping AST splitter (interpreter fallback enabled).");
+                }
+                throw tooLarge;  // Propagate to createRuntimeCode() which will use interpreter
+            }
+
+            // Automatic retry with AST splitting when interpreter fallback is not enabled
             try {
                 // Notify user that automatic refactoring is happening
                 if (showFallback) {
