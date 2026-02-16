@@ -567,8 +567,7 @@ public class BytecodeCompiler implements Visitor {
 
             // Dereference to get the hash
             hashReg = allocateRegister();
-            emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-            emit(Opcodes.SLOWOP_DEREF_HASH);
+            emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
             emitReg(hashReg);
             emitReg(scalarRefReg);
         } else {
@@ -613,10 +612,9 @@ public class BytecodeCompiler implements Visitor {
             emitReg(keyReg);
         }
 
-        // Emit SLOW_OP with SLOWOP_HASH_SLICE
+        // Emit direct opcode HASH_SLICE
         int rdSlice = allocateRegister();
-        emit(Opcodes.SLOW_OP);
-        emit(Opcodes.SLOWOP_HASH_SLICE);
+        emit(Opcodes.HASH_SLICE);
         emitReg(rdSlice);
         emitReg(hashReg);
         emitReg(keysListReg);
@@ -673,8 +671,7 @@ public class BytecodeCompiler implements Visitor {
                             int nameIdx = addToStringPool(varName);
                             int reg = allocateRegister();
 
-                            emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                            emit(Opcodes.SLOWOP_RETRIEVE_BEGIN_SCALAR);
+                            emitWithToken(Opcodes.RETRIEVE_BEGIN_SCALAR, node.getIndex());
                             emitReg(reg);
                             emit(nameIdx);
                             emit(beginId);
@@ -723,8 +720,7 @@ public class BytecodeCompiler implements Visitor {
                             int nameIdx = addToStringPool(varName);
                             int arrayReg = allocateRegister();
 
-                            emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                            emit(Opcodes.SLOWOP_RETRIEVE_BEGIN_ARRAY);
+                            emitWithToken(Opcodes.RETRIEVE_BEGIN_ARRAY, node.getIndex());
                             emitReg(arrayReg);
                             emit(nameIdx);
                             emit(beginId);
@@ -774,8 +770,7 @@ public class BytecodeCompiler implements Visitor {
                             int nameIdx = addToStringPool(varName);
                             int hashReg = allocateRegister();
 
-                            emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                            emit(Opcodes.SLOWOP_RETRIEVE_BEGIN_HASH);
+                            emitWithToken(Opcodes.RETRIEVE_BEGIN_HASH, node.getIndex());
                             emitReg(hashReg);
                             emit(nameIdx);
                             emit(beginId);
@@ -861,8 +856,7 @@ public class BytecodeCompiler implements Visitor {
                         int nameIdx = addToStringPool(globalVarName);
 
                         int localReg = allocateRegister();
-                        emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                        emit(Opcodes.SLOWOP_LOCAL_SCALAR);
+                        emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
                         emitReg(localReg);
                         emit(nameIdx);
 
@@ -1172,9 +1166,8 @@ public class BytecodeCompiler implements Visitor {
                     node.right.accept(this);
                     int valuesReg = lastResultReg;
 
-                    // Emit SLOW_OP with SLOWOP_ARRAY_SLICE_SET
-                    emit(Opcodes.SLOW_OP);
-                    emit(Opcodes.SLOWOP_ARRAY_SLICE_SET);
+                    // Emit direct opcode ARRAY_SLICE_SET
+                    emit(Opcodes.ARRAY_SLICE_SET);
                     emitReg(arrayReg);
                     emitReg(indicesReg);
                     emitReg(valuesReg);
@@ -1227,8 +1220,7 @@ public class BytecodeCompiler implements Visitor {
 
                     // Dereference the array reference to get the actual array
                     arrayReg = allocateRegister();
-                    emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                    emit(Opcodes.SLOWOP_DEREF_ARRAY);
+                    emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
                     emitReg(arrayReg);
                     emitReg(scalarReg);
                 } else {
@@ -1341,9 +1333,8 @@ public class BytecodeCompiler implements Visitor {
                         node.right.accept(this);
                         int valuesReg = lastResultReg;
 
-                        // Emit SLOW_OP with SLOWOP_HASH_SLICE_SET
-                        emit(Opcodes.SLOW_OP);
-                        emit(Opcodes.SLOWOP_HASH_SLICE_SET);
+                        // Emit direct opcode HASH_SLICE_SET
+                        emit(Opcodes.HASH_SLICE_SET);
                         emitReg(hashReg);
                         emitReg(keysListReg);
                         emitReg(valuesReg);
@@ -1387,8 +1378,7 @@ public class BytecodeCompiler implements Visitor {
 
                     // Dereference to get the hash (with autovivification)
                     hashReg = allocateRegister();
-                    emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                    emit(Opcodes.SLOWOP_DEREF_HASH);
+                    emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
                     emitReg(hashReg);
                     emitReg(scalarReg);
                 } else {
@@ -1524,8 +1514,7 @@ public class BytecodeCompiler implements Visitor {
                             // Create a list of remaining indices
                             // Use SLOWOP_LIST_SLICE_FROM to get list[i..]
                             int remainingListReg = allocateRegister();
-                            emit(Opcodes.SLOW_OP);
-                            emit(Opcodes.SLOWOP_LIST_SLICE_FROM);
+                            emit(Opcodes.LIST_SLICE_FROM);
                             emitReg(remainingListReg);
                             emitReg(rhsListReg);
                             emitInt(i);  // Start index
@@ -1558,8 +1547,7 @@ public class BytecodeCompiler implements Visitor {
 
                             // Get remaining elements from list
                             int remainingListReg = allocateRegister();
-                            emit(Opcodes.SLOW_OP);
-                            emit(Opcodes.SLOWOP_LIST_SLICE_FROM);
+                            emit(Opcodes.LIST_SLICE_FROM);
                             emitReg(remainingListReg);
                             emitReg(rhsListReg);
                             emitInt(i);  // Start index
@@ -1925,9 +1913,8 @@ public class BytecodeCompiler implements Visitor {
                 // rs1 = pattern (string or regex)
                 // rs2 = list containing string to split (and optional limit)
 
-                // Emit SLOW_OP with SLOWOP_SPLIT
-                emit(Opcodes.SLOW_OP);
-                emit(Opcodes.SLOWOP_SPLIT);
+                // Emit direct opcode SPLIT
+                emit(Opcodes.SPLIT);
                 emitReg(rd);
                 emitReg(rs1);  // Pattern register
                 emitReg(rs2);  // Args register
@@ -2024,8 +2011,7 @@ public class BytecodeCompiler implements Visitor {
 
                 // Dereference the scalar to get the actual hash
                 int hashReg = allocateRegister();
-                emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                emit(Opcodes.SLOWOP_DEREF_HASH);
+                emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
                 emitReg(hashReg);
                 emitReg(scalarRefReg);
 
@@ -2072,8 +2058,7 @@ public class BytecodeCompiler implements Visitor {
 
                 // Dereference the scalar to get the actual array
                 int arrayReg = allocateRegister();
-                emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                emit(Opcodes.SLOWOP_DEREF_ARRAY);
+                emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
                 emitReg(arrayReg);
                 emitReg(scalarRefReg);
 
@@ -2282,8 +2267,7 @@ public class BytecodeCompiler implements Visitor {
 
                         switch (sigil) {
                             case "$" -> {
-                                emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                                emit(Opcodes.SLOWOP_RETRIEVE_BEGIN_SCALAR);
+                                emitWithToken(Opcodes.RETRIEVE_BEGIN_SCALAR, node.getIndex());
                                 emitReg(reg);
                                 emit(nameIdx);
                                 emit(sigilOp.id);
@@ -2291,16 +2275,14 @@ public class BytecodeCompiler implements Visitor {
                                 variableScopes.peek().put(varName, reg);
                             }
                             case "@" -> {
-                                emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                                emit(Opcodes.SLOWOP_RETRIEVE_BEGIN_ARRAY);
+                                emitWithToken(Opcodes.RETRIEVE_BEGIN_ARRAY, node.getIndex());
                                 emitReg(reg);
                                 emit(nameIdx);
                                 emit(sigilOp.id);
                                 variableScopes.peek().put(varName, reg);
                             }
                             case "%" -> {
-                                emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                                emit(Opcodes.SLOWOP_RETRIEVE_BEGIN_HASH);
+                                emitWithToken(Opcodes.RETRIEVE_BEGIN_HASH, node.getIndex());
                                 emitReg(reg);
                                 emit(nameIdx);
                                 emit(sigilOp.id);
@@ -2357,24 +2339,21 @@ public class BytecodeCompiler implements Visitor {
 
                                 switch (sigil) {
                                     case "$" -> {
-                                        emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                                        emit(Opcodes.SLOWOP_RETRIEVE_BEGIN_SCALAR);
+                                        emitWithToken(Opcodes.RETRIEVE_BEGIN_SCALAR, node.getIndex());
                                         emitReg(reg);
                                         emit(nameIdx);
                                         emit(sigilOp.id);
                                         variableScopes.peek().put(varName, reg);
                                     }
                                     case "@" -> {
-                                        emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                                        emit(Opcodes.SLOWOP_RETRIEVE_BEGIN_ARRAY);
+                                        emitWithToken(Opcodes.RETRIEVE_BEGIN_ARRAY, node.getIndex());
                                         emitReg(reg);
                                         emit(nameIdx);
                                         emit(sigilOp.id);
                                         variableScopes.peek().put(varName, reg);
                                     }
                                     case "%" -> {
-                                        emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                                        emit(Opcodes.SLOWOP_RETRIEVE_BEGIN_HASH);
+                                        emitWithToken(Opcodes.RETRIEVE_BEGIN_HASH, node.getIndex());
                                         emitReg(reg);
                                         emit(nameIdx);
                                         emit(sigilOp.id);
@@ -2568,8 +2547,7 @@ public class BytecodeCompiler implements Visitor {
                     int nameIdx = addToStringPool(globalVarName);
 
                     int rd = allocateRegister();
-                    emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                    emit(Opcodes.SLOWOP_LOCAL_SCALAR);
+                    emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
                     emitReg(rd);
                     emit(nameIdx);
 
@@ -2672,8 +2650,7 @@ public class BytecodeCompiler implements Visitor {
                 // The reference should contain a RuntimeArray
                 // For @$scalar, we need to dereference it
                 int rd = allocateRegister();
-                emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                emit(Opcodes.SLOWOP_DEREF_ARRAY);
+                emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
                 emitReg(rd);
                 emitReg(refReg);
 
@@ -2690,8 +2667,7 @@ public class BytecodeCompiler implements Visitor {
 
                 // Dereference to get the array
                 int rd = allocateRegister();
-                emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                emit(Opcodes.SLOWOP_DEREF_ARRAY);
+                emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
                 emitReg(rd);
                 emitReg(refReg);
 
@@ -2739,9 +2715,8 @@ public class BytecodeCompiler implements Visitor {
                 int rd = allocateRegister();
                 int nameIdx = addToStringPool(varName);
 
-                // Emit SLOW_OP with SLOWOP_LOAD_GLOB
-                emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                emit(Opcodes.SLOWOP_LOAD_GLOB);
+                // Emit direct opcode LOAD_GLOB
+                emitWithToken(Opcodes.LOAD_GLOB, node.getIndex());
                 emitReg(rd);
                 emit(nameIdx);
 
@@ -3096,9 +3071,8 @@ public class BytecodeCompiler implements Visitor {
                 node.operand.accept(this);
                 int secondsReg = lastResultReg;
 
-                // Emit SLOW_OP with SLOWOP_SLEEP
-                emit(Opcodes.SLOW_OP);
-                emit(Opcodes.SLOWOP_SLEEP);
+                // Emit direct opcode SLEEP_OP
+                emit(Opcodes.SLEEP_OP);
                 emitReg(rd);
                 emitReg(secondsReg);
             } else {
@@ -3108,8 +3082,7 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(maxReg);
                 emitInt(Integer.MAX_VALUE);
 
-                emit(Opcodes.SLOW_OP);
-                emit(Opcodes.SLOWOP_SLEEP);
+                emit(Opcodes.SLEEP_OP);
                 emitReg(rd);
                 emitReg(maxReg);
             }
@@ -3187,9 +3160,8 @@ public class BytecodeCompiler implements Visitor {
                 // Allocate register for result
                 int rd = allocateRegister();
 
-                // Emit SLOW_OP with SLOWOP_EVAL_STRING
-                emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                emit(Opcodes.SLOWOP_EVAL_STRING);
+                // Emit direct opcode EVAL_STRING
+                emitWithToken(Opcodes.EVAL_STRING, node.getIndex());
                 emitReg(rd);
                 emitReg(stringReg);
 
@@ -3300,8 +3272,7 @@ public class BytecodeCompiler implements Visitor {
 
                 // Dereference to get the array
                 arrayReg = allocateRegister();
-                emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                emit(Opcodes.SLOWOP_DEREF_ARRAY);
+                emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
                 emitReg(arrayReg);
                 emitReg(refReg);
             } else {
@@ -3360,8 +3331,7 @@ public class BytecodeCompiler implements Visitor {
 
                 // Dereference to get the array
                 arrayReg = allocateRegister();
-                emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                emit(Opcodes.SLOWOP_DEREF_ARRAY);
+                emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
                 emitReg(arrayReg);
                 emitReg(refReg);
             } else {
@@ -3424,8 +3394,7 @@ public class BytecodeCompiler implements Visitor {
 
                 // Dereference to get the array
                 arrayReg = allocateRegister();
-                emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                emit(Opcodes.SLOWOP_DEREF_ARRAY);
+                emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
                 emitReg(arrayReg);
                 emitReg(refReg);
             } else {
@@ -3452,9 +3421,8 @@ public class BytecodeCompiler implements Visitor {
             // Allocate result register
             int rd = allocateRegister();
 
-            // Emit SLOW_OP with SLOWOP_SPLICE
-            emit(Opcodes.SLOW_OP);
-            emit(Opcodes.SLOWOP_SPLICE);
+            // Emit direct opcode SPLICE
+            emit(Opcodes.SPLICE);
             emitReg(rd);
             emitReg(arrayReg);
             emitReg(argsListReg);
@@ -3489,9 +3457,8 @@ public class BytecodeCompiler implements Visitor {
             // Allocate result register
             int rd = allocateRegister();
 
-            // Emit SLOW_OP with SLOWOP_REVERSE
-            emit(Opcodes.SLOW_OP);
-            emit(Opcodes.SLOWOP_REVERSE);
+            // Emit direct opcode REVERSE
+            emit(Opcodes.REVERSE);
             emitReg(rd);
             emitReg(argsListReg);
             emit(RuntimeContextType.LIST);  // Context
@@ -3545,8 +3512,7 @@ public class BytecodeCompiler implements Visitor {
                         int scalarReg = lastResultReg;
 
                         hashReg = allocateRegister();
-                        emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                        emit(Opcodes.SLOWOP_DEREF_HASH);
+                        emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
                         emitReg(hashReg);
                         emitReg(scalarReg);
                     }
@@ -3556,8 +3522,7 @@ public class BytecodeCompiler implements Visitor {
                     int scalarReg = lastResultReg;
 
                     hashReg = allocateRegister();
-                    emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                    emit(Opcodes.SLOWOP_DEREF_HASH);
+                    emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
                     emitReg(hashReg);
                     emitReg(scalarReg);
                 } else {
@@ -3607,8 +3572,7 @@ public class BytecodeCompiler implements Visitor {
                 int argReg = lastResultReg;
 
                 int rd = allocateRegister();
-                emit(Opcodes.SLOW_OP);
-                emit(Opcodes.SLOWOP_EXISTS);
+                emit(Opcodes.EXISTS);
                 emitReg(rd);
                 emitReg(argReg);
 
@@ -3697,8 +3661,7 @@ public class BytecodeCompiler implements Visitor {
 
                         // Use SLOW_OP for hash slice delete
                         int rd = allocateRegister();
-                        emit(Opcodes.SLOW_OP);
-                        emit(Opcodes.SLOWOP_HASH_SLICE_DELETE);
+                        emit(Opcodes.HASH_SLICE_DELETE);
                         emitReg(rd);
                         emitReg(hashReg);
                         emitReg(keysListReg);
@@ -3739,8 +3702,7 @@ public class BytecodeCompiler implements Visitor {
                         int scalarReg = lastResultReg;
 
                         hashReg = allocateRegister();
-                        emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                        emit(Opcodes.SLOWOP_DEREF_HASH);
+                        emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
                         emitReg(hashReg);
                         emitReg(scalarReg);
                     }
@@ -3750,8 +3712,7 @@ public class BytecodeCompiler implements Visitor {
                     int scalarReg = lastResultReg;
 
                     hashReg = allocateRegister();
-                    emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                    emit(Opcodes.SLOWOP_DEREF_HASH);
+                    emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
                     emitReg(hashReg);
                     emitReg(scalarReg);
                 } else {
@@ -3801,8 +3762,7 @@ public class BytecodeCompiler implements Visitor {
                 int argReg = lastResultReg;
 
                 int rd = allocateRegister();
-                emit(Opcodes.SLOW_OP);
-                emit(Opcodes.SLOWOP_DELETE);
+                emit(Opcodes.DELETE);
                 emitReg(rd);
                 emitReg(argReg);
 
@@ -3880,8 +3840,7 @@ public class BytecodeCompiler implements Visitor {
                     int refReg = lastResultReg;
 
                     arrayReg = allocateRegister();
-                    emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                    emit(Opcodes.SLOWOP_DEREF_ARRAY);
+                    emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
                     emitReg(arrayReg);
                     emitReg(refReg);
                 } else {
@@ -3949,8 +3908,7 @@ public class BytecodeCompiler implements Visitor {
 
             // Call length builtin using SLOW_OP
             int rd = allocateRegister();
-            emit(Opcodes.SLOW_OP);
-            emit(Opcodes.SLOWOP_LENGTH);
+            emit(Opcodes.LENGTH_OP);
             emitReg(rd);
             emitReg(stringReg);
 
