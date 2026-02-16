@@ -624,6 +624,1350 @@ public class BytecodeCompiler implements Visitor {
         lastResultReg = rdSlice;
     }
 
+    /**
+     * Helper method to compile assignment operators (=).
+     * Extracted from visit(BinaryOperatorNode) to reduce method size.
+     * Handles all forms of assignment including my/our/local, scalars, arrays, hashes, and slices.
+     */
+    private void compileAssignmentOperator(BinaryOperatorNode node) {
+        // Determine the calling context for the RHS based on LHS type
+        int rhsContext = RuntimeContextType.LIST; // Default
+
+        // Check if LHS is a scalar assignment (my $x = ... or our $x = ...)
+        if (node.left instanceof OperatorNode) {
+            OperatorNode leftOp = (OperatorNode) node.left;
+            if ((leftOp.operator.equals("my") || leftOp.operator.equals("our")) && leftOp.operand instanceof OperatorNode) {
+                OperatorNode sigilOp = (OperatorNode) leftOp.operand;
+                if (sigilOp.operator.equals("$")) {
+                    // Scalar assignment: use SCALAR context for RHS
+                    rhsContext = RuntimeContextType.SCALAR;
+                }
+            } else if (leftOp.operator.equals("$")) {
+                // Regular scalar assignment: $x = ...
+                rhsContext = RuntimeContextType.SCALAR;
+            }
+        }
+
+        // Set the context for subroutine calls in RHS
+        int savedContext = currentCallContext;
+        try {
+            currentCallContext = rhsContext;
+
+        // Special case: my $x = value
+        if (node.left instanceof OperatorNode) {
+            OperatorNode leftOp = (OperatorNode) node.left;
+            if (leftOp.operator.equals("my")) {
+                // Extract variable name from "my" operand
+                Node myOperand = leftOp.operand;
+
+                // Handle my $x (where $x is OperatorNode("$", IdentifierNode("x")))
+                if (myOperand instanceof OperatorNode) {
+                    OperatorNode sigilOp = (OperatorNode) myOperand;
+                    if (sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode) {
+                        String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
+
+                        // Check if this variable is captured by named subs (Parser marks with id)
+                        if (sigilOp.id != 0) {
+                            // RETRIEVE the persistent variable (creates if doesn't exist)
+                            int beginId = sigilOp.id;
+                            int nameIdx = addToStringPool(varName);
+                            int reg = allocateRegister();
+
+                            emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                            emit(Opcodes.SLOWOP_RETRIEVE_BEGIN_SCALAR);
+                            emitReg(reg);
+                            emit(nameIdx);
+                            emit(beginId);
+
+                            // Now register contains a reference to the persistent RuntimeScalar
+                            // Store the initializer value INTO that RuntimeScalar
+                            node.right.accept(this);
+                            int valueReg = lastResultReg;
+
+                            // Set the value in the persistent scalar using SET_SCALAR
+                            // This calls .set() on the RuntimeScalar without overwriting the reference
+                            emit(Opcodes.SET_SCALAR);
+                            emitReg(reg);
+                            emitReg(valueReg);
+
+                            // Track this variable - map the name to the register we already allocated
+                            variableScopes.peek().put(varName, reg);
+                            lastResultReg = reg;
+                            return;
+                        }
+
+                        // Regular lexical variable (not captured)
+                        // Allocate register for new lexical variable and add to symbol table
+                        int reg = addVariable(varName, "my");
+
+                        // Compile RHS in the appropriate context
+                        // @ operator will check currentCallContext and emit ARRAY_SIZE if needed
+                        node.right.accept(this);
+                        int valueReg = lastResultReg;
+
+                        // Move to variable register
+                        emit(Opcodes.MOVE);
+                        emitReg(reg);
+                        emitReg(valueReg);
+
+                        lastResultReg = reg;
+                        return;
+                    } else if (sigilOp.operator.equals("@") && sigilOp.operand instanceof IdentifierNode) {
+                        // Handle my @array = ...
+                        String varName = "@" + ((IdentifierNode) sigilOp.operand).name;
+
+                        // Check if this variable is captured by named subs
+                        if (sigilOp.id != 0) {
+                            // RETRIEVE the persistent array
+                            int beginId = sigilOp.id;
+                            int nameIdx = addToStringPool(varName);
+                            int arrayReg = allocateRegister();
+
+                            emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                            emit(Opcodes.SLOWOP_RETRIEVE_BEGIN_ARRAY);
+                            emitReg(arrayReg);
+                            emit(nameIdx);
+                            emit(beginId);
+
+                            // Compile RHS (should evaluate to a list)
+                            node.right.accept(this);
+                            int listReg = lastResultReg;
+
+                            // Populate array from list
+                            emit(Opcodes.ARRAY_SET_FROM_LIST);
+                            emitReg(arrayReg);
+                            emitReg(listReg);
+
+                            // Track this variable - map the name to the register we already allocated
+                            variableScopes.peek().put(varName, arrayReg);
+                            lastResultReg = arrayReg;
+                            return;
+                        }
+
+                        // Regular lexical array (not captured)
+                        // Allocate register for new lexical array and add to symbol table
+                        int arrayReg = addVariable(varName, "my");
+
+                        // Create empty array
+                        emit(Opcodes.NEW_ARRAY);
+                        emitReg(arrayReg);
+
+                        // Compile RHS (should evaluate to a list)
+                        node.right.accept(this);
+                        int listReg = lastResultReg;
+
+                        // Populate array from list using setFromList
+                        emit(Opcodes.ARRAY_SET_FROM_LIST);
+                        emitReg(arrayReg);
+                        emitReg(listReg);
+
+                        lastResultReg = arrayReg;
+                        return;
+                    } else if (sigilOp.operator.equals("%") && sigilOp.operand instanceof IdentifierNode) {
+                        // Handle my %hash = ...
+                        String varName = "%" + ((IdentifierNode) sigilOp.operand).name;
+
+                        // Check if this variable is captured by named subs
+                        if (sigilOp.id != 0) {
+                            // RETRIEVE the persistent hash
+                            int beginId = sigilOp.id;
+                            int nameIdx = addToStringPool(varName);
+                            int hashReg = allocateRegister();
+
+                            emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                            emit(Opcodes.SLOWOP_RETRIEVE_BEGIN_HASH);
+                            emitReg(hashReg);
+                            emit(nameIdx);
+                            emit(beginId);
+
+                            // Compile RHS (should evaluate to a list)
+                            node.right.accept(this);
+                            int listReg = lastResultReg;
+
+                            // Populate hash from list
+                            emit(Opcodes.HASH_SET_FROM_LIST);
+                            emitReg(hashReg);
+                            emitReg(listReg);
+
+                            // Track this variable - map the name to the register we already allocated
+                            variableScopes.peek().put(varName, hashReg);
+                            lastResultReg = hashReg;
+                            return;
+                        }
+
+                        // Regular lexical hash (not captured)
+                        // Allocate register for new lexical hash and add to symbol table
+                        int hashReg = addVariable(varName, "my");
+
+                        // Create empty hash
+                        emit(Opcodes.NEW_HASH);
+                        emitReg(hashReg);
+
+                        // Compile RHS (should evaluate to a list)
+                        node.right.accept(this);
+                        int listReg = lastResultReg;
+
+                        // Populate hash from list
+                        emit(Opcodes.HASH_SET_FROM_LIST);
+                        emitReg(hashReg);
+                        emitReg(listReg);
+
+                        lastResultReg = hashReg;
+                        return;
+                    }
+                }
+
+                // Handle my x (direct identifier without sigil)
+                if (myOperand instanceof IdentifierNode) {
+                    String varName = ((IdentifierNode) myOperand).name;
+
+                    // Allocate register for new lexical variable and add to symbol table
+                    int reg = addVariable(varName, "my");
+
+                    // Compile RHS
+                    node.right.accept(this);
+                    int valueReg = lastResultReg;
+
+                    // Move to variable register
+                    emit(Opcodes.MOVE);
+                    emitReg(reg);
+                    emitReg(valueReg);
+
+                    lastResultReg = reg;
+                    return;
+                }
+            }
+
+            // Special case: local $x = value
+            if (leftOp.operator.equals("local")) {
+                // Extract variable from "local" operand
+                Node localOperand = leftOp.operand;
+
+                // Handle local $x (where $x is OperatorNode("$", IdentifierNode("x")))
+                if (localOperand instanceof OperatorNode) {
+                    OperatorNode sigilOp = (OperatorNode) localOperand;
+                    if (sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode) {
+                        String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
+
+                        // Check if it's a lexical variable (should not be localized)
+                        if (hasVariable(varName)) {
+                            throwCompilerException("Can't localize lexical variable " + varName);
+                            return;
+                        }
+
+                        // It's a global variable - emit SLOW_OP to call GlobalRuntimeScalar.makeLocal()
+                        String packageName = getCurrentPackage();
+                        String globalVarName = packageName + "::" + ((IdentifierNode) sigilOp.operand).name;
+                        int nameIdx = addToStringPool(globalVarName);
+
+                        int localReg = allocateRegister();
+                        emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                        emit(Opcodes.SLOWOP_LOCAL_SCALAR);
+                        emitReg(localReg);
+                        emit(nameIdx);
+
+                        // Compile RHS
+                        node.right.accept(this);
+                        int valueReg = lastResultReg;
+
+                        // Assign value to the localized variable
+                        // The localized variable is a RuntimeScalar, so we use set() on it
+                        emit(Opcodes.STORE_GLOBAL_SCALAR);
+                        emit(nameIdx);
+                        emitReg(valueReg);
+
+                        lastResultReg = localReg;
+                        return;
+                    }
+                }
+            }
+        }
+
+        // Regular assignment: $x = value
+        // OPTIMIZATION: Detect $x = $x + $y and emit ADD_ASSIGN instead of ADD_SCALAR + MOVE
+        if (node.left instanceof OperatorNode && node.right instanceof BinaryOperatorNode) {
+            OperatorNode leftOp = (OperatorNode) node.left;
+            BinaryOperatorNode rightBin = (BinaryOperatorNode) node.right;
+
+            if (leftOp.operator.equals("$") && leftOp.operand instanceof IdentifierNode &&
+                rightBin.operator.equals("+") &&
+                rightBin.left instanceof OperatorNode) {
+
+                String leftVarName = "$" + ((IdentifierNode) leftOp.operand).name;
+                OperatorNode rightLeftOp = (OperatorNode) rightBin.left;
+
+                if (rightLeftOp.operator.equals("$") && rightLeftOp.operand instanceof IdentifierNode) {
+                    String rightLeftVarName = "$" + ((IdentifierNode) rightLeftOp.operand).name;
+
+                    // Pattern match: $x = $x + $y (emit ADD_ASSIGN)
+                    // Skip optimization for captured variables (need SET_SCALAR)
+                    boolean isCaptured = capturedVarIndices != null &&
+                                        capturedVarIndices.containsKey(leftVarName);
+
+                    if (leftVarName.equals(rightLeftVarName) && hasVariable(leftVarName) && !isCaptured) {
+                        int targetReg = getVariableRegister(leftVarName);
+
+                        // Compile RHS operand ($y)
+                        rightBin.right.accept(this);
+                        int rhsReg = lastResultReg;
+
+                        // Emit ADD_ASSIGN instead of ADD_SCALAR + MOVE
+                        emit(Opcodes.ADD_ASSIGN);
+                        emitReg(targetReg);
+                        emitReg(rhsReg);
+
+                        lastResultReg = targetReg;
+                        return;
+                    }
+                }
+            }
+        }
+
+        // Regular assignment: $x = value (no optimization)
+        // Compile RHS first
+        node.right.accept(this);
+        int valueReg = lastResultReg;
+
+        // Assign to LHS
+        if (node.left instanceof OperatorNode) {
+            OperatorNode leftOp = (OperatorNode) node.left;
+            if (leftOp.operator.equals("$") && leftOp.operand instanceof IdentifierNode) {
+                String varName = "$" + ((IdentifierNode) leftOp.operand).name;
+
+                if (hasVariable(varName)) {
+                    // Lexical variable - check if it's captured
+                    int targetReg = getVariableRegister(varName);
+
+                    if (capturedVarIndices != null && capturedVarIndices.containsKey(varName)) {
+                        // Captured variable - use SET_SCALAR to preserve aliasing
+                        emit(Opcodes.SET_SCALAR);
+                        emitReg(targetReg);
+                        emitReg(valueReg);
+                    } else {
+                        // Regular lexical - use MOVE
+                        emit(Opcodes.MOVE);
+                        emitReg(targetReg);
+                        emitReg(valueReg);
+                    }
+
+                    lastResultReg = targetReg;
+                } else {
+                    // Global variable
+                    int nameIdx = addToStringPool(varName);
+                    emit(Opcodes.STORE_GLOBAL_SCALAR);
+                    emit(nameIdx);
+                    emitReg(valueReg);
+                    lastResultReg = valueReg;
+                }
+            } else if (leftOp.operator.equals("@") && leftOp.operand instanceof IdentifierNode) {
+                // Array assignment: @array = ...
+                String varName = "@" + ((IdentifierNode) leftOp.operand).name;
+
+                int arrayReg;
+                if (hasVariable(varName)) {
+                    // Lexical array
+                    arrayReg = getVariableRegister(varName);
+                } else {
+                    // Global array - load it
+                    arrayReg = allocateRegister();
+                    String globalArrayName = NameNormalizer.normalizeVariableName(((IdentifierNode) leftOp.operand).name, getCurrentPackage());
+                    int nameIdx = addToStringPool(globalArrayName);
+                    emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                    emitReg(arrayReg);
+                    emit(nameIdx);
+                }
+
+                // Populate array from list using setFromList
+                emit(Opcodes.ARRAY_SET_FROM_LIST);
+                emitReg(arrayReg);
+                emitReg(valueReg);
+
+                lastResultReg = arrayReg;
+            } else if (leftOp.operator.equals("%") && leftOp.operand instanceof IdentifierNode) {
+                // Hash assignment: %hash = ...
+                String varName = "%" + ((IdentifierNode) leftOp.operand).name;
+
+                int hashReg;
+                if (hasVariable(varName)) {
+                    // Lexical hash
+                    hashReg = getVariableRegister(varName);
+                } else {
+                    // Global hash - load it
+                    hashReg = allocateRegister();
+                    String globalHashName = NameNormalizer.normalizeVariableName(((IdentifierNode) leftOp.operand).name, getCurrentPackage());
+                    int nameIdx = addToStringPool(globalHashName);
+                    emit(Opcodes.LOAD_GLOBAL_HASH);
+                    emitReg(hashReg);
+                    emit(nameIdx);
+                }
+
+                // Populate hash from list using setFromList
+                emit(Opcodes.HASH_SET_FROM_LIST);
+                emitReg(hashReg);
+                emitReg(valueReg);
+
+                lastResultReg = hashReg;
+            } else if (leftOp.operator.equals("our")) {
+                // Assignment to our variable: our $x = value or our @x = value or our %x = value
+                // Compile the our declaration first (which loads the global into a register)
+                leftOp.accept(this);
+                int targetReg = lastResultReg;
+
+                // Now assign the RHS value to the target register
+                // The target register contains either a scalar, array, or hash
+                // We need to determine which and use the appropriate assignment
+
+                // Extract the sigil from our operand
+                if (leftOp.operand instanceof OperatorNode) {
+                    OperatorNode sigilOp = (OperatorNode) leftOp.operand;
+                    String sigil = sigilOp.operator;
+
+                    if (sigil.equals("$")) {
+                        // Scalar: use SET_SCALAR to modify value without breaking alias
+                        emit(Opcodes.SET_SCALAR);
+                        emitReg(targetReg);
+                        emitReg(valueReg);
+                    } else if (sigil.equals("@")) {
+                        // Array: use ARRAY_SET_FROM_LIST
+                        emit(Opcodes.ARRAY_SET_FROM_LIST);
+                        emitReg(targetReg);
+                        emitReg(valueReg);
+                    } else if (sigil.equals("%")) {
+                        // Hash: use HASH_SET_FROM_LIST
+                        emit(Opcodes.HASH_SET_FROM_LIST);
+                        emitReg(targetReg);
+                        emitReg(valueReg);
+                    }
+                } else if (leftOp.operand instanceof ListNode) {
+                    // our ($a, $b) = ... - list declaration with assignment
+                    // The our statement already declared the variables and returned a list
+                    // We need to assign the RHS values to each variable
+                    ListNode listNode = (ListNode) leftOp.operand;
+
+                    // Convert RHS to list
+                    int rhsListReg = allocateRegister();
+                    emit(Opcodes.SCALAR_TO_LIST);
+                    emitReg(rhsListReg);
+                    emitReg(valueReg);
+
+                    // Assign each element
+                    for (int i = 0; i < listNode.elements.size(); i++) {
+                        Node element = listNode.elements.get(i);
+                        if (element instanceof OperatorNode) {
+                            OperatorNode sigilOp = (OperatorNode) element;
+                            String sigil = sigilOp.operator;
+
+                            if (sigilOp.operand instanceof IdentifierNode) {
+                                String varName = sigil + ((IdentifierNode) sigilOp.operand).name;
+                                int varReg = getVariableRegister(varName);
+
+                                // Get i-th element from RHS
+                                int indexReg = allocateRegister();
+                                emit(Opcodes.LOAD_INT);
+                                emitReg(indexReg);
+                                emitInt(i);
+
+                                int elemReg = allocateRegister();
+                                emit(Opcodes.ARRAY_GET);
+                                emitReg(elemReg);
+                                emitReg(rhsListReg);
+                                emitReg(indexReg);
+
+                                // Assign to variable
+                                if (sigil.equals("$")) {
+                                    emit(Opcodes.MOVE);
+                                    emitReg(varReg);
+                                    emitReg(elemReg);
+                                } else if (sigil.equals("@")) {
+                                    emit(Opcodes.ARRAY_SET_FROM_LIST);
+                                    emitReg(varReg);
+                                    emitReg(elemReg);
+                                } else if (sigil.equals("%")) {
+                                    emit(Opcodes.HASH_SET_FROM_LIST);
+                                    emitReg(varReg);
+                                    emitReg(elemReg);
+                                }
+                            }
+                        }
+                    }
+                    lastResultReg = valueReg;
+                    currentCallContext = savedContext;
+                    return;
+                }
+
+                lastResultReg = targetReg;
+            } else {
+                throw new RuntimeException("Assignment to unsupported operator: " + leftOp.operator);
+            }
+        } else if (node.left instanceof IdentifierNode) {
+            String varName = ((IdentifierNode) node.left).name;
+
+            if (hasVariable(varName)) {
+                // Lexical variable - copy to its register
+                int targetReg = getVariableRegister(varName);
+                emit(Opcodes.MOVE);
+                emitReg(targetReg);
+                emitReg(valueReg);
+                lastResultReg = targetReg;
+            } else {
+                // Global variable
+                int nameIdx = addToStringPool(varName);
+                emit(Opcodes.STORE_GLOBAL_SCALAR);
+                emit(nameIdx);
+                emitReg(valueReg);
+                lastResultReg = valueReg;
+            }
+        } else if (node.left instanceof BinaryOperatorNode) {
+            BinaryOperatorNode leftBin = (BinaryOperatorNode) node.left;
+
+            // Handle array slice assignment: @array[1, 3, 5] = (20, 30, 40)
+            if (leftBin.operator.equals("[") && leftBin.left instanceof OperatorNode) {
+                OperatorNode arrayOp = (OperatorNode) leftBin.left;
+
+                // Must be @array (not $array)
+                if (arrayOp.operator.equals("@") && arrayOp.operand instanceof IdentifierNode) {
+                    String varName = "@" + ((IdentifierNode) arrayOp.operand).name;
+
+                    // Get the array register
+                    int arrayReg;
+                    if (hasVariable(varName)) {
+                        // Lexical array
+                        arrayReg = getVariableRegister(varName);
+                    } else {
+                        // Global array - load it
+                        arrayReg = allocateRegister();
+                        String globalArrayName = NameNormalizer.normalizeVariableName(
+                            ((IdentifierNode) arrayOp.operand).name,
+                            getCurrentPackage()
+                        );
+                        int nameIdx = addToStringPool(globalArrayName);
+                        emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                        emitReg(arrayReg);
+                        emit(nameIdx);
+                    }
+
+                    // Compile indices (right side of [])
+                    // ArrayLiteralNode contains the indices
+                    if (!(leftBin.right instanceof ArrayLiteralNode)) {
+                        throwCompilerException("Array slice assignment requires index list");
+                    }
+
+                    ArrayLiteralNode indicesNode = (ArrayLiteralNode) leftBin.right;
+                    List<Integer> indexRegs = new ArrayList<>();
+                    for (Node indexNode : indicesNode.elements) {
+                        indexNode.accept(this);
+                        indexRegs.add(lastResultReg);
+                    }
+
+                    // Create indices list
+                    int indicesReg = allocateRegister();
+                    emit(Opcodes.CREATE_LIST);
+                    emitReg(indicesReg);
+                    emit(indexRegs.size());
+                    for (int indexReg : indexRegs) {
+                        emitReg(indexReg);
+                    }
+
+                    // Compile values (RHS of assignment)
+                    node.right.accept(this);
+                    int valuesReg = lastResultReg;
+
+                    // Emit SLOW_OP with SLOWOP_ARRAY_SLICE_SET
+                    emit(Opcodes.SLOW_OP);
+                    emit(Opcodes.SLOWOP_ARRAY_SLICE_SET);
+                    emitReg(arrayReg);
+                    emitReg(indicesReg);
+                    emitReg(valuesReg);
+
+                    lastResultReg = arrayReg;
+                    currentCallContext = savedContext;
+                    return;
+                }
+            }
+
+            // Handle single element array assignment
+            // For: $array[index] = value or $matrix[3][0] = value
+            if (leftBin.operator.equals("[")) {
+                int arrayReg;
+
+                // Check if left side is a variable or multidimensional access
+                if (leftBin.left instanceof OperatorNode) {
+                    OperatorNode arrayOp = (OperatorNode) leftBin.left;
+
+                    // Single element assignment: $array[index] = value
+                    if (arrayOp.operator.equals("$") && arrayOp.operand instanceof IdentifierNode) {
+                        String varName = ((IdentifierNode) arrayOp.operand).name;
+                        String arrayVarName = "@" + varName;
+
+                        // Get the array register
+                        if (hasVariable(arrayVarName)) {
+                            // Lexical array
+                            arrayReg = getVariableRegister(arrayVarName);
+                        } else {
+                            // Global array - load it
+                            arrayReg = allocateRegister();
+                            String globalArrayName = NameNormalizer.normalizeVariableName(
+                                varName,
+                                getCurrentPackage()
+                            );
+                            int nameIdx = addToStringPool(globalArrayName);
+                            emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                            emitReg(arrayReg);
+                            emit(nameIdx);
+                        }
+                    } else {
+                        throwCompilerException("Assignment requires scalar dereference: $var[index]");
+                        return;
+                    }
+                } else if (leftBin.left instanceof BinaryOperatorNode) {
+                    // Multidimensional case: $matrix[3][0] = value
+                    // Compile left side (which returns a scalar containing an array reference)
+                    leftBin.left.accept(this);
+                    int scalarReg = lastResultReg;
+
+                    // Dereference the array reference to get the actual array
+                    arrayReg = allocateRegister();
+                    emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                    emit(Opcodes.SLOWOP_DEREF_ARRAY);
+                    emitReg(arrayReg);
+                    emitReg(scalarReg);
+                } else {
+                    throwCompilerException("Array assignment requires variable or expression on left side");
+                    return;
+                }
+
+                // Compile index expression
+                if (!(leftBin.right instanceof ArrayLiteralNode)) {
+                    throwCompilerException("Array assignment requires ArrayLiteralNode on right side");
+                }
+                ArrayLiteralNode indexNode = (ArrayLiteralNode) leftBin.right;
+                if (indexNode.elements.isEmpty()) {
+                    throwCompilerException("Array assignment requires index expression");
+                }
+
+                indexNode.elements.get(0).accept(this);
+                int indexReg = lastResultReg;
+
+                // Compile RHS value
+                node.right.accept(this);
+                int assignValueReg = lastResultReg;
+
+                // Emit ARRAY_SET
+                emit(Opcodes.ARRAY_SET);
+                emitReg(arrayReg);
+                emitReg(indexReg);
+                emitReg(assignValueReg);
+
+                lastResultReg = assignValueReg;
+                currentCallContext = savedContext;
+                return;
+            } else if (leftBin.operator.equals("{")) {
+                // Hash element/slice assignment
+                // $hash{key} = value (scalar element)
+                // @hash{keys} = values (slice)
+
+                // 1. Get hash variable (leftBin.left)
+                int hashReg;
+                if (leftBin.left instanceof OperatorNode) {
+                    OperatorNode hashOp = (OperatorNode) leftBin.left;
+
+                    // Check for hash slice assignment: @hash{keys} = values
+                    if (hashOp.operator.equals("@")) {
+                        // Hash slice assignment
+                        if (!(hashOp.operand instanceof IdentifierNode)) {
+                            throwCompilerException("Hash slice assignment requires identifier");
+                            return;
+                        }
+                        String varName = ((IdentifierNode) hashOp.operand).name;
+                        String hashVarName = "%" + varName;
+
+                        // Get the hash - check lexical first, then global
+                        if (hasVariable(hashVarName)) {
+                            // Lexical hash
+                            hashReg = getVariableRegister(hashVarName);
+                        } else {
+                            // Global hash - load it
+                            hashReg = allocateRegister();
+                            String globalHashName = NameNormalizer.normalizeVariableName(
+                                varName,
+                                getCurrentPackage()
+                            );
+                            int nameIdx = addToStringPool(globalHashName);
+                            emit(Opcodes.LOAD_GLOBAL_HASH);
+                            emitReg(hashReg);
+                            emit(nameIdx);
+                        }
+
+                        // Get the keys from HashLiteralNode
+                        if (!(leftBin.right instanceof HashLiteralNode)) {
+                            throwCompilerException("Hash slice assignment requires HashLiteralNode");
+                            return;
+                        }
+                        HashLiteralNode keysNode = (HashLiteralNode) leftBin.right;
+                        if (keysNode.elements.isEmpty()) {
+                            throwCompilerException("Hash slice assignment requires at least one key");
+                            return;
+                        }
+
+                        // Compile all keys into a list
+                        List<Integer> keyRegs = new ArrayList<>();
+                        for (Node keyElement : keysNode.elements) {
+                            if (keyElement instanceof IdentifierNode) {
+                                // Bareword key - autoquote
+                                String keyString = ((IdentifierNode) keyElement).name;
+                                int keyReg = allocateRegister();
+                                int keyIdx = addToStringPool(keyString);
+                                emit(Opcodes.LOAD_STRING);
+                                emitReg(keyReg);
+                                emit(keyIdx);
+                                keyRegs.add(keyReg);
+                            } else {
+                                // Expression key
+                                keyElement.accept(this);
+                                keyRegs.add(lastResultReg);
+                            }
+                        }
+
+                        // Create a RuntimeList from key registers
+                        int keysListReg = allocateRegister();
+                        emit(Opcodes.CREATE_LIST);
+                        emitReg(keysListReg);
+                        emit(keyRegs.size());
+                        for (int keyReg : keyRegs) {
+                            emitReg(keyReg);
+                        }
+
+                        // Compile RHS values
+                        node.right.accept(this);
+                        int valuesReg = lastResultReg;
+
+                        // Emit SLOW_OP with SLOWOP_HASH_SLICE_SET
+                        emit(Opcodes.SLOW_OP);
+                        emit(Opcodes.SLOWOP_HASH_SLICE_SET);
+                        emitReg(hashReg);
+                        emitReg(keysListReg);
+                        emitReg(valuesReg);
+
+                        lastResultReg = valuesReg;
+                        currentCallContext = savedContext;
+                        return;
+                    } else if (hashOp.operator.equals("$")) {
+                        // $hash{key} - dereference to get hash
+                        if (!(hashOp.operand instanceof IdentifierNode)) {
+                            throwCompilerException("Hash assignment requires identifier");
+                            return;
+                        }
+                        String varName = ((IdentifierNode) hashOp.operand).name;
+                        String hashVarName = "%" + varName;
+
+                        if (hasVariable(hashVarName)) {
+                            // Lexical hash
+                            hashReg = getVariableRegister(hashVarName);
+                        } else {
+                            // Global hash - load it
+                            hashReg = allocateRegister();
+                            String globalHashName = NameNormalizer.normalizeVariableName(
+                                varName,
+                                getCurrentPackage()
+                            );
+                            int nameIdx = addToStringPool(globalHashName);
+                            emit(Opcodes.LOAD_GLOBAL_HASH);
+                            emitReg(hashReg);
+                            emit(nameIdx);
+                        }
+                    } else {
+                        throwCompilerException("Hash assignment requires scalar dereference: $var{key}");
+                        return;
+                    }
+                } else if (leftBin.left instanceof BinaryOperatorNode) {
+                    // Nested: $hash{outer}{inner} = value
+                    // Compile left side (returns scalar containing hash reference or autovivifies)
+                    leftBin.left.accept(this);
+                    int scalarReg = lastResultReg;
+
+                    // Dereference to get the hash (with autovivification)
+                    hashReg = allocateRegister();
+                    emitWithToken(Opcodes.SLOW_OP, node.getIndex());
+                    emit(Opcodes.SLOWOP_DEREF_HASH);
+                    emitReg(hashReg);
+                    emitReg(scalarReg);
+                } else {
+                    throwCompilerException("Hash assignment requires variable or expression on left side");
+                    return;
+                }
+
+                // 2. Compile key expression
+                if (!(leftBin.right instanceof HashLiteralNode)) {
+                    throwCompilerException("Hash assignment requires HashLiteralNode on right side");
+                    return;
+                }
+                HashLiteralNode keyNode = (HashLiteralNode) leftBin.right;
+                if (keyNode.elements.isEmpty()) {
+                    throwCompilerException("Hash key required for assignment");
+                    return;
+                }
+
+                // Compile the key
+                // Special case: IdentifierNode in hash access is autoquoted (bareword key)
+                int keyReg;
+                Node keyElement = keyNode.elements.get(0);
+                if (keyElement instanceof IdentifierNode) {
+                    // Bareword key: $hash{key} -> key is autoquoted to "key"
+                    String keyString = ((IdentifierNode) keyElement).name;
+                    keyReg = allocateRegister();
+                    int keyIdx = addToStringPool(keyString);
+                    emit(Opcodes.LOAD_STRING);
+                    emitReg(keyReg);
+                    emit(keyIdx);
+                } else {
+                    // Expression key: $hash{$var} or $hash{func()}
+                    keyElement.accept(this);
+                    keyReg = lastResultReg;
+                }
+
+                // 3. Compile RHS value
+                node.right.accept(this);
+                int hashValueReg = lastResultReg;
+
+                // 4. Emit HASH_SET
+                emit(Opcodes.HASH_SET);
+                emitReg(hashReg);
+                emitReg(keyReg);
+                emitReg(hashValueReg);
+
+                lastResultReg = hashValueReg;
+                currentCallContext = savedContext;
+                return;
+            }
+
+            throwCompilerException("Assignment to non-identifier not yet supported: " + node.left.getClass().getSimpleName());
+        } else if (node.left instanceof ListNode) {
+            // List assignment: ($a, $b) = ... or () = ...
+            // In scalar context, returns the number of elements on RHS
+            // In list context, returns the RHS list
+            ListNode listNode = (ListNode) node.left;
+
+            // Compile RHS in LIST context to get all elements
+            int savedRhsContext = currentCallContext;
+            currentCallContext = RuntimeContextType.LIST;
+            node.right.accept(this);
+            int rhsReg = lastResultReg;
+            currentCallContext = savedRhsContext;
+
+            // Convert RHS to RuntimeList if needed
+            int rhsListReg = allocateRegister();
+            emit(Opcodes.SCALAR_TO_LIST);
+            emitReg(rhsListReg);
+            emitReg(rhsReg);
+
+            // If the list is not empty, perform the assignment
+            if (!listNode.elements.isEmpty()) {
+                // Assign each RHS element to corresponding LHS variable
+                for (int i = 0; i < listNode.elements.size(); i++) {
+                    Node lhsElement = listNode.elements.get(i);
+
+                    // Get the i-th element from RHS list
+                    int indexReg = allocateRegister();
+                    emit(Opcodes.LOAD_INT);
+                    emitReg(indexReg);
+                    emitInt(i);
+
+                    int elementReg = allocateRegister();
+                    emit(Opcodes.ARRAY_GET);
+                    emitReg(elementReg);
+                    emitReg(rhsListReg);
+                    emitReg(indexReg);
+
+                    // Assign to LHS element
+                    if (lhsElement instanceof OperatorNode) {
+                        OperatorNode lhsOp = (OperatorNode) lhsElement;
+                        if (lhsOp.operator.equals("$") && lhsOp.operand instanceof IdentifierNode) {
+                            String varName = "$" + ((IdentifierNode) lhsOp.operand).name;
+
+                            if (hasVariable(varName)) {
+                                int targetReg = getVariableRegister(varName);
+                                if (capturedVarIndices != null && capturedVarIndices.containsKey(varName)) {
+                                    emit(Opcodes.SET_SCALAR);
+                                    emitReg(targetReg);
+                                    emitReg(elementReg);
+                                } else {
+                                    emit(Opcodes.MOVE);
+                                    emitReg(targetReg);
+                                    emitReg(elementReg);
+                                }
+                            } else {
+                                int nameIdx = addToStringPool(varName);
+                                emit(Opcodes.STORE_GLOBAL_SCALAR);
+                                emit(nameIdx);
+                                emitReg(elementReg);
+                            }
+                        } else if (lhsOp.operator.equals("@") && lhsOp.operand instanceof IdentifierNode) {
+                            // Array slurp: ($a, @rest) = ...
+                            // Collect remaining elements into a RuntimeList
+                            String varName = "@" + ((IdentifierNode) lhsOp.operand).name;
+
+                            int arrayReg;
+                            if (hasVariable(varName)) {
+                                arrayReg = getVariableRegister(varName);
+                            } else {
+                                arrayReg = allocateRegister();
+                                String globalArrayName = NameNormalizer.normalizeVariableName(
+                                    ((IdentifierNode) lhsOp.operand).name,
+                                    getCurrentPackage()
+                                );
+                                int nameIdx = addToStringPool(globalArrayName);
+                                emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                                emitReg(arrayReg);
+                                emit(nameIdx);
+                            }
+
+                            // Create a list of remaining indices
+                            // Use SLOWOP_LIST_SLICE_FROM to get list[i..]
+                            int remainingListReg = allocateRegister();
+                            emit(Opcodes.SLOW_OP);
+                            emit(Opcodes.SLOWOP_LIST_SLICE_FROM);
+                            emitReg(remainingListReg);
+                            emitReg(rhsListReg);
+                            emitInt(i);  // Start index
+
+                            // Populate array from remaining elements
+                            emit(Opcodes.ARRAY_SET_FROM_LIST);
+                            emitReg(arrayReg);
+                            emitReg(remainingListReg);
+
+                            // Array slurp consumes all remaining elements
+                            break;
+                        } else if (lhsOp.operator.equals("%") && lhsOp.operand instanceof IdentifierNode) {
+                            // Hash slurp: ($a, %rest) = ...
+                            String varName = "%" + ((IdentifierNode) lhsOp.operand).name;
+
+                            int hashReg;
+                            if (hasVariable(varName)) {
+                                hashReg = getVariableRegister(varName);
+                            } else {
+                                hashReg = allocateRegister();
+                                String globalHashName = NameNormalizer.normalizeVariableName(
+                                    ((IdentifierNode) lhsOp.operand).name,
+                                    getCurrentPackage()
+                                );
+                                int nameIdx = addToStringPool(globalHashName);
+                                emit(Opcodes.LOAD_GLOBAL_HASH);
+                                emitReg(hashReg);
+                                emit(nameIdx);
+                            }
+
+                            // Get remaining elements from list
+                            int remainingListReg = allocateRegister();
+                            emit(Opcodes.SLOW_OP);
+                            emit(Opcodes.SLOWOP_LIST_SLICE_FROM);
+                            emitReg(remainingListReg);
+                            emitReg(rhsListReg);
+                            emitInt(i);  // Start index
+
+                            // Populate hash from remaining elements
+                            emit(Opcodes.HASH_SET_FROM_LIST);
+                            emitReg(hashReg);
+                            emitReg(remainingListReg);
+
+                            // Hash slurp consumes all remaining elements
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Return value depends on savedContext (the context this assignment was called in)
+            if (savedContext == RuntimeContextType.SCALAR) {
+                // In scalar context, list assignment returns the count of RHS elements
+                int countReg = allocateRegister();
+                emit(Opcodes.ARRAY_SIZE);
+                emitReg(countReg);
+                emitReg(rhsListReg);
+                lastResultReg = countReg;
+            } else {
+                // In list context, return the RHS value
+                lastResultReg = rhsListReg;
+            }
+
+            currentCallContext = savedContext;
+            return;
+        } else {
+            throwCompilerException("Assignment to non-identifier not yet supported: " + node.left.getClass().getSimpleName());
+        }
+
+        } finally {
+            // Always restore the calling context
+            currentCallContext = savedContext;
+        }
+    }
+
+    /**
+     * Helper method to compile binary operator switch statement.
+     * Extracted from visit(BinaryOperatorNode) to reduce method size.
+     * Handles the giant switch statement for all binary operators.
+     *
+     * @param operator The binary operator string
+     * @param rs1 Left operand register
+     * @param rs2 Right operand register
+     * @param tokenIndex Token index for error reporting
+     * @return Result register containing the operation result
+     */
+    private int compileBinaryOperatorSwitch(String operator, int rs1, int rs2, int tokenIndex) {
+        // Allocate result register
+        int rd = allocateRegister();
+
+        // Emit opcode based on operator
+        switch (operator) {
+            case "+" -> {
+                emit(Opcodes.ADD_SCALAR);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
+            case "-" -> {
+                emit(Opcodes.SUB_SCALAR);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
+            case "*" -> {
+                emit(Opcodes.MUL_SCALAR);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
+            case "%" -> {
+                emit(Opcodes.MOD_SCALAR);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
+            case "/" -> {
+                emit(Opcodes.DIV_SCALAR);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
+            case "**" -> {
+                emit(Opcodes.POW_SCALAR);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
+            case "." -> {
+                emit(Opcodes.CONCAT);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
+            case "x" -> {
+                emit(Opcodes.REPEAT);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
+            case "<=>" -> {
+                emit(Opcodes.COMPARE_NUM);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
+            case "cmp" -> {
+                emit(Opcodes.COMPARE_STR);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
+            case "bless" -> {
+                // bless $ref, "Package" or bless $ref (defaults to current package)
+                // rs1 = reference to bless
+                // rs2 = package name (or undef for current package)
+                emit(Opcodes.BLESS);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
+            case "isa" -> {
+                // $obj isa "Package" - check if object is instance of package
+                // rs1 = object/reference
+                // rs2 = package name
+                emit(Opcodes.ISA);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
+            case "==" -> {
+                emit(Opcodes.EQ_NUM);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
+            case "<" -> {
+                emit(Opcodes.LT_NUM);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
+            case ">" -> {
+                emit(Opcodes.GT_NUM);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
+            case "!=" -> {
+                emit(Opcodes.NE_NUM);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
+            case "eq" -> {
+                // String equality: $a eq $b
+                emit(Opcodes.EQ_STR);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
+            case "ne" -> {
+                // String inequality: $a ne $b
+                emit(Opcodes.NE_STR);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
+            case "lt", "gt", "le", "ge" -> {
+                // String comparisons using COMPARE_STR (like cmp)
+                // cmp returns: -1 if $a lt $b, 0 if equal, 1 if $a gt $b
+                int cmpReg = allocateRegister();
+                emit(Opcodes.COMPARE_STR);
+                emitReg(cmpReg);
+                emitReg(rs1);
+                emitReg(rs2);
+
+                // Compare result to 0
+                int zeroReg = allocateRegister();
+                emit(Opcodes.LOAD_INT);
+                emitReg(zeroReg);
+                emitInt(0);
+
+                // Emit appropriate comparison
+                switch (operator) {
+                    case "lt" -> emit(Opcodes.LT_NUM);  // cmp < 0
+                    case "gt" -> emit(Opcodes.GT_NUM);  // cmp > 0
+                    case "le" -> {
+                        // le: cmp <= 0, which is !(cmp > 0)
+                        int gtReg = allocateRegister();
+                        emit(Opcodes.GT_NUM);
+                        emitReg(gtReg);
+                        emitReg(cmpReg);
+                        emitReg(zeroReg);
+                        emit(Opcodes.NOT);
+                        emitReg(rd);
+                        emitReg(gtReg);
+                        return rd;
+                    }
+                    case "ge" -> {
+                        // ge: cmp >= 0, which is !(cmp < 0)
+                        int ltReg = allocateRegister();
+                        emit(Opcodes.LT_NUM);
+                        emitReg(ltReg);
+                        emitReg(cmpReg);
+                        emitReg(zeroReg);
+                        emit(Opcodes.NOT);
+                        emitReg(rd);
+                        emitReg(ltReg);
+                        return rd;
+                    }
+                }
+                emitReg(rd);
+                emitReg(cmpReg);
+                emitReg(zeroReg);
+            }
+            case "(", "()" -> {
+                // Apply operator: $coderef->(args) or &subname(args) or foo(args)
+                // left (rs1) = code reference (RuntimeScalar containing RuntimeCode or SubroutineNode)
+                // right (rs2) = arguments (should be RuntimeList from ListNode)
+
+                // Note: rs2 should contain a RuntimeList (from visiting the ListNode)
+                // We need to convert it to RuntimeArray for the CALL_SUB opcode
+
+                // For now, rs2 is a RuntimeList - we'll pass it directly and let
+                // BytecodeInterpreter convert it to RuntimeArray
+
+                // Emit CALL_SUB: rd = coderef.apply(args, context)
+                emit(Opcodes.CALL_SUB);
+                emitReg(rd);  // Result register
+                emitReg(rs1); // Code reference register
+                emitReg(rs2); // Arguments register (RuntimeList to be converted to RuntimeArray)
+                emit(currentCallContext); // Use current calling context
+
+                // Note: CALL_SUB may return RuntimeControlFlowList
+                // The interpreter will handle control flow propagation
+            }
+            case ".." -> {
+                // Range operator: start..end
+                // Create a PerlRange object which can be iterated or converted to a list
+
+                // Optimization: if both operands are constant numbers, create range at compile time
+                // (This optimization would need access to the original nodes, which we don't have here)
+                // So we always use runtime range creation
+
+                // Runtime range creation using RANGE opcode
+                // rs1 and rs2 already contain the start and end values
+                emit(Opcodes.RANGE);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
+            case "&&", "and" -> {
+                // Logical AND with short-circuit evaluation
+                // Semantics: if left is false, return left; else evaluate and return right
+                // Implementation:
+                //   rd = left
+                //   if (!rd) goto skip_right
+                //   rd = right
+                //   skip_right:
+
+                // Left operand is already in rs1
+                // Move to result register
+                emit(Opcodes.MOVE);
+                emitReg(rd);
+                emitReg(rs1);
+
+                // Mark position for forward jump
+                int skipRightPos = bytecode.size();
+
+                // Emit conditional jump: if (!rd) skip right evaluation
+                emit(Opcodes.GOTO_IF_FALSE);
+                emitReg(rd);
+                emitInt(0); // Placeholder for offset (will be patched)
+
+                // Right operand is already in rs2
+                // Move to result register (overwriting left value)
+                emit(Opcodes.MOVE);
+                emitReg(rd);
+                emitReg(rs2);
+
+                // Patch the forward jump offset
+                int skipRightTarget = bytecode.size();
+                patchIntOffset(skipRightPos + 2, skipRightTarget);
+            }
+            case "||", "or" -> {
+                // Logical OR with short-circuit evaluation
+                // Semantics: if left is true, return left; else evaluate and return right
+                // Implementation:
+                //   rd = left
+                //   if (rd) goto skip_right
+                //   rd = right
+                //   skip_right:
+
+                // Left operand is already in rs1
+                // Move to result register
+                emit(Opcodes.MOVE);
+                emitReg(rd);
+                emitReg(rs1);
+
+                // Mark position for forward jump
+                int skipRightPos = bytecode.size();
+
+                // Emit conditional jump: if (rd) skip right evaluation
+                emit(Opcodes.GOTO_IF_TRUE);
+                emitReg(rd);
+                emitInt(0); // Placeholder for offset (will be patched)
+
+                // Right operand is already in rs2
+                // Move to result register (overwriting left value)
+                emit(Opcodes.MOVE);
+                emitReg(rd);
+                emitReg(rs2);
+
+                // Patch the forward jump offset
+                int skipRightTarget = bytecode.size();
+                patchIntOffset(skipRightPos + 2, skipRightTarget);
+            }
+            case "map" -> {
+                // Map operator: map { block } list
+                // rs1 = closure (SubroutineNode compiled to code reference)
+                // rs2 = list expression
+
+                // Emit MAP opcode
+                emit(Opcodes.MAP);
+                emitReg(rd);
+                emitReg(rs2);       // List register
+                emitReg(rs1);       // Closure register
+                emit(RuntimeContextType.LIST);  // Map always uses list context
+            }
+            case "grep" -> {
+                // Grep operator: grep { block } list
+                // rs1 = closure (SubroutineNode compiled to code reference)
+                // rs2 = list expression
+
+                // Emit GREP opcode
+                emit(Opcodes.GREP);
+                emitReg(rd);
+                emitReg(rs2);       // List register
+                emitReg(rs1);       // Closure register
+                emit(RuntimeContextType.LIST);  // Grep uses list context
+            }
+            case "sort" -> {
+                // Sort operator: sort { block } list
+                // rs1 = closure (SubroutineNode compiled to code reference)
+                // rs2 = list expression
+
+                // Emit SORT opcode
+                emit(Opcodes.SORT);
+                emitReg(rd);
+                emitReg(rs2);       // List register
+                emitReg(rs1);       // Closure register
+                emitInt(addToStringPool(currentPackage));  // Package name for sort
+            }
+            case "split" -> {
+                // Split operator: split pattern, string
+                // rs1 = pattern (string or regex)
+                // rs2 = list containing string to split (and optional limit)
+
+                // Emit SLOW_OP with SLOWOP_SPLIT
+                emit(Opcodes.SLOW_OP);
+                emit(Opcodes.SLOWOP_SPLIT);
+                emitReg(rd);
+                emitReg(rs1);  // Pattern register
+                emitReg(rs2);  // Args register
+                emit(RuntimeContextType.LIST);  // Split uses list context
+            }
+            case "[" -> {
+                // Array element access: $a[10] means get element 10 from array @a
+                // Array slice: @a[1,2,3] or @a[1..3] means get multiple elements
+                // Also handles multidimensional: $a[0][1] means $a[0]->[1]
+                // This case should NOT be reached because array access is handled specially before this switch
+                throwCompilerException("Array access [ should be handled before switch", tokenIndex);
+            }
+            case "{" -> {
+                // Hash element access: $h{key} means get element 'key' from hash %h
+                // Hash slice access: @h{keys} returns multiple values as array
+                // This case should NOT be reached because hash access is handled specially before this switch
+                throwCompilerException("Hash access { should be handled before switch", tokenIndex);
+            }
+            case "push" -> {
+                // This should NOT be reached because push is handled specially before this switch
+                throwCompilerException("push should be handled before switch", tokenIndex);
+            }
+            case "unshift" -> {
+                // This should NOT be reached because unshift is handled specially before this switch
+                throwCompilerException("unshift should be handled before switch", tokenIndex);
+            }
+            case "+=" -> {
+                // This should NOT be reached because += is handled specially before this switch
+                throwCompilerException("+= should be handled before switch", tokenIndex);
+            }
+            case "-=", "*=", "/=", "%=" -> {
+                // This should NOT be reached because compound assignments are handled specially before this switch
+                throwCompilerException(operator + " should be handled before switch", tokenIndex);
+            }
+            default -> throwCompilerException("Unsupported operator: " + operator, tokenIndex);
+        }
+
+        return rd;
+    }
+
     @Override
     public void visit(BinaryOperatorNode node) {
         // Track token index for error reporting
@@ -660,977 +2004,10 @@ public class BytecodeCompiler implements Visitor {
 
         // Handle assignment separately (doesn't follow standard left-right-op pattern)
         if (node.operator.equals("=")) {
-            // Determine the calling context for the RHS based on LHS type
-            int rhsContext = RuntimeContextType.LIST; // Default
-
-            // Check if LHS is a scalar assignment (my $x = ... or our $x = ...)
-            if (node.left instanceof OperatorNode) {
-                OperatorNode leftOp = (OperatorNode) node.left;
-                if ((leftOp.operator.equals("my") || leftOp.operator.equals("our")) && leftOp.operand instanceof OperatorNode) {
-                    OperatorNode sigilOp = (OperatorNode) leftOp.operand;
-                    if (sigilOp.operator.equals("$")) {
-                        // Scalar assignment: use SCALAR context for RHS
-                        rhsContext = RuntimeContextType.SCALAR;
-                    }
-                } else if (leftOp.operator.equals("$")) {
-                    // Regular scalar assignment: $x = ...
-                    rhsContext = RuntimeContextType.SCALAR;
-                }
-            }
-
-            // Set the context for subroutine calls in RHS
-            int savedContext = currentCallContext;
-            try {
-                currentCallContext = rhsContext;
-
-            // Special case: my $x = value
-            if (node.left instanceof OperatorNode) {
-                OperatorNode leftOp = (OperatorNode) node.left;
-                if (leftOp.operator.equals("my")) {
-                    // Extract variable name from "my" operand
-                    Node myOperand = leftOp.operand;
-
-                    // Handle my $x (where $x is OperatorNode("$", IdentifierNode("x")))
-                    if (myOperand instanceof OperatorNode) {
-                        OperatorNode sigilOp = (OperatorNode) myOperand;
-                        if (sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode) {
-                            String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
-
-                            // Check if this variable is captured by named subs (Parser marks with id)
-                            if (sigilOp.id != 0) {
-                                // RETRIEVE the persistent variable (creates if doesn't exist)
-                                int beginId = sigilOp.id;
-                                int nameIdx = addToStringPool(varName);
-                                int reg = allocateRegister();
-
-                                emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                                emit(Opcodes.SLOWOP_RETRIEVE_BEGIN_SCALAR);
-                                emitReg(reg);
-                                emit(nameIdx);
-                                emit(beginId);
-
-                                // Now register contains a reference to the persistent RuntimeScalar
-                                // Store the initializer value INTO that RuntimeScalar
-                                node.right.accept(this);
-                                int valueReg = lastResultReg;
-
-                                // Set the value in the persistent scalar using SET_SCALAR
-                                // This calls .set() on the RuntimeScalar without overwriting the reference
-                                emit(Opcodes.SET_SCALAR);
-                                emitReg(reg);
-                                emitReg(valueReg);
-
-                                // Track this variable - map the name to the register we already allocated
-                                variableScopes.peek().put(varName, reg);
-                                lastResultReg = reg;
-                                return;
-                            }
-
-                            // Regular lexical variable (not captured)
-                            // Allocate register for new lexical variable and add to symbol table
-                            int reg = addVariable(varName, "my");
-
-                            // Compile RHS in the appropriate context
-                            // @ operator will check currentCallContext and emit ARRAY_SIZE if needed
-                            node.right.accept(this);
-                            int valueReg = lastResultReg;
-
-                            // Move to variable register
-                            emit(Opcodes.MOVE);
-                            emitReg(reg);
-                            emitReg(valueReg);
-
-                            lastResultReg = reg;
-                            return;
-                        } else if (sigilOp.operator.equals("@") && sigilOp.operand instanceof IdentifierNode) {
-                            // Handle my @array = ...
-                            String varName = "@" + ((IdentifierNode) sigilOp.operand).name;
-
-                            // Check if this variable is captured by named subs
-                            if (sigilOp.id != 0) {
-                                // RETRIEVE the persistent array
-                                int beginId = sigilOp.id;
-                                int nameIdx = addToStringPool(varName);
-                                int arrayReg = allocateRegister();
-
-                                emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                                emit(Opcodes.SLOWOP_RETRIEVE_BEGIN_ARRAY);
-                                emitReg(arrayReg);
-                                emit(nameIdx);
-                                emit(beginId);
-
-                                // Compile RHS (should evaluate to a list)
-                                node.right.accept(this);
-                                int listReg = lastResultReg;
-
-                                // Populate array from list
-                                emit(Opcodes.ARRAY_SET_FROM_LIST);
-                                emitReg(arrayReg);
-                                emitReg(listReg);
-
-                                // Track this variable - map the name to the register we already allocated
-                                variableScopes.peek().put(varName, arrayReg);
-                                lastResultReg = arrayReg;
-                                return;
-                            }
-
-                            // Regular lexical array (not captured)
-                            // Allocate register for new lexical array and add to symbol table
-                            int arrayReg = addVariable(varName, "my");
-
-                            // Create empty array
-                            emit(Opcodes.NEW_ARRAY);
-                            emitReg(arrayReg);
-
-                            // Compile RHS (should evaluate to a list)
-                            node.right.accept(this);
-                            int listReg = lastResultReg;
-
-                            // Populate array from list using setFromList
-                            emit(Opcodes.ARRAY_SET_FROM_LIST);
-                            emitReg(arrayReg);
-                            emitReg(listReg);
-
-                            lastResultReg = arrayReg;
-                            return;
-                        } else if (sigilOp.operator.equals("%") && sigilOp.operand instanceof IdentifierNode) {
-                            // Handle my %hash = ...
-                            String varName = "%" + ((IdentifierNode) sigilOp.operand).name;
-
-                            // Check if this variable is captured by named subs
-                            if (sigilOp.id != 0) {
-                                // RETRIEVE the persistent hash
-                                int beginId = sigilOp.id;
-                                int nameIdx = addToStringPool(varName);
-                                int hashReg = allocateRegister();
-
-                                emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                                emit(Opcodes.SLOWOP_RETRIEVE_BEGIN_HASH);
-                                emitReg(hashReg);
-                                emit(nameIdx);
-                                emit(beginId);
-
-                                // Compile RHS (should evaluate to a list)
-                                node.right.accept(this);
-                                int listReg = lastResultReg;
-
-                                // Populate hash from list
-                                emit(Opcodes.HASH_SET_FROM_LIST);
-                                emitReg(hashReg);
-                                emitReg(listReg);
-
-                                // Track this variable - map the name to the register we already allocated
-                                variableScopes.peek().put(varName, hashReg);
-                                lastResultReg = hashReg;
-                                return;
-                            }
-
-                            // Regular lexical hash (not captured)
-                            // Allocate register for new lexical hash and add to symbol table
-                            int hashReg = addVariable(varName, "my");
-
-                            // Create empty hash
-                            emit(Opcodes.NEW_HASH);
-                            emitReg(hashReg);
-
-                            // Compile RHS (should evaluate to a list)
-                            node.right.accept(this);
-                            int listReg = lastResultReg;
-
-                            // Populate hash from list
-                            emit(Opcodes.HASH_SET_FROM_LIST);
-                            emitReg(hashReg);
-                            emitReg(listReg);
-
-                            lastResultReg = hashReg;
-                            return;
-                        }
-                    }
-
-                    // Handle my x (direct identifier without sigil)
-                    if (myOperand instanceof IdentifierNode) {
-                        String varName = ((IdentifierNode) myOperand).name;
-
-                        // Allocate register for new lexical variable and add to symbol table
-                        int reg = addVariable(varName, "my");
-
-                        // Compile RHS
-                        node.right.accept(this);
-                        int valueReg = lastResultReg;
-
-                        // Move to variable register
-                        emit(Opcodes.MOVE);
-                        emitReg(reg);
-                        emitReg(valueReg);
-
-                        lastResultReg = reg;
-                        return;
-                    }
-                }
-
-                // Special case: local $x = value
-                if (leftOp.operator.equals("local")) {
-                    // Extract variable from "local" operand
-                    Node localOperand = leftOp.operand;
-
-                    // Handle local $x (where $x is OperatorNode("$", IdentifierNode("x")))
-                    if (localOperand instanceof OperatorNode) {
-                        OperatorNode sigilOp = (OperatorNode) localOperand;
-                        if (sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode) {
-                            String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
-
-                            // Check if it's a lexical variable (should not be localized)
-                            if (hasVariable(varName)) {
-                                throwCompilerException("Can't localize lexical variable " + varName);
-                                return;
-                            }
-
-                            // It's a global variable - emit SLOW_OP to call GlobalRuntimeScalar.makeLocal()
-                            String packageName = getCurrentPackage();
-                            String globalVarName = packageName + "::" + ((IdentifierNode) sigilOp.operand).name;
-                            int nameIdx = addToStringPool(globalVarName);
-
-                            int localReg = allocateRegister();
-                            emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                            emit(Opcodes.SLOWOP_LOCAL_SCALAR);
-                            emitReg(localReg);
-                            emit(nameIdx);
-
-                            // Compile RHS
-                            node.right.accept(this);
-                            int valueReg = lastResultReg;
-
-                            // Assign value to the localized variable
-                            // The localized variable is a RuntimeScalar, so we use set() on it
-                            emit(Opcodes.STORE_GLOBAL_SCALAR);
-                            emit(nameIdx);
-                            emitReg(valueReg);
-
-                            lastResultReg = localReg;
-                            return;
-                        }
-                    }
-                }
-            }
-
-            // Regular assignment: $x = value
-            // OPTIMIZATION: Detect $x = $x + $y and emit ADD_ASSIGN instead of ADD_SCALAR + MOVE
-            if (node.left instanceof OperatorNode && node.right instanceof BinaryOperatorNode) {
-                OperatorNode leftOp = (OperatorNode) node.left;
-                BinaryOperatorNode rightBin = (BinaryOperatorNode) node.right;
-
-                if (leftOp.operator.equals("$") && leftOp.operand instanceof IdentifierNode &&
-                    rightBin.operator.equals("+") &&
-                    rightBin.left instanceof OperatorNode) {
-
-                    String leftVarName = "$" + ((IdentifierNode) leftOp.operand).name;
-                    OperatorNode rightLeftOp = (OperatorNode) rightBin.left;
-
-                    if (rightLeftOp.operator.equals("$") && rightLeftOp.operand instanceof IdentifierNode) {
-                        String rightLeftVarName = "$" + ((IdentifierNode) rightLeftOp.operand).name;
-
-                        // Pattern match: $x = $x + $y (emit ADD_ASSIGN)
-                        // Skip optimization for captured variables (need SET_SCALAR)
-                        boolean isCaptured = capturedVarIndices != null &&
-                                            capturedVarIndices.containsKey(leftVarName);
-
-                        if (leftVarName.equals(rightLeftVarName) && hasVariable(leftVarName) && !isCaptured) {
-                            int targetReg = getVariableRegister(leftVarName);
-
-                            // Compile RHS operand ($y)
-                            rightBin.right.accept(this);
-                            int rhsReg = lastResultReg;
-
-                            // Emit ADD_ASSIGN instead of ADD_SCALAR + MOVE
-                            emit(Opcodes.ADD_ASSIGN);
-                            emitReg(targetReg);
-                            emitReg(rhsReg);
-
-                            lastResultReg = targetReg;
-                            return;
-                        }
-                    }
-                }
-            }
-
-            // Regular assignment: $x = value (no optimization)
-            // Compile RHS first
-            node.right.accept(this);
-            int valueReg = lastResultReg;
-
-            // Assign to LHS
-            if (node.left instanceof OperatorNode) {
-                OperatorNode leftOp = (OperatorNode) node.left;
-                if (leftOp.operator.equals("$") && leftOp.operand instanceof IdentifierNode) {
-                    String varName = "$" + ((IdentifierNode) leftOp.operand).name;
-
-                    if (hasVariable(varName)) {
-                        // Lexical variable - check if it's captured
-                        int targetReg = getVariableRegister(varName);
-
-                        if (capturedVarIndices != null && capturedVarIndices.containsKey(varName)) {
-                            // Captured variable - use SET_SCALAR to preserve aliasing
-                            emit(Opcodes.SET_SCALAR);
-                            emitReg(targetReg);
-                            emitReg(valueReg);
-                        } else {
-                            // Regular lexical - use MOVE
-                            emit(Opcodes.MOVE);
-                            emitReg(targetReg);
-                            emitReg(valueReg);
-                        }
-
-                        lastResultReg = targetReg;
-                    } else {
-                        // Global variable
-                        int nameIdx = addToStringPool(varName);
-                        emit(Opcodes.STORE_GLOBAL_SCALAR);
-                        emit(nameIdx);
-                        emitReg(valueReg);
-                        lastResultReg = valueReg;
-                    }
-                } else if (leftOp.operator.equals("@") && leftOp.operand instanceof IdentifierNode) {
-                    // Array assignment: @array = ...
-                    String varName = "@" + ((IdentifierNode) leftOp.operand).name;
-
-                    int arrayReg;
-                    if (hasVariable(varName)) {
-                        // Lexical array
-                        arrayReg = getVariableRegister(varName);
-                    } else {
-                        // Global array - load it
-                        arrayReg = allocateRegister();
-                        String globalArrayName = NameNormalizer.normalizeVariableName(((IdentifierNode) leftOp.operand).name, getCurrentPackage());
-                        int nameIdx = addToStringPool(globalArrayName);
-                        emit(Opcodes.LOAD_GLOBAL_ARRAY);
-                        emitReg(arrayReg);
-                        emit(nameIdx);
-                    }
-
-                    // Populate array from list using setFromList
-                    emit(Opcodes.ARRAY_SET_FROM_LIST);
-                    emitReg(arrayReg);
-                    emitReg(valueReg);
-
-                    lastResultReg = arrayReg;
-                } else if (leftOp.operator.equals("%") && leftOp.operand instanceof IdentifierNode) {
-                    // Hash assignment: %hash = ...
-                    String varName = "%" + ((IdentifierNode) leftOp.operand).name;
-
-                    int hashReg;
-                    if (hasVariable(varName)) {
-                        // Lexical hash
-                        hashReg = getVariableRegister(varName);
-                    } else {
-                        // Global hash - load it
-                        hashReg = allocateRegister();
-                        String globalHashName = NameNormalizer.normalizeVariableName(((IdentifierNode) leftOp.operand).name, getCurrentPackage());
-                        int nameIdx = addToStringPool(globalHashName);
-                        emit(Opcodes.LOAD_GLOBAL_HASH);
-                        emitReg(hashReg);
-                        emit(nameIdx);
-                    }
-
-                    // Populate hash from list using setFromList
-                    emit(Opcodes.HASH_SET_FROM_LIST);
-                    emitReg(hashReg);
-                    emitReg(valueReg);
-
-                    lastResultReg = hashReg;
-                } else if (leftOp.operator.equals("our")) {
-                    // Assignment to our variable: our $x = value or our @x = value or our %x = value
-                    // Compile the our declaration first (which loads the global into a register)
-                    leftOp.accept(this);
-                    int targetReg = lastResultReg;
-
-                    // Now assign the RHS value to the target register
-                    // The target register contains either a scalar, array, or hash
-                    // We need to determine which and use the appropriate assignment
-
-                    // Extract the sigil from our operand
-                    if (leftOp.operand instanceof OperatorNode) {
-                        OperatorNode sigilOp = (OperatorNode) leftOp.operand;
-                        String sigil = sigilOp.operator;
-
-                        if (sigil.equals("$")) {
-                            // Scalar: use SET_SCALAR to modify value without breaking alias
-                            emit(Opcodes.SET_SCALAR);
-                            emitReg(targetReg);
-                            emitReg(valueReg);
-                        } else if (sigil.equals("@")) {
-                            // Array: use ARRAY_SET_FROM_LIST
-                            emit(Opcodes.ARRAY_SET_FROM_LIST);
-                            emitReg(targetReg);
-                            emitReg(valueReg);
-                        } else if (sigil.equals("%")) {
-                            // Hash: use HASH_SET_FROM_LIST
-                            emit(Opcodes.HASH_SET_FROM_LIST);
-                            emitReg(targetReg);
-                            emitReg(valueReg);
-                        }
-                    } else if (leftOp.operand instanceof ListNode) {
-                        // our ($a, $b) = ... - list declaration with assignment
-                        // The our statement already declared the variables and returned a list
-                        // We need to assign the RHS values to each variable
-                        ListNode listNode = (ListNode) leftOp.operand;
-
-                        // Convert RHS to list
-                        int rhsListReg = allocateRegister();
-                        emit(Opcodes.SCALAR_TO_LIST);
-                        emitReg(rhsListReg);
-                        emitReg(valueReg);
-
-                        // Assign each element
-                        for (int i = 0; i < listNode.elements.size(); i++) {
-                            Node element = listNode.elements.get(i);
-                            if (element instanceof OperatorNode) {
-                                OperatorNode sigilOp = (OperatorNode) element;
-                                String sigil = sigilOp.operator;
-
-                                if (sigilOp.operand instanceof IdentifierNode) {
-                                    String varName = sigil + ((IdentifierNode) sigilOp.operand).name;
-                                    int varReg = getVariableRegister(varName);
-
-                                    // Get i-th element from RHS
-                                    int indexReg = allocateRegister();
-                                    emit(Opcodes.LOAD_INT);
-                                    emitReg(indexReg);
-                                    emitInt(i);
-
-                                    int elemReg = allocateRegister();
-                                    emit(Opcodes.ARRAY_GET);
-                                    emitReg(elemReg);
-                                    emitReg(rhsListReg);
-                                    emitReg(indexReg);
-
-                                    // Assign to variable
-                                    if (sigil.equals("$")) {
-                                        emit(Opcodes.MOVE);
-                                        emitReg(varReg);
-                                        emitReg(elemReg);
-                                    } else if (sigil.equals("@")) {
-                                        emit(Opcodes.ARRAY_SET_FROM_LIST);
-                                        emitReg(varReg);
-                                        emitReg(elemReg);
-                                    } else if (sigil.equals("%")) {
-                                        emit(Opcodes.HASH_SET_FROM_LIST);
-                                        emitReg(varReg);
-                                        emitReg(elemReg);
-                                    }
-                                }
-                            }
-                        }
-                        lastResultReg = valueReg;
-                        currentCallContext = savedContext;
-                        return;
-                    }
-
-                    lastResultReg = targetReg;
-                } else {
-                    throw new RuntimeException("Assignment to unsupported operator: " + leftOp.operator);
-                }
-            } else if (node.left instanceof IdentifierNode) {
-                String varName = ((IdentifierNode) node.left).name;
-
-                if (hasVariable(varName)) {
-                    // Lexical variable - copy to its register
-                    int targetReg = getVariableRegister(varName);
-                    emit(Opcodes.MOVE);
-                    emitReg(targetReg);
-                    emitReg(valueReg);
-                    lastResultReg = targetReg;
-                } else {
-                    // Global variable
-                    int nameIdx = addToStringPool(varName);
-                    emit(Opcodes.STORE_GLOBAL_SCALAR);
-                    emit(nameIdx);
-                    emitReg(valueReg);
-                    lastResultReg = valueReg;
-                }
-            } else if (node.left instanceof BinaryOperatorNode) {
-                BinaryOperatorNode leftBin = (BinaryOperatorNode) node.left;
-
-                // Handle array slice assignment: @array[1, 3, 5] = (20, 30, 40)
-                if (leftBin.operator.equals("[") && leftBin.left instanceof OperatorNode) {
-                    OperatorNode arrayOp = (OperatorNode) leftBin.left;
-
-                    // Must be @array (not $array)
-                    if (arrayOp.operator.equals("@") && arrayOp.operand instanceof IdentifierNode) {
-                        String varName = "@" + ((IdentifierNode) arrayOp.operand).name;
-
-                        // Get the array register
-                        int arrayReg;
-                        if (hasVariable(varName)) {
-                            // Lexical array
-                            arrayReg = getVariableRegister(varName);
-                        } else {
-                            // Global array - load it
-                            arrayReg = allocateRegister();
-                            String globalArrayName = NameNormalizer.normalizeVariableName(
-                                ((IdentifierNode) arrayOp.operand).name,
-                                getCurrentPackage()
-                            );
-                            int nameIdx = addToStringPool(globalArrayName);
-                            emit(Opcodes.LOAD_GLOBAL_ARRAY);
-                            emitReg(arrayReg);
-                            emit(nameIdx);
-                        }
-
-                        // Compile indices (right side of [])
-                        // ArrayLiteralNode contains the indices
-                        if (!(leftBin.right instanceof ArrayLiteralNode)) {
-                            throwCompilerException("Array slice assignment requires index list");
-                        }
-
-                        ArrayLiteralNode indicesNode = (ArrayLiteralNode) leftBin.right;
-                        List<Integer> indexRegs = new ArrayList<>();
-                        for (Node indexNode : indicesNode.elements) {
-                            indexNode.accept(this);
-                            indexRegs.add(lastResultReg);
-                        }
-
-                        // Create indices list
-                        int indicesReg = allocateRegister();
-                        emit(Opcodes.CREATE_LIST);
-                        emitReg(indicesReg);
-                        emit(indexRegs.size());
-                        for (int indexReg : indexRegs) {
-                            emitReg(indexReg);
-                        }
-
-                        // Compile values (RHS of assignment)
-                        node.right.accept(this);
-                        int valuesReg = lastResultReg;
-
-                        // Emit SLOW_OP with SLOWOP_ARRAY_SLICE_SET
-                        emit(Opcodes.SLOW_OP);
-                        emit(Opcodes.SLOWOP_ARRAY_SLICE_SET);
-                        emitReg(arrayReg);
-                        emitReg(indicesReg);
-                        emitReg(valuesReg);
-
-                        lastResultReg = arrayReg;
-                        currentCallContext = savedContext;
-                        return;
-                    }
-                }
-
-                // Handle single element array assignment
-                // For: $array[index] = value or $matrix[3][0] = value
-                if (leftBin.operator.equals("[")) {
-                    int arrayReg;
-
-                    // Check if left side is a variable or multidimensional access
-                    if (leftBin.left instanceof OperatorNode) {
-                        OperatorNode arrayOp = (OperatorNode) leftBin.left;
-
-                        // Single element assignment: $array[index] = value
-                        if (arrayOp.operator.equals("$") && arrayOp.operand instanceof IdentifierNode) {
-                            String varName = ((IdentifierNode) arrayOp.operand).name;
-                            String arrayVarName = "@" + varName;
-
-                            // Get the array register
-                            if (hasVariable(arrayVarName)) {
-                                // Lexical array
-                                arrayReg = getVariableRegister(arrayVarName);
-                            } else {
-                                // Global array - load it
-                                arrayReg = allocateRegister();
-                                String globalArrayName = NameNormalizer.normalizeVariableName(
-                                    varName,
-                                    getCurrentPackage()
-                                );
-                                int nameIdx = addToStringPool(globalArrayName);
-                                emit(Opcodes.LOAD_GLOBAL_ARRAY);
-                                emitReg(arrayReg);
-                                emit(nameIdx);
-                            }
-                        } else {
-                            throwCompilerException("Assignment requires scalar dereference: $var[index]");
-                            return;
-                        }
-                    } else if (leftBin.left instanceof BinaryOperatorNode) {
-                        // Multidimensional case: $matrix[3][0] = value
-                        // Compile left side (which returns a scalar containing an array reference)
-                        leftBin.left.accept(this);
-                        int scalarReg = lastResultReg;
-
-                        // Dereference the array reference to get the actual array
-                        arrayReg = allocateRegister();
-                        emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                        emit(Opcodes.SLOWOP_DEREF_ARRAY);
-                        emitReg(arrayReg);
-                        emitReg(scalarReg);
-                    } else {
-                        throwCompilerException("Array assignment requires variable or expression on left side");
-                        return;
-                    }
-
-                    // Compile index expression
-                    if (!(leftBin.right instanceof ArrayLiteralNode)) {
-                        throwCompilerException("Array assignment requires ArrayLiteralNode on right side");
-                    }
-                    ArrayLiteralNode indexNode = (ArrayLiteralNode) leftBin.right;
-                    if (indexNode.elements.isEmpty()) {
-                        throwCompilerException("Array assignment requires index expression");
-                    }
-
-                    indexNode.elements.get(0).accept(this);
-                    int indexReg = lastResultReg;
-
-                    // Compile RHS value
-                    node.right.accept(this);
-                    int assignValueReg = lastResultReg;
-
-                    // Emit ARRAY_SET
-                    emit(Opcodes.ARRAY_SET);
-                    emitReg(arrayReg);
-                    emitReg(indexReg);
-                    emitReg(assignValueReg);
-
-                    lastResultReg = assignValueReg;
-                    currentCallContext = savedContext;
-                    return;
-                } else if (leftBin.operator.equals("{")) {
-                    // Hash element/slice assignment
-                    // $hash{key} = value (scalar element)
-                    // @hash{keys} = values (slice)
-
-                    // 1. Get hash variable (leftBin.left)
-                    int hashReg;
-                    if (leftBin.left instanceof OperatorNode) {
-                        OperatorNode hashOp = (OperatorNode) leftBin.left;
-
-                        // Check for hash slice assignment: @hash{keys} = values
-                        if (hashOp.operator.equals("@")) {
-                            // Hash slice assignment
-                            if (!(hashOp.operand instanceof IdentifierNode)) {
-                                throwCompilerException("Hash slice assignment requires identifier");
-                                return;
-                            }
-                            String varName = ((IdentifierNode) hashOp.operand).name;
-                            String hashVarName = "%" + varName;
-
-                            // Get the hash - check lexical first, then global
-                            if (hasVariable(hashVarName)) {
-                                // Lexical hash
-                                hashReg = getVariableRegister(hashVarName);
-                            } else {
-                                // Global hash - load it
-                                hashReg = allocateRegister();
-                                String globalHashName = NameNormalizer.normalizeVariableName(
-                                    varName,
-                                    getCurrentPackage()
-                                );
-                                int nameIdx = addToStringPool(globalHashName);
-                                emit(Opcodes.LOAD_GLOBAL_HASH);
-                                emitReg(hashReg);
-                                emit(nameIdx);
-                            }
-
-                            // Get the keys from HashLiteralNode
-                            if (!(leftBin.right instanceof HashLiteralNode)) {
-                                throwCompilerException("Hash slice assignment requires HashLiteralNode");
-                                return;
-                            }
-                            HashLiteralNode keysNode = (HashLiteralNode) leftBin.right;
-                            if (keysNode.elements.isEmpty()) {
-                                throwCompilerException("Hash slice assignment requires at least one key");
-                                return;
-                            }
-
-                            // Compile all keys into a list
-                            List<Integer> keyRegs = new ArrayList<>();
-                            for (Node keyElement : keysNode.elements) {
-                                if (keyElement instanceof IdentifierNode) {
-                                    // Bareword key - autoquote
-                                    String keyString = ((IdentifierNode) keyElement).name;
-                                    int keyReg = allocateRegister();
-                                    int keyIdx = addToStringPool(keyString);
-                                    emit(Opcodes.LOAD_STRING);
-                                    emitReg(keyReg);
-                                    emit(keyIdx);
-                                    keyRegs.add(keyReg);
-                                } else {
-                                    // Expression key
-                                    keyElement.accept(this);
-                                    keyRegs.add(lastResultReg);
-                                }
-                            }
-
-                            // Create a RuntimeList from key registers
-                            int keysListReg = allocateRegister();
-                            emit(Opcodes.CREATE_LIST);
-                            emitReg(keysListReg);
-                            emit(keyRegs.size());
-                            for (int keyReg : keyRegs) {
-                                emitReg(keyReg);
-                            }
-
-                            // Compile RHS values
-                            node.right.accept(this);
-                            int valuesReg = lastResultReg;
-
-                            // Emit SLOW_OP with SLOWOP_HASH_SLICE_SET
-                            emit(Opcodes.SLOW_OP);
-                            emit(Opcodes.SLOWOP_HASH_SLICE_SET);
-                            emitReg(hashReg);
-                            emitReg(keysListReg);
-                            emitReg(valuesReg);
-
-                            lastResultReg = valuesReg;
-                            currentCallContext = savedContext;
-                            return;
-                        } else if (hashOp.operator.equals("$")) {
-                            // $hash{key} - dereference to get hash
-                            if (!(hashOp.operand instanceof IdentifierNode)) {
-                                throwCompilerException("Hash assignment requires identifier");
-                                return;
-                            }
-                            String varName = ((IdentifierNode) hashOp.operand).name;
-                            String hashVarName = "%" + varName;
-
-                            if (hasVariable(hashVarName)) {
-                                // Lexical hash
-                                hashReg = getVariableRegister(hashVarName);
-                            } else {
-                                // Global hash - load it
-                                hashReg = allocateRegister();
-                                String globalHashName = NameNormalizer.normalizeVariableName(
-                                    varName,
-                                    getCurrentPackage()
-                                );
-                                int nameIdx = addToStringPool(globalHashName);
-                                emit(Opcodes.LOAD_GLOBAL_HASH);
-                                emitReg(hashReg);
-                                emit(nameIdx);
-                            }
-                        } else {
-                            throwCompilerException("Hash assignment requires scalar dereference: $var{key}");
-                            return;
-                        }
-                    } else if (leftBin.left instanceof BinaryOperatorNode) {
-                        // Nested: $hash{outer}{inner} = value
-                        // Compile left side (returns scalar containing hash reference or autovivifies)
-                        leftBin.left.accept(this);
-                        int scalarReg = lastResultReg;
-
-                        // Dereference to get the hash (with autovivification)
-                        hashReg = allocateRegister();
-                        emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                        emit(Opcodes.SLOWOP_DEREF_HASH);
-                        emitReg(hashReg);
-                        emitReg(scalarReg);
-                    } else {
-                        throwCompilerException("Hash assignment requires variable or expression on left side");
-                        return;
-                    }
-
-                    // 2. Compile key expression
-                    if (!(leftBin.right instanceof HashLiteralNode)) {
-                        throwCompilerException("Hash assignment requires HashLiteralNode on right side");
-                        return;
-                    }
-                    HashLiteralNode keyNode = (HashLiteralNode) leftBin.right;
-                    if (keyNode.elements.isEmpty()) {
-                        throwCompilerException("Hash key required for assignment");
-                        return;
-                    }
-
-                    // Compile the key
-                    // Special case: IdentifierNode in hash access is autoquoted (bareword key)
-                    int keyReg;
-                    Node keyElement = keyNode.elements.get(0);
-                    if (keyElement instanceof IdentifierNode) {
-                        // Bareword key: $hash{key} -> key is autoquoted to "key"
-                        String keyString = ((IdentifierNode) keyElement).name;
-                        keyReg = allocateRegister();
-                        int keyIdx = addToStringPool(keyString);
-                        emit(Opcodes.LOAD_STRING);
-                        emitReg(keyReg);
-                        emit(keyIdx);
-                    } else {
-                        // Expression key: $hash{$var} or $hash{func()}
-                        keyElement.accept(this);
-                        keyReg = lastResultReg;
-                    }
-
-                    // 3. Compile RHS value
-                    node.right.accept(this);
-                    int hashValueReg = lastResultReg;
-
-                    // 4. Emit HASH_SET
-                    emit(Opcodes.HASH_SET);
-                    emitReg(hashReg);
-                    emitReg(keyReg);
-                    emitReg(hashValueReg);
-
-                    lastResultReg = hashValueReg;
-                    currentCallContext = savedContext;
-                    return;
-                }
-
-                throwCompilerException("Assignment to non-identifier not yet supported: " + node.left.getClass().getSimpleName());
-            } else if (node.left instanceof ListNode) {
-                // List assignment: ($a, $b) = ... or () = ...
-                // In scalar context, returns the number of elements on RHS
-                // In list context, returns the RHS list
-                ListNode listNode = (ListNode) node.left;
-
-                // Compile RHS in LIST context to get all elements
-                int savedRhsContext = currentCallContext;
-                currentCallContext = RuntimeContextType.LIST;
-                node.right.accept(this);
-                int rhsReg = lastResultReg;
-                currentCallContext = savedRhsContext;
-
-                // Convert RHS to RuntimeList if needed
-                int rhsListReg = allocateRegister();
-                emit(Opcodes.SCALAR_TO_LIST);
-                emitReg(rhsListReg);
-                emitReg(rhsReg);
-
-                // If the list is not empty, perform the assignment
-                if (!listNode.elements.isEmpty()) {
-                    // Assign each RHS element to corresponding LHS variable
-                    for (int i = 0; i < listNode.elements.size(); i++) {
-                        Node lhsElement = listNode.elements.get(i);
-
-                        // Get the i-th element from RHS list
-                        int indexReg = allocateRegister();
-                        emit(Opcodes.LOAD_INT);
-                        emitReg(indexReg);
-                        emitInt(i);
-
-                        int elementReg = allocateRegister();
-                        emit(Opcodes.ARRAY_GET);
-                        emitReg(elementReg);
-                        emitReg(rhsListReg);
-                        emitReg(indexReg);
-
-                        // Assign to LHS element
-                        if (lhsElement instanceof OperatorNode) {
-                            OperatorNode lhsOp = (OperatorNode) lhsElement;
-                            if (lhsOp.operator.equals("$") && lhsOp.operand instanceof IdentifierNode) {
-                                String varName = "$" + ((IdentifierNode) lhsOp.operand).name;
-
-                                if (hasVariable(varName)) {
-                                    int targetReg = getVariableRegister(varName);
-                                    if (capturedVarIndices != null && capturedVarIndices.containsKey(varName)) {
-                                        emit(Opcodes.SET_SCALAR);
-                                        emitReg(targetReg);
-                                        emitReg(elementReg);
-                                    } else {
-                                        emit(Opcodes.MOVE);
-                                        emitReg(targetReg);
-                                        emitReg(elementReg);
-                                    }
-                                } else {
-                                    int nameIdx = addToStringPool(varName);
-                                    emit(Opcodes.STORE_GLOBAL_SCALAR);
-                                    emit(nameIdx);
-                                    emitReg(elementReg);
-                                }
-                            } else if (lhsOp.operator.equals("@") && lhsOp.operand instanceof IdentifierNode) {
-                                // Array slurp: ($a, @rest) = ...
-                                // Collect remaining elements into a RuntimeList
-                                String varName = "@" + ((IdentifierNode) lhsOp.operand).name;
-
-                                int arrayReg;
-                                if (hasVariable(varName)) {
-                                    arrayReg = getVariableRegister(varName);
-                                } else {
-                                    arrayReg = allocateRegister();
-                                    String globalArrayName = NameNormalizer.normalizeVariableName(
-                                        ((IdentifierNode) lhsOp.operand).name,
-                                        getCurrentPackage()
-                                    );
-                                    int nameIdx = addToStringPool(globalArrayName);
-                                    emit(Opcodes.LOAD_GLOBAL_ARRAY);
-                                    emitReg(arrayReg);
-                                    emit(nameIdx);
-                                }
-
-                                // Create a list of remaining indices
-                                // Use SLOWOP_LIST_SLICE_FROM to get list[i..]
-                                int remainingListReg = allocateRegister();
-                                emit(Opcodes.SLOW_OP);
-                                emit(Opcodes.SLOWOP_LIST_SLICE_FROM);
-                                emitReg(remainingListReg);
-                                emitReg(rhsListReg);
-                                emitInt(i);  // Start index
-
-                                // Populate array from remaining elements
-                                emit(Opcodes.ARRAY_SET_FROM_LIST);
-                                emitReg(arrayReg);
-                                emitReg(remainingListReg);
-
-                                // Array slurp consumes all remaining elements
-                                break;
-                            } else if (lhsOp.operator.equals("%") && lhsOp.operand instanceof IdentifierNode) {
-                                // Hash slurp: ($a, %rest) = ...
-                                String varName = "%" + ((IdentifierNode) lhsOp.operand).name;
-
-                                int hashReg;
-                                if (hasVariable(varName)) {
-                                    hashReg = getVariableRegister(varName);
-                                } else {
-                                    hashReg = allocateRegister();
-                                    String globalHashName = NameNormalizer.normalizeVariableName(
-                                        ((IdentifierNode) lhsOp.operand).name,
-                                        getCurrentPackage()
-                                    );
-                                    int nameIdx = addToStringPool(globalHashName);
-                                    emit(Opcodes.LOAD_GLOBAL_HASH);
-                                    emitReg(hashReg);
-                                    emit(nameIdx);
-                                }
-
-                                // Get remaining elements from list
-                                int remainingListReg = allocateRegister();
-                                emit(Opcodes.SLOW_OP);
-                                emit(Opcodes.SLOWOP_LIST_SLICE_FROM);
-                                emitReg(remainingListReg);
-                                emitReg(rhsListReg);
-                                emitInt(i);  // Start index
-
-                                // Populate hash from remaining elements
-                                emit(Opcodes.HASH_SET_FROM_LIST);
-                                emitReg(hashReg);
-                                emitReg(remainingListReg);
-
-                                // Hash slurp consumes all remaining elements
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                // Return value depends on savedContext (the context this assignment was called in)
-                if (savedContext == RuntimeContextType.SCALAR) {
-                    // In scalar context, list assignment returns the count of RHS elements
-                    int countReg = allocateRegister();
-                    emit(Opcodes.ARRAY_SIZE);
-                    emitReg(countReg);
-                    emitReg(rhsListReg);
-                    lastResultReg = countReg;
-                } else {
-                    // In list context, return the RHS value
-                    lastResultReg = rhsListReg;
-                }
-
-                currentCallContext = savedContext;
-                return;
-            } else {
-                throwCompilerException("Assignment to non-identifier not yet supported: " + node.left.getClass().getSimpleName());
-            }
-
+            compileAssignmentOperator(node);
             return;
-            } finally {
-                // Always restore the calling context
-                currentCallContext = savedContext;
-            }
         }
+
 
         // Handle -> operator specially for hashref/arrayref dereference
         if (node.operator.equals("->")) {
@@ -1870,892 +2247,18 @@ public class BytecodeCompiler implements Visitor {
         node.right.accept(this);
         int rs2 = lastResultReg;
 
-        // Allocate result register
-        int rd = allocateRegister();
+        // Emit opcode based on operator (delegated to helper method)
+        int rd = compileBinaryOperatorSwitch(node.operator, rs1, rs2, node.getIndex());
 
-        // Emit opcode based on operator
-        switch (node.operator) {
-            case "+" -> {
-                emit(Opcodes.ADD_SCALAR);
-                emitReg(rd);
-                emitReg(rs1);
-                emitReg(rs2);
-            }
-            case "-" -> {
-                emit(Opcodes.SUB_SCALAR);
-                emitReg(rd);
-                emitReg(rs1);
-                emitReg(rs2);
-            }
-            case "*" -> {
-                emit(Opcodes.MUL_SCALAR);
-                emitReg(rd);
-                emitReg(rs1);
-                emitReg(rs2);
-            }
-            case "%" -> {
-                emit(Opcodes.MOD_SCALAR);
-                emitReg(rd);
-                emitReg(rs1);
-                emitReg(rs2);
-            }
-            case "/" -> {
-                emit(Opcodes.DIV_SCALAR);
-                emitReg(rd);
-                emitReg(rs1);
-                emitReg(rs2);
-            }
-            case "**" -> {
-                emit(Opcodes.POW_SCALAR);
-                emitReg(rd);
-                emitReg(rs1);
-                emitReg(rs2);
-            }
-            case "." -> {
-                emit(Opcodes.CONCAT);
-                emitReg(rd);
-                emitReg(rs1);
-                emitReg(rs2);
-            }
-            case "x" -> {
-                emit(Opcodes.REPEAT);
-                emitReg(rd);
-                emitReg(rs1);
-                emitReg(rs2);
-            }
-            case "<=>" -> {
-                emit(Opcodes.COMPARE_NUM);
-                emitReg(rd);
-                emitReg(rs1);
-                emitReg(rs2);
-            }
-            case "cmp" -> {
-                emit(Opcodes.COMPARE_STR);
-                emitReg(rd);
-                emitReg(rs1);
-                emitReg(rs2);
-            }
-            case "bless" -> {
-                // bless $ref, "Package" or bless $ref (defaults to current package)
-                // rs1 = reference to bless
-                // rs2 = package name (or undef for current package)
-                emit(Opcodes.BLESS);
-                emitReg(rd);
-                emitReg(rs1);
-                emitReg(rs2);
-            }
-            case "isa" -> {
-                // $obj isa "Package" - check if object is instance of package
-                // rs1 = object/reference
-                // rs2 = package name
-                emit(Opcodes.ISA);
-                emitReg(rd);
-                emitReg(rs1);
-                emitReg(rs2);
-            }
-            case "==" -> {
-                emit(Opcodes.EQ_NUM);
-                emitReg(rd);
-                emitReg(rs1);
-                emitReg(rs2);
-            }
-            case "<" -> {
-                emit(Opcodes.LT_NUM);
-                emitReg(rd);
-                emitReg(rs1);
-                emitReg(rs2);
-            }
-            case ">" -> {
-                emit(Opcodes.GT_NUM);
-                emitReg(rd);
-                emitReg(rs1);
-                emitReg(rs2);
-            }
-            case "!=" -> {
-                emit(Opcodes.NE_NUM);
-                emitReg(rd);
-                emitReg(rs1);
-                emitReg(rs2);
-            }
-            case "eq" -> {
-                // String equality: $a eq $b
-                emit(Opcodes.EQ_STR);
-                emitReg(rd);
-                emitReg(rs1);
-                emitReg(rs2);
-            }
-            case "ne" -> {
-                // String inequality: $a ne $b
-                emit(Opcodes.NE_STR);
-                emitReg(rd);
-                emitReg(rs1);
-                emitReg(rs2);
-            }
-            case "lt", "gt", "le", "ge" -> {
-                // String comparisons using COMPARE_STR (like cmp)
-                // cmp returns: -1 if $a lt $b, 0 if equal, 1 if $a gt $b
-                int cmpReg = allocateRegister();
-                emit(Opcodes.COMPARE_STR);
-                emitReg(cmpReg);
-                emitReg(rs1);
-                emitReg(rs2);
-
-                // Compare result to 0
-                int zeroReg = allocateRegister();
-                emit(Opcodes.LOAD_INT);
-                emitReg(zeroReg);
-                emitInt(0);
-
-                // Emit appropriate comparison
-                switch (node.operator) {
-                    case "lt" -> emit(Opcodes.LT_NUM);  // cmp < 0
-                    case "gt" -> emit(Opcodes.GT_NUM);  // cmp > 0
-                    case "le" -> {
-                        // le: cmp <= 0, which is !(cmp > 0)
-                        int gtReg = allocateRegister();
-                        emit(Opcodes.GT_NUM);
-                        emitReg(gtReg);
-                        emitReg(cmpReg);
-                        emitReg(zeroReg);
-                        emit(Opcodes.NOT);
-                        emitReg(rd);
-                        emitReg(gtReg);
-                        lastResultReg = rd;
-                        return;
-                    }
-                    case "ge" -> {
-                        // ge: cmp >= 0, which is !(cmp < 0)
-                        int ltReg = allocateRegister();
-                        emit(Opcodes.LT_NUM);
-                        emitReg(ltReg);
-                        emitReg(cmpReg);
-                        emitReg(zeroReg);
-                        emit(Opcodes.NOT);
-                        emitReg(rd);
-                        emitReg(ltReg);
-                        lastResultReg = rd;
-                        return;
-                    }
-                }
-                emitReg(rd);
-                emitReg(cmpReg);
-                emitReg(zeroReg);
-            }
-            case "(", "()" -> {
-                // Apply operator: $coderef->(args) or &subname(args) or foo(args)
-                // left (rs1) = code reference (RuntimeScalar containing RuntimeCode or SubroutineNode)
-                // right (rs2) = arguments (should be RuntimeList from ListNode)
-
-                // Note: rs2 should contain a RuntimeList (from visiting the ListNode)
-                // We need to convert it to RuntimeArray for the CALL_SUB opcode
-
-                // For now, rs2 is a RuntimeList - we'll pass it directly and let
-                // BytecodeInterpreter convert it to RuntimeArray
-
-                // Emit CALL_SUB: rd = coderef.apply(args, context)
-                emit(Opcodes.CALL_SUB);
-                emitReg(rd);  // Result register
-                emitReg(rs1); // Code reference register
-                emitReg(rs2); // Arguments register (RuntimeList to be converted to RuntimeArray)
-                emit(currentCallContext); // Use current calling context
-
-                // Note: CALL_SUB may return RuntimeControlFlowList
-                // The interpreter will handle control flow propagation
-            }
-            case ".." -> {
-                // Range operator: start..end
-                // Create a PerlRange object which can be iterated or converted to a list
-
-                // Optimization: if both operands are constant numbers, create range at compile time
-                if (node.left instanceof NumberNode && node.right instanceof NumberNode) {
-                    try {
-                        // Remove underscores for parsing (Perl allows them as digit separators)
-                        String startStr = ((NumberNode) node.left).value.replace("_", "");
-                        String endStr = ((NumberNode) node.right).value.replace("_", "");
-
-                        int start = Integer.parseInt(startStr);
-                        int end = Integer.parseInt(endStr);
-
-                        // Create PerlRange with RuntimeScalarCache integers
-                        RuntimeScalar startScalar = RuntimeScalarCache.getScalarInt(start);
-                        RuntimeScalar endScalar = RuntimeScalarCache.getScalarInt(end);
-                        PerlRange range = PerlRange.createRange(startScalar, endScalar);
-
-                        // Store in constant pool and load
-                        int constIdx = addToConstantPool(range);
-                        emit(Opcodes.LOAD_CONST);
-                        emitReg(rd);
-                        emit(constIdx);
-                    } catch (NumberFormatException e) {
-                        throw new RuntimeException("Range operator requires integer values: " + e.getMessage());
-                    }
-                } else {
-                    // Runtime range creation using RANGE opcode
-                    // rs1 and rs2 already contain the start and end values
-                    emit(Opcodes.RANGE);
-                    emitReg(rd);
-                    emitReg(rs1);
-                    emitReg(rs2);
-                }
-            }
-            case "&&", "and" -> {
-                // Logical AND with short-circuit evaluation
-                // Semantics: if left is false, return left; else evaluate and return right
-                // Implementation:
-                //   rd = left
-                //   if (!rd) goto skip_right
-                //   rd = right
-                //   skip_right:
-
-                // Left operand is already in rs1
-                // Move to result register
-                emit(Opcodes.MOVE);
-                emitReg(rd);
-                emitReg(rs1);
-
-                // Mark position for forward jump
-                int skipRightPos = bytecode.size();
-
-                // Emit conditional jump: if (!rd) skip right evaluation
-                emit(Opcodes.GOTO_IF_FALSE);
-                emitReg(rd);
-                emitInt(0); // Placeholder for offset (will be patched)
-
-                // Right operand is already in rs2
-                // Move to result register (overwriting left value)
-                emit(Opcodes.MOVE);
-                emitReg(rd);
-                emitReg(rs2);
-
-                // Patch the forward jump offset
-                int skipRightTarget = bytecode.size();
-                patchIntOffset(skipRightPos + 2, skipRightTarget);
-            }
-            case "||", "or" -> {
-                // Logical OR with short-circuit evaluation
-                // Semantics: if left is true, return left; else evaluate and return right
-                // Implementation:
-                //   rd = left
-                //   if (rd) goto skip_right
-                //   rd = right
-                //   skip_right:
-
-                // Left operand is already in rs1
-                // Move to result register
-                emit(Opcodes.MOVE);
-                emitReg(rd);
-                emitReg(rs1);
-
-                // Mark position for forward jump
-                int skipRightPos = bytecode.size();
-
-                // Emit conditional jump: if (rd) skip right evaluation
-                emit(Opcodes.GOTO_IF_TRUE);
-                emitReg(rd);
-                emitInt(0); // Placeholder for offset (will be patched)
-
-                // Right operand is already in rs2
-                // Move to result register (overwriting left value)
-                emit(Opcodes.MOVE);
-                emitReg(rd);
-                emitReg(rs2);
-
-                // Patch the forward jump offset
-                int skipRightTarget = bytecode.size();
-                patchIntOffset(skipRightPos + 2, skipRightTarget);
-            }
-            case "map" -> {
-                // Map operator: map { block } list
-                // rs1 = closure (SubroutineNode compiled to code reference)
-                // rs2 = list expression
-
-                // Emit MAP opcode
-                emit(Opcodes.MAP);
-                emitReg(rd);
-                emitReg(rs2);       // List register
-                emitReg(rs1);       // Closure register
-                emit(RuntimeContextType.LIST);  // Map always uses list context
-            }
-            case "grep" -> {
-                // Grep operator: grep { block } list
-                // rs1 = closure (SubroutineNode compiled to code reference)
-                // rs2 = list expression
-
-                // Emit GREP opcode
-                emit(Opcodes.GREP);
-                emitReg(rd);
-                emitReg(rs2);       // List register
-                emitReg(rs1);       // Closure register
-                emit(RuntimeContextType.LIST);  // Grep uses list context
-            }
-            case "sort" -> {
-                // Sort operator: sort { block } list
-                // rs1 = closure (SubroutineNode compiled to code reference)
-                // rs2 = list expression
-
-                // Emit SORT opcode
-                emit(Opcodes.SORT);
-                emitReg(rd);
-                emitReg(rs2);       // List register
-                emitReg(rs1);       // Closure register
-                emitInt(addToStringPool(currentPackage));  // Package name for sort
-            }
-            case "split" -> {
-                // Split operator: split pattern, string
-                // rs1 = pattern (string or regex)
-                // rs2 = list containing string to split (and optional limit)
-
-                // Emit SLOW_OP with SLOWOP_SPLIT
-                emit(Opcodes.SLOW_OP);
-                emit(Opcodes.SLOWOP_SPLIT);
-                emitReg(rd);
-                emitReg(rs1);  // Pattern register
-                emitReg(rs2);  // Args register
-                emit(RuntimeContextType.LIST);  // Split uses list context
-            }
-            case "[" -> {
-                // Array element access: $a[10] means get element 10 from array @a
-                // Array slice: @a[1,2,3] or @a[1..3] means get multiple elements
-                // Also handles multidimensional: $a[0][1] means $a[0]->[1]
-                // left: OperatorNode("$", IdentifierNode("a")) for element access
-                //       OperatorNode("@", IdentifierNode("a")) for array slice
-                // right: ArrayLiteralNode(index_expression or indices)
-
-                int arrayReg = -1; // Will be initialized in if/else branches
-
-                if (node.left instanceof OperatorNode) {
-                    OperatorNode leftOp = (OperatorNode) node.left;
-
-                    // Check if this is an array slice (@array[...]) or element access ($array[...])
-                    if (leftOp.operator.equals("@")) {
-                        // Array slice: @array[1,2,3] or @array[1..3] or @$arrayref[1..3]
-
-                        if (leftOp.operand instanceof IdentifierNode) {
-                            // Simple case: @array[indices]
-                            String varName = "@" + ((IdentifierNode) leftOp.operand).name;
-
-                            // Get the array - check lexical first, then global
-                            if (hasVariable(varName)) {
-                                // Lexical array
-                                arrayReg = getVariableRegister(varName);
-                            } else {
-                                // Global array - load it
-                                arrayReg = allocateRegister();
-                                String globalArrayName = NameNormalizer.normalizeVariableName(
-                                    ((IdentifierNode) leftOp.operand).name,
-                                    getCurrentPackage()
-                                );
-                                int nameIdx = addToStringPool(globalArrayName);
-                                emit(Opcodes.LOAD_GLOBAL_ARRAY);
-                                emitReg(arrayReg);
-                                emit(nameIdx);
-                            }
-                        } else {
-                            // Complex case: @$arrayref[indices] or @{expr}[indices]
-                            // Compile the operand to get the array (which might involve dereferencing)
-                            leftOp.accept(this);
-                            arrayReg = lastResultReg;
-                        }
-
-                        // Evaluate the indices
-                        if (!(node.right instanceof ArrayLiteralNode)) {
-                            throwCompilerException("Array slice requires ArrayLiteralNode on right side");
-                        }
-                        ArrayLiteralNode indicesNode = (ArrayLiteralNode) node.right;
-                        if (indicesNode.elements.isEmpty()) {
-                            throwCompilerException("Array slice requires index expressions");
-                        }
-
-                        // Compile all indices into a list
-                        List<Integer> indexRegs = new ArrayList<>();
-                        for (Node indexExpr : indicesNode.elements) {
-                            indexExpr.accept(this);
-                            indexRegs.add(lastResultReg);
-                        }
-
-                        // Create a RuntimeList from these index registers
-                        int indicesListReg = allocateRegister();
-                        emit(Opcodes.CREATE_LIST);
-                        emitReg(indicesListReg);
-                        emit(indexRegs.size());
-                        for (int indexReg : indexRegs) {
-                            emitReg(indexReg);
-                        }
-
-                        // Emit SLOW_OP with SLOWOP_ARRAY_SLICE
-                        emit(Opcodes.SLOW_OP);
-                        emit(Opcodes.SLOWOP_ARRAY_SLICE);
-                        emitReg(rd);
-                        emitReg(arrayReg);
-                        emitReg(indicesListReg);
-
-                        // Array slice returns a list
-                        lastResultReg = rd;
-                        return;
-                    } else if (leftOp.operator.equals("$")) {
-                        // Single element access: $var[index]
-                        if (!(leftOp.operand instanceof IdentifierNode)) {
-                            throwCompilerException("Array access requires scalar dereference: $var[index]");
-                        }
-
-                        String varName = ((IdentifierNode) leftOp.operand).name;
-                        String arrayVarName = "@" + varName;
-
-                        // Get the array - check lexical first, then global
-                        if (hasVariable(arrayVarName)) {
-                            // Lexical array
-                            arrayReg = getVariableRegister(arrayVarName);
-                        } else {
-                            // Global array - load it
-                            arrayReg = allocateRegister();
-                            String globalArrayName = NameNormalizer.normalizeVariableName(
-                                varName,
-                                getCurrentPackage()
-                            );
-                            int nameIdx = addToStringPool(globalArrayName);
-                            emit(Opcodes.LOAD_GLOBAL_ARRAY);
-                            emitReg(arrayReg);
-                            emit(nameIdx);
-                        }
-                    } else {
-                        throwCompilerException("Array access requires scalar ($) or array (@) dereference");
-                    }
-                } else if (node.left instanceof BinaryOperatorNode) {
-                    // Multidimensional case: $a[0][1] is really $a[0]->[1]
-                    // Compile left side (which returns a scalar containing an array reference)
-                    node.left.accept(this);
-                    int scalarReg = lastResultReg;
-
-                    // Dereference the array reference to get the actual array
-                    // Use SLOW_OP with SLOWOP_DEREF_ARRAY
-                    arrayReg = allocateRegister();
-                    emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                    emit(Opcodes.SLOWOP_DEREF_ARRAY);
-                    emitReg(arrayReg);
-                    emitReg(scalarReg);
-                } else {
-                    throwCompilerException("Array access requires variable or expression on left side");
-                }
-
-                // Evaluate index expression
-                // For ArrayLiteralNode, get the first element
-                if (!(node.right instanceof ArrayLiteralNode)) {
-                    throwCompilerException("Array access requires ArrayLiteralNode on right side");
-                }
-                ArrayLiteralNode indexNode = (ArrayLiteralNode) node.right;
-                if (indexNode.elements.isEmpty()) {
-                    throwCompilerException("Array access requires index expression");
-                }
-
-                // Compile the index expression
-                indexNode.elements.get(0).accept(this);
-                int indexReg = lastResultReg;
-
-                // Emit ARRAY_GET
-                emit(Opcodes.ARRAY_GET);
-                emitReg(rd);
-                emitReg(arrayReg);
-                emitReg(indexReg);
-            }
-            case "{" -> {
-                // Hash element access: $h{key} means get element 'key' from hash %h
-                // Hash slice access: @h{keys} returns multiple values as array
-                // left: OperatorNode("$", IdentifierNode("h")) or OperatorNode("@", ...)
-                // right: HashLiteralNode(key_expression)
-
-                currentTokenIndex = node.getIndex();  // Track token for error reporting
-
-                int hashReg;
-
-                // Determine if this is a simple hash access or nested/ref access
-                if (node.left instanceof OperatorNode) {
-                    OperatorNode leftOp = (OperatorNode) node.left;
-
-                    // Check for hash slice: @hash{keys} or hashref slice: @$hashref{keys}
-                if (leftOp.operator.equals("@")) {
-                    // Hash slice: @hash{'key1', 'key2'} returns array of values
-                    // Hashref slice: @$hashref{'key1', 'key2'} dereferences then slices
-
-                    if (leftOp.operand instanceof IdentifierNode) {
-                        // Direct hash slice: @hash{keys}
-                        String varName = ((IdentifierNode) leftOp.operand).name;
-                        String hashVarName = "%" + varName;
-
-                        // Get the hash - check lexical first, then global
-                        if (hasVariable(hashVarName)) {
-                            // Lexical hash
-                            hashReg = getVariableRegister(hashVarName);
-                        } else {
-                            // Global hash - load it
-                            hashReg = allocateRegister();
-                            String globalHashName = NameNormalizer.normalizeVariableName(
-                                varName,
-                                getCurrentPackage()
-                            );
-                            int nameIdx = addToStringPool(globalHashName);
-                            emit(Opcodes.LOAD_GLOBAL_HASH);
-                            emitReg(hashReg);
-                            emit(nameIdx);
-                        }
-                    } else if (leftOp.operand instanceof OperatorNode) {
-                        // Hashref slice: @$hashref{keys}
-                        // DEBUG: Check if we reach this code
-                        System.err.println("DEBUG: Compiling hashref slice @$ref{keys}");
-
-                        // Compile the reference and dereference it
-                        leftOp.operand.accept(this);
-                        int scalarRefReg = lastResultReg;
-
-                        // Dereference to get the hash
-                        hashReg = allocateRegister();
-                        emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                        emit(Opcodes.SLOWOP_DEREF_HASH);
-                        emitReg(hashReg);
-                        emitReg(scalarRefReg);
-                    } else {
-                        throwCompilerException("Hash slice requires hash variable or reference");
-                        return;
-                    }
-
-                    // Get the keys from HashLiteralNode
-                    if (!(node.right instanceof HashLiteralNode)) {
-                        throwCompilerException("Hash slice requires HashLiteralNode");
-                    }
-                    HashLiteralNode keysNode = (HashLiteralNode) node.right;
-                    if (keysNode.elements.isEmpty()) {
-                        throwCompilerException("Hash slice requires at least one key");
-                    }
-
-                    // Compile all keys into a list
-                    List<Integer> keyRegs = new ArrayList<>();
-                    for (Node keyElement : keysNode.elements) {
-                        if (keyElement instanceof IdentifierNode) {
-                            // Bareword key - autoquote
-                            String keyString = ((IdentifierNode) keyElement).name;
-                            int keyReg = allocateRegister();
-                            int keyIdx = addToStringPool(keyString);
-                            emit(Opcodes.LOAD_STRING);
-                            emitReg(keyReg);
-                            emit(keyIdx);
-                            keyRegs.add(keyReg);
-                        } else {
-                            // Expression key
-                            keyElement.accept(this);
-                            keyRegs.add(lastResultReg);
-                        }
-                    }
-
-                    // Create a RuntimeList from key registers
-                    int keysListReg = allocateRegister();
-                    emit(Opcodes.CREATE_LIST);
-                    emitReg(keysListReg);
-                    emit(keyRegs.size());
-                    for (int keyReg : keyRegs) {
-                        emitReg(keyReg);
-                    }
-
-                    // Emit SLOW_OP with SLOWOP_HASH_SLICE
-                    int rdSlice = allocateRegister();
-                    emit(Opcodes.SLOW_OP);
-                    emit(Opcodes.SLOWOP_HASH_SLICE);
-                    emitReg(rdSlice);
-                    emitReg(hashReg);
-                    emitReg(keysListReg);
-
-                    lastResultReg = rdSlice;
-                    return;
-                }
-
-                // Handle scalar hash access: $hash{key} or $hash{outer}{inner}
-                if (!leftOp.operator.equals("$")) {
-                    throwCompilerException("Hash access requires $ or @ sigil");
-                }
-
-                // Check if it's simple ($var) or nested ($expr{key})
-                if (leftOp.operand instanceof IdentifierNode) {
-                    // Simple: $hash{key}
-                    String varName = ((IdentifierNode) leftOp.operand).name;
-                    String hashVarName = "%" + varName;
-
-                    // Get the hash - check lexical first, then global
-                    if (hasVariable(hashVarName)) {
-                        // Lexical hash
-                        hashReg = getVariableRegister(hashVarName);
-                    } else {
-                        // Global hash - load it
-                        hashReg = allocateRegister();
-                        String globalHashName = "main::" + varName;
-                        int nameIdx = addToStringPool(globalHashName);
-                        emit(Opcodes.LOAD_GLOBAL_HASH);
-                        emitReg(hashReg);
-                        emit(nameIdx);
-                    }
-                } else {
-                    // Nested or complex: $hash{outer}{inner} or $func()->{key}
-                    // Compile the left side (returns a scalar containing hash reference)
-                    leftOp.operand.accept(this);
-                    int scalarReg = lastResultReg;
-
-                    // Dereference to get the hash
-                    hashReg = allocateRegister();
-                    emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                    emit(Opcodes.SLOWOP_DEREF_HASH);
-                    emitReg(hashReg);
-                    emitReg(scalarReg);
-                }
-            } else if (node.left instanceof BinaryOperatorNode) {
-                // Nested access where left is already a hash access
-                // e.g., $hash{outer}{inner} - the outer "{" is evaluated
-                node.left.accept(this);
-                int scalarReg = lastResultReg;
-
-                // Dereference to get the hash
-                hashReg = allocateRegister();
-                emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                emit(Opcodes.SLOWOP_DEREF_HASH);
-                emitReg(hashReg);
-                emitReg(scalarReg);
-            } else {
-                throwCompilerException("Hash access requires variable or expression on left side");
-                return;
-            }
-
-            // Common code for all scalar hash access paths
-            // Evaluate key expression
-            if (!(node.right instanceof HashLiteralNode)) {
-                throwCompilerException("Hash access requires HashLiteralNode on right side");
-            }
-            HashLiteralNode keyNode = (HashLiteralNode) node.right;
-            if (keyNode.elements.isEmpty()) {
-                throwCompilerException("Hash access requires key expression");
-            }
-
-            // Compile the key expression
-            // Special case: bareword identifiers should be treated as string literals
-            int keyReg;
-            Node keyElement = keyNode.elements.get(0);
-            if (keyElement instanceof IdentifierNode) {
-                // Bareword key - treat as string literal
-                String keyStr = ((IdentifierNode) keyElement).name;
-                keyReg = allocateRegister();
-                int strIdx = addToStringPool(keyStr);
-                emit(Opcodes.LOAD_STRING);
-                emitReg(keyReg);
-                emit(strIdx);
-            } else {
-                // Expression key - evaluate normally
-                keyElement.accept(this);
-                keyReg = lastResultReg;
-            }
-
-            // Emit HASH_GET
-            emit(Opcodes.HASH_GET);
-            emitReg(rd);
-            emitReg(hashReg);
-            emitReg(keyReg);
-            }
-            case "push" -> {
-                // Array push: push(@array, values...) or push(@$ref, values...)
-                // left: OperatorNode("@", IdentifierNode("array")) or OperatorNode("@", OperatorNode("$", ...))
-                // right: ListNode with values to push
-
-                if (!(node.left instanceof OperatorNode)) {
-                    throwCompilerException("push requires array variable");
-                }
-                OperatorNode leftOp = (OperatorNode) node.left;
-                if (!leftOp.operator.equals("@")) {
-                    throwCompilerException("push requires array variable: push @array, values");
-                }
-
-                int arrayReg = -1;  // Will be assigned in if/else blocks
-
-                if (leftOp.operand instanceof IdentifierNode) {
-                    // push @array
-                    String varName = "@" + ((IdentifierNode) leftOp.operand).name;
-
-                    // Get the array - check lexical first, then global
-                    if (hasVariable(varName)) {
-                        // Lexical array
-                        arrayReg = getVariableRegister(varName);
-                    } else {
-                        // Global array - load it
-                        arrayReg = allocateRegister();
-                        String globalArrayName = getCurrentPackage() + "::" + ((IdentifierNode) leftOp.operand).name;
-                        int nameIdx = addToStringPool(globalArrayName);
-                        emit(Opcodes.LOAD_GLOBAL_ARRAY);
-                        emitReg(arrayReg);
-                        emit(nameIdx);
-                    }
-                } else if (leftOp.operand instanceof OperatorNode) {
-                    // push @$ref - dereference first
-                    leftOp.operand.accept(this);
-                    int refReg = lastResultReg;
-
-                    // Dereference to get the array
-                    arrayReg = allocateRegister();
-                    emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                    emit(Opcodes.SLOWOP_DEREF_ARRAY);
-                    emitReg(arrayReg);
-                    emitReg(refReg);
-                } else {
-                    throwCompilerException("push requires array variable or dereferenced array: push @array or push @$ref");
-                }
-
-                // Evaluate the values to push (right operand)
-                node.right.accept(this);
-                int valuesReg = lastResultReg;
-
-                // Emit ARRAY_PUSH
-                emit(Opcodes.ARRAY_PUSH);
-                emitReg(arrayReg);
-                emitReg(valuesReg);
-
-                // push returns the new size of the array
-                // For now, just return the array itself
-                lastResultReg = arrayReg;
-            }
-            case "unshift" -> {
-                // Array unshift: unshift(@array, values...) or unshift(@$ref, values...)
-                // left: OperatorNode("@", IdentifierNode("array")) or OperatorNode("@", OperatorNode("$", ...))
-                // right: ListNode with values to unshift
-
-                if (!(node.left instanceof OperatorNode)) {
-                    throwCompilerException("unshift requires array variable");
-                }
-                OperatorNode leftOp = (OperatorNode) node.left;
-                if (!leftOp.operator.equals("@")) {
-                    throwCompilerException("unshift requires array variable: unshift @array, values");
-                }
-
-                int arrayReg = -1;  // Will be assigned in if/else blocks
-
-                if (leftOp.operand instanceof IdentifierNode) {
-                    // unshift @array
-                    String varName = "@" + ((IdentifierNode) leftOp.operand).name;
-
-                    // Get the array - check lexical first, then global
-                    if (hasVariable(varName)) {
-                        // Lexical array
-                        arrayReg = getVariableRegister(varName);
-                    } else {
-                        // Global array - load it
-                        arrayReg = allocateRegister();
-                        String globalArrayName = NameNormalizer.normalizeVariableName(
-                            ((IdentifierNode) leftOp.operand).name,
-                            getCurrentPackage()
-                        );
-                        int nameIdx = addToStringPool(globalArrayName);
-                        emit(Opcodes.LOAD_GLOBAL_ARRAY);
-                        emitReg(arrayReg);
-                        emit(nameIdx);
-                    }
-                } else if (leftOp.operand instanceof OperatorNode) {
-                    // unshift @$ref - dereference first
-                    leftOp.operand.accept(this);
-                    int refReg = lastResultReg;
-
-                    // Dereference to get the array
-                    arrayReg = allocateRegister();
-                    emitWithToken(Opcodes.SLOW_OP, node.getIndex());
-                    emit(Opcodes.SLOWOP_DEREF_ARRAY);
-                    emitReg(arrayReg);
-                    emitReg(refReg);
-                } else {
-                    throwCompilerException("unshift requires array variable or dereferenced array: unshift @array or unshift @$ref");
-                }
-
-                // Evaluate the values to unshift (right operand)
-                node.right.accept(this);
-                int valuesReg = lastResultReg;
-
-                // Emit ARRAY_UNSHIFT
-                emit(Opcodes.ARRAY_UNSHIFT);
-                emitReg(arrayReg);
-                emitReg(valuesReg);
-
-                // unshift returns the new size of the array
-                // For now, just return the array itself
-                lastResultReg = arrayReg;
-            }
-            case "+=" -> {
-                // Compound assignment: $var += $value
-                // left: variable (OperatorNode)
-                // right: value expression
-
-                if (!(node.left instanceof OperatorNode)) {
-                    throwCompilerException("+= requires variable on left side");
-                }
-                OperatorNode leftOp = (OperatorNode) node.left;
-                if (!leftOp.operator.equals("$") || !(leftOp.operand instanceof IdentifierNode)) {
-                    throwCompilerException("+= requires scalar variable: $var += value");
-                }
-
-                String varName = "$" + ((IdentifierNode) leftOp.operand).name;
-
-                // Get the variable register
-                if (!hasVariable(varName)) {
-                    throwCompilerException("+= requires existing variable: " + varName);
-                }
-                int varReg = getVariableRegister(varName);
-
-                // Compile the right side
-                node.right.accept(this);
-                int valueReg = lastResultReg;
-
-                // Emit ADD_ASSIGN
-                emit(Opcodes.ADD_ASSIGN);
-                emitReg(varReg);
-                emitReg(valueReg);
-
-                lastResultReg = varReg;
-            }
-            case "-=", "*=", "/=", "%=" -> {
-                // Compound assignment: $var op= $value
-                // Now uses *Assign opcodes which check for compound overloads first
-                if (!(node.left instanceof OperatorNode)) {
-                    throwCompilerException(node.operator + " requires variable on left side");
-                }
-                OperatorNode leftOp = (OperatorNode) node.left;
-                if (!leftOp.operator.equals("$") || !(leftOp.operand instanceof IdentifierNode)) {
-                    throwCompilerException(node.operator + " requires scalar variable");
-                }
-
-                String varName = "$" + ((IdentifierNode) leftOp.operand).name;
-                if (!hasVariable(varName)) {
-                    throwCompilerException(node.operator + " requires existing variable: " + varName);
-                }
-                int varReg = getVariableRegister(varName);
-
-                // Compile the right side
-                node.right.accept(this);
-                int valueReg = lastResultReg;
-
-                // Emit compound assignment opcode (checks for overloads)
-                switch (node.operator) {
-                    case "-=" -> emit(Opcodes.SUBTRACT_ASSIGN);
-                    case "*=" -> emit(Opcodes.MULTIPLY_ASSIGN);
-                    case "/=" -> emit(Opcodes.DIVIDE_ASSIGN);
-                    case "%=" -> emit(Opcodes.MODULUS_ASSIGN);
-                }
-                emitReg(varReg);  // destination (also left operand)
-                emitReg(valueReg); // right operand
-
-                lastResultReg = varReg;
-            }
-            default -> throwCompilerException("Unsupported operator: " + node.operator);
-        }
 
         lastResultReg = rd;
     }
 
-    @Override
-    public void visit(OperatorNode node) {
-        // Track token index for error reporting
-        currentTokenIndex = node.getIndex();
-
-        String op = node.operator;
-
-        // Handle specific operators
+    /**
+     * Compile variable declaration operators (my, our, local).
+     * Extracted to reduce visit(OperatorNode) bytecode size.
+     */
+    private void compileVariableDeclaration(OperatorNode node, String op) {
         if (op.equals("my")) {
             // my $x / my @x / my %x - variable declaration
             // The operand will be OperatorNode("$"/"@"/"%", IdentifierNode("x"))
@@ -3075,33 +2578,12 @@ public class BytecodeCompiler implements Visitor {
                 }
             }
             throw new RuntimeException("Unsupported local operand: " + node.operand.getClass().getSimpleName());
-        } else if (op.equals("scalar")) {
-            // Force scalar context: scalar(expr)
-            // Evaluates the operand and converts the result to scalar
-            if (node.operand != null) {
-                // Evaluate operand in scalar context
-                int savedContext = currentCallContext;
-                currentCallContext = RuntimeContextType.SCALAR;
-                try {
-                    node.operand.accept(this);
-                    int operandReg = lastResultReg;
+        }
+        throw new RuntimeException("Unsupported variable declaration operator: " + op);
+    }
 
-                    // Emit ARRAY_SIZE to convert to scalar
-                    // This handles arrays/hashes (converts to size) and passes through scalars
-                    int rd = allocateRegister();
-                    emit(Opcodes.ARRAY_SIZE);
-                    emitReg(rd);
-                    emitReg(operandReg);
-
-                    lastResultReg = rd;
-                } finally {
-                    currentCallContext = savedContext;
-                }
-            } else {
-                throwCompilerException("scalar operator requires an operand");
-            }
-            return;
-        } else if (op.equals("$")) {
+    private void compileVariableReference(OperatorNode node, String op) {
+        if (op.equals("$")) {
             // Scalar variable dereference: $x
             if (node.operand instanceof IdentifierNode) {
                 String varName = "$" + ((IdentifierNode) node.operand).name;
@@ -3217,88 +2699,6 @@ public class BytecodeCompiler implements Visitor {
             } else {
                 throwCompilerException("Unsupported @ operand: " + node.operand.getClass().getSimpleName());
             }
-        } else if (op.equals("scalar")) {
-            // Scalar context: scalar(@array) or scalar(%hash) or scalar(expr)
-            // Forces scalar context on the operand
-            if (node.operand != null) {
-                // Special case: if operand is a ListNode with single array/hash variable,
-                // compile it directly in scalar context instead of list context
-                if (node.operand instanceof ListNode) {
-                    ListNode listNode = (ListNode) node.operand;
-                    if (listNode.elements.size() == 1) {
-                        Node elem = listNode.elements.get(0);
-                        if (elem instanceof OperatorNode) {
-                            OperatorNode opNode = (OperatorNode) elem;
-                            if (opNode.operator.equals("@")) {
-                                // scalar(@array) - get array size
-                                if (opNode.operand instanceof IdentifierNode) {
-                                    String varName = "@" + ((IdentifierNode) opNode.operand).name;
-
-                                    int arrayReg;
-                                    if (varName.equals("@_")) {
-                                        arrayReg = 1;
-                                    } else if (hasVariable(varName)) {
-                                        arrayReg = getVariableRegister(varName);
-                                    } else {
-                                        // Global array
-                                        arrayReg = allocateRegister();
-                                        String globalArrayName = NameNormalizer.normalizeVariableName(((IdentifierNode) opNode.operand).name, getCurrentPackage());
-                                        int nameIdx = addToStringPool(globalArrayName);
-                                        emit(Opcodes.LOAD_GLOBAL_ARRAY);
-                                        emitReg(arrayReg);
-                                        emit(nameIdx);
-                                    }
-
-                                    // Emit ARRAY_SIZE
-                                    int rd = allocateRegister();
-                                    emit(Opcodes.ARRAY_SIZE);
-                                    emitReg(rd);
-                                    emitReg(arrayReg);
-
-                                    lastResultReg = rd;
-                                    return;
-                                }
-                            } else if (opNode.operator.equals("%")) {
-                                // scalar(%hash) - get hash size (not implemented yet)
-                                throwCompilerException("scalar(%hash) not yet implemented");
-                            }
-                        }
-                    }
-                }
-
-                // General case: compile operand and apply scalar context
-                // ARRAY_SIZE will:
-                // - Convert arrays/hashes to their size
-                // - Pass through scalars unchanged
-                node.operand.accept(this);
-                int operandReg = lastResultReg;
-
-                int rd = allocateRegister();
-                emit(Opcodes.ARRAY_SIZE);
-                emitReg(rd);
-                emitReg(operandReg);
-
-                lastResultReg = rd;
-            } else {
-                throwCompilerException("scalar operator requires an operand");
-            }
-        } else if (op.equals("!")) {
-            // Logical NOT: !expr
-            if (node.operand == null) {
-                throwCompilerException("! operator requires an operand");
-            }
-
-            // Compile the operand
-            node.operand.accept(this);
-            int operandReg = lastResultReg;
-
-            // Emit NOT opcode
-            int rd = allocateRegister();
-            emit(Opcodes.NOT);
-            emitReg(rd);
-            emitReg(operandReg);
-
-            lastResultReg = rd;
         } else if (op.equals("%")) {
             // Hash variable dereference: %x
             if (node.operand instanceof IdentifierNode) {
@@ -3401,6 +2801,55 @@ public class BytecodeCompiler implements Visitor {
             } else {
                 throw new RuntimeException("Reference operator requires operand");
             }
+        }
+    }
+
+    @Override
+    public void visit(OperatorNode node) {
+        // Track token index for error reporting
+        currentTokenIndex = node.getIndex();
+
+        String op = node.operator;
+
+        // Group 1: Variable declarations (my, our, local)
+        if (op.equals("my") || op.equals("our") || op.equals("local")) {
+            compileVariableDeclaration(node, op);
+            return;
+        }
+
+        // Group 2: Variable reference operators ($, @, %, *, &, \)
+        if (op.equals("$") || op.equals("@") || op.equals("%") || op.equals("*") || op.equals("&") || op.equals("\\")) {
+            compileVariableReference(node, op);
+            return;
+        }
+
+        // Handle remaining operators
+        if (op.equals("scalar")) {
+            // Force scalar context: scalar(expr)
+            // Evaluates the operand and converts the result to scalar
+            if (node.operand != null) {
+                // Evaluate operand in scalar context
+                int savedContext = currentCallContext;
+                currentCallContext = RuntimeContextType.SCALAR;
+                try {
+                    node.operand.accept(this);
+                    int operandReg = lastResultReg;
+
+                    // Emit ARRAY_SIZE to convert to scalar
+                    // This handles arrays/hashes (converts to size) and passes through scalars
+                    int rd = allocateRegister();
+                    emit(Opcodes.ARRAY_SIZE);
+                    emitReg(rd);
+                    emitReg(operandReg);
+
+                    lastResultReg = rd;
+                } finally {
+                    currentCallContext = savedContext;
+                }
+            } else {
+                throwCompilerException("scalar operator requires an operand");
+            }
+            return;
         } else if (op.equals("package")) {
             // Package declaration: package Foo;
             // This updates the current package context for subsequent variable declarations
