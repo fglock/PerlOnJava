@@ -918,6 +918,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Check if the type of this RuntimeScalar is CODE
         if (runtimeScalar.type == RuntimeScalarType.CODE) {
             RuntimeCode code = (RuntimeCode) runtimeScalar.value;
+            System.err.println("DEBUG RuntimeCode.apply: code class = " + code.getClass().getName());
+            System.err.println("DEBUG RuntimeCode.apply: code.defined() = " + code.defined());
+            System.err.println("DEBUG RuntimeCode.apply: code.compilerSupplier = " + code.compilerSupplier);
+            System.err.println("DEBUG RuntimeCode.apply: code.methodHandle = " + code.methodHandle);
             // Check if it's an unfilled forward declaration (not defined)
             if (!code.defined()) {
                 // Try to find AUTOLOAD for this subroutine

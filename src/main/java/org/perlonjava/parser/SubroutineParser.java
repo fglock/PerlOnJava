@@ -811,9 +811,22 @@ public class SubroutineParser {
                     field.set(code.codeObject, codeRef);
                 } else if (runtimeCode instanceof org.perlonjava.interpreter.InterpretedCode) {
                     // InterpretedCode path - replace the RuntimeCode object with InterpretedCode
-                    // TODO: Handle captured variables for InterpretedCode
                     org.perlonjava.interpreter.InterpretedCode interpretedCode =
                         (org.perlonjava.interpreter.InterpretedCode) runtimeCode;
+
+                    System.err.println("DEBUG: Got InterpretedCode for subroutine " + code.subName);
+
+                    // Set captured variables if there are any
+                    if (!paramList.isEmpty()) {
+                        System.err.println("DEBUG: Setting " + paramList.size() + " captured variables");
+                        Object[] parameters = paramList.toArray();
+                        org.perlonjava.runtime.RuntimeBase[] capturedVars =
+                            new org.perlonjava.runtime.RuntimeBase[parameters.length];
+                        for (int i = 0; i < parameters.length; i++) {
+                            capturedVars[i] = (org.perlonjava.runtime.RuntimeBase) parameters[i];
+                        }
+                        interpretedCode = interpretedCode.withCapturedVars(capturedVars);
+                    }
 
                     // Replace codeRef.value with the InterpretedCode instance
                     // This allows polymorphic dispatch to work correctly
@@ -822,7 +835,11 @@ public class SubroutineParser {
                     interpretedCode.subName = code.subName;
                     interpretedCode.packageName = code.packageName;
 
+                    System.err.println("DEBUG: Replacing codeRef.value for " + code.subName);
+                    System.err.println("DEBUG: Before: codeRef.value = " + codeRef.value);
                     codeRef.value = interpretedCode;
+                    System.err.println("DEBUG: After: codeRef.value = " + codeRef.value);
+                    System.err.println("DEBUG: InterpretedCode.defined() = " + interpretedCode.defined());
                 }
             } catch (Exception e) {
                 // Handle any exceptions during subroutine creation
@@ -831,6 +848,9 @@ public class SubroutineParser {
 
             // Clear the compilerThread once done
             code.compilerSupplier = null;
+            System.err.println("DEBUG: Cleared compilerSupplier for " + code.subName);
+            System.err.println("DEBUG: code object is now: " + code);
+            System.err.println("DEBUG: code.defined() = " + code.defined());
             return null;
         };
 
