@@ -614,147 +614,17 @@ public class Opcodes {
 
     // Math Operators (400-409) - CONTIGUOUS
     /** Power operator: rd = MathOperators.pow(rs1, rs2) - equivalent to rs1 ** rs2 */
-    public static final short OP_POW = 400;
+    public static final short OP_POW = 155;
     /** Absolute value: rd = MathOperators.abs(rs) - equivalent to abs(rs) */
-    public static final short OP_ABS = 401;
+    public static final short OP_ABS = 156;
     /** Integer conversion: rd = MathOperators.integer(rs) - equivalent to int(rs) */
-    public static final short OP_INT = 402;
+    public static final short OP_INT = 157;
 
     // =================================================================
-    // Slow Operation IDs (0-255)
+    // OPCODES 403-32767: RESERVED FOR FUTURE OPERATIONS
     // =================================================================
-    // These are NOT opcodes - they are sub-operation identifiers
-    // used by the SLOW_OP opcode.
-    // DEPRECATED: Being phased out in favor of direct opcodes above.
-
-    /** @deprecated Use CHOWN opcode (132) instead */
-    public static final int SLOWOP_CHOWN = 0;
-
-    /** @deprecated Use WAITPID opcode (133) instead */
-    public static final int SLOWOP_WAITPID = 1;
-
-    /** @deprecated Use SETSOCKOPT opcode (141) instead */
-    public static final int SLOWOP_SETSOCKOPT = 2;
-
-    /** @deprecated Use GETSOCKOPT opcode (140) instead */
-    public static final int SLOWOP_GETSOCKOPT = 3;
-
-    /** @deprecated Use GETPRIORITY opcode (138) instead */
-    public static final int SLOWOP_GETPRIORITY = 4;
-
-    /** @deprecated Use SETPRIORITY opcode (139) instead */
-    public static final int SLOWOP_SETPRIORITY = 5;
-
-    /** @deprecated Use GETPGRP opcode (136) instead */
-    public static final int SLOWOP_GETPGRP = 6;
-
-    /** @deprecated Use SETPGRP opcode (137) instead */
-    public static final int SLOWOP_SETPGRP = 7;
-
-    /** @deprecated Use GETPPID opcode (135) instead */
-    public static final int SLOWOP_GETPPID = 8;
-
-    /** @deprecated Use FORK opcode (134) instead */
-    public static final int SLOWOP_FORK = 9;
-
-    /** @deprecated Use SEMGET opcode (143) instead */
-    public static final int SLOWOP_SEMGET = 10;
-
-    /** @deprecated Use SEMOP opcode (144) instead */
-    public static final int SLOWOP_SEMOP = 11;
-
-    /** @deprecated Use MSGGET opcode (145) instead */
-    public static final int SLOWOP_MSGGET = 12;
-
-    /** @deprecated Use MSGSND opcode (146) instead */
-    public static final int SLOWOP_MSGSND = 13;
-
-    /** @deprecated Use MSGRCV opcode (147) instead */
-    public static final int SLOWOP_MSGRCV = 14;
-
-    /** @deprecated Use SHMGET opcode (148) instead */
-    public static final int SLOWOP_SHMGET = 15;
-
-    /** @deprecated Use SHMREAD opcode (149) instead */
-    public static final int SLOWOP_SHMREAD = 16;
-
-    /** @deprecated Use SHMWRITE opcode (150) instead */
-    public static final int SLOWOP_SHMWRITE = 17;
-
-    /** @deprecated Use SYSCALL opcode (142) instead */
-    public static final int SLOWOP_SYSCALL = 18;
-
-    /** @deprecated Use EVAL_STRING opcode (151) instead */
-    public static final int SLOWOP_EVAL_STRING = 19;
-
-    /** @deprecated Use SELECT_OP opcode (152) instead */
-    public static final int SLOWOP_SELECT = 20;
-
-    /** @deprecated Use LOAD_GLOB opcode (153) instead */
-    public static final int SLOWOP_LOAD_GLOB = 21;
-
-    /** @deprecated Use SLEEP_OP opcode (154) instead */
-    public static final int SLOWOP_SLEEP = 22;
-
-    /** @deprecated Use DEREF_ARRAY opcode (114) instead */
-    public static final int SLOWOP_DEREF_ARRAY = 23;
-
-    /** @deprecated Use RETRIEVE_BEGIN_SCALAR opcode (128) instead */
-    public static final int SLOWOP_RETRIEVE_BEGIN_SCALAR = 24;
-
-    /** @deprecated Use RETRIEVE_BEGIN_ARRAY opcode (129) instead */
-    public static final int SLOWOP_RETRIEVE_BEGIN_ARRAY = 25;
-
-    /** @deprecated Use RETRIEVE_BEGIN_HASH opcode (130) instead */
-    public static final int SLOWOP_RETRIEVE_BEGIN_HASH = 26;
-
-    /** @deprecated Use LOCAL_SCALAR opcode (131) instead */
-    public static final int SLOWOP_LOCAL_SCALAR = 27;
-
-    /** @deprecated Use SPLICE opcode (122) instead */
-    public static final int SLOWOP_SPLICE = 28;
-
-    /** @deprecated Use ARRAY_SLICE opcode (116) instead */
-    public static final int SLOWOP_ARRAY_SLICE = 29;
-
-    /** @deprecated Use REVERSE opcode (123) instead */
-    public static final int SLOWOP_REVERSE = 30;
-
-    /** @deprecated Use ARRAY_SLICE_SET opcode (117) instead */
-    public static final int SLOWOP_ARRAY_SLICE_SET = 31;
-
-    /** @deprecated Use SPLIT opcode (124) instead */
-    public static final int SLOWOP_SPLIT = 32;
-
-    /** @deprecated Use EXISTS opcode (126) instead */
-    public static final int SLOWOP_EXISTS = 33;
-
-    /** @deprecated Use DELETE opcode (127) instead */
-    public static final int SLOWOP_DELETE = 34;
-
-    /** @deprecated Use DEREF_HASH opcode (115) instead */
-    public static final int SLOWOP_DEREF_HASH = 35;
-
-    /** @deprecated Use HASH_SLICE opcode (118) instead */
-    public static final int SLOWOP_HASH_SLICE = 36;
-
-    /** @deprecated Use HASH_SLICE_DELETE opcode (120) instead */
-    public static final int SLOWOP_HASH_SLICE_DELETE = 37;
-
-    /** @deprecated Use HASH_SLICE_SET opcode (119) instead */
-    public static final int SLOWOP_HASH_SLICE_SET = 38;
-
-    /** @deprecated Use LIST_SLICE_FROM opcode (121) instead */
-    public static final int SLOWOP_LIST_SLICE_FROM = 39;
-
-    /** @deprecated Use LENGTH_OP opcode (125) instead */
-    public static final int SLOWOP_LENGTH = 40;
-
-    // =================================================================
-    // OPCODES 93-255: RESERVED FOR FUTURE FAST OPERATIONS
-    // =================================================================
-    // This range is reserved for frequently-used operations that benefit
-    // from being in the main interpreter switch for optimal CPU i-cache usage.
+    // See PHASE3_OPERATOR_PROMOTIONS.md for promotion strategy.
+    // All SLOWOP_* constants have been removed - use direct opcodes 114-154 instead.
 
     private Opcodes() {} // Utility class - no instantiation
 }
