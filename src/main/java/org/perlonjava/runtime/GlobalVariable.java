@@ -342,7 +342,8 @@ public class GlobalVariable {
         RuntimeScalar var = globalCodeRefs.get(key);
         if (var != null && var.type == RuntimeScalarType.CODE && var.value instanceof RuntimeCode runtimeCode) {
             // Check if the subroutine has actual implementation (not just a placeholder)
-            return (runtimeCode.methodHandle != null || runtimeCode.compilerSupplier != null || runtimeCode.isBuiltin) ? scalarTrue : scalarFalse;
+            boolean result = (runtimeCode.methodHandle != null || runtimeCode.compilerSupplier != null || runtimeCode.isBuiltin);
+            return result ? scalarTrue : scalarFalse;
         }
         return scalarFalse;
     }

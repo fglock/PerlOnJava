@@ -933,6 +933,7 @@ public class BytecodeCompiler implements Visitor {
             case "*=" -> emit(Opcodes.MULTIPLY_ASSIGN);
             case "/=" -> emit(Opcodes.DIVIDE_ASSIGN);
             case "%=" -> emit(Opcodes.MODULUS_ASSIGN);
+            case ".=" -> emit(Opcodes.STRING_CONCAT_ASSIGN);
             default -> {
                 throwCompilerException("Unknown compound assignment operator: " + op);
                 return;
@@ -1351,12 +1352,116 @@ public class BytecodeCompiler implements Visitor {
                     lastResultReg = reg;
                     return;
                 }
+
+                // Handle my ($x, $y, @rest) = ... - list declaration with assignment
+                if (myOperand instanceof ListNode) {
+                    ListNode listNode = (ListNode) myOperand;
+
+                    // Compile RHS first
+                    node.right.accept(this);
+                    int listReg = lastResultReg;
+
+                    // Convert to list if needed
+                    int rhsListReg = allocateRegister();
+                    emit(Opcodes.SCALAR_TO_LIST);
+                    emitReg(rhsListReg);
+                    emitReg(listReg);
+
+                    // Declare and assign each variable
+                    for (int i = 0; i < listNode.elements.size(); i++) {
+                        Node element = listNode.elements.get(i);
+                        if (element instanceof OperatorNode) {
+                            OperatorNode sigilOp = (OperatorNode) element;
+                            String sigil = sigilOp.operator;
+
+                            if (sigilOp.operand instanceof IdentifierNode) {
+                                String varName = sigil + ((IdentifierNode) sigilOp.operand).name;
+
+                                // Declare the variable
+                                int varReg = addVariable(varName, "my");
+
+                                // Initialize based on sigil
+                                switch (sigil) {
+                                    case "$" -> {
+                                        emit(Opcodes.LOAD_UNDEF);
+                                        emitReg(varReg);
+                                    }
+                                    case "@" -> {
+                                        emit(Opcodes.NEW_ARRAY);
+                                        emitReg(varReg);
+                                    }
+                                    case "%" -> {
+                                        emit(Opcodes.NEW_HASH);
+                                        emitReg(varReg);
+                                    }
+                                }
+
+                                // Get i-th element from RHS
+                                int indexReg = allocateRegister();
+                                emit(Opcodes.LOAD_INT);
+                                emitReg(indexReg);
+                                emitInt(i);
+
+                                int elemReg = allocateRegister();
+                                emit(Opcodes.ARRAY_GET);
+                                emitReg(elemReg);
+                                emitReg(rhsListReg);
+                                emitReg(indexReg);
+
+                                // Assign to variable
+                                if (sigil.equals("$")) {
+                                    emit(Opcodes.MOVE);
+                                    emitReg(varReg);
+                                    emitReg(elemReg);
+                                } else if (sigil.equals("@")) {
+                                    emit(Opcodes.ARRAY_SET_FROM_LIST);
+                                    emitReg(varReg);
+                                    emitReg(elemReg);
+                                } else if (sigil.equals("%")) {
+                                    emit(Opcodes.HASH_SET_FROM_LIST);
+                                    emitReg(varReg);
+                                    emitReg(elemReg);
+                                }
+                            }
+                        }
+                    }
+
+                    lastResultReg = rhsListReg;
+                    return;
+                }
             }
 
             // Special case: local $x = value
             if (leftOp.operator.equals("local")) {
                 // Extract variable from "local" operand
                 Node localOperand = leftOp.operand;
+
+                // Handle local $hash{key} = value (localizing hash element)
+                if (localOperand instanceof BinaryOperatorNode) {
+                    BinaryOperatorNode hashAccess = (BinaryOperatorNode) localOperand;
+                    if (hashAccess.operator.equals("{")) {
+                        // Compile the hash access to get the hash element reference
+                        // This returns a RuntimeScalar that is aliased to the hash slot
+                        hashAccess.accept(this);
+                        int elemReg = lastResultReg;
+
+                        // Push this hash element to the local variable stack
+                        emit(Opcodes.PUSH_LOCAL_VARIABLE);
+                        emitReg(elemReg);
+
+                        // Compile RHS
+                        node.right.accept(this);
+                        int valueReg = lastResultReg;
+
+                        // Assign value to the hash element (which is already localized)
+                        emit(Opcodes.SET_SCALAR);
+                        emitReg(elemReg);
+                        emitReg(valueReg);
+
+                        lastResultReg = elemReg;
+                        return;
+                    }
+                }
 
                 // Handle local $x (where $x is OperatorNode("$", IdentifierNode("x")))
                 if (localOperand instanceof OperatorNode) {
@@ -1370,7 +1475,11 @@ public class BytecodeCompiler implements Visitor {
                             return;
                         }
 
-                        // It's a global variable - emit SLOW_OP to call GlobalRuntimeScalar.makeLocal()
+                        // Compile RHS first
+                        node.right.accept(this);
+                        int valueReg = lastResultReg;
+
+                        // It's a global variable - call makeLocal which returns the localized scalar
                         String packageName = getCurrentPackage();
                         String globalVarName = packageName + "::" + ((IdentifierNode) sigilOp.operand).name;
                         int nameIdx = addToStringPool(globalVarName);
@@ -1380,17 +1489,82 @@ public class BytecodeCompiler implements Visitor {
                         emitReg(localReg);
                         emit(nameIdx);
 
-                        // Compile RHS
-                        node.right.accept(this);
-                        int valueReg = lastResultReg;
-
-                        // Assign value to the localized variable
-                        // The localized variable is a RuntimeScalar, so we use set() on it
-                        emit(Opcodes.STORE_GLOBAL_SCALAR);
-                        emit(nameIdx);
+                        // Assign value to the localized scalar (not to the global!)
+                        emit(Opcodes.SET_SCALAR);
+                        emitReg(localReg);
                         emitReg(valueReg);
 
                         lastResultReg = localReg;
+                        return;
+                    } else if (sigilOp.operator.equals("@") && sigilOp.operand instanceof IdentifierNode) {
+                        // Handle local @array = value
+                        String varName = "@" + ((IdentifierNode) sigilOp.operand).name;
+
+                        // Check if it's a lexical variable (should not be localized)
+                        if (hasVariable(varName)) {
+                            throwCompilerException("Can't localize lexical variable " + varName);
+                            return;
+                        }
+
+                        // Compile RHS first
+                        node.right.accept(this);
+                        int valueReg = lastResultReg;
+
+                        // It's a global array - get it and push to local stack
+                        String packageName = getCurrentPackage();
+                        String globalVarName = packageName + "::" + ((IdentifierNode) sigilOp.operand).name;
+                        int nameIdx = addToStringPool(globalVarName);
+
+                        int arrayReg = allocateRegister();
+                        emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                        emitReg(arrayReg);
+                        emit(nameIdx);
+
+                        // Push to local variable stack
+                        emit(Opcodes.PUSH_LOCAL_VARIABLE);
+                        emitReg(arrayReg);
+
+                        // Populate array from list
+                        emit(Opcodes.ARRAY_SET_FROM_LIST);
+                        emitReg(arrayReg);
+                        emitReg(valueReg);
+
+                        lastResultReg = arrayReg;
+                        return;
+                    } else if (sigilOp.operator.equals("%") && sigilOp.operand instanceof IdentifierNode) {
+                        // Handle local %hash = value
+                        String varName = "%" + ((IdentifierNode) sigilOp.operand).name;
+
+                        // Check if it's a lexical variable (should not be localized)
+                        if (hasVariable(varName)) {
+                            throwCompilerException("Can't localize lexical variable " + varName);
+                            return;
+                        }
+
+                        // Compile RHS first
+                        node.right.accept(this);
+                        int valueReg = lastResultReg;
+
+                        // It's a global hash - get it and push to local stack
+                        String packageName = getCurrentPackage();
+                        String globalVarName = packageName + "::" + ((IdentifierNode) sigilOp.operand).name;
+                        int nameIdx = addToStringPool(globalVarName);
+
+                        int hashReg = allocateRegister();
+                        emit(Opcodes.LOAD_GLOBAL_HASH);
+                        emitReg(hashReg);
+                        emit(nameIdx);
+
+                        // Push to local variable stack
+                        emit(Opcodes.PUSH_LOCAL_VARIABLE);
+                        emitReg(hashReg);
+
+                        // Populate hash from list
+                        emit(Opcodes.HASH_SET_FROM_LIST);
+                        emitReg(hashReg);
+                        emitReg(valueReg);
+
+                        lastResultReg = hashReg;
                         return;
                     }
                 }
@@ -1610,8 +1784,26 @@ public class BytecodeCompiler implements Visitor {
                 }
 
                 lastResultReg = targetReg;
+            } else if (leftOp.operator.equals("*") && leftOp.operand instanceof IdentifierNode) {
+                // Typeglob assignment: *foo = value
+                String varName = ((IdentifierNode) leftOp.operand).name;
+                String globalName = NameNormalizer.normalizeVariableName(varName, getCurrentPackage());
+                int nameIdx = addToStringPool(globalName);
+
+                // Load the glob
+                int globReg = allocateRegister();
+                emit(Opcodes.LOAD_GLOB);
+                emitReg(globReg);
+                emit(nameIdx);
+
+                // Store value to glob
+                emit(Opcodes.STORE_GLOB);
+                emitReg(globReg);
+                emitReg(valueReg);
+
+                lastResultReg = globReg;
             } else {
-                throw new RuntimeException("Assignment to unsupported operator: " + leftOp.operator);
+                throwCompilerException("Assignment to unsupported operator: " + leftOp.operator);
             }
         } else if (node.left instanceof IdentifierNode) {
             String varName = ((IdentifierNode) node.left).name;
@@ -1950,6 +2142,28 @@ public class BytecodeCompiler implements Visitor {
                 return;
             }
 
+            // Handle lvalue subroutine: f() = value
+            // When a function is called in lvalue context, it returns a RuntimeBaseProxy
+            // that wraps a mutable reference. We can assign to it using SET_SCALAR.
+            if (leftBin.operator.equals("(")) {
+                // Call the function (which returns a RuntimeBaseProxy in lvalue context)
+                node.left.accept(this);
+                int lvalueReg = lastResultReg;
+
+                // Compile RHS
+                node.right.accept(this);
+                int rhsReg = lastResultReg;
+
+                // Assign to the lvalue using SET_SCALAR
+                emit(Opcodes.SET_SCALAR);
+                emitReg(lvalueReg);
+                emitReg(rhsReg);
+
+                lastResultReg = rhsReg;
+                currentCallContext = savedContext;
+                return;
+            }
+
             throwCompilerException("Assignment to non-identifier not yet supported: " + node.left.getClass().getSimpleName());
         } else if (node.left instanceof ListNode) {
             // List assignment: ($a, $b) = ... or () = ...
@@ -2222,6 +2436,18 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(rs1);
                 emitReg(rs2);
             }
+            case "<=" -> {
+                emit(Opcodes.LE_NUM);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
+            case ">=" -> {
+                emit(Opcodes.GE_NUM);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
             case "!=" -> {
                 emit(Opcodes.NE_NUM);
                 emitReg(rd);
@@ -2399,9 +2625,28 @@ public class BytecodeCompiler implements Visitor {
                 // This should NOT be reached because += is handled specially before this switch
                 throwCompilerException("+= should be handled before switch", tokenIndex);
             }
-            case "-=", "*=", "/=", "%=" -> {
+            case "-=", "*=", "/=", "%=", ".=" -> {
                 // This should NOT be reached because compound assignments are handled specially before this switch
                 throwCompilerException(operator + " should be handled before switch", tokenIndex);
+            }
+            case "readline" -> {
+                // <$fh> - read line from filehandle
+                // rs1 = filehandle (or undef for ARGV)
+                // rs2 = unused (ListNode)
+                emit(Opcodes.READLINE);
+                emitReg(rd);
+                emitReg(rs1);
+                emit(currentCallContext);
+            }
+            case "=~" -> {
+                // $string =~ /pattern/ - regex match
+                // rs1 = string to match against
+                // rs2 = compiled regex pattern
+                emit(Opcodes.MATCH_REGEX);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+                emit(currentCallContext);
             }
             default -> throwCompilerException("Unsupported operator: " + operator, tokenIndex);
         }
@@ -2443,10 +2688,10 @@ public class BytecodeCompiler implements Visitor {
             return;
         }
 
-        // Handle compound assignment operators (+=, -=, *=, /=, %=)
+        // Handle compound assignment operators (+=, -=, *=, /=, %=, .=)
         if (node.operator.equals("+=") || node.operator.equals("-=") ||
             node.operator.equals("*=") || node.operator.equals("/=") ||
-            node.operator.equals("%=")) {
+            node.operator.equals("%=") || node.operator.equals(".=")) {
             handleCompoundAssignment(node);
             return;
         }
@@ -2730,6 +2975,28 @@ public class BytecodeCompiler implements Visitor {
             return;
         }
 
+        // Handle function call operators specially to ensure arguments are in LIST context
+        if (node.operator.equals("(") || node.operator.equals("()")) {
+            // Function call: subname(args) or $coderef->(args)
+            // Save and set context for left operand (code reference)
+            int savedContext = currentCallContext;
+            currentCallContext = RuntimeContextType.SCALAR;
+            node.left.accept(this);
+            int rs1 = lastResultReg;
+
+            // Arguments must ALWAYS be evaluated in LIST context
+            // Even if the call itself is in SCALAR context (e.g., scalar(func()))
+            currentCallContext = RuntimeContextType.LIST;
+            node.right.accept(this);
+            int rs2 = lastResultReg;
+            currentCallContext = savedContext;
+
+            // Emit CALL_SUB opcode
+            int rd = compileBinaryOperatorSwitch(node.operator, rs1, rs2, node.getIndex());
+            lastResultReg = rd;
+            return;
+        }
+
         // Handle short-circuit operators specially - don't compile right operand yet!
         if (node.operator.equals("&&") || node.operator.equals("and")) {
             // Logical AND with short-circuit evaluation
@@ -2793,6 +3060,51 @@ public class BytecodeCompiler implements Visitor {
             emitInt(0); // Placeholder for offset (will be patched)
 
             // NOW compile right operand (only executed if left was false)
+            node.right.accept(this);
+            int rs2 = lastResultReg;
+
+            // Move right result to rd (overwriting left value)
+            emit(Opcodes.MOVE);
+            emitReg(rd);
+            emitReg(rs2);
+
+            // Patch the forward jump offset
+            int skipRightTarget = bytecode.size();
+            patchIntOffset(skipRightPos + 2, skipRightTarget);
+
+            lastResultReg = rd;
+            return;
+        }
+
+        if (node.operator.equals("//")) {
+            // Defined-OR with short-circuit evaluation
+            // Only evaluate right side if left side is undefined
+
+            // Compile left operand
+            node.left.accept(this);
+            int rs1 = lastResultReg;
+
+            // Allocate result register and move left value to it
+            int rd = allocateRegister();
+            emit(Opcodes.MOVE);
+            emitReg(rd);
+            emitReg(rs1);
+
+            // Check if left is defined
+            int definedReg = allocateRegister();
+            emit(Opcodes.DEFINED);
+            emitReg(definedReg);
+            emitReg(rd);
+
+            // Mark position for forward jump
+            int skipRightPos = bytecode.size();
+
+            // Emit conditional jump: if (defined) skip right evaluation
+            emit(Opcodes.GOTO_IF_TRUE);
+            emitReg(definedReg);
+            emitInt(0); // Placeholder for offset (will be patched)
+
+            // NOW compile right operand (only executed if left was undefined)
             node.right.accept(this);
             int rs2 = lastResultReg;
 
@@ -2990,7 +3302,7 @@ public class BytecodeCompiler implements Visitor {
                 lastResultReg = resultReg;
                 return;
             }
-            throw new RuntimeException("Unsupported my operand: " + node.operand.getClass().getSimpleName());
+            throwCompilerException("Unsupported my operand: " + node.operand.getClass().getSimpleName());
         } else if (op.equals("our")) {
             // our $x / our @x / our %x - package variable declaration
             // The operand will be OperatorNode("$"/"@"/"%", IdentifierNode("x"))
@@ -3110,7 +3422,7 @@ public class BytecodeCompiler implements Visitor {
                 lastResultReg = resultReg;
                 return;
             }
-            throw new RuntimeException("Unsupported our operand: " + node.operand.getClass().getSimpleName());
+            throwCompilerException("Unsupported our operand: " + node.operand.getClass().getSimpleName());
         } else if (op.equals("local")) {
             // local $x - temporarily localize a global variable            // The operand will be OperatorNode("$", IdentifierNode("x"))
             if (node.operand instanceof OperatorNode) {
@@ -3139,9 +3451,9 @@ public class BytecodeCompiler implements Visitor {
                     return;
                 }
             }
-            throw new RuntimeException("Unsupported local operand: " + node.operand.getClass().getSimpleName());
+            throwCompilerException("Unsupported local operand: " + node.operand.getClass().getSimpleName());
         }
-        throw new RuntimeException("Unsupported variable declaration operator: " + op);
+        throwCompilerException("Unsupported variable declaration operator: " + op);
     }
 
     private void compileVariableReference(OperatorNode node, String op) {
@@ -3171,8 +3483,24 @@ public class BytecodeCompiler implements Visitor {
 
                     lastResultReg = rd;
                 }
+            } else if (node.operand instanceof BlockNode) {
+                // Block dereference: ${\0} or ${expr}
+                // Execute the block and dereference the result
+                BlockNode block = (BlockNode) node.operand;
+
+                // Compile the block
+                block.accept(this);
+                int blockResultReg = lastResultReg;
+
+                // Dereference the result
+                int rd = allocateRegister();
+                emitWithToken(Opcodes.DEREF, node.getIndex());
+                emitReg(rd);
+                emitReg(blockResultReg);
+
+                lastResultReg = rd;
             } else {
-                throw new RuntimeException("Unsupported $ operand: " + node.operand.getClass().getSimpleName());
+                throwCompilerException("Unsupported $ operand: " + node.operand.getClass().getSimpleName());
             }
         } else if (op.equals("@")) {
             // Array variable dereference: @x or @_ or @$arrayref
@@ -3306,7 +3634,7 @@ public class BytecodeCompiler implements Visitor {
 
                 lastResultReg = rd;
             } else {
-                throw new RuntimeException("Unsupported * operand: " + node.operand.getClass().getSimpleName());
+                throwCompilerException("Unsupported * operand: " + node.operand.getClass().getSimpleName());
             }
         } else if (op.equals("&")) {
             // Code reference: &subname
@@ -3358,7 +3686,7 @@ public class BytecodeCompiler implements Visitor {
                     currentCallContext = savedContext;
                 }
             } else {
-                throw new RuntimeException("Reference operator requires operand");
+                throwCompilerException("Reference operator requires operand");
             }
         }
     }
@@ -3448,7 +3776,7 @@ public class BytecodeCompiler implements Visitor {
 
                 lastResultReg = rd;
             } else {
-                throw new RuntimeException("NOT operator requires operand");
+                throwCompilerException("NOT operator requires operand");
             }
         } else if (op.equals("defined")) {
             // Defined operator: defined($x)
@@ -3467,7 +3795,7 @@ public class BytecodeCompiler implements Visitor {
 
                 lastResultReg = rd;
             } else {
-                throw new RuntimeException("defined operator requires operand");
+                throwCompilerException("defined operator requires operand");
             }
         } else if (op.equals("ref")) {
             // Ref operator: ref($x)
@@ -3496,6 +3824,68 @@ public class BytecodeCompiler implements Visitor {
             emit(Opcodes.REF);
             emitReg(rd);
             emitReg(argReg);
+
+            lastResultReg = rd;
+        } else if (op.equals("prototype")) {
+            // Prototype operator: prototype(\&func) or prototype("func_name")
+            // Returns the prototype string for a subroutine
+            if (node.operand == null) {
+                throwCompilerException("prototype requires an argument");
+            }
+
+            // Compile the operand (code reference or function name)
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (list.elements.isEmpty()) {
+                    throwCompilerException("prototype requires an argument");
+                }
+                // Get first element
+                list.elements.get(0).accept(this);
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+
+            // Allocate result register
+            int rd = allocateRegister();
+
+            // Add current package to string pool
+            int packageIdx = addToStringPool(getCurrentPackage());
+
+            // Emit PROTOTYPE opcode
+            emit(Opcodes.PROTOTYPE);
+            emitReg(rd);
+            emitReg(argReg);
+            emitInt(packageIdx);
+
+            lastResultReg = rd;
+        } else if (op.equals("quoteRegex")) {
+            // Quote regex operator: qr{pattern}flags
+            // operand is a ListNode with [pattern, flags]
+            if (node.operand == null || !(node.operand instanceof ListNode)) {
+                throwCompilerException("quoteRegex requires pattern and flags");
+            }
+
+            ListNode operand = (ListNode) node.operand;
+            if (operand.elements.size() < 2) {
+                throwCompilerException("quoteRegex requires pattern and flags");
+            }
+
+            // Compile pattern and flags
+            operand.elements.get(0).accept(this);  // Pattern
+            int patternReg = lastResultReg;
+
+            operand.elements.get(1).accept(this);  // Flags
+            int flagsReg = lastResultReg;
+
+            // Allocate result register
+            int rd = allocateRegister();
+
+            // Emit QUOTE_REGEX opcode
+            emit(Opcodes.QUOTE_REGEX);
+            emitReg(rd);
+            emitReg(patternReg);
+            emitReg(flagsReg);
 
             lastResultReg = rd;
         } else if (op.equals("++") || op.equals("--") || op.equals("++postfix") || op.equals("--postfix")) {
@@ -3529,7 +3919,7 @@ public class BytecodeCompiler implements Visitor {
 
                     lastResultReg = varReg;
                 } else {
-                    throw new RuntimeException("Increment/decrement of non-lexical variable not yet supported");
+                    throwCompilerException("Increment/decrement of non-lexical variable not yet supported");
                 }
             } else if (node.operand instanceof OperatorNode) {
                 // Handle $x++
@@ -4497,6 +4887,136 @@ public class BytecodeCompiler implements Visitor {
             emitReg(stringReg);
 
             lastResultReg = rd;
+        } else if (op.equals("open")) {
+            // open(filehandle, mode, filename) or open(filehandle, expr)
+            if (node.operand == null || !(node.operand instanceof ListNode)) {
+                throwCompilerException("open requires arguments");
+            }
+
+            ListNode argsList = (ListNode) node.operand;
+            if (argsList.elements.isEmpty()) {
+                throwCompilerException("open requires arguments");
+            }
+
+            // Compile all arguments into a list
+            int argsReg = allocateRegister();
+            emit(Opcodes.NEW_ARRAY);
+            emitReg(argsReg);
+
+            for (Node arg : argsList.elements) {
+                arg.accept(this);
+                int elemReg = lastResultReg;
+
+                emit(Opcodes.ARRAY_PUSH);
+                emitReg(argsReg);
+                emitReg(elemReg);
+            }
+
+            // Call open with context and args
+            int rd = allocateRegister();
+            emit(Opcodes.OPEN);
+            emitReg(rd);
+            emit(currentCallContext);
+            emitReg(argsReg);
+
+            lastResultReg = rd;
+        } else if (op.equals("matchRegex")) {
+            // m/pattern/flags - create a regex and return it (for use with =~)
+            // operand: ListNode containing pattern string and flags string
+            if (node.operand == null || !(node.operand instanceof ListNode)) {
+                throwCompilerException("matchRegex requires pattern and flags");
+            }
+
+            ListNode args = (ListNode) node.operand;
+            if (args.elements.size() < 2) {
+                throwCompilerException("matchRegex requires pattern and flags");
+            }
+
+            // Compile pattern
+            args.elements.get(0).accept(this);
+            int patternReg = lastResultReg;
+
+            // Compile flags
+            args.elements.get(1).accept(this);
+            int flagsReg = lastResultReg;
+
+            // Create quoted regex using QUOTE_REGEX opcode
+            int rd = allocateRegister();
+            emit(Opcodes.QUOTE_REGEX);
+            emitReg(rd);
+            emitReg(patternReg);
+            emitReg(flagsReg);
+
+            lastResultReg = rd;
+        } else if (op.equals("chomp")) {
+            // chomp($x) or chomp - remove trailing newlines
+            if (node.operand == null) {
+                // chomp with no args - operates on $_
+                String varName = "$_";
+                int targetReg;
+                if (hasVariable(varName)) {
+                    targetReg = getVariableRegister(varName);
+                } else {
+                    targetReg = allocateRegister();
+                    int nameIdx = addToStringPool("main::_");
+                    emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                    emitReg(targetReg);
+                    emit(nameIdx);
+                }
+
+                int rd = allocateRegister();
+                emit(Opcodes.CHOMP);
+                emitReg(rd);
+                emitReg(targetReg);
+
+                lastResultReg = rd;
+            } else {
+                // chomp with argument
+                if (node.operand instanceof ListNode) {
+                    ListNode list = (ListNode) node.operand;
+                    if (!list.elements.isEmpty()) {
+                        list.elements.get(0).accept(this);
+                    } else {
+                        throwCompilerException("chomp requires an argument");
+                    }
+                } else {
+                    node.operand.accept(this);
+                }
+                int targetReg = lastResultReg;
+
+                int rd = allocateRegister();
+                emit(Opcodes.CHOMP);
+                emitReg(rd);
+                emitReg(targetReg);
+
+                lastResultReg = rd;
+            }
+        } else if (op.equals("+")) {
+            // Unary + operator: forces numeric context on its operand
+            // For arrays/hashes in scalar context, this returns the size
+            // For scalars, this ensures the value is numeric
+            if (node.operand != null) {
+                // Evaluate operand in scalar context
+                int savedContext = currentCallContext;
+                currentCallContext = RuntimeContextType.SCALAR;
+                try {
+                    node.operand.accept(this);
+                    int operandReg = lastResultReg;
+
+                    // Emit ARRAY_SIZE to convert to scalar
+                    // This handles arrays/hashes (converts to size) and passes through scalars
+                    int rd = allocateRegister();
+                    emit(Opcodes.ARRAY_SIZE);
+                    emitReg(rd);
+                    emitReg(operandReg);
+
+                    lastResultReg = rd;
+                } finally {
+                    currentCallContext = savedContext;
+                }
+            } else {
+                throwCompilerException("unary + operator requires an operand");
+            }
         } else {
             throwCompilerException("Unsupported operator: " + op);
         }

@@ -299,10 +299,20 @@ public class InterpretedCode extends RuntimeCode {
                     nameIdx = bytecode[pc++];
                     sb.append("LOAD_GLOBAL_ARRAY r").append(rd).append(" = @").append(stringPool[nameIdx]).append("\n");
                     break;
+                case Opcodes.STORE_GLOBAL_ARRAY:
+                    nameIdx = bytecode[pc++];
+                    int storeArraySrcReg = bytecode[pc++];
+                    sb.append("STORE_GLOBAL_ARRAY @").append(stringPool[nameIdx]).append(" = r").append(storeArraySrcReg).append("\n");
+                    break;
                 case Opcodes.LOAD_GLOBAL_HASH:
                     rd = bytecode[pc++];
                     nameIdx = bytecode[pc++];
                     sb.append("LOAD_GLOBAL_HASH r").append(rd).append(" = %").append(stringPool[nameIdx]).append("\n");
+                    break;
+                case Opcodes.STORE_GLOBAL_HASH:
+                    nameIdx = bytecode[pc++];
+                    int storeHashSrcReg = bytecode[pc++];
+                    sb.append("STORE_GLOBAL_HASH %").append(stringPool[nameIdx]).append(" = r").append(storeHashSrcReg).append("\n");
                     break;
                 case Opcodes.LOAD_GLOBAL_CODE:
                     rd = bytecode[pc++];
@@ -362,6 +372,32 @@ public class InterpretedCode extends RuntimeCode {
                     pc += 2;
                     sb.append("ADD_SCALAR_INT r").append(rd).append(" = r").append(rs).append(" + ").append(imm).append("\n");
                     break;
+                case Opcodes.SUB_SCALAR_INT:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    int subImm = readInt(bytecode, pc);
+                    pc += 2;
+                    sb.append("SUB_SCALAR_INT r").append(rd).append(" = r").append(rs).append(" - ").append(subImm).append("\n");
+                    break;
+                case Opcodes.MUL_SCALAR_INT:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    int mulImm = readInt(bytecode, pc);
+                    pc += 2;
+                    sb.append("MUL_SCALAR_INT r").append(rd).append(" = r").append(rs).append(" * ").append(mulImm).append("\n");
+                    break;
+                case Opcodes.CONCAT:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    rs2 = bytecode[pc++];
+                    sb.append("CONCAT r").append(rd).append(" = r").append(rs1).append(" . r").append(rs2).append("\n");
+                    break;
+                case Opcodes.REPEAT:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    rs2 = bytecode[pc++];
+                    sb.append("REPEAT r").append(rd).append(" = r").append(rs1).append(" x r").append(rs2).append("\n");
+                    break;
                 case Opcodes.LT_NUM:
                     rd = bytecode[pc++];
                     rs1 = bytecode[pc++];
@@ -373,6 +409,18 @@ public class InterpretedCode extends RuntimeCode {
                     rs1 = bytecode[pc++];
                     rs2 = bytecode[pc++];
                     sb.append("GT_NUM r").append(rd).append(" = r").append(rs1).append(" > r").append(rs2).append("\n");
+                    break;
+                case Opcodes.LE_NUM:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    rs2 = bytecode[pc++];
+                    sb.append("LE_NUM r").append(rd).append(" = r").append(rs1).append(" <= r").append(rs2).append("\n");
+                    break;
+                case Opcodes.GE_NUM:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    rs2 = bytecode[pc++];
+                    sb.append("GE_NUM r").append(rd).append(" = r").append(rs1).append(" >= r").append(rs2).append("\n");
                     break;
                 case Opcodes.NE_NUM:
                     rd = bytecode[pc++];
@@ -398,6 +446,44 @@ public class InterpretedCode extends RuntimeCode {
                     imm = readInt(bytecode, pc);
                     pc += 2;
                     sb.append("ADD_ASSIGN_INT r").append(rd).append(" += ").append(imm).append("\n");
+                    break;
+                case Opcodes.STRING_CONCAT_ASSIGN:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("STRING_CONCAT_ASSIGN r").append(rd).append(" .= r").append(rs).append("\n");
+                    break;
+                case Opcodes.PUSH_LOCAL_VARIABLE:
+                    rs = bytecode[pc++];
+                    sb.append("PUSH_LOCAL_VARIABLE r").append(rs).append("\n");
+                    break;
+                case Opcodes.STORE_GLOB:
+                    int globReg = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("STORE_GLOB r").append(globReg).append(" = r").append(rs).append("\n");
+                    break;
+                case Opcodes.OPEN:
+                    rd = bytecode[pc++];
+                    int openCtx = bytecode[pc++];
+                    int openArgs = bytecode[pc++];
+                    sb.append("OPEN r").append(rd).append(" = open(ctx=").append(openCtx).append(", r").append(openArgs).append(")\n");
+                    break;
+                case Opcodes.READLINE:
+                    rd = bytecode[pc++];
+                    int fhReg = bytecode[pc++];
+                    int readCtx = bytecode[pc++];
+                    sb.append("READLINE r").append(rd).append(" = readline(r").append(fhReg).append(", ctx=").append(readCtx).append(")\n");
+                    break;
+                case Opcodes.MATCH_REGEX:
+                    rd = bytecode[pc++];
+                    int strReg = bytecode[pc++];
+                    int regReg = bytecode[pc++];
+                    int matchCtx = bytecode[pc++];
+                    sb.append("MATCH_REGEX r").append(rd).append(" = r").append(strReg).append(" =~ r").append(regReg).append(" (ctx=").append(matchCtx).append(")\n");
+                    break;
+                case Opcodes.CHOMP:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("CHOMP r").append(rd).append(" = chomp(r").append(rs).append(")\n");
                     break;
                 case Opcodes.PRE_AUTOINCREMENT:
                     rd = bytecode[pc++];
@@ -470,6 +556,32 @@ public class InterpretedCode extends RuntimeCode {
                     int arrayReg = bytecode[pc++];
                     int indexReg = bytecode[pc++];
                     sb.append("ARRAY_GET r").append(rd).append(" = r").append(arrayReg).append("[r").append(indexReg).append("]\n");
+                    break;
+                case Opcodes.ARRAY_SET:
+                    arrayReg = bytecode[pc++];
+                    indexReg = bytecode[pc++];
+                    int arraySetValueReg = bytecode[pc++];
+                    sb.append("ARRAY_SET r").append(arrayReg).append("[r").append(indexReg).append("] = r").append(arraySetValueReg).append("\n");
+                    break;
+                case Opcodes.ARRAY_PUSH:
+                    arrayReg = bytecode[pc++];
+                    int arrayPushValueReg = bytecode[pc++];
+                    sb.append("ARRAY_PUSH r").append(arrayReg).append(".push(r").append(arrayPushValueReg).append(")\n");
+                    break;
+                case Opcodes.ARRAY_POP:
+                    rd = bytecode[pc++];
+                    arrayReg = bytecode[pc++];
+                    sb.append("ARRAY_POP r").append(rd).append(" = r").append(arrayReg).append(".pop()\n");
+                    break;
+                case Opcodes.ARRAY_SHIFT:
+                    rd = bytecode[pc++];
+                    arrayReg = bytecode[pc++];
+                    sb.append("ARRAY_SHIFT r").append(rd).append(" = r").append(arrayReg).append(".shift()\n");
+                    break;
+                case Opcodes.ARRAY_UNSHIFT:
+                    arrayReg = bytecode[pc++];
+                    int arrayUnshiftValueReg = bytecode[pc++];
+                    sb.append("ARRAY_UNSHIFT r").append(arrayReg).append(".unshift(r").append(arrayUnshiftValueReg).append(")\n");
                     break;
                 case Opcodes.ARRAY_SIZE:
                     rd = bytecode[pc++];
@@ -635,6 +747,11 @@ public class InterpretedCode extends RuntimeCode {
                     }
                     sb.append("])\n");
                     break;
+                case Opcodes.SET_SCALAR:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("SET_SCALAR r").append(rd).append(".set(r").append(rs).append(")\n");
+                    break;
                 case Opcodes.NOT:
                     rd = bytecode[pc++];
                     rs = bytecode[pc++];
@@ -663,6 +780,23 @@ public class InterpretedCode extends RuntimeCode {
                     int pkgReg = bytecode[pc++];
                     sb.append("ISA r").append(rd).append(" = isa(r").append(objReg)
                       .append(", r").append(pkgReg).append(")\n");
+                    break;
+                case Opcodes.PROTOTYPE:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    int packageIdx = readInt(bytecode, pc);
+                    pc += 2;  // readInt reads 2 shorts
+                    String packageName = (stringPool != null && packageIdx < stringPool.length) ?
+                        stringPool[packageIdx] : "<unknown>";
+                    sb.append("PROTOTYPE r").append(rd).append(" = prototype(r").append(rs)
+                      .append(", \"").append(packageName).append("\")\n");
+                    break;
+                case Opcodes.QUOTE_REGEX:
+                    rd = bytecode[pc++];
+                    int patternReg = bytecode[pc++];
+                    int flagsReg = bytecode[pc++];
+                    sb.append("QUOTE_REGEX r").append(rd).append(" = qr{r").append(patternReg)
+                      .append("}r").append(flagsReg).append("\n");
                     break;
                 case Opcodes.ITERATOR_CREATE:
                     rd = bytecode[pc++];
@@ -717,6 +851,51 @@ public class InterpretedCode extends RuntimeCode {
                     rd = bytecode[pc++];
                     rs = bytecode[pc++];
                     sb.append("SCALAR_TO_LIST r").append(rd).append(" = to_list(r").append(rs).append(")\n");
+                    break;
+                case Opcodes.EVAL_STRING:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("EVAL_STRING r").append(rd).append(" = eval(r").append(rs).append(")\n");
+                    break;
+                case Opcodes.SELECT_OP:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("SELECT_OP r").append(rd).append(" = select(r").append(rs).append(")\n");
+                    break;
+                case Opcodes.LOAD_GLOB:
+                    rd = bytecode[pc++];
+                    nameIdx = bytecode[pc++];
+                    sb.append("LOAD_GLOB r").append(rd).append(" = *").append(stringPool[nameIdx]).append("\n");
+                    break;
+                case Opcodes.SLEEP_OP:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("SLEEP_OP r").append(rd).append(" = sleep(r").append(rs).append(")\n");
+                    break;
+                case Opcodes.DEREF_ARRAY:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("DEREF_ARRAY r").append(rd).append(" = @{r").append(rs).append("}\n");
+                    break;
+                case Opcodes.RETRIEVE_BEGIN_SCALAR:
+                    rd = bytecode[pc++];
+                    nameIdx = bytecode[pc++];
+                    int beginId = bytecode[pc++];
+                    sb.append("RETRIEVE_BEGIN_SCALAR r").append(rd).append(" = BEGIN_").append(beginId)
+                      .append("::").append(stringPool[nameIdx]).append("\n");
+                    break;
+                case Opcodes.SPLIT:
+                    rd = bytecode[pc++];
+                    int splitPatternReg = bytecode[pc++];
+                    int splitArgsReg = bytecode[pc++];
+                    int splitCtx = bytecode[pc++];
+                    sb.append("SPLIT r").append(rd).append(" = split(r").append(splitPatternReg)
+                      .append(", r").append(splitArgsReg).append(", ctx=").append(splitCtx).append(")\n");
+                    break;
+                case Opcodes.LOCAL_SCALAR:
+                    rd = bytecode[pc++];
+                    nameIdx = bytecode[pc++];
+                    sb.append("LOCAL_SCALAR r").append(rd).append(" = local $").append(stringPool[nameIdx]).append("\n");
                     break;
                 // DEPRECATED: SLOW_OP case removed - opcode 87 is no longer emitted
                 // All operations now use direct opcodes (114-154)

@@ -2,6 +2,7 @@ package org.perlonjava.scriptengine;
 
 import org.perlonjava.CompilerOptions;
 import org.perlonjava.astnode.Node;
+import org.perlonjava.codegen.CompiledCode;
 import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.codegen.EmitterMethodCreator;
 import org.perlonjava.codegen.JavaClassInfo;
@@ -183,10 +184,10 @@ public class PerlLanguageProvider {
         SpecialBlockParser.setCurrentScope(ctx.symbolTable);
 
         // Compile to executable (compiler or interpreter based on flag)
-        Object codeInstance = compileToExecutable(ast, ctx);
+        RuntimeCode runtimeCode = compileToExecutable(ast, ctx);
 
         // Execute (unified path for both backends)
-        return executeCode(codeInstance, ctx, isTopLevelScript, callerContext);
+        return executeCode(runtimeCode, ctx, isTopLevelScript, callerContext);
     }
 
     /**
@@ -235,23 +236,23 @@ public class PerlLanguageProvider {
         SpecialBlockParser.setCurrentScope(ctx.symbolTable);
 
         // Compile to executable (compiler or interpreter based on flag)
-        Object codeInstance = compileToExecutable(ast, ctx);
+        RuntimeCode runtimeCode = compileToExecutable(ast, ctx);
 
         // executePerlAST is always called from BEGIN blocks which use VOID context
-        return executeCode(codeInstance, ctx, false, RuntimeContextType.VOID);
+        return executeCode(runtimeCode, ctx, false, RuntimeContextType.VOID);
     }
 
     /**
      * Common method to execute compiled code and return the result.
-     * Works with both interpreter (InterpretedCode) and compiler (generated class instance).
+     * Works with both interpreter (InterpretedCode) and compiler (CompiledCode).
      *
-     * @param codeInstance  The compiled code instance (InterpretedCode or generated class)
+     * @param runtimeCode   The compiled RuntimeCode instance (InterpretedCode or CompiledCode)
      * @param ctx           The emitter context.
      * @param isMainProgram Indicates if this is the main program.
      * @param callerContext The calling context (VOID, SCALAR, LIST) or -1 for default
      * @return The result of the Perl code execution.
      */
-    private static RuntimeList executeCode(Object codeInstance, EmitterContext ctx, boolean isMainProgram, int callerContext) throws Exception {
+    private static RuntimeList executeCode(RuntimeCode runtimeCode, EmitterContext ctx, boolean isMainProgram, int callerContext) throws Exception {
         runUnitcheckBlocks(ctx.unitcheckBlocks);
         if (isMainProgram) {
             runCheckBlocks();
@@ -260,10 +261,6 @@ public class PerlLanguageProvider {
             RuntimeIO.closeAllHandles();
             return null;
         }
-
-        // Get MethodHandle for apply() - works for both RuntimeCode subclasses and generated classes
-        Class<?> codeClass = codeInstance.getClass();
-        MethodHandle invoker = RuntimeCode.lookup.findVirtual(codeClass, "apply", RuntimeCode.methodType);
 
         RuntimeList result;
         try {
@@ -274,7 +271,9 @@ public class PerlLanguageProvider {
             // Use the caller's context if specified, otherwise use default behavior
             int executionContext = callerContext >= 0 ? callerContext :
                     (isMainProgram ? RuntimeContextType.VOID : RuntimeContextType.SCALAR);
-            result = (RuntimeList) invoker.invoke(codeInstance, new RuntimeArray(), executionContext);
+
+            // Call apply() directly - works for both InterpretedCode and CompiledCode
+            result = runtimeCode.apply(new RuntimeArray(), executionContext);
 
             try {
                 if (isMainProgram) {
@@ -304,16 +303,17 @@ public class PerlLanguageProvider {
     }
 
     /**
-     * Compiles Perl AST to an executable instance (compiler or interpreter).
+     * Compiles Perl AST to an executable RuntimeCode instance (compiler or interpreter).
      * This method provides a unified compilation path that chooses the backend
-     * based on CompilerOptions.useInterpreter.
+     * based on CompilerOptions.useInterpreter, with automatic fallback to interpreter
+     * when compilation exceeds JVM method size limits.
      *
      * @param ast The abstract syntax tree to compile
      * @param ctx The emitter context
-     * @return Object that has apply() method - either InterpretedCode or compiled class instance
+     * @return RuntimeCode instance - either InterpretedCode or CompiledCode
      * @throws Exception if compilation fails
      */
-    private static Object compileToExecutable(Node ast, EmitterContext ctx) throws Exception {
+    private static RuntimeCode compileToExecutable(Node ast, EmitterContext ctx) throws Exception {
         if (ctx.compilerOptions.useInterpreter) {
             // Interpreter path - returns InterpretedCode (extends RuntimeCode)
             ctx.logDebug("Compiling to bytecode interpreter");
@@ -333,15 +333,68 @@ public class PerlLanguageProvider {
 
             return interpretedCode;
         } else {
-            // Compiler path - returns generated class instance
+            // Compiler path - returns CompiledCode (wrapper around generated class)
             ctx.logDebug("Compiling to JVM bytecode");
-            Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(
-                ctx,
-                ast,
-                false  // no try-catch
-            );
-            Constructor<?> constructor = generatedClass.getConstructor();
-            return constructor.newInstance();
+            try {
+                Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(
+                    ctx,
+                    ast,
+                    false  // no try-catch
+                );
+                Constructor<?> constructor = generatedClass.getConstructor();
+                Object instance = constructor.newInstance();
+
+                // Create MethodHandle for the apply() method
+                MethodHandle methodHandle = RuntimeCode.lookup.findVirtual(
+                    generatedClass,
+                    "apply",
+                    RuntimeCode.methodType
+                );
+
+                // Wrap in CompiledCode for type safety and consistency
+                // Main scripts don't have prototypes, so pass null
+                CompiledCode compiled = new CompiledCode(
+                    methodHandle,
+                    instance,
+                    null,  // prototype (main scripts don't have one)
+                    generatedClass,
+                    ctx
+                );
+                return compiled;
+
+            } catch (RuntimeException e) {
+                // Check if this is a "Method too large" error from ASM
+                if (e.getMessage() != null && e.getMessage().contains("Method too large")) {
+                    // When JPERL_USE_INTERPRETER_FALLBACK is set and compilation fails due to size,
+                    // automatically fall back to the interpreter backend
+                    boolean showFallback = System.getenv("JPERL_SHOW_FALLBACK") != null ||
+                                           System.getenv("JPERL_USE_INTERPRETER_FALLBACK") != null;
+                    if (showFallback) {
+                        System.err.println("Note: Method too large after AST splitting, using interpreter backend.");
+                    }
+
+                    // Fall back to interpreter path
+                    ctx.logDebug("Falling back to bytecode interpreter due to method size");
+                    BytecodeCompiler compiler = new BytecodeCompiler(
+                        ctx.compilerOptions.fileName,
+                        1,  // sourceLine (legacy parameter)
+                        ctx.errorUtil  // Pass errorUtil for proper error formatting with line numbers
+                    );
+                    InterpretedCode interpretedCode = compiler.compile(ast);
+
+                    // If --disassemble is enabled, print the bytecode
+                    if (ctx.compilerOptions.disassembleEnabled) {
+                        System.out.println("=== Interpreter Bytecode ===");
+                        System.out.println(interpretedCode.disassemble());
+                        System.out.println("=== End Bytecode ===");
+                    }
+
+                    return interpretedCode;
+                } else {
+                    // Not a size error, rethrow
+                    throw e;
+                }
+            }
         }
     }
 
