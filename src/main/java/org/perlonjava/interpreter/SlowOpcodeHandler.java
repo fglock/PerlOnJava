@@ -3,266 +3,57 @@ package org.perlonjava.interpreter;
 import org.perlonjava.runtime.*;
 
 /**
- * Handler for rarely-used operations via SLOW_OP opcode.
+ * Handler for rarely-used operations called directly by BytecodeInterpreter.
  *
- * <p>This class handles "cold path" operations via a single SLOW_OP opcode (87)
- * that takes a slow_op_id byte parameter. This architecture:</p>
+ * <p>This class provides execution methods for "cold path" operations that are
+ * called directly from BytecodeInterpreter helper methods (executeSliceOps,
+ * executeListOps, executeSystemOps, executeMiscOps).</p>
  *
- * <ul>
- *   <li>Uses only ONE opcode number for ALL rare operations (efficient!)</li>
- *   <li>Supports 256 slow operations via slow_op_id parameter</li>
- *   <li>Keeps main BytecodeInterpreter switch compact (~10-15% faster)</li>
- *   <li>Improves CPU instruction cache utilization (smaller main loop)</li>
- *   <li>Preserves valuable opcode space (88-255) for future fast operations</li>
- * </ul>
+ * <h2>Architecture (Phase 5)</h2>
+ * <p>As of Phase 5, this class uses <strong>direct method calls</strong> instead of
+ * the old SLOWOP_* ID dispatch mechanism:</p>
  *
- * <h2>Bytecode Format</h2>
  * <pre>
- * [SLOW_OP] [slow_op_id] [operands...]
- *
- * Example: waitpid
- * [87] [1] [rd] [rs_pid] [rs_flags]
- *  ^    ^
- *  |    |__ SLOWOP_WAITPID (1)
- *  |_______ SLOW_OP opcode (87)
- * </pre>
- *
- * <h2>Performance Trade-off</h2>
- * <p>Adds ~5ns overhead per slow operation but keeps hot path ~10-15% faster
- * by maintaining compact main interpreter loop. Since these operations are
- * rarely used (typically <1% of execution), the trade-off is excellent.</p>
- *
- * <h2>Architecture</h2>
- * <pre>
- * BytecodeInterpreter main loop:
+ * BytecodeInterpreter:
  *   switch (opcode) {
- *     case 0-86: Handle directly (hot path)
- *     case 87:   SlowOpcodeHandler.execute(...)  // All rare operations
- *     case 88-255: Future fast operations
+ *     case Opcodes.DEREF_ARRAY:
+ *       return SlowOpcodeHandler.executeDerefArray(bytecode, pc, registers);
+ *     case Opcodes.ARRAY_SLICE:
+ *       return SlowOpcodeHandler.executeArraySlice(bytecode, pc, registers);
+ *     ...
  *   }
  * </pre>
  *
- * <h2>Adding New Slow Operations</h2>
+ * <h2>Benefits of Direct Calls</h2>
+ * <ul>
+ *   <li>Eliminates SLOWOP_* ID indirection (no ID lookup overhead)</li>
+ *   <li>Simpler architecture: direct method calls instead of dispatch table</li>
+ *   <li>Better JIT optimization: methods can be inlined by C2 compiler</li>
+ *   <li>Clearer code: obvious which method handles each opcode</li>
+ * </ul>
+ *
+ * <h2>Performance Characteristics</h2>
+ * <p>Each operation adds one static method call (~5ns overhead) compared to
+ * inline handling in main execute() method. This is acceptable since these
+ * operations are rarely used (typically <1% of execution time).</p>
+ *
+ * <h2>Adding New Operations</h2>
  * <ol>
- *   <li>Add SLOWOP_XXX constant in Opcodes.java (next available ID)</li>
- *   <li>Add case in execute() method below</li>
- *   <li>Implement executeXxx() method</li>
- *   <li>Update getSlowOpName() for disassembler</li>
+ *   <li>Add opcode constant in Opcodes.java (next available opcode)</li>
+ *   <li>Add public static executeXxx() method in this class</li>
+ *   <li>Add case in BytecodeInterpreter helper method to call executeXxx()</li>
+ *   <li>Add disassembly case in InterpretedCode.java</li>
+ *   <li>Add emission logic in BytecodeCompiler.java</li>
  * </ol>
  *
- * @see Opcodes#SLOW_OP
- * @see Opcodes#SLOWOP_CHOWN
  * @see BytecodeInterpreter
+ * @see Opcodes
  */
 public class SlowOpcodeHandler {
 
-    /**
-     * Execute a slow operation.
-     *
-     * <p>Called from BytecodeInterpreter when SLOW_OP opcode (87) is encountered.
-     * Reads slow_op_id byte and dispatches to appropriate handler.</p>
-     *
-     * @param bytecode  The bytecode array
-     * @param pc        The program counter (pointing to slow_op_id byte)
-     * @param registers The register file
-     * @param code      The InterpretedCode being executed
-     * @return The new program counter position (after consuming all operands)
-     * @throws RuntimeException if the slow_op_id is unknown or execution fails
-     */
-    public static int execute(
-            short[] bytecode,
-            int pc,
-            RuntimeBase[] registers,
-            InterpretedCode code) {
-
-        // Read slow operation ID
-        int slowOpId = bytecode[pc++];
-
-        switch (slowOpId) {
-            case Opcodes.SLOWOP_CHOWN:
-                return executeChown(bytecode, pc, registers);
-
-            case Opcodes.SLOWOP_WAITPID:
-                return executeWaitpid(bytecode, pc, registers);
-
-            case Opcodes.SLOWOP_SETSOCKOPT:
-                return executeSetsockopt(bytecode, pc, registers);
-
-            case Opcodes.SLOWOP_GETSOCKOPT:
-                return executeGetsockopt(bytecode, pc, registers);
-
-            case Opcodes.SLOWOP_GETPRIORITY:
-                return executeGetpriority(bytecode, pc, registers);
-
-            case Opcodes.SLOWOP_SETPRIORITY:
-                return executeSetpriority(bytecode, pc, registers);
-
-            case Opcodes.SLOWOP_GETPGRP:
-                return executeGetpgrp(bytecode, pc, registers);
-
-            case Opcodes.SLOWOP_SETPGRP:
-                return executeSetpgrp(bytecode, pc, registers);
-
-            case Opcodes.SLOWOP_GETPPID:
-                return executeGetppid(bytecode, pc, registers);
-
-            case Opcodes.SLOWOP_FORK:
-                return executeFork(bytecode, pc, registers);
-
-            case Opcodes.SLOWOP_SEMGET:
-                return executeSemget(bytecode, pc, registers);
-
-            case Opcodes.SLOWOP_SEMOP:
-                return executeSemop(bytecode, pc, registers);
-
-            case Opcodes.SLOWOP_MSGGET:
-                return executeMsgget(bytecode, pc, registers);
-
-            case Opcodes.SLOWOP_MSGSND:
-                return executeMsgsnd(bytecode, pc, registers);
-
-            case Opcodes.SLOWOP_MSGRCV:
-                return executeMsgrcv(bytecode, pc, registers);
-
-            case Opcodes.SLOWOP_SHMGET:
-                return executeShmget(bytecode, pc, registers);
-
-            case Opcodes.SLOWOP_SHMREAD:
-                return executeShmread(bytecode, pc, registers);
-
-            case Opcodes.SLOWOP_SHMWRITE:
-                return executeShmwrite(bytecode, pc, registers);
-
-            case Opcodes.SLOWOP_SYSCALL:
-                return executeSyscall(bytecode, pc, registers);
-
-            case Opcodes.SLOWOP_EVAL_STRING:
-                return executeEvalString(bytecode, pc, registers, code);
-
-            case Opcodes.SLOWOP_SELECT:
-                return executeSelect(bytecode, pc, registers);
-
-            case Opcodes.SLOWOP_LOAD_GLOB:
-                return executeLoadGlob(bytecode, pc, registers, code);
-
-            case Opcodes.SLOWOP_SLEEP:
-                return executeSleep(bytecode, pc, registers);
-
-            case Opcodes.SLOWOP_DEREF_ARRAY:
-                return executeDerefArray(bytecode, pc, registers);
-
-            case Opcodes.SLOWOP_RETRIEVE_BEGIN_SCALAR:
-                return executeRetrieveBeginScalar(bytecode, pc, registers, code);
-
-            case Opcodes.SLOWOP_RETRIEVE_BEGIN_ARRAY:
-                return executeRetrieveBeginArray(bytecode, pc, registers, code);
-
-            case Opcodes.SLOWOP_RETRIEVE_BEGIN_HASH:
-                return executeRetrieveBeginHash(bytecode, pc, registers, code);
-
-            case Opcodes.SLOWOP_LOCAL_SCALAR:
-                return executeLocalScalar(bytecode, pc, registers, code);
-
-            case Opcodes.SLOWOP_SPLICE:
-                return executeSplice(bytecode, pc, registers);
-
-            case Opcodes.SLOWOP_ARRAY_SLICE:
-                return executeArraySlice(bytecode, pc, registers);
-
-            case Opcodes.SLOWOP_REVERSE:
-                return executeReverse(bytecode, pc, registers);
-
-            case Opcodes.SLOWOP_ARRAY_SLICE_SET:
-                return executeArraySliceSet(bytecode, pc, registers);
-
-            case Opcodes.SLOWOP_SPLIT:
-                return executeSplit(bytecode, pc, registers);
-
-            case Opcodes.SLOWOP_EXISTS:
-                return executeExists(bytecode, pc, registers);
-
-            case Opcodes.SLOWOP_DELETE:
-                return executeDelete(bytecode, pc, registers);
-
-            case Opcodes.SLOWOP_DEREF_HASH:
-                return executeDerefHash(bytecode, pc, registers);
-
-            case Opcodes.SLOWOP_HASH_SLICE:
-                return executeHashSlice(bytecode, pc, registers);
-
-            case Opcodes.SLOWOP_HASH_SLICE_DELETE:
-                return executeHashSliceDelete(bytecode, pc, registers);
-
-            case Opcodes.SLOWOP_HASH_SLICE_SET:
-                return executeHashSliceSet(bytecode, pc, registers);
-
-            case Opcodes.SLOWOP_LIST_SLICE_FROM:
-                return executeListSliceFrom(bytecode, pc, registers);
-
-            case Opcodes.SLOWOP_LENGTH:
-                return executeLength(bytecode, pc, registers);
-
-            default:
-                throw new RuntimeException(
-                    "Unknown slow operation ID: " + slowOpId +
-                    " at " + code.sourceName + ":" + code.sourceLine
-                );
-        }
-    }
-
-    /**
-     * Get human-readable name for slow operation ID.
-     * Used by disassembler.
-     */
-    public static String getSlowOpName(int slowOpId) {
-        return switch (slowOpId) {
-            case Opcodes.SLOWOP_CHOWN -> "chown";
-            case Opcodes.SLOWOP_WAITPID -> "waitpid";
-            case Opcodes.SLOWOP_SETSOCKOPT -> "setsockopt";
-            case Opcodes.SLOWOP_GETSOCKOPT -> "getsockopt";
-            case Opcodes.SLOWOP_GETPRIORITY -> "getpriority";
-            case Opcodes.SLOWOP_SETPRIORITY -> "setpriority";
-            case Opcodes.SLOWOP_GETPGRP -> "getpgrp";
-            case Opcodes.SLOWOP_SETPGRP -> "setpgrp";
-            case Opcodes.SLOWOP_GETPPID -> "getppid";
-            case Opcodes.SLOWOP_FORK -> "fork";
-            case Opcodes.SLOWOP_SEMGET -> "semget";
-            case Opcodes.SLOWOP_SEMOP -> "semop";
-            case Opcodes.SLOWOP_MSGGET -> "msgget";
-            case Opcodes.SLOWOP_MSGSND -> "msgsnd";
-            case Opcodes.SLOWOP_MSGRCV -> "msgrcv";
-            case Opcodes.SLOWOP_SHMGET -> "shmget";
-            case Opcodes.SLOWOP_SHMREAD -> "shmread";
-            case Opcodes.SLOWOP_SHMWRITE -> "shmwrite";
-            case Opcodes.SLOWOP_SYSCALL -> "syscall";
-            case Opcodes.SLOWOP_EVAL_STRING -> "eval";
-            case Opcodes.SLOWOP_SELECT -> "select";
-            case Opcodes.SLOWOP_LOAD_GLOB -> "load_glob";
-            case Opcodes.SLOWOP_SLEEP -> "sleep";
-            case Opcodes.SLOWOP_DEREF_ARRAY -> "deref_array";
-            case Opcodes.SLOWOP_RETRIEVE_BEGIN_SCALAR -> "retrieve_begin_scalar";
-            case Opcodes.SLOWOP_RETRIEVE_BEGIN_ARRAY -> "retrieve_begin_array";
-            case Opcodes.SLOWOP_RETRIEVE_BEGIN_HASH -> "retrieve_begin_hash";
-            case Opcodes.SLOWOP_LOCAL_SCALAR -> "local_scalar";
-            case Opcodes.SLOWOP_SPLICE -> "splice";
-            case Opcodes.SLOWOP_ARRAY_SLICE -> "array_slice";
-            case Opcodes.SLOWOP_REVERSE -> "reverse";
-            case Opcodes.SLOWOP_ARRAY_SLICE_SET -> "array_slice_set";
-            case Opcodes.SLOWOP_SPLIT -> "split";
-            case Opcodes.SLOWOP_EXISTS -> "exists";
-            case Opcodes.SLOWOP_DELETE -> "delete";
-            case Opcodes.SLOWOP_DEREF_HASH -> "deref_hash";
-            case Opcodes.SLOWOP_HASH_SLICE -> "hash_slice";
-            case Opcodes.SLOWOP_HASH_SLICE_DELETE -> "hash_slice_delete";
-            case Opcodes.SLOWOP_HASH_SLICE_SET -> "hash_slice_set";
-            case Opcodes.SLOWOP_LIST_SLICE_FROM -> "list_slice_from";
-            case Opcodes.SLOWOP_LENGTH -> "length";
-            default -> "slowop_" + slowOpId;
-        };
-    }
-
     // =================================================================
-    // IMPLEMENTATION METHODS
+    // SLICE AND DEREFERENCE OPERATIONS
+    // =================================================================
     // =================================================================
 
     /**
@@ -270,7 +61,7 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_CHOWN] [rs_list] [rs_uid] [rs_gid]
      * Effect: Changes ownership of files in list
      */
-    private static int executeChown(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeChown(short[] bytecode, int pc, RuntimeBase[] registers) {
         int listReg = bytecode[pc++];
         int uidReg = bytecode[pc++];
         int gidReg = bytecode[pc++];
@@ -287,7 +78,7 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_WAITPID] [rd] [rs_pid] [rs_flags]
      * Effect: Waits for child process and returns status
      */
-    private static int executeWaitpid(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeWaitpid(short[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int pidReg = bytecode[pc++];
         int flagsReg = bytecode[pc++];
@@ -306,7 +97,7 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_SETSOCKOPT] [rs_socket] [rs_level] [rs_optname] [rs_optval]
      * Effect: Sets socket option
      */
-    private static int executeSetsockopt(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeSetsockopt(short[] bytecode, int pc, RuntimeBase[] registers) {
         int socketReg = bytecode[pc++];
         int levelReg = bytecode[pc++];
         int optnameReg = bytecode[pc++];
@@ -323,7 +114,7 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_GETSOCKOPT] [rd] [rs_socket] [rs_level] [rs_optname]
      * Effect: Gets socket option value
      */
-    private static int executeGetsockopt(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeGetsockopt(short[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int socketReg = bytecode[pc++];
         int levelReg = bytecode[pc++];
@@ -340,7 +131,7 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_GETPRIORITY] [rd] [rs_which] [rs_who]
      * Effect: Gets process priority
      */
-    private static int executeGetpriority(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeGetpriority(short[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int whichReg = bytecode[pc++];
         int whoReg = bytecode[pc++];
@@ -355,7 +146,7 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_SETPRIORITY] [rs_which] [rs_who] [rs_priority]
      * Effect: Sets process priority
      */
-    private static int executeSetpriority(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeSetpriority(short[] bytecode, int pc, RuntimeBase[] registers) {
         int whichReg = bytecode[pc++];
         int whoReg = bytecode[pc++];
         int priorityReg = bytecode[pc++];
@@ -370,7 +161,7 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_GETPGRP] [rd] [rs_pid]
      * Effect: Gets process group ID
      */
-    private static int executeGetpgrp(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeGetpgrp(short[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int pidReg = bytecode[pc++];
 
@@ -384,7 +175,7 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_SETPGRP] [rs_pid] [rs_pgrp]
      * Effect: Sets process group ID
      */
-    private static int executeSetpgrp(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeSetpgrp(short[] bytecode, int pc, RuntimeBase[] registers) {
         int pidReg = bytecode[pc++];
         int pgrpReg = bytecode[pc++];
 
@@ -397,7 +188,7 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_GETPPID] [rd]
      * Effect: Gets parent process ID
      */
-    private static int executeGetppid(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeGetppid(short[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
 
         // Java 9+ has ProcessHandle.current().parent()
@@ -411,7 +202,7 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_FORK] [rd]
      * Effect: Forks process (not supported in Java)
      */
-    private static int executeFork(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeFork(short[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
 
         // fork() is not supported in Java - return -1 (error)
@@ -426,7 +217,7 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_SEMGET] [rd] [rs_key] [rs_nsems] [rs_flags]
      * Effect: Gets semaphore set identifier
      */
-    private static int executeSemget(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeSemget(short[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int keyReg = bytecode[pc++];
         int nsemsReg = bytecode[pc++];
@@ -441,7 +232,7 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_SEMOP] [rd] [rs_semid] [rs_opstring]
      * Effect: Performs semaphore operations
      */
-    private static int executeSemop(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeSemop(short[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int semidReg = bytecode[pc++];
         int opstringReg = bytecode[pc++];
@@ -455,7 +246,7 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_MSGGET] [rd] [rs_key] [rs_flags]
      * Effect: Gets message queue identifier
      */
-    private static int executeMsgget(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeMsgget(short[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int keyReg = bytecode[pc++];
         int flagsReg = bytecode[pc++];
@@ -469,7 +260,7 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_MSGSND] [rd] [rs_id] [rs_msg] [rs_flags]
      * Effect: Sends message to queue
      */
-    private static int executeMsgsnd(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeMsgsnd(short[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int idReg = bytecode[pc++];
         int msgReg = bytecode[pc++];
@@ -484,7 +275,7 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_MSGRCV] [rd] [rs_id] [rs_size] [rs_type] [rs_flags]
      * Effect: Receives message from queue
      */
-    private static int executeMsgrcv(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeMsgrcv(short[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int idReg = bytecode[pc++];
         int sizeReg = bytecode[pc++];
@@ -500,7 +291,7 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_SHMGET] [rd] [rs_key] [rs_size] [rs_flags]
      * Effect: Gets shared memory segment
      */
-    private static int executeShmget(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeShmget(short[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int keyReg = bytecode[pc++];
         int sizeReg = bytecode[pc++];
@@ -515,7 +306,7 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_SHMREAD] [rd] [rs_id] [rs_pos] [rs_size]
      * Effect: Reads from shared memory
      */
-    private static int executeShmread(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeShmread(short[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int idReg = bytecode[pc++];
         int posReg = bytecode[pc++];
@@ -530,7 +321,7 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_SHMWRITE] [rs_id] [rs_pos] [rs_string]
      * Effect: Writes to shared memory
      */
-    private static int executeShmwrite(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeShmwrite(short[] bytecode, int pc, RuntimeBase[] registers) {
         int idReg = bytecode[pc++];
         int posReg = bytecode[pc++];
         int stringReg = bytecode[pc++];
@@ -544,7 +335,7 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_SYSCALL] [rd] [rs_number] [arg_count] [rs_arg1] [rs_arg2] ...
      * Effect: Makes arbitrary system call
      */
-    private static int executeSyscall(short[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeSyscall(short[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int numberReg = bytecode[pc++];
         int argCount = bytecode[pc++];
@@ -563,7 +354,7 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_EVAL_STRING] [rd] [rs_string]
      * Effect: Dynamically evaluates Perl code string
      */
-    private static int executeEvalString(
+    public static int executeEvalString(
             short[] bytecode,
             int pc,
             RuntimeBase[] registers,
@@ -601,7 +392,7 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_SELECT] [rd] [rs_list]
      * Effect: Sets or gets the default output filehandle
      */
-    private static int executeSelect(
+    public static int executeSelect(
             short[] bytecode,
             int pc,
             RuntimeBase[] registers) {
@@ -626,7 +417,7 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_LOAD_GLOB] [rd] [name_idx]
      * Effect: Loads a glob/filehandle from global variables
      */
-    private static int executeLoadGlob(
+    public static int executeLoadGlob(
             short[] bytecode,
             int pc,
             RuntimeBase[] registers,
@@ -653,7 +444,7 @@ public class SlowOpcodeHandler {
      * @param registers The register file
      * @return The new program counter
      */
-    private static int executeSleep(
+    public static int executeSleep(
             short[] bytecode,
             int pc,
             RuntimeBase[] registers) {
@@ -681,7 +472,7 @@ public class SlowOpcodeHandler {
      * @param registers Register array
      * @return Updated program counter
      */
-    private static int executeDerefArray(
+    public static int executeDerefArray(
             short[] bytecode,
             int pc,
             RuntimeBase[] registers) {
@@ -712,7 +503,7 @@ public class SlowOpcodeHandler {
      * Format: [SLOWOP_RETRIEVE_BEGIN_SCALAR] [rd] [nameIdx] [begin_id]
      * Effect: rd = PersistentVariable.retrieveBeginScalar(stringPool[nameIdx], begin_id)
      */
-    private static int executeRetrieveBeginScalar(
+    public static int executeRetrieveBeginScalar(
             short[] bytecode,
             int pc,
             RuntimeBase[] registers,
@@ -734,7 +525,7 @@ public class SlowOpcodeHandler {
      * Format: [SLOWOP_RETRIEVE_BEGIN_ARRAY] [rd] [nameIdx] [begin_id]
      * Effect: rd = PersistentVariable.retrieveBeginArray(stringPool[nameIdx], begin_id)
      */
-    private static int executeRetrieveBeginArray(
+    public static int executeRetrieveBeginArray(
             short[] bytecode,
             int pc,
             RuntimeBase[] registers,
@@ -756,7 +547,7 @@ public class SlowOpcodeHandler {
      * Format: [SLOWOP_RETRIEVE_BEGIN_HASH] [rd] [nameIdx] [begin_id]
      * Effect: rd = PersistentVariable.retrieveBeginHash(stringPool[nameIdx], begin_id)
      */
-    private static int executeRetrieveBeginHash(
+    public static int executeRetrieveBeginHash(
             short[] bytecode,
             int pc,
             RuntimeBase[] registers,
@@ -778,7 +569,7 @@ public class SlowOpcodeHandler {
      * Format: [SLOWOP_LOCAL_SCALAR] [rd] [nameIdx]
      * Effect: rd = GlobalRuntimeScalar.makeLocal(stringPool[nameIdx])
      */
-    private static int executeLocalScalar(
+    public static int executeLocalScalar(
             short[] bytecode,
             int pc,
             RuntimeBase[] registers,
@@ -800,7 +591,7 @@ public class SlowOpcodeHandler {
      * Effect: rd = Operator.splice(registers[arrayReg], registers[argsReg])
      * In scalar context, returns last element removed (or undef if no elements removed)
      */
-    private static int executeSplice(
+    public static int executeSplice(
             short[] bytecode,
             int pc,
             RuntimeBase[] registers) {
@@ -833,7 +624,7 @@ public class SlowOpcodeHandler {
      * Format: [SLOWOP_ARRAY_SLICE] [rd] [arrayReg] [indicesReg]
      * Effect: rd = array.getSlice(indices)
      */
-    private static int executeArraySlice(
+    public static int executeArraySlice(
             short[] bytecode,
             int pc,
             RuntimeBase[] registers) {
@@ -856,7 +647,7 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_REVERSE] [rd] [argsReg] [ctx]
      * Effect: rd = Operator.reverse(ctx, args...)
      */
-    private static int executeReverse(
+    public static int executeReverse(
             short[] bytecode,
             int pc,
             RuntimeBase[] registers) {
@@ -879,7 +670,7 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_ARRAY_SLICE_SET] [arrayReg] [indicesReg] [valuesReg]
      * Effect: Sets array elements at indices to values
      */
-    private static int executeArraySliceSet(
+    public static int executeArraySliceSet(
             short[] bytecode,
             int pc,
             RuntimeBase[] registers) {
@@ -902,7 +693,7 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_SPLIT] [rd] [patternReg] [argsReg] [ctx]
      * Effect: rd = Operator.split(pattern, args, ctx)
      */
-    private static int executeSplit(
+    public static int executeSplit(
             short[] bytecode,
             int pc,
             RuntimeBase[] registers) {
@@ -926,7 +717,7 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_EXISTS] [rd] [operandReg]
      * Effect: rd = exists operand (fallback for non-simple cases)
      */
-    private static int executeExists(
+    public static int executeExists(
             short[] bytecode,
             int pc,
             RuntimeBase[] registers) {
@@ -946,7 +737,7 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_DELETE] [rd] [operandReg]
      * Effect: rd = delete operand (fallback for non-simple cases)
      */
-    private static int executeDelete(
+    public static int executeDelete(
             short[] bytecode,
             int pc,
             RuntimeBase[] registers) {
@@ -970,7 +761,7 @@ public class SlowOpcodeHandler {
      * @param registers Register array
      * @return Updated program counter
      */
-    private static int executeDerefHash(
+    public static int executeDerefHash(
             short[] bytecode,
             int pc,
             RuntimeBase[] registers) {
@@ -1001,7 +792,7 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_HASH_SLICE] [rd] [hashReg] [keysListReg]
      * Effect: rd = RuntimeArray of values for the given keys
      */
-    private static int executeHashSlice(
+    public static int executeHashSlice(
             short[] bytecode,
             int pc,
             RuntimeBase[] registers) {
@@ -1031,7 +822,7 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_HASH_SLICE_DELETE] [rd] [hashReg] [keysListReg]
      * Effect: rd = RuntimeList of deleted values
      */
-    private static int executeHashSliceDelete(
+    public static int executeHashSliceDelete(
             short[] bytecode,
             int pc,
             RuntimeBase[] registers) {
@@ -1061,7 +852,7 @@ public class SlowOpcodeHandler {
      * Format: [SLOW_HASH_SLICE_SET] [hashReg] [keysListReg] [valuesListReg]
      * Effect: Assign values to multiple hash keys (slice assignment)
      */
-    private static int executeHashSliceSet(
+    public static int executeHashSliceSet(
             short[] bytecode,
             int pc,
             RuntimeBase[] registers) {
@@ -1101,7 +892,7 @@ public class SlowOpcodeHandler {
      * Extract a slice from a list starting at given index to the end
      * Format: [SLOWOP_LIST_SLICE_FROM] [rd] [listReg] [startIndex]
      */
-    private static int executeListSliceFrom(
+    public static int executeListSliceFrom(
             short[] bytecode,
             int pc,
             RuntimeBase[] registers) {
@@ -1162,7 +953,7 @@ public class SlowOpcodeHandler {
      * Get the length of a string
      * Format: [SLOWOP_LENGTH] [rd] [stringReg]
      */
-    private static int executeLength(
+    public static int executeLength(
             short[] bytecode,
             int pc,
             RuntimeBase[] registers) {
