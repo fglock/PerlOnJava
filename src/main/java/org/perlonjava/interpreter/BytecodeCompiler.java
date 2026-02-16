@@ -2142,6 +2142,28 @@ public class BytecodeCompiler implements Visitor {
                 return;
             }
 
+            // Handle lvalue subroutine: f() = value
+            // When a function is called in lvalue context, it returns a RuntimeBaseProxy
+            // that wraps a mutable reference. We can assign to it using SET_SCALAR.
+            if (leftBin.operator.equals("(")) {
+                // Call the function (which returns a RuntimeBaseProxy in lvalue context)
+                node.left.accept(this);
+                int lvalueReg = lastResultReg;
+
+                // Compile RHS
+                node.right.accept(this);
+                int rhsReg = lastResultReg;
+
+                // Assign to the lvalue using SET_SCALAR
+                emit(Opcodes.SET_SCALAR);
+                emitReg(lvalueReg);
+                emitReg(rhsReg);
+
+                lastResultReg = rhsReg;
+                currentCallContext = savedContext;
+                return;
+            }
+
             throwCompilerException("Assignment to non-identifier not yet supported: " + node.left.getClass().getSimpleName());
         } else if (node.left instanceof ListNode) {
             // List assignment: ($a, $b) = ... or () = ...
@@ -4901,6 +4923,32 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(targetReg);
 
                 lastResultReg = rd;
+            }
+        } else if (op.equals("+")) {
+            // Unary + operator: forces numeric context on its operand
+            // For arrays/hashes in scalar context, this returns the size
+            // For scalars, this ensures the value is numeric
+            if (node.operand != null) {
+                // Evaluate operand in scalar context
+                int savedContext = currentCallContext;
+                currentCallContext = RuntimeContextType.SCALAR;
+                try {
+                    node.operand.accept(this);
+                    int operandReg = lastResultReg;
+
+                    // Emit ARRAY_SIZE to convert to scalar
+                    // This handles arrays/hashes (converts to size) and passes through scalars
+                    int rd = allocateRegister();
+                    emit(Opcodes.ARRAY_SIZE);
+                    emitReg(rd);
+                    emitReg(operandReg);
+
+                    lastResultReg = rd;
+                } finally {
+                    currentCallContext = savedContext;
+                }
+            } else {
+                throwCompilerException("unary + operator requires an operand");
             }
         } else {
             throwCompilerException("Unsupported operator: " + op);
