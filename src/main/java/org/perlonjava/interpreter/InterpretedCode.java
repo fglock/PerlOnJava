@@ -451,11 +451,10 @@ public class InterpretedCode extends RuntimeCode {
                     sb.append("WARN r").append(rs).append("\n");
                     break;
                 case Opcodes.EVAL_TRY: {
-                    int catchOffsetHigh = bytecode[pc++];
-                    int catchOffsetLow = bytecode[pc++];
-                    int catchOffset = (catchOffsetHigh << 8) | catchOffsetLow;
-                    int tryPc = pc - 3;
-                    int catchPc = tryPc + catchOffset;
+                    // Read 4-byte absolute catch target
+                    int high = bytecode[pc++] & 0xFFFF;
+                    int low = bytecode[pc++] & 0xFFFF;
+                    int catchPc = (high << 16) | low;
                     sb.append("EVAL_TRY catch_at=").append(catchPc).append("\n");
                     break;
                 }

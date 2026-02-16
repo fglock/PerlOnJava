@@ -4956,12 +4956,10 @@ public class BytecodeCompiler implements Visitor {
     private void visitEvalBlock(SubroutineNode node) {
         int resultReg = allocateRegister();
 
-        // Emit EVAL_TRY with placeholder for catch offset
-        int tryPc = bytecode.size();
+        // Emit EVAL_TRY with placeholder for catch target (absolute address)
         emitWithToken(Opcodes.EVAL_TRY, node.getIndex());
-        int catchOffsetPos = bytecode.size();
-        emit(0); // High byte placeholder
-        emit(0); // Low byte placeholder
+        int catchTargetPos = bytecode.size();
+        emitInt(0); // Placeholder for absolute catch address (4 bytes)
 
         // Compile the eval block body
         node.block.accept(this);
@@ -4976,19 +4974,16 @@ public class BytecodeCompiler implements Visitor {
         // Emit EVAL_END (clears $@)
         emit(Opcodes.EVAL_END);
 
-        // Jump over catch block
-        int gotoEndPos = bytecode.size();
+        // Jump over catch block to end
         emit(Opcodes.GOTO);
-        int gotoEndOffsetPos = bytecode.size();
-        emit(0); // High byte placeholder
-        emit(0); // Low byte placeholder
+        int gotoEndPos = bytecode.size();
+        emitInt(0); // Placeholder for absolute end address (4 bytes)
 
         // CATCH block starts here
         int catchPc = bytecode.size();
 
-        // Patch EVAL_TRY with catch offset (as a single short)
-        int catchOffset = catchPc - tryPc;
-        bytecode.set(catchOffsetPos, (short)catchOffset);
+        // Patch EVAL_TRY with absolute catch target (4 bytes)
+        patchIntOffset(catchTargetPos, catchPc);
 
         // Emit EVAL_CATCH (sets $@, stores undef)
         emit(Opcodes.EVAL_CATCH);
@@ -4997,9 +4992,8 @@ public class BytecodeCompiler implements Visitor {
         // END label (after catch)
         int endPc = bytecode.size();
 
-        // Patch GOTO to end (as a single short)
-        int gotoEndOffset = endPc - gotoEndPos;
-        bytecode.set(gotoEndOffsetPos, (short)gotoEndOffset);
+        // Patch GOTO with absolute end target (4 bytes)
+        patchIntOffset(gotoEndPos, endPc);
 
         lastResultReg = resultReg;
     }
