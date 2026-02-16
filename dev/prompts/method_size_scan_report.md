@@ -6,53 +6,43 @@
 
 ## Summary
 
-Total methods analyzed: **4,009**
+Total methods analyzed: **4,013**
 
-- 🔴 **Critical** (>= 8000 bytes): **2 methods**
+- 🟢 **Critical** (>= 8000 bytes): **0 methods** ✅
 - 🟡 **Warning** (7000-8000 bytes): **1 method**
-- 🟢 **Safe** (< 7000 bytes): **4,006 methods**
+- 🟢 **Safe** (< 7000 bytes): **4,012 methods**
 
 ---
 
 ## Critical Methods (Won't JIT Compile)
 
-### 1. `BytecodeCompiler.visit(BinaryOperatorNode)` - 11,365 bytes
+**None!** All critical methods have been fixed. ✅
 
-**Location**: `src/main/java/org/perlonjava/interpreter/BytecodeCompiler.java`
+### 1. `BytecodeCompiler.visit(BinaryOperatorNode)` - ✅ FIXED
 
-**Impact**: Affects **compilation speed**
-- Slows down script startup when compiling
-- Slows down `eval STRING` compilation
-- Does NOT affect runtime execution of already-compiled code
+**Was**: 11,365 bytes (critical)
+**Now**: < 7,000 bytes (safe)
 
-**Priority**: Medium (compilation-time only)
+**Solution Applied**: Split into helper methods
+- Created `compileAssignmentOperator()` (5,008 bytes) - handles my/our/state variable initialization
+- Created `compileBinaryOperatorSwitch()` (2,535 bytes) - handles binary operation dispatch
+- Main `visit()` method now properly delegates to helpers
 
-**Recommended Solution**:
-- Split into helper methods by operator type
-- Delegate arithmetic operators to `compileBinaryArithmetic()`
-- Delegate comparison operators to `compileBinaryComparison()`
-- Delegate assignment operators to `compileBinaryAssignment()`
-- Keep only dispatch logic in main `visit()` method
+**Result**: Method now JIT-compiles successfully, improving eval STRING and script startup speed
 
 ---
 
-### 2. `BytecodeCompiler.visit(OperatorNode)` - 9,544 bytes
+### 2. `BytecodeCompiler.visit(OperatorNode)` - ✅ FIXED
 
-**Location**: `src/main/java/org/perlonjava/interpreter/BytecodeCompiler.java`
+**Was**: 9,544 bytes (critical)
+**Now**: 5,743 bytes (safe) - **40% reduction!**
 
-**Impact**: Affects **compilation speed**
-- Slows down script startup when compiling
-- Slows down `eval STRING` compilation
-- Does NOT affect runtime execution of already-compiled code
+**Solution Applied**: Split into helper methods by operator category
+- Created `compileVariableDeclaration()` - handles my/our/local declarations
+- Created `compileVariableReference()` - handles $/\@/%/*/&/\ operators
+- Main `visit()` method now properly delegates to helpers
 
-**Priority**: Medium (compilation-time only)
-
-**Recommended Solution**:
-- Split into helper methods by operator category
-- Delegate I/O operators to `compileIOOperator()`
-- Delegate list operators to `compileListOperator()`
-- Delegate control flow to `compileControlFlowOperator()`
-- Keep only dispatch logic in main `visit()` method
+**Result**: Method now JIT-compiles successfully, improving eval STRING and script startup speed
 
 ---
 
@@ -79,12 +69,12 @@ Total methods analyzed: **4,009**
 
 | Size (bytes) | Status | Method |
 |--------------|--------|--------|
-| 11,365 | 🔴 | `BytecodeCompiler.visit(BinaryOperatorNode)` |
-| 9,544 | 🔴 | `BytecodeCompiler.visit(OperatorNode)` |
 | 7,270 | 🟡 | `BytecodeInterpreter.execute()` (FIXED) |
 | 6,959 | 🟢 | `InterpretedCode.disassemble()` |
+| 5,743 | 🟢 | `BytecodeCompiler.visit(OperatorNode)` (FIXED) |
 | 5,343 | 🟢 | `ControlFlowDetectorVisitor.scan()` |
 | 5,178 | 🟢 | `ParserTables.<clinit>()` |
+| 5,008 | 🟢 | `BytecodeCompiler.compileAssignmentOperator()` (NEW) |
 | 4,604 | 🟢 | `CoreOperatorResolver.parseCoreOperator()` |
 | 4,468 | 🟢 | `EmitOperatorNode.emitOperatorNode()` |
 | 4,370 | 🟢 | `StatementResolver.parseStatement()` |
@@ -98,7 +88,7 @@ Total methods analyzed: **4,009**
 | 2,751 | 🟢 | `ModuleOperators.doFile()` |
 | 2,742 | 🟢 | `EmitEval.handleEvalOperator()` |
 | 2,670 | 🟢 | `FileTestOperator.fileTest()` |
-| 2,481 | 🟢 | `EmitVariable.handleVariableOperator()` |
+| 2,535 | 🟢 | `BytecodeCompiler.compileBinaryOperatorSwitch()` (NEW) |
 
 ---
 
@@ -106,21 +96,33 @@ Total methods analyzed: **4,009**
 
 ### Immediate Action Required
 
-**None** - The critical runtime performance issue (BytecodeInterpreter) has been fixed.
+**None!** ✅ All critical performance issues have been resolved.
+
+### Completed Improvements
+
+1. ✅ **BytecodeInterpreter.execute()** - Fixed (8,492 → 7,270 bytes)
+   - Used range-based delegation pattern
+   - Split into 4 secondary methods by opcode functionality
+   - Achieved 8x speedup (5.03s → 0.63s for 50M iterations)
+
+2. ✅ **BytecodeCompiler.visit(BinaryOperatorNode)** - Fixed (11,365 → <7,000 bytes)
+   - Extracted `compileAssignmentOperator()` for variable initialization logic
+   - Extracted `compileBinaryOperatorSwitch()` for binary operation dispatch
+   - Improves eval STRING and script startup compilation speed
+
+3. ✅ **BytecodeCompiler.visit(OperatorNode)** - Fixed (9,544 → 5,743 bytes)
+   - Extracted `compileVariableDeclaration()` for my/our/local handling
+   - Extracted `compileVariableReference()` for sigil operators
+   - Improves eval STRING and script startup compilation speed
 
 ### Future Improvements
 
-1. **BytecodeCompiler.visit() methods** (when time permits):
-   - Use same range-based delegation pattern as BytecodeInterpreter
-   - Split into ~5 secondary methods by operator category
-   - Will improve compilation speed for large scripts
-
-2. **Monitoring**:
+1. **Monitoring**:
    - Run `./dev/tools/scan-all-method-sizes.sh` after major changes
    - Watch for methods approaching 7,000 bytes
    - Proactively refactor before hitting 8,000-byte limit
 
-3. **Build Integration** (optional):
+2. **Build Integration** (optional):
    - Add scan to CI/CD pipeline
    - Fail builds if new critical methods are introduced
    - Set threshold at 7,500 bytes for early warning
