@@ -624,8 +624,18 @@ public class Opcodes {
      * Format: PROTOTYPE rd rs package_name_idx(int) */
     public static final short PROTOTYPE = 158;
 
+    /** Quote regex operator: rd = RuntimeRegex.getQuotedRegex(pattern_reg, flags_reg)
+     * Format: QUOTE_REGEX rd pattern_reg flags_reg */
+    public static final short QUOTE_REGEX = 159;
+
+    /** Less than or equal: rd = CompareOperators.numericLessThanOrEqual(rs1, rs2) */
+    public static final short LE_NUM = 160;
+
+    /** Greater than or equal: rd = CompareOperators.numericGreaterThanOrEqual(rs1, rs2) */
+    public static final short GE_NUM = 161;
+
     // =================================================================
-    // OPCODES 159-32767: RESERVED FOR FUTURE OPERATIONS
+    // OPCODES 162-32767: RESERVED FOR FUTURE OPERATIONS
     // =================================================================
     // See PHASE3_OPERATOR_PROMOTIONS.md for promotion strategy.
     // All SLOWOP_* constants have been removed - use direct opcodes 114-154 instead.

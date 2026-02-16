@@ -374,6 +374,18 @@ public class InterpretedCode extends RuntimeCode {
                     rs2 = bytecode[pc++];
                     sb.append("GT_NUM r").append(rd).append(" = r").append(rs1).append(" > r").append(rs2).append("\n");
                     break;
+                case Opcodes.LE_NUM:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    rs2 = bytecode[pc++];
+                    sb.append("LE_NUM r").append(rd).append(" = r").append(rs1).append(" <= r").append(rs2).append("\n");
+                    break;
+                case Opcodes.GE_NUM:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    rs2 = bytecode[pc++];
+                    sb.append("GE_NUM r").append(rd).append(" = r").append(rs1).append(" >= r").append(rs2).append("\n");
+                    break;
                 case Opcodes.NE_NUM:
                     rd = bytecode[pc++];
                     rs1 = bytecode[pc++];
@@ -673,6 +685,13 @@ public class InterpretedCode extends RuntimeCode {
                         stringPool[packageIdx] : "<unknown>";
                     sb.append("PROTOTYPE r").append(rd).append(" = prototype(r").append(rs)
                       .append(", \"").append(packageName).append("\")\n");
+                    break;
+                case Opcodes.QUOTE_REGEX:
+                    rd = bytecode[pc++];
+                    int patternReg = bytecode[pc++];
+                    int flagsReg = bytecode[pc++];
+                    sb.append("QUOTE_REGEX r").append(rd).append(" = qr{r").append(patternReg)
+                      .append("}r").append(flagsReg).append("\n");
                     break;
                 case Opcodes.ITERATOR_CREATE:
                     rd = bytecode[pc++];
