@@ -531,6 +531,32 @@ public class InterpretedCode extends RuntimeCode {
                     int indexReg = bytecode[pc++];
                     sb.append("ARRAY_GET r").append(rd).append(" = r").append(arrayReg).append("[r").append(indexReg).append("]\n");
                     break;
+                case Opcodes.ARRAY_SET:
+                    arrayReg = bytecode[pc++];
+                    indexReg = bytecode[pc++];
+                    int arraySetValueReg = bytecode[pc++];
+                    sb.append("ARRAY_SET r").append(arrayReg).append("[r").append(indexReg).append("] = r").append(arraySetValueReg).append("\n");
+                    break;
+                case Opcodes.ARRAY_PUSH:
+                    arrayReg = bytecode[pc++];
+                    int arrayPushValueReg = bytecode[pc++];
+                    sb.append("ARRAY_PUSH r").append(arrayReg).append(".push(r").append(arrayPushValueReg).append(")\n");
+                    break;
+                case Opcodes.ARRAY_POP:
+                    rd = bytecode[pc++];
+                    arrayReg = bytecode[pc++];
+                    sb.append("ARRAY_POP r").append(rd).append(" = r").append(arrayReg).append(".pop()\n");
+                    break;
+                case Opcodes.ARRAY_SHIFT:
+                    rd = bytecode[pc++];
+                    arrayReg = bytecode[pc++];
+                    sb.append("ARRAY_SHIFT r").append(rd).append(" = r").append(arrayReg).append(".shift()\n");
+                    break;
+                case Opcodes.ARRAY_UNSHIFT:
+                    arrayReg = bytecode[pc++];
+                    int arrayUnshiftValueReg = bytecode[pc++];
+                    sb.append("ARRAY_UNSHIFT r").append(arrayReg).append(".unshift(r").append(arrayUnshiftValueReg).append(")\n");
+                    break;
                 case Opcodes.ARRAY_SIZE:
                     rd = bytecode[pc++];
                     arrayReg = bytecode[pc++];
@@ -819,6 +845,18 @@ public class InterpretedCode extends RuntimeCode {
                     rd = bytecode[pc++];
                     rs = bytecode[pc++];
                     sb.append("SLEEP_OP r").append(rd).append(" = sleep(r").append(rs).append(")\n");
+                    break;
+                case Opcodes.DEREF_ARRAY:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("DEREF_ARRAY r").append(rd).append(" = @{r").append(rs).append("}\n");
+                    break;
+                case Opcodes.RETRIEVE_BEGIN_SCALAR:
+                    rd = bytecode[pc++];
+                    nameIdx = bytecode[pc++];
+                    int beginId = bytecode[pc++];
+                    sb.append("RETRIEVE_BEGIN_SCALAR r").append(rd).append(" = BEGIN_").append(beginId)
+                      .append("::").append(stringPool[nameIdx]).append("\n");
                     break;
                 // DEPRECATED: SLOW_OP case removed - opcode 87 is no longer emitted
                 // All operations now use direct opcodes (114-154)
