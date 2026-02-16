@@ -781,81 +781,76 @@ public class SubroutineParser {
                 new RuntimeArray()
         );
 
-        // Encapsulate the subroutine creation task in a Supplier
-        Supplier<Void> subroutineCreationTaskSupplier = () -> {
-            // Generate bytecode using unified API (returns RuntimeCode - either CompiledCode or InterpretedCode)
-            org.perlonjava.runtime.RuntimeCode runtimeCode =
-                EmitterMethodCreator.createRuntimeCode(newCtx, block, false);
+        // TEMPORARY: Compile eagerly instead of lazily
+        // TODO: Re-establish lazy compilation optimization after interpreter fallback is stable
+        // The lazy Supplier pattern conflicts with InterpretedCode because the Supplier
+        // replaces codeRef.value but the caller keeps the old object reference.
 
-            try {
-                // Check if we got CompiledCode or InterpretedCode
-                if (runtimeCode instanceof org.perlonjava.codegen.CompiledCode) {
-                    // CompiledCode path - use reflection as before
-                    org.perlonjava.codegen.CompiledCode compiledCode =
-                        (org.perlonjava.codegen.CompiledCode) runtimeCode;
-                    Class<?> generatedClass = compiledCode.generatedClass;
+        // Generate bytecode using unified API (returns RuntimeCode - either CompiledCode or InterpretedCode)
+        org.perlonjava.runtime.RuntimeCode runtimeCode =
+            EmitterMethodCreator.createRuntimeCode(newCtx, block, false);
 
-                    // Prepare constructor with the captured variable types
-                    Class<?>[] parameterTypes = classList.toArray(new Class<?>[0]);
-                    Constructor<?> constructor = generatedClass.getConstructor(parameterTypes);
+        try {
+            // Check if we got CompiledCode or InterpretedCode
+            if (runtimeCode instanceof org.perlonjava.codegen.CompiledCode) {
+                // CompiledCode path - use reflection as before
+                org.perlonjava.codegen.CompiledCode compiledCode =
+                    (org.perlonjava.codegen.CompiledCode) runtimeCode;
+                Class<?> generatedClass = compiledCode.generatedClass;
 
-                    // Instantiate the subroutine with the captured variables
+                // Prepare constructor with the captured variable types
+                Class<?>[] parameterTypes = classList.toArray(new Class<?>[0]);
+                Constructor<?> constructor = generatedClass.getConstructor(parameterTypes);
+
+                // Instantiate the subroutine with the captured variables
+                Object[] parameters = paramList.toArray();
+                code.codeObject = constructor.newInstance(parameters);
+
+                // Retrieve the 'apply' method from the generated class
+                code.methodHandle = RuntimeCode.lookup.findVirtual(generatedClass, "apply", RuntimeCode.methodType);
+
+                // Set the __SUB__ instance field to codeRef
+                Field field = code.codeObject.getClass().getDeclaredField("__SUB__");
+                field.set(code.codeObject, codeRef);
+            } else if (runtimeCode instanceof org.perlonjava.interpreter.InterpretedCode) {
+                // InterpretedCode path - replace the RuntimeCode object with InterpretedCode
+                org.perlonjava.interpreter.InterpretedCode interpretedCode =
+                    (org.perlonjava.interpreter.InterpretedCode) runtimeCode;
+
+                System.err.println("DEBUG: Got InterpretedCode for subroutine " + code.subName);
+
+                // Set captured variables if there are any
+                if (!paramList.isEmpty()) {
+                    System.err.println("DEBUG: Setting " + paramList.size() + " captured variables");
                     Object[] parameters = paramList.toArray();
-                    code.codeObject = constructor.newInstance(parameters);
-
-                    // Retrieve the 'apply' method from the generated class
-                    code.methodHandle = RuntimeCode.lookup.findVirtual(generatedClass, "apply", RuntimeCode.methodType);
-
-                    // Set the __SUB__ instance field to codeRef
-                    Field field = code.codeObject.getClass().getDeclaredField("__SUB__");
-                    field.set(code.codeObject, codeRef);
-                } else if (runtimeCode instanceof org.perlonjava.interpreter.InterpretedCode) {
-                    // InterpretedCode path - replace the RuntimeCode object with InterpretedCode
-                    org.perlonjava.interpreter.InterpretedCode interpretedCode =
-                        (org.perlonjava.interpreter.InterpretedCode) runtimeCode;
-
-                    System.err.println("DEBUG: Got InterpretedCode for subroutine " + code.subName);
-
-                    // Set captured variables if there are any
-                    if (!paramList.isEmpty()) {
-                        System.err.println("DEBUG: Setting " + paramList.size() + " captured variables");
-                        Object[] parameters = paramList.toArray();
-                        org.perlonjava.runtime.RuntimeBase[] capturedVars =
-                            new org.perlonjava.runtime.RuntimeBase[parameters.length];
-                        for (int i = 0; i < parameters.length; i++) {
-                            capturedVars[i] = (org.perlonjava.runtime.RuntimeBase) parameters[i];
-                        }
-                        interpretedCode = interpretedCode.withCapturedVars(capturedVars);
+                    org.perlonjava.runtime.RuntimeBase[] capturedVars =
+                        new org.perlonjava.runtime.RuntimeBase[parameters.length];
+                    for (int i = 0; i < parameters.length; i++) {
+                        capturedVars[i] = (org.perlonjava.runtime.RuntimeBase) parameters[i];
                     }
-
-                    // Replace codeRef.value with the InterpretedCode instance
-                    // This allows polymorphic dispatch to work correctly
-                    interpretedCode.prototype = code.prototype;
-                    interpretedCode.attributes = code.attributes;
-                    interpretedCode.subName = code.subName;
-                    interpretedCode.packageName = code.packageName;
-
-                    System.err.println("DEBUG: Replacing codeRef.value for " + code.subName);
-                    System.err.println("DEBUG: Before: codeRef.value = " + codeRef.value);
-                    codeRef.value = interpretedCode;
-                    System.err.println("DEBUG: After: codeRef.value = " + codeRef.value);
-                    System.err.println("DEBUG: InterpretedCode.defined() = " + interpretedCode.defined());
+                    interpretedCode = interpretedCode.withCapturedVars(capturedVars);
                 }
-            } catch (Exception e) {
-                // Handle any exceptions during subroutine creation
-                throw new PerlCompilerException("Subroutine error: " + e.getMessage());
+
+                // Replace codeRef.value with the InterpretedCode instance
+                // This allows polymorphic dispatch to work correctly
+                interpretedCode.prototype = code.prototype;
+                interpretedCode.attributes = code.attributes;
+                interpretedCode.subName = code.subName;
+                interpretedCode.packageName = code.packageName;
+
+                System.err.println("DEBUG: Replacing codeRef.value for " + code.subName);
+                System.err.println("DEBUG: Before: codeRef.value = " + codeRef.value);
+                codeRef.value = interpretedCode;
+                System.err.println("DEBUG: After: codeRef.value = " + codeRef.value);
+                System.err.println("DEBUG: InterpretedCode.defined() = " + interpretedCode.defined());
             }
+        } catch (Exception e) {
+            // Handle any exceptions during subroutine creation
+            throw new PerlCompilerException("Subroutine error: " + e.getMessage());
+        }
 
-            // Clear the compilerThread once done
-            code.compilerSupplier = null;
-            System.err.println("DEBUG: Cleared compilerSupplier for " + code.subName);
-            System.err.println("DEBUG: code object is now: " + code);
-            System.err.println("DEBUG: code.defined() = " + code.defined());
-            return null;
-        };
-
-        // Store the supplier for later execution
-        code.compilerSupplier = subroutineCreationTaskSupplier;
+        // No need for compilerSupplier since we're compiling eagerly now
+        code.compilerSupplier = null;
 
 
         // return an empty AST list
