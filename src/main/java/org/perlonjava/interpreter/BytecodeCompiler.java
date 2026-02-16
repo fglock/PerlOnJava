@@ -24,9 +24,13 @@ import java.util.*;
  * - Generate 3-address code (rd = rs1 op rs2)
  */
 public class BytecodeCompiler implements Visitor {
-    private final List<Short> bytecode = new ArrayList<>();
-    private final List<Object> constants = new ArrayList<>();
-    private final List<String> stringPool = new ArrayList<>();
+    // Pre-allocate with reasonable initial capacity to reduce resizing
+    // Typical small eval/subroutine needs 20-50 bytecodes, 5-10 constants, 3-8 strings
+    private final List<Short> bytecode = new ArrayList<>(64);
+    private final List<Object> constants = new ArrayList<>(16);
+    private final List<String> stringPool = new ArrayList<>(16);
+    private final Map<String, Integer> stringPoolIndex = new HashMap<>(16);  // O(1) lookup
+    private final Map<Object, Integer> constantPoolIndex = new HashMap<>(16);  // O(1) lookup
 
     // Simple variable-to-register mapping for the interpreter
     // Each scope is a Map<String, Integer> mapping variable names to register indices
@@ -532,6 +536,235 @@ public class BytecodeCompiler implements Visitor {
      * Handle hash slice operations: @hash{keys} or @$hashref{keys}
      * Must be called before automatic operand compilation to avoid compiling @ operator
      */
+    /**
+     * Handle array element access: $array[index]
+     * Example: $ARGV[0] or $array[$i]
+     */
+    private void handleArrayElementAccess(BinaryOperatorNode node, OperatorNode leftOp) {
+        // Get the array variable name
+        if (!(leftOp.operand instanceof IdentifierNode)) {
+            throwCompilerException("Array element access requires identifier");
+            return;
+        }
+        String varName = ((IdentifierNode) leftOp.operand).name;
+        String arrayVarName = "@" + varName;
+
+        // Get the array register - check lexical first, then global
+        int arrayReg;
+        if (hasVariable(arrayVarName)) {
+            // Lexical array
+            arrayReg = getVariableRegister(arrayVarName);
+        } else {
+            // Global array - load it
+            arrayReg = allocateRegister();
+            String globalArrayName = NameNormalizer.normalizeVariableName(
+                varName,
+                getCurrentPackage()
+            );
+            int nameIdx = addToStringPool(globalArrayName);
+            emit(Opcodes.LOAD_GLOBAL_ARRAY);
+            emitReg(arrayReg);
+            emit(nameIdx);
+        }
+
+        // Compile the index expression (right side)
+        if (!(node.right instanceof ArrayLiteralNode)) {
+            throwCompilerException("Array subscript requires ArrayLiteralNode");
+            return;
+        }
+        ArrayLiteralNode indexNode = (ArrayLiteralNode) node.right;
+        if (indexNode.elements.isEmpty()) {
+            throwCompilerException("Array subscript requires at least one index");
+            return;
+        }
+
+        // Handle single element access: $array[0]
+        if (indexNode.elements.size() == 1) {
+            Node indexExpr = indexNode.elements.get(0);
+            indexExpr.accept(this);
+            int indexReg = lastResultReg;
+
+            // Emit ARRAY_GET opcode
+            int rd = allocateRegister();
+            emit(Opcodes.ARRAY_GET);
+            emitReg(rd);
+            emitReg(arrayReg);
+            emitReg(indexReg);
+
+            lastResultReg = rd;
+        } else {
+            throwCompilerException("Multi-element array access not yet implemented");
+        }
+    }
+
+    /**
+     * Handle array slice: @array[indices]
+     * Example: @array[0,2,4] or @array[1..5]
+     */
+    private void handleArraySlice(BinaryOperatorNode node, OperatorNode leftOp) {
+        int arrayReg;
+
+        // Get the array - either direct @array or dereferenced @$arrayref
+        if (leftOp.operand instanceof IdentifierNode) {
+            // Direct array slice: @array[indices]
+            String varName = ((IdentifierNode) leftOp.operand).name;
+            String arrayVarName = "@" + varName;
+
+            // Get the array register - check lexical first, then global
+            if (hasVariable(arrayVarName)) {
+                // Lexical array
+                arrayReg = getVariableRegister(arrayVarName);
+            } else {
+                // Global array - load it
+                arrayReg = allocateRegister();
+                String globalArrayName = NameNormalizer.normalizeVariableName(
+                    varName,
+                    getCurrentPackage()
+                );
+                int nameIdx = addToStringPool(globalArrayName);
+                emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                emitReg(arrayReg);
+                emit(nameIdx);
+            }
+        } else if (leftOp.operand instanceof OperatorNode) {
+            // Array dereference slice: @$arrayref[indices]
+            OperatorNode derefOp = (OperatorNode) leftOp.operand;
+            if (derefOp.operator.equals("$")) {
+                // Compile the scalar reference
+                derefOp.accept(this);
+                int refReg = lastResultReg;
+
+                // Dereference to get the array
+                arrayReg = allocateRegister();
+                emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
+                emitReg(arrayReg);
+                emitReg(refReg);
+            } else {
+                throwCompilerException("Array slice requires array or array reference");
+                return;
+            }
+        } else {
+            throwCompilerException("Array slice requires identifier or reference");
+            return;
+        }
+
+        // Compile the indices (right side) - this is an ArrayLiteralNode
+        if (!(node.right instanceof ArrayLiteralNode)) {
+            throwCompilerException("Array slice requires ArrayLiteralNode");
+            return;
+        }
+        ArrayLiteralNode indicesNode = (ArrayLiteralNode) node.right;
+
+        // Compile the indices into a list
+        // The ArrayLiteralNode might contain a range operator (..) or multiple elements
+        List<Integer> indexRegs = new ArrayList<>();
+        for (Node indexExpr : indicesNode.elements) {
+            // Each element could be a simple value or a range expression
+            indexExpr.accept(this);
+            indexRegs.add(lastResultReg);
+        }
+
+        // Create a RuntimeList from index registers
+        int indicesListReg = allocateRegister();
+        emit(Opcodes.CREATE_LIST);
+        emitReg(indicesListReg);
+        emit(indexRegs.size());
+        for (int indexReg : indexRegs) {
+            emitReg(indexReg);
+        }
+
+        // Emit ARRAY_SLICE opcode
+        int rd = allocateRegister();
+        emit(Opcodes.ARRAY_SLICE);
+        emitReg(rd);
+        emitReg(arrayReg);
+        emitReg(indicesListReg);
+
+        lastResultReg = rd;
+    }
+
+    /**
+     * Handle hash element access: $hash{key}
+     * Example: $hash{foo} or $hash{$key}
+     */
+    private void handleHashElementAccess(BinaryOperatorNode node, OperatorNode leftOp) {
+        // Get the hash variable name
+        if (!(leftOp.operand instanceof IdentifierNode)) {
+            throwCompilerException("Hash element access requires identifier");
+            return;
+        }
+        String varName = ((IdentifierNode) leftOp.operand).name;
+        String hashVarName = "%" + varName;
+
+        // Get the hash register - check lexical first, then global
+        int hashReg;
+        if (hasVariable(hashVarName)) {
+            // Lexical hash
+            hashReg = getVariableRegister(hashVarName);
+        } else {
+            // Global hash - load it
+            hashReg = allocateRegister();
+            String globalHashName = NameNormalizer.normalizeVariableName(
+                varName,
+                getCurrentPackage()
+            );
+            int nameIdx = addToStringPool(globalHashName);
+            emit(Opcodes.LOAD_GLOBAL_HASH);
+            emitReg(hashReg);
+            emit(nameIdx);
+        }
+
+        // Compile the key expression (right side)
+        if (!(node.right instanceof HashLiteralNode)) {
+            throwCompilerException("Hash subscript requires HashLiteralNode");
+            return;
+        }
+        HashLiteralNode keyNode = (HashLiteralNode) node.right;
+        if (keyNode.elements.isEmpty()) {
+            throwCompilerException("Hash subscript requires at least one key");
+            return;
+        }
+
+        // Handle single element access: $hash{key}
+        if (keyNode.elements.size() == 1) {
+            Node keyExpr = keyNode.elements.get(0);
+
+            // Check if it's a bareword (IdentifierNode) - autoquote it
+            if (keyExpr instanceof IdentifierNode) {
+                String keyString = ((IdentifierNode) keyExpr).name;
+                int keyReg = allocateRegister();
+                int keyIdx = addToStringPool(keyString);
+                emit(Opcodes.LOAD_STRING);
+                emitReg(keyReg);
+                emit(keyIdx);
+
+                // Emit HASH_GET opcode
+                int rd = allocateRegister();
+                emit(Opcodes.HASH_GET);
+                emitReg(rd);
+                emitReg(hashReg);
+                emitReg(keyReg);
+
+                lastResultReg = rd;
+            } else {
+                // Expression key - compile it
+                keyExpr.accept(this);
+                int keyReg = lastResultReg;
+
+                // Emit HASH_GET opcode
+                int rd = allocateRegister();
+                emit(Opcodes.HASH_GET);
+                emitReg(rd);
+                emitReg(hashReg);
+                emitReg(keyReg);
+
+                lastResultReg = rd;
+            }
+        } else {
+            throwCompilerException("Multi-element hash access not yet implemented");
+        }
+    }
+
     private void handleHashSlice(BinaryOperatorNode node, OperatorNode leftOp) {
         int hashReg;
 
@@ -620,6 +853,260 @@ public class BytecodeCompiler implements Visitor {
         emitReg(keysListReg);
 
         lastResultReg = rdSlice;
+    }
+
+    /**
+     * Handle compound assignment operators: +=, -=, *=, /=, %=
+     * Example: $sum += $elem means $sum = $sum + $elem
+     */
+    private void handleCompoundAssignment(BinaryOperatorNode node) {
+        String op = node.operator;
+
+        // Get the left operand register (the variable being assigned to)
+        // The left side must be a variable reference
+        if (!(node.left instanceof OperatorNode)) {
+            throwCompilerException("Compound assignment requires variable on left side");
+            return;
+        }
+
+        OperatorNode leftOp = (OperatorNode) node.left;
+        if (!leftOp.operator.equals("$")) {
+            throwCompilerException("Compound assignment currently only supports scalar variables");
+            return;
+        }
+
+        if (!(leftOp.operand instanceof IdentifierNode)) {
+            throwCompilerException("Compound assignment requires simple variable");
+            return;
+        }
+
+        String varName = "$" + ((IdentifierNode) leftOp.operand).name;
+
+        // Get the variable's register
+        if (!hasVariable(varName)) {
+            throwCompilerException("Undefined variable: " + varName);
+            return;
+        }
+        int targetReg = getVariableRegister(varName);
+
+        // Compile the right operand (the value to add/subtract/etc.)
+        node.right.accept(this);
+        int valueReg = lastResultReg;
+
+        // Emit the appropriate compound assignment opcode
+        switch (op) {
+            case "+=" -> emit(Opcodes.ADD_ASSIGN);
+            case "-=" -> emit(Opcodes.SUBTRACT_ASSIGN);
+            case "*=" -> emit(Opcodes.MULTIPLY_ASSIGN);
+            case "/=" -> emit(Opcodes.DIVIDE_ASSIGN);
+            case "%=" -> emit(Opcodes.MODULUS_ASSIGN);
+            default -> {
+                throwCompilerException("Unknown compound assignment operator: " + op);
+                return;
+            }
+        }
+
+        emitReg(targetReg);
+        emitReg(valueReg);
+
+        // The result is stored in targetReg
+        lastResultReg = targetReg;
+    }
+
+    /**
+     * Handle general array access: expr[index]
+     * Example: $matrix[1][0] where $matrix[1] returns an arrayref
+     */
+    private void handleGeneralArrayAccess(BinaryOperatorNode node) {
+        // Compile the left side (the expression that should yield an array or arrayref)
+        node.left.accept(this);
+        int baseReg = lastResultReg;
+
+        // Compile the index expression (right side)
+        if (!(node.right instanceof ArrayLiteralNode)) {
+            throwCompilerException("Array subscript requires ArrayLiteralNode");
+            return;
+        }
+        ArrayLiteralNode indexNode = (ArrayLiteralNode) node.right;
+        if (indexNode.elements.isEmpty()) {
+            throwCompilerException("Array subscript requires at least one index");
+            return;
+        }
+
+        // Handle single element access
+        if (indexNode.elements.size() == 1) {
+            Node indexExpr = indexNode.elements.get(0);
+            indexExpr.accept(this);
+            int indexReg = lastResultReg;
+
+            // The base might be either:
+            // 1. A RuntimeArray (from $array which was an array variable)
+            // 2. A RuntimeScalar containing an arrayref (from $matrix[1])
+            // We need to handle both cases. The ARRAY_GET opcode should handle
+            // dereferencing if needed, or we can use a deref+get sequence.
+
+            // For now, let's assume it's a scalar with arrayref and dereference it first
+            int arrayReg = allocateRegister();
+            emit(Opcodes.DEREF_ARRAY);
+            emitReg(arrayReg);
+            emitReg(baseReg);
+
+            // Now get the element
+            int rd = allocateRegister();
+            emit(Opcodes.ARRAY_GET);
+            emitReg(rd);
+            emitReg(arrayReg);
+            emitReg(indexReg);
+
+            lastResultReg = rd;
+        } else {
+            throwCompilerException("Multi-element array access not yet implemented");
+        }
+    }
+
+    /**
+     * Handle general hash access: expr{key}
+     * Example: $hash{outer}{inner} where $hash{outer} returns a hashref
+     */
+    private void handleGeneralHashAccess(BinaryOperatorNode node) {
+        // Compile the left side (the expression that should yield a hash or hashref)
+        node.left.accept(this);
+        int baseReg = lastResultReg;
+
+        // Compile the key expression (right side)
+        if (!(node.right instanceof HashLiteralNode)) {
+            throwCompilerException("Hash subscript requires HashLiteralNode");
+            return;
+        }
+        HashLiteralNode keyNode = (HashLiteralNode) node.right;
+        if (keyNode.elements.isEmpty()) {
+            throwCompilerException("Hash subscript requires at least one key");
+            return;
+        }
+
+        // Handle single element access
+        if (keyNode.elements.size() == 1) {
+            Node keyExpr = keyNode.elements.get(0);
+
+            // Compile the key
+            int keyReg;
+            if (keyExpr instanceof IdentifierNode) {
+                // Bareword key - autoquote it
+                String keyString = ((IdentifierNode) keyExpr).name;
+                keyReg = allocateRegister();
+                int keyIdx = addToStringPool(keyString);
+                emit(Opcodes.LOAD_STRING);
+                emitReg(keyReg);
+                emit(keyIdx);
+            } else {
+                // Expression key - compile it
+                keyExpr.accept(this);
+                keyReg = lastResultReg;
+            }
+
+            // The base might be either:
+            // 1. A RuntimeHash (from %hash which was a hash variable)
+            // 2. A RuntimeScalar containing a hashref (from $hash{outer})
+            // We need to handle both cases. Dereference if needed.
+
+            // For now, let's assume it's a scalar with hashref and dereference it first
+            int hashReg = allocateRegister();
+            emit(Opcodes.DEREF_HASH);
+            emitReg(hashReg);
+            emitReg(baseReg);
+
+            // Now get the element
+            int rd = allocateRegister();
+            emit(Opcodes.HASH_GET);
+            emitReg(rd);
+            emitReg(hashReg);
+            emitReg(keyReg);
+
+            lastResultReg = rd;
+        } else {
+            throwCompilerException("Multi-element hash access not yet implemented");
+        }
+    }
+
+    /**
+     * Handle push/unshift operators: push @array, values or unshift @array, values
+     * Example: push @arr, 1, 2, 3
+     */
+    private void handlePushUnshift(BinaryOperatorNode node) {
+        boolean isPush = node.operator.equals("push");
+
+        // Left operand is the array (@array or @$arrayref)
+        // Right operand is the list of values to push/unshift
+
+        // Get the array
+        int arrayReg;
+        if (node.left instanceof OperatorNode) {
+            OperatorNode leftOp = (OperatorNode) node.left;
+
+            if (leftOp.operator.equals("@") && leftOp.operand instanceof IdentifierNode) {
+                // Direct array: @array
+                String varName = ((IdentifierNode) leftOp.operand).name;
+                String arrayVarName = "@" + varName;
+
+                // Get array register - check lexical first, then global
+                if (hasVariable(arrayVarName)) {
+                    arrayReg = getVariableRegister(arrayVarName);
+                } else {
+                    // Global array - load it
+                    arrayReg = allocateRegister();
+                    String globalArrayName = NameNormalizer.normalizeVariableName(
+                        varName,
+                        getCurrentPackage()
+                    );
+                    int nameIdx = addToStringPool(globalArrayName);
+                    emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                    emitReg(arrayReg);
+                    emit(nameIdx);
+                }
+            } else if (leftOp.operator.equals("@") && leftOp.operand instanceof OperatorNode) {
+                // Array dereference: @$arrayref
+                OperatorNode derefOp = (OperatorNode) leftOp.operand;
+                if (derefOp.operator.equals("$")) {
+                    // Compile the scalar reference
+                    derefOp.accept(this);
+                    int refReg = lastResultReg;
+
+                    // Dereference to get the array
+                    arrayReg = allocateRegister();
+                    emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
+                    emitReg(arrayReg);
+                    emitReg(refReg);
+                } else {
+                    throwCompilerException("push/unshift requires array or array reference");
+                    return;
+                }
+            } else {
+                throwCompilerException("push/unshift requires array or array reference");
+                return;
+            }
+        } else {
+            throwCompilerException("push/unshift requires array operand");
+            return;
+        }
+
+        // Compile the values to push/unshift (right operand) in list context
+        int savedContext = currentCallContext;
+        currentCallContext = RuntimeContextType.LIST;
+        node.right.accept(this);
+        int valuesReg = lastResultReg;
+        currentCallContext = savedContext;
+
+        // Emit ARRAY_PUSH or ARRAY_UNSHIFT opcode
+        if (isPush) {
+            emit(Opcodes.ARRAY_PUSH);
+        } else {
+            emit(Opcodes.ARRAY_UNSHIFT);
+        }
+        emitReg(arrayReg);
+        emitReg(valuesReg);
+
+        // push/unshift return the new array size
+        lastResultReg = -1;  // No result register needed
     }
 
     /**
@@ -1989,6 +2476,14 @@ public class BytecodeCompiler implements Visitor {
             return;
         }
 
+        // Handle compound assignment operators (+=, -=, *=, /=, %=)
+        if (node.operator.equals("+=") || node.operator.equals("-=") ||
+            node.operator.equals("*=") || node.operator.equals("/=") ||
+            node.operator.equals("%=")) {
+            handleCompoundAssignment(node);
+            return;
+        }
+
         // Handle assignment separately (doesn't follow standard left-right-op pattern)
         if (node.operator.equals("=")) {
             compileAssignmentOperator(node);
@@ -2182,6 +2677,33 @@ public class BytecodeCompiler implements Visitor {
             // Otherwise, fall through to normal -> handling (method call)
         }
 
+        // Handle [] operator for array access
+        // Must be before automatic operand compilation to handle array slices
+        if (node.operator.equals("[")) {
+            currentTokenIndex = node.getIndex();
+
+            // Check if this is an array slice: @array[indices]
+            if (node.left instanceof OperatorNode) {
+                OperatorNode leftOp = (OperatorNode) node.left;
+                if (leftOp.operator.equals("@")) {
+                    // This is an array slice - handle it specially
+                    handleArraySlice(node, leftOp);
+                    return;
+                }
+
+                // Handle normal array element access: $array[index]
+                if (leftOp.operator.equals("$") && leftOp.operand instanceof IdentifierNode) {
+                    handleArrayElementAccess(node, leftOp);
+                    return;
+                }
+            }
+
+            // Handle general case: expr[index]
+            // This covers cases like $matrix[1][0] where $matrix[1] is an expression
+            handleGeneralArrayAccess(node);
+            return;
+        }
+
         // Handle {} operator specially for hash slice operations
         // Must be before automatic operand compilation to avoid compiling @ operator
         if (node.operator.equals("{")) {
@@ -2195,8 +2717,24 @@ public class BytecodeCompiler implements Visitor {
                     handleHashSlice(node, leftOp);
                     return;
                 }
+
+                // Handle normal hash element access: $hash{key}
+                if (leftOp.operator.equals("$") && leftOp.operand instanceof IdentifierNode) {
+                    handleHashElementAccess(node, leftOp);
+                    return;
+                }
             }
-            // Otherwise, fall through to normal {} handling after operand compilation
+
+            // Handle general case: expr{key}
+            // This covers cases like $hash{outer}{inner} where $hash{outer} is an expression
+            handleGeneralHashAccess(node);
+            return;
+        }
+
+        // Handle push/unshift operators
+        if (node.operator.equals("push") || node.operator.equals("unshift")) {
+            handlePushUnshift(node);
+            return;
         }
 
         // Handle "join" operator specially to ensure proper context
@@ -2847,8 +3385,8 @@ public class BytecodeCompiler implements Visitor {
                 emit(op.equals("say") ? Opcodes.SAY : Opcodes.PRINT);
                 emitReg(rs);
             }
-        } else if (op.equals("not")) {
-            // Logical NOT operator: not $x
+        } else if (op.equals("not") || op.equals("!")) {
+            // Logical NOT operator: not $x or !$x
             // Evaluate operand and emit NOT opcode
             if (node.operand != null) {
                 node.operand.accept(this);
@@ -3932,21 +4470,27 @@ public class BytecodeCompiler implements Visitor {
     }
 
     private int addToStringPool(String str) {
-        int index = stringPool.indexOf(str);
-        if (index >= 0) {
-            return index;
+        // Use HashMap for O(1) lookup instead of O(n) ArrayList.indexOf()
+        Integer cached = stringPoolIndex.get(str);
+        if (cached != null) {
+            return cached;
         }
+        int index = stringPool.size();
         stringPool.add(str);
-        return stringPool.size() - 1;
+        stringPoolIndex.put(str, index);
+        return index;
     }
 
     private int addToConstantPool(Object obj) {
-        int index = constants.indexOf(obj);
-        if (index >= 0) {
-            return index;
+        // Use HashMap for O(1) lookup instead of O(n) ArrayList.indexOf()
+        Integer cached = constantPoolIndex.get(obj);
+        if (cached != null) {
+            return cached;
         }
+        int index = constants.size();
         constants.add(obj);
-        return constants.size() - 1;
+        constantPoolIndex.put(obj, index);
+        return index;
     }
 
     private void emit(short opcode) {
