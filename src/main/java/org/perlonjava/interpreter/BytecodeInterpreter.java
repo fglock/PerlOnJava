@@ -1866,7 +1866,7 @@ public class BytecodeInterpreter {
                 int rd = bytecode[pc++];
                 int rs = bytecode[pc++];
                 int packageIdx = readInt(bytecode, pc);
-                pc += 4;
+                pc += 2;  // readInt reads 2 shorts
                 RuntimeScalar codeRef = (RuntimeScalar) registers[rs];
                 String packageName = code.stringPool[packageIdx];
                 registers[rd] = RuntimeCode.prototype(codeRef, packageName);

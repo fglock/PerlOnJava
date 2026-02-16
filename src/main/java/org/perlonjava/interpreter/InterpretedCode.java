@@ -785,7 +785,7 @@ public class InterpretedCode extends RuntimeCode {
                     rd = bytecode[pc++];
                     rs = bytecode[pc++];
                     int packageIdx = readInt(bytecode, pc);
-                    pc += 2;
+                    pc += 2;  // readInt reads 2 shorts
                     String packageName = (stringPool != null && packageIdx < stringPool.length) ?
                         stringPool[packageIdx] : "<unknown>";
                     sb.append("PROTOTYPE r").append(rd).append(" = prototype(r").append(rs)
