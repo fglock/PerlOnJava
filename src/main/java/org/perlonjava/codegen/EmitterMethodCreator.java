@@ -348,13 +348,17 @@ public class EmitterMethodCreator implements Opcodes {
 
     public static byte[] getBytecode(EmitterContext ctx, Node ast, boolean useTryCatch) {
         boolean asmDebug = System.getenv("JPERL_ASM_DEBUG") != null;
+        boolean showFallback = System.getenv("JPERL_SHOW_FALLBACK") != null ||
+                               System.getenv("JPERL_USE_INTERPRETER_FALLBACK") != null;
         try {
             return getBytecodeInternal(ctx, ast, useTryCatch, false);
         } catch (MethodTooLargeException tooLarge) {
             // Automatic retry with refactoring on "Method too large" error
             try {
                 // Notify user that automatic refactoring is happening
-                // System.err.println("Note: Method too large, retrying with automatic refactoring.");
+                if (showFallback) {
+                    System.err.println("Note: Method too large, retrying with AST splitter (automatic refactoring).");
+                }
 
                 // First, try depth-first literal refactoring (refactors nested structures first)
                 org.perlonjava.astvisitor.DepthFirstLiteralRefactorVisitor.refactor(ast);
@@ -372,9 +376,16 @@ public class EmitterMethodCreator implements Opcodes {
                     ctx.clearContextCache();
                 }
 
-                return getBytecodeInternal(ctx, ast, useTryCatch, false);
+                byte[] result = getBytecodeInternal(ctx, ast, useTryCatch, false);
+                if (showFallback) {
+                    System.err.println("Note: AST splitter succeeded.");
+                }
+                return result;
             } catch (MethodTooLargeException retryTooLarge) {
                 // Refactoring didn't help enough - give up
+                if (showFallback) {
+                    System.err.println("Note: AST splitter failed, propagating exception.");
+                }
                 throw retryTooLarge;
             } catch (Throwable retryError) {
                 // Refactoring caused a different error - report both
@@ -1454,6 +1465,9 @@ public class EmitterMethodCreator implements Opcodes {
     // Feature flag for interpreter fallback
     private static final boolean USE_INTERPRETER_FALLBACK =
         System.getenv("JPERL_USE_INTERPRETER_FALLBACK") != null;
+    private static final boolean SHOW_FALLBACK =
+        System.getenv("JPERL_SHOW_FALLBACK") != null ||
+        System.getenv("JPERL_USE_INTERPRETER_FALLBACK") != null;
 
     /**
      * Unified factory method that returns RuntimeCode (either CompiledCode or InterpretedCode).
@@ -1478,12 +1492,15 @@ public class EmitterMethodCreator implements Opcodes {
         try {
             // Try compiler path
             Class<?> generatedClass = createClassWithMethod(ctx, ast, useTryCatch);
+            if (SHOW_FALLBACK) {
+                System.err.println("Note: JVM compilation succeeded.");
+            }
             return wrapAsCompiledCode(generatedClass, ctx);
 
         } catch (MethodTooLargeException e) {
             if (USE_INTERPRETER_FALLBACK) {
                 // Fall back to interpreter
-                System.err.println("Note: Method too large, using interpreter backend.");
+                System.err.println("Note: Method too large after AST splitting, using interpreter backend.");
                 return compileToInterpreter(ast, ctx, useTryCatch);
             }
 
