@@ -4010,8 +4010,8 @@ public class BytecodeCompiler implements Visitor {
     }
 
     private void emitInt(int value) {
-        bytecode.add((short)((value >> 16) & 0xFFFF));  // High 16 bits
-        bytecode.add((short)(value & 0xFFFF));           // Low 16 bits
+        bytecode.add((short)(value >> 16));  // High 16 bits
+        bytecode.add((short)value);          // Low 16 bits
     }
 
     /**
