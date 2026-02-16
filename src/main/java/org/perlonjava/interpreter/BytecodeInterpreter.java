@@ -482,6 +482,7 @@ public class BytecodeInterpreter {
                     case Opcodes.REF:
                     case Opcodes.BLESS:
                     case Opcodes.ISA:
+                    case Opcodes.PROTOTYPE:
                         pc = executeTypeOps(opcode, bytecode, pc, registers, code);
                         break;
 
@@ -1736,6 +1737,17 @@ public class BytecodeInterpreter {
                 isaArgs.push(packageName);
                 RuntimeList result = org.perlonjava.perlmodule.Universal.isa(isaArgs, RuntimeContextType.SCALAR);
                 registers[rd] = result.scalar();
+                return pc;
+            }
+
+            case Opcodes.PROTOTYPE: {
+                int rd = bytecode[pc++];
+                int rs = bytecode[pc++];
+                int packageIdx = readInt(bytecode, pc);
+                pc += 4;
+                RuntimeScalar codeRef = (RuntimeScalar) registers[rs];
+                String packageName = code.stringPool[packageIdx];
+                registers[rd] = RuntimeCode.prototype(codeRef, packageName);
                 return pc;
             }
 

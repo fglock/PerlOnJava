@@ -664,6 +664,16 @@ public class InterpretedCode extends RuntimeCode {
                     sb.append("ISA r").append(rd).append(" = isa(r").append(objReg)
                       .append(", r").append(pkgReg).append(")\n");
                     break;
+                case Opcodes.PROTOTYPE:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    int packageIdx = readInt(bytecode, pc);
+                    pc += 2;
+                    String packageName = (stringPool != null && packageIdx < stringPool.length) ?
+                        stringPool[packageIdx] : "<unknown>";
+                    sb.append("PROTOTYPE r").append(rd).append(" = prototype(r").append(rs)
+                      .append(", \"").append(packageName).append("\")\n");
+                    break;
                 case Opcodes.ITERATOR_CREATE:
                     rd = bytecode[pc++];
                     rs = bytecode[pc++];
