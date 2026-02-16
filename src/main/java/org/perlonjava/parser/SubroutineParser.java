@@ -783,24 +783,47 @@ public class SubroutineParser {
 
         // Encapsulate the subroutine creation task in a Supplier
         Supplier<Void> subroutineCreationTaskSupplier = () -> {
-            // Generate bytecode and load into a Class object
-            Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(newCtx, block, false);
+            // Generate bytecode using unified API (returns RuntimeCode - either CompiledCode or InterpretedCode)
+            org.perlonjava.runtime.RuntimeCode runtimeCode =
+                EmitterMethodCreator.createRuntimeCode(newCtx, block, false);
 
             try {
-                // Prepare constructor with the captured variable types
-                Class<?>[] parameterTypes = classList.toArray(new Class<?>[0]);
-                Constructor<?> constructor = generatedClass.getConstructor(parameterTypes);
+                // Check if we got CompiledCode or InterpretedCode
+                if (runtimeCode instanceof org.perlonjava.codegen.CompiledCode) {
+                    // CompiledCode path - use reflection as before
+                    org.perlonjava.codegen.CompiledCode compiledCode =
+                        (org.perlonjava.codegen.CompiledCode) runtimeCode;
+                    Class<?> generatedClass = compiledCode.generatedClass;
 
-                // Instantiate the subroutine with the captured variables
-                Object[] parameters = paramList.toArray();
-                code.codeObject = constructor.newInstance(parameters);
+                    // Prepare constructor with the captured variable types
+                    Class<?>[] parameterTypes = classList.toArray(new Class<?>[0]);
+                    Constructor<?> constructor = generatedClass.getConstructor(parameterTypes);
 
-                // Retrieve the 'apply' method from the generated class
-                code.methodHandle = RuntimeCode.lookup.findVirtual(generatedClass, "apply", RuntimeCode.methodType);
+                    // Instantiate the subroutine with the captured variables
+                    Object[] parameters = paramList.toArray();
+                    code.codeObject = constructor.newInstance(parameters);
 
-                // Set the __SUB__ instance field to codeRef
-                Field field = code.codeObject.getClass().getDeclaredField("__SUB__");
-                field.set(code.codeObject, codeRef);
+                    // Retrieve the 'apply' method from the generated class
+                    code.methodHandle = RuntimeCode.lookup.findVirtual(generatedClass, "apply", RuntimeCode.methodType);
+
+                    // Set the __SUB__ instance field to codeRef
+                    Field field = code.codeObject.getClass().getDeclaredField("__SUB__");
+                    field.set(code.codeObject, codeRef);
+                } else if (runtimeCode instanceof org.perlonjava.interpreter.InterpretedCode) {
+                    // InterpretedCode path - replace the RuntimeCode object with InterpretedCode
+                    // TODO: Handle captured variables for InterpretedCode
+                    org.perlonjava.interpreter.InterpretedCode interpretedCode =
+                        (org.perlonjava.interpreter.InterpretedCode) runtimeCode;
+
+                    // Replace codeRef.value with the InterpretedCode instance
+                    // This allows polymorphic dispatch to work correctly
+                    interpretedCode.prototype = code.prototype;
+                    interpretedCode.attributes = code.attributes;
+                    interpretedCode.subName = code.subName;
+                    interpretedCode.packageName = code.packageName;
+
+                    codeRef.value = interpretedCode;
+                }
             } catch (Exception e) {
                 // Handle any exceptions during subroutine creation
                 throw new PerlCompilerException("Subroutine error: " + e.getMessage());
