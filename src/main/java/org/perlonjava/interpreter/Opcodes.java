@@ -654,8 +654,16 @@ public class Opcodes {
      * Format: READLINE rd fhReg ctx */
     public static final short READLINE = 166;
 
+    /** Match regex: rd = RuntimeRegex.matchRegex(string, regex, ctx)
+     * Format: MATCH_REGEX rd stringReg regexReg ctx */
+    public static final short MATCH_REGEX = 167;
+
+    /** Chomp: rd = rs.chomp()
+     * Format: CHOMP rd rs */
+    public static final short CHOMP = 168;
+
     // =================================================================
-    // OPCODES 167-32767: RESERVED FOR FUTURE OPERATIONS
+    // OPCODES 169-32767: RESERVED FOR FUTURE OPERATIONS
     // =================================================================
     // See PHASE3_OPERATOR_PROMOTIONS.md for promotion strategy.
     // All SLOWOP_* constants have been removed - use direct opcodes 114-154 instead.

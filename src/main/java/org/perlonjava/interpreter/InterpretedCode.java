@@ -437,6 +437,18 @@ public class InterpretedCode extends RuntimeCode {
                     int readCtx = bytecode[pc++];
                     sb.append("READLINE r").append(rd).append(" = readline(r").append(fhReg).append(", ctx=").append(readCtx).append(")\n");
                     break;
+                case Opcodes.MATCH_REGEX:
+                    rd = bytecode[pc++];
+                    int strReg = bytecode[pc++];
+                    int regReg = bytecode[pc++];
+                    int matchCtx = bytecode[pc++];
+                    sb.append("MATCH_REGEX r").append(rd).append(" = r").append(strReg).append(" =~ r").append(regReg).append(" (ctx=").append(matchCtx).append(")\n");
+                    break;
+                case Opcodes.CHOMP:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("CHOMP r").append(rd).append(" = chomp(r").append(rs).append(")\n");
+                    break;
                 case Opcodes.PRE_AUTOINCREMENT:
                     rd = bytecode[pc++];
                     sb.append("PRE_AUTOINCREMENT ++r").append(rd).append("\n");
