@@ -1457,11 +1457,79 @@ public class BytecodeInterpreter {
                     }
 
                     // =================================================================
-                    // SLOW OPERATIONS
+                    // PHASE 2: DIRECT OPCODES (114-154) - Range delegation
+                    // =================================================================
+                    // These operations were promoted from SLOW_OP for better performance.
+                    // Organized in CONTIGUOUS groups for JVM tableswitch optimization.
+
+                    // Group 1-2: Dereferencing and Slicing (114-121)
+                    case Opcodes.DEREF_ARRAY:
+                    case Opcodes.DEREF_HASH:
+                    case Opcodes.ARRAY_SLICE:
+                    case Opcodes.ARRAY_SLICE_SET:
+                    case Opcodes.HASH_SLICE:
+                    case Opcodes.HASH_SLICE_SET:
+                    case Opcodes.HASH_SLICE_DELETE:
+                    case Opcodes.LIST_SLICE_FROM:
+                        pc = executeSliceOps(opcode, bytecode, pc, registers, code);
+                        break;
+
+                    // Group 3-4: Array/String/Exists/Delete (122-127)
+                    case Opcodes.SPLICE:
+                    case Opcodes.REVERSE:
+                    case Opcodes.SPLIT:
+                    case Opcodes.LENGTH_OP:
+                    case Opcodes.EXISTS:
+                    case Opcodes.DELETE:
+                        pc = executeArrayStringOps(opcode, bytecode, pc, registers, code);
+                        break;
+
+                    // Group 5: Closure/Scope (128-131)
+                    case Opcodes.RETRIEVE_BEGIN_SCALAR:
+                    case Opcodes.RETRIEVE_BEGIN_ARRAY:
+                    case Opcodes.RETRIEVE_BEGIN_HASH:
+                    case Opcodes.LOCAL_SCALAR:
+                        pc = executeScopeOps(opcode, bytecode, pc, registers);
+                        break;
+
+                    // Group 6-8: System Calls and IPC (132-150)
+                    case Opcodes.CHOWN:
+                    case Opcodes.WAITPID:
+                    case Opcodes.FORK:
+                    case Opcodes.GETPPID:
+                    case Opcodes.GETPGRP:
+                    case Opcodes.SETPGRP:
+                    case Opcodes.GETPRIORITY:
+                    case Opcodes.SETPRIORITY:
+                    case Opcodes.GETSOCKOPT:
+                    case Opcodes.SETSOCKOPT:
+                    case Opcodes.SYSCALL:
+                    case Opcodes.SEMGET:
+                    case Opcodes.SEMOP:
+                    case Opcodes.MSGGET:
+                    case Opcodes.MSGSND:
+                    case Opcodes.MSGRCV:
+                    case Opcodes.SHMGET:
+                    case Opcodes.SHMREAD:
+                    case Opcodes.SHMWRITE:
+                        pc = executeSystemOps(opcode, bytecode, pc, registers);
+                        break;
+
+                    // Group 9: Special I/O (151-154)
+                    case Opcodes.EVAL_STRING:
+                    case Opcodes.SELECT_OP:
+                    case Opcodes.LOAD_GLOB:
+                    case Opcodes.SLEEP_OP:
+                        pc = executeSpecialIO(opcode, bytecode, pc, registers, code);
+                        break;
+
+                    // =================================================================
+                    // SLOW OPERATIONS (DEPRECATED)
                     // =================================================================
 
                     case Opcodes.SLOW_OP: {
-                        // Dispatch to slow operation handler
+                        // @deprecated Legacy slow operation handler
+                        // New code should use direct opcodes (114-154) instead
                         // Format: [SLOW_OP] [slow_op_id] [operands...]
                         // The slow_op_id is a dense sequence (0,1,2...) for tableswitch optimization
                         pc = SlowOpcodeHandler.execute(bytecode, pc, registers, code);
@@ -2170,6 +2238,111 @@ public class BytecodeInterpreter {
             default:
                 throw new RuntimeException("Unknown comparison opcode: " + opcode);
         }
+    }
+
+    /**
+     * Execute slice operations (opcodes 114-121).
+     * Handles: DEREF_ARRAY, DEREF_HASH, *_SLICE, *_SLICE_SET, *_SLICE_DELETE, LIST_SLICE_FROM
+     * Moved from SlowOpcodeHandler for direct dispatch (saves ~5ns per op).
+     */
+    private static int executeSliceOps(short opcode, short[] bytecode, int pc,
+                                        RuntimeBase[] registers, InterpretedCode code) {
+        // Delegate to SlowOpcodeHandler with mapped SLOWOP ID
+        // TODO: Move implementations directly here to eliminate SlowOpcodeHandler
+        int slowOpId = switch ((int)opcode) {
+            case Opcodes.DEREF_ARRAY -> Opcodes.SLOWOP_DEREF_ARRAY;
+            case Opcodes.DEREF_HASH -> Opcodes.SLOWOP_DEREF_HASH;
+            case Opcodes.ARRAY_SLICE -> Opcodes.SLOWOP_ARRAY_SLICE;
+            case Opcodes.ARRAY_SLICE_SET -> Opcodes.SLOWOP_ARRAY_SLICE_SET;
+            case Opcodes.HASH_SLICE -> Opcodes.SLOWOP_HASH_SLICE;
+            case Opcodes.HASH_SLICE_SET -> Opcodes.SLOWOP_HASH_SLICE_SET;
+            case Opcodes.HASH_SLICE_DELETE -> Opcodes.SLOWOP_HASH_SLICE_DELETE;
+            case Opcodes.LIST_SLICE_FROM -> Opcodes.SLOWOP_LIST_SLICE_FROM;
+            default -> throw new RuntimeException("Unknown slice opcode: " + opcode);
+        };
+        return SlowOpcodeHandler.executeById(slowOpId, bytecode, pc, registers, code);
+    }
+
+    /**
+     * Execute array/string operations (opcodes 122-127).
+     * Handles: SPLICE, REVERSE, SPLIT, LENGTH_OP, EXISTS, DELETE
+     */
+    private static int executeArrayStringOps(short opcode, short[] bytecode, int pc,
+                                              RuntimeBase[] registers, InterpretedCode code) {
+        int slowOpId = switch ((int)opcode) {
+            case Opcodes.SPLICE -> Opcodes.SLOWOP_SPLICE;
+            case Opcodes.REVERSE -> Opcodes.SLOWOP_REVERSE;
+            case Opcodes.SPLIT -> Opcodes.SLOWOP_SPLIT;
+            case Opcodes.LENGTH_OP -> Opcodes.SLOWOP_LENGTH;
+            case Opcodes.EXISTS -> Opcodes.SLOWOP_EXISTS;
+            case Opcodes.DELETE -> Opcodes.SLOWOP_DELETE;
+            default -> throw new RuntimeException("Unknown array/string opcode: " + opcode);
+        };
+        return SlowOpcodeHandler.executeById(slowOpId, bytecode, pc, registers, code);
+    }
+
+    /**
+     * Execute closure/scope operations (opcodes 128-131).
+     * Handles: RETRIEVE_BEGIN_*, LOCAL_SCALAR
+     */
+    private static int executeScopeOps(short opcode, short[] bytecode, int pc,
+                                        RuntimeBase[] registers) {
+        int slowOpId = switch ((int)opcode) {
+            case Opcodes.RETRIEVE_BEGIN_SCALAR -> Opcodes.SLOWOP_RETRIEVE_BEGIN_SCALAR;
+            case Opcodes.RETRIEVE_BEGIN_ARRAY -> Opcodes.SLOWOP_RETRIEVE_BEGIN_ARRAY;
+            case Opcodes.RETRIEVE_BEGIN_HASH -> Opcodes.SLOWOP_RETRIEVE_BEGIN_HASH;
+            case Opcodes.LOCAL_SCALAR -> Opcodes.SLOWOP_LOCAL_SCALAR;
+            default -> throw new RuntimeException("Unknown scope opcode: " + opcode);
+        };
+        return SlowOpcodeHandler.executeById(slowOpId, bytecode, pc, registers, null);
+    }
+
+    /**
+     * Execute system call and IPC operations (opcodes 132-150).
+     * Handles: CHOWN, WAITPID, FORK, GETPPID, *PGRP, *PRIORITY, *SOCKOPT,
+     *          SYSCALL, SEMGET, SEMOP, MSGGET, MSGSND, MSGRCV, SHMGET, SHMREAD, SHMWRITE
+     */
+    private static int executeSystemOps(short opcode, short[] bytecode, int pc,
+                                         RuntimeBase[] registers) {
+        int slowOpId = switch ((int)opcode) {
+            case Opcodes.CHOWN -> Opcodes.SLOWOP_CHOWN;
+            case Opcodes.WAITPID -> Opcodes.SLOWOP_WAITPID;
+            case Opcodes.FORK -> Opcodes.SLOWOP_FORK;
+            case Opcodes.GETPPID -> Opcodes.SLOWOP_GETPPID;
+            case Opcodes.GETPGRP -> Opcodes.SLOWOP_GETPGRP;
+            case Opcodes.SETPGRP -> Opcodes.SLOWOP_SETPGRP;
+            case Opcodes.GETPRIORITY -> Opcodes.SLOWOP_GETPRIORITY;
+            case Opcodes.SETPRIORITY -> Opcodes.SLOWOP_SETPRIORITY;
+            case Opcodes.GETSOCKOPT -> Opcodes.SLOWOP_GETSOCKOPT;
+            case Opcodes.SETSOCKOPT -> Opcodes.SLOWOP_SETSOCKOPT;
+            case Opcodes.SYSCALL -> Opcodes.SLOWOP_SYSCALL;
+            case Opcodes.SEMGET -> Opcodes.SLOWOP_SEMGET;
+            case Opcodes.SEMOP -> Opcodes.SLOWOP_SEMOP;
+            case Opcodes.MSGGET -> Opcodes.SLOWOP_MSGGET;
+            case Opcodes.MSGSND -> Opcodes.SLOWOP_MSGSND;
+            case Opcodes.MSGRCV -> Opcodes.SLOWOP_MSGRCV;
+            case Opcodes.SHMGET -> Opcodes.SLOWOP_SHMGET;
+            case Opcodes.SHMREAD -> Opcodes.SLOWOP_SHMREAD;
+            case Opcodes.SHMWRITE -> Opcodes.SLOWOP_SHMWRITE;
+            default -> throw new RuntimeException("Unknown system opcode: " + opcode);
+        };
+        return SlowOpcodeHandler.executeById(slowOpId, bytecode, pc, registers, null);
+    }
+
+    /**
+     * Execute special I/O operations (opcodes 151-154).
+     * Handles: EVAL_STRING, SELECT_OP, LOAD_GLOB, SLEEP_OP
+     */
+    private static int executeSpecialIO(short opcode, short[] bytecode, int pc,
+                                         RuntimeBase[] registers, InterpretedCode code) {
+        int slowOpId = switch ((int)opcode) {
+            case Opcodes.EVAL_STRING -> Opcodes.SLOWOP_EVAL_STRING;
+            case Opcodes.SELECT_OP -> Opcodes.SLOWOP_SELECT;
+            case Opcodes.LOAD_GLOB -> Opcodes.SLOWOP_LOAD_GLOB;
+            case Opcodes.SLEEP_OP -> Opcodes.SLOWOP_SLEEP;
+            default -> throw new RuntimeException("Unknown special I/O opcode: " + opcode);
+        };
+        return SlowOpcodeHandler.executeById(slowOpId, bytecode, pc, registers, code);
     }
 
     /**
