@@ -192,6 +192,18 @@ javap -c -classpath build/classes/java/main \
 
 **Must see `tableswitch`, not `lookupswitch`!**
 
+**Example output showing tableswitch:**
+```
+   148: tableswitch   { // 0 to 168
+                   0: 840
+                   1: 843
+                   2: 893
+                   3: 909
+                   4: 976
+```
+
+**If you see `lookupswitch` instead, you've introduced gaps in opcode numbering!**
+
 ### Critical Lessons Learned
 
 **1. Disassembly is NOT Optional**
