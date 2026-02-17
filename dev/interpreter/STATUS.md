@@ -39,6 +39,36 @@ export JPERL_SHOW_FALLBACK=1
 # Or: "Note: Method too large after AST splitting, using interpreter backend."
 ```
 
+### JPERL_EVAL_USE_INTERPRETER (TODO)
+**Default:** Not set (eval STRING uses compiler)
+**Status:** Not yet implemented
+
+When set, forces `eval STRING` to use the interpreter backend instead of compiling to JVM bytecode. This would provide significant performance benefits for code that performs many unique eval STRING operations (46x faster compilation).
+
+```bash
+export JPERL_EVAL_USE_INTERPRETER=1
+./jperl script.pl
+```
+
+**Implementation Challenge:**
+The current `eval STRING` infrastructure in `EmitEval.java` generates bytecode that:
+1. Calls `RuntimeCode.evalStringHelper()` to compile the eval string and return a Class
+2. Uses reflection to instantiate the Class with captured variables
+3. Calls `makeCodeObject()` to wrap it as a CODE reference
+4. Executes via `RuntimeCode.apply()`
+
+For interpreter mode, we want to skip class generation entirely and use `InterpretedCode` directly. However, `EmitEval` generates bytecode at compile-time, so it cannot dynamically choose different code paths based on runtime environment variables.
+
+**Possible Solutions:**
+1. **Runtime Check in evalStringHelper():** Return a special pre-existing wrapper class that internally delegates to `InterpretedCode` stored in a map. Avoids per-eval class generation but still requires one wrapper class.
+2. **Modify EmitEval:** Add bytecode that checks the environment variable at runtime and branches to different paths. More complex but cleaner.
+3. **Direct InterpretedCode Usage:** Have `evalStringHelper()` return `InterpretedCode` directly when flag is set, and modify `Em
+
+itEval` to handle both Class and InterpretedCode returns. Requires significant refactoring.
+
+**Performance Target:**
+For workloads with many unique eval strings (e.g., `for my $x (1..5_000_000) { eval "\$var$x++" }`), the interpreter compilation is 46x faster than JVM bytecode generation, which could reduce execution time from minutes to seconds.
+
 ## Benefits of Default Fallback
 
 1. **No Size Limits:** Large subroutines automatically work without manual intervention
