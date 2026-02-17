@@ -348,9 +348,8 @@ public class EmitterMethodCreator implements Opcodes {
 
     public static byte[] getBytecode(EmitterContext ctx, Node ast, boolean useTryCatch) {
         boolean asmDebug = System.getenv("JPERL_ASM_DEBUG") != null;
-        boolean showFallback = System.getenv("JPERL_SHOW_FALLBACK") != null ||
-                               System.getenv("JPERL_USE_INTERPRETER_FALLBACK") != null;
-        boolean useInterpreterFallback = System.getenv("JPERL_USE_INTERPRETER_FALLBACK") != null;
+        boolean showFallback = System.getenv("JPERL_SHOW_FALLBACK") != null;
+        boolean useInterpreterFallback = System.getenv("JPERL_DISABLE_INTERPRETER_FALLBACK") == null;
 
         try {
             return getBytecodeInternal(ctx, ast, useTryCatch, false);
@@ -1473,9 +1472,9 @@ public class EmitterMethodCreator implements Opcodes {
         return loader.defineClass(javaClassNameDot, classData);
     }
 
-    // Feature flag for interpreter fallback
+    // Feature flag for interpreter fallback (enabled by default, can be disabled)
     private static final boolean USE_INTERPRETER_FALLBACK =
-        System.getenv("JPERL_USE_INTERPRETER_FALLBACK") != null;
+        System.getenv("JPERL_DISABLE_INTERPRETER_FALLBACK") == null;
     private static final boolean SHOW_FALLBACK =
         System.getenv("JPERL_SHOW_FALLBACK") != null;
 
@@ -1483,12 +1482,13 @@ public class EmitterMethodCreator implements Opcodes {
      * Unified factory method that returns RuntimeCode (either CompiledCode or InterpretedCode).
      *
      * This is the NEW API that replaces createClassWithMethod() for most use cases.
-     * It handles the "Method too large" exception by falling back to the interpreter
-     * when JPERL_USE_INTERPRETER_FALLBACK environment variable is set.
+     * It handles the "Method too large" exception by falling back to the interpreter.
+     * The interpreter fallback is ENABLED BY DEFAULT and can be disabled by setting
+     * JPERL_DISABLE_INTERPRETER_FALLBACK environment variable.
      *
      * DESIGN:
      * - Try compiler first (createClassWithMethod)
-     * - On MethodTooLargeException: fall back to interpreter if flag enabled
+     * - On MethodTooLargeException: fall back to interpreter (unless disabled)
      * - Return CompiledCode or InterpretedCode (both extend RuntimeCode)
      * - Call sites work with RuntimeCode interface, don't need to know which backend was used
      *
