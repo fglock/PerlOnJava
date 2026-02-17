@@ -50,6 +50,9 @@ public class BytecodeCompiler implements Visitor {
     // Error reporting
     private final ErrorMessageUtil errorUtil;
 
+    // EmitterContext for strict checks and other compile-time options
+    private EmitterContext emitterContext;
+
     // Register allocation
     private int nextRegister = 3;  // 0=this, 1=@_, 2=wantarray
     private int baseRegisterForStatement = 3;  // Reset point after each statement
@@ -270,6 +273,9 @@ public class BytecodeCompiler implements Visitor {
      * @return InterpretedCode ready for execution
      */
     public InterpretedCode compile(Node node, EmitterContext ctx) {
+        // Store context for strict checks and other compile-time options
+        this.emitterContext = ctx;
+
         // Detect closure variables if context is provided
         if (ctx != null) {
             detectClosureVariables(node, ctx);
@@ -571,6 +577,24 @@ public class BytecodeCompiler implements Visitor {
             }
 
             if (!found) {
+                // Not a lexical variable - could be a global or a bareword
+                // Check for strict subs violation (bareword without sigil)
+                if (!varName.startsWith("$") && !varName.startsWith("@") && !varName.startsWith("%")) {
+                    // This is a bareword (no sigil)
+                    if (emitterContext != null && emitterContext.symbolTable != null &&
+                        emitterContext.symbolTable.isStrictOptionEnabled(org.perlonjava.perlmodule.Strict.HINT_STRICT_SUBS)) {
+                        throwCompilerException("Bareword \"" + varName + "\" not allowed while \"strict subs\" in use");
+                    }
+                    // Not strict - treat bareword as string literal
+                    int rd = allocateRegister();
+                    emit(Opcodes.LOAD_STRING);
+                    emitReg(rd);
+                    int strIdx = addToStringPool(varName);
+                    emit(strIdx);
+                    lastResultReg = rd;
+                    return;
+                }
+
                 // Global variable
                 // Strip sigil and normalize name (e.g., "$x" → "main::x")
                 String bareVarName = varName.substring(1);  // Remove sigil
