@@ -175,158 +175,18 @@ public class EmitEval {
         mv.visitTryCatchBlock(tryStart, tryEnd, catchBlock, "java/lang/Throwable");
         mv.visitLabel(tryStart);
 
-        // Push the evalTag that links to the saved context
-        mv.visitLdcInsn(evalTag);
-        // Stack: [RuntimeScalar(String), String]
-
         // Calculate how many variables need to be passed
         // We skip 'this', '@_', and 'wantarray' which are handled separately
         int skipVariables = EmitterMethodCreator.skipVariables;
 
-        // Build array of runtime values for captured variables
-        // These are passed to evalStringHelper so BEGIN blocks can access outer lexical variables
-        mv.visitIntInsn(Opcodes.BIPUSH, newEnv.length - skipVariables);
-        mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object");
-        // Stack: [RuntimeScalar(String), String, Object[]]
-
-        // Fill the runtime values array with actual variable values from local variables
-        for (Integer index : newSymbolTable.getAllVisibleVariables().keySet()) {
-            if (index >= skipVariables) {
-                String varName = newEnv[index];
-                mv.visitInsn(Opcodes.DUP);
-                mv.visitIntInsn(Opcodes.BIPUSH, index - skipVariables);
-                mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.symbolTable.getVariableIndex(varName));
-                mv.visitInsn(Opcodes.AASTORE);
-            }
-        }
-        // Stack: [RuntimeScalar(String), String, Object[]]
-
-        // Call evalStringHelper to compile the eval string at runtime
-        // Now passes runtime values so BEGIN blocks can access outer lexical variables
-        mv.visitMethodInsn(
-                Opcodes.INVOKESTATIC,
-                "org/perlonjava/runtime/RuntimeCode",
-                "evalStringHelper",
-                "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/Class;",
-                false);
-        // Stack: [Class or null]
-
-        // Check if evalStringHelper returned null (compilation error)
-        Label compileSuccess = new Label();
-        mv.visitInsn(Opcodes.DUP);
-        mv.visitJumpInsn(Opcodes.IFNONNULL, compileSuccess);
-        // Stack: [null]
-
-        // Compilation failed, $SIG{__DIE__} was called, $@ is set
-        // Pop null and return undef
-        mv.visitInsn(Opcodes.POP);
-        // Stack: []
-
-        // Create undef result
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.LIST) {
-            mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
-            mv.visitInsn(Opcodes.DUP);
-            mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "()V", false);
+        // Check at COMPILE TIME if we should use interpreter for eval STRING
+        if (RuntimeCode.EVAL_USE_INTERPRETER) {
+            // INTERPRETER PATH: Compile to InterpretedCode and execute directly
+            emitEvalInterpreterPath(emitterVisitor, evalTag, newEnv, newSymbolTable, skipVariables);
         } else {
-            mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
-            mv.visitInsn(Opcodes.DUP);
-            mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeScalar");
-            mv.visitInsn(Opcodes.DUP);
-            mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeScalar", "<init>", "()V", false);
-            mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "(Lorg/perlonjava/runtime/RuntimeScalar;)V", false);
+            // COMPILER PATH: Use reflection to compile and instantiate (current behavior)
+            emitEvalCompilerPath(emitterVisitor, evalTag, newEnv, newSymbolTable, skipVariables);
         }
-        mv.visitJumpInsn(Opcodes.GOTO, endCatch);
-        // Stack: [RuntimeList]
-
-        mv.visitLabel(compileSuccess);
-        // Stack: [Class]
-
-        // Create array of parameter types for the constructor
-        // Each captured variable becomes a constructor parameter (including null gaps)
-        mv.visitIntInsn(Opcodes.BIPUSH, newEnv.length - skipVariables);
-        mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Class");
-        // Stack: [Class, Class[]]
-
-        // Fill the parameter types array based on variable types
-        // Variables starting with @ are RuntimeArray, % are RuntimeHash, others are RuntimeScalar
-        // getVariableDescriptor handles nulls gracefully (returns RuntimeScalar descriptor)
-        for (int i = 0; i < newEnv.length - skipVariables; i++) {
-            mv.visitInsn(Opcodes.DUP);
-            mv.visitIntInsn(Opcodes.BIPUSH, i);
-            String descriptor = EmitterMethodCreator.getVariableDescriptor(newEnv[i + skipVariables]);
-            mv.visitLdcInsn(Type.getType(descriptor));
-            mv.visitInsn(Opcodes.AASTORE);
-        }
-        // Stack: [Class, Class[]]
-
-        // Use reflection to get the constructor
-        // Note: Direct instantiation (NEW/INVOKESPECIAL) isn't possible because
-        // the class name is only known at runtime
-        mv.visitMethodInsn(
-                Opcodes.INVOKEVIRTUAL,
-                "java/lang/Class",
-                "getConstructor",
-                "([Ljava/lang/Class;)Ljava/lang/reflect/Constructor;",
-                false);
-        // Stack: [Constructor]
-
-        // Create array for constructor arguments (captured variable values)
-        mv.visitIntInsn(Opcodes.BIPUSH, newEnv.length - skipVariables);
-        mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object");
-        // Stack: [Constructor, Object[]]
-
-        // Fill the arguments array with actual variable values from local variables
-        for (Integer index : newSymbolTable.getAllVisibleVariables().keySet()) {
-            if (index >= skipVariables) {
-                String varName = newEnv[index];
-                mv.visitInsn(Opcodes.DUP);
-                mv.visitIntInsn(Opcodes.BIPUSH, index - skipVariables);
-                mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.symbolTable.getVariableIndex(varName));
-                mv.visitInsn(Opcodes.AASTORE);
-                emitterVisitor.ctx.logDebug("Put variable " + emitterVisitor.ctx.symbolTable.getVariableIndex(varName) + " at parameter #" + (index - skipVariables) + " " + varName);
-            }
-        }
-        // Stack: [Constructor, Object[]]
-
-        // Create instance of the eval class with captured variables
-        // This is where the "closure" behavior happens - the new instance
-        // holds references to the captured variables
-        mv.visitMethodInsn(
-                Opcodes.INVOKEVIRTUAL,
-                "java/lang/reflect/Constructor",
-                "newInstance",
-                "([Ljava/lang/Object;)Ljava/lang/Object;",
-                false);
-        mv.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Object");
-        // Stack: [Object]
-
-        // Convert the instance to a CODE reference
-        // This wraps the instance in a RuntimeCode object that can be called
-        mv.visitMethodInsn(
-                Opcodes.INVOKESTATIC,
-                "org/perlonjava/runtime/RuntimeCode",
-                "makeCodeObject",
-                "(Ljava/lang/Object;)Lorg/perlonjava/runtime/RuntimeScalar;",
-                false);
-        // Stack: [RuntimeScalar(Code)]
-
-        // Push @_ (the current subroutine's arguments) for the eval to access
-        mv.visitVarInsn(Opcodes.ALOAD, 1);
-        // Stack: [RuntimeScalar(Code), RuntimeArray(@_)]
-
-        // Push the calling context (scalar, list, or void)
-        emitterVisitor.pushCallContext();
-        // Stack: [RuntimeScalar(Code), RuntimeArray(@_), int]
-
-        // Execute the eval code
-        // The apply method runs the compiled code and returns the result
-        mv.visitMethodInsn(
-                Opcodes.INVOKESTATIC,
-                "org/perlonjava/runtime/RuntimeCode",
-                "applyEval",
-                "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeArray;I)Lorg/perlonjava/runtime/RuntimeList;",
-                false);
-        // Stack: [RuntimeList]
 
         mv.visitLabel(tryEnd);
         mv.visitJumpInsn(Opcodes.GOTO, endCatch);
@@ -657,5 +517,232 @@ public class EmitEval {
             // Stack: []
         }
         // In list context, leave the RuntimeList on the stack
+    }
+
+    /**
+     * Emit bytecode for the interpreter path: compile to InterpretedCode and execute directly.
+     * This path is used when JPERL_EVAL_USE_INTERPRETER is set.
+     *
+     * @param emitterVisitor The visitor that traverses the AST
+     * @param evalTag The unique identifier for this eval site
+     * @param newEnv The captured environment variable names
+     * @param newSymbolTable The symbol table with captured variables
+     * @param skipVariables Number of reserved variables to skip (this, @_, wantarray)
+     */
+    private static void emitEvalInterpreterPath(EmitterVisitor emitterVisitor, String evalTag,
+                                                String[] newEnv, ScopedSymbolTable newSymbolTable,
+                                                int skipVariables) {
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+
+        // Stack: [RuntimeScalar(String)]
+
+        // Push the evalTag
+        mv.visitLdcInsn(evalTag);
+        // Stack: [RuntimeScalar(String), String]
+
+        // Build array of runtime values for captured variables
+        mv.visitIntInsn(Opcodes.BIPUSH, newEnv.length - skipVariables);
+        mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object");
+        // Stack: [RuntimeScalar(String), String, Object[]]
+
+        // Fill the runtime values array with actual variable values from local variables
+        for (Integer index : newSymbolTable.getAllVisibleVariables().keySet()) {
+            if (index >= skipVariables) {
+                String varName = newEnv[index];
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitIntInsn(Opcodes.BIPUSH, index - skipVariables);
+                mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.symbolTable.getVariableIndex(varName));
+                mv.visitInsn(Opcodes.AASTORE);
+            }
+        }
+        // Stack: [RuntimeScalar(String), String, Object[]]
+
+        // Push @_ (the current subroutine's arguments)
+        mv.visitVarInsn(Opcodes.ALOAD, 1);
+        // Stack: [RuntimeScalar(String), String, Object[], RuntimeArray(@_)]
+
+        // Push the calling context (scalar, list, or void)
+        emitterVisitor.pushCallContext();
+        // Stack: [RuntimeScalar(String), String, Object[], RuntimeArray(@_), int]
+
+        // Call evalStringWithInterpreter which returns RuntimeList directly
+        mv.visitMethodInsn(
+                Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/RuntimeCode",
+                "evalStringWithInterpreter",
+                "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;[Ljava/lang/Object;Lorg/perlonjava/runtime/RuntimeArray;I)Lorg/perlonjava/runtime/RuntimeList;",
+                false);
+        // Stack: [RuntimeList]
+    }
+
+    /**
+     * Emit bytecode for the compiler path: use reflection to compile and instantiate.
+     * This is the traditional path using JVM bytecode compilation.
+     *
+     * @param emitterVisitor The visitor that traverses the AST
+     * @param evalTag The unique identifier for this eval site
+     * @param newEnv The captured environment variable names
+     * @param newSymbolTable The symbol table with captured variables
+     * @param skipVariables Number of reserved variables to skip (this, @_, wantarray)
+     */
+    private static void emitEvalCompilerPath(EmitterVisitor emitterVisitor, String evalTag,
+                                            String[] newEnv, ScopedSymbolTable newSymbolTable,
+                                            int skipVariables) {
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+
+        // Stack: [RuntimeScalar(String)]
+
+        // Push the evalTag that links to the saved context
+        mv.visitLdcInsn(evalTag);
+        // Stack: [RuntimeScalar(String), String]
+
+        // Build array of runtime values for captured variables
+        // These are passed to evalStringHelper so BEGIN blocks can access outer lexical variables
+        mv.visitIntInsn(Opcodes.BIPUSH, newEnv.length - skipVariables);
+        mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object");
+        // Stack: [RuntimeScalar(String), String, Object[]]
+
+        // Fill the runtime values array with actual variable values from local variables
+        for (Integer index : newSymbolTable.getAllVisibleVariables().keySet()) {
+            if (index >= skipVariables) {
+                String varName = newEnv[index];
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitIntInsn(Opcodes.BIPUSH, index - skipVariables);
+                mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.symbolTable.getVariableIndex(varName));
+                mv.visitInsn(Opcodes.AASTORE);
+            }
+        }
+        // Stack: [RuntimeScalar(String), String, Object[]]
+
+        // Call evalStringHelper to compile the eval string at runtime
+        // Now passes runtime values so BEGIN blocks can access outer lexical variables
+        mv.visitMethodInsn(
+                Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/RuntimeCode",
+                "evalStringHelper",
+                "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/Class;",
+                false);
+        // Stack: [Class or null]
+
+        // Check if evalStringHelper returned null (compilation error)
+        Label compileSuccess = new Label();
+        Label compileEnd = new Label();
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitJumpInsn(Opcodes.IFNONNULL, compileSuccess);
+        // Stack: [null]
+
+        // Compilation failed, $SIG{__DIE__} was called, $@ is set
+        // Pop null and return undef
+        mv.visitInsn(Opcodes.POP);
+        // Stack: []
+
+        // Create undef result
+        if (emitterVisitor.ctx.contextType == RuntimeContextType.LIST) {
+            mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "()V", false);
+        } else {
+            mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeScalar");
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeScalar", "<init>", "()V", false);
+            mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "(Lorg/perlonjava/runtime/RuntimeScalar;)V", false);
+        }
+        mv.visitJumpInsn(Opcodes.GOTO, compileEnd);
+        // Stack: [RuntimeList]
+
+        mv.visitLabel(compileSuccess);
+        // Stack: [Class]
+
+        // Create array of parameter types for the constructor
+        // Each captured variable becomes a constructor parameter (including null gaps)
+        mv.visitIntInsn(Opcodes.BIPUSH, newEnv.length - skipVariables);
+        mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Class");
+        // Stack: [Class, Class[]]
+
+        // Fill the parameter types array based on variable types
+        // Variables starting with @ are RuntimeArray, % are RuntimeHash, others are RuntimeScalar
+        // getVariableDescriptor handles nulls gracefully (returns RuntimeScalar descriptor)
+        for (int i = 0; i < newEnv.length - skipVariables; i++) {
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitIntInsn(Opcodes.BIPUSH, i);
+            String descriptor = EmitterMethodCreator.getVariableDescriptor(newEnv[i + skipVariables]);
+            mv.visitLdcInsn(Type.getType(descriptor));
+            mv.visitInsn(Opcodes.AASTORE);
+        }
+        // Stack: [Class, Class[]]
+
+        // Use reflection to get the constructor
+        // Note: Direct instantiation (NEW/INVOKESPECIAL) isn't possible because
+        // the class name is only known at runtime
+        mv.visitMethodInsn(
+                Opcodes.INVOKEVIRTUAL,
+                "java/lang/Class",
+                "getConstructor",
+                "([Ljava/lang/Class;)Ljava/lang/reflect/Constructor;",
+                false);
+        // Stack: [Constructor]
+
+        // Create array for constructor arguments (captured variable values)
+        mv.visitIntInsn(Opcodes.BIPUSH, newEnv.length - skipVariables);
+        mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object");
+        // Stack: [Constructor, Object[]]
+
+        // Fill the arguments array with actual variable values from local variables
+        for (Integer index : newSymbolTable.getAllVisibleVariables().keySet()) {
+            if (index >= skipVariables) {
+                String varName = newEnv[index];
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitIntInsn(Opcodes.BIPUSH, index - skipVariables);
+                mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.symbolTable.getVariableIndex(varName));
+                mv.visitInsn(Opcodes.AASTORE);
+                emitterVisitor.ctx.logDebug("Put variable " + emitterVisitor.ctx.symbolTable.getVariableIndex(varName) + " at parameter #" + (index - skipVariables) + " " + varName);
+            }
+        }
+        // Stack: [Constructor, Object[]]
+
+        // Create instance of the eval class with captured variables
+        // This is where the "closure" behavior happens - the new instance
+        // holds references to the captured variables
+        mv.visitMethodInsn(
+                Opcodes.INVOKEVIRTUAL,
+                "java/lang/reflect/Constructor",
+                "newInstance",
+                "([Ljava/lang/Object;)Ljava/lang/Object;",
+                false);
+        mv.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Object");
+        // Stack: [Object]
+
+        // Convert the instance to a CODE reference
+        // This wraps the instance in a RuntimeCode object that can be called
+        mv.visitMethodInsn(
+                Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/RuntimeCode",
+                "makeCodeObject",
+                "(Ljava/lang/Object;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                false);
+        // Stack: [RuntimeScalar(Code)]
+
+        // Push @_ (the current subroutine's arguments) for the eval to access
+        mv.visitVarInsn(Opcodes.ALOAD, 1);
+        // Stack: [RuntimeScalar(Code), RuntimeArray(@_)]
+
+        // Push the calling context (scalar, list, or void)
+        emitterVisitor.pushCallContext();
+        // Stack: [RuntimeScalar(Code), RuntimeArray(@_), int]
+
+        // Execute the eval code
+        // The apply method runs the compiled code and returns the result
+        mv.visitMethodInsn(
+                Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/RuntimeCode",
+                "applyEval",
+                "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeArray;I)Lorg/perlonjava/runtime/RuntimeList;",
+                false);
+        // Stack: [RuntimeList]
+
+        // Both success and failure paths converge here with RuntimeList on stack
+        mv.visitLabel(compileEnd);
     }
 }
