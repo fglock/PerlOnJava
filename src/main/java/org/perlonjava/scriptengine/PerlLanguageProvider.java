@@ -365,10 +365,9 @@ public class PerlLanguageProvider {
             } catch (RuntimeException e) {
                 // Check if this is a "Method too large" error from ASM
                 if (e.getMessage() != null && e.getMessage().contains("Method too large")) {
-                    // When JPERL_USE_INTERPRETER_FALLBACK is set and compilation fails due to size,
+                    // Interpreter fallback is enabled by default and can be disabled with JPERL_DISABLE_INTERPRETER_FALLBACK
                     // automatically fall back to the interpreter backend
-                    boolean showFallback = System.getenv("JPERL_SHOW_FALLBACK") != null ||
-                                           System.getenv("JPERL_USE_INTERPRETER_FALLBACK") != null;
+                    boolean showFallback = System.getenv("JPERL_SHOW_FALLBACK") != null;
                     if (showFallback) {
                         System.err.println("Note: Method too large after AST splitting, using interpreter backend.");
                     }
