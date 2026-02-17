@@ -273,6 +273,9 @@ public class BytecodeCompiler implements Visitor {
         // Detect closure variables if context is provided
         if (ctx != null) {
             detectClosureVariables(node, ctx);
+            // Use the calling context from EmitterContext for top-level expressions
+            // This is crucial for eval STRING to propagate context correctly
+            currentCallContext = ctx.contextType;
         }
 
         // If we have captured variables, allocate registers for them
