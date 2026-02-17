@@ -69,6 +69,10 @@ public class BytecodeCompiler implements Visitor {
     private String[] capturedVarNames;            // Parallel array of names
     private Map<String, Integer> capturedVarIndices;  // Name → register index
 
+    // BEGIN support for named subroutine closures
+    private int currentSubroutineBeginId = 0;     // BEGIN ID for current named subroutine (0 = not in named sub)
+    private Set<String> currentSubroutineClosureVars = new HashSet<>();  // Variables captured from outer scope
+
     // Source information
     private final String sourceName;
     private final int sourceLine;
@@ -1433,22 +1437,57 @@ public class BytecodeCompiler implements Visitor {
                             if (sigilOp.operand instanceof IdentifierNode) {
                                 String varName = sigil + ((IdentifierNode) sigilOp.operand).name;
 
-                                // Declare the variable
-                                int varReg = addVariable(varName, "my");
+                                int varReg;
 
-                                // Initialize based on sigil
-                                switch (sigil) {
-                                    case "$" -> {
-                                        emit(Opcodes.LOAD_UNDEF);
-                                        emitReg(varReg);
+                                // Check if this variable is captured by named subs (Parser marks with id)
+                                if (sigilOp.id != 0) {
+                                    // This variable is captured - use RETRIEVE_BEGIN to get persistent storage
+                                    int beginId = sigilOp.id;
+                                    int nameIdx = addToStringPool(varName);
+                                    varReg = allocateRegister();
+
+                                    switch (sigil) {
+                                        case "$" -> {
+                                            emitWithToken(Opcodes.RETRIEVE_BEGIN_SCALAR, node.getIndex());
+                                            emitReg(varReg);
+                                            emit(nameIdx);
+                                            emit(beginId);
+                                        }
+                                        case "@" -> {
+                                            emitWithToken(Opcodes.RETRIEVE_BEGIN_ARRAY, node.getIndex());
+                                            emitReg(varReg);
+                                            emit(nameIdx);
+                                            emit(beginId);
+                                        }
+                                        case "%" -> {
+                                            emitWithToken(Opcodes.RETRIEVE_BEGIN_HASH, node.getIndex());
+                                            emitReg(varReg);
+                                            emit(nameIdx);
+                                            emit(beginId);
+                                        }
                                     }
-                                    case "@" -> {
-                                        emit(Opcodes.NEW_ARRAY);
-                                        emitReg(varReg);
-                                    }
-                                    case "%" -> {
-                                        emit(Opcodes.NEW_HASH);
-                                        emitReg(varReg);
+
+                                    // Track this variable
+                                    variableScopes.peek().put(varName, varReg);
+                                } else {
+                                    // Regular lexical variable (not captured)
+                                    // Declare the variable
+                                    varReg = addVariable(varName, "my");
+
+                                    // Initialize based on sigil
+                                    switch (sigil) {
+                                        case "$" -> {
+                                            emit(Opcodes.LOAD_UNDEF);
+                                            emitReg(varReg);
+                                        }
+                                        case "@" -> {
+                                            emit(Opcodes.NEW_ARRAY);
+                                            emitReg(varReg);
+                                        }
+                                        case "%" -> {
+                                            emit(Opcodes.NEW_HASH);
+                                            emitReg(varReg);
+                                        }
                                     }
                                 }
 
@@ -1466,9 +1505,17 @@ public class BytecodeCompiler implements Visitor {
 
                                 // Assign to variable
                                 if (sigil.equals("$")) {
-                                    emit(Opcodes.MOVE);
-                                    emitReg(varReg);
-                                    emitReg(elemReg);
+                                    if (sigilOp.id != 0) {
+                                        // Captured variable - use SET_SCALAR to preserve aliasing
+                                        emit(Opcodes.SET_SCALAR);
+                                        emitReg(varReg);
+                                        emitReg(elemReg);
+                                    } else {
+                                        // Regular variable - use MOVE
+                                        emit(Opcodes.MOVE);
+                                        emitReg(varReg);
+                                        emitReg(elemReg);
+                                    }
                                 } else if (sigil.equals("@")) {
                                     emit(Opcodes.ARRAY_SET_FROM_LIST);
                                     emitReg(varReg);
@@ -3618,7 +3665,19 @@ public class BytecodeCompiler implements Visitor {
             if (node.operand instanceof IdentifierNode) {
                 String varName = "$" + ((IdentifierNode) node.operand).name;
 
-                if (hasVariable(varName)) {
+                // Check if this is a closure variable captured from outer scope via PersistentVariable
+                if (currentSubroutineBeginId != 0 && currentSubroutineClosureVars.contains(varName)) {
+                    // This is a closure variable - use RETRIEVE_BEGIN_SCALAR
+                    int rd = allocateRegister();
+                    int nameIdx = addToStringPool(varName);
+
+                    emitWithToken(Opcodes.RETRIEVE_BEGIN_SCALAR, node.getIndex());
+                    emitReg(rd);
+                    emit(nameIdx);
+                    emit(currentSubroutineBeginId);
+
+                    lastResultReg = rd;
+                } else if (hasVariable(varName)) {
                     // Lexical variable - use existing register
                     lastResultReg = getVariableRegister(varName);
                 } else {
@@ -3627,7 +3686,7 @@ public class BytecodeCompiler implements Visitor {
                     String globalVarName = varName.substring(1); // Remove $ sigil first
                     if (!globalVarName.contains("::")) {
                         // Add package prefix
-                        globalVarName = "main::" + globalVarName;
+                        globalVarName = currentPackage + "::" + globalVarName;
                     }
 
                     int rd = allocateRegister();
@@ -3680,9 +3739,18 @@ public class BytecodeCompiler implements Visitor {
                     return;
                 }
 
-                // Check if it's a lexical array
+                // Check if this is a closure variable captured from outer scope via PersistentVariable
                 int arrayReg;
-                if (hasVariable(varName)) {
+                if (currentSubroutineBeginId != 0 && currentSubroutineClosureVars.contains(varName)) {
+                    // This is a closure variable - use RETRIEVE_BEGIN_ARRAY
+                    arrayReg = allocateRegister();
+                    int nameIdx = addToStringPool(varName);
+
+                    emitWithToken(Opcodes.RETRIEVE_BEGIN_ARRAY, node.getIndex());
+                    emitReg(arrayReg);
+                    emit(nameIdx);
+                    emit(currentSubroutineBeginId);
+                } else if (hasVariable(varName)) {
                     // Lexical array - use existing register
                     arrayReg = getVariableRegister(varName);
                 } else {
@@ -5593,18 +5661,61 @@ public class BytecodeCompiler implements Visitor {
             }
         }
 
-        // Step 3: Create a new BytecodeCompiler for the subroutine body
-        BytecodeCompiler subCompiler = new BytecodeCompiler(this.sourceName, node.getIndex(), this.errorUtil);
+        // If there are closure variables, we need to store them in PersistentVariable globals
+        // so the named sub can retrieve them using RETRIEVE_BEGIN opcodes
+        int beginId = 0;
+        if (!closureVarIndices.isEmpty()) {
+            // Assign a unique BEGIN ID for this subroutine
+            beginId = org.perlonjava.codegen.EmitterMethodCreator.classCounter++;
 
-        // Step 4: Pre-populate sub-compiler's variable scope with captured variables
-        for (String varName : closureVarNames) {
-            subCompiler.addVariable(varName, "my");
+            // Store each closure variable in PersistentVariable globals
+            for (int i = 0; i < closureVarNames.size(); i++) {
+                String varName = closureVarNames.get(i);
+                int varReg = closureVarIndices.get(i);
+
+                // Get the variable type from the sigil
+                String sigil = varName.substring(0, 1);
+                String bareVarName = varName.substring(1);
+                String beginVarName = org.perlonjava.runtime.PersistentVariable.beginPackage(beginId) + "::" + bareVarName;
+
+                // Store the variable value in PersistentVariable global
+                int nameIdx = addToStringPool(beginVarName);
+                switch (sigil) {
+                    case "$" -> {
+                        emit(Opcodes.STORE_GLOBAL_SCALAR);
+                        emit(nameIdx);
+                        emitReg(varReg);
+                    }
+                    case "@" -> {
+                        emit(Opcodes.STORE_GLOBAL_ARRAY);
+                        emit(nameIdx);
+                        emitReg(varReg);
+                    }
+                    case "%" -> {
+                        emit(Opcodes.STORE_GLOBAL_HASH);
+                        emit(nameIdx);
+                        emitReg(varReg);
+                    }
+                }
+            }
         }
 
-        // Step 5: Compile the subroutine body
+        // Step 3: Create a new BytecodeCompiler for the subroutine body
+        BytecodeCompiler subCompiler = new BytecodeCompiler(
+            this.sourceName,
+            node.getIndex(),
+            this.errorUtil
+        );
+
+        // Set the BEGIN ID in the sub-compiler so it knows to use RETRIEVE_BEGIN opcodes
+        subCompiler.currentSubroutineBeginId = beginId;
+        subCompiler.currentSubroutineClosureVars = new HashSet<>(closureVarNames);
+
+        // Step 4: Compile the subroutine body
+        // Sub-compiler will use RETRIEVE_BEGIN opcodes for closure variables
         InterpretedCode subCode = subCompiler.compile(node.block);
 
-        // Step 6: Emit bytecode to create closure with captured variables at RUNTIME
+        // Step 5: Emit bytecode to create closure or simple code ref
         int codeReg = allocateRegister();
 
         if (closureVarIndices.isEmpty()) {
@@ -5614,20 +5725,18 @@ public class BytecodeCompiler implements Visitor {
             emitReg(codeReg);
             emit(constIdx);
         } else {
-            int templateIdx = addToConstantPool(subCode);
-            emit(Opcodes.CREATE_CLOSURE);
+            // Store the InterpretedCode directly (closures are handled via PersistentVariable)
+            RuntimeScalar codeScalar = new RuntimeScalar((RuntimeCode) subCode);
+            int constIdx = addToConstantPool(codeScalar);
+            emit(Opcodes.LOAD_CONST);
             emitReg(codeReg);
-            emit(templateIdx);
-            emit(closureVarIndices.size());
-            for (int regIdx : closureVarIndices) {
-                emit(regIdx);
-            }
+            emit(constIdx);
         }
 
-        // Step 7: Store in global namespace
+        // Step 6: Store in global namespace
         String fullName = node.name;
         if (!fullName.contains("::")) {
-            fullName = "main::" + fullName;
+            fullName = currentPackage + "::" + fullName;  // Use currentPackage instead of hardcoded "main"
         }
 
         int nameIdx = addToStringPool(fullName);
@@ -5671,17 +5780,30 @@ public class BytecodeCompiler implements Visitor {
         }
 
         // Step 3: Create a new BytecodeCompiler for the subroutine body
-        BytecodeCompiler subCompiler = new BytecodeCompiler(this.sourceName, node.getIndex(), this.errorUtil);
+        // Build a variable registry from current scope to pass to sub-compiler
+        // This allows nested closures to see grandparent scope variables
+        Map<String, Integer> parentRegistry = new HashMap<>();
+        parentRegistry.put("this", 0);
+        parentRegistry.put("@_", 1);
+        parentRegistry.put("wantarray", 2);
 
-        // Step 4: Pre-populate sub-compiler's variable scope with captured variables
-        for (String varName : closureVarNames) {
-            subCompiler.addVariable(varName, "my");
+        // Add captured variables with adjusted indices (starting at 3)
+        for (int i = 0; i < closureVarNames.size(); i++) {
+            parentRegistry.put(closureVarNames.get(i), 3 + i);
         }
 
-        // Step 5: Compile the subroutine body
+        BytecodeCompiler subCompiler = new BytecodeCompiler(
+            this.sourceName,
+            node.getIndex(),
+            this.errorUtil,
+            parentRegistry  // Pass parent variable registry for nested closure support
+        );
+
+        // Step 4: Compile the subroutine body
+        // Sub-compiler will use parentRegistry to resolve captured variables
         InterpretedCode subCode = subCompiler.compile(node.block);
 
-        // Step 6: Create closure or simple code ref
+        // Step 5: Create closure or simple code ref
         int codeReg = allocateRegister();
 
         if (closureVarIndices.isEmpty()) {
