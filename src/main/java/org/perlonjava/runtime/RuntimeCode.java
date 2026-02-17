@@ -744,7 +744,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         parseSymbolTable,
                         null,
                         null,
-                        ctx.contextType,
+                        callContext,  // Use the runtime calling context, not the saved one!
                         true,
                         new ErrorMessageUtil(evalCompilerOptions.fileName, tokens),
                         evalCompilerOptions,
@@ -781,7 +781,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         1,
                         evalCtx.errorUtil,
                         adjustedRegistry);
-                interpretedCode = compiler.compile(ast);
+                interpretedCode = compiler.compile(ast, evalCtx);
 
                 // Set captured variables
                 if (runtimeValues.length > 0) {
