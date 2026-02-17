@@ -966,46 +966,59 @@ public class BytecodeCompiler implements Visitor {
     private void handleCompoundAssignment(BinaryOperatorNode node) {
         String op = node.operator;
 
-        // Get the left operand register (the variable being assigned to)
-        // The left side must be a variable reference
-        if (!(node.left instanceof OperatorNode)) {
-            throwCompilerException("Compound assignment requires variable on left side");
-            return;
-        }
-
-        OperatorNode leftOp = (OperatorNode) node.left;
-        if (!leftOp.operator.equals("$")) {
-            throwCompilerException("Compound assignment currently only supports scalar variables");
-            return;
-        }
-
-        if (!(leftOp.operand instanceof IdentifierNode)) {
-            throwCompilerException("Compound assignment requires simple variable");
-            return;
-        }
-
-        String varName = "$" + ((IdentifierNode) leftOp.operand).name;
-
-        // Compile the right operand (the value to add/subtract/etc.)
+        // Compile the right operand first (the value to add/subtract/etc.)
+        int savedContext = currentCallContext;
+        currentCallContext = RuntimeContextType.SCALAR;
         node.right.accept(this);
         int valueReg = lastResultReg;
 
-        // Get the variable's register (or load from global if not in local scope)
+        // Get the left operand register (the variable or expression being assigned to)
         int targetReg;
         boolean isGlobal = false;
 
-        if (hasVariable(varName)) {
-            // Lexical variable - use its register directly
-            targetReg = getVariableRegister(varName);
+        // Check if left side is a simple variable reference
+        if (node.left instanceof OperatorNode) {
+            OperatorNode leftOp = (OperatorNode) node.left;
+
+            if (leftOp.operator.equals("$") && leftOp.operand instanceof IdentifierNode) {
+                // Simple scalar variable: $x += 5
+                String varName = "$" + ((IdentifierNode) leftOp.operand).name;
+
+                if (hasVariable(varName)) {
+                    // Lexical variable - use its register directly
+                    targetReg = getVariableRegister(varName);
+                } else {
+                    // Global variable - need to load it first
+                    isGlobal = true;
+                    targetReg = allocateRegister();
+                    String normalizedName = NameNormalizer.normalizeVariableName(varName, getCurrentPackage());
+                    int nameIdx = addToStringPool(normalizedName);
+                    emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                    emitReg(targetReg);
+                    emit(nameIdx);
+                }
+            } else {
+                // Other operator (not simple variable) - compile as expression in SCALAR context
+                node.left.accept(this);
+                targetReg = lastResultReg;
+            }
         } else {
-            // Global variable - need to load it first
-            isGlobal = true;
-            targetReg = allocateRegister();
-            String normalizedName = NameNormalizer.normalizeVariableName(varName, getCurrentPackage());
-            int nameIdx = addToStringPool(normalizedName);
-            emit(Opcodes.LOAD_GLOBAL_SCALAR);
-            emitReg(targetReg);
-            emit(nameIdx);
+            // Not an OperatorNode (could be BinaryOperatorNode like ($x &= $y))
+            // Compile the left side as an expression in SCALAR context
+            node.left.accept(this);
+            targetReg = lastResultReg;
+
+            // Convert to scalar if it's a list
+            if (!(lastResultReg == targetReg)) {
+                // Already handled
+            } else {
+                // May need to convert list to scalar
+                int scalarReg = allocateRegister();
+                emit(Opcodes.LIST_TO_SCALAR);
+                emitReg(scalarReg);
+                emitReg(targetReg);
+                targetReg = scalarReg;
+            }
         }
 
         // Emit the appropriate compound assignment opcode
@@ -1021,6 +1034,7 @@ public class BytecodeCompiler implements Visitor {
             case "^=" -> emit(Opcodes.BITWISE_XOR_ASSIGN);
             default -> {
                 throwCompilerException("Unknown compound assignment operator: " + op);
+                currentCallContext = savedContext;
                 return;
             }
         }
@@ -1030,6 +1044,8 @@ public class BytecodeCompiler implements Visitor {
 
         // If it's a global variable, store it back
         if (isGlobal) {
+            OperatorNode leftOp = (OperatorNode) node.left;
+            String varName = "$" + ((IdentifierNode) leftOp.operand).name;
             String normalizedName = NameNormalizer.normalizeVariableName(varName, getCurrentPackage());
             int nameIdx = addToStringPool(normalizedName);
             emit(Opcodes.STORE_GLOBAL_SCALAR);
@@ -1039,6 +1055,7 @@ public class BytecodeCompiler implements Visitor {
 
         // The result is stored in targetReg
         lastResultReg = targetReg;
+        currentCallContext = savedContext;
     }
 
     /**
