@@ -467,6 +467,21 @@ public class InterpretedCode extends RuntimeCode {
                     rs = bytecode[pc++];
                     sb.append("BITWISE_XOR_ASSIGN r").append(rd).append(" ^= r").append(rs).append("\n");
                     break;
+                case Opcodes.STRING_BITWISE_AND_ASSIGN:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("STRING_BITWISE_AND_ASSIGN r").append(rd).append(" &.= r").append(rs).append("\n");
+                    break;
+                case Opcodes.STRING_BITWISE_OR_ASSIGN:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("STRING_BITWISE_OR_ASSIGN r").append(rd).append(" |.= r").append(rs).append("\n");
+                    break;
+                case Opcodes.STRING_BITWISE_XOR_ASSIGN:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("STRING_BITWISE_XOR_ASSIGN r").append(rd).append(" ^.= r").append(rs).append("\n");
+                    break;
                 case Opcodes.PUSH_LOCAL_VARIABLE:
                     rs = bytecode[pc++];
                     sb.append("PUSH_LOCAL_VARIABLE r").append(rs).append("\n");
