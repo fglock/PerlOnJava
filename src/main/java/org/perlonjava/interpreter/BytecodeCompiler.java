@@ -4005,10 +4005,10 @@ public class BytecodeCompiler implements Visitor {
                         }
                         emitReg(globalReg);
 
-                        // Store back to global variable
-                        emit(Opcodes.STORE_GLOBAL_SCALAR);
-                        emit(nameIdx);
-                        emitReg(globalReg);
+                        // NOTE: Do NOT store back to global variable!
+                        // The POST/PRE_AUTO* opcodes modify the global variable directly
+                        // and return the appropriate value (old for postfix, new for prefix).
+                        // Storing back would overwrite the modification with the return value.
 
                         lastResultReg = globalReg;
                     }
