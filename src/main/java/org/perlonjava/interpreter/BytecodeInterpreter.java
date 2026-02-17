@@ -1168,6 +1168,42 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.STRING_BITWISE_AND_ASSIGN: {
+                        // String bitwise AND assignment: rd &.= rs (modifies rd in place)
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        RuntimeScalar result = org.perlonjava.operators.BitwiseOperators.bitwiseAndDot(
+                            (RuntimeScalar) registers[rd],
+                            (RuntimeScalar) registers[rs]
+                        );
+                        ((RuntimeScalar) registers[rd]).set(result);
+                        break;
+                    }
+
+                    case Opcodes.STRING_BITWISE_OR_ASSIGN: {
+                        // String bitwise OR assignment: rd |.= rs (modifies rd in place)
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        RuntimeScalar result = org.perlonjava.operators.BitwiseOperators.bitwiseOrDot(
+                            (RuntimeScalar) registers[rd],
+                            (RuntimeScalar) registers[rs]
+                        );
+                        ((RuntimeScalar) registers[rd]).set(result);
+                        break;
+                    }
+
+                    case Opcodes.STRING_BITWISE_XOR_ASSIGN: {
+                        // String bitwise XOR assignment: rd ^.= rs (modifies rd in place)
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        RuntimeScalar result = org.perlonjava.operators.BitwiseOperators.bitwiseXorDot(
+                            (RuntimeScalar) registers[rd],
+                            (RuntimeScalar) registers[rs]
+                        );
+                        ((RuntimeScalar) registers[rd]).set(result);
+                        break;
+                    }
+
                     case Opcodes.PUSH_LOCAL_VARIABLE: {
                         // Push variable to local stack: DynamicVariableManager.pushLocalVariable(rs)
                         int rs = bytecode[pc++];

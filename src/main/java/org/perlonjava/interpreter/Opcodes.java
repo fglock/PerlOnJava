@@ -694,8 +694,20 @@ public class Opcodes {
      * Format: BITWISE_XOR_ASSIGN target value */
     public static final short BITWISE_XOR_ASSIGN = 176;
 
+    /** String bitwise AND assignment: target &.= value
+     * Format: STRING_BITWISE_AND_ASSIGN target value */
+    public static final short STRING_BITWISE_AND_ASSIGN = 177;
+
+    /** String bitwise OR assignment: target |.= value
+     * Format: STRING_BITWISE_OR_ASSIGN target value */
+    public static final short STRING_BITWISE_OR_ASSIGN = 178;
+
+    /** String bitwise XOR assignment: target ^.= value
+     * Format: STRING_BITWISE_XOR_ASSIGN target value */
+    public static final short STRING_BITWISE_XOR_ASSIGN = 179;
+
     // =================================================================
-    // OPCODES 177-32767: RESERVED FOR FUTURE OPERATIONS
+    // OPCODES 180-32767: RESERVED FOR FUTURE OPERATIONS
     // =================================================================
     // See PHASE3_OPERATOR_PROMOTIONS.md for promotion strategy.
     // All SLOWOP_* constants have been removed - use direct opcodes 114-154 instead.
