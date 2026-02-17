@@ -669,6 +669,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         );
         evalRuntimeContext.set(runtimeCtx);
 
+        InterpretedCode interpretedCode = null;
+        RuntimeList result;
+
         try {
             String evalString = code.toString();
 
@@ -729,67 +732,159 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
             }
 
-            // Parse the eval string
-            Lexer lexer = new Lexer(evalString);
-            List<LexerToken> tokens = lexer.tokenize();
+            try {
+                // Parse the eval string
+                Lexer lexer = new Lexer(evalString);
+                List<LexerToken> tokens = lexer.tokenize();
 
-            // Create parser context
-            ScopedSymbolTable parseSymbolTable = capturedSymbolTable.snapShot();
-            EmitterContext evalCtx = new EmitterContext(
-                    new JavaClassInfo(),
-                    parseSymbolTable,
-                    null,
-                    null,
-                    ctx.contextType,
-                    true,
-                    new ErrorMessageUtil(evalCompilerOptions.fileName, tokens),
-                    evalCompilerOptions,
-                    ctx.unitcheckBlocks);
+                // Create parser context
+                ScopedSymbolTable parseSymbolTable = capturedSymbolTable.snapShot();
+                EmitterContext evalCtx = new EmitterContext(
+                        new JavaClassInfo(),
+                        parseSymbolTable,
+                        null,
+                        null,
+                        ctx.contextType,
+                        true,
+                        new ErrorMessageUtil(evalCompilerOptions.fileName, tokens),
+                        evalCompilerOptions,
+                        ctx.unitcheckBlocks);
 
-            Parser parser = new Parser(evalCtx, tokens);
-            Node ast = parser.parse();
+                Parser parser = new Parser(evalCtx, tokens);
+                Node ast = parser.parse();
 
-            // Run UNITCHECK blocks
-            runUnitcheckBlocks(evalCtx.unitcheckBlocks);
+                // Run UNITCHECK blocks
+                runUnitcheckBlocks(evalCtx.unitcheckBlocks);
 
-            // Build adjusted registry for captured variables
-            // Map variable names to register indices (3+ for captured variables)
-            Map<String, Integer> adjustedRegistry = new HashMap<>();
-            adjustedRegistry.put("this", 0);
-            adjustedRegistry.put("@_", 1);
-            adjustedRegistry.put("wantarray", 2);
+                // Build adjusted registry for captured variables
+                // Map variable names to register indices (3+ for captured variables)
+                Map<String, Integer> adjustedRegistry = new HashMap<>();
+                adjustedRegistry.put("this", 0);
+                adjustedRegistry.put("@_", 1);
+                adjustedRegistry.put("wantarray", 2);
 
-            // Add captured variables starting at register 3
-            int captureIndex = 3;
-            Map<Integer, SymbolTable.SymbolEntry> capturedVariables = capturedSymbolTable.getAllVisibleVariables();
-            for (Map.Entry<Integer, SymbolTable.SymbolEntry> entry : capturedVariables.entrySet()) {
-                int index = entry.getKey();
-                if (index >= 3) {  // Skip reserved registers
-                    String varName = entry.getValue().name();
-                    adjustedRegistry.put(varName, captureIndex);
-                    captureIndex++;
+                // Add captured variables starting at register 3
+                int captureIndex = 3;
+                Map<Integer, SymbolTable.SymbolEntry> capturedVariables = capturedSymbolTable.getAllVisibleVariables();
+                for (Map.Entry<Integer, SymbolTable.SymbolEntry> entry : capturedVariables.entrySet()) {
+                    int index = entry.getKey();
+                    if (index >= 3) {  // Skip reserved registers
+                        String varName = entry.getValue().name();
+                        adjustedRegistry.put(varName, captureIndex);
+                        captureIndex++;
+                    }
+                }
+
+                // Compile to InterpretedCode with variable registry
+                BytecodeCompiler compiler = new BytecodeCompiler(
+                        evalCompilerOptions.fileName,
+                        1,
+                        evalCtx.errorUtil,
+                        adjustedRegistry);
+                interpretedCode = compiler.compile(ast);
+
+                // Set captured variables
+                if (runtimeValues.length > 0) {
+                    RuntimeBase[] capturedVars2 = new RuntimeBase[runtimeValues.length];
+                    for (int i = 0; i < runtimeValues.length; i++) {
+                        capturedVars2[i] = (RuntimeBase) runtimeValues[i];
+                    }
+                    interpretedCode = interpretedCode.withCapturedVars(capturedVars2);
+                }
+
+            } catch (Throwable e) {
+                // Compilation error in eval-string
+                // Set the global error variable "$@"
+                RuntimeScalar err = GlobalVariable.getGlobalVariable("main::@");
+                err.set(e.getMessage());
+
+                // Check if $SIG{__DIE__} handler is defined
+                RuntimeScalar sig = GlobalVariable.getGlobalHash("main::SIG").get("__DIE__");
+                if (sig.getDefinedBoolean()) {
+                    // Call the $SIG{__DIE__} handler (similar to what die() does)
+                    RuntimeScalar sigHandler = new RuntimeScalar(sig);
+
+                    // Undefine $SIG{__DIE__} before calling to avoid infinite recursion
+                    int level = DynamicVariableManager.getLocalLevel();
+                    DynamicVariableManager.pushLocalVariable(sig);
+
+                    try {
+                        RuntimeArray handlerArgs = new RuntimeArray();
+                        RuntimeArray.push(handlerArgs, new RuntimeScalar(err));
+                        apply(sigHandler, handlerArgs, RuntimeContextType.SCALAR);
+                    } catch (Throwable handlerException) {
+                        // If the handler dies, use its payload as the new error
+                        if (handlerException instanceof RuntimeException && handlerException.getCause() instanceof PerlDieException) {
+                            PerlDieException pde = (PerlDieException) handlerException.getCause();
+                            RuntimeBase handlerPayload = pde.getPayload();
+                            if (handlerPayload != null) {
+                                err.set(handlerPayload.getFirst());
+                            }
+                        } else if (handlerException instanceof PerlDieException) {
+                            PerlDieException pde = (PerlDieException) handlerException;
+                            RuntimeBase handlerPayload = pde.getPayload();
+                            if (handlerPayload != null) {
+                                err.set(handlerPayload.getFirst());
+                            }
+                        }
+                        // If handler throws other exceptions, ignore them (keep original error in $@)
+                    } finally {
+                        // Restore $SIG{__DIE__}
+                        DynamicVariableManager.popToLocalLevel(level);
+                    }
+                }
+
+                // Return undef/empty list to signal compilation failure
+                if (callContext == RuntimeContextType.LIST) {
+                    return new RuntimeList();
+                } else {
+                    return new RuntimeList(new RuntimeScalar());
                 }
             }
 
-            // Compile to InterpretedCode with variable registry
-            BytecodeCompiler compiler = new BytecodeCompiler(
-                    evalCompilerOptions.fileName,
-                    1,
-                    evalCtx.errorUtil,
-                    adjustedRegistry);
-            InterpretedCode interpretedCode = compiler.compile(ast);
+            // Execute the interpreted code
+            try {
+                result = interpretedCode.apply(args, callContext);
 
-            // Set captured variables
-            if (runtimeValues.length > 0) {
-                RuntimeBase[] capturedVars2 = new RuntimeBase[runtimeValues.length];
-                for (int i = 0; i < runtimeValues.length; i++) {
-                    capturedVars2[i] = (RuntimeBase) runtimeValues[i];
+                // Clear $@ on successful execution
+                RuntimeScalar err = GlobalVariable.getGlobalVariable("main::@");
+                err.set("");
+
+                return result;
+
+            } catch (PerlDieException e) {
+                // Runtime error - set $@ and return undef/empty list
+                RuntimeScalar err = GlobalVariable.getGlobalVariable("main::@");
+                RuntimeBase payload = e.getPayload();
+                if (payload != null) {
+                    err.set(payload.getFirst());
+                } else {
+                    err.set("Died");
                 }
-                interpretedCode = interpretedCode.withCapturedVars(capturedVars2);
-            }
 
-            // Execute directly and return result
-            return interpretedCode.apply(args, callContext);
+                // Return undef/empty list
+                if (callContext == RuntimeContextType.LIST) {
+                    return new RuntimeList();
+                } else {
+                    return new RuntimeList(new RuntimeScalar());
+                }
+
+            } catch (Throwable e) {
+                // Other runtime errors - set $@ and return undef/empty list
+                RuntimeScalar err = GlobalVariable.getGlobalVariable("main::@");
+                String message = e.getMessage();
+                if (message == null || message.isEmpty()) {
+                    message = e.getClass().getSimpleName();
+                }
+                err.set(message);
+
+                // Return undef/empty list
+                if (callContext == RuntimeContextType.LIST) {
+                    return new RuntimeList();
+                } else {
+                    return new RuntimeList(new RuntimeScalar());
+                }
+            }
 
         } finally {
             // Clean up ThreadLocal

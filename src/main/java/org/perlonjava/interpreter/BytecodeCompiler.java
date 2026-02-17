@@ -285,9 +285,20 @@ public class BytecodeCompiler implements Visitor {
         // Visit the node to generate bytecode
         node.accept(this);
 
-        // Emit RETURN with last result register (or register 0 for empty)
+        // Emit RETURN with last result register
+        // If no result was produced, return undef instead of register 0 ("this")
+        int returnReg;
+        if (lastResultReg >= 0) {
+            returnReg = lastResultReg;
+        } else {
+            // No result - allocate register for undef
+            returnReg = allocateRegister();
+            emit(Opcodes.LOAD_UNDEF);
+            emitReg(returnReg);
+        }
+
         emit(Opcodes.RETURN);
-        emit(lastResultReg >= 0 ? lastResultReg : 0);
+        emitReg(returnReg);
 
         // Build variable registry for eval STRING support
         // This maps variable names to their register indices for variable capture
@@ -3993,7 +4004,11 @@ public class BytecodeCompiler implements Visitor {
 
                         lastResultReg = globalReg;
                     }
+                } else {
+                    throwCompilerException("Invalid operand for increment/decrement operator");
                 }
+            } else {
+                throwCompilerException("Increment/decrement operator requires operand");
             }
         } else if (op.equals("return")) {
             // return $expr;
