@@ -1005,6 +1005,9 @@ public class BytecodeCompiler implements Visitor {
             case "/=" -> emit(Opcodes.DIVIDE_ASSIGN);
             case "%=" -> emit(Opcodes.MODULUS_ASSIGN);
             case ".=" -> emit(Opcodes.STRING_CONCAT_ASSIGN);
+            case "&=" -> emit(Opcodes.BITWISE_AND_ASSIGN);
+            case "|=" -> emit(Opcodes.BITWISE_OR_ASSIGN);
+            case "^=" -> emit(Opcodes.BITWISE_XOR_ASSIGN);
             default -> {
                 throwCompilerException("Unknown compound assignment operator: " + op);
                 return;
@@ -2918,10 +2921,11 @@ public class BytecodeCompiler implements Visitor {
             return;
         }
 
-        // Handle compound assignment operators (+=, -=, *=, /=, %=, .=)
+        // Handle compound assignment operators (+=, -=, *=, /=, %=, .=, &=, |=, ^=)
         if (node.operator.equals("+=") || node.operator.equals("-=") ||
             node.operator.equals("*=") || node.operator.equals("/=") ||
-            node.operator.equals("%=") || node.operator.equals(".=")) {
+            node.operator.equals("%=") || node.operator.equals(".=") ||
+            node.operator.equals("&=") || node.operator.equals("|=") || node.operator.equals("^=")) {
             handleCompoundAssignment(node);
             return;
         }
