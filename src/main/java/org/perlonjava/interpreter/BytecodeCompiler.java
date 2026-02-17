@@ -285,7 +285,10 @@ public class BytecodeCompiler implements Visitor {
         }
 
         // If we have captured variables, allocate registers for them
-        if (capturedVars != null && capturedVars.length > 0) {
+        // BUT: If we were constructed with a parentRegistry (for eval STRING),
+        // nextRegister is already correctly set by the constructor.
+        // Only reset it if we have runtime capturedVars but no parentRegistry.
+        if (capturedVars != null && capturedVars.length > 0 && capturedVarIndices == null) {
             // Registers 0-2 are reserved (this, @_, wantarray)
             // Registers 3+ are captured variables
             nextRegister = 3 + capturedVars.length;
