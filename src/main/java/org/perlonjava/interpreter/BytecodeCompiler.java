@@ -1589,6 +1589,99 @@ public class BytecodeCompiler implements Visitor {
                         lastResultReg = hashReg;
                         return;
                     }
+                } else if (localOperand instanceof ListNode) {
+                    // Handle local($x) = value or local($x, $y) = (v1, v2)
+                    ListNode listNode = (ListNode) localOperand;
+
+                    // Special case: single element list local($x) = value
+                    if (listNode.elements.size() == 1) {
+                        Node element = listNode.elements.get(0);
+                        if (element instanceof OperatorNode) {
+                            OperatorNode sigilOp = (OperatorNode) element;
+                            if (sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode) {
+                                String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
+
+                                // Check if it's a lexical variable (should not be localized)
+                                if (hasVariable(varName)) {
+                                    throwCompilerException("Can't localize lexical variable " + varName);
+                                    return;
+                                }
+
+                                // Compile RHS first
+                                node.right.accept(this);
+                                int valueReg = lastResultReg;
+
+                                // Get the global variable and localize it
+                                String packageName = getCurrentPackage();
+                                String globalVarName = packageName + "::" + ((IdentifierNode) sigilOp.operand).name;
+                                int nameIdx = addToStringPool(globalVarName);
+
+                                int localReg = allocateRegister();
+                                emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
+                                emitReg(localReg);
+                                emit(nameIdx);
+
+                                // Assign value to the localized variable
+                                emit(Opcodes.SET_SCALAR);
+                                emitReg(localReg);
+                                emitReg(valueReg);
+
+                                lastResultReg = localReg;
+                                return;
+                            }
+                        }
+                    }
+
+                    // Multi-element case: local($x, $y) = (v1, v2)
+                    // Compile RHS first
+                    node.right.accept(this);
+                    int valueReg = lastResultReg;
+
+                    // For each element in the list, localize and assign
+                    for (int i = 0; i < listNode.elements.size(); i++) {
+                        Node element = listNode.elements.get(i);
+
+                        if (element instanceof OperatorNode) {
+                            OperatorNode sigilOp = (OperatorNode) element;
+                            if (sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode) {
+                                String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
+
+                                // Check if it's a lexical variable (should not be localized)
+                                if (hasVariable(varName)) {
+                                    throwCompilerException("Can't localize lexical variable " + varName);
+                                    return;
+                                }
+
+                                // Get the global variable
+                                String packageName = getCurrentPackage();
+                                String globalVarName = packageName + "::" + ((IdentifierNode) sigilOp.operand).name;
+                                int nameIdx = addToStringPool(globalVarName);
+
+                                int localReg = allocateRegister();
+                                emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
+                                emitReg(localReg);
+                                emit(nameIdx);
+
+                                // Extract element from RHS list
+                                int elemReg = allocateRegister();
+                                emit(Opcodes.ARRAY_GET);
+                                emitReg(elemReg);
+                                emitReg(valueReg);
+                                emitInt(i);
+
+                                // Assign to the localized variable
+                                emit(Opcodes.SET_SCALAR);
+                                emitReg(localReg);
+                                emitReg(elemReg);
+
+                                if (i == 0) {
+                                    // Return the first localized variable
+                                    lastResultReg = localReg;
+                                }
+                            }
+                        }
+                    }
+                    return;
                 }
             }
         }
