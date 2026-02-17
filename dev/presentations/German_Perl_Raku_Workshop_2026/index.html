@@ -18,8 +18,9 @@
         .reveal h1 { font-size: 2.5em; }
         .reveal h2 { font-size: 1.8em; }
         .reveal h3 { font-size: 1.3em; }
-        .reveal code { font-size: 0.9em; }
-        .reveal pre code { font-size: 0.7em; max-height: 500px; }
+        .reveal { font-size: 38px; }  /* Increase base font size */
+        .reveal code { font-size: 1.2em; }  /* Inline code */
+        .reveal pre code { font-size: 1.2em; line-height: 1.5; max-height: 500px; }  /* Code blocks */
         .reveal .slides section .fragment.highlight-current-blue { opacity: 1; }
         .reveal .slides section .fragment.highlight-current-blue.current-fragment { color: #42affa; }
 
@@ -38,6 +39,7 @@
         .three-columns > div {
             flex: 1;
             text-align: center;
+            font-size: 0.9em;  /* Slightly smaller for three-column to fit */
         }
     </style>
 </head>
