@@ -620,13 +620,18 @@ Note:
 4. Transliteration: `tr/a-z/A-Z/`
 5. String interpolation: `"Value: $x\n"`
 
-**Architecture:** Unified parser framework
+**Architecture:** Each DSL has its own dedicated parser
+
+- Parses DSL syntax into AST nodes
+- Validates at compile-time (catches errors early)
+- Generates optimized bytecode
+- Provides consistent error messages
 
 Note:
-- Each DSL has its own syntax
-- Must parse, validate, compile at compile-time
-- Enables optimization
-- Consistent error messages
+- String interpolation parser: breaks `"$x\n"` into literals, variables, escapes
+- Regex parser: parses pattern syntax; translation to Java regex happens at regex compile time
+- Pack/unpack parser: validates templates, generates format handlers
+- Each parser is invoked by main parser when context requires it
 
 ---
 
@@ -847,73 +852,18 @@ Note:
 
 **Recently Completed (v5.42.3):**
 -  Interpreter backend production-ready
--  Full Perl 5.38+ class features
+-  Full Perl class features
 -  System V IPC, socket operations
--  250,000+ tests passing
 
 **Active Development:**
 - Interpreter performance refinement
 - Automatic fallback for large methods
 - Optimizing eval STRING compilation
+- 260,000+ tests passing
 
 Note:
 - Production-ready now
 - Active development continues
-- Current branch: feature/eval-interpreter-mode
-
----
-
-## Roadmap: v4.0.0 (2026-05-10)
-
-**Short-term goals:**
-
-- Concurrency and threading support
-- Interactive debugger with breakpoints
-- Docker/Kubernetes configurations
-- Enhanced library integration
-
-Note:
-- Focus on developer experience
-- Modern deployment platforms
-- Better debugging tools
-
----
-
-## Roadmap: v5.0.0 (2027-04-10)
-
-**Long-term vision:**
-
-1. **GraalVM native image compilation**
-   - Standalone native executables
-   - Instant startup (no JVM warmup)
-   - 10-50MB footprint vs 100-200MB
-
-2. **Android DEX compilation**
-   - Run Perl on Android devices
-   - Mobile development with Perl
-
-3. **Advanced JVM optimizations**
-
-Note:
-- GraalVM: compile to native binary
-- No JVM needed to run
-- Android: convert to DEX format
-- Ambitious but achievable goals
-
----
-
-## Ambitious Goals
-
-- Native system integration (fork, exec, signals)
-- XS module support (C extensions)
-- Full CPAN compatibility
-- Performance parity or better in all scenarios
-
-Note:
-- Long-term vision
-- XS is challenging on JVM
-- CPAN would be huge win
-- Focus on compatibility and performance
 
 ---
 
