@@ -1206,6 +1206,14 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.POS: {
+                        // Get regex position: rd = rs.pos()
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        registers[rd] = ((RuntimeScalar) registers[rs]).pos();
+                        break;
+                    }
+
                     case Opcodes.PRE_AUTOINCREMENT: {
                         // Pre-increment: ++rd
                         int rd = bytecode[pc++];
