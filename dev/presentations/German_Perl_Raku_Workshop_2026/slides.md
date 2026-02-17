@@ -61,6 +61,9 @@ Note:
 <div>
 
 ### Cloud
+- **Single JAR** runs on Linux, macOS, Windows
+- JNA loads platform-specific features dynamically
+- Debian packages (`make deb`)
 - Docker containers
 - Kubernetes
 - Android (future)
@@ -69,10 +72,9 @@ Note:
 <div>
 
 ### Performance
-- **~Perl 5 speed on average**
-- **Up to ~2x faster** (hot loops)
-- Higher startup time (JVM warmup)
+- Competitive with Perl 5
 - JVM JIT optimization
+- Higher startup time (JVM warmup)
 
 </div>
 </div>
@@ -86,9 +88,9 @@ Note:
 
 ## Key Achievements
 
-- <span class="metric">250,000+ tests passing</span>
-- <span class="metric">383 Java source files</span>
-- <span class="metric">Many Perl modules bundled</span>
+- <span class="metric">260,000+ tests passing</span>
+- <span class="metric">74,000+ lines of Java code</span> (383 files)
+- <span class="metric">70,000+ lines of Perl code</span> (398 bundled modules)
 - <span class="metric">5,621+ commits</span>
 
 **Bundled modules:** DBI, HTTP::Tiny, JSON, YAML, Text::CSV, and more
@@ -104,13 +106,13 @@ Note:
 
 ## Recent Milestones
 
-✅ Latest Perl class features
+- Latest Perl class features
 
-✅ Dual execution backend (compiler + interpreter)
+- Dual execution backend (compiler + interpreter)
 
-✅ System V IPC and socket operations
+- System V IPC and socket operations
 
-✅ 250,000+ tests passing
+- 250,000+ tests passing
 
 Note:
 - Modern OOP with class keyword
@@ -236,14 +238,13 @@ my $𝕦𝕟𝕚𝕔𝕠𝕕𝕖 = "test";      # Surrogate pairs
 
 **Solution:**
 - IBM's ICU4J library
-- 251 Unicode code points (not UTF-16 units)
+- Unicode code points (not UTF-16 units)
 - Proper surrogate pair handling
 
 Note:
 - Breaks source into tokens: identifiers, operators, keywords
 - Perl limits identifiers to 251 code points
 - Must handle characters beyond U+FFFF correctly
-- ~50,000 lines per second
 
 ---
 
@@ -344,9 +345,9 @@ Note:
 
 ## Compiler Mode: The Fast Path
 
-**Performance:** workload dependent
-- ~2x faster on tight loops / lexical variable access
-- ~0.5x on `eval STRING`-heavy workloads
+**Performance example (loop increment with lexical variable, 100M iterations):**
+- Perl 5: 1.53s baseline
+- PerlOnJava Compiler: 0.86s (1.78x faster)
 
 **Advantages:**
 - Maximum performance after JIT warmup
@@ -366,7 +367,9 @@ Note:
 
 ## Interpreter Mode: The Flexible Path
 
-**Performance:** 0.85x Perl 5 (15% slower)
+**Performance example (loop increment, 100M iterations):**
+- Perl 5: 1.53s baseline
+- PerlOnJava Interpreter mode: 1.80s (0.85x, 15% slower)
 
 **Advantages:**
 - No method size limits
@@ -395,7 +398,7 @@ eval {
 LABEL: print "Jumped out!\n";
 ```
 
-- **Stack-based:** Stack corrupts on non-local jumps
+- **Stack-based:** Easy to corrupt the stack on non-local jumps
 - **Register-based:** Explicit operands maintain correctness
 
 Note:
@@ -406,19 +409,19 @@ Note:
 
 ---
 
-## JVM Ecosystem: Standard and Derivatives
+## JVM Ecosystem: Current and Future
 
 **Current support: Standard JVM (HotSpot)**
 - Oracle JDK, OpenJDK
 - Compiler mode generates standard JVM bytecode
 - Runs on any compliant JVM
 
-**JVM derivatives we can target:**
+**Future targets (v5.0.0 - 2027):**
 
 1. **GraalVM** - Native image compilation
    - Compile to standalone native executables
    - Instant startup, no JVM warmup
-   - Smaller footprint (10-50MB vs 100-200MB)
+   - Smaller footprint
 
 2. **Android DEX** - Mobile platform
    - Convert JVM bytecode → Dalvik bytecode
@@ -437,49 +440,22 @@ Note:
 
 ---
 
-## Seamless Interoperability
-
-```perl
-sub large_function {
-    # 10,000 lines of code
-    # Runs in interpreter mode
-
-    my $result = small_helper();  # Compiled mode!
-    return $result;
-}
-
-sub small_helper {
-    return 42;  # Compiled mode
-}
-```
-
-**Key:** Shared runtime APIs across both modes
-
-Note:
-- Users don't need to know which mode
-- Compiled code calls interpreted code seamlessly
-- Same RuntimeScalar/Array/Hash/Code classes
-- Closures work across boundaries
-
----
-
 ## eval STRING Performance
 
-**Dynamic eval (unique strings):**
+**Dynamic eval (1,000,000 unique strings):**
 
 | Implementation | Time | vs Perl 5 |
 |----------------|------|-----------|
-| Perl 5 | 1.26s | baseline |
-| **Interpreter** | **2.52s** | **2.0x slower** |
-| Compiler | 46.99s | 39x slower |
+| Perl 5 | 1.25s | baseline |
+| PerlOnJava | 6.00s | 4.80x slower |
 
-**Interpreter is significantly faster than compiler for dynamic eval**
+**Note:** PerlOnJava automatically uses interpreter mode for eval STRING
 
 Note:
-- Where interpreter really shines
-- Each iteration evals different string
-- Compiler: expensive ASM compilation per string
-- Interpreter: lightweight bytecode compilation
+- Interpreter mode used automatically for dynamic eval
+- Each iteration evals a different string
+- Compilation overhead dominates runtime
+- Still functional for typical eval usage patterns
 
 ---
 
@@ -700,15 +676,15 @@ Note:
 ## Current Limitations
 
 **JVM-incompatible features:**
-- ❌ `fork` - not available on JVM
-- ❌ `DESTROY` blocks - incompatible with JVM garbage collection
-- ❌ Threading - not yet implemented
-- ❌ Perl XS modules - C extensions don't work (use Java equivalents)
+-  `fork` - not available on JVM
+-  `DESTROY` blocks - Perl uses reference counting for deterministic cleanup; JVM uses non-deterministic garbage collection
+-  Threading - not yet implemented
+-  Perl XS modules - C extensions don't work (use Java equivalents)
 
 **Partially implemented:**
-- 🚧 Some regex features (recursive patterns, variable-length lookbehind)
-- 🚧 Some warnings and pragmas
-- 🚧 Taint checks
+-  Some regex features (recursive patterns, variable-length lookbehind)
+-  Some warnings and pragmas
+-  Taint checks
 
 **Workarounds available:**
 - Use JNA for native library access instead of XS
@@ -799,10 +775,10 @@ Note:
 ## Current Status
 
 **Recently Completed (v5.42.3):**
-- ✅ Interpreter backend production-ready
-- ✅ Full Perl 5.38+ class features
-- ✅ System V IPC, socket operations
-- ✅ 250,000+ tests passing
+-  Interpreter backend production-ready
+-  Full Perl 5.38+ class features
+-  System V IPC, socket operations
+-  250,000+ tests passing
 
 **Active Development:**
 - Interpreter performance refinement
@@ -934,9 +910,8 @@ Note:
 ## Conclusion
 
 - ✅ **Production-ready** Perl compiler for JVM
-- ✅ **~Perl 5 speed on average**, with higher startup time
-- ✅ **Up to ~2x faster** than Perl 5 (compiler mode, workload dependent)
-- ✅ **250,000+ tests** passing
+- ✅ **Competitive performance** with Perl 5 (1.78x faster in compiler mode, 0.85x in interpreter mode)
+- ✅ **260,000+ tests** passing
 - ✅ **Full ecosystem integration** (JDBC, JSR-223)
 - ✅ **Active development** with clear roadmap
 
@@ -944,7 +919,8 @@ Note:
 
 Note:
 - Comprehensive Perl 5 compatibility
-- Average runtime around Perl 5 speed, up to 2x faster on hot loops
+- Compiler mode: 1.78x faster on loop benchmarks
+- Interpreter mode: 19x faster eval compilation
 - Modern deployment options
 - Active, sustained development
 
