@@ -672,6 +672,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         InterpretedCode interpretedCode = null;
         RuntimeList result;
 
+        // Save dynamic variable level to restore after eval
+        int dynamicVarLevel = DynamicVariableManager.getLocalLevel();
+
         try {
             String evalString = code.toString();
 
@@ -887,6 +890,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
 
         } finally {
+            // Restore dynamic variables (local) to their state before eval
+            DynamicVariableManager.popToLocalLevel(dynamicVarLevel);
+
             // Clean up ThreadLocal
             evalRuntimeContext.remove();
         }

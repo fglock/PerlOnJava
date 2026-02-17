@@ -10,10 +10,10 @@ use Getopt::Long qw(GetOptions);
 my %opt = (
     stats => 1,
     bench => 1,
-    iterations => 100_000_000,
-    eval_iterations => 2_000,
+    iterations => 1_000_000_000,
+    eval_iterations => 1_000_000,
     eval_payload_len => 50,
-    print_cmd => 1,
+    print_cmd => 0,
 );
 
 GetOptions(
@@ -203,16 +203,11 @@ if ($opt{bench}) {
     my $jperl = shell_quote(File::Spec->catfile($repo_root, 'jperl'));
 
     my $perl_loop = sprintf(
-        q{perl -MTime::HiRes=time -e 'my $t=time; my $x=0; for (1..%d) { $x++ } print(time-$t, "\n")'},
+        q{perl -MTime::HiRes=time -e 'my $t=time; my $x=0; for my $v (1..%d) { $x++ } print(time-$t, "\n")'},
         $iters
     );
     my $jperl_loop_comp = sprintf(
-        q{%s -MTime::HiRes=time -e 'my $t=time; my $x=0; for (1..%d) { $x++ } print(time-$t, "\n")'},
-        $jperl,
-        $iters
-    );
-    my $jperl_loop_interp = sprintf(
-        q{%s --interpreter -MTime::HiRes=time -e 'my $t=time; my $x=0; for (1..%d) { $x++ } print(time-$t, "\n")'},
+        q{%s -MTime::HiRes=time -e 'my $t=time; my $x=0; for my $v (1..%d) { $x++ } print(time-$t, "\n")'},
         $jperl,
         $iters
     );
@@ -226,28 +221,19 @@ if ($opt{bench}) {
         $jperl,
         $eval_iters
     );
-    my $jperl_eval_interp = sprintf(
-        q{%s -MTime::HiRes=time -e 'my $t=time; for my $i (1..%d) { my $payload = "x" x %d; my $code = "$i+1;$payload"; eval $code; } print(time-$t, "\n")'},
-        $jperl,
-        $eval_iters,
-        $payload_len
-    );
 
     my $t_perl = bench_command_seconds(cmd => $perl_loop);
     my $t_comp = bench_command_seconds(cmd => $jperl_loop_comp);
-    my $t_interp = bench_command_seconds(cmd => $jperl_loop_interp);
 
     print "# Loop increment benchmark ($iters iterations)\n\n";
 
     my $vs_perl_comp = format_vs_baseline(baseline => $t_perl, candidate => $t_comp);
-    my $vs_perl_interp = format_vs_baseline(baseline => $t_perl, candidate => $t_interp);
 
     print_markdown_table(
         headers => ['Implementation', 'Time', 'vs Perl 5'],
         rows => [
             ['Perl 5', format_seconds($t_perl), 'baseline'],
             ['PerlOnJava Compiler', format_seconds($t_comp), $vs_perl_comp],
-            ['PerlOnJava Interpreter', format_seconds($t_interp), $vs_perl_interp],
         ],
     );
 
@@ -255,26 +241,22 @@ if ($opt{bench}) {
 
     my $t_eval_perl = bench_command_seconds(cmd => $perl_eval);
     my $t_eval_jperl_comp = bench_command_seconds(cmd => $jperl_eval_comp);
-    my $t_eval_jperl_interp = bench_command_seconds(cmd => $jperl_eval_interp, env => { JPERL_EVAL_USE_INTERPRETER => 1 });
 
     print "# eval STRING benchmark ($eval_iters unique evals)\n\n";
 
-    my $vs_perl_eval_interp = format_vs_baseline(baseline => $t_eval_perl, candidate => $t_eval_jperl_interp);
     my $vs_perl_eval_comp = format_vs_baseline(baseline => $t_eval_perl, candidate => $t_eval_jperl_comp);
 
     print_markdown_table(
         headers => ['Implementation', 'Time', 'vs Perl 5'],
         rows => [
             ['Perl 5', format_seconds($t_eval_perl), 'baseline'],
-            ['PerlOnJava (eval via interpreter backend)', format_seconds($t_eval_jperl_interp), $vs_perl_eval_interp],
-            ['PerlOnJava (eval via JVM compiler)', format_seconds($t_eval_jperl_comp), $vs_perl_eval_comp],
+            ['PerlOnJava', format_seconds($t_eval_jperl_comp), $vs_perl_eval_comp],
         ],
     );
 
     print "\n";
 
     print "Notes:\n";
-    print "- Force full interpreter mode for the whole program via: ./jperl --interpreter ...\n";
     print "- Force eval STRING to use the interpreter backend via: JPERL_EVAL_USE_INTERPRETER=1 ./jperl ...\n";
     print "- You can tune --eval-iterations and --iterations for runtime on slower machines.\n";
 }
