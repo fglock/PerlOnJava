@@ -4272,6 +4272,72 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(locationReg);
             }
             lastResultReg = -1; // No result after die
+        } else if (op.equals("warn")) {
+            // warn $message;
+            if (node.operand != null) {
+                // Evaluate warn message
+                node.operand.accept(this);
+                int msgReg = lastResultReg;
+
+                // Precompute location message at compile time
+                String locationMsg;
+                // Use annotation from AST node which has the correct line number
+                Object lineObj = node.getAnnotation("line");
+                Object fileObj = node.getAnnotation("file");
+                if (lineObj != null && fileObj != null) {
+                    String fileName = fileObj.toString();
+                    int lineNumber = Integer.parseInt(lineObj.toString());
+                    locationMsg = " at " + fileName + " line " + lineNumber;
+                } else if (errorUtil != null) {
+                    // Fallback to errorUtil if annotations not available
+                    String fileName = errorUtil.getFileName();
+                    int lineNumber = errorUtil.getLineNumberAccurate(node.getIndex());
+                    locationMsg = " at " + fileName + " line " + lineNumber;
+                } else {
+                    // Final fallback if neither available
+                    locationMsg = " at " + sourceName + " line " + sourceLine;
+                }
+
+                int locationReg = allocateRegister();
+                emit(Opcodes.LOAD_STRING);
+                emitReg(locationReg);
+                emit(addToStringPool(locationMsg));
+
+                // Emit WARN with both message and precomputed location
+                emitWithToken(Opcodes.WARN, node.getIndex());
+                emitReg(msgReg);
+                emitReg(locationReg);
+            } else {
+                // warn; (no message - use $@)
+                int undefReg = allocateRegister();
+                emit(Opcodes.LOAD_UNDEF);
+                emitReg(undefReg);
+
+                // Precompute location message for bare warn
+                String locationMsg;
+                if (errorUtil != null) {
+                    String fileName = errorUtil.getFileName();
+                    int lineNumber = errorUtil.getLineNumber(node.getIndex());
+                    locationMsg = " at " + fileName + " line " + lineNumber;
+                } else {
+                    locationMsg = " at " + sourceName + " line " + sourceLine;
+                }
+
+                int locationReg = allocateRegister();
+                emit(Opcodes.LOAD_STRING);
+                emitReg(locationReg);
+                emitInt(addToStringPool(locationMsg));
+
+                emitWithToken(Opcodes.WARN, node.getIndex());
+                emitReg(undefReg);
+                emitReg(locationReg);
+            }
+            // warn returns 1 (true) in Perl
+            int resultReg = allocateRegister();
+            emit(Opcodes.LOAD_INT);
+            emitReg(resultReg);
+            emitInt(1);
+            lastResultReg = resultReg;
         } else if (op.equals("eval")) {
             // eval $string;
             if (node.operand != null) {

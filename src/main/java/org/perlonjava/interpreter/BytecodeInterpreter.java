@@ -1249,17 +1249,13 @@ public class BytecodeInterpreter {
                     }
 
                     case Opcodes.WARN: {
-                        // Warn with message: warn(rs)
-                        int warnRs = bytecode[pc++];
-                        RuntimeBase message = registers[warnRs];
+                        // Warn with message and precomputed location: warn(msgReg, locationReg)
+                        int msgReg = bytecode[pc++];
+                        int locationReg = bytecode[pc++];
+                        RuntimeBase message = registers[msgReg];
+                        RuntimeScalar where = (RuntimeScalar) registers[locationReg];
 
-                        // Get token index for this warn location if available
-                        Integer tokenIndex = code.pcToTokenIndex != null
-                                ? code.pcToTokenIndex.get(pc - 2) // PC before we read register
-                                : null;
-
-                        // Call WarnDie.warn() with proper parameters
-                        RuntimeScalar where = new RuntimeScalar(" at " + code.sourceName + " line " + code.sourceLine);
+                        // Call WarnDie.warn() with precomputed location
                         WarnDie.warn(message, where, code.sourceName, code.sourceLine);
                         break;
                     }
