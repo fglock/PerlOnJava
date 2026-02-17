@@ -127,7 +127,7 @@ public class EvalStringHandler {
                 errorUtil,
                 adjustedRegistry  // Pass adjusted registry for variable capture
             );
-            InterpretedCode evalCode = compiler.compile(ast);
+            InterpretedCode evalCode = compiler.compile(ast, ctx);  // Pass ctx for context propagation
 
             // Step 5: Attach captured variables to eval'd code
             if (capturedVars.length > 0) {
@@ -197,7 +197,7 @@ public class EvalStringHandler {
                 sourceName + " (eval)",
                 sourceLine
             );
-            InterpretedCode evalCode = compiler.compile(ast);
+            InterpretedCode evalCode = compiler.compile(ast, ctx);  // Pass ctx for context propagation
 
             // Attach captured variables
             evalCode = evalCode.withCapturedVars(capturedVars);
