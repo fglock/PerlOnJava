@@ -4400,6 +4400,54 @@ public class BytecodeCompiler implements Visitor {
             } finally {
                 currentCallContext = savedContext;
             }
+        } else if (op.equals("index") || op.equals("rindex")) {
+            // index(str, substr, pos?) or rindex(str, substr, pos?)
+            if (node.operand instanceof ListNode) {
+                ListNode args = (ListNode) node.operand;
+
+                int savedContext = currentCallContext;
+                currentCallContext = RuntimeContextType.SCALAR;
+                try {
+                    // Evaluate first arg (string)
+                    if (args.elements.isEmpty()) {
+                        throwCompilerException("Not enough arguments for " + op);
+                    }
+                    args.elements.get(0).accept(this);
+                    int strReg = lastResultReg;
+
+                    // Evaluate second arg (substring)
+                    if (args.elements.size() < 2) {
+                        throwCompilerException("Not enough arguments for " + op);
+                    }
+                    args.elements.get(1).accept(this);
+                    int substrReg = lastResultReg;
+
+                    // Evaluate third arg (position) - optional, defaults to undef
+                    int posReg;
+                    if (args.elements.size() >= 3) {
+                        args.elements.get(2).accept(this);
+                        posReg = lastResultReg;
+                    } else {
+                        posReg = allocateRegister();
+                        emit(Opcodes.LOAD_UNDEF);
+                        emitReg(posReg);
+                    }
+
+                    // Call index or rindex
+                    int rd = allocateRegister();
+                    emit(op.equals("index") ? Opcodes.INDEX : Opcodes.RINDEX);
+                    emitReg(rd);
+                    emitReg(strReg);
+                    emitReg(substrReg);
+                    emitReg(posReg);
+
+                    lastResultReg = rd;
+                } finally {
+                    currentCallContext = savedContext;
+                }
+            } else {
+                throwCompilerException(op + " requires a list of arguments");
+            }
         } else if (op.equals("die")) {
             // die $message;
             if (node.operand != null) {
