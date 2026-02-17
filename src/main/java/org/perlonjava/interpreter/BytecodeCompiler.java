@@ -1029,9 +1029,9 @@ public class BytecodeCompiler implements Visitor {
             case "/=" -> emit(Opcodes.DIVIDE_ASSIGN);
             case "%=" -> emit(Opcodes.MODULUS_ASSIGN);
             case ".=" -> emit(Opcodes.STRING_CONCAT_ASSIGN);
-            case "&=" -> emit(Opcodes.BITWISE_AND_ASSIGN);
-            case "|=" -> emit(Opcodes.BITWISE_OR_ASSIGN);
-            case "^=" -> emit(Opcodes.BITWISE_XOR_ASSIGN);
+            case "&=", "binary&=" -> emit(Opcodes.BITWISE_AND_ASSIGN);  // Numeric bitwise AND
+            case "|=", "binary|=" -> emit(Opcodes.BITWISE_OR_ASSIGN);   // Numeric bitwise OR
+            case "^=", "binary^=" -> emit(Opcodes.BITWISE_XOR_ASSIGN);  // Numeric bitwise XOR
             default -> {
                 throwCompilerException("Unknown compound assignment operator: " + op);
                 currentCallContext = savedContext;
@@ -2958,11 +2958,12 @@ public class BytecodeCompiler implements Visitor {
             return;
         }
 
-        // Handle compound assignment operators (+=, -=, *=, /=, %=, .=, &=, |=, ^=)
+        // Handle compound assignment operators (+=, -=, *=, /=, %=, .=, &=, |=, ^=, binary&=, binary|=, binary^=)
         if (node.operator.equals("+=") || node.operator.equals("-=") ||
             node.operator.equals("*=") || node.operator.equals("/=") ||
             node.operator.equals("%=") || node.operator.equals(".=") ||
-            node.operator.equals("&=") || node.operator.equals("|=") || node.operator.equals("^=")) {
+            node.operator.equals("&=") || node.operator.equals("|=") || node.operator.equals("^=") ||
+            node.operator.equals("binary&=") || node.operator.equals("binary|=") || node.operator.equals("binary^=")) {
             handleCompoundAssignment(node);
             return;
         }
