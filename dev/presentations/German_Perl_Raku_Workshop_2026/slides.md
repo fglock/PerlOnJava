@@ -872,7 +872,7 @@ Note:
 **Project:**
 - GitHub: github.com/fglock/PerlOnJava
 - License: Artistic 2.0 (same as Perl)
-- 5,621+ commits since 2013
+- 5,621+ commits since 2024
 
 **Ways to contribute:**
 1. Testing - run your scripts, report issues
@@ -899,7 +899,7 @@ make           # Build and run tests
 
 **Resources:**
 - Comprehensive documentation
-- 250k+ tests as examples
+- Tests as examples
 - Active development
 
 Note:
@@ -913,7 +913,7 @@ Note:
 
 **PerlOnJava demonstrates:**
 
-- Compiler engineering at scale (383 files, 250k tests)
+- Compiler engineering at scale (383 files, 260k tests)
 - Creative solutions to hard problems
 - Language interoperability
 - Sustained engineering effort (10+ years)
@@ -930,11 +930,11 @@ Note:
 
 ## Conclusion
 
-- ✅ **Production-ready** Perl compiler for JVM
-- ✅ **Competitive performance** with Perl 5 (1.78x faster in compiler mode, 0.85x in interpreter mode)
-- ✅ **260,000+ tests** passing
-- ✅ **Full ecosystem integration** (JDBC, JSR-223)
-- ✅ **Active development** with clear roadmap
+-  **Production-ready** Perl compiler for JVM
+-  **Competitive performance** with Perl 5 (1.78x faster in compiler mode, 0.85x in interpreter mode)
+-  **260,000+ tests** passing
+-  **Full ecosystem integration** (JDBC, JSR-223)
+-  **Active development** with clear roadmap
 
 **Proving language ecosystems can be bridged**
 
