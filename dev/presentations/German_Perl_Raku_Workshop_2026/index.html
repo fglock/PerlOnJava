@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PerlOnJava: Perl on the JVM - German Perl/Raku Workshop 2026</title>
+
+    <!-- reveal.js CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.0.4/dist/reset.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.0.4/dist/reveal.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.0.4/dist/theme/black.css" id="theme">
+
+    <!-- Code syntax highlighting -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.0.4/plugin/highlight/monokai.css">
+
+    <style>
+        /* Custom styles for the presentation */
+        .reveal h1 { font-size: 2.5em; }
+        .reveal h2 { font-size: 1.8em; }
+        .reveal h3 { font-size: 1.3em; }
+        .reveal code { font-size: 0.9em; }
+        .reveal pre code { font-size: 0.7em; max-height: 500px; }
+        .reveal .slides section .fragment.highlight-current-blue { opacity: 1; }
+        .reveal .slides section .fragment.highlight-current-blue.current-fragment { color: #42affa; }
+
+        /* Speaker notes styling */
+        .reveal aside.notes { font-size: 1em; }
+
+        /* Metrics emphasis */
+        .metric { color: #42affa; font-weight: bold; font-size: 1.2em; }
+
+        /* Three-column layout */
+        .three-columns {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+        }
+        .three-columns > div {
+            flex: 1;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="reveal">
+        <div class="slides">
+            <!-- Slides will be loaded from slides.md -->
+            <section data-markdown="slides.md"
+                     data-separator="^\n---\n$"
+                     data-separator-vertical="^\n----\n$"
+                     data-separator-notes="^Note:"
+                     data-charset="utf-8">
+            </section>
+        </div>
+    </div>
+
+    <!-- reveal.js scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.0.4/dist/reveal.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.0.4/plugin/markdown/markdown.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.0.4/plugin/highlight/highlight.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.0.4/plugin/notes/notes.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.0.4/plugin/zoom/zoom.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.0.4/plugin/search/search.js"></script>
+
+    <script>
+        // Initialize reveal.js
+        Reveal.initialize({
+            // Display options
+            width: 1280,
+            height: 720,
+            margin: 0.04,
+
+            // Presentation controls
+            controls: true,
+            progress: true,
+            center: true,
+            hash: true,
+            slideNumber: 'c/t',
+
+            // Transitions
+            transition: 'slide', // none/fade/slide/convex/concave/zoom
+
+            // Code highlighting
+            highlight: {
+                highlightOnLoad: true,
+                escapeHTML: false
+            },
+
+            // Plugins
+            plugins: [
+                RevealMarkdown,
+                RevealHighlight,
+                RevealNotes,
+                RevealZoom,
+                RevealSearch
+            ],
+
+            // Markdown plugin options
+            markdown: {
+                smartypants: true
+            }
+        });
+    </script>
+</body>
+</html>
