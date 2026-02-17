@@ -1373,7 +1373,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     // Method to apply (execute) a subroutine reference (legacy method for compatibility)
     public static RuntimeList apply(RuntimeScalar runtimeScalar, String subroutineName, RuntimeBase list, int callContext) {
-        
+
         // WORKAROUND for eval-defined subs not filling lexical forward declarations:
         // If the RuntimeScalar is undef (forward declaration never filled), 
         // silently return undef so tests can continue running.

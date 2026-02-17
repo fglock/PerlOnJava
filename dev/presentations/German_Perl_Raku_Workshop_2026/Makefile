@@ -6,6 +6,7 @@ help:
 	@echo ""
 	@echo "  make serve    - Start web server and view presentation"
 	@echo "  make open     - Just open browser (server must be running)"
+	@echo "  make stats    - Collect statistics and benchmarks for slide numbers"
 	@echo "  make pdf      - Instructions for PDF export"
 	@echo "  make clean    - Clean temporary files"
 	@echo ""
@@ -42,6 +43,10 @@ open:
 	@command -v open >/dev/null 2>&1 && open http://localhost:8000 || true
 	@command -v xdg-open >/dev/null 2>&1 && xdg-open http://localhost:8000 || true
 	@echo "If browser didn't open, go to: http://localhost:8000"
+
+# Collect statistics and benchmarks for slide numbers
+stats:
+	@perl ./collect_slide_numbers.pl
 
 # PDF export instructions
 pdf:

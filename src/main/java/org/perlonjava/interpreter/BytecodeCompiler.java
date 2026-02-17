@@ -444,7 +444,10 @@ public class BytecodeCompiler implements Visitor {
         enterScope();
 
         // Visit each statement in the block
-        for (Node stmt : node.elements) {
+        int numStatements = node.elements.size();
+        for (int i = 0; i < numStatements; i++) {
+            Node stmt = node.elements.get(i);
+
             // Track line number for this statement (like codegen's setDebugInfoLineNumber)
             if (stmt != null) {
                 int tokenIndex = stmt.getIndex();
@@ -456,7 +459,9 @@ public class BytecodeCompiler implements Visitor {
             int savedContext = currentCallContext;
 
             // If this is not an assignment or other value-using construct, use VOID context
-            if (!(stmt instanceof BinaryOperatorNode && ((BinaryOperatorNode) stmt).operator.equals("="))) {
+            // EXCEPT for the last statement in a block, which should use the block's context
+            boolean isLastStatement = (i == numStatements - 1);
+            if (!isLastStatement && !(stmt instanceof BinaryOperatorNode && ((BinaryOperatorNode) stmt).operator.equals("="))) {
                 currentCallContext = RuntimeContextType.VOID;
             }
 
