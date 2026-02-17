@@ -4333,6 +4333,23 @@ public class BytecodeCompiler implements Visitor {
             }
 
             lastResultReg = rd;
+        } else if (op.equals("study")) {
+            // study $var
+            // In modern Perl, study is a no-op that always returns true
+            // We evaluate the operand for side effects, then return 1
+
+            if (node.operand != null) {
+                // Evaluate operand for side effects (though typically there are none)
+                node.operand.accept(this);
+            }
+
+            // Return 1 (true)
+            int rd = allocateRegister();
+            emit(Opcodes.LOAD_INT);
+            emitReg(rd);
+            emitInt(1);
+
+            lastResultReg = rd;
         } else if (op.equals("die")) {
             // die $message;
             if (node.operand != null) {
