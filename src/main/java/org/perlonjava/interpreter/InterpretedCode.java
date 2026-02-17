@@ -482,6 +482,52 @@ public class InterpretedCode extends RuntimeCode {
                     rs = bytecode[pc++];
                     sb.append("STRING_BITWISE_XOR_ASSIGN r").append(rd).append(" ^.= r").append(rs).append("\n");
                     break;
+                case Opcodes.BITWISE_AND_BINARY:
+                    rd = bytecode[pc++];
+                    int andRs1 = bytecode[pc++];
+                    int andRs2 = bytecode[pc++];
+                    sb.append("BITWISE_AND_BINARY r").append(rd).append(" = r").append(andRs1).append(" & r").append(andRs2).append("\n");
+                    break;
+                case Opcodes.BITWISE_OR_BINARY:
+                    rd = bytecode[pc++];
+                    int orRs1 = bytecode[pc++];
+                    int orRs2 = bytecode[pc++];
+                    sb.append("BITWISE_OR_BINARY r").append(rd).append(" = r").append(orRs1).append(" | r").append(orRs2).append("\n");
+                    break;
+                case Opcodes.BITWISE_XOR_BINARY:
+                    rd = bytecode[pc++];
+                    int xorRs1 = bytecode[pc++];
+                    int xorRs2 = bytecode[pc++];
+                    sb.append("BITWISE_XOR_BINARY r").append(rd).append(" = r").append(xorRs1).append(" ^ r").append(xorRs2).append("\n");
+                    break;
+                case Opcodes.STRING_BITWISE_AND:
+                    rd = bytecode[pc++];
+                    int strAndRs1 = bytecode[pc++];
+                    int strAndRs2 = bytecode[pc++];
+                    sb.append("STRING_BITWISE_AND r").append(rd).append(" = r").append(strAndRs1).append(" &. r").append(strAndRs2).append("\n");
+                    break;
+                case Opcodes.STRING_BITWISE_OR:
+                    rd = bytecode[pc++];
+                    int strOrRs1 = bytecode[pc++];
+                    int strOrRs2 = bytecode[pc++];
+                    sb.append("STRING_BITWISE_OR r").append(rd).append(" = r").append(strOrRs1).append(" |. r").append(strOrRs2).append("\n");
+                    break;
+                case Opcodes.STRING_BITWISE_XOR:
+                    rd = bytecode[pc++];
+                    int strXorRs1 = bytecode[pc++];
+                    int strXorRs2 = bytecode[pc++];
+                    sb.append("STRING_BITWISE_XOR r").append(rd).append(" = r").append(strXorRs1).append(" ^. r").append(strXorRs2).append("\n");
+                    break;
+                case Opcodes.BITWISE_NOT_BINARY:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("BITWISE_NOT_BINARY r").append(rd).append(" = ~r").append(rs).append("\n");
+                    break;
+                case Opcodes.BITWISE_NOT_STRING:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("BITWISE_NOT_STRING r").append(rd).append(" = ~.r").append(rs).append("\n");
+                    break;
                 case Opcodes.PUSH_LOCAL_VARIABLE:
                     rs = bytecode[pc++];
                     sb.append("PUSH_LOCAL_VARIABLE r").append(rs).append("\n");

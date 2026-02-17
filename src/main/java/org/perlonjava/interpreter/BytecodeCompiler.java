@@ -2921,6 +2921,48 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(rs2);
                 emit(currentCallContext);
             }
+            case "&", "binary&" -> {
+                // Numeric bitwise AND: rs1 & rs2
+                emit(Opcodes.BITWISE_AND_BINARY);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
+            case "|", "binary|" -> {
+                // Numeric bitwise OR: rs1 | rs2
+                emit(Opcodes.BITWISE_OR_BINARY);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
+            case "^", "binary^" -> {
+                // Numeric bitwise XOR: rs1 ^ rs2
+                emit(Opcodes.BITWISE_XOR_BINARY);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
+            case "&." -> {
+                // String bitwise AND: rs1 &. rs2
+                emit(Opcodes.STRING_BITWISE_AND);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
+            case "|." -> {
+                // String bitwise OR: rs1 |. rs2
+                emit(Opcodes.STRING_BITWISE_OR);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
+            case "^." -> {
+                // String bitwise XOR: rs1 ^. rs2
+                emit(Opcodes.STRING_BITWISE_XOR);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
             default -> throwCompilerException("Unsupported operator: " + operator, tokenIndex);
         }
 
@@ -4090,6 +4132,44 @@ public class BytecodeCompiler implements Visitor {
                 lastResultReg = rd;
             } else {
                 throwCompilerException("NOT operator requires operand");
+            }
+        } else if (op.equals("~") || op.equals("binary~")) {
+            // Bitwise NOT operator: ~$x or binary~$x
+            // Evaluate operand and emit BITWISE_NOT_BINARY opcode
+            if (node.operand != null) {
+                node.operand.accept(this);
+                int rs = lastResultReg;
+
+                // Allocate result register
+                int rd = allocateRegister();
+
+                // Emit BITWISE_NOT_BINARY opcode
+                emit(Opcodes.BITWISE_NOT_BINARY);
+                emitReg(rd);
+                emitReg(rs);
+
+                lastResultReg = rd;
+            } else {
+                throwCompilerException("Bitwise NOT operator requires operand");
+            }
+        } else if (op.equals("~.")) {
+            // String bitwise NOT operator: ~.$x
+            // Evaluate operand and emit BITWISE_NOT_STRING opcode
+            if (node.operand != null) {
+                node.operand.accept(this);
+                int rs = lastResultReg;
+
+                // Allocate result register
+                int rd = allocateRegister();
+
+                // Emit BITWISE_NOT_STRING opcode
+                emit(Opcodes.BITWISE_NOT_STRING);
+                emitReg(rd);
+                emitReg(rs);
+
+                lastResultReg = rd;
+            } else {
+                throwCompilerException("String bitwise NOT operator requires operand");
             }
         } else if (op.equals("defined")) {
             // Defined operator: defined($x)
