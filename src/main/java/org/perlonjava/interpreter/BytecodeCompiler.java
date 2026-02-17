@@ -308,6 +308,17 @@ public class BytecodeCompiler implements Visitor {
         // Visit the node to generate bytecode
         node.accept(this);
 
+        // Convert result to scalar context if needed (for eval STRING)
+        if (currentCallContext == RuntimeContextType.SCALAR && lastResultReg >= 0) {
+            RuntimeBase lastResult = null; // Can't access at compile time
+            // Use ARRAY_SIZE to convert arrays/lists to scalar count
+            int scalarReg = allocateRegister();
+            emit(Opcodes.ARRAY_SIZE);
+            emitReg(scalarReg);
+            emitReg(lastResultReg);
+            lastResultReg = scalarReg;
+        }
+
         // Emit RETURN with last result register
         // If no result was produced, return undef instead of register 0 ("this")
         int returnReg;
@@ -1373,7 +1384,18 @@ public class BytecodeCompiler implements Visitor {
                             // Track this variable - map the name to the register we already allocated
                             variableScopes.peek().put(varName, arrayReg);
                             allDeclaredVariables.put(varName, arrayReg);  // Track for variableRegistry
-                            lastResultReg = arrayReg;
+
+                            // In scalar context, return the count of elements assigned
+                            // In list/void context, return the array
+                            if (currentCallContext == RuntimeContextType.SCALAR) {
+                                int countReg = allocateRegister();
+                                emit(Opcodes.ARRAY_SIZE);
+                                emitReg(countReg);
+                                emitReg(listReg);
+                                lastResultReg = countReg;
+                            } else {
+                                lastResultReg = arrayReg;
+                            }
                             return;
                         }
 
@@ -1394,7 +1416,17 @@ public class BytecodeCompiler implements Visitor {
                         emitReg(arrayReg);
                         emitReg(listReg);
 
-                        lastResultReg = arrayReg;
+                        // In scalar context, return the count of elements assigned
+                        // In list/void context, return the array
+                        if (currentCallContext == RuntimeContextType.SCALAR) {
+                            int countReg = allocateRegister();
+                            emit(Opcodes.ARRAY_SIZE);
+                            emitReg(countReg);
+                            emitReg(listReg);
+                            lastResultReg = countReg;
+                        } else {
+                            lastResultReg = arrayReg;
+                        }
                         return;
                     } else if (sigilOp.operator.equals("%") && sigilOp.operand instanceof IdentifierNode) {
                         // Handle my %hash = ...
