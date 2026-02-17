@@ -2963,7 +2963,7 @@ public class BytecodeCompiler implements Visitor {
             node.operator.equals("*=") || node.operator.equals("/=") ||
             node.operator.equals("%=") || node.operator.equals(".=") ||
             node.operator.equals("&=") || node.operator.equals("|=") || node.operator.equals("^=") ||
-            node.operator.equals("binary&=") || node.operator.equals("binary|=") || node.operator.equals("binary^=")) {
+            node.operator.startsWith("binary")) {  // Handle binary&=, binary|=, binary^=
             handleCompoundAssignment(node);
             return;
         }
