@@ -47,6 +47,26 @@ Note:
 
 ---
 
+## Historical Context
+
+**Building on 25+ years of Perl-on-JVM research:**
+
+- **1997**: JPL (Java-Perl Library) - Brian Jepson
+- **2001**: Bradley Kuhn's MS thesis on porting Perl to JVM
+- **2002**: perljvm prototype using Perl's B compiler
+- **2013-2023**: Perlito5 - Perl to Java/JavaScript compiler
+- **2024**: PerlOnJava - Production-ready compiler and runtime
+
+**Key insight:** Previous attempts informed this implementation
+
+Note:
+- Not the first attempt, but the first production-ready implementation
+- Learned from decades of prior work
+- Perlito5 was the predecessor project (same author)
+- PerlOnJava represents culmination of lessons learned
+
+---
+
 ## Why Does This Matter?
 
 <div class="three-columns">
@@ -99,7 +119,7 @@ Note:
 - Demonstrates comprehensive Perl 5 compatibility
 - Scale of implementation
 - Includes popular CPAN modules out of the box
-- Active, sustained development since 2013
+- Project started June 2024 with small Perl (parser) and Java (ASM generation) prototypes
 - Production-ready
 
 ---
@@ -186,23 +206,25 @@ Note:
 
 ---
 
-## Background: JVM Compilation
+## Background: Compilation Approaches
 
-**Traditional:**
+**Perl 5 (traditional):**
 ```
-Perl Source → Perl Interpreter → Execution
+Perl Source → Compiler → Perl Bytecode → Bytecode Interpreter
 ```
 
-**PerlOnJava:**
+**PerlOnJava (dual approach):**
 ```
 Perl Source → Compiler → JVM Bytecode → JVM Execution
+                      ↘ Custom Bytecode → Bytecode Interpreter
 ```
 
 Note:
-- Quick primer for mixed audience
-- Compiler translates once, runs fast
-- JVM is a "virtual computer" running bytecode
-- Same bytecode works on all platforms
+- Perl 5 compiles to internal bytecode, then interprets it
+- PerlOnJava can generate either JVM bytecode or custom bytecode
+- JVM bytecode: optimized by JVM JIT compiler
+- Custom bytecode: more flexible, no size limits
+- Both approaches use bytecode interpreters at some level
 
 ---
 
@@ -250,21 +272,29 @@ Note:
 
 ## Parser: Building the AST
 
-**Challenge:** Context-aware parsing
+**Architecture:** Recursive descent parser + sub-language parsers
 
-- Same syntax, different meanings
-- `<=>` can be spaceship operator OR qw() delimiter
-- Complex precedence rules
+**Main parser:**
+- Recognizes regular keywords and statements
+- Handles precedence and operator resolution
+- Simple recursive descent approach
+
+**Sub-language parsers** (context-specific):
+- Prototypes: `sub foo ($$@) { ... }`
+- map/grep blocks: `map { ... } @list`
+- Regular expressions: `m/pattern/flags`
+- String interpolations: `"value: $x\n"`
+- Heredocs: `<<'EOF' ... EOF`
 
 **AST Node Types:**
 - `BlockNode`, `BinaryOperatorNode`, `ListNode`
 - `OperatorNode`, `MethodCallNode`
 
 Note:
-- Converts tokens to Abstract Syntax Tree
-- Handles Perl's complex precedence
-- Resolves ambiguities with lookahead
-- Context tracking essential
+- Main parser delegates to specialized sub-parsers
+- Each sub-language has its own syntax rules
+- Context determines which parser to invoke
+- Enables proper handling of Perl's complex syntax
 
 ---
 
@@ -288,24 +318,62 @@ Note:
 
 ---
 
-## Bytecode Example
+## Compiler Mode: JVM Bytecode
 
-**Perl:**
-```perl
-my $x = 10;
-$x += 5;
+**Perl:** `my $x = 10; say $x`
+
+**Generated JVM bytecode:**
+```
+LDC 10
+INVOKESTATIC RuntimeScalarCache.getScalarInt(I)
+ASTORE 7
+NEW RuntimeScalar
+DUP
+INVOKESPECIAL RuntimeScalar.<init>()
+ASTORE 25
+ALOAD 25
+ALOAD 7
+SWAP
+INVOKEVIRTUAL RuntimeBase.addToScalar(RuntimeScalar)
+...
+INVOKESTATIC IOOperator.say(RuntimeList;RuntimeScalar)
 ```
 
-**Generated (conceptual):**
-```java
-RuntimeScalar x = new RuntimeScalar(10);
-x = x.add(new RuntimeScalar(5));
-```
+**View with:** `./jperl --disassemble -E '...'`
 
 Note:
-- Shows what actually gets generated
-- RuntimeScalar handles Perl semantics
-- JVM bytecode is similar to Java
+- Standard JVM bytecode instructions
+- Uses ASM library for generation
+- Optimized by JVM JIT compiler at runtime
+
+---
+
+## Interpreter Mode: Custom Bytecode
+
+**Perl:** `my $x = 10; say $x`
+
+**Generated interpreter bytecode:**
+```
+Registers: 9
+Bytecode length: 26 shorts
+
+   0: LOAD_INT r4 = 10
+   4: MOVE r3 = r4
+   7: CREATE_LIST r6 = []
+  10: SELECT r5 = select(r6)
+  13: CREATE_LIST r7 = [r3]
+  17: SAY r7, fh=r5
+  20: LOAD_INT r8 = 1
+  24: RETURN r8
+```
+
+**View with:** `./jperl --interpreter --disassemble -E '...'`
+
+Note:
+- Custom register-based bytecode format
+- Much more compact than JVM bytecode
+- Explicit register operands (r3, r4, etc.)
+- ~200 custom opcodes
 
 ---
 
@@ -506,7 +574,7 @@ sub foo {
 ELSEWHERE: print "Jumped!\n";
 ```
 
-- We implement these using **tagged control-flow markers** plus a **trampoline** at the subroutine return boundary
+- We implement these using **tagged return values** (`RuntimeControlFlowList`) that carry control-flow markers across subroutine boundaries
 
 Note:
 - Perl's flexible control flow is challenging
@@ -525,9 +593,12 @@ Note:
 3. `die` → Java exceptions
 4. `eval` → try-catch blocks
 5. Proper scope boundaries
-6. **Trampoline** at subroutine return boundary
-    - A small loop that repeatedly executes the “next” control-flow action instead of growing the JVM call stack
-    - We use it to implement Perl tail calls (`goto &sub`) and to propagate/resolve non-local control flow markers safely
+6. **Tagged return values** for control flow
+    - Return `RuntimeControlFlowList` (tagged list) instead of regular `RuntimeList`
+    - Tag contains control flow type (last/next/redo/goto/tail-call) and target label
+    - Caller checks tag and dispatches accordingly
+    - If list is not tagged, program continues normally
+    - Implements Perl tail calls (`goto &sub`) and non-local jumps safely
 
 **Why register architecture helps:** Stack would corrupt
 
