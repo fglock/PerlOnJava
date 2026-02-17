@@ -1100,10 +1100,10 @@ public class BytecodeInterpreter {
                     }
 
                     case Opcodes.ADD_ASSIGN: {
-                        // Add and assign: rd = rd + rs
+                        // Add and assign: rd += rs (modifies rd in place)
                         int rd = bytecode[pc++];
                         int rs = bytecode[pc++];
-                        registers[rd] = MathOperators.add(
+                        MathOperators.addAssign(
                             (RuntimeScalar) registers[rd],
                             (RuntimeScalar) registers[rs]
                         );
@@ -1111,55 +1111,60 @@ public class BytecodeInterpreter {
                     }
 
                     case Opcodes.ADD_ASSIGN_INT: {
-                        // Add immediate and assign: rd = rd + imm
+                        // Add immediate and assign: rd += imm (modifies rd in place)
                         int rd = bytecode[pc++];
                         int immediate = readInt(bytecode, pc);
                         pc += 2;
-                        registers[rd] = MathOperators.add((RuntimeScalar) registers[rd], immediate);
+                        RuntimeScalar result = MathOperators.add((RuntimeScalar) registers[rd], immediate);
+                        ((RuntimeScalar) registers[rd]).set(result);
                         break;
                     }
 
                     case Opcodes.STRING_CONCAT_ASSIGN: {
-                        // String concatenation and assign: rd .= rs
+                        // String concatenation and assign: rd .= rs (modifies rd in place)
                         int rd = bytecode[pc++];
                         int rs = bytecode[pc++];
-                        registers[rd] = StringOperators.stringConcat(
+                        RuntimeScalar result = StringOperators.stringConcat(
                             (RuntimeScalar) registers[rd],
                             (RuntimeScalar) registers[rs]
                         );
+                        ((RuntimeScalar) registers[rd]).set(result);
                         break;
                     }
 
                     case Opcodes.BITWISE_AND_ASSIGN: {
-                        // Bitwise AND assignment: rd &= rs
+                        // Bitwise AND assignment: rd &= rs (modifies rd in place)
                         int rd = bytecode[pc++];
                         int rs = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.BitwiseOperators.bitwiseAndBinary(
+                        RuntimeScalar result = org.perlonjava.operators.BitwiseOperators.bitwiseAndBinary(
                             (RuntimeScalar) registers[rd],
                             (RuntimeScalar) registers[rs]
                         );
+                        ((RuntimeScalar) registers[rd]).set(result);
                         break;
                     }
 
                     case Opcodes.BITWISE_OR_ASSIGN: {
-                        // Bitwise OR assignment: rd |= rs
+                        // Bitwise OR assignment: rd |= rs (modifies rd in place)
                         int rd = bytecode[pc++];
                         int rs = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.BitwiseOperators.bitwiseOrBinary(
+                        RuntimeScalar result = org.perlonjava.operators.BitwiseOperators.bitwiseOrBinary(
                             (RuntimeScalar) registers[rd],
                             (RuntimeScalar) registers[rs]
                         );
+                        ((RuntimeScalar) registers[rd]).set(result);
                         break;
                     }
 
                     case Opcodes.BITWISE_XOR_ASSIGN: {
-                        // Bitwise XOR assignment: rd ^= rs
+                        // Bitwise XOR assignment: rd ^= rs (modifies rd in place)
                         int rd = bytecode[pc++];
                         int rs = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.BitwiseOperators.bitwiseXorBinary(
+                        RuntimeScalar result = org.perlonjava.operators.BitwiseOperators.bitwiseXorBinary(
                             (RuntimeScalar) registers[rd],
                             (RuntimeScalar) registers[rs]
                         );
+                        ((RuntimeScalar) registers[rd]).set(result);
                         break;
                     }
 
