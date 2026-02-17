@@ -45,6 +45,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static final MethodHandles.Lookup lookup = MethodHandles.lookup();
 
     /**
+     * Flag to control whether eval STRING should use the interpreter backend.
+     * When set, eval STRING compiles to InterpretedCode instead of generating JVM bytecode.
+     * This provides 46x faster compilation for workloads with many unique eval strings.
+     *
+     * Set environment variable JPERL_EVAL_USE_INTERPRETER=1 to enable.
+     */
+    public static final boolean EVAL_USE_INTERPRETER =
+            System.getenv("JPERL_EVAL_USE_INTERPRETER") != null;
+
+    /**
      * ThreadLocal storage for runtime values of captured variables during eval STRING compilation.
      *
      * PROBLEM: In perl5, BEGIN blocks inside eval STRING can access outer lexical variables' runtime values:
@@ -625,6 +635,165 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
                 targetArray.elements.set(targetLine, new RuntimeScalar(line + "\n"));
             }
+        }
+    }
+
+    /**
+     * Execute eval STRING using the interpreter backend for faster compilation.
+     * This method parses the eval string and compiles it to InterpretedCode instead
+     * of generating JVM bytecode, which is 46x faster for workloads with many unique eval strings.
+     *
+     * @param code The RuntimeScalar containing the eval string
+     * @param evalTag The unique identifier for this eval site
+     * @param runtimeValues The captured variable values from the outer scope
+     * @param args The @_ arguments to pass to the eval
+     * @param callContext The calling context (SCALAR/LIST/VOID)
+     * @return The result of executing the eval as a RuntimeList
+     * @throws Throwable if compilation or execution fails
+     */
+    public static RuntimeList evalStringWithInterpreter(
+            RuntimeScalar code,
+            String evalTag,
+            Object[] runtimeValues,
+            RuntimeArray args,
+            int callContext) throws Throwable {
+
+        // Retrieve the eval context that was saved at program compile-time
+        EmitterContext ctx = RuntimeCode.evalContext.get(evalTag);
+
+        // Store runtime values in ThreadLocal for BEGIN block support
+        EvalRuntimeContext runtimeCtx = new EvalRuntimeContext(
+                runtimeValues,
+                ctx.capturedEnv,
+                evalTag
+        );
+        evalRuntimeContext.set(runtimeCtx);
+
+        try {
+            String evalString = code.toString();
+
+            // Handle Unicode source detection (same logic as evalStringHelper)
+            boolean hasUnicode = false;
+            if (!ctx.isEvalbytes && code.type != RuntimeScalarType.BYTE_STRING) {
+                for (int i = 0; i < evalString.length(); i++) {
+                    if (evalString.charAt(i) > 127) {
+                        hasUnicode = true;
+                        break;
+                    }
+                }
+            }
+
+            // Clone compiler options if needed
+            CompilerOptions evalCompilerOptions = ctx.compilerOptions;
+            boolean isByteStringSource = !ctx.isEvalbytes && code.type == RuntimeScalarType.BYTE_STRING;
+            if (hasUnicode || ctx.isEvalbytes || isByteStringSource) {
+                evalCompilerOptions = (CompilerOptions) ctx.compilerOptions.clone();
+                if (hasUnicode) {
+                    evalCompilerOptions.isUnicodeSource = true;
+                }
+                if (ctx.isEvalbytes) {
+                    evalCompilerOptions.isEvalbytes = true;
+                }
+                if (isByteStringSource) {
+                    evalCompilerOptions.isByteStringSource = true;
+                }
+            }
+
+            // Setup for BEGIN block support - create aliases for captured variables
+            ScopedSymbolTable capturedSymbolTable = ctx.symbolTable;
+            Map<Integer, SymbolTable.SymbolEntry> capturedVars = capturedSymbolTable.getAllVisibleVariables();
+            for (SymbolTable.SymbolEntry entry : capturedVars.values()) {
+                if (!entry.name().equals("@_") && !entry.decl().isEmpty() && !entry.name().startsWith("&")) {
+                    if (!entry.decl().equals("our")) {
+                        Object runtimeValue = runtimeCtx.getRuntimeValue(entry.name());
+                        if (runtimeValue != null) {
+                            OperatorNode ast = entry.ast();
+                            if (ast != null) {
+                                if (ast.id == 0) {
+                                    ast.id = EmitterMethodCreator.classCounter++;
+                                }
+                                String packageName = PersistentVariable.beginPackage(ast.id);
+                                String varNameWithoutSigil = entry.name().substring(1);
+                                String fullName = packageName + "::" + varNameWithoutSigil;
+
+                                if (runtimeValue instanceof RuntimeArray) {
+                                    GlobalVariable.globalArrays.put(fullName, (RuntimeArray) runtimeValue);
+                                } else if (runtimeValue instanceof RuntimeHash) {
+                                    GlobalVariable.globalHashes.put(fullName, (RuntimeHash) runtimeValue);
+                                } else if (runtimeValue instanceof RuntimeScalar) {
+                                    GlobalVariable.globalVariables.put(fullName, (RuntimeScalar) runtimeValue);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Parse the eval string
+            Lexer lexer = new Lexer(evalString);
+            List<LexerToken> tokens = lexer.tokenize();
+
+            // Create parser context
+            ScopedSymbolTable parseSymbolTable = capturedSymbolTable.snapShot();
+            EmitterContext evalCtx = new EmitterContext(
+                    new JavaClassInfo(),
+                    parseSymbolTable,
+                    null,
+                    null,
+                    ctx.contextType,
+                    true,
+                    new ErrorMessageUtil(evalCompilerOptions.fileName, tokens),
+                    evalCompilerOptions,
+                    ctx.unitcheckBlocks);
+
+            Parser parser = new Parser(evalCtx, tokens);
+            Node ast = parser.parse();
+
+            // Run UNITCHECK blocks
+            runUnitcheckBlocks(evalCtx.unitcheckBlocks);
+
+            // Build adjusted registry for captured variables
+            // Map variable names to register indices (3+ for captured variables)
+            Map<String, Integer> adjustedRegistry = new HashMap<>();
+            adjustedRegistry.put("this", 0);
+            adjustedRegistry.put("@_", 1);
+            adjustedRegistry.put("wantarray", 2);
+
+            // Add captured variables starting at register 3
+            int captureIndex = 3;
+            Map<Integer, SymbolTable.SymbolEntry> capturedVariables = capturedSymbolTable.getAllVisibleVariables();
+            for (Map.Entry<Integer, SymbolTable.SymbolEntry> entry : capturedVariables.entrySet()) {
+                int index = entry.getKey();
+                if (index >= 3) {  // Skip reserved registers
+                    String varName = entry.getValue().name();
+                    adjustedRegistry.put(varName, captureIndex);
+                    captureIndex++;
+                }
+            }
+
+            // Compile to InterpretedCode with variable registry
+            BytecodeCompiler compiler = new BytecodeCompiler(
+                    evalCompilerOptions.fileName,
+                    1,
+                    evalCtx.errorUtil,
+                    adjustedRegistry);
+            InterpretedCode interpretedCode = compiler.compile(ast);
+
+            // Set captured variables
+            if (runtimeValues.length > 0) {
+                RuntimeBase[] capturedVars2 = new RuntimeBase[runtimeValues.length];
+                for (int i = 0; i < runtimeValues.length; i++) {
+                    capturedVars2[i] = (RuntimeBase) runtimeValues[i];
+                }
+                interpretedCode = interpretedCode.withCapturedVars(capturedVars2);
+            }
+
+            // Execute directly and return result
+            return interpretedCode.apply(args, callContext);
+
+        } finally {
+            // Clean up ThreadLocal
+            evalRuntimeContext.remove();
         }
     }
 
