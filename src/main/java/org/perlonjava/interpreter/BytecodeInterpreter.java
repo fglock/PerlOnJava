@@ -1198,6 +1198,14 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.REQUIRE: {
+                        // Require module or version: rd = ModuleOperators.require(rs)
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.ModuleOperators.require((RuntimeScalar) registers[rs]);
+                        break;
+                    }
+
                     case Opcodes.PRE_AUTOINCREMENT: {
                         // Pre-increment: ++rd
                         int rd = bytecode[pc++];

@@ -4350,6 +4350,25 @@ public class BytecodeCompiler implements Visitor {
             emitInt(1);
 
             lastResultReg = rd;
+        } else if (op.equals("require")) {
+            // require MODULE_NAME or require VERSION
+            // Evaluate operand in scalar context
+            int savedContext = currentCallContext;
+            currentCallContext = RuntimeContextType.SCALAR;
+            try {
+                node.operand.accept(this);
+                int operandReg = lastResultReg;
+
+                // Call ModuleOperators.require()
+                int rd = allocateRegister();
+                emit(Opcodes.REQUIRE);
+                emitReg(rd);
+                emitReg(operandReg);
+
+                lastResultReg = rd;
+            } finally {
+                currentCallContext = savedContext;
+            }
         } else if (op.equals("die")) {
             // die $message;
             if (node.operand != null) {
