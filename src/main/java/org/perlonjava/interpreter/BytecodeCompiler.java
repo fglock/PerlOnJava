@@ -4058,11 +4058,16 @@ public class BytecodeCompiler implements Visitor {
                     // Use optimized autoincrement/decrement opcodes
                     if (isPostfix) {
                         // Postfix: returns old value before modifying
+                        // Need TWO registers: one for result (old value), one for variable
+                        int resultReg = allocateRegister();
                         if (isIncrement) {
                             emit(Opcodes.POST_AUTOINCREMENT);
                         } else {
                             emit(Opcodes.POST_AUTODECREMENT);
                         }
+                        emitReg(resultReg);  // Destination for old value
+                        emitReg(varReg);     // Variable to modify in-place
+                        lastResultReg = resultReg;
                     } else {
                         // Prefix: returns new value after modifying
                         if (isIncrement) {
@@ -4070,10 +4075,9 @@ public class BytecodeCompiler implements Visitor {
                         } else {
                             emit(Opcodes.PRE_AUTODECREMENT);
                         }
+                        emitReg(varReg);
+                        lastResultReg = varReg;
                     }
-                    emitReg(varReg);
-
-                    lastResultReg = varReg;
                 } else {
                     throwCompilerException("Increment/decrement of non-lexical variable not yet supported");
                 }
@@ -4088,21 +4092,26 @@ public class BytecodeCompiler implements Visitor {
 
                         // Use optimized autoincrement/decrement opcodes
                         if (isPostfix) {
+                            // Postfix: returns old value before modifying
+                            // Need TWO registers: one for result (old value), one for variable
+                            int resultReg = allocateRegister();
                             if (isIncrement) {
                                 emit(Opcodes.POST_AUTOINCREMENT);
                             } else {
                                 emit(Opcodes.POST_AUTODECREMENT);
                             }
+                            emitReg(resultReg);  // Destination for old value
+                            emitReg(varReg);     // Variable to modify in-place
+                            lastResultReg = resultReg;
                         } else {
                             if (isIncrement) {
                                 emit(Opcodes.PRE_AUTOINCREMENT);
                             } else {
                                 emit(Opcodes.PRE_AUTODECREMENT);
                             }
+                            emitReg(varReg);
+                            lastResultReg = varReg;
                         }
-                        emitReg(varReg);
-
-                        lastResultReg = varReg;
                     } else {
                         // Global variable increment/decrement
                         // Normalize global variable name (remove sigil, add package)
@@ -4118,26 +4127,31 @@ public class BytecodeCompiler implements Visitor {
 
                         // Apply increment/decrement
                         if (isPostfix) {
+                            // Postfix: returns old value before modifying
+                            // Need TWO registers: one for result (old value), one for variable
+                            int resultReg = allocateRegister();
                             if (isIncrement) {
                                 emit(Opcodes.POST_AUTOINCREMENT);
                             } else {
                                 emit(Opcodes.POST_AUTODECREMENT);
                             }
+                            emitReg(resultReg);   // Destination for old value
+                            emitReg(globalReg);   // Variable to modify in-place
+                            lastResultReg = resultReg;
                         } else {
                             if (isIncrement) {
                                 emit(Opcodes.PRE_AUTOINCREMENT);
                             } else {
                                 emit(Opcodes.PRE_AUTODECREMENT);
                             }
+                            emitReg(globalReg);
+                            lastResultReg = globalReg;
                         }
-                        emitReg(globalReg);
 
                         // NOTE: Do NOT store back to global variable!
                         // The POST/PRE_AUTO* opcodes modify the global variable directly
                         // and return the appropriate value (old for postfix, new for prefix).
                         // Storing back would overwrite the modification with the return value.
-
-                        lastResultReg = globalReg;
                     }
                 } else {
                     throwCompilerException("Invalid operand for increment/decrement operator");
