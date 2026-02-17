@@ -13,6 +13,7 @@ my %opt = (
     iterations => 100_000_000,
     eval_iterations => 2_000,
     eval_payload_len => 50,
+    print_cmd => 1,
 );
 
 GetOptions(
@@ -21,6 +22,7 @@ GetOptions(
     'iterations=i' => \$opt{iterations},
     'eval-iterations=i' => \$opt{eval_iterations},
     'eval-payload-len=i' => \$opt{eval_payload_len},
+    'print-cmd!' => \$opt{print_cmd},
 ) or die "Invalid options\n";
 
 sub find_repo_root {
@@ -59,6 +61,12 @@ sub run_cmd {
     return ($exit, $out);
 }
 
+sub shell_quote {
+    my ($s) = @_;
+    $s =~ s/'/'\\''/g;
+    return "'$s'";
+}
+
 sub count_files {
     my (%args) = @_;
     my $root = $args{root};
@@ -90,10 +98,49 @@ sub format_int {
     return $n;
 }
 
+sub format_vs_baseline {
+    my (%args) = @_;
+    my $baseline = $args{baseline};
+    my $candidate = $args{candidate};
+
+    return 'N/A' if !defined $baseline || !defined $candidate;
+    return 'N/A' if $baseline <= 0 || $candidate <= 0;
+
+    my $ratio = $baseline / $candidate;
+    if ($ratio >= 1) {
+        return sprintf("%.2fx faster", $ratio);
+    }
+    return sprintf("%.2fx slower", 1 / $ratio);
+}
+
+sub format_seconds {
+    my ($s) = @_;
+    return 'N/A' if !defined $s;
+    if ($s < 0.01) {
+        return sprintf("%.4fs", $s);
+    }
+    if ($s < 0.1) {
+        return sprintf("%.3fs", $s);
+    }
+    return sprintf("%.2fs", $s);
+}
+
 sub bench_command_seconds {
     my (%args) = @_;
     my $cmd = $args{cmd};
     my $env = $args{env} || {};
+
+    if ($opt{print_cmd}) {
+        if (%$env) {
+            my @pairs;
+            for my $k (sort keys %$env) {
+                push @pairs, $k . '=' . $env->{$k};
+            }
+            print "CMD: " . join(' ', @pairs) . " $cmd\n";
+        } else {
+            print "CMD: $cmd\n";
+        }
+    }
 
     my ($exit, $out) = run_cmd(cmd => $cmd, env => $env);
     die "Benchmark command failed (exit=$exit):\n$cmd\n$out\n" if $exit != 0;
@@ -143,13 +190,48 @@ if ($opt{bench}) {
     my $eval_iters = $opt{eval_iterations};
     my $payload_len = $opt{eval_payload_len};
 
-    my $perl_loop = "perl -MTime::HiRes=time -e 'my \\$t=time; my \\$x=0; for (1..$iters) { \\$x++ } printf ""%.2f\\n"", time-\\$t'";
-    my $jperl_loop_comp = "'$repo_root/jperl' -MTime::HiRes=time -e 'my \\$t=time; my \\$x=0; for (1..$iters) { \\$x++ } printf ""%.2f\\n"", time-\\$t'";
-    my $jperl_loop_interp = "'$repo_root/jperl' --interpreter -MTime::HiRes=time -e 'my \\$t=time; my \\$x=0; for (1..$iters) { \\$x++ } printf ""%.2f\\n"", time-\\$t'";
+    my $min_iters = 5_000_000;
+    my $min_eval_iters = 500;
 
-    my $perl_eval = "perl -MTime::HiRes=time -e 'my \\$t=time; for my \\$i (1..$eval_iters) { my \\$code = \\\"(\\$i + 1)\\\"; eval \\$code; } printf ""%.2f\\n"", time-\\$t'";
-    my $jperl_eval_comp = "'$repo_root/jperl' -MTime::HiRes=time -e 'my \\$t=time; for my \\$i (1..$eval_iters) { my \\$code = \\\"(\\$i + 1)\\\"; eval \\$code; } printf ""%.2f\\n"", time-\\$t'";
-    my $jperl_eval_interp = "'$repo_root/jperl' -MTime::HiRes=time -e 'my \\$t=time; for my \\$i (1..$eval_iters) { my \\$payload = q{x} x $payload_len; my \\$code = \\\"\\$i+1;\\$payload\\\"; eval \\$code; } printf ""%.2f\\n"", time-\\$t'";
+    if ($iters < $min_iters) {
+        $iters = $min_iters;
+    }
+    if ($eval_iters < $min_eval_iters) {
+        $eval_iters = $min_eval_iters;
+    }
+
+    my $jperl = shell_quote(File::Spec->catfile($repo_root, 'jperl'));
+
+    my $perl_loop = sprintf(
+        q{perl -MTime::HiRes=time -e 'my $t=time; my $x=0; for (1..%d) { $x++ } print(time-$t, "\n")'},
+        $iters
+    );
+    my $jperl_loop_comp = sprintf(
+        q{%s -MTime::HiRes=time -e 'my $t=time; my $x=0; for (1..%d) { $x++ } print(time-$t, "\n")'},
+        $jperl,
+        $iters
+    );
+    my $jperl_loop_interp = sprintf(
+        q{%s --interpreter -MTime::HiRes=time -e 'my $t=time; my $x=0; for (1..%d) { $x++ } print(time-$t, "\n")'},
+        $jperl,
+        $iters
+    );
+
+    my $perl_eval = sprintf(
+        q{perl -MTime::HiRes=time -e 'my $t=time; for my $i (1..%d) { my $code = "($i + 1)"; eval $code; } print(time-$t, "\n")'},
+        $eval_iters
+    );
+    my $jperl_eval_comp = sprintf(
+        q{%s -MTime::HiRes=time -e 'my $t=time; for my $i (1..%d) { my $code = "($i + 1)"; eval $code; } print(time-$t, "\n")'},
+        $jperl,
+        $eval_iters
+    );
+    my $jperl_eval_interp = sprintf(
+        q{%s -MTime::HiRes=time -e 'my $t=time; for my $i (1..%d) { my $payload = "x" x %d; my $code = "$i+1;$payload"; eval $code; } print(time-$t, "\n")'},
+        $jperl,
+        $eval_iters,
+        $payload_len
+    );
 
     my $t_perl = bench_command_seconds(cmd => $perl_loop);
     my $t_comp = bench_command_seconds(cmd => $jperl_loop_comp);
@@ -157,15 +239,15 @@ if ($opt{bench}) {
 
     print "# Loop increment benchmark ($iters iterations)\n\n";
 
-    my $vs_perl_comp = $t_comp > 0 ? sprintf("%.2fx faster", $t_perl / $t_comp) : 'N/A';
-    my $vs_perl_interp = $t_interp > 0 ? sprintf("%.2fx", $t_perl / $t_interp) : 'N/A';
+    my $vs_perl_comp = format_vs_baseline(baseline => $t_perl, candidate => $t_comp);
+    my $vs_perl_interp = format_vs_baseline(baseline => $t_perl, candidate => $t_interp);
 
     print_markdown_table(
         headers => ['Implementation', 'Time', 'vs Perl 5'],
         rows => [
-            ['Perl 5', sprintf("%.2fs", $t_perl), 'baseline'],
-            ['PerlOnJava Compiler', sprintf("%.2fs", $t_comp), $vs_perl_comp],
-            ['PerlOnJava Interpreter', sprintf("%.2fs", $t_interp), $vs_perl_interp],
+            ['Perl 5', format_seconds($t_perl), 'baseline'],
+            ['PerlOnJava Compiler', format_seconds($t_comp), $vs_perl_comp],
+            ['PerlOnJava Interpreter', format_seconds($t_interp), $vs_perl_interp],
         ],
     );
 
@@ -177,15 +259,15 @@ if ($opt{bench}) {
 
     print "# eval STRING benchmark ($eval_iters unique evals)\n\n";
 
-    my $vs_perl_eval_interp = $t_eval_perl > 0 ? sprintf("%.0f%% %s", abs(100 * ($t_eval_jperl_interp - $t_eval_perl) / $t_eval_perl), ($t_eval_jperl_interp <= $t_eval_perl ? 'faster' : 'slower')) : 'N/A';
-    my $vs_perl_eval_comp = $t_eval_perl > 0 ? sprintf("%.1fx %s", ($t_eval_jperl_comp / $t_eval_perl), ($t_eval_jperl_comp >= $t_eval_perl ? 'slower' : 'faster')) : 'N/A';
+    my $vs_perl_eval_interp = format_vs_baseline(baseline => $t_eval_perl, candidate => $t_eval_jperl_interp);
+    my $vs_perl_eval_comp = format_vs_baseline(baseline => $t_eval_perl, candidate => $t_eval_jperl_comp);
 
     print_markdown_table(
         headers => ['Implementation', 'Time', 'vs Perl 5'],
         rows => [
-            ['Perl 5', sprintf("%.2fs", $t_eval_perl), 'baseline'],
-            ['PerlOnJava (eval via interpreter backend)', sprintf("%.2fs", $t_eval_jperl_interp), $vs_perl_eval_interp],
-            ['PerlOnJava (eval via JVM compiler)', sprintf("%.2fs", $t_eval_jperl_comp), $vs_perl_eval_comp],
+            ['Perl 5', format_seconds($t_eval_perl), 'baseline'],
+            ['PerlOnJava (eval via interpreter backend)', format_seconds($t_eval_jperl_interp), $vs_perl_eval_interp],
+            ['PerlOnJava (eval via JVM compiler)', format_seconds($t_eval_jperl_comp), $vs_perl_eval_comp],
         ],
     );
 

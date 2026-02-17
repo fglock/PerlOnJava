@@ -1207,8 +1207,10 @@ public class BytecodeInterpreter {
 
                     case Opcodes.POST_AUTOINCREMENT: {
                         // Post-increment: rd++
+                        // The postAutoIncrement() method increments the variable and returns the OLD value
                         int rd = bytecode[pc++];
-                        ((RuntimeScalar) registers[rd]).postAutoIncrement();
+                        RuntimeScalar oldValue = ((RuntimeScalar) registers[rd]).postAutoIncrement();
+                        registers[rd] = oldValue;  // Store old value in register for use in expression
                         break;
                     }
 
@@ -1221,8 +1223,10 @@ public class BytecodeInterpreter {
 
                     case Opcodes.POST_AUTODECREMENT: {
                         // Post-decrement: rd--
+                        // The postAutoDecrement() method decrements the variable and returns the OLD value
                         int rd = bytecode[pc++];
-                        ((RuntimeScalar) registers[rd]).postAutoDecrement();
+                        RuntimeScalar oldValue = ((RuntimeScalar) registers[rd]).postAutoDecrement();
+                        registers[rd] = oldValue;  // Store old value in register for use in expression
                         break;
                     }
 
