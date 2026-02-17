@@ -1130,6 +1130,39 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.BITWISE_AND_ASSIGN: {
+                        // Bitwise AND assignment: rd &= rs
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.BitwiseOperators.bitwiseAndBinary(
+                            (RuntimeScalar) registers[rd],
+                            (RuntimeScalar) registers[rs]
+                        );
+                        break;
+                    }
+
+                    case Opcodes.BITWISE_OR_ASSIGN: {
+                        // Bitwise OR assignment: rd |= rs
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.BitwiseOperators.bitwiseOrBinary(
+                            (RuntimeScalar) registers[rd],
+                            (RuntimeScalar) registers[rs]
+                        );
+                        break;
+                    }
+
+                    case Opcodes.BITWISE_XOR_ASSIGN: {
+                        // Bitwise XOR assignment: rd ^= rs
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.BitwiseOperators.bitwiseXorBinary(
+                            (RuntimeScalar) registers[rd],
+                            (RuntimeScalar) registers[rs]
+                        );
+                        break;
+                    }
+
                     case Opcodes.PUSH_LOCAL_VARIABLE: {
                         // Push variable to local stack: DynamicVariableManager.pushLocalVariable(rs)
                         int rs = bytecode[pc++];

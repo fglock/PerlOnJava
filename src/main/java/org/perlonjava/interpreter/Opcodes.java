@@ -682,8 +682,20 @@ public class Opcodes {
      * Format: RINDEX rd str substr pos */
     public static final short RINDEX = 173;
 
+    /** Bitwise AND assignment: target &= value
+     * Format: BITWISE_AND_ASSIGN target value */
+    public static final short BITWISE_AND_ASSIGN = 174;
+
+    /** Bitwise OR assignment: target |= value
+     * Format: BITWISE_OR_ASSIGN target value */
+    public static final short BITWISE_OR_ASSIGN = 175;
+
+    /** Bitwise XOR assignment: target ^= value
+     * Format: BITWISE_XOR_ASSIGN target value */
+    public static final short BITWISE_XOR_ASSIGN = 176;
+
     // =================================================================
-    // OPCODES 174-32767: RESERVED FOR FUTURE OPERATIONS
+    // OPCODES 177-32767: RESERVED FOR FUTURE OPERATIONS
     // =================================================================
     // See PHASE3_OPERATOR_PROMOTIONS.md for promotion strategy.
     // All SLOWOP_* constants have been removed - use direct opcodes 114-154 instead.
