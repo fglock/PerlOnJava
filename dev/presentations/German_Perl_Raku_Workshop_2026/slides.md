@@ -477,14 +477,14 @@ Note:
 
 ---
 
-## JVM Ecosystem: Current and Future
+## JVM Ecosystem
 
 **Current support: Standard JVM (HotSpot)**
 - Oracle JDK, OpenJDK
 - Compiler mode generates standard JVM bytecode
 - Runs on any compliant JVM
 
-**Future targets (v5.0.0 - 2027):**
+**Future targets:**
 
 1. **GraalVM** - Native image compilation
    - Compile to standalone native executables
