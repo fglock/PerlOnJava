@@ -670,8 +670,12 @@ public class Opcodes {
      * Format: REQUIRE rd rs */
     public static final short REQUIRE = 170;
 
+    /** Get regex position: rd = rs.pos() (returns lvalue for assignment)
+     * Format: POS rd rs */
+    public static final short POS = 171;
+
     // =================================================================
-    // OPCODES 171-32767: RESERVED FOR FUTURE OPERATIONS
+    // OPCODES 172-32767: RESERVED FOR FUTURE OPERATIONS
     // =================================================================
     // See PHASE3_OPERATOR_PROMOTIONS.md for promotion strategy.
     // All SLOWOP_* constants have been removed - use direct opcodes 114-154 instead.

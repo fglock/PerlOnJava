@@ -495,6 +495,11 @@ public class InterpretedCode extends RuntimeCode {
                     rs = bytecode[pc++];
                     sb.append("REQUIRE r").append(rd).append(" = require(r").append(rs).append(")\n");
                     break;
+                case Opcodes.POS:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("POS r").append(rd).append(" = pos(r").append(rs).append(")\n");
+                    break;
                 case Opcodes.PRE_AUTOINCREMENT:
                     rd = bytecode[pc++];
                     sb.append("PRE_AUTOINCREMENT ++r").append(rd).append("\n");

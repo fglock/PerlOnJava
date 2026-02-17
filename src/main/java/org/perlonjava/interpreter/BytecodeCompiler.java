@@ -2016,6 +2016,18 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(valueReg);
 
                 lastResultReg = globReg;
+            } else if (leftOp.operator.equals("pos")) {
+                // pos($var) = value - lvalue assignment to regex position
+                // pos() returns a PosLvalueScalar that can be assigned to
+                node.left.accept(this);
+                int lvalueReg = lastResultReg;
+
+                // Use SET_SCALAR to assign through the lvalue
+                emit(Opcodes.SET_SCALAR);
+                emitReg(lvalueReg);
+                emitReg(valueReg);
+
+                lastResultReg = valueReg;
             } else {
                 throwCompilerException("Assignment to unsupported operator: " + leftOp.operator);
             }
@@ -4362,6 +4374,25 @@ public class BytecodeCompiler implements Visitor {
                 // Call ModuleOperators.require()
                 int rd = allocateRegister();
                 emit(Opcodes.REQUIRE);
+                emitReg(rd);
+                emitReg(operandReg);
+
+                lastResultReg = rd;
+            } finally {
+                currentCallContext = savedContext;
+            }
+        } else if (op.equals("pos")) {
+            // pos($var) - get or set regex match position
+            // Returns an lvalue that can be assigned to
+            int savedContext = currentCallContext;
+            currentCallContext = RuntimeContextType.SCALAR;
+            try {
+                node.operand.accept(this);
+                int operandReg = lastResultReg;
+
+                // Call RuntimeScalar.pos()
+                int rd = allocateRegister();
+                emit(Opcodes.POS);
                 emitReg(rd);
                 emitReg(operandReg);
 
