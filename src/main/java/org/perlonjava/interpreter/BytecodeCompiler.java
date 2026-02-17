@@ -346,6 +346,13 @@ public class BytecodeCompiler implements Visitor {
      * @param ctx EmitterContext containing symbol table and eval context
      */
     private void detectClosureVariables(Node ast, EmitterContext ctx) {
+        // If capturedVarIndices was already set by the constructor (for eval STRING
+        // with parentRegistry), don't overwrite it. The constructor has already set up
+        // the correct captured variable mappings from the parent scope.
+        if (capturedVarIndices != null) {
+            return;  // Already set up by constructor with parentRegistry
+        }
+
         // Step 1: Collect all variable references in AST
         Set<String> referencedVars = collectReferencedVariables(ast);
 
