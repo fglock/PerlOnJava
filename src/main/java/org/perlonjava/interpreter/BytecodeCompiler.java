@@ -36,12 +36,13 @@ public class BytecodeCompiler implements Visitor {
     // Each scope is a Map<String, Integer> mapping variable names to register indices
     private final Stack<Map<String, Integer>> variableScopes = new Stack<>();
 
+    // Symbol table for package/class tracking
+    // Tracks current package, class flag, and package versions like the compiler does
+    private final ScopedSymbolTable symbolTable = new ScopedSymbolTable();
+
     // Stack to save/restore register state when entering/exiting scopes
     private final Stack<Integer> savedNextRegister = new Stack<>();
     private final Stack<Integer> savedBaseRegister = new Stack<>();
-
-    // Track current package name (for global variables)
-    private String currentPackage = "main";
 
     // Token index tracking for error reporting
     private final TreeMap<Integer, Integer> pcToTokenIndex = new TreeMap<>();
@@ -223,9 +224,10 @@ public class BytecodeCompiler implements Visitor {
 
     /**
      * Helper: Get current package name for global variable resolution.
+     * Uses symbolTable for proper package/class tracking.
      */
     private String getCurrentPackage() {
-        return currentPackage;
+        return symbolTable.getCurrentPackage();
     }
 
     /**
@@ -2802,7 +2804,7 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(rd);
                 emitReg(rs2);       // List register
                 emitReg(rs1);       // Closure register
-                emitInt(addToStringPool(currentPackage));  // Package name for sort
+                emitInt(addToStringPool(getCurrentPackage()));  // Package name for sort
             }
             case "split" -> {
                 // Split operator: split pattern, string
@@ -3705,7 +3707,7 @@ public class BytecodeCompiler implements Visitor {
                     String globalVarName = varName.substring(1); // Remove $ sigil first
                     if (!globalVarName.contains("::")) {
                         // Add package prefix
-                        globalVarName = currentPackage + "::" + globalVarName;
+                        globalVarName = getCurrentPackage() + "::" + globalVarName;
                     }
 
                     int rd = allocateRegister();
@@ -3980,18 +3982,28 @@ public class BytecodeCompiler implements Visitor {
                 throwCompilerException("scalar operator requires an operand");
             }
             return;
-        } else if (op.equals("package")) {
-            // Package declaration: package Foo;
+        } else if (op.equals("package") || op.equals("class")) {
+            // Package/Class declaration: package Foo; or class Foo;
             // This updates the current package context for subsequent variable declarations
             if (node.operand instanceof IdentifierNode) {
                 String packageName = ((IdentifierNode) node.operand).name;
 
-                // Update the current package for this compilation scope
-                currentPackage = packageName;
+                // Check if this is a class declaration (either "class" operator or isClass annotation)
+                Boolean isClassAnnotation = (Boolean) node.getAnnotation("isClass");
+                boolean isClass = op.equals("class") || (isClassAnnotation != null && isClassAnnotation);
+
+                // Update the current package/class in symbol table
+                // This tracks package name, isClass flag, and version
+                symbolTable.setCurrentPackage(packageName, isClass);
+
+                // Register as Perl 5.38+ class for proper stringification if needed
+                if (isClass) {
+                    org.perlonjava.runtime.ClassRegistry.registerClass(packageName);
+                }
 
                 lastResultReg = -1;  // No runtime value
             } else {
-                throwCompilerException("package operator requires an identifier");
+                throwCompilerException(op + " operator requires an identifier");
             }
         } else if (op.equals("say") || op.equals("print")) {
             // say/print $x
@@ -5755,7 +5767,7 @@ public class BytecodeCompiler implements Visitor {
         // Step 6: Store in global namespace
         String fullName = node.name;
         if (!fullName.contains("::")) {
-            fullName = currentPackage + "::" + fullName;  // Use currentPackage instead of hardcoded "main"
+            fullName = getCurrentPackage() + "::" + fullName;  // Use getCurrentPackage() for proper package tracking
         }
 
         int nameIdx = addToStringPool(fullName);
