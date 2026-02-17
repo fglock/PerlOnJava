@@ -1204,6 +1204,98 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.BITWISE_AND_BINARY: {
+                        // Numeric bitwise AND: rd = rs1 binary& rs2
+                        int rd = bytecode[pc++];
+                        int rs1 = bytecode[pc++];
+                        int rs2 = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.BitwiseOperators.bitwiseAndBinary(
+                            (RuntimeScalar) registers[rs1],
+                            (RuntimeScalar) registers[rs2]
+                        );
+                        break;
+                    }
+
+                    case Opcodes.BITWISE_OR_BINARY: {
+                        // Numeric bitwise OR: rd = rs1 binary| rs2
+                        int rd = bytecode[pc++];
+                        int rs1 = bytecode[pc++];
+                        int rs2 = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.BitwiseOperators.bitwiseOrBinary(
+                            (RuntimeScalar) registers[rs1],
+                            (RuntimeScalar) registers[rs2]
+                        );
+                        break;
+                    }
+
+                    case Opcodes.BITWISE_XOR_BINARY: {
+                        // Numeric bitwise XOR: rd = rs1 binary^ rs2
+                        int rd = bytecode[pc++];
+                        int rs1 = bytecode[pc++];
+                        int rs2 = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.BitwiseOperators.bitwiseXorBinary(
+                            (RuntimeScalar) registers[rs1],
+                            (RuntimeScalar) registers[rs2]
+                        );
+                        break;
+                    }
+
+                    case Opcodes.STRING_BITWISE_AND: {
+                        // String bitwise AND: rd = rs1 &. rs2
+                        int rd = bytecode[pc++];
+                        int rs1 = bytecode[pc++];
+                        int rs2 = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.BitwiseOperators.bitwiseAndDot(
+                            (RuntimeScalar) registers[rs1],
+                            (RuntimeScalar) registers[rs2]
+                        );
+                        break;
+                    }
+
+                    case Opcodes.STRING_BITWISE_OR: {
+                        // String bitwise OR: rd = rs1 |. rs2
+                        int rd = bytecode[pc++];
+                        int rs1 = bytecode[pc++];
+                        int rs2 = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.BitwiseOperators.bitwiseOrDot(
+                            (RuntimeScalar) registers[rs1],
+                            (RuntimeScalar) registers[rs2]
+                        );
+                        break;
+                    }
+
+                    case Opcodes.STRING_BITWISE_XOR: {
+                        // String bitwise XOR: rd = rs1 ^. rs2
+                        int rd = bytecode[pc++];
+                        int rs1 = bytecode[pc++];
+                        int rs2 = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.BitwiseOperators.bitwiseXorDot(
+                            (RuntimeScalar) registers[rs1],
+                            (RuntimeScalar) registers[rs2]
+                        );
+                        break;
+                    }
+
+                    case Opcodes.BITWISE_NOT_BINARY: {
+                        // Numeric bitwise NOT: rd = binary~ rs
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.BitwiseOperators.bitwiseNotBinary(
+                            (RuntimeScalar) registers[rs]
+                        );
+                        break;
+                    }
+
+                    case Opcodes.BITWISE_NOT_STRING: {
+                        // String bitwise NOT: rd = ~. rs
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.BitwiseOperators.bitwiseNotDot(
+                            (RuntimeScalar) registers[rs]
+                        );
+                        break;
+                    }
+
                     case Opcodes.PUSH_LOCAL_VARIABLE: {
                         // Push variable to local stack: DynamicVariableManager.pushLocalVariable(rs)
                         int rs = bytecode[pc++];

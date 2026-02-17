@@ -706,8 +706,40 @@ public class Opcodes {
      * Format: STRING_BITWISE_XOR_ASSIGN target value */
     public static final short STRING_BITWISE_XOR_ASSIGN = 179;
 
+    /** Numeric bitwise AND: rd = rs1 binary& rs2
+     * Format: BITWISE_AND_BINARY rd rs1 rs2 */
+    public static final short BITWISE_AND_BINARY = 180;
+
+    /** Numeric bitwise OR: rd = rs1 binary| rs2
+     * Format: BITWISE_OR_BINARY rd rs1 rs2 */
+    public static final short BITWISE_OR_BINARY = 181;
+
+    /** Numeric bitwise XOR: rd = rs1 binary^ rs2
+     * Format: BITWISE_XOR_BINARY rd rs1 rs2 */
+    public static final short BITWISE_XOR_BINARY = 182;
+
+    /** String bitwise AND: rd = rs1 &. rs2
+     * Format: STRING_BITWISE_AND rd rs1 rs2 */
+    public static final short STRING_BITWISE_AND = 183;
+
+    /** String bitwise OR: rd = rs1 |. rs2
+     * Format: STRING_BITWISE_OR rd rs1 rs2 */
+    public static final short STRING_BITWISE_OR = 184;
+
+    /** String bitwise XOR: rd = rs1 ^. rs2
+     * Format: STRING_BITWISE_XOR rd rs1 rs2 */
+    public static final short STRING_BITWISE_XOR = 185;
+
+    /** Numeric bitwise NOT: rd = binary~ rs
+     * Format: BITWISE_NOT_BINARY rd rs */
+    public static final short BITWISE_NOT_BINARY = 186;
+
+    /** String bitwise NOT: rd = ~. rs
+     * Format: BITWISE_NOT_STRING rd rs */
+    public static final short BITWISE_NOT_STRING = 187;
+
     // =================================================================
-    // OPCODES 180-32767: RESERVED FOR FUTURE OPERATIONS
+    // OPCODES 188-32767: RESERVED FOR FUTURE OPERATIONS
     // =================================================================
     // See PHASE3_OPERATOR_PROMOTIONS.md for promotion strategy.
     // All SLOWOP_* constants have been removed - use direct opcodes 114-154 instead.
