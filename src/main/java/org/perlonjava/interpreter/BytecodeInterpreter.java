@@ -1206,11 +1206,11 @@ public class BytecodeInterpreter {
                     }
 
                     case Opcodes.POST_AUTOINCREMENT: {
-                        // Post-increment: rd++
+                        // Post-increment: rd = rs++
                         // The postAutoIncrement() method increments the variable and returns the OLD value
-                        int rd = bytecode[pc++];
-                        RuntimeScalar oldValue = ((RuntimeScalar) registers[rd]).postAutoIncrement();
-                        registers[rd] = oldValue;  // Store old value in register for use in expression
+                        int rd = bytecode[pc++];  // Destination register for old value
+                        int rs = bytecode[pc++];  // Source variable register
+                        registers[rd] = ((RuntimeScalar) registers[rs]).postAutoIncrement();
                         break;
                     }
 
@@ -1222,11 +1222,11 @@ public class BytecodeInterpreter {
                     }
 
                     case Opcodes.POST_AUTODECREMENT: {
-                        // Post-decrement: rd--
+                        // Post-decrement: rd = rs--
                         // The postAutoDecrement() method decrements the variable and returns the OLD value
-                        int rd = bytecode[pc++];
-                        RuntimeScalar oldValue = ((RuntimeScalar) registers[rd]).postAutoDecrement();
-                        registers[rd] = oldValue;  // Store old value in register for use in expression
+                        int rd = bytecode[pc++];  // Destination register for old value
+                        int rs = bytecode[pc++];  // Source variable register
+                        registers[rd] = ((RuntimeScalar) registers[rs]).postAutoDecrement();
                         break;
                     }
 
