@@ -1,5 +1,7 @@
 # PerlOnJava Interpreter Developer Guide
 
+- name all test files /tmp/test.pl
+
 ## Quick Reference
 
 **Performance:** 46.84M ops/sec (1.75x slower than compiler ✓)
