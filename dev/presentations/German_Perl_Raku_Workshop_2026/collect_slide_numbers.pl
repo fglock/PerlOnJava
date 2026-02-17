@@ -6,17 +6,13 @@ use Cwd qw(abs_path);
 use File::Basename qw(dirname);
 use File::Spec;
 use Getopt::Long qw(GetOptions);
-use Time::HiRes qw(time);
 
 my %opt = (
     stats => 1,
     bench => 1,
-    iterations => 1_000_000_000,
-    eval_iterations => 1_000_000,
+    iterations => 100_000_000,
+    eval_iterations => 2_000,
     eval_payload_len => 50,
-    print_cmd => 0,
-    startup_runs => 30,
-    startup_warmup => 5,
 );
 
 GetOptions(
@@ -25,9 +21,6 @@ GetOptions(
     'iterations=i' => \$opt{iterations},
     'eval-iterations=i' => \$opt{eval_iterations},
     'eval-payload-len=i' => \$opt{eval_payload_len},
-    'print-cmd!' => \$opt{print_cmd},
-    'startup-runs=i' => \$opt{startup_runs},
-    'startup-warmup=i' => \$opt{startup_warmup},
 ) or die "Invalid options\n";
 
 sub find_repo_root {
@@ -66,12 +59,6 @@ sub run_cmd {
     return ($exit, $out);
 }
 
-sub shell_quote {
-    my ($s) = @_;
-    $s =~ s/'/'\\''/g;
-    return "'$s'";
-}
-
 sub count_files {
     my (%args) = @_;
     my $root = $args{root};
@@ -103,49 +90,10 @@ sub format_int {
     return $n;
 }
 
-sub format_vs_baseline {
-    my (%args) = @_;
-    my $baseline = $args{baseline};
-    my $candidate = $args{candidate};
-
-    return 'N/A' if !defined $baseline || !defined $candidate;
-    return 'N/A' if $baseline <= 0 || $candidate <= 0;
-
-    my $ratio = $baseline / $candidate;
-    if ($ratio >= 1) {
-        return sprintf("%.2fx faster", $ratio);
-    }
-    return sprintf("%.2fx slower", 1 / $ratio);
-}
-
-sub format_seconds {
-    my ($s) = @_;
-    return 'N/A' if !defined $s;
-    if ($s < 0.01) {
-        return sprintf("%.4fs", $s);
-    }
-    if ($s < 0.1) {
-        return sprintf("%.3fs", $s);
-    }
-    return sprintf("%.2fs", $s);
-}
-
 sub bench_command_seconds {
     my (%args) = @_;
     my $cmd = $args{cmd};
     my $env = $args{env} || {};
-
-    if ($opt{print_cmd}) {
-        if (%$env) {
-            my @pairs;
-            for my $k (sort keys %$env) {
-                push @pairs, $k . '=' . $env->{$k};
-            }
-            print "CMD: " . join(' ', @pairs) . " $cmd\n";
-        } else {
-            print "CMD: $cmd\n";
-        }
-    }
 
     my ($exit, $out) = run_cmd(cmd => $cmd, env => $env);
     die "Benchmark command failed (exit=$exit):\n$cmd\n$out\n" if $exit != 0;
@@ -158,49 +106,6 @@ sub bench_command_seconds {
     }
 
     return 0 + $1;
-}
-
-sub wall_time_cmd_seconds {
-    my (%args) = @_;
-    my $cmd = $args{cmd};
-    my $env = $args{env} || {};
-
-    if ($opt{print_cmd}) {
-        if (%$env) {
-            my @pairs;
-            for my $k (sort keys %$env) {
-                push @pairs, $k . '=' . $env->{$k};
-            }
-            print "CMD: " . join(' ', @pairs) . " $cmd\n";
-        } else {
-            print "CMD: $cmd\n";
-        }
-    }
-
-    my $t0 = time();
-    my ($exit, $out) = run_cmd(cmd => $cmd, env => $env);
-    my $t1 = time();
-    die "Command failed (exit=$exit):\n$cmd\n$out\n" if $exit != 0;
-    return $t1 - $t0;
-}
-
-sub mean {
-    my ($vals) = @_;
-    return undef if !$vals || !@$vals;
-    my $sum = 0;
-    $sum += $_ for @$vals;
-    return $sum / scalar(@$vals);
-}
-
-sub median {
-    my ($vals) = @_;
-    return undef if !$vals || !@$vals;
-    my @s = sort { $a <=> $b } @$vals;
-    my $n = scalar(@s);
-    if ($n % 2) {
-        return $s[int($n / 2)];
-    }
-    return ($s[$n/2 - 1] + $s[$n/2]) / 2;
 }
 
 sub print_markdown_table {
@@ -238,50 +143,29 @@ if ($opt{bench}) {
     my $eval_iters = $opt{eval_iterations};
     my $payload_len = $opt{eval_payload_len};
 
-    my $min_iters = 5_000_000;
-    my $min_eval_iters = 500;
+    my $perl_loop = "perl -MTime::HiRes=time -e 'my \\$t=time; my \\$x=0; for (1..$iters) { \\$x++ } printf ""%.2f\\n"", time-\\$t'";
+    my $jperl_loop_comp = "'$repo_root/jperl' -MTime::HiRes=time -e 'my \\$t=time; my \\$x=0; for (1..$iters) { \\$x++ } printf ""%.2f\\n"", time-\\$t'";
+    my $jperl_loop_interp = "'$repo_root/jperl' --interpreter -MTime::HiRes=time -e 'my \\$t=time; my \\$x=0; for (1..$iters) { \\$x++ } printf ""%.2f\\n"", time-\\$t'";
 
-    if ($iters < $min_iters) {
-        $iters = $min_iters;
-    }
-    if ($eval_iters < $min_eval_iters) {
-        $eval_iters = $min_eval_iters;
-    }
-
-    my $jperl = shell_quote(File::Spec->catfile($repo_root, 'jperl'));
-
-    my $perl_loop = sprintf(
-        q{perl -MTime::HiRes=time -e 'my $t=time; my $x=0; for my $v (1..%d) { $x++ } print(time-$t, "\n")'},
-        $iters
-    );
-    my $jperl_loop_comp = sprintf(
-        q{%s -MTime::HiRes=time -e 'my $t=time; my $x=0; for my $v (1..%d) { $x++ } print(time-$t, "\n")'},
-        $jperl,
-        $iters
-    );
-
-    my $perl_eval = sprintf(
-        q{perl -MTime::HiRes=time -e 'my $t=time; for my $i (1..%d) { my $code = "($i + 1)"; eval $code; } print(time-$t, "\n")'},
-        $eval_iters
-    );
-    my $jperl_eval_comp = sprintf(
-        q{%s -MTime::HiRes=time -e 'my $t=time; for my $i (1..%d) { my $code = "($i + 1)"; eval $code; } print(time-$t, "\n")'},
-        $jperl,
-        $eval_iters
-    );
+    my $perl_eval = "perl -MTime::HiRes=time -e 'my \\$t=time; for my \\$i (1..$eval_iters) { my \\$code = \\\"(\\$i + 1)\\\"; eval \\$code; } printf ""%.2f\\n"", time-\\$t'";
+    my $jperl_eval_comp = "'$repo_root/jperl' -MTime::HiRes=time -e 'my \\$t=time; for my \\$i (1..$eval_iters) { my \\$code = \\\"(\\$i + 1)\\\"; eval \\$code; } printf ""%.2f\\n"", time-\\$t'";
+    my $jperl_eval_interp = "'$repo_root/jperl' -MTime::HiRes=time -e 'my \\$t=time; for my \\$i (1..$eval_iters) { my \\$payload = q{x} x $payload_len; my \\$code = \\\"\\$i+1;\\$payload\\\"; eval \\$code; } printf ""%.2f\\n"", time-\\$t'";
 
     my $t_perl = bench_command_seconds(cmd => $perl_loop);
     my $t_comp = bench_command_seconds(cmd => $jperl_loop_comp);
+    my $t_interp = bench_command_seconds(cmd => $jperl_loop_interp);
 
     print "# Loop increment benchmark ($iters iterations)\n\n";
 
-    my $vs_perl_comp = format_vs_baseline(baseline => $t_perl, candidate => $t_comp);
+    my $vs_perl_comp = $t_comp > 0 ? sprintf("%.2fx faster", $t_perl / $t_comp) : 'N/A';
+    my $vs_perl_interp = $t_interp > 0 ? sprintf("%.2fx", $t_perl / $t_interp) : 'N/A';
 
     print_markdown_table(
         headers => ['Implementation', 'Time', 'vs Perl 5'],
         rows => [
-            ['Perl 5', format_seconds($t_perl), 'baseline'],
-            ['PerlOnJava Compiler', format_seconds($t_comp), $vs_perl_comp],
+            ['Perl 5', sprintf("%.2fs", $t_perl), 'baseline'],
+            ['PerlOnJava Compiler', sprintf("%.2fs", $t_comp), $vs_perl_comp],
+            ['PerlOnJava Interpreter', sprintf("%.2fs", $t_interp), $vs_perl_interp],
         ],
     );
 
@@ -289,63 +173,26 @@ if ($opt{bench}) {
 
     my $t_eval_perl = bench_command_seconds(cmd => $perl_eval);
     my $t_eval_jperl_comp = bench_command_seconds(cmd => $jperl_eval_comp);
+    my $t_eval_jperl_interp = bench_command_seconds(cmd => $jperl_eval_interp, env => { JPERL_EVAL_USE_INTERPRETER => 1 });
 
     print "# eval STRING benchmark ($eval_iters unique evals)\n\n";
 
-    my $vs_perl_eval_comp = format_vs_baseline(baseline => $t_eval_perl, candidate => $t_eval_jperl_comp);
+    my $vs_perl_eval_interp = $t_eval_perl > 0 ? sprintf("%.0f%% %s", abs(100 * ($t_eval_jperl_interp - $t_eval_perl) / $t_eval_perl), ($t_eval_jperl_interp <= $t_eval_perl ? 'faster' : 'slower')) : 'N/A';
+    my $vs_perl_eval_comp = $t_eval_perl > 0 ? sprintf("%.1fx %s", ($t_eval_jperl_comp / $t_eval_perl), ($t_eval_jperl_comp >= $t_eval_perl ? 'slower' : 'faster')) : 'N/A';
 
     print_markdown_table(
         headers => ['Implementation', 'Time', 'vs Perl 5'],
         rows => [
-            ['Perl 5', format_seconds($t_eval_perl), 'baseline'],
-            ['PerlOnJava', format_seconds($t_eval_jperl_comp), $vs_perl_eval_comp],
+            ['Perl 5', sprintf("%.2fs", $t_eval_perl), 'baseline'],
+            ['PerlOnJava (eval via interpreter backend)', sprintf("%.2fs", $t_eval_jperl_interp), $vs_perl_eval_interp],
+            ['PerlOnJava (eval via JVM compiler)', sprintf("%.2fs", $t_eval_jperl_comp), $vs_perl_eval_comp],
         ],
     );
 
     print "\n";
 
     print "Notes:\n";
+    print "- Force full interpreter mode for the whole program via: ./jperl --interpreter ...\n";
     print "- Force eval STRING to use the interpreter backend via: JPERL_EVAL_USE_INTERPRETER=1 ./jperl ...\n";
     print "- You can tune --eval-iterations and --iterations for runtime on slower machines.\n";
-
-    my $startup_runs = $opt{startup_runs};
-    my $startup_warmup = $opt{startup_warmup};
-    if (!defined $startup_runs || $startup_runs < 1) {
-        $startup_runs = 1;
-    }
-    if (!defined $startup_warmup || $startup_warmup < 0) {
-        $startup_warmup = 0;
-    }
-
-    my $startup_perl = q{perl -e 'print "hello, World!\n"' > /dev/null};
-    my $startup_jperl = $jperl . q{ -e 'print "hello, World!\n"' > /dev/null};
-
-    my @startup_perl_times;
-    my @startup_jperl_times;
-
-    for (1 .. $startup_warmup) {
-        wall_time_cmd_seconds(cmd => $startup_perl);
-        wall_time_cmd_seconds(cmd => $startup_jperl);
-    }
-    for (1 .. $startup_runs) {
-        push @startup_perl_times, wall_time_cmd_seconds(cmd => $startup_perl);
-        push @startup_jperl_times, wall_time_cmd_seconds(cmd => $startup_jperl);
-    }
-
-    my $startup_perl_median = median(\@startup_perl_times);
-    my $startup_jperl_median = median(\@startup_jperl_times);
-
-    print "\n";
-    print "# Startup benchmark (hello world, wall time)\n\n";
-    print "Runs: $startup_runs (warmup: $startup_warmup)\n\n";
-
-    my $startup_vs_perl = format_vs_baseline(baseline => $startup_perl_median, candidate => $startup_jperl_median);
-
-    print_markdown_table(
-        headers => ['Implementation', 'Median', 'Mean', 'vs Perl 5 (median)'],
-        rows => [
-            ['Perl 5', format_seconds($startup_perl_median), format_seconds(mean(\@startup_perl_times)), 'baseline'],
-            ['PerlOnJava', format_seconds($startup_jperl_median), format_seconds(mean(\@startup_jperl_times)), $startup_vs_perl],
-        ],
-    );
 }
