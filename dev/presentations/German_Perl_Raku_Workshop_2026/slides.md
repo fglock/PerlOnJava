@@ -914,6 +914,7 @@ Note:
 **PerlOnJava demonstrates:**
 
 - Compiler engineering at scale (383 files, 260k tests)
+- **Test-Driven Development**: No Perl specification exists—only tests and CPAN code
 - Creative solutions to hard problems
 - Language interoperability
 - Sustained engineering effort (10+ years)
@@ -922,6 +923,8 @@ Note:
 
 Note:
 - Significant technical achievement
+- TDD approach: compatibility verified through comprehensive test suite
+- Perl has no formal spec—behavior defined by tests and reference implementation
 - Dynamic language on modern VM
 - Maintains compatibility
 - Achieves competitive performance
