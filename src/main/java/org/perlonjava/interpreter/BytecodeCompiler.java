@@ -69,6 +69,10 @@ public class BytecodeCompiler implements Visitor {
     private String[] capturedVarNames;            // Parallel array of names
     private Map<String, Integer> capturedVarIndices;  // Name → register index
 
+    // Track ALL variables ever declared (for variableRegistry)
+    // This is needed because inner scopes get popped before variableRegistry is built
+    private final Map<String, Integer> allDeclaredVariables = new HashMap<>();
+
     // BEGIN support for named subroutine closures
     private int currentSubroutineBeginId = 0;     // BEGIN ID for current named subroutine (0 = not in named sub)
     private Set<String> currentSubroutineClosureVars = new HashSet<>();  // Variables captured from outer scope
@@ -182,6 +186,7 @@ public class BytecodeCompiler implements Visitor {
     private int addVariable(String name, String declType) {
         int reg = allocateRegister();
         variableScopes.peek().put(name, reg);
+        allDeclaredVariables.put(name, reg);  // Track for variableRegistry
         return reg;
     }
 
@@ -317,8 +322,12 @@ public class BytecodeCompiler implements Visitor {
         emitReg(returnReg);
 
         // Build variable registry for eval STRING support
-        // This maps variable names to their register indices for variable capture
+        // Use allDeclaredVariables which tracks ALL variables ever declared,
+        // not variableScopes which loses variables when scopes are popped
         Map<String, Integer> variableRegistry = new HashMap<>();
+        variableRegistry.putAll(allDeclaredVariables);
+
+        // Also include variables from current scopes (in case of nested contexts)
         for (Map<String, Integer> scope : variableScopes) {
             variableRegistry.putAll(scope);
         }
@@ -1270,6 +1279,7 @@ public class BytecodeCompiler implements Visitor {
 
                             // Track this variable - map the name to the register we already allocated
                             variableScopes.peek().put(varName, reg);
+                            allDeclaredVariables.put(varName, reg);  // Track for variableRegistry
                             lastResultReg = reg;
                             return;
                         }
@@ -1317,6 +1327,7 @@ public class BytecodeCompiler implements Visitor {
 
                             // Track this variable - map the name to the register we already allocated
                             variableScopes.peek().put(varName, arrayReg);
+                            allDeclaredVariables.put(varName, arrayReg);  // Track for variableRegistry
                             lastResultReg = arrayReg;
                             return;
                         }
@@ -1367,6 +1378,7 @@ public class BytecodeCompiler implements Visitor {
 
                             // Track this variable - map the name to the register we already allocated
                             variableScopes.peek().put(varName, hashReg);
+                            allDeclaredVariables.put(varName, hashReg);  // Track for variableRegistry
                             lastResultReg = hashReg;
                             return;
                         }
@@ -1469,6 +1481,7 @@ public class BytecodeCompiler implements Visitor {
 
                                     // Track this variable
                                     variableScopes.peek().put(varName, varReg);
+                            allDeclaredVariables.put(varName, varReg);  // Track for variableRegistry
                                 } else {
                                     // Regular lexical variable (not captured)
                                     // Declare the variable
@@ -3372,6 +3385,7 @@ public class BytecodeCompiler implements Visitor {
                                 emit(sigilOp.id);
                                 // Track this as a captured variable - map to the register we allocated
                                 variableScopes.peek().put(varName, reg);
+                            allDeclaredVariables.put(varName, reg);  // Track for variableRegistry
                             }
                             case "@" -> {
                                 emitWithToken(Opcodes.RETRIEVE_BEGIN_ARRAY, node.getIndex());
@@ -3379,6 +3393,7 @@ public class BytecodeCompiler implements Visitor {
                                 emit(nameIdx);
                                 emit(sigilOp.id);
                                 variableScopes.peek().put(varName, reg);
+                            allDeclaredVariables.put(varName, reg);  // Track for variableRegistry
                             }
                             case "%" -> {
                                 emitWithToken(Opcodes.RETRIEVE_BEGIN_HASH, node.getIndex());
@@ -3386,6 +3401,7 @@ public class BytecodeCompiler implements Visitor {
                                 emit(nameIdx);
                                 emit(sigilOp.id);
                                 variableScopes.peek().put(varName, reg);
+                            allDeclaredVariables.put(varName, reg);  // Track for variableRegistry
                             }
                             default -> throwCompilerException("Unsupported variable type: " + sigil);
                         }
@@ -3443,6 +3459,7 @@ public class BytecodeCompiler implements Visitor {
                                         emit(nameIdx);
                                         emit(sigilOp.id);
                                         variableScopes.peek().put(varName, reg);
+                            allDeclaredVariables.put(varName, reg);  // Track for variableRegistry
                                     }
                                     case "@" -> {
                                         emitWithToken(Opcodes.RETRIEVE_BEGIN_ARRAY, node.getIndex());
@@ -3450,6 +3467,7 @@ public class BytecodeCompiler implements Visitor {
                                         emit(nameIdx);
                                         emit(sigilOp.id);
                                         variableScopes.peek().put(varName, reg);
+                            allDeclaredVariables.put(varName, reg);  // Track for variableRegistry
                                     }
                                     case "%" -> {
                                         emitWithToken(Opcodes.RETRIEVE_BEGIN_HASH, node.getIndex());
@@ -3457,6 +3475,7 @@ public class BytecodeCompiler implements Visitor {
                                         emit(nameIdx);
                                         emit(sigilOp.id);
                                         variableScopes.peek().put(varName, reg);
+                            allDeclaredVariables.put(varName, reg);  // Track for variableRegistry
                                     }
                                     default -> throwCompilerException("Unsupported variable type in list declaration: " + sigil);
                                 }
