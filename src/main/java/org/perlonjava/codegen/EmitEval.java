@@ -562,7 +562,15 @@ public class EmitEval {
         // Stack: [RuntimeScalar(String), String, Object[], RuntimeArray(@_)]
 
         // Push the calling context (scalar, list, or void)
-        emitterVisitor.pushCallContext();
+        // For eval, use the context determined by how the eval result is used
+        // This matches the compiler path which uses a compile-time constant
+        if (emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME) {
+            // If context is RUNTIME, load it from wantarray variable
+            mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.symbolTable.getVariableIndex("wantarray"));
+        } else {
+            // Otherwise use the compile-time constant (LIST/SCALAR/VOID)
+            mv.visitLdcInsn(emitterVisitor.ctx.contextType);
+        }
         // Stack: [RuntimeScalar(String), String, Object[], RuntimeArray(@_), int]
 
         // Call evalStringWithInterpreter which returns RuntimeList directly

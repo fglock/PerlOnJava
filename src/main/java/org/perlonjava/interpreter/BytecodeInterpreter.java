@@ -1189,6 +1189,15 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.WANTARRAY: {
+                        // Get wantarray context: rd = Operator.wantarray(wantarrayReg)
+                        int rd = bytecode[pc++];
+                        int wantarrayReg = bytecode[pc++];
+                        int ctx = ((RuntimeScalar) registers[wantarrayReg]).getInt();
+                        registers[rd] = org.perlonjava.operators.Operator.wantarray(ctx);
+                        break;
+                    }
+
                     case Opcodes.PRE_AUTOINCREMENT: {
                         // Pre-increment: ++rd
                         int rd = bytecode[pc++];

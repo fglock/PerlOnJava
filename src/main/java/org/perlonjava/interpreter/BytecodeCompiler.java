@@ -5040,6 +5040,15 @@ public class BytecodeCompiler implements Visitor {
             } else {
                 throwCompilerException("unary + operator requires an operand");
             }
+        } else if (op.equals("wantarray")) {
+            // wantarray operator: returns undef in VOID, false in SCALAR, true in LIST
+            // Read register 2 (wantarray context) and convert to Perl convention
+            int rd = allocateRegister();
+            emit(Opcodes.WANTARRAY);
+            emitReg(rd);
+            emitReg(2);  // Register 2 contains the calling context
+
+            lastResultReg = rd;
         } else {
             throwCompilerException("Unsupported operator: " + op);
         }

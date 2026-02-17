@@ -662,8 +662,12 @@ public class Opcodes {
      * Format: CHOMP rd rs */
     public static final short CHOMP = 168;
 
+    /** Get wantarray context: rd = Operator.wantarray(wantarrayReg)
+     * Format: WANTARRAY rd wantarrayReg */
+    public static final short WANTARRAY = 169;
+
     // =================================================================
-    // OPCODES 169-32767: RESERVED FOR FUTURE OPERATIONS
+    // OPCODES 170-32767: RESERVED FOR FUTURE OPERATIONS
     // =================================================================
     // See PHASE3_OPERATOR_PROMOTIONS.md for promotion strategy.
     // All SLOWOP_* constants have been removed - use direct opcodes 114-154 instead.
