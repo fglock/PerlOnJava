@@ -674,8 +674,16 @@ public class Opcodes {
      * Format: POS rd rs */
     public static final short POS = 171;
 
+    /** Find substring position: rd = StringOperators.index(str, substr, pos)
+     * Format: INDEX rd str substr pos */
+    public static final short INDEX = 172;
+
+    /** Find substring position from end: rd = StringOperators.rindex(str, substr, pos)
+     * Format: RINDEX rd str substr pos */
+    public static final short RINDEX = 173;
+
     // =================================================================
-    // OPCODES 172-32767: RESERVED FOR FUTURE OPERATIONS
+    // OPCODES 174-32767: RESERVED FOR FUTURE OPERATIONS
     // =================================================================
     // See PHASE3_OPERATOR_PROMOTIONS.md for promotion strategy.
     // All SLOWOP_* constants have been removed - use direct opcodes 114-154 instead.

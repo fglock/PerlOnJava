@@ -500,6 +500,22 @@ public class InterpretedCode extends RuntimeCode {
                     rs = bytecode[pc++];
                     sb.append("POS r").append(rd).append(" = pos(r").append(rs).append(")\n");
                     break;
+                case Opcodes.INDEX: {
+                    rd = bytecode[pc++];
+                    int idxStrReg = bytecode[pc++];
+                    int idxSubstrReg = bytecode[pc++];
+                    int idxPosReg = bytecode[pc++];
+                    sb.append("INDEX r").append(rd).append(" = index(r").append(idxStrReg).append(", r").append(idxSubstrReg).append(", r").append(idxPosReg).append(")\n");
+                    break;
+                }
+                case Opcodes.RINDEX: {
+                    rd = bytecode[pc++];
+                    int ridxStrReg = bytecode[pc++];
+                    int ridxSubstrReg = bytecode[pc++];
+                    int ridxPosReg = bytecode[pc++];
+                    sb.append("RINDEX r").append(rd).append(" = rindex(r").append(ridxStrReg).append(", r").append(ridxSubstrReg).append(", r").append(ridxPosReg).append(")\n");
+                    break;
+                }
                 case Opcodes.PRE_AUTOINCREMENT:
                     rd = bytecode[pc++];
                     sb.append("PRE_AUTOINCREMENT ++r").append(rd).append("\n");

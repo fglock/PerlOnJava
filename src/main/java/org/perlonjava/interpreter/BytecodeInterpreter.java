@@ -1214,6 +1214,34 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.INDEX: {
+                        // Find substring position: rd = StringOperators.index(str, substr, pos)
+                        int rd = bytecode[pc++];
+                        int strReg = bytecode[pc++];
+                        int substrReg = bytecode[pc++];
+                        int posReg = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.StringOperators.index(
+                            (RuntimeScalar) registers[strReg],
+                            (RuntimeScalar) registers[substrReg],
+                            (RuntimeScalar) registers[posReg]
+                        );
+                        break;
+                    }
+
+                    case Opcodes.RINDEX: {
+                        // Find substring position from end: rd = StringOperators.rindex(str, substr, pos)
+                        int rd = bytecode[pc++];
+                        int strReg = bytecode[pc++];
+                        int substrReg = bytecode[pc++];
+                        int posReg = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.StringOperators.rindex(
+                            (RuntimeScalar) registers[strReg],
+                            (RuntimeScalar) registers[substrReg],
+                            (RuntimeScalar) registers[posReg]
+                        );
+                        break;
+                    }
+
                     case Opcodes.PRE_AUTOINCREMENT: {
                         // Pre-increment: ++rd
                         int rd = bytecode[pc++];
