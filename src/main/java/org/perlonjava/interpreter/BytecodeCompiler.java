@@ -986,16 +986,27 @@ public class BytecodeCompiler implements Visitor {
 
         String varName = "$" + ((IdentifierNode) leftOp.operand).name;
 
-        // Get the variable's register
-        if (!hasVariable(varName)) {
-            throwCompilerException("Undefined variable: " + varName);
-            return;
-        }
-        int targetReg = getVariableRegister(varName);
-
         // Compile the right operand (the value to add/subtract/etc.)
         node.right.accept(this);
         int valueReg = lastResultReg;
+
+        // Get the variable's register (or load from global if not in local scope)
+        int targetReg;
+        boolean isGlobal = false;
+
+        if (hasVariable(varName)) {
+            // Lexical variable - use its register directly
+            targetReg = getVariableRegister(varName);
+        } else {
+            // Global variable - need to load it first
+            isGlobal = true;
+            targetReg = allocateRegister();
+            String normalizedName = NameNormalizer.normalizeVariableName(varName, getCurrentPackage());
+            int nameIdx = addToStringPool(normalizedName);
+            emit(Opcodes.LOAD_GLOBAL_SCALAR);
+            emitReg(targetReg);
+            emit(nameIdx);
+        }
 
         // Emit the appropriate compound assignment opcode
         switch (op) {
@@ -1016,6 +1027,15 @@ public class BytecodeCompiler implements Visitor {
 
         emitReg(targetReg);
         emitReg(valueReg);
+
+        // If it's a global variable, store it back
+        if (isGlobal) {
+            String normalizedName = NameNormalizer.normalizeVariableName(varName, getCurrentPackage());
+            int nameIdx = addToStringPool(normalizedName);
+            emit(Opcodes.STORE_GLOBAL_SCALAR);
+            emit(nameIdx);
+            emitReg(targetReg);
+        }
 
         // The result is stored in targetReg
         lastResultReg = targetReg;
