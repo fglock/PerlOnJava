@@ -17,7 +17,7 @@ Note:
 ## What is Perl?
 
 - High-level, general-purpose programming language
-- 35+ years of development (created 1987)
+- Developed by Larry Wall in 1987 (39 years ago)
 - Text processing, sysadmin, web, databases
 - Comprehensive module ecosystem (CPAN)
 - "Makes easy things easy and hard things possible"
@@ -69,9 +69,10 @@ Note:
 <div>
 
 ### Performance
-- **1.78x faster**
+- **~Perl 5 speed on average**
+- **Up to ~2x faster** (hot loops)
+- Higher startup time (JVM warmup)
 - JVM JIT optimization
-- Competitive benchmarks
 
 </div>
 </div>
@@ -79,7 +80,7 @@ Note:
 Note:
 - Enterprise: Use Perl in Java-heavy environments
 - Cloud: Modern deployment platforms
-- Performance: Better than Perl 5 in many cases
+- Performance: Average runtime around Perl 5 speed, with higher startup time
 
 ---
 
@@ -87,13 +88,15 @@ Note:
 
 - <span class="metric">250,000+ tests passing</span>
 - <span class="metric">383 Java source files</span>
-- <span class="metric">150+ core Perl modules</span>
-- <span class="metric">341 Perl stdlib modules</span>
+- <span class="metric">Many Perl modules bundled</span>
 - <span class="metric">5,621+ commits</span>
+
+**Bundled modules:** DBI, HTTP::Tiny, JSON, YAML, Text::CSV, and more
 
 Note:
 - Demonstrates comprehensive Perl 5 compatibility
 - Scale of implementation
+- Includes popular CPAN modules out of the box
 - Active, sustained development since 2013
 - Production-ready
 
@@ -101,7 +104,7 @@ Note:
 
 ## Recent Milestones
 
-✅ Full Perl 5.38+ class features
+✅ Latest Perl class features
 
 ✅ Dual execution backend (compiler + interpreter)
 
@@ -117,24 +120,6 @@ Note:
 
 ---
 
-## Performance Benchmark
-
-**Loop Increment Test (100M iterations)**
-
-| Implementation | Time | vs Perl 5 |
-|----------------|------|-----------|
-| Perl 5 | 1.53s | baseline |
-| **PerlOnJava Compiler** | **0.86s** | **1.78x faster** ⚡ |
-| PerlOnJava Interpreter | 1.80s | 0.85x (15% slower) |
-
-Note:
-- Real benchmark on numeric code
-- Compiler mode significantly faster
-- Interpreter still competitive
-- JVM JIT optimization working well
-
----
-
 ## Live Demo
 
 ```bash
@@ -146,12 +131,45 @@ Note:
 
 # JSON processing
 ./jperl examples/json.pl
+
+# Database access with DBI
+./jperl examples/dbi.pl
 ```
 
 Note:
 - Quick demo if doing live
 - Shows it's real and working
 - Conway's Life is visually impressive
+- DBI example shows Java ecosystem integration
+
+---
+
+## Live Demo: Database Integration
+
+**DBI with JDBC drivers:**
+
+```perl
+use DBI;
+my $dbh = DBI->connect(
+    "dbi:SQLite:dbname=test.db",
+    "", "",
+    { RaiseError => 1 }
+);
+
+my $sth = $dbh->prepare("SELECT * FROM users");
+$sth->execute();
+while (my $row = $sth->fetchrow_hashref) {
+    say "User: $row->{name}";
+}
+```
+
+**Key advantage:** Uses JDBC drivers directly, no DBD::* adapter needed
+
+Note:
+- Perl DBI module works seamlessly with JDBC
+- Any JDBC driver: PostgreSQL, MySQL, Oracle, SQLite, H2
+- No need to compile C-based DBD drivers
+- Pure Java integration
 
 ---
 
@@ -308,6 +326,11 @@ Note:
 - Large Perl subroutines exceed this
 - Dynamic `eval STRING` slow to compile
 
+**This is a common VM design pattern:**
+- JVM HotSpot: bytecode interpreter + JIT compilers
+- JavaScript engines (V8, SpiderMonkey): interpreter/baseline tier + optimizing JIT tier
+- Ruby (CRuby): interpreter + optional JIT (MJIT/YJIT)
+
 **The Solution:**
 1. **Compiler Mode** (default): AST → JVM bytecode
 2. **Interpreter Mode** (fallback): AST → Custom bytecode
@@ -321,7 +344,9 @@ Note:
 
 ## Compiler Mode: The Fast Path
 
-**Performance:** 1.78x faster than Perl 5
+**Performance:** workload dependent
+- ~2x faster on tight loops / lexical variable access
+- ~0.5x on `eval STRING`-heavy workloads
 
 **Advantages:**
 - Maximum performance after JIT warmup
@@ -331,7 +356,6 @@ Note:
 **Limitations:**
 - 65KB method size limit
 - Slower compilation for dynamic eval
-- Higher memory usage
 
 Note:
 - AST → ASM → JVM bytecode → ClassLoader
@@ -346,8 +370,7 @@ Note:
 
 **Advantages:**
 - No method size limits
-- **46x faster compilation** for eval STRING
-- Lower memory footprint
+- **~19x faster** eval STRING than the compiler backend
 - 65,536 virtual registers
 
 **Architecture:** Register-based, not stack-based
@@ -356,6 +379,7 @@ Note:
 - Custom bytecode format
 - Switch-based interpreter VM
 - Register-based crucial for Perl's control flow
+- ~200 opcodes covering all Perl operations
 - Stack-based would corrupt on non-local jumps
 
 ---
@@ -379,6 +403,37 @@ Note:
 - Stack state becomes inconsistent with goto
 - Register: rd = rs1 op rs2 (3-address code)
 - ~200 opcodes covering all Perl operations
+
+---
+
+## JVM Ecosystem: Standard and Derivatives
+
+**Current support: Standard JVM (HotSpot)**
+- Oracle JDK, OpenJDK
+- Compiler mode generates standard JVM bytecode
+- Runs on any compliant JVM
+
+**JVM derivatives we can target:**
+
+1. **GraalVM** - Native image compilation
+   - Compile to standalone native executables
+   - Instant startup, no JVM warmup
+   - Smaller footprint (10-50MB vs 100-200MB)
+
+2. **Android DEX** - Mobile platform
+   - Convert JVM bytecode → Dalvik bytecode
+   - Run Perl on Android devices
+
+**Key advantage: Interpreter backend enables portability**
+- Custom bytecode format is platform-independent
+- Can be ported to any JVM derivative
+- Compiler mode ties us to standard JVM bytecode
+
+Note:
+- Interpreter mode is the key to multi-platform support
+- GraalVM and DEX support planned for future releases
+- Interpreter's custom bytecode can run anywhere
+- This is why dual backend matters beyond just performance
 
 ---
 
@@ -414,18 +469,17 @@ Note:
 
 | Implementation | Time | vs Perl 5 |
 |----------------|------|-----------|
-| Perl 5 | 1.62s | baseline |
-| **Interpreter** | **1.64s** | **1% slower** ✓ |
-| Compiler | 76.12s | 47x slower ✗ |
+| Perl 5 | 1.26s | baseline |
+| **Interpreter** | **2.52s** | **2.0x slower** |
+| Compiler | 46.99s | 39x slower |
 
-**Interpreter is 46x faster than compiler for dynamic eval!**
+**Interpreter is significantly faster than compiler for dynamic eval**
 
 Note:
 - Where interpreter really shines
 - Each iteration evals different string
 - Compiler: expensive ASM compilation per string
 - Interpreter: lightweight bytecode compilation
-- Achieves Perl 5 parity
 
 ---
 
@@ -476,6 +530,8 @@ sub foo {
 ELSEWHERE: print "Jumped!\n";
 ```
 
+- We implement these using **tagged control-flow markers** plus a **trampoline** at the subroutine return boundary
+
 Note:
 - Perl's flexible control flow is challenging
 - last/next/redo with labels
@@ -493,6 +549,9 @@ Note:
 3. `die` → Java exceptions
 4. `eval` → try-catch blocks
 5. Proper scope boundaries
+6. **Trampoline** at subroutine return boundary
+    - A small loop that repeatedly executes the “next” control-flow action instead of growing the JVM call stack
+    - We use it to implement Perl tail calls (`goto &sub`) and to propagate/resolve non-local control flow markers safely
 
 **Why register architecture helps:** Stack would corrupt
 
@@ -539,9 +598,32 @@ my $msg = "Hello $name!\n";
 
 Note:
 - String interpolation is complex
-- Must parse literals, variables, escapes
+- Must parse literals, variables escapes
 - Compile-time validation catches errors early
 - Can optimize away unnecessary operations
+
+---
+
+## Regular Expressions: Java Engine + Compatibility Layer
+
+**Architecture:**
+- Uses **Java's regex engine** (`java.util.regex.Pattern`)
+- **RegexPreprocessor** translates Perl syntax → Java syntax
+- **RuntimeRegex** manages matching, captures, and special variables
+
+**Compatibility layer handles:**
+- Octal escapes: `\120` → `\0120`
+- Named Unicode: `\N{name}`, `\N{U+263D}`
+- Character classes: `[:ascii:]` → `\p{ASCII}`
+- Multi-character case folds: `ß` → `(?:ß|ss|SS)`
+- Perl modifiers: `/i`, `/g`, `/x`, `/xx`, `/e`, `/ee`
+
+**Result:** Most Perl regex features work seamlessly
+
+Note:
+- Regex cache (1000 patterns) for performance
+- Some advanced features not supported (recursive patterns, variable-length lookbehind)
+- See feature-matrix.md for complete regex support details
 
 ---
 
@@ -587,6 +669,57 @@ Note:
 - Same variable is string and number
 - RuntimeArray auto-expands
 - Context determines behavior
+
+---
+
+## XSLoader: C vs Java
+
+**Perl 5 XSLoader:**
+- Loads C-based extensions (XS modules)
+- Requires C compiler and platform-specific compilation
+- Direct access to C libraries
+- Examples: `DBI::DBD::*`, `JSON::XS`, `Compress::*`
+
+**PerlOnJava XSLoader:**
+- Loads Java-based extensions instead
+- No C compiler needed
+- Direct access to Java libraries and JVM ecosystem
+- Examples: `DBI` (uses JDBC), native Java library bindings
+
+**Key difference:** XS → Java Native Access (JNA) for native libraries
+
+Note:
+- Perl 5 XS modules won't work directly on PerlOnJava
+- But we can create Java equivalents with same API
+- Advantage: easier to write and maintain than C/XS
+- Access to entire Java ecosystem instead of C libraries
+- Some CPAN modules being ported to Java backend
+
+---
+
+## Current Limitations
+
+**JVM-incompatible features:**
+- ❌ `fork` - not available on JVM
+- ❌ `DESTROY` blocks - incompatible with JVM garbage collection
+- ❌ Threading - not yet implemented
+- ❌ Perl XS modules - C extensions don't work (use Java equivalents)
+
+**Partially implemented:**
+- 🚧 Some regex features (recursive patterns, variable-length lookbehind)
+- 🚧 Some warnings and pragmas
+- 🚧 Taint checks
+
+**Workarounds available:**
+- Use JNA for native library access instead of XS
+- Use Java threading APIs instead of Perl threads
+- File auto-close happens at program end
+
+Note:
+- Most limitations are JVM-related, not design choices
+- Many CPAN modules being ported to Java backend
+- XSLoader works with Java implementations
+- See feature-matrix.md for complete details
 
 ---
 
@@ -801,7 +934,8 @@ Note:
 ## Conclusion
 
 - ✅ **Production-ready** Perl compiler for JVM
-- ✅ **1.78x faster** than Perl 5 (compiler mode)
+- ✅ **~Perl 5 speed on average**, with higher startup time
+- ✅ **Up to ~2x faster** than Perl 5 (compiler mode, workload dependent)
 - ✅ **250,000+ tests** passing
 - ✅ **Full ecosystem integration** (JDBC, JSR-223)
 - ✅ **Active development** with clear roadmap
@@ -810,7 +944,7 @@ Note:
 
 Note:
 - Comprehensive Perl 5 compatibility
-- Competitive or better performance
+- Average runtime around Perl 5 speed, up to 2x faster on hot loops
 - Modern deployment options
 - Active, sustained development
 
