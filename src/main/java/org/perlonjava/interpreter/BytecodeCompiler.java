@@ -553,8 +553,11 @@ public class BytecodeCompiler implements Visitor {
 
             if (!found) {
                 // Global variable
+                // Strip sigil and normalize name (e.g., "$x" → "main::x")
+                String bareVarName = varName.substring(1);  // Remove sigil
+                String normalizedName = NameNormalizer.normalizeVariableName(bareVarName, getCurrentPackage());
                 int rd = allocateRegister();
-                int nameIdx = addToStringPool(varName);
+                int nameIdx = addToStringPool(normalizedName);
 
                 emit(Opcodes.LOAD_GLOBAL_SCALAR);
                 emitReg(rd);
@@ -1641,7 +1644,10 @@ public class BytecodeCompiler implements Visitor {
                     lastResultReg = targetReg;
                 } else {
                     // Global variable
-                    int nameIdx = addToStringPool(varName);
+                    // Strip sigil and normalize name (e.g., "$x" → "main::x")
+                    String bareVarName = varName.substring(1);  // Remove sigil
+                    String normalizedName = NameNormalizer.normalizeVariableName(bareVarName, getCurrentPackage());
+                    int nameIdx = addToStringPool(normalizedName);
                     emit(Opcodes.STORE_GLOBAL_SCALAR);
                     emit(nameIdx);
                     emitReg(valueReg);
@@ -1816,8 +1822,9 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(valueReg);
                 lastResultReg = targetReg;
             } else {
-                // Global variable
-                int nameIdx = addToStringPool(varName);
+                // Global variable (varName has no sigil here)
+                String normalizedName = NameNormalizer.normalizeVariableName(varName, getCurrentPackage());
+                int nameIdx = addToStringPool(normalizedName);
                 emit(Opcodes.STORE_GLOBAL_SCALAR);
                 emit(nameIdx);
                 emitReg(valueReg);
@@ -2220,7 +2227,10 @@ public class BytecodeCompiler implements Visitor {
                                     emitReg(elementReg);
                                 }
                             } else {
-                                int nameIdx = addToStringPool(varName);
+                                // Normalize global variable name (remove sigil, add package)
+                                String bareVarName = varName.substring(1);  // Remove "$"
+                                String normalizedName = NameNormalizer.normalizeVariableName(bareVarName, getCurrentPackage());
+                                int nameIdx = addToStringPool(normalizedName);
                                 emit(Opcodes.STORE_GLOBAL_SCALAR);
                                 emit(nameIdx);
                                 emitReg(elementReg);
@@ -3949,12 +3959,10 @@ public class BytecodeCompiler implements Visitor {
                         lastResultReg = varReg;
                     } else {
                         // Global variable increment/decrement
-                        // Add package prefix if not present
-                        String globalVarName = varName;
-                        if (!globalVarName.contains("::")) {
-                            globalVarName = "main::" + varName.substring(1);
-                        }
-                        int nameIdx = addToStringPool(globalVarName);
+                        // Normalize global variable name (remove sigil, add package)
+                        String bareVarName = varName.substring(1);  // Remove "$"
+                        String normalizedName = NameNormalizer.normalizeVariableName(bareVarName, getCurrentPackage());
+                        int nameIdx = addToStringPool(normalizedName);
 
                         // Load global variable
                         int globalReg = allocateRegister();
