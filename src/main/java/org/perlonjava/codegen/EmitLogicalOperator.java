@@ -311,10 +311,8 @@ public class EmitLogicalOperator {
                 rewritten = true;
             }
 
-            // For RUNTIME context, preserve it; otherwise use SCALAR for boolean evaluation
-            int operandContext = emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME
-                    ? RuntimeContextType.RUNTIME
-                    : RuntimeContextType.SCALAR;
+            // Logical operators always need SCALAR context for boolean evaluation
+            int operandContext = RuntimeContextType.SCALAR;
 
             resultRef = emitterVisitor.ctx.javaClassInfo.acquireSpillRefOrAllocate(emitterVisitor.ctx.symbolTable);
 
