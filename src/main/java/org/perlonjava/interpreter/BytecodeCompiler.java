@@ -3362,9 +3362,12 @@ public class BytecodeCompiler implements Visitor {
             // Logical AND with short-circuit evaluation
             // Only evaluate right side if left side is true
 
-            // Compile left operand
+            // Compile left operand in scalar context (need boolean value)
+            int savedContext = currentCallContext;
+            currentCallContext = RuntimeContextType.SCALAR;
             node.left.accept(this);
             int rs1 = lastResultReg;
+            currentCallContext = savedContext;
 
             // Allocate result register and move left value to it
             int rd = allocateRegister();
@@ -3401,9 +3404,12 @@ public class BytecodeCompiler implements Visitor {
             // Logical OR with short-circuit evaluation
             // Only evaluate right side if left side is false
 
-            // Compile left operand
+            // Compile left operand in scalar context (need boolean value)
+            int savedContext = currentCallContext;
+            currentCallContext = RuntimeContextType.SCALAR;
             node.left.accept(this);
             int rs1 = lastResultReg;
+            currentCallContext = savedContext;
 
             // Allocate result register and move left value to it
             int rd = allocateRegister();
@@ -3440,9 +3446,12 @@ public class BytecodeCompiler implements Visitor {
             // Defined-OR with short-circuit evaluation
             // Only evaluate right side if left side is undefined
 
-            // Compile left operand
+            // Compile left operand in scalar context (need to test definedness)
+            int savedContext = currentCallContext;
+            currentCallContext = RuntimeContextType.SCALAR;
             node.left.accept(this);
             int rs1 = lastResultReg;
+            currentCallContext = savedContext;
 
             // Allocate result register and move left value to it
             int rd = allocateRegister();
@@ -4158,10 +4167,13 @@ public class BytecodeCompiler implements Visitor {
             }
         } else if (op.equals("not") || op.equals("!")) {
             // Logical NOT operator: not $x or !$x
-            // Evaluate operand and emit NOT opcode
+            // Evaluate operand in scalar context (need boolean value)
             if (node.operand != null) {
+                int savedContext = currentCallContext;
+                currentCallContext = RuntimeContextType.SCALAR;
                 node.operand.accept(this);
                 int rs = lastResultReg;
+                currentCallContext = savedContext;
 
                 // Allocate result register
                 int rd = allocateRegister();
@@ -6483,9 +6495,12 @@ public class BytecodeCompiler implements Visitor {
         //   rd = false_expr
         //   end_label:
 
-        // Compile condition
+        // Compile condition in scalar context (need boolean value)
+        int savedContext = currentCallContext;
+        currentCallContext = RuntimeContextType.SCALAR;
         node.condition.accept(this);
         int condReg = lastResultReg;
+        currentCallContext = savedContext;
 
         // Allocate result register
         int rd = allocateRegister();

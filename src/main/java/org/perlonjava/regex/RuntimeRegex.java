@@ -357,7 +357,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
 
         // Fast path: no alarm active, use direct matching
-        return matchRegexDirect(quotedRegex, string, ctx);
+        RuntimeBase result = matchRegexDirect(quotedRegex, string, ctx);
+        return result;
     }
 
     /**
@@ -540,6 +541,11 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
 
         if (ctx == RuntimeContextType.LIST) {
+            // In LIST context: return captured groups, or (1) for success with no captures (non-global)
+            if (found && result.elements.isEmpty() && !regex.regexFlags.isGlobalMatch()) {
+                // Non-global match with no captures in LIST context returns (1)
+                result.elements.add(RuntimeScalarCache.getScalarInt(1));
+            }
             return result;
         } else if (ctx == RuntimeContextType.SCALAR) {
             return RuntimeScalarCache.getScalarBoolean(found);
