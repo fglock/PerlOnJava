@@ -187,6 +187,13 @@ make
 # Run unit tests
 make test-unit
 
+# Run specific test in interpreter mode
+cd perl5_t/t && JPERL_EVAL_USE_INTERPRETER=1 ../../jperl op/bop.t
+
+# Compare compiler vs interpreter results
+./jperl op/bop.t                               # Compiler mode
+JPERL_EVAL_USE_INTERPRETER=1 ./jperl op/bop.t # Interpreter mode
+
 # Verify tableswitch preserved
 javap -c -classpath build/classes/java/main \
   org.perlonjava.interpreter.BytecodeInterpreter | grep -A 5 "switch"
