@@ -662,8 +662,152 @@ public class Opcodes {
      * Format: CHOMP rd rs */
     public static final short CHOMP = 168;
 
+    /** Get wantarray context: rd = Operator.wantarray(wantarrayReg)
+     * Format: WANTARRAY rd wantarrayReg */
+    public static final short WANTARRAY = 169;
+
+    /** Require module or version: rd = ModuleOperators.require(rs)
+     * Format: REQUIRE rd rs */
+    public static final short REQUIRE = 170;
+
+    /** Get regex position: rd = rs.pos() (returns lvalue for assignment)
+     * Format: POS rd rs */
+    public static final short POS = 171;
+
+    /** Find substring position: rd = StringOperators.index(str, substr, pos)
+     * Format: INDEX rd str substr pos */
+    public static final short INDEX = 172;
+
+    /** Find substring position from end: rd = StringOperators.rindex(str, substr, pos)
+     * Format: RINDEX rd str substr pos */
+    public static final short RINDEX = 173;
+
+    /** Bitwise AND assignment: target &= value
+     * Format: BITWISE_AND_ASSIGN target value */
+    public static final short BITWISE_AND_ASSIGN = 174;
+
+    /** Bitwise OR assignment: target |= value
+     * Format: BITWISE_OR_ASSIGN target value */
+    public static final short BITWISE_OR_ASSIGN = 175;
+
+    /** Bitwise XOR assignment: target ^= value
+     * Format: BITWISE_XOR_ASSIGN target value */
+    public static final short BITWISE_XOR_ASSIGN = 176;
+
+    /** String bitwise AND assignment: target &.= value
+     * Format: STRING_BITWISE_AND_ASSIGN target value */
+    public static final short STRING_BITWISE_AND_ASSIGN = 177;
+
+    /** String bitwise OR assignment: target |.= value
+     * Format: STRING_BITWISE_OR_ASSIGN target value */
+    public static final short STRING_BITWISE_OR_ASSIGN = 178;
+
+    /** String bitwise XOR assignment: target ^.= value
+     * Format: STRING_BITWISE_XOR_ASSIGN target value */
+    public static final short STRING_BITWISE_XOR_ASSIGN = 179;
+
+    /** Numeric bitwise AND: rd = rs1 binary& rs2
+     * Format: BITWISE_AND_BINARY rd rs1 rs2 */
+    public static final short BITWISE_AND_BINARY = 180;
+
+    /** Numeric bitwise OR: rd = rs1 binary| rs2
+     * Format: BITWISE_OR_BINARY rd rs1 rs2 */
+    public static final short BITWISE_OR_BINARY = 181;
+
+    /** Numeric bitwise XOR: rd = rs1 binary^ rs2
+     * Format: BITWISE_XOR_BINARY rd rs1 rs2 */
+    public static final short BITWISE_XOR_BINARY = 182;
+
+    /** String bitwise AND: rd = rs1 &. rs2
+     * Format: STRING_BITWISE_AND rd rs1 rs2 */
+    public static final short STRING_BITWISE_AND = 183;
+
+    /** String bitwise OR: rd = rs1 |. rs2
+     * Format: STRING_BITWISE_OR rd rs1 rs2 */
+    public static final short STRING_BITWISE_OR = 184;
+
+    /** String bitwise XOR: rd = rs1 ^. rs2
+     * Format: STRING_BITWISE_XOR rd rs1 rs2 */
+    public static final short STRING_BITWISE_XOR = 185;
+
+    /** Numeric bitwise NOT: rd = binary~ rs
+     * Format: BITWISE_NOT_BINARY rd rs */
+    public static final short BITWISE_NOT_BINARY = 186;
+
+    /** String bitwise NOT: rd = ~. rs
+     * Format: BITWISE_NOT_STRING rd rs */
+    public static final short BITWISE_NOT_STRING = 187;
+
     // =================================================================
-    // OPCODES 169-32767: RESERVED FOR FUTURE OPERATIONS
+    // FILE TEST AND STAT OPERATIONS (188-218)
+    // =================================================================
+
+    /** stat operator: rd = stat(rs) [context]
+     * Format: STAT rd rs ctx */
+    public static final short STAT = 188;
+
+    /** lstat operator: rd = lstat(rs) [context]
+     * Format: LSTAT rd rs ctx */
+    public static final short LSTAT = 189;
+
+    // File test operators (unary operators returning boolean or value)
+    /** -r FILE: readable */
+    public static final short FILETEST_R = 190;
+    /** -w FILE: writable */
+    public static final short FILETEST_W = 191;
+    /** -x FILE: executable */
+    public static final short FILETEST_X = 192;
+    /** -o FILE: owned by effective uid */
+    public static final short FILETEST_O = 193;
+    /** -R FILE: readable by real uid */
+    public static final short FILETEST_R_REAL = 194;
+    /** -W FILE: writable by real uid */
+    public static final short FILETEST_W_REAL = 195;
+    /** -X FILE: executable by real uid */
+    public static final short FILETEST_X_REAL = 196;
+    /** -O FILE: owned by real uid */
+    public static final short FILETEST_O_REAL = 197;
+    /** -e FILE: exists */
+    public static final short FILETEST_E = 198;
+    /** -z FILE: zero size */
+    public static final short FILETEST_Z = 199;
+    /** -s FILE: size in bytes */
+    public static final short FILETEST_S = 200;
+    /** -f FILE: plain file */
+    public static final short FILETEST_F = 201;
+    /** -d FILE: directory */
+    public static final short FILETEST_D = 202;
+    /** -l FILE: symbolic link */
+    public static final short FILETEST_L = 203;
+    /** -p FILE: named pipe */
+    public static final short FILETEST_P = 204;
+    /** -S FILE: socket */
+    public static final short FILETEST_S_UPPER = 205;
+    /** -b FILE: block special */
+    public static final short FILETEST_B = 206;
+    /** -c FILE: character special */
+    public static final short FILETEST_C = 207;
+    /** -t FILE: tty */
+    public static final short FILETEST_T = 208;
+    /** -u FILE: setuid */
+    public static final short FILETEST_U = 209;
+    /** -g FILE: setgid */
+    public static final short FILETEST_G = 210;
+    /** -k FILE: sticky bit */
+    public static final short FILETEST_K = 211;
+    /** -T FILE: text file */
+    public static final short FILETEST_T_UPPER = 212;
+    /** -B FILE: binary file */
+    public static final short FILETEST_B_UPPER = 213;
+    /** -M FILE: modification age (days) */
+    public static final short FILETEST_M = 214;
+    /** -A FILE: access age (days) */
+    public static final short FILETEST_A = 215;
+    /** -C FILE: inode change age (days) */
+    public static final short FILETEST_C_UPPER = 216;
+
+    // =================================================================
+    // OPCODES 217-32767: RESERVED FOR FUTURE OPERATIONS
     // =================================================================
     // See PHASE3_OPERATOR_PROMOTIONS.md for promotion strategy.
     // All SLOWOP_* constants have been removed - use direct opcodes 114-154 instead.
