@@ -3060,43 +3060,45 @@ public class BytecodeCompiler implements Visitor {
                 emit(currentCallContext);
             }
             case "&" -> {
-                // String bitwise AND (default): rs1 & rs2
-                // Note: binary& (with use integer) is handled separately
-                emit(Opcodes.STRING_BITWISE_AND);
+                // Numeric bitwise AND (default): rs1 & rs2
+                emit(Opcodes.BITWISE_AND_BINARY);
                 emitReg(rd);
                 emitReg(rs1);
                 emitReg(rs2);
             }
             case "binary&" -> {
                 // Numeric bitwise AND (use integer): rs1 binary& rs2
+                // Same as & but explicitly numeric
                 emit(Opcodes.BITWISE_AND_BINARY);
                 emitReg(rd);
                 emitReg(rs1);
                 emitReg(rs2);
             }
             case "|" -> {
-                // String bitwise OR (default): rs1 | rs2
-                emit(Opcodes.STRING_BITWISE_OR);
+                // Numeric bitwise OR (default): rs1 | rs2
+                emit(Opcodes.BITWISE_OR_BINARY);
                 emitReg(rd);
                 emitReg(rs1);
                 emitReg(rs2);
             }
             case "binary|" -> {
                 // Numeric bitwise OR (use integer): rs1 binary| rs2
+                // Same as | but explicitly numeric
                 emit(Opcodes.BITWISE_OR_BINARY);
                 emitReg(rd);
                 emitReg(rs1);
                 emitReg(rs2);
             }
             case "^" -> {
-                // String bitwise XOR (default): rs1 ^ rs2
-                emit(Opcodes.STRING_BITWISE_XOR);
+                // Numeric bitwise XOR (default): rs1 ^ rs2
+                emit(Opcodes.BITWISE_XOR_BINARY);
                 emitReg(rd);
                 emitReg(rs1);
                 emitReg(rs2);
             }
             case "binary^" -> {
                 // Numeric bitwise XOR (use integer): rs1 binary^ rs2
+                // Same as ^ but explicitly numeric
                 emit(Opcodes.BITWISE_XOR_BINARY);
                 emitReg(rd);
                 emitReg(rs1);
