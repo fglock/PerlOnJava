@@ -439,8 +439,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         List<RuntimeBase> matchedGroups = result.elements;
 
         int capture = 1;
-        int captureCount = 0;  // Track capture count for later use
-        int previousPos = startPos; // Track the previous position
+        int previousPos = startPos; // Track the previous position  
         int previousMatchEnd = -1;  // Track end of previous match
         // NOTE: Do NOT clear global match variables here.
         //
@@ -457,7 +456,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             }
 
             found = true;
-            captureCount = matcher.groupCount();
+            int captureCount = matcher.groupCount();
 
             // Always initialize $1, $2, @+, @-, $`, $&, $' for every successful match
             globalMatcher = matcher;
@@ -478,10 +477,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 if (ctx == RuntimeContextType.LIST) {
                     for (int i = 1; i <= captureCount; i++) {
                         String matchedStr = matcher.group(i);
-                        // Add capture even if null (as undef) to match Perl behavior
-                        matchedGroups.add(matchedStr != null
-                                ? new RuntimeScalar(matchedStr)
-                                : RuntimeScalarCache.scalarUndef);
+                        if (matchedStr != null) {
+                            matchedGroups.add(new RuntimeScalar(matchedStr));
+                        }
                     }
                 }
             }
@@ -576,9 +574,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
 
         if (ctx == RuntimeContextType.LIST) {
-            // In LIST context: return captured groups, or (1) for success with no capturing groups (non-global)
-            if (found && captureCount == 0 && !regex.regexFlags.isGlobalMatch()) {
-                // Non-global match with no capturing groups in LIST context returns (1)
+            // In LIST context: return captured groups, or (1) for success with no captures (non-global)
+            if (found && result.elements.isEmpty() && !regex.regexFlags.isGlobalMatch()) {
+                // Non-global match with no captures in LIST context returns (1)
                 result.elements.add(RuntimeScalarCache.getScalarInt(1));
             }
             return result;
