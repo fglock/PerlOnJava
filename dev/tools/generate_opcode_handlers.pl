@@ -8,6 +8,7 @@ my $operator_handler_file = 'src/main/java/org/perlonjava/operators/OperatorHand
 my $opcodes_file = 'src/main/java/org/perlonjava/interpreter/Opcodes.java';
 my $bytecode_interpreter_file = 'src/main/java/org/perlonjava/interpreter/BytecodeInterpreter.java';
 my $interpreted_code_file = 'src/main/java/org/perlonjava/interpreter/InterpretedCode.java';
+my $bytecode_compiler_file = 'src/main/java/org/perlonjava/interpreter/BytecodeCompiler.java';
 my $output_dir = 'src/main/java/org/perlonjava/interpreter';
 
 # Read existing opcodes and LASTOP from Opcodes.java
@@ -82,10 +83,10 @@ print "\nUpdating source files...\n";
 update_opcodes_file(\%operators_by_sig, $opcode_num);
 update_bytecode_interpreter(\%operators_by_sig);
 update_interpreted_code(\%operators_by_sig);
+update_bytecode_compiler(\%operators_by_sig);
 
 print "\nGeneration complete!\n";
 print "Next opcode available: $opcode_num\n";
-print "\nStill TODO: Add operator cases to BytecodeCompiler.java\n";
 
 sub read_existing_opcodes {
     my ($filename) = @_;
@@ -540,5 +541,41 @@ sub update_interpreted_code {
     }
 
     update_file_at_markers($interpreted_code_file, '// GENERATED_DISASM_START', '// GENERATED_DISASM_END',
+        join('', @content));
+}
+
+sub update_bytecode_compiler {
+    my ($operators_by_sig) = @_;
+
+    my @content;
+
+    # Only generate unary operators for now (binary/ternary need different patterns)
+    if (exists $operators_by_sig->{scalar_unary}) {
+        for my $op (@{$operators_by_sig->{scalar_unary}}) {
+            my $op_name = $op->{name};
+            my $opcode_name = $op->{opcode_name};
+
+            push @content, "        } else if (op.equals(\"$op_name\")) {\n";
+            push @content, "            // $op_name(\$x) - $op->{class}.$op->{method}\n";
+            push @content, "            if (node.operand instanceof ListNode) {\n";
+            push @content, "                ListNode list = (ListNode) node.operand;\n";
+            push @content, "                if (!list.elements.isEmpty()) {\n";
+            push @content, "                    list.elements.get(0).accept(this);\n";
+            push @content, "                } else {\n";
+            push @content, "                    throwCompilerException(\"$op_name requires an argument\");\n";
+            push @content, "                }\n";
+            push @content, "            } else {\n";
+            push @content, "                node.operand.accept(this);\n";
+            push @content, "            }\n";
+            push @content, "            int argReg = lastResultReg;\n";
+            push @content, "            int rd = allocateRegister();\n";
+            push @content, "            emit(Opcodes.$opcode_name);\n";
+            push @content, "            emitReg(rd);\n";
+            push @content, "            emitReg(argReg);\n";
+            push @content, "            lastResultReg = rd;\n";
+        }
+    }
+
+    update_file_at_markers($bytecode_compiler_file, '// GENERATED_OPERATORS_START', '// GENERATED_OPERATORS_END',
         join('', @content));
 }
