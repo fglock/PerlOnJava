@@ -55,6 +55,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             System.getenv("JPERL_EVAL_USE_INTERPRETER") != null;
 
     /**
+     * Flag to control whether eval compilation errors should be printed to stderr.
+     * By default, eval failures are silent (errors only stored in $@).
+     *
+     * Set environment variable JPERL_EVAL_VERBOSE=1 to enable verbose error reporting.
+     * This is useful for debugging eval compilation issues, especially when testing
+     * the interpreter path.
+     */
+    public static final boolean EVAL_VERBOSE =
+            System.getenv("JPERL_EVAL_VERBOSE") != null;
+
+    /**
      * ThreadLocal storage for runtime values of captured variables during eval STRING compilation.
      *
      * PROBLEM: In perl5, BEGIN blocks inside eval STRING can access outer lexical variables' runtime values:
@@ -454,6 +465,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             RuntimeScalar err = GlobalVariable.getGlobalVariable("main::@");
             err.set(e.getMessage());
 
+            // If EVAL_VERBOSE is set, print the error to stderr for debugging
+            if (EVAL_VERBOSE) {
+                System.err.println("eval compilation error: " + e.getMessage());
+                if (e.getCause() != null) {
+                    System.err.println("Caused by: " + e.getCause().getMessage());
+                }
+            }
+
             // Check if $SIG{__DIE__} handler is defined
             RuntimeScalar sig = GlobalVariable.getGlobalHash("main::SIG").get("__DIE__");
             if (sig.getDefinedBoolean()) {
@@ -800,6 +819,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // Set the global error variable "$@"
                 RuntimeScalar err = GlobalVariable.getGlobalVariable("main::@");
                 err.set(e.getMessage());
+
+                // If EVAL_VERBOSE is set, print the error to stderr for debugging
+                if (EVAL_VERBOSE) {
+                    System.err.println("eval compilation error: " + e.getMessage());
+                    if (e.getCause() != null) {
+                        System.err.println("Caused by: " + e.getCause().getMessage());
+                    }
+                }
 
                 // Check if $SIG{__DIE__} handler is defined
                 RuntimeScalar sig = GlobalVariable.getGlobalHash("main::SIG").get("__DIE__");
