@@ -8,6 +8,18 @@
 **Opcodes:** 0-157 (contiguous) for JVM tableswitch optimization
 **Runtime:** 100% API compatibility with compiler (zero duplication)
 
+### Testing Modes
+
+**JPERL_EVAL_USE_INTERPRETER=1** - Forces all eval STRING to use the interpreter
+- Used for testing interpreter implementation of operators in eval context
+- Compiler still used for main code, only eval STRING uses interpreter
+- Example: `JPERL_EVAL_USE_INTERPRETER=1 ./jperl test.pl`
+
+**--interpreter** - Forces the interpreter EVERYWHERE
+- All code (main and eval) runs in interpreter mode
+- Used for full interpreter testing and development
+- Example: `./jperl --interpreter test.pl`
+
 ## Core Files
 
 - `Opcodes.java` - Opcode constants (0-157, contiguous)

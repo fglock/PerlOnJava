@@ -1,5 +1,6 @@
 package org.perlonjava.interpreter;
 
+import org.perlonjava.operators.RuntimeTransliterate;
 import org.perlonjava.runtime.*;
 
 /**
@@ -966,6 +967,38 @@ public class SlowOpcodeHandler {
 
         int length = stringScalar.toString().length();
         registers[rd] = new RuntimeScalar(length);
+
+        return pc;
+    }
+
+    /**
+     * TR_TRANSLITERATE: rd = tr///pattern applied to target
+     * Format: [TR_TRANSLITERATE] [rd] [searchReg] [replaceReg] [modifiersReg] [targetReg] [context]
+     * Effect: Applies transliteration pattern to target variable
+     * Returns: Count of transliterated characters
+     */
+    public static int executeTransliterate(
+            short[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+
+        int rd = bytecode[pc++];
+        int searchReg = bytecode[pc++];
+        int replaceReg = bytecode[pc++];
+        int modifiersReg = bytecode[pc++];
+        int targetReg = bytecode[pc++];
+
+        // Read context (4 bytes = 1 int)
+        int context = ((bytecode[pc++] & 0xFFFF) << 16) | (bytecode[pc++] & 0xFFFF);
+
+        RuntimeScalar search = (RuntimeScalar) registers[searchReg];
+        RuntimeScalar replace = (RuntimeScalar) registers[replaceReg];
+        RuntimeScalar modifiers = (RuntimeScalar) registers[modifiersReg];
+        RuntimeScalar target = (RuntimeScalar) registers[targetReg];
+
+        // Compile and apply transliteration
+        RuntimeTransliterate tr = RuntimeTransliterate.compile(search, replace, modifiers);
+        registers[rd] = tr.transliterate(target, context);
 
         return pc;
     }

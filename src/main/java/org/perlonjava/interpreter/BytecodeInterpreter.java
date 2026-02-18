@@ -2158,6 +2158,11 @@ public class BytecodeInterpreter {
                     case Opcodes.EXIT:
                         pc = ScalarUnaryOpcodeHandler.execute(opcode, bytecode, pc, registers);
                         break;
+
+                    case Opcodes.TR_TRANSLITERATE:
+                        pc = SlowOpcodeHandler.executeTransliterate(bytecode, pc, registers);
+                        break;
+
                     // GENERATED_HANDLERS_END
 
                     default:
