@@ -6,7 +6,6 @@ use Cwd qw(abs_path);
 use File::Basename qw(dirname);
 use File::Spec;
 use Getopt::Long qw(GetOptions);
-use Time::HiRes qw(time);
 
 my %opt = (
     stats => 1,
@@ -15,8 +14,6 @@ my %opt = (
     eval_iterations => 1_000_000,
     eval_payload_len => 50,
     print_cmd => 0,
-    startup_runs => 30,
-    startup_warmup => 5,
 );
 
 GetOptions(
@@ -26,8 +23,6 @@ GetOptions(
     'eval-iterations=i' => \$opt{eval_iterations},
     'eval-payload-len=i' => \$opt{eval_payload_len},
     'print-cmd!' => \$opt{print_cmd},
-    'startup-runs=i' => \$opt{startup_runs},
-    'startup-warmup=i' => \$opt{startup_warmup},
 ) or die "Invalid options\n";
 
 sub find_repo_root {
@@ -160,49 +155,6 @@ sub bench_command_seconds {
     return 0 + $1;
 }
 
-sub wall_time_cmd_seconds {
-    my (%args) = @_;
-    my $cmd = $args{cmd};
-    my $env = $args{env} || {};
-
-    if ($opt{print_cmd}) {
-        if (%$env) {
-            my @pairs;
-            for my $k (sort keys %$env) {
-                push @pairs, $k . '=' . $env->{$k};
-            }
-            print "CMD: " . join(' ', @pairs) . " $cmd\n";
-        } else {
-            print "CMD: $cmd\n";
-        }
-    }
-
-    my $t0 = time();
-    my ($exit, $out) = run_cmd(cmd => $cmd, env => $env);
-    my $t1 = time();
-    die "Command failed (exit=$exit):\n$cmd\n$out\n" if $exit != 0;
-    return $t1 - $t0;
-}
-
-sub mean {
-    my ($vals) = @_;
-    return undef if !$vals || !@$vals;
-    my $sum = 0;
-    $sum += $_ for @$vals;
-    return $sum / scalar(@$vals);
-}
-
-sub median {
-    my ($vals) = @_;
-    return undef if !$vals || !@$vals;
-    my @s = sort { $a <=> $b } @$vals;
-    my $n = scalar(@s);
-    if ($n % 2) {
-        return $s[int($n / 2)];
-    }
-    return ($s[$n/2 - 1] + $s[$n/2]) / 2;
-}
-
 sub print_markdown_table {
     my (%args) = @_;
     my $headers = $args{headers};
@@ -307,45 +259,4 @@ if ($opt{bench}) {
     print "Notes:\n";
     print "- Force eval STRING to use the interpreter backend via: JPERL_EVAL_USE_INTERPRETER=1 ./jperl ...\n";
     print "- You can tune --eval-iterations and --iterations for runtime on slower machines.\n";
-
-    my $startup_runs = $opt{startup_runs};
-    my $startup_warmup = $opt{startup_warmup};
-    if (!defined $startup_runs || $startup_runs < 1) {
-        $startup_runs = 1;
-    }
-    if (!defined $startup_warmup || $startup_warmup < 0) {
-        $startup_warmup = 0;
-    }
-
-    my $startup_perl = q{perl -e 'print "hello, World!\n"' > /dev/null};
-    my $startup_jperl = $jperl . q{ -e 'print "hello, World!\n"' > /dev/null};
-
-    my @startup_perl_times;
-    my @startup_jperl_times;
-
-    for (1 .. $startup_warmup) {
-        wall_time_cmd_seconds(cmd => $startup_perl);
-        wall_time_cmd_seconds(cmd => $startup_jperl);
-    }
-    for (1 .. $startup_runs) {
-        push @startup_perl_times, wall_time_cmd_seconds(cmd => $startup_perl);
-        push @startup_jperl_times, wall_time_cmd_seconds(cmd => $startup_jperl);
-    }
-
-    my $startup_perl_median = median(\@startup_perl_times);
-    my $startup_jperl_median = median(\@startup_jperl_times);
-
-    print "\n";
-    print "# Startup benchmark (hello world, wall time)\n\n";
-    print "Runs: $startup_runs (warmup: $startup_warmup)\n\n";
-
-    my $startup_vs_perl = format_vs_baseline(baseline => $startup_perl_median, candidate => $startup_jperl_median);
-
-    print_markdown_table(
-        headers => ['Implementation', 'Median', 'Mean', 'vs Perl 5 (median)'],
-        rows => [
-            ['Perl 5', format_seconds($startup_perl_median), format_seconds(mean(\@startup_perl_times)), 'baseline'],
-            ['PerlOnJava', format_seconds($startup_jperl_median), format_seconds(mean(\@startup_jperl_times)), $startup_vs_perl],
-        ],
-    );
 }
