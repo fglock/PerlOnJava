@@ -3804,13 +3804,17 @@ public class BytecodeCompiler implements Visitor {
                                 varRegs.add(reg);
                             }
                         } else if (sigilOp.operand instanceof OperatorNode) {
-                            // Handle declared references: my (\$x) or my \($x, $y)
+                            // Handle declared references with backslash: my (\$x)
+                            // The backslash operator wraps the variable
                             // For now, skip these as they require special handling
-                            // The JVM compiler also doesn't fully support these in the interpreter path
                             continue;
                         } else {
                             throwCompilerException("my list declaration requires identifier: " + sigilOp.operand.getClass().getSimpleName());
                         }
+                    } else if (element instanceof ListNode) {
+                        // Nested list: my (($x, $y))
+                        // Skip nested lists for now
+                        continue;
                     } else {
                         throwCompilerException("my list declaration requires scalar/array/hash: " + element.getClass().getSimpleName());
                     }
