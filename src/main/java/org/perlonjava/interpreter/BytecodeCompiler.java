@@ -56,10 +56,12 @@ public class BytecodeCompiler implements Visitor {
         final List<Integer> breakPcs; // PCs to patch for last (break)
         final List<Integer> nextPcs;  // PCs to patch for next
         final List<Integer> redoPcs;  // PCs to patch for redo
+        final boolean isTrueLoop;    // True for for/while/foreach; false for do-while/bare blocks
 
-        LoopInfo(String label, int startPc) {
+        LoopInfo(String label, int startPc, boolean isTrueLoop) {
             this.label = label;
             this.startPc = startPc;
+            this.isTrueLoop = isTrueLoop;
             this.continuePc = -1;  // Will be set later
             this.breakPcs = new ArrayList<>();
             this.nextPcs = new ArrayList<>();
@@ -325,6 +327,11 @@ public class BytecodeCompiler implements Visitor {
             } else {
                 throwCompilerException("Can't \"" + op + "\" outside a loop block", node.getIndex());
             }
+        }
+
+        // Check if this is a pseudo-loop (do-while/bare block) which doesn't support last/next/redo
+        if (!targetLoop.isTrueLoop) {
+            throwCompilerException("Can't \"" + op + "\" outside a loop block", node.getIndex());
         }
 
         // Emit the opcode and record the PC to be patched later
@@ -6417,7 +6424,7 @@ public class BytecodeCompiler implements Visitor {
 
         // Step 5: Push loop info onto stack for last/next/redo
         int loopStartPc = bytecode.size();
-        LoopInfo loopInfo = new LoopInfo(node.labelName, loopStartPc);
+        LoopInfo loopInfo = new LoopInfo(node.labelName, loopStartPc, true); // true = foreach is a true loop
         loopStack.push(loopInfo);
 
         // Step 6: Loop start - combined check/next/exit (superinstruction)
@@ -6466,8 +6473,10 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(For3Node node) {
-        // For3Node: C-style for loop or bare block
+        // For3Node: C-style for loop, while loop, do-while loop, or bare block
         // for (init; condition; increment) { body }
+        // while (condition) { body }
+        // do { body } while (condition);
         // { body }  (bare block - isSimpleBlock=true)
 
         // Handle bare blocks (simple blocks) differently - they execute once, not loop
@@ -6488,59 +6497,104 @@ public class BytecodeCompiler implements Visitor {
             return;
         }
 
-        // Step 1: Execute initialization
+        // Step 1: Execute initialization (for C-style loops only)
         if (node.initialization != null) {
             node.initialization.accept(this);
         }
 
         // Step 2: Push loop info onto stack for last/next/redo
         int loopStartPc = bytecode.size();
-        LoopInfo loopInfo = new LoopInfo(node.labelName, loopStartPc);
+        // do-while is NOT a true loop (can't use last/next/redo); while/for are true loops
+        LoopInfo loopInfo = new LoopInfo(node.labelName, loopStartPc, !node.isDoWhile);
         loopStack.push(loopInfo);
 
-        // Step 3: Check condition (redo jumps here)
-        int condReg = allocateRegister();
-        if (node.condition != null) {
-            node.condition.accept(this);
-            condReg = lastResultReg;
-        } else {
-            // No condition means infinite loop - load true
-            emit(Opcodes.LOAD_INT);
+        int loopEndJumpPc = -1;
+
+        if (node.isDoWhile) {
+            // do-while loop: body executes at least once, condition checked at end
+            // Step 3: Execute body (redo jumps here)
+            if (node.body != null) {
+                node.body.accept(this);
+            }
+
+            // Step 4: Continue point (next jumps here)
+            loopInfo.continuePc = bytecode.size();
+
+            // Step 5: Execute continue block if present
+            if (node.continueBlock != null) {
+                node.continueBlock.accept(this);
+            }
+
+            // Step 6: Execute increment (for C-style for loops)
+            if (node.increment != null) {
+                node.increment.accept(this);
+            }
+
+            // Step 7: Check condition
+            int condReg = allocateRegister();
+            if (node.condition != null) {
+                node.condition.accept(this);
+                condReg = lastResultReg;
+            } else {
+                // No condition means infinite loop - load true
+                emit(Opcodes.LOAD_INT);
+                emitReg(condReg);
+                emitInt(1);
+            }
+
+            // Step 8: If condition is true, jump back to start
+            emit(Opcodes.GOTO_IF_TRUE);
             emitReg(condReg);
-            emitInt(1);
+            emitInt(loopStartPc);
+
+        } else {
+            // while/for loop: condition checked before body
+            // Step 3: Check condition (redo jumps here)
+            int condReg = allocateRegister();
+            if (node.condition != null) {
+                node.condition.accept(this);
+                condReg = lastResultReg;
+            } else {
+                // No condition means infinite loop - load true
+                emit(Opcodes.LOAD_INT);
+                emitReg(condReg);
+                emitInt(1);
+            }
+
+            // Step 4: If condition is false, jump to end
+            emit(Opcodes.GOTO_IF_FALSE);
+            emitReg(condReg);
+            loopEndJumpPc = bytecode.size();
+            emitInt(0);  // Placeholder for jump target (will be patched)
+
+            // Step 5: Execute body
+            if (node.body != null) {
+                node.body.accept(this);
+            }
+
+            // Step 6: Continue point (next jumps here)
+            loopInfo.continuePc = bytecode.size();
+
+            // Step 7: Execute continue block if present
+            if (node.continueBlock != null) {
+                node.continueBlock.accept(this);
+            }
+
+            // Step 8: Execute increment (for C-style for loops)
+            if (node.increment != null) {
+                node.increment.accept(this);
+            }
+
+            // Step 9: Jump back to loop start
+            emit(Opcodes.GOTO);
+            emitInt(loopStartPc);
         }
-
-        // Step 4: If condition is false, jump to end
-        emit(Opcodes.GOTO_IF_FALSE);
-        emitReg(condReg);
-        int loopEndJumpPc = bytecode.size();
-        emitInt(0);  // Placeholder for jump target (will be patched)
-
-        // Step 5: Execute body
-        if (node.body != null) {
-            node.body.accept(this);
-        }
-
-        // Step 6: Continue point (next jumps here)
-        loopInfo.continuePc = bytecode.size();
-
-        // Step 7: Execute continue block if present
-        if (node.continueBlock != null) {
-            node.continueBlock.accept(this);
-        }
-
-        // Step 8: Execute increment
-        if (node.increment != null) {
-            node.increment.accept(this);
-        }
-
-        // Step 9: Jump back to loop start
-        emit(Opcodes.GOTO);
-        emitInt(loopStartPc);
 
         // Step 10: Loop end - patch the forward jump (last jumps here)
         int loopEndPc = bytecode.size();
-        patchJump(loopEndJumpPc, loopEndPc);
+        if (loopEndJumpPc != -1) {
+            patchJump(loopEndJumpPc, loopEndPc);
+        }
 
         // Step 11: Patch all last/next/redo jumps
         for (int pc : loopInfo.breakPcs) {
