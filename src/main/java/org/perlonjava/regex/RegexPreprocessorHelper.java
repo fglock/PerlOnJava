@@ -19,49 +19,53 @@ public class RegexPreprocessorHelper {
         char nextChar = s.charAt(offset);
 
         // Check for numeric backreferences vs octal escapes
-        // In Perl: \400, \600, \777 are octals (> 255), not backreferences
-        // But \1-\9 followed by non-octal digits are backreferences
+        // In Perl:
+        // - \1 through \9 are backreferences (when groups exist)
+        // - \10, \11, etc. are also backreferences (when groups exist)
+        // - \0 through \377 (up to 3 digits) are octal escapes (values 0-255)
+        // - \400 and above are octal escapes (values > 255)
+        // - If no groups exist, \1-\9 are treated as octals, not errors
+        //
+        // Key insight: A sequence like \337 is a 3-digit octal (decimal 223 = ß)
+        // It should NOT be treated as backreference \3 followed by literal "37"
+        //
+        // Strategy:
+        // 1. Check if we have a valid 3-digit octal sequence -> always treat as octal
+        // 2. If we have 1-2 digits starting with \1-\9:
+        //    - If capture groups exist -> treat as backreference
+        //    - If no capture groups exist -> treat as octal
         boolean isOctalNotBackref = false;
-        if (nextChar >= '1' && nextChar <= '9') {
-            // Check if this might be a 3-digit octal > 255
-            if (nextChar >= '1' && nextChar <= '7' && offset + 2 < length) {
-                int d1 = nextChar - '0';
+        if (nextChar >= '0' && nextChar <= '7') {
+            // Potential octal - check if we have 2 more octal digits
+            if (offset + 2 < length) {
                 char c2 = s.charAt(offset + 1);
-                char c3 = offset + 2 < length ? s.charAt(offset + 2) : '\0';
+                char c3 = s.charAt(offset + 2);
 
                 if (c2 >= '0' && c2 <= '7' && c3 >= '0' && c3 <= '7') {
-                    int octalValue = d1 * 64 + (c2 - '0') * 8 + (c3 - '0');
-                    if (octalValue > 255) {
-                        // This is an octal escape, not a backreference
-                        // Fall through to octal handling below at line ~320
-                        // Leave the backslash in sb for the octal handler to manage
-                        // offset stays pointing to the first octal digit ('4' in \400)
-                        isOctalNotBackref = true;
-                    }
-                    // else: It's a 3-digit octal <= 255, treat as backreference
-                    // (Perl's behavior: \1-\377 are backreferences if groups exist)
+                    // We have 3 octal digits - this is ALWAYS an octal escape
+                    // Example: \337, \123, \400, etc.
+                    isOctalNotBackref = true;
                 }
             }
+            // Note: If we have fewer than 3 octal digits, we'll check for backreferences below
+            // Example: \1, \12 could be backreferences if groups exist, octals if not
         }
 
         if (!isOctalNotBackref && nextChar >= '1' && nextChar <= '9') {
-            // This is a backreference like \1, \2, etc.
-            int refNum = nextChar - '0';
-
-            // Check if we have ANY capture groups at all
-            // If there are no groups, this is always an error
-            // But if there are groups, allow forward references
+            // Check if we have capture groups
             if (RegexPreprocessor.captureGroupCount == 0) {
-                sb.setLength(sb.length() - 1); // Remove the backslash
-                RegexPreprocessor.regexError(s, offset + 1, "Reference to nonexistent group");
+                // No capture groups - treat as octal
+                // Fall through to octal handling below
+                isOctalNotBackref = true;
+            } else {
+                // This is a backreference like \1, \2, etc.
+                // Forward references are allowed when there are capture groups
+                // Perl allows forward references like (\3|b)\2(a) where \3 refers to group 3
+                // which hasn't been captured yet. This is valid and the reference just won't match
+                // until group 3 is actually captured.
+                sb.append(nextChar);
+                return offset;
             }
-            // Forward references are allowed when there are capture groups
-            // Perl allows forward references like (\3|b)\2(a) where \3 refers to group 3
-            // which hasn't been captured yet. This is valid and the reference just won't match
-            // until group 3 is actually captured.
-
-            sb.append(nextChar);
-            return offset;
         }
         if (nextChar == 'k' && offset + 1 < length && s.charAt(offset + 1) == '\'') {
             // Handle \k'name' backreference (Perl syntax)
@@ -374,21 +378,22 @@ public class RegexPreprocessorHelper {
                     sb.setLength(sb.length() - 1); // Remove the backslash
                     sb.append(String.format("\\x{%X}", octalValue));
                     offset += octalLength - 1; // -1 because caller will increment
-                } else if (octalValue <= 255 && octalLength == 3) {
-                    // Standard 3-digit octal, prepend 0 for Java
+                } else if (octalLength == 3) {
+                    // 3-digit octal, prepend 0 for Java
+                    // Java requires \0nnn format
                     sb.append('0');
                     sb.append(Character.toChars(c2));
-                } else if (c2 == '0' && octalLength == 1) {
-                    // Single \0 becomes \00
-                    sb.append('0');
-                    sb.append('0');
-                } else if (c2 >= '1' && c2 <= '3' && octalLength == 3) {
-                    // 3-digit octal starting with 1-3, prepend 0
-                    sb.append('0');
-                    sb.append(Character.toChars(c2));
-                } else {
-                    // Short octal or single digit, pass through
-                    sb.append(Character.toChars(c2));
+                    // The remaining 2 digits will be added by caller's loop
+                } else if (octalLength == 2) {
+                    // 2-digit octal like \12 becomes \012
+                    sb.setLength(sb.length() - 1); // Remove the backslash
+                    sb.append(String.format("\\0%o", octalValue));
+                    offset += octalLength - 1; // Skip the second digit
+                } else if (octalLength == 1) {
+                    // Single digit octal: \0 through \7
+                    // Convert to 2-digit format for Java: \00 through \07
+                    sb.setLength(sb.length() - 1); // Remove the backslash
+                    sb.append(String.format("\\0%o", octalValue));
                 }
             } else if (c2 == '8' || c2 == '9') {
                 // \8 and \9 are not valid octals - treat as literal digits
@@ -610,25 +615,23 @@ public class RegexPreprocessorHelper {
                                 sb.append(String.format("x{%X}", octalValue));
                                 offset += octalLength - 1; // -1 because outer loop will increment
                                 lastChar = octalValue;
-                            } else if (octalValue <= 255 && octalLength == 3) {
-                                // Standard 3-digit octal, prepend 0 for Java
+                            } else if (octalLength == 3) {
+                                // 3-digit octal, prepend 0 for Java
                                 sb.append('0');
                                 sb.append(Character.toChars(c2));
                                 lastChar = octalValue;
-                            } else if (c2 == '0' && octalLength == 1) {
-                                // Single \0 becomes \00
-                                sb.append('0');
-                                sb.append('0');
-                                lastChar = 0;
-                            } else if (c2 >= '1' && c2 <= '3' && octalLength == 3) {
-                                // 3-digit octal starting with 1-3, prepend 0
-                                sb.append('0');
-                                sb.append(Character.toChars(c2));
+                            } else if (octalLength == 2) {
+                                // 2-digit octal like \12 becomes \012
+                                sb.setLength(sb.length() - 1); // Remove the backslash
+                                sb.append(String.format("\\0%o", octalValue));
+                                offset += octalLength - 1; // Skip the second digit
                                 lastChar = octalValue;
-                            } else {
-                                // Short octal or single digit, pass through
-                                sb.append(Character.toChars(c2));
-                                lastChar = c2;
+                            } else if (octalLength == 1) {
+                                // Single digit octal: \0 through \7
+                                // Convert to 2-digit format for Java: \00 through \07
+                                sb.setLength(sb.length() - 1); // Remove the backslash
+                                sb.append(String.format("\\0%o", octalValue));
+                                lastChar = octalValue;
                             }
                         } else if (c2 == '8' || c2 == '9') {
                             // \8 and \9 are not valid octals - treat as literal digits
