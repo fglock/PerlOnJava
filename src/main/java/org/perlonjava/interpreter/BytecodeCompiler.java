@@ -3950,12 +3950,13 @@ public class BytecodeCompiler implements Visitor {
                     lastResultReg = getVariableRegister(varName);
                 } else {
                     // Global variable - load it
-                    // Add package prefix if not present (match compiler behavior)
+                    // Use NameNormalizer to properly handle special variables (like $&)
+                    // which must always be in the "main" package
                     String globalVarName = varName.substring(1); // Remove $ sigil first
-                    if (!globalVarName.contains("::")) {
-                        // Add package prefix
-                        globalVarName = getCurrentPackage() + "::" + globalVarName;
-                    }
+                    globalVarName = org.perlonjava.runtime.NameNormalizer.normalizeVariableName(
+                        globalVarName,
+                        getCurrentPackage()
+                    );
 
                     int rd = allocateRegister();
                     int nameIdx = addToStringPool(globalVarName);
