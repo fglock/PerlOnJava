@@ -3625,12 +3625,12 @@ public class BytecodeCompiler implements Visitor {
     }
 
     /**
-     * Compile variable declaration operators (my, our, local).
+     * Compile variable declaration operators (my, our, local, state).
      * Extracted to reduce visit(OperatorNode) bytecode size.
      */
     private void compileVariableDeclaration(OperatorNode node, String op) {
-        if (op.equals("my")) {
-            // my $x / my @x / my %x - variable declaration
+        if (op.equals("my") || op.equals("state")) {
+            // my $x / my @x / my %x / state $x / state @x / state %x - variable declaration
             // The operand will be OperatorNode("$"/"@"/"%", IdentifierNode("x"))
             if (node.operand instanceof OperatorNode) {
                 OperatorNode sigilOp = (OperatorNode) node.operand;
@@ -3639,18 +3639,19 @@ public class BytecodeCompiler implements Visitor {
                 if (sigilOp.operand instanceof IdentifierNode) {
                     String varName = sigil + ((IdentifierNode) sigilOp.operand).name;
 
-                    // Check if this is a declared reference (my \$x)
+                    // Check if this is a declared reference (my \$x or state \$x)
                     boolean isDeclaredReference = node.annotations != null &&
                             Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"));
 
-                    // Check if this variable is captured by closures (sigilOp.id != 0)
-                    if (sigilOp.id != 0) {
-                        // Variable is captured by compiled named subs
+                    // Check if this variable is captured by closures (sigilOp.id != 0) or is a state variable
+                    // State variables always use persistent storage
+                    if (sigilOp.id != 0 || op.equals("state")) {
+                        // Variable is captured by compiled named subs or is a state variable
                         // Store as persistent variable so both interpreted and compiled code can access it
                         // Don't use a local register; instead load/store through persistent globals
 
-                        // For now, retrieve the persistent variable and store in register
-                        // This handles BEGIN-initialized variables
+                        // For state variables, retrieve or initialize the persistent variable
+                        // For captured variables, retrieve the BEGIN-initialized variable
                         int reg = allocateRegister();
                         int nameIdx = addToStringPool(varName);
 
@@ -3660,7 +3661,7 @@ public class BytecodeCompiler implements Visitor {
                                 emitReg(reg);
                                 emit(nameIdx);
                                 emit(sigilOp.id);
-                                // Track this as a captured variable - map to the register we allocated
+                                // Track this as a captured/state variable - map to the register we allocated
                                 variableScopes.peek().put(varName, reg);
                             allDeclaredVariables.put(varName, reg);  // Track for variableRegistry
                             }
@@ -3696,7 +3697,7 @@ public class BytecodeCompiler implements Visitor {
                         return;
                     }
 
-                    // Regular lexical variable (not captured)
+                    // Regular lexical variable (not captured, not state)
                     int reg = addVariable(varName, "my");
 
                     // Normal initialization: load undef/empty array/empty hash
@@ -3803,7 +3804,7 @@ public class BytecodeCompiler implements Visitor {
                                             String varName = "$" + idNode.name;
 
                                             // Declare and initialize the variable
-                                            int reg = addVariable(varName, "my");
+                                            int reg = addVariable(varName, op);
                                             emit(Opcodes.LOAD_UNDEF);
                                             emitReg(reg);
 
@@ -3813,13 +3814,13 @@ public class BytecodeCompiler implements Visitor {
                                 }
                             } else if (sigilOp.operand instanceof OperatorNode varNode &&
                                        "$@%".contains(varNode.operator)) {
-                                // Single variable: my (\$x)
+                                // Single variable: my (\$x) or state (\$x)
                                 if (varNode.operand instanceof IdentifierNode idNode) {
                                     // For declared refs, always use scalar sigil
                                     String varName = "$" + idNode.name;
 
                                     // Declare and initialize the variable
-                                    int reg = addVariable(varName, "my");
+                                    int reg = addVariable(varName, op);
                                     emit(Opcodes.LOAD_UNDEF);
                                     emitReg(reg);
 
@@ -3832,9 +3833,9 @@ public class BytecodeCompiler implements Visitor {
                         if (sigilOp.operand instanceof IdentifierNode) {
                             String varName = sigil + ((IdentifierNode) sigilOp.operand).name;
 
-                            // Check if this variable is captured by closures
-                            if (sigilOp.id != 0) {
-                                // Variable is captured - use persistent storage
+                            // Check if this variable is captured by closures or is a state variable
+                            if (sigilOp.id != 0 || op.equals("state")) {
+                                // Variable is captured or is a state variable - use persistent storage
                                 int reg = allocateRegister();
                                 int nameIdx = addToStringPool(varName);
 
@@ -3868,8 +3869,8 @@ public class BytecodeCompiler implements Visitor {
 
                                 varRegs.add(reg);
                             } else {
-                                // Regular lexical variable
-                                int reg = addVariable(varName, "my");
+                                // Regular lexical variable (not captured, not state)
+                                int reg = addVariable(varName, op);
 
                                 // Initialize the variable
                                 switch (sigil) {
@@ -3952,10 +3953,25 @@ public class BytecodeCompiler implements Visitor {
                 if (sigilOp.operand instanceof IdentifierNode) {
                     String varName = sigil + ((IdentifierNode) sigilOp.operand).name;
 
+                    // Check if this is a declared reference (our \$x)
+                    boolean isDeclaredReference = node.annotations != null &&
+                            Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"));
+
                     // Check if already declared in current scope
                     if (hasVariable(varName)) {
                         // Already declared, just return the existing register
-                        lastResultReg = getVariableRegister(varName);
+                        int reg = getVariableRegister(varName);
+
+                        // If this is a declared reference, create a reference to it
+                        if (isDeclaredReference && currentCallContext != RuntimeContextType.VOID) {
+                            int refReg = allocateRegister();
+                            emit(Opcodes.CREATE_REF);
+                            emitReg(refReg);
+                            emitReg(reg);
+                            lastResultReg = refReg;
+                        } else {
+                            lastResultReg = reg;
+                        }
                         return;
                     }
 
@@ -3988,18 +4004,124 @@ public class BytecodeCompiler implements Visitor {
                         default -> throwCompilerException("Unsupported variable type: " + sigil);
                     }
 
-                    lastResultReg = reg;
+                    // If this is a declared reference, create a reference to it
+                    if (isDeclaredReference && currentCallContext != RuntimeContextType.VOID) {
+                        int refReg = allocateRegister();
+                        emit(Opcodes.CREATE_REF);
+                        emitReg(refReg);
+                        emitReg(reg);
+                        lastResultReg = refReg;
+                    } else {
+                        lastResultReg = reg;
+                    }
                     return;
+                }
+
+                // Handle our \\$x - reference to a declared reference (double backslash)
+                if (sigil.equals("\\")) {
+                    boolean isDeclaredReference = node.annotations != null &&
+                            Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"));
+
+                    if (isDeclaredReference) {
+                        // This is our \\$x which means: create a declared reference and then take a reference to it
+                        // The operand is \$x, so we recursively compile it
+                        sigilOp.accept(this);
+                        // The result is now in lastResultReg
+                        return;
+                    }
                 }
             } else if (node.operand instanceof ListNode) {
                 // our ($x, $y) - list of package variable declarations
                 ListNode listNode = (ListNode) node.operand;
                 List<Integer> varRegs = new ArrayList<>();
 
+                // Check if this is a declared reference (our \($x, $y))
+                boolean isDeclaredReference = node.annotations != null &&
+                        Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"));
+
+                // Track if we found any backslash operators inside the list
+                boolean foundBackslashInList = false;
+
                 for (Node element : listNode.elements) {
                     if (element instanceof OperatorNode) {
                         OperatorNode sigilOp = (OperatorNode) element;
                         String sigil = sigilOp.operator;
+
+                        // Handle backslash operator (reference constructor): our (\$x) or our (\($x, $y))
+                        if (sigil.equals("\\")) {
+                            // Check if it's a double backslash first: our (\\$x)
+                            if (sigilOp.operand instanceof OperatorNode innerBackslash &&
+                                       innerBackslash.operator.equals("\\")) {
+                                // Double backslash: our (\\$x)
+                                // Recursively compile the inner part
+                                OperatorNode innerOur = new OperatorNode("our", innerBackslash, node.getIndex());
+                                if (node.annotations != null && Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"))) {
+                                    innerOur.setAnnotation("isDeclaredReference", true);
+                                }
+                                innerOur.accept(this);
+
+                                // Create a reference to the result
+                                if (currentCallContext != RuntimeContextType.VOID && lastResultReg != -1) {
+                                    int refReg = allocateRegister();
+                                    emit(Opcodes.CREATE_REF);
+                                    emitReg(refReg);
+                                    emitReg(lastResultReg);
+                                    varRegs.add(refReg);
+                                }
+                                continue;
+                            }
+
+                            // Single backslash - mark that we need to create references later
+                            foundBackslashInList = true;
+
+                            // Check if it's a nested list: our (\($d, $e))
+                            if (sigilOp.operand instanceof ListNode nestedList) {
+                                // Process each element in the nested list as a declared reference
+                                for (Node nestedElement : nestedList.elements) {
+                                    if (nestedElement instanceof OperatorNode nestedVarNode &&
+                                        "$@%".contains(nestedVarNode.operator)) {
+                                        if (nestedVarNode.operand instanceof IdentifierNode idNode) {
+                                            // For declared refs, always use scalar sigil
+                                            String varName = "$" + idNode.name;
+
+                                            // Declare and load the package variable
+                                            int reg = addVariable(varName, "our");
+                                            String globalVarName = NameNormalizer.normalizeVariableName(
+                                                idNode.name,
+                                                getCurrentPackage()
+                                            );
+                                            int nameIdx = addToStringPool(globalVarName);
+                                            emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                                            emitReg(reg);
+                                            emit(nameIdx);
+
+                                            varRegs.add(reg);
+                                        }
+                                    }
+                                }
+                            } else if (sigilOp.operand instanceof OperatorNode varNode &&
+                                       "$@%".contains(varNode.operator)) {
+                                // Single variable: our (\$x)
+                                if (varNode.operand instanceof IdentifierNode idNode) {
+                                    // For declared refs, always use scalar sigil
+                                    String varName = "$" + idNode.name;
+
+                                    // Declare and load the package variable
+                                    int reg = addVariable(varName, "our");
+                                    String globalVarName = NameNormalizer.normalizeVariableName(
+                                        idNode.name,
+                                        getCurrentPackage()
+                                    );
+                                    int nameIdx = addToStringPool(globalVarName);
+                                    emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                                    emitReg(reg);
+                                    emit(nameIdx);
+
+                                    varRegs.add(reg);
+                                }
+                            }
+                            continue;
+                        }
 
                         if (sigilOp.operand instanceof IdentifierNode) {
                             String varName = sigil + ((IdentifierNode) sigilOp.operand).name;
@@ -4041,10 +4163,6 @@ public class BytecodeCompiler implements Visitor {
                             }
 
                             varRegs.add(reg);
-                        } else if (sigilOp.operand instanceof OperatorNode) {
-                            // Handle declared references: our (\$x) or our \($x, $y)
-                            // For now, skip these as they require special handling
-                            continue;
                         } else {
                             throwCompilerException("our list declaration requires identifier: " + sigilOp.operand.getClass().getSimpleName());
                         }
@@ -4053,13 +4171,35 @@ public class BytecodeCompiler implements Visitor {
                     }
                 }
 
-                // Return a list of the declared variables
+                // Return a list of the declared variables (or their references if isDeclaredReference)
                 int resultReg = allocateRegister();
-                emit(Opcodes.CREATE_LIST);
-                emitReg(resultReg);
-                emit(varRegs.size());
-                for (int varReg : varRegs) {
-                    emitReg(varReg);
+
+                if ((isDeclaredReference || foundBackslashInList) && currentCallContext != RuntimeContextType.VOID) {
+                    // Create references to all variables first
+                    List<Integer> refRegs = new ArrayList<>();
+                    for (int varReg : varRegs) {
+                        int refReg = allocateRegister();
+                        emit(Opcodes.CREATE_REF);
+                        emitReg(refReg);
+                        emitReg(varReg);
+                        refRegs.add(refReg);
+                    }
+
+                    // Create a list of the references
+                    emit(Opcodes.CREATE_LIST);
+                    emitReg(resultReg);
+                    emit(refRegs.size());
+                    for (int refReg : refRegs) {
+                        emitReg(refReg);
+                    }
+                } else {
+                    // Regular list of variables
+                    emit(Opcodes.CREATE_LIST);
+                    emitReg(resultReg);
+                    emit(varRegs.size());
+                    for (int varReg : varRegs) {
+                        emitReg(varReg);
+                    }
                 }
 
                 lastResultReg = resultReg;
@@ -4067,11 +4207,13 @@ public class BytecodeCompiler implements Visitor {
             }
             throwCompilerException("Unsupported our operand: " + node.operand.getClass().getSimpleName());
         } else if (op.equals("local")) {
-            // local $x - temporarily localize a global variable            // The operand will be OperatorNode("$", IdentifierNode("x"))
+            // local $x - temporarily localize a global variable
+            // The operand will be OperatorNode("$", IdentifierNode("x"))
             if (node.operand instanceof OperatorNode) {
                 OperatorNode sigilOp = (OperatorNode) node.operand;
+                String sigil = sigilOp.operator;
 
-                if (sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode) {
+                if (sigil.equals("$") && sigilOp.operand instanceof IdentifierNode) {
                     String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
 
                     // Check if it's a lexical variable (should not be localized)
@@ -4079,6 +4221,10 @@ public class BytecodeCompiler implements Visitor {
                         throwCompilerException("Can't localize lexical variable " + varName);
                         return;
                     }
+
+                    // Check if this is a declared reference (local \$x)
+                    boolean isDeclaredReference = node.annotations != null &&
+                            Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"));
 
                     // It's a global variable - emit SLOW_OP to call GlobalRuntimeScalar.makeLocal()
                     String packageName = getCurrentPackage();
@@ -4090,9 +4236,162 @@ public class BytecodeCompiler implements Visitor {
                     emitReg(rd);
                     emit(nameIdx);
 
-                    lastResultReg = rd;
+                    // If this is a declared reference, create a reference to it
+                    if (isDeclaredReference && currentCallContext != RuntimeContextType.VOID) {
+                        int refReg = allocateRegister();
+                        emit(Opcodes.CREATE_REF);
+                        emitReg(refReg);
+                        emitReg(rd);
+                        lastResultReg = refReg;
+                    } else {
+                        lastResultReg = rd;
+                    }
                     return;
                 }
+
+                // Handle local \\$x - reference to a declared reference (double backslash)
+                if (sigil.equals("\\")) {
+                    boolean isDeclaredReference = node.annotations != null &&
+                            Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"));
+
+                    if (isDeclaredReference) {
+                        // This is local \\$x which means: create a declared reference and then take a reference to it
+                        // The operand is \$x, so we recursively compile it
+                        sigilOp.accept(this);
+                        // The result is now in lastResultReg
+                        return;
+                    }
+                }
+            } else if (node.operand instanceof ListNode) {
+                // local ($x, $y) - list of localized global variables
+                ListNode listNode = (ListNode) node.operand;
+                List<Integer> varRegs = new ArrayList<>();
+
+                // Check if this is a declared reference
+                boolean isDeclaredReference = node.annotations != null &&
+                        Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"));
+
+                // Track if we found any backslash operators inside the list
+                boolean foundBackslashInList = false;
+
+                for (Node element : listNode.elements) {
+                    if (element instanceof OperatorNode) {
+                        OperatorNode sigilOp = (OperatorNode) element;
+                        String sigil = sigilOp.operator;
+
+                        // Handle backslash operator: local (\$x) or local (\($x, $y))
+                        if (sigil.equals("\\")) {
+                            foundBackslashInList = true;
+
+                            // Check if it's a nested list
+                            if (sigilOp.operand instanceof ListNode nestedList) {
+                                for (Node nestedElement : nestedList.elements) {
+                                    if (nestedElement instanceof OperatorNode nestedVarNode &&
+                                        nestedVarNode.operator.equals("$") &&
+                                        nestedVarNode.operand instanceof IdentifierNode idNode) {
+                                        String varName = "$" + idNode.name;
+
+                                        // Check if it's a lexical variable
+                                        if (hasVariable(varName)) {
+                                            throwCompilerException("Can't localize lexical variable " + varName);
+                                        }
+
+                                        // Localize global variable
+                                        String packageName = getCurrentPackage();
+                                        String globalVarName = packageName + "::" + idNode.name;
+                                        int nameIdx = addToStringPool(globalVarName);
+
+                                        int rd = allocateRegister();
+                                        emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
+                                        emitReg(rd);
+                                        emit(nameIdx);
+
+                                        varRegs.add(rd);
+                                    }
+                                }
+                            } else if (sigilOp.operand instanceof OperatorNode varNode &&
+                                       varNode.operator.equals("$") &&
+                                       varNode.operand instanceof IdentifierNode idNode) {
+                                // Single variable: local (\$x)
+                                String varName = "$" + idNode.name;
+
+                                // Check if it's a lexical variable
+                                if (hasVariable(varName)) {
+                                    throwCompilerException("Can't localize lexical variable " + varName);
+                                }
+
+                                // Localize global variable
+                                String packageName = getCurrentPackage();
+                                String globalVarName = packageName + "::" + idNode.name;
+                                int nameIdx = addToStringPool(globalVarName);
+
+                                int rd = allocateRegister();
+                                emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
+                                emitReg(rd);
+                                emit(nameIdx);
+
+                                varRegs.add(rd);
+                            }
+                            continue;
+                        }
+
+                        // Regular scalar variable in list
+                        if (sigil.equals("$") && sigilOp.operand instanceof IdentifierNode idNode) {
+                            String varName = "$" + idNode.name;
+
+                            // Check if it's a lexical variable
+                            if (hasVariable(varName)) {
+                                throwCompilerException("Can't localize lexical variable " + varName);
+                            }
+
+                            // Localize global variable
+                            String packageName = getCurrentPackage();
+                            String globalVarName = packageName + "::" + idNode.name;
+                            int nameIdx = addToStringPool(globalVarName);
+
+                            int rd = allocateRegister();
+                            emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
+                            emitReg(rd);
+                            emit(nameIdx);
+
+                            varRegs.add(rd);
+                        }
+                    }
+                }
+
+                // Return a list of the localized variables (or their references)
+                int resultReg = allocateRegister();
+
+                if ((isDeclaredReference || foundBackslashInList) && currentCallContext != RuntimeContextType.VOID) {
+                    // Create references to all variables first
+                    List<Integer> refRegs = new ArrayList<>();
+                    for (int varReg : varRegs) {
+                        int refReg = allocateRegister();
+                        emit(Opcodes.CREATE_REF);
+                        emitReg(refReg);
+                        emitReg(varReg);
+                        refRegs.add(refReg);
+                    }
+
+                    // Create a list of the references
+                    emit(Opcodes.CREATE_LIST);
+                    emitReg(resultReg);
+                    emit(refRegs.size());
+                    for (int refReg : refRegs) {
+                        emitReg(refReg);
+                    }
+                } else {
+                    // Regular list of variables
+                    emit(Opcodes.CREATE_LIST);
+                    emitReg(resultReg);
+                    emit(varRegs.size());
+                    for (int varReg : varRegs) {
+                        emitReg(varReg);
+                    }
+                }
+
+                lastResultReg = resultReg;
+                return;
             }
             throwCompilerException("Unsupported local operand: " + node.operand.getClass().getSimpleName());
         }
@@ -4376,8 +4675,8 @@ public class BytecodeCompiler implements Visitor {
 
         String op = node.operator;
 
-        // Group 1: Variable declarations (my, our, local)
-        if (op.equals("my") || op.equals("our") || op.equals("local")) {
+        // Group 1: Variable declarations (my, our, local, state)
+        if (op.equals("my") || op.equals("our") || op.equals("local") || op.equals("state")) {
             compileVariableDeclaration(node, op);
             return;
         }
