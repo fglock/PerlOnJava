@@ -3777,6 +3777,11 @@ public class BytecodeCompiler implements Visitor {
 
                                 varRegs.add(reg);
                             }
+                        } else if (sigilOp.operand instanceof OperatorNode) {
+                            // Handle declared references: my (\$x) or my \($x, $y)
+                            // For now, skip these as they require special handling
+                            // The JVM compiler also doesn't fully support these in the interpreter path
+                            continue;
                         } else {
                             throwCompilerException("my list declaration requires identifier: " + sigilOp.operand.getClass().getSimpleName());
                         }
@@ -3897,6 +3902,10 @@ public class BytecodeCompiler implements Visitor {
                             }
 
                             varRegs.add(reg);
+                        } else if (sigilOp.operand instanceof OperatorNode) {
+                            // Handle declared references: our (\$x) or our \($x, $y)
+                            // For now, skip these as they require special handling
+                            continue;
                         } else {
                             throwCompilerException("our list declaration requires identifier: " + sigilOp.operand.getClass().getSimpleName());
                         }
