@@ -4007,6 +4007,19 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(blockResultReg);
 
                 lastResultReg = rd;
+            } else if (node.operand instanceof OperatorNode) {
+                // Operator dereference: $$x, $${expr}, etc.
+                // Compile the operand expression (e.g., $x returns a reference)
+                node.operand.accept(this);
+                int refReg = lastResultReg;
+
+                // Dereference the result
+                int rd = allocateRegister();
+                emitWithToken(Opcodes.DEREF, node.getIndex());
+                emitReg(rd);
+                emitReg(refReg);
+
+                lastResultReg = rd;
             } else {
                 throwCompilerException("Unsupported $ operand: " + node.operand.getClass().getSimpleName());
             }
@@ -6415,6 +6428,56 @@ public class BytecodeCompiler implements Visitor {
             emitReg(argReg);
             lastResultReg = rd;
         // GENERATED_OPERATORS_END
+        } else if (op.equals("tr") || op.equals("y")) {
+            // tr/// or y/// transliteration operator
+            // Pattern: tr/search/replace/modifiers on $variable
+            if (!(node.operand instanceof ListNode)) {
+                throwCompilerException("tr operator requires list operand");
+            }
+
+            ListNode list = (ListNode) node.operand;
+            if (list.elements.size() < 3) {
+                throwCompilerException("tr operator requires search, replace, and modifiers");
+            }
+
+            // Compile search pattern
+            list.elements.get(0).accept(this);
+            int searchReg = lastResultReg;
+
+            // Compile replace pattern
+            list.elements.get(1).accept(this);
+            int replaceReg = lastResultReg;
+
+            // Compile modifiers
+            list.elements.get(2).accept(this);
+            int modifiersReg = lastResultReg;
+
+            // Compile target variable (element [3] or default to $_)
+            int targetReg;
+            if (list.elements.size() > 3 && list.elements.get(3) != null) {
+                list.elements.get(3).accept(this);
+                targetReg = lastResultReg;
+            } else {
+                // Default to $_ - need to load it
+                targetReg = allocateRegister();
+                String underscoreName = NameNormalizer.normalizeVariableName("_", getCurrentPackage());
+                int nameIdx = addToStringPool(underscoreName);
+                emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                emitReg(targetReg);
+                emit(nameIdx);
+            }
+
+            // Emit TR_TRANSLITERATE operation
+            int rd = allocateRegister();
+            emit(Opcodes.TR_TRANSLITERATE);
+            emitReg(rd);
+            emitReg(searchReg);
+            emitReg(replaceReg);
+            emitReg(modifiersReg);
+            emitReg(targetReg);
+            emitInt(currentCallContext);
+
+            lastResultReg = rd;
         } else {
             throwCompilerException("Unsupported operator: " + op);
         }
