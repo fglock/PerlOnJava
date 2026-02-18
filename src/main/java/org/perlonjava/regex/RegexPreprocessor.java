@@ -78,7 +78,8 @@ public class RegexPreprocessor {
         deferredUnicodePropertyEncountered = false;
 
         // First, escape invalid quantifier braces (Perl compatibility)
-        s = escapeInvalidQuantifierBraces(s);
+        // DISABLED: Causes test regressions - needs more work
+        // s = escapeInvalidQuantifierBraces(s);
 
         s = convertPythonStyleGroups(s);
         s = transformSimpleConditionals(s);
