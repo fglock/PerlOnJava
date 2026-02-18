@@ -24,7 +24,6 @@ close $fh;
 
 # Parse operators
 my %operators_by_sig;
-my $opcode_num = $OPCODE_START;
 
 print "\nParsing OperatorHandler.java...\n";
 while ($content =~ /put\("([^"]+)",\s*"(\w+)",\s*"([^"]+)"(?:,\s*"([^"]+)")?\)/g) {
@@ -61,10 +60,18 @@ while ($content =~ /put\("([^"]+)",\s*"(\w+)",\s*"([^"]+)"(?:,\s*"([^"]+)")?\)/g
         class => $class,
         class_path => $class_path,
         descriptor => $descriptor,
-        opcode_num => $opcode_num++,
     };
 
     push @{$operators_by_sig{$sig_type}}, $op;
+}
+
+# Now assign contiguous opcode numbers by signature type
+my $opcode_num = $OPCODE_START;
+
+for my $sig_type (sort keys %operators_by_sig) {
+    for my $op (@{$operators_by_sig{$sig_type}}) {
+        $op->{opcode_num} = $opcode_num++;
+    }
 }
 
 print "\nParsed operators by signature:\n";
