@@ -1553,6 +1553,22 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.MATCH_REGEX_NOT: {
+                        // Negated regex match: rd = !RuntimeRegex.matchRegex(quotedRegex, string, ctx)
+                        int rd = bytecode[pc++];
+                        int stringReg = bytecode[pc++];
+                        int regexReg = bytecode[pc++];
+                        int ctx = bytecode[pc++];
+                        RuntimeBase matchResult = org.perlonjava.regex.RuntimeRegex.matchRegex(
+                            (RuntimeScalar) registers[regexReg],  // quotedRegex first
+                            (RuntimeScalar) registers[stringReg], // string second
+                            ctx
+                        );
+                        // Negate the boolean result
+                        registers[rd] = new RuntimeScalar(matchResult.scalar().getBoolean() ? 0 : 1);
+                        break;
+                    }
+
                     case Opcodes.CHOMP: {
                         // Chomp: rd = rs.chomp()
                         int rd = bytecode[pc++];

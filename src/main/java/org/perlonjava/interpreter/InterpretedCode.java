@@ -703,6 +703,13 @@ public class InterpretedCode extends RuntimeCode {
                     int matchCtx = bytecode[pc++];
                     sb.append("MATCH_REGEX r").append(rd).append(" = r").append(strReg).append(" =~ r").append(regReg).append(" (ctx=").append(matchCtx).append(")\n");
                     break;
+                case Opcodes.MATCH_REGEX_NOT:
+                    rd = bytecode[pc++];
+                    strReg = bytecode[pc++];
+                    regReg = bytecode[pc++];
+                    matchCtx = bytecode[pc++];
+                    sb.append("MATCH_REGEX_NOT r").append(rd).append(" = r").append(strReg).append(" !~ r").append(regReg).append(" (ctx=").append(matchCtx).append(")\n");
+                    break;
                 case Opcodes.CHOMP:
                     rd = bytecode[pc++];
                     rs = bytecode[pc++];

@@ -806,8 +806,12 @@ public class Opcodes {
     /** -C FILE: inode change age (days) */
     public static final short FILETEST_C_UPPER = 216;
 
+    /** Match regex (negated): rd = !RuntimeRegex.matchRegex(string, regex, ctx)
+     * Format: MATCH_REGEX_NOT rd stringReg regexReg ctx */
+    public static final short MATCH_REGEX_NOT = 217;
+
     // =================================================================
-    // OPCODES 217-32767: RESERVED FOR FUTURE OPERATIONS
+    // OPCODES 218-32767: RESERVED FOR FUTURE OPERATIONS
     // =================================================================
     // See PHASE3_OPERATOR_PROMOTIONS.md for promotion strategy.
     // All SLOWOP_* constants have been removed - use direct opcodes 114-154 instead.
