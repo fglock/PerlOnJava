@@ -344,16 +344,12 @@ public class BytecodeInterpreter {
                     }
 
                     case Opcodes.SET_SCALAR: {
-                        // Set scalar value: registers[rd].set(registers[rs])
-                        // Used to set the value in a persistent scalar without overwriting the reference
+                        // Set scalar value: registers[rd] = registers[rs]
+                        // Use addToScalar which properly handles special variables like $&
+                        // addToScalar calls getValueAsScalar() for ScalarSpecialVariable
                         int rd = bytecode[pc++];
                         int rs = bytecode[pc++];
-                        // Auto-convert rs to scalar if needed
-                        RuntimeBase rsBase = registers[rs];
-                        RuntimeScalar rsScalar = (rsBase instanceof RuntimeScalar)
-                                ? (RuntimeScalar) rsBase
-                                : rsBase.scalar();
-                        ((RuntimeScalar) registers[rd]).set(rsScalar);
+                        registers[rs].addToScalar((RuntimeScalar) registers[rd]);
                         break;
                     }
 
