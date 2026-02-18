@@ -219,9 +219,9 @@ Perl Source → Compiler → JVM Bytecode → JVM Execution (JVM backend)
                       ↘ Custom Bytecode → Bytecode Interpreter (Interpreter backend)
 ```
 
-**Two backends:**
+**Code generation targets (backends):**
 - **JVM backend**: Generates native JVM bytecode using ASM library
-- **Interpreter backend**: Custom bytecode format, more flexible
+- **Interpreter backend**: Custom bytecode format, compact and no size limits
 
 Note:
 - Backend = code generation target
