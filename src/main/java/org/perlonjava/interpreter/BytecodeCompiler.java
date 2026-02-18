@@ -2953,6 +2953,16 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(rs2);
                 emit(currentCallContext);
             }
+            case "!~" -> {
+                // $string !~ /pattern/ - negated regex match
+                // rs1 = string to match against
+                // rs2 = compiled regex pattern
+                emit(Opcodes.MATCH_REGEX_NOT);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+                emit(currentCallContext);
+            }
             case "&", "binary&" -> {
                 // Numeric bitwise AND: rs1 & rs2
                 emit(Opcodes.BITWISE_AND_BINARY);
