@@ -16,6 +16,174 @@
 - `InterpretedCode.java` - Bytecode container with disassembler
 - `SlowOpcodeHandler.java` - Handlers for rare operations (151-154)
 
+## Code Generation Tool
+
+**Location:** `dev/tools/generate_opcode_handlers.pl`
+
+Automates creation of opcode handlers for built-in functions with simple signatures.
+
+### Quick Start
+
+```bash
+# Generate handlers for all eligible operators in OperatorHandler.java
+perl dev/tools/generate_opcode_handlers.pl
+
+# Rebuilds:
+# - ScalarUnaryOpcodeHandler.java (31 ops: chr, ord, abs, sin, cos, etc.)
+# - ScalarBinaryOpcodeHandler.java (12 ops: atan2, eq, ne, lt, le, gt, ge, cmp, etc.)
+# - Opcodes.java (adds new opcode constants)
+# - BytecodeInterpreter.java (adds dispatch cases)
+# - InterpretedCode.java (adds disassembly cases)
+```
+
+### What Gets Generated
+
+**Automatically:**
+1. Handler classes with zero-overhead dispatch pattern
+2. Opcode constants in Opcodes.java
+3. Dispatch cases in BytecodeInterpreter.java
+4. Disassembly cases in InterpretedCode.java
+
+**Still Manual:**
+- Emit cases in BytecodeCompiler.java (between `// GENERATED_OPERATORS_START/END`)
+
+### Eligibility Criteria
+
+**Included:**
+- Scalar unary: `(RuntimeScalar) → RuntimeScalar`
+- Scalar binary: `(RuntimeScalar, RuntimeScalar) → RuntimeScalar`
+- Scalar ternary: `(RuntimeScalar, RuntimeScalar, RuntimeScalar) → RuntimeScalar`
+
+**Excluded:**
+- Varargs signatures: `(int, RuntimeBase...)` - getc
+- Array/List/Hash parameters
+- Primitive parameters (except in skipped varargs)
+- Already existing opcodes (rand=91, length=30, rindex=173, index=172, require=170, isa=105, bless=104, ref=103, join=88, prototype=158)
+
+### Adding BytecodeCompiler Cases
+
+Tool prints list of operators needing emit cases. Add between markers:
+
+```java
+// GENERATED_OPERATORS_START
+} else if (op.equals("chr")) {
+    // chr($x) - convert codepoint to character
+    if (node.operand instanceof ListNode) {
+        ListNode list = (ListNode) node.operand;
+        if (!list.elements.isEmpty()) {
+            list.elements.get(0).accept(this);
+        } else {
+            throwCompilerException("chr requires an argument");
+        }
+    } else {
+        node.operand.accept(this);
+    }
+    int argReg = lastResultReg;
+    int rd = allocateRegister();
+    emit(Opcodes.CHR);
+    emitReg(rd);
+    emitReg(argReg);
+    lastResultReg = rd;
+// GENERATED_OPERATORS_END
+```
+
+### Critical: LASTOP Management
+
+Tool reads `LASTOP` from Opcodes.java to determine starting opcode:
+
+```java
+// In Opcodes.java
+public static final short REDO = 220;
+
+// Last manually-assigned opcode (for tool reference)
+private static final short LASTOP = 220;  // ← UPDATE WHEN ADDING MANUAL OPCODES
+```
+
+**When adding manual opcodes:**
+1. Add constant BEFORE generated section
+2. Update `LASTOP = <your new opcode number>`
+3. Run tool - it starts at LASTOP + 1
+
+### Gotchas
+
+**1. Don't Edit Generated Sections**
+- Between `// GENERATED_*_START` and `// GENERATED_*_END`
+- Tool overwrites on regeneration
+- Your changes will be lost!
+
+**2. LASTOP Drift**
+```java
+// WRONG: Forgot to update LASTOP
+public static final short MY_NEW_OP = 221;
+private static final short LASTOP = 220;  // ← Still 220!
+
+// Tool starts at 221, collides with MY_NEW_OP!
+
+// RIGHT: Always update LASTOP
+public static final short MY_NEW_OP = 221;
+private static final short LASTOP = 221;  // ← Updated!
+```
+
+**3. Import Path Conversion**
+- Tool auto-converts: `org/perlonjava/operators/...` → `org.perlonjava.operators....`
+- Works correctly for all Java imports
+
+**4. BytecodeCompiler Not Automated**
+- Tool can't automatically add emit cases (too many variations)
+- Must add manually between markers
+- Tool prints list of operators needing implementation
+
+**5. Signature Mismatches**
+- Tool skips complex signatures silently
+- Check tool output for "Skipping X" messages
+- These need manual implementation
+
+### Testing Generated Opcodes
+
+```bash
+# Build
+make
+
+# Test in interpreter mode (forces eval STRING to use interpreter)
+JPERL_EVAL_USE_INTERPRETER=1 ./jperl /tmp/test.pl
+
+# Test script example:
+cat > /tmp/test.pl << 'EOF'
+print "chr(65): ", eval("chr(65)"), "\n";
+print "ord('A'): ", eval("ord('A')"), "\n";
+print "abs(-42): ", eval("abs(-42)"), "\n";
+EOF
+
+# Expected output (after adding BytecodeCompiler cases):
+# chr(65): A
+# ord('A'): 65
+# abs(-42): 42
+```
+
+### Regenerating After Changes
+
+```bash
+# After adding new operators to OperatorHandler.java
+perl dev/tools/generate_opcode_handlers.pl
+
+# After updating LASTOP
+perl dev/tools/generate_opcode_handlers.pl
+
+# Tool output shows:
+# - Existing opcodes skipped
+# - New opcodes generated
+# - Next available opcode number
+# - List of operators needing BytecodeCompiler cases
+```
+
+### Manual Implementation Still Needed For
+
+- **Varargs functions**: getc, printf, sprintf
+- **List operators**: map, grep, sort, push, pop
+- **Hash operators**: keys, values, each
+- **Array operators**: splice (complex signature)
+- **Special forms**: defined, wantarray (already manual)
+
 ## Adding New Operators
 
 ### 1. Decide: Fast Opcode or SLOW_OP?
@@ -186,6 +354,13 @@ make
 
 # Run unit tests
 make test-unit
+
+# Run specific test in interpreter mode
+cd perl5_t/t && JPERL_EVAL_USE_INTERPRETER=1 ../../jperl op/bop.t
+
+# Compare compiler vs interpreter results
+./jperl op/bop.t                               # Compiler mode
+JPERL_EVAL_USE_INTERPRETER=1 ./jperl op/bop.t # Interpreter mode
 
 # Verify tableswitch preserved
 javap -c -classpath build/classes/java/main \

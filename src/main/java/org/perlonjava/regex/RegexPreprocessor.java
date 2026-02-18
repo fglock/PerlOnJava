@@ -77,6 +77,10 @@ public class RegexPreprocessor {
         captureGroupCount = 0;
         deferredUnicodePropertyEncountered = false;
 
+        // First, escape invalid quantifier braces (Perl compatibility)
+        // DISABLED: Causes test regressions - needs more work
+        // s = escapeInvalidQuantifierBraces(s);
+
         s = convertPythonStyleGroups(s);
         s = transformSimpleConditionals(s);
         s = removeUnderscoresFromEscapes(s);
@@ -91,6 +95,214 @@ public class RegexPreprocessor {
         handleRegex(s, 0, sb, regexFlags, false);
         String result = sb.toString();
         return result;
+    }
+
+    /**
+     * Escape unescaped braces that don't form valid quantifiers.
+     * Perl allows invalid quantifier braces and treats them as literals.
+     * Java Pattern.compile() rejects them, so we must escape them.
+     *
+     * Valid quantifiers: {n}, {n,}, {n,m} where n and m are non-negative integers
+     * Invalid quantifiers: {(.*?)}, {abc}, {}, {,5}, etc.
+     *
+     * IMPORTANT: This is a high-risk preprocessing step that modifies brace characters.
+     * Known edge cases that must be handled correctly:
+     *
+     * 1. ESCAPE SEQUENCES WITH BRACES (must NOT be escaped):
+     *    - \N{name} - Named Unicode character (e.g., \N{LATIN SMALL LETTER A})
+     *    - \x{...} - Hexadecimal character code (e.g., \x{1F600})
+     *    - \o{...} - Octal character code (e.g., \o{777})
+     *    - \p{...} - Unicode property (e.g., \p{Letter})
+     *    - \P{...} - Negated Unicode property (e.g., \P{Number})
+     *    - \g{...} - Named or relative backreference (e.g., \g{name}, \g{-1})
+     *    Currently handled: N, x, o, p, P, g
+     *
+     * 2. CHARACTER CLASSES (braces inside [...] are always literal):
+     *    - [a{3}] means "match 'a', '{', '3', or '}'" not "match 'aaa'"
+     *    - Nested classes like [a-z[0-9]{3}] must track nesting depth
+     *
+     * 3. VALID QUANTIFIERS (must NOT be escaped):
+     *    - {n} - exactly n times (e.g., a{3})
+     *    - {n,} - n or more times (e.g., a{2,})
+     *    - {n,m} - between n and m times (e.g., a{2,5})
+     *
+     * 4. ALREADY ESCAPED BRACES (must NOT be double-escaped):
+     *    - \{ and \} should remain as-is
+     *    - Track backslash escaping carefully to avoid double-escaping
+     *
+     * 5. POSSESSIVE AND LAZY QUANTIFIERS:
+     *    - {n}+ (possessive) and {n}? (lazy) should work with valid quantifiers
+     *
+     * POTENTIAL ISSUES NOT YET HANDLED:
+     * - Extended bracketed character classes: (?[...]) may contain braces
+     * - Conditional patterns: (?(condition){yes}{no}) uses braces for branches
+     * - Subroutine definitions: (?(DEFINE)(?<name>...)) may have complex nesting
+     * - Code blocks: (?{...}) and (??{...}) use braces but are handled elsewhere
+     * - Named capture definitions: (?<name{suffix}>...) - are braces allowed in names?
+     * - Unicode named sequences: \N{...} may contain nested braces in some contexts
+     *
+     * If new regex features are added that use braces, this function MUST be updated.
+     * Test changes thoroughly with unit/regex/unescaped_braces.t and regex test suite.
+     */
+    private static String escapeInvalidQuantifierBraces(String pattern) {
+        StringBuilder result = new StringBuilder();
+        boolean inCharClass = false;
+        boolean escaped = false;
+
+        for (int i = 0; i < pattern.length(); i++) {
+            char c = pattern.charAt(i);
+
+            // Handle escape sequences
+            if (escaped) {
+                result.append(c);
+
+                // Check if this is an escape sequence that uses braces: \N{...}, \x{...}, \o{...}, \p{...}, \P{...}, \g{...}
+                if ((c == 'N' || c == 'x' || c == 'o' || c == 'p' || c == 'P' || c == 'g') &&
+                    i + 1 < pattern.length() && pattern.charAt(i + 1) == '{') {
+                    // Skip the entire escape sequence with braces
+                    result.append('{');
+                    i++; // Move past '{'
+                    int braceDepth = 1;
+                    i++; // Move to first character inside braces
+
+                    while (i < pattern.length() && braceDepth > 0) {
+                        char ch = pattern.charAt(i);
+                        result.append(ch);
+                        if (ch == '\\' && i + 1 < pattern.length()) {
+                            // Skip escaped character inside the escape sequence
+                            i++;
+                            if (i < pattern.length()) {
+                                result.append(pattern.charAt(i));
+                            }
+                        } else if (ch == '{') {
+                            braceDepth++;
+                        } else if (ch == '}') {
+                            braceDepth--;
+                        }
+                        i++;
+                    }
+                    i--; // Back up one since the loop will increment
+                }
+
+                escaped = false;
+                continue;
+            }
+
+            if (c == '\\') {
+                result.append(c);
+                escaped = true;
+                continue;
+            }
+
+            // Track character class boundaries (braces inside [...] are always literal)
+            if (c == '[') {
+                inCharClass = true;
+                result.append(c);
+                continue;
+            }
+            if (c == ']') {
+                inCharClass = false;
+                result.append(c);
+                continue;
+            }
+
+            // Only process braces outside character classes
+            if (!inCharClass && c == '{') {
+                // Look ahead to check if this is a valid quantifier
+                int closePos = findMatchingCloseBraceForEscape(pattern, i);
+                if (closePos > 0 && isValidQuantifierContent(pattern, i + 1, closePos)) {
+                    result.append(c);  // Keep valid quantifier as-is
+                } else {
+                    result.append("\\{");  // Escape invalid quantifier
+                }
+            } else if (!inCharClass && c == '}') {
+                // Check if this closes a quantifier that we kept unescaped
+                if (!closesValidQuantifier(result, pattern, i)) {
+                    result.append("\\}");  // Escape unmatched closing brace
+                } else {
+                    result.append(c);
+                }
+            } else {
+                result.append(c);
+            }
+        }
+
+        return result.toString();
+    }
+
+    /**
+     * Find the position of closing brace that matches opening brace at pos.
+     * Returns -1 if no matching brace found.
+     */
+    private static int findMatchingCloseBraceForEscape(String pattern, int openPos) {
+        for (int i = openPos + 1; i < pattern.length(); i++) {
+            char c = pattern.charAt(i);
+            if (c == '\\') {
+                i++; // Skip escaped character
+                continue;
+            }
+            if (c == '}') {
+                return i;
+            }
+        }
+        return -1; // No closing brace found
+    }
+
+    /**
+     * Check if content between braces forms a valid quantifier.
+     * Valid: {n}, {n,}, {n,m} where n and m are non-negative integers
+     * Invalid: {(.*?)}, {abc}, {}, {,5}, etc.
+     */
+    private static boolean isValidQuantifierContent(String pattern, int start, int end) {
+        if (start >= end) {
+            return false; // Empty braces {}
+        }
+
+        String content = pattern.substring(start, end);
+
+        // Check for {n}, {n,}, or {n,m} pattern
+        if (content.matches("\\d+")) {
+            return true; // {n}
+        }
+        if (content.matches("\\d+,")) {
+            return true; // {n,}
+        }
+        if (content.matches("\\d+,\\d+")) {
+            return true; // {n,m}
+        }
+
+        return false;
+    }
+
+    /**
+     * Check if closing brace at position closePos closes a valid quantifier
+     * that we kept unescaped in the result buffer.
+     */
+    private static boolean closesValidQuantifier(StringBuilder result, String pattern, int closePos) {
+        // Find the most recent unescaped opening brace in result
+        int openPos = -1;
+        for (int i = result.length() - 1; i >= 0; i--) {
+            if (result.charAt(i) == '{') {
+                // Check if it's escaped
+                int backslashCount = 0;
+                for (int j = i - 1; j >= 0 && result.charAt(j) == '\\'; j--) {
+                    backslashCount++;
+                }
+                if (backslashCount % 2 == 0) {
+                    // Even number of backslashes (or zero) means { is not escaped
+                    openPos = i;
+                    break;
+                }
+            }
+        }
+
+        if (openPos < 0) {
+            return false; // No unescaped opening brace found
+        }
+
+        // Extract content and validate
+        String content = result.substring(openPos + 1);
+        return content.matches("\\d+") || content.matches("\\d+,") || content.matches("\\d+,\\d+");
     }
 
     /**

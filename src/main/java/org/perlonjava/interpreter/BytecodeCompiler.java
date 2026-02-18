@@ -3060,43 +3060,45 @@ public class BytecodeCompiler implements Visitor {
                 emit(currentCallContext);
             }
             case "&" -> {
-                // String bitwise AND (default): rs1 & rs2
-                // Note: binary& (with use integer) is handled separately
-                emit(Opcodes.STRING_BITWISE_AND);
+                // Numeric bitwise AND (default): rs1 & rs2
+                emit(Opcodes.BITWISE_AND_BINARY);
                 emitReg(rd);
                 emitReg(rs1);
                 emitReg(rs2);
             }
             case "binary&" -> {
                 // Numeric bitwise AND (use integer): rs1 binary& rs2
+                // Same as & but explicitly numeric
                 emit(Opcodes.BITWISE_AND_BINARY);
                 emitReg(rd);
                 emitReg(rs1);
                 emitReg(rs2);
             }
             case "|" -> {
-                // String bitwise OR (default): rs1 | rs2
-                emit(Opcodes.STRING_BITWISE_OR);
+                // Numeric bitwise OR (default): rs1 | rs2
+                emit(Opcodes.BITWISE_OR_BINARY);
                 emitReg(rd);
                 emitReg(rs1);
                 emitReg(rs2);
             }
             case "binary|" -> {
                 // Numeric bitwise OR (use integer): rs1 binary| rs2
+                // Same as | but explicitly numeric
                 emit(Opcodes.BITWISE_OR_BINARY);
                 emitReg(rd);
                 emitReg(rs1);
                 emitReg(rs2);
             }
             case "^" -> {
-                // String bitwise XOR (default): rs1 ^ rs2
-                emit(Opcodes.STRING_BITWISE_XOR);
+                // Numeric bitwise XOR (default): rs1 ^ rs2
+                emit(Opcodes.BITWISE_XOR_BINARY);
                 emitReg(rd);
                 emitReg(rs1);
                 emitReg(rs2);
             }
             case "binary^" -> {
                 // Numeric bitwise XOR (use integer): rs1 binary^ rs2
+                // Same as ^ but explicitly numeric
                 emit(Opcodes.BITWISE_XOR_BINARY);
                 emitReg(rd);
                 emitReg(rs1);
@@ -5853,6 +5855,566 @@ public class BytecodeCompiler implements Visitor {
             emitReg(2);  // Register 2 contains the calling context
 
             lastResultReg = rd;
+        // GENERATED_OPERATORS_START
+        } else if (op.equals("int")) {
+            // int($x) - MathOperators.integer
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(this);
+                } else {
+                    throwCompilerException("int requires an argument");
+                }
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+            int rd = allocateRegister();
+            emit(Opcodes.INT);
+            emitReg(rd);
+            emitReg(argReg);
+            lastResultReg = rd;
+        } else if (op.equals("log")) {
+            // log($x) - MathOperators.log
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(this);
+                } else {
+                    throwCompilerException("log requires an argument");
+                }
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+            int rd = allocateRegister();
+            emit(Opcodes.LOG);
+            emitReg(rd);
+            emitReg(argReg);
+            lastResultReg = rd;
+        } else if (op.equals("sqrt")) {
+            // sqrt($x) - MathOperators.sqrt
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(this);
+                } else {
+                    throwCompilerException("sqrt requires an argument");
+                }
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+            int rd = allocateRegister();
+            emit(Opcodes.SQRT);
+            emitReg(rd);
+            emitReg(argReg);
+            lastResultReg = rd;
+        } else if (op.equals("cos")) {
+            // cos($x) - MathOperators.cos
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(this);
+                } else {
+                    throwCompilerException("cos requires an argument");
+                }
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+            int rd = allocateRegister();
+            emit(Opcodes.COS);
+            emitReg(rd);
+            emitReg(argReg);
+            lastResultReg = rd;
+        } else if (op.equals("sin")) {
+            // sin($x) - MathOperators.sin
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(this);
+                } else {
+                    throwCompilerException("sin requires an argument");
+                }
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+            int rd = allocateRegister();
+            emit(Opcodes.SIN);
+            emitReg(rd);
+            emitReg(argReg);
+            lastResultReg = rd;
+        } else if (op.equals("exp")) {
+            // exp($x) - MathOperators.exp
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(this);
+                } else {
+                    throwCompilerException("exp requires an argument");
+                }
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+            int rd = allocateRegister();
+            emit(Opcodes.EXP);
+            emitReg(rd);
+            emitReg(argReg);
+            lastResultReg = rd;
+        } else if (op.equals("abs")) {
+            // abs($x) - MathOperators.abs
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(this);
+                } else {
+                    throwCompilerException("abs requires an argument");
+                }
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+            int rd = allocateRegister();
+            emit(Opcodes.ABS);
+            emitReg(rd);
+            emitReg(argReg);
+            lastResultReg = rd;
+        } else if (op.equals("binary~")) {
+            // binary~($x) - BitwiseOperators.bitwiseNotBinary
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(this);
+                } else {
+                    throwCompilerException("binary~ requires an argument");
+                }
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+            int rd = allocateRegister();
+            emit(Opcodes.BINARY_NOT);
+            emitReg(rd);
+            emitReg(argReg);
+            lastResultReg = rd;
+        } else if (op.equals("integerBitwiseNot")) {
+            // integerBitwiseNot($x) - BitwiseOperators.integerBitwiseNot
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(this);
+                } else {
+                    throwCompilerException("integerBitwiseNot requires an argument");
+                }
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+            int rd = allocateRegister();
+            emit(Opcodes.INTEGER_BITWISE_NOT);
+            emitReg(rd);
+            emitReg(argReg);
+            lastResultReg = rd;
+        } else if (op.equals("ord")) {
+            // ord($x) - ScalarOperators.ord
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(this);
+                } else {
+                    throwCompilerException("ord requires an argument");
+                }
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+            int rd = allocateRegister();
+            emit(Opcodes.ORD);
+            emitReg(rd);
+            emitReg(argReg);
+            lastResultReg = rd;
+        } else if (op.equals("ordBytes")) {
+            // ordBytes($x) - ScalarOperators.ordBytes
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(this);
+                } else {
+                    throwCompilerException("ordBytes requires an argument");
+                }
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+            int rd = allocateRegister();
+            emit(Opcodes.ORD_BYTES);
+            emitReg(rd);
+            emitReg(argReg);
+            lastResultReg = rd;
+        } else if (op.equals("oct")) {
+            // oct($x) - ScalarOperators.oct
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(this);
+                } else {
+                    throwCompilerException("oct requires an argument");
+                }
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+            int rd = allocateRegister();
+            emit(Opcodes.OCT);
+            emitReg(rd);
+            emitReg(argReg);
+            lastResultReg = rd;
+        } else if (op.equals("hex")) {
+            // hex($x) - ScalarOperators.hex
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(this);
+                } else {
+                    throwCompilerException("hex requires an argument");
+                }
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+            int rd = allocateRegister();
+            emit(Opcodes.HEX);
+            emitReg(rd);
+            emitReg(argReg);
+            lastResultReg = rd;
+        } else if (op.equals("srand")) {
+            // srand($x) - Random.srand
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(this);
+                } else {
+                    throwCompilerException("srand requires an argument");
+                }
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+            int rd = allocateRegister();
+            emit(Opcodes.SRAND);
+            emitReg(rd);
+            emitReg(argReg);
+            lastResultReg = rd;
+        } else if (op.equals("chr")) {
+            // chr($x) - StringOperators.chr
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(this);
+                } else {
+                    throwCompilerException("chr requires an argument");
+                }
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+            int rd = allocateRegister();
+            emit(Opcodes.CHR);
+            emitReg(rd);
+            emitReg(argReg);
+            lastResultReg = rd;
+        } else if (op.equals("chrBytes")) {
+            // chrBytes($x) - StringOperators.chrBytes
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(this);
+                } else {
+                    throwCompilerException("chrBytes requires an argument");
+                }
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+            int rd = allocateRegister();
+            emit(Opcodes.CHR_BYTES);
+            emitReg(rd);
+            emitReg(argReg);
+            lastResultReg = rd;
+        } else if (op.equals("lengthBytes")) {
+            // lengthBytes($x) - StringOperators.lengthBytes
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(this);
+                } else {
+                    throwCompilerException("lengthBytes requires an argument");
+                }
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+            int rd = allocateRegister();
+            emit(Opcodes.LENGTH_BYTES);
+            emitReg(rd);
+            emitReg(argReg);
+            lastResultReg = rd;
+        } else if (op.equals("quotemeta")) {
+            // quotemeta($x) - StringOperators.quotemeta
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(this);
+                } else {
+                    throwCompilerException("quotemeta requires an argument");
+                }
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+            int rd = allocateRegister();
+            emit(Opcodes.QUOTEMETA);
+            emitReg(rd);
+            emitReg(argReg);
+            lastResultReg = rd;
+        } else if (op.equals("fc")) {
+            // fc($x) - StringOperators.fc
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(this);
+                } else {
+                    throwCompilerException("fc requires an argument");
+                }
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+            int rd = allocateRegister();
+            emit(Opcodes.FC);
+            emitReg(rd);
+            emitReg(argReg);
+            lastResultReg = rd;
+        } else if (op.equals("lc")) {
+            // lc($x) - StringOperators.lc
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(this);
+                } else {
+                    throwCompilerException("lc requires an argument");
+                }
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+            int rd = allocateRegister();
+            emit(Opcodes.LC);
+            emitReg(rd);
+            emitReg(argReg);
+            lastResultReg = rd;
+        } else if (op.equals("lcfirst")) {
+            // lcfirst($x) - StringOperators.lcfirst
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(this);
+                } else {
+                    throwCompilerException("lcfirst requires an argument");
+                }
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+            int rd = allocateRegister();
+            emit(Opcodes.LCFIRST);
+            emitReg(rd);
+            emitReg(argReg);
+            lastResultReg = rd;
+        } else if (op.equals("uc")) {
+            // uc($x) - StringOperators.uc
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(this);
+                } else {
+                    throwCompilerException("uc requires an argument");
+                }
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+            int rd = allocateRegister();
+            emit(Opcodes.UC);
+            emitReg(rd);
+            emitReg(argReg);
+            lastResultReg = rd;
+        } else if (op.equals("ucfirst")) {
+            // ucfirst($x) - StringOperators.ucfirst
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(this);
+                } else {
+                    throwCompilerException("ucfirst requires an argument");
+                }
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+            int rd = allocateRegister();
+            emit(Opcodes.UCFIRST);
+            emitReg(rd);
+            emitReg(argReg);
+            lastResultReg = rd;
+        } else if (op.equals("sleep")) {
+            // sleep($x) - Time.sleep
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(this);
+                } else {
+                    throwCompilerException("sleep requires an argument");
+                }
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+            int rd = allocateRegister();
+            emit(Opcodes.SLEEP);
+            emitReg(rd);
+            emitReg(argReg);
+            lastResultReg = rd;
+        } else if (op.equals("tell")) {
+            // tell($x) - IOOperator.tell
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(this);
+                } else {
+                    throwCompilerException("tell requires an argument");
+                }
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+            int rd = allocateRegister();
+            emit(Opcodes.TELL);
+            emitReg(rd);
+            emitReg(argReg);
+            lastResultReg = rd;
+        } else if (op.equals("rmdir")) {
+            // rmdir($x) - Directory.rmdir
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(this);
+                } else {
+                    throwCompilerException("rmdir requires an argument");
+                }
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+            int rd = allocateRegister();
+            emit(Opcodes.RMDIR);
+            emitReg(rd);
+            emitReg(argReg);
+            lastResultReg = rd;
+        } else if (op.equals("closedir")) {
+            // closedir($x) - Directory.closedir
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(this);
+                } else {
+                    throwCompilerException("closedir requires an argument");
+                }
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+            int rd = allocateRegister();
+            emit(Opcodes.CLOSEDIR);
+            emitReg(rd);
+            emitReg(argReg);
+            lastResultReg = rd;
+        } else if (op.equals("rewinddir")) {
+            // rewinddir($x) - Directory.rewinddir
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(this);
+                } else {
+                    throwCompilerException("rewinddir requires an argument");
+                }
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+            int rd = allocateRegister();
+            emit(Opcodes.REWINDDIR);
+            emitReg(rd);
+            emitReg(argReg);
+            lastResultReg = rd;
+        } else if (op.equals("telldir")) {
+            // telldir($x) - Directory.telldir
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(this);
+                } else {
+                    throwCompilerException("telldir requires an argument");
+                }
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+            int rd = allocateRegister();
+            emit(Opcodes.TELLDIR);
+            emitReg(rd);
+            emitReg(argReg);
+            lastResultReg = rd;
+        } else if (op.equals("chdir")) {
+            // chdir($x) - Directory.chdir
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(this);
+                } else {
+                    throwCompilerException("chdir requires an argument");
+                }
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+            int rd = allocateRegister();
+            emit(Opcodes.CHDIR);
+            emitReg(rd);
+            emitReg(argReg);
+            lastResultReg = rd;
+        } else if (op.equals("exit")) {
+            // exit($x) - WarnDie.exit
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(this);
+                } else {
+                    throwCompilerException("exit requires an argument");
+                }
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+            int rd = allocateRegister();
+            emit(Opcodes.EXIT);
+            emitReg(rd);
+            emitReg(argReg);
+            lastResultReg = rd;
+        // GENERATED_OPERATORS_END
         } else {
             throwCompilerException("Unsupported operator: " + op);
         }
