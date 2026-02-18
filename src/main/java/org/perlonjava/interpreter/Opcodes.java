@@ -806,8 +806,31 @@ public class Opcodes {
     /** -C FILE: inode change age (days) */
     public static final short FILETEST_C_UPPER = 216;
 
+    /** Match regex (negated): rd = !RuntimeRegex.matchRegex(string, regex, ctx)
+     * Format: MATCH_REGEX_NOT rd stringReg regexReg ctx */
+    public static final short MATCH_REGEX_NOT = 217;
+
     // =================================================================
-    // OPCODES 217-32767: RESERVED FOR FUTURE OPERATIONS
+    // LOOP CONTROL OPERATIONS (218-220) - last/next/redo
+    // =================================================================
+
+    /** Loop last: Jump to end of loop or return RuntimeControlFlowList for non-local
+     * Format: LAST labelIndex
+     * labelIndex: index into stringPool for label name (or -1 for unlabeled) */
+    public static final short LAST = 218;
+
+    /** Loop next: Jump to continue/next label or return RuntimeControlFlowList for non-local
+     * Format: NEXT labelIndex
+     * labelIndex: index into stringPool for label name (or -1 for unlabeled) */
+    public static final short NEXT = 219;
+
+    /** Loop redo: Jump to start of loop or return RuntimeControlFlowList for non-local
+     * Format: REDO labelIndex
+     * labelIndex: index into stringPool for label name (or -1 for unlabeled) */
+    public static final short REDO = 220;
+
+    // =================================================================
+    // OPCODES 221-32767: RESERVED FOR FUTURE OPERATIONS
     // =================================================================
     // See PHASE3_OPERATOR_PROMOTIONS.md for promotion strategy.
     // All SLOWOP_* constants have been removed - use direct opcodes 114-154 instead.
