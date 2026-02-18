@@ -1296,6 +1296,212 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    // File test and stat operations
+                    case Opcodes.STAT: {
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        int ctx = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.Stat.stat((RuntimeScalar) registers[rs], ctx);
+                        break;
+                    }
+
+                    case Opcodes.LSTAT: {
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        int ctx = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.Stat.lstat((RuntimeScalar) registers[rs], ctx);
+                        break;
+                    }
+
+                    case Opcodes.FILETEST_R: {
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-r", (RuntimeScalar) registers[rs]);
+                        break;
+                    }
+
+                    case Opcodes.FILETEST_W: {
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-w", (RuntimeScalar) registers[rs]);
+                        break;
+                    }
+
+                    case Opcodes.FILETEST_X: {
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-x", (RuntimeScalar) registers[rs]);
+                        break;
+                    }
+
+                    case Opcodes.FILETEST_O: {
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-o", (RuntimeScalar) registers[rs]);
+                        break;
+                    }
+
+                    case Opcodes.FILETEST_R_REAL: {
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-R", (RuntimeScalar) registers[rs]);
+                        break;
+                    }
+
+                    case Opcodes.FILETEST_W_REAL: {
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-W", (RuntimeScalar) registers[rs]);
+                        break;
+                    }
+
+                    case Opcodes.FILETEST_X_REAL: {
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-X", (RuntimeScalar) registers[rs]);
+                        break;
+                    }
+
+                    case Opcodes.FILETEST_O_REAL: {
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-O", (RuntimeScalar) registers[rs]);
+                        break;
+                    }
+
+                    case Opcodes.FILETEST_E: {
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-e", (RuntimeScalar) registers[rs]);
+                        break;
+                    }
+
+                    case Opcodes.FILETEST_Z: {
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-z", (RuntimeScalar) registers[rs]);
+                        break;
+                    }
+
+                    case Opcodes.FILETEST_S: {
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-s", (RuntimeScalar) registers[rs]);
+                        break;
+                    }
+
+                    case Opcodes.FILETEST_F: {
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-f", (RuntimeScalar) registers[rs]);
+                        break;
+                    }
+
+                    case Opcodes.FILETEST_D: {
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-d", (RuntimeScalar) registers[rs]);
+                        break;
+                    }
+
+                    case Opcodes.FILETEST_L: {
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-l", (RuntimeScalar) registers[rs]);
+                        break;
+                    }
+
+                    case Opcodes.FILETEST_P: {
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-p", (RuntimeScalar) registers[rs]);
+                        break;
+                    }
+
+                    case Opcodes.FILETEST_S_UPPER: {
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-S", (RuntimeScalar) registers[rs]);
+                        break;
+                    }
+
+                    case Opcodes.FILETEST_B: {
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-b", (RuntimeScalar) registers[rs]);
+                        break;
+                    }
+
+                    case Opcodes.FILETEST_C: {
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-c", (RuntimeScalar) registers[rs]);
+                        break;
+                    }
+
+                    case Opcodes.FILETEST_T: {
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-t", (RuntimeScalar) registers[rs]);
+                        break;
+                    }
+
+                    case Opcodes.FILETEST_U: {
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-u", (RuntimeScalar) registers[rs]);
+                        break;
+                    }
+
+                    case Opcodes.FILETEST_G: {
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-g", (RuntimeScalar) registers[rs]);
+                        break;
+                    }
+
+                    case Opcodes.FILETEST_K: {
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-k", (RuntimeScalar) registers[rs]);
+                        break;
+                    }
+
+                    case Opcodes.FILETEST_T_UPPER: {
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-T", (RuntimeScalar) registers[rs]);
+                        break;
+                    }
+
+                    case Opcodes.FILETEST_B_UPPER: {
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-B", (RuntimeScalar) registers[rs]);
+                        break;
+                    }
+
+                    case Opcodes.FILETEST_M: {
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-M", (RuntimeScalar) registers[rs]);
+                        break;
+                    }
+
+                    case Opcodes.FILETEST_A: {
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-A", (RuntimeScalar) registers[rs]);
+                        break;
+                    }
+
+                    case Opcodes.FILETEST_C_UPPER: {
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-C", (RuntimeScalar) registers[rs]);
+                        break;
+                    }
+
                     case Opcodes.PUSH_LOCAL_VARIABLE: {
                         // Push variable to local stack: DynamicVariableManager.pushLocalVariable(rs)
                         int rs = bytecode[pc++];

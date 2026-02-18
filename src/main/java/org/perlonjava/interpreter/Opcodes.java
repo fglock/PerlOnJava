@@ -739,7 +739,75 @@ public class Opcodes {
     public static final short BITWISE_NOT_STRING = 187;
 
     // =================================================================
-    // OPCODES 188-32767: RESERVED FOR FUTURE OPERATIONS
+    // FILE TEST AND STAT OPERATIONS (188-218)
+    // =================================================================
+
+    /** stat operator: rd = stat(rs) [context]
+     * Format: STAT rd rs ctx */
+    public static final short STAT = 188;
+
+    /** lstat operator: rd = lstat(rs) [context]
+     * Format: LSTAT rd rs ctx */
+    public static final short LSTAT = 189;
+
+    // File test operators (unary operators returning boolean or value)
+    /** -r FILE: readable */
+    public static final short FILETEST_R = 190;
+    /** -w FILE: writable */
+    public static final short FILETEST_W = 191;
+    /** -x FILE: executable */
+    public static final short FILETEST_X = 192;
+    /** -o FILE: owned by effective uid */
+    public static final short FILETEST_O = 193;
+    /** -R FILE: readable by real uid */
+    public static final short FILETEST_R_REAL = 194;
+    /** -W FILE: writable by real uid */
+    public static final short FILETEST_W_REAL = 195;
+    /** -X FILE: executable by real uid */
+    public static final short FILETEST_X_REAL = 196;
+    /** -O FILE: owned by real uid */
+    public static final short FILETEST_O_REAL = 197;
+    /** -e FILE: exists */
+    public static final short FILETEST_E = 198;
+    /** -z FILE: zero size */
+    public static final short FILETEST_Z = 199;
+    /** -s FILE: size in bytes */
+    public static final short FILETEST_S = 200;
+    /** -f FILE: plain file */
+    public static final short FILETEST_F = 201;
+    /** -d FILE: directory */
+    public static final short FILETEST_D = 202;
+    /** -l FILE: symbolic link */
+    public static final short FILETEST_L = 203;
+    /** -p FILE: named pipe */
+    public static final short FILETEST_P = 204;
+    /** -S FILE: socket */
+    public static final short FILETEST_S_UPPER = 205;
+    /** -b FILE: block special */
+    public static final short FILETEST_B = 206;
+    /** -c FILE: character special */
+    public static final short FILETEST_C = 207;
+    /** -t FILE: tty */
+    public static final short FILETEST_T = 208;
+    /** -u FILE: setuid */
+    public static final short FILETEST_U = 209;
+    /** -g FILE: setgid */
+    public static final short FILETEST_G = 210;
+    /** -k FILE: sticky bit */
+    public static final short FILETEST_K = 211;
+    /** -T FILE: text file */
+    public static final short FILETEST_T_UPPER = 212;
+    /** -B FILE: binary file */
+    public static final short FILETEST_B_UPPER = 213;
+    /** -M FILE: modification age (days) */
+    public static final short FILETEST_M = 214;
+    /** -A FILE: access age (days) */
+    public static final short FILETEST_A = 215;
+    /** -C FILE: inode change age (days) */
+    public static final short FILETEST_C_UPPER = 216;
+
+    // =================================================================
+    // OPCODES 217-32767: RESERVED FOR FUTURE OPERATIONS
     // =================================================================
     // See PHASE3_OPERATOR_PROMOTIONS.md for promotion strategy.
     // All SLOWOP_* constants have been removed - use direct opcodes 114-154 instead.

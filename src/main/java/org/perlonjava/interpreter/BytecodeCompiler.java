@@ -4606,6 +4606,78 @@ public class BytecodeCompiler implements Visitor {
             } else {
                 throwCompilerException(op + " requires a list of arguments");
             }
+        } else if (op.equals("stat") || op.equals("lstat")) {
+            // stat FILE or lstat FILE
+            int savedContext = currentCallContext;
+            currentCallContext = RuntimeContextType.SCALAR;
+            try {
+                node.operand.accept(this);
+                int operandReg = lastResultReg;
+
+                int rd = allocateRegister();
+                emit(op.equals("stat") ? Opcodes.STAT : Opcodes.LSTAT);
+                emitReg(rd);
+                emitReg(operandReg);
+                emit(savedContext);  // Pass calling context
+
+                lastResultReg = rd;
+            } finally {
+                currentCallContext = savedContext;
+            }
+        } else if (op.startsWith("-") && op.length() == 2) {
+            // File test operators: -r, -w, -x, etc.
+            int savedContext = currentCallContext;
+            currentCallContext = RuntimeContextType.SCALAR;
+            try {
+                node.operand.accept(this);
+                int operandReg = lastResultReg;
+
+                int rd = allocateRegister();
+
+                // Map operator to opcode
+                char testChar = op.charAt(1);
+                short opcode;
+                switch (testChar) {
+                    case 'r': opcode = Opcodes.FILETEST_R; break;
+                    case 'w': opcode = Opcodes.FILETEST_W; break;
+                    case 'x': opcode = Opcodes.FILETEST_X; break;
+                    case 'o': opcode = Opcodes.FILETEST_O; break;
+                    case 'R': opcode = Opcodes.FILETEST_R_REAL; break;
+                    case 'W': opcode = Opcodes.FILETEST_W_REAL; break;
+                    case 'X': opcode = Opcodes.FILETEST_X_REAL; break;
+                    case 'O': opcode = Opcodes.FILETEST_O_REAL; break;
+                    case 'e': opcode = Opcodes.FILETEST_E; break;
+                    case 'z': opcode = Opcodes.FILETEST_Z; break;
+                    case 's': opcode = Opcodes.FILETEST_S; break;
+                    case 'f': opcode = Opcodes.FILETEST_F; break;
+                    case 'd': opcode = Opcodes.FILETEST_D; break;
+                    case 'l': opcode = Opcodes.FILETEST_L; break;
+                    case 'p': opcode = Opcodes.FILETEST_P; break;
+                    case 'S': opcode = Opcodes.FILETEST_S_UPPER; break;
+                    case 'b': opcode = Opcodes.FILETEST_B; break;
+                    case 'c': opcode = Opcodes.FILETEST_C; break;
+                    case 't': opcode = Opcodes.FILETEST_T; break;
+                    case 'u': opcode = Opcodes.FILETEST_U; break;
+                    case 'g': opcode = Opcodes.FILETEST_G; break;
+                    case 'k': opcode = Opcodes.FILETEST_K; break;
+                    case 'T': opcode = Opcodes.FILETEST_T_UPPER; break;
+                    case 'B': opcode = Opcodes.FILETEST_B_UPPER; break;
+                    case 'M': opcode = Opcodes.FILETEST_M; break;
+                    case 'A': opcode = Opcodes.FILETEST_A; break;
+                    case 'C': opcode = Opcodes.FILETEST_C_UPPER; break;
+                    default:
+                        throwCompilerException("Unsupported file test operator: " + op);
+                        return;
+                }
+
+                emit(opcode);
+                emitReg(rd);
+                emitReg(operandReg);
+
+                lastResultReg = rd;
+            } finally {
+                currentCallContext = savedContext;
+            }
         } else if (op.equals("die")) {
             // die $message;
             if (node.operand != null) {
