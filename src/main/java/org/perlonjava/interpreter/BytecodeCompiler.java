@@ -3742,6 +3742,46 @@ public class BytecodeCompiler implements Visitor {
                         OperatorNode sigilOp = (OperatorNode) element;
                         String sigil = sigilOp.operator;
 
+                        // Handle backslash operator (reference constructor): my (\$x) or my (\($x, $y))
+                        if (sigil.equals("\\")) {
+                            // Check if it's a nested list: my (\($d, $e))
+                            if (sigilOp.operand instanceof ListNode nestedList) {
+                                // Process each element in the nested list as a declared reference
+                                for (Node nestedElement : nestedList.elements) {
+                                    if (nestedElement instanceof OperatorNode nestedVarNode &&
+                                        "$@%".contains(nestedVarNode.operator)) {
+                                        // Get the variable name
+                                        if (nestedVarNode.operand instanceof IdentifierNode idNode) {
+                                            // For declared refs, always use scalar sigil
+                                            String varName = "$" + idNode.name;
+
+                                            // Declare and initialize the variable
+                                            int reg = addVariable(varName, "my");
+                                            emit(Opcodes.LOAD_UNDEF);
+                                            emitReg(reg);
+
+                                            varRegs.add(reg);
+                                        }
+                                    }
+                                }
+                            } else if (sigilOp.operand instanceof OperatorNode varNode &&
+                                       "$@%".contains(varNode.operator)) {
+                                // Single variable: my (\$x)
+                                if (varNode.operand instanceof IdentifierNode idNode) {
+                                    // For declared refs, always use scalar sigil
+                                    String varName = "$" + idNode.name;
+
+                                    // Declare and initialize the variable
+                                    int reg = addVariable(varName, "my");
+                                    emit(Opcodes.LOAD_UNDEF);
+                                    emitReg(reg);
+
+                                    varRegs.add(reg);
+                                }
+                            }
+                            continue;
+                        }
+
                         if (sigilOp.operand instanceof IdentifierNode) {
                             String varName = sigil + ((IdentifierNode) sigilOp.operand).name;
 
