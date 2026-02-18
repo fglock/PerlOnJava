@@ -16,6 +16,9 @@ import org.perlonjava.operators.*;
  */
 public class BytecodeInterpreter {
 
+    // Debug flag for regex compilation (set at class load time)
+    private static final boolean DEBUG_REGEX = System.getenv("DEBUG_REGEX") != null;
+
     /**
      * Execute interpreted bytecode.
      *
@@ -93,6 +96,16 @@ public class BytecodeInterpreter {
                         // Unconditional jump: pc = offset
                         int offset = readInt(bytecode, pc);
                         pc = offset;  // Registers persist across jump (unlike stack-based!)
+                        break;
+                    }
+
+                    case Opcodes.LAST:
+                    case Opcodes.NEXT:
+                    case Opcodes.REDO: {
+                        // Loop control: jump to target PC
+                        // Format: opcode, target (absolute PC as int)
+                        int target = readInt(bytecode, pc);
+                        pc = target;
                         break;
                     }
 
@@ -331,16 +344,12 @@ public class BytecodeInterpreter {
                     }
 
                     case Opcodes.SET_SCALAR: {
-                        // Set scalar value: registers[rd].set(registers[rs])
-                        // Used to set the value in a persistent scalar without overwriting the reference
+                        // Set scalar value: registers[rd] = registers[rs]
+                        // Use addToScalar which properly handles special variables like $&
+                        // addToScalar calls getValueAsScalar() for ScalarSpecialVariable
                         int rd = bytecode[pc++];
                         int rs = bytecode[pc++];
-                        // Auto-convert rs to scalar if needed
-                        RuntimeBase rsBase = registers[rs];
-                        RuntimeScalar rsScalar = (rsBase instanceof RuntimeScalar)
-                                ? (RuntimeScalar) rsBase
-                                : rsBase.scalar();
-                        ((RuntimeScalar) registers[rd]).set(rsScalar);
+                        registers[rs].addToScalar((RuntimeScalar) registers[rd]);
                         break;
                     }
 
@@ -1553,6 +1562,22 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.MATCH_REGEX_NOT: {
+                        // Negated regex match: rd = !RuntimeRegex.matchRegex(quotedRegex, string, ctx)
+                        int rd = bytecode[pc++];
+                        int stringReg = bytecode[pc++];
+                        int regexReg = bytecode[pc++];
+                        int ctx = bytecode[pc++];
+                        RuntimeBase matchResult = org.perlonjava.regex.RuntimeRegex.matchRegex(
+                            (RuntimeScalar) registers[regexReg],  // quotedRegex first
+                            (RuntimeScalar) registers[stringReg], // string second
+                            ctx
+                        );
+                        // Negate the boolean result
+                        registers[rd] = new RuntimeScalar(matchResult.scalar().getBoolean() ? 0 : 1);
+                        break;
+                    }
+
                     case Opcodes.CHOMP: {
                         // Chomp: rd = rs.chomp()
                         int rd = bytecode[pc++];
@@ -2304,6 +2329,13 @@ public class BytecodeInterpreter {
                 int flagsReg = bytecode[pc++];
                 RuntimeScalar pattern = (RuntimeScalar) registers[patternReg];
                 RuntimeScalar flags = (RuntimeScalar) registers[flagsReg];
+
+                // Debug logging
+                if (DEBUG_REGEX) {
+                    System.err.println("BytecodeInterpreter.QUOTE_REGEX: pattern=" + pattern.toString() +
+                                       " flags=" + flags.toString());
+                }
+
                 registers[rd] = org.perlonjava.regex.RuntimeRegex.getQuotedRegex(pattern, flags);
                 return pc;
             }

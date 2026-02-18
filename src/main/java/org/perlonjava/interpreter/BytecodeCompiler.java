@@ -44,6 +44,31 @@ public class BytecodeCompiler implements Visitor {
     private final Stack<Integer> savedNextRegister = new Stack<>();
     private final Stack<Integer> savedBaseRegister = new Stack<>();
 
+    // Loop label stack for last/next/redo control flow
+    // Each entry tracks loop boundaries and optional label
+    private final Stack<LoopInfo> loopStack = new Stack<>();
+
+    // Helper class to track loop boundaries
+    private static class LoopInfo {
+        final String label;           // Loop label (null if unlabeled)
+        final int startPc;           // PC for redo (start of loop body)
+        int continuePc;              // PC for next (continue block or increment)
+        final List<Integer> breakPcs; // PCs to patch for last (break)
+        final List<Integer> nextPcs;  // PCs to patch for next
+        final List<Integer> redoPcs;  // PCs to patch for redo
+        final boolean isTrueLoop;    // True for for/while/foreach; false for do-while/bare blocks
+
+        LoopInfo(String label, int startPc, boolean isTrueLoop) {
+            this.label = label;
+            this.startPc = startPc;
+            this.isTrueLoop = isTrueLoop;
+            this.continuePc = -1;  // Will be set later
+            this.breakPcs = new ArrayList<>();
+            this.nextPcs = new ArrayList<>();
+            this.redoPcs = new ArrayList<>();
+        }
+    }
+
     // Token index tracking for error reporting
     private final TreeMap<Integer, Integer> pcToTokenIndex = new TreeMap<>();
     private int currentTokenIndex = -1;  // Track current token for error reporting
@@ -254,6 +279,77 @@ public class BytecodeCompiler implements Visitor {
         } else {
             // Fallback to simple error (no context available)
             throw new RuntimeException(message);
+        }
+    }
+
+    /**
+     * Handle loop control operators: last, next, redo
+     * Emits appropriate opcode with label reference
+     *
+     * @param node The operator node
+     * @param op The operator name (last/next/redo)
+     */
+    private void handleLoopControlOperator(OperatorNode node, String op) {
+        // Extract label if present
+        String labelStr = null;
+        if (node.operand instanceof ListNode labelNode && !labelNode.elements.isEmpty()) {
+            Node arg = labelNode.elements.getFirst();
+            if (arg instanceof IdentifierNode) {
+                labelStr = ((IdentifierNode) arg).name;
+            } else {
+                throwCompilerException("Not implemented: " + node, node.getIndex());
+            }
+        }
+
+        // Find the target loop
+        LoopInfo targetLoop = null;
+        if (labelStr == null) {
+            // Unlabeled: find innermost loop
+            if (!loopStack.isEmpty()) {
+                targetLoop = loopStack.peek();
+            }
+        } else {
+            // Labeled: search for matching label
+            for (int i = loopStack.size() - 1; i >= 0; i--) {
+                LoopInfo loop = loopStack.get(i);
+                if (labelStr.equals(loop.label)) {
+                    targetLoop = loop;
+                    break;
+                }
+            }
+        }
+
+        if (targetLoop == null) {
+            // No matching loop found - non-local control flow
+            // For now, throw an error. Later we can implement RuntimeControlFlowList
+            if (labelStr != null) {
+                throwCompilerException("Can't find label \"" + labelStr + "\"", node.getIndex());
+            } else {
+                throwCompilerException("Can't \"" + op + "\" outside a loop block", node.getIndex());
+            }
+        }
+
+        // Check if this is a pseudo-loop (do-while/bare block) which doesn't support last/next/redo
+        if (!targetLoop.isTrueLoop) {
+            throwCompilerException("Can't \"" + op + "\" outside a loop block", node.getIndex());
+        }
+
+        // Emit the opcode and record the PC to be patched later
+        short opcode = op.equals("last") ? Opcodes.LAST
+                      : op.equals("next") ? Opcodes.NEXT
+                      : Opcodes.REDO;
+
+        emitWithToken(opcode, node.getIndex());
+        int jumpPc = bytecode.size();
+        emitInt(0);  // Placeholder for jump target (will be patched)
+
+        // Record this PC in the appropriate list for later patching
+        if (op.equals("last")) {
+            targetLoop.breakPcs.add(jumpPc);
+        } else if (op.equals("next")) {
+            targetLoop.nextPcs.add(jumpPc);
+        } else { // redo
+            targetLoop.redoPcs.add(jumpPc);
         }
     }
 
@@ -2953,22 +3049,54 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(rs2);
                 emit(currentCallContext);
             }
-            case "&", "binary&" -> {
-                // Numeric bitwise AND: rs1 & rs2
+            case "!~" -> {
+                // $string !~ /pattern/ - negated regex match
+                // rs1 = string to match against
+                // rs2 = compiled regex pattern
+                emit(Opcodes.MATCH_REGEX_NOT);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+                emit(currentCallContext);
+            }
+            case "&" -> {
+                // String bitwise AND (default): rs1 & rs2
+                // Note: binary& (with use integer) is handled separately
+                emit(Opcodes.STRING_BITWISE_AND);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
+            case "binary&" -> {
+                // Numeric bitwise AND (use integer): rs1 binary& rs2
                 emit(Opcodes.BITWISE_AND_BINARY);
                 emitReg(rd);
                 emitReg(rs1);
                 emitReg(rs2);
             }
-            case "|", "binary|" -> {
-                // Numeric bitwise OR: rs1 | rs2
+            case "|" -> {
+                // String bitwise OR (default): rs1 | rs2
+                emit(Opcodes.STRING_BITWISE_OR);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
+            case "binary|" -> {
+                // Numeric bitwise OR (use integer): rs1 binary| rs2
                 emit(Opcodes.BITWISE_OR_BINARY);
                 emitReg(rd);
                 emitReg(rs1);
                 emitReg(rs2);
             }
-            case "^", "binary^" -> {
-                // Numeric bitwise XOR: rs1 ^ rs2
+            case "^" -> {
+                // String bitwise XOR (default): rs1 ^ rs2
+                emit(Opcodes.STRING_BITWISE_XOR);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
+            case "binary^" -> {
+                // Numeric bitwise XOR (use integer): rs1 binary^ rs2
                 emit(Opcodes.BITWISE_XOR_BINARY);
                 emitReg(rd);
                 emitReg(rs1);
@@ -3352,9 +3480,12 @@ public class BytecodeCompiler implements Visitor {
             // Logical AND with short-circuit evaluation
             // Only evaluate right side if left side is true
 
-            // Compile left operand
+            // Compile left operand in scalar context (need boolean value)
+            int savedContext = currentCallContext;
+            currentCallContext = RuntimeContextType.SCALAR;
             node.left.accept(this);
             int rs1 = lastResultReg;
+            currentCallContext = savedContext;
 
             // Allocate result register and move left value to it
             int rd = allocateRegister();
@@ -3391,9 +3522,12 @@ public class BytecodeCompiler implements Visitor {
             // Logical OR with short-circuit evaluation
             // Only evaluate right side if left side is false
 
-            // Compile left operand
+            // Compile left operand in scalar context (need boolean value)
+            int savedContext = currentCallContext;
+            currentCallContext = RuntimeContextType.SCALAR;
             node.left.accept(this);
             int rs1 = lastResultReg;
+            currentCallContext = savedContext;
 
             // Allocate result register and move left value to it
             int rd = allocateRegister();
@@ -3430,9 +3564,12 @@ public class BytecodeCompiler implements Visitor {
             // Defined-OR with short-circuit evaluation
             // Only evaluate right side if left side is undefined
 
-            // Compile left operand
+            // Compile left operand in scalar context (need to test definedness)
+            int savedContext = currentCallContext;
+            currentCallContext = RuntimeContextType.SCALAR;
             node.left.accept(this);
             int rs1 = lastResultReg;
+            currentCallContext = savedContext;
 
             // Allocate result register and move left value to it
             int rd = allocateRegister();
@@ -3835,12 +3972,13 @@ public class BytecodeCompiler implements Visitor {
                     lastResultReg = getVariableRegister(varName);
                 } else {
                     // Global variable - load it
-                    // Add package prefix if not present (match compiler behavior)
+                    // Use NameNormalizer to properly handle special variables (like $&)
+                    // which must always be in the "main" package
                     String globalVarName = varName.substring(1); // Remove $ sigil first
-                    if (!globalVarName.contains("::")) {
-                        // Add package prefix
-                        globalVarName = getCurrentPackage() + "::" + globalVarName;
-                    }
+                    globalVarName = org.perlonjava.runtime.NameNormalizer.normalizeVariableName(
+                        globalVarName,
+                        getCurrentPackage()
+                    );
 
                     int rd = allocateRegister();
                     int nameIdx = addToStringPool(globalVarName);
@@ -4148,10 +4286,13 @@ public class BytecodeCompiler implements Visitor {
             }
         } else if (op.equals("not") || op.equals("!")) {
             // Logical NOT operator: not $x or !$x
-            // Evaluate operand and emit NOT opcode
+            // Evaluate operand in scalar context (need boolean value)
             if (node.operand != null) {
+                int savedContext = currentCallContext;
+                currentCallContext = RuntimeContextType.SCALAR;
                 node.operand.accept(this);
                 int rs = lastResultReg;
+                currentCallContext = savedContext;
 
                 // Allocate result register
                 int rd = allocateRegister();
@@ -4448,6 +4589,10 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(undefReg);
             }
             lastResultReg = -1; // No result after return
+        } else if (op.equals("last") || op.equals("next") || op.equals("redo")) {
+            // Loop control operators: last/next/redo [LABEL]
+            handleLoopControlOperator(node, op);
+            lastResultReg = -1; // No result after control flow
         } else if (op.equals("rand")) {
             // rand() or rand($max)
             // Calls Random.rand(max) where max defaults to 1
@@ -6300,9 +6445,12 @@ public class BytecodeCompiler implements Visitor {
             varReg = allocateRegister();
         }
 
-        // Step 5: Loop start - combined check/next/exit (superinstruction)
+        // Step 5: Push loop info onto stack for last/next/redo
         int loopStartPc = bytecode.size();
+        LoopInfo loopInfo = new LoopInfo(node.labelName, loopStartPc, true); // true = foreach is a true loop
+        loopStack.push(loopInfo);
 
+        // Step 6: Loop start - combined check/next/exit (superinstruction)
         // Emit FOREACH_NEXT_OR_EXIT superinstruction
         // This combines: hasNext check, next() call, and conditional jump
         // Format: FOREACH_NEXT_OR_EXIT varReg, iterReg, exitTarget (absolute address)
@@ -6312,20 +6460,35 @@ public class BytecodeCompiler implements Visitor {
         int loopEndJumpPc = bytecode.size();
         emitInt(0);             // placeholder for exit target (absolute, will be patched)
 
-        // Step 6: Execute body
+        // Step 7: Execute body (redo jumps here)
         if (node.body != null) {
             node.body.accept(this);
         }
 
-        // Step 7: Jump back to loop start
+        // Step 8: Continue point (next jumps here)
+        loopInfo.continuePc = bytecode.size();
+
+        // Step 9: Jump back to loop start
         emit(Opcodes.GOTO);
         emitInt(loopStartPc);
 
-        // Step 8: Loop end - patch the forward jump
+        // Step 10: Loop end - patch the forward jump (last jumps here)
         int loopEndPc = bytecode.size();
         patchJump(loopEndJumpPc, loopEndPc);
 
-        // Step 9: Exit scope
+        // Step 11: Patch all last/next/redo jumps
+        for (int pc : loopInfo.breakPcs) {
+            patchJump(pc, loopEndPc);
+        }
+        for (int pc : loopInfo.nextPcs) {
+            patchJump(pc, loopInfo.continuePc);
+        }
+        for (int pc : loopInfo.redoPcs) {
+            patchJump(pc, loopStartPc);
+        }
+
+        // Step 12: Pop loop info and exit scope
+        loopStack.pop();
         exitScope();
 
         lastResultReg = -1;  // For loop returns empty
@@ -6333,8 +6496,10 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(For3Node node) {
-        // For3Node: C-style for loop or bare block
+        // For3Node: C-style for loop, while loop, do-while loop, or bare block
         // for (init; condition; increment) { body }
+        // while (condition) { body }
+        // do { body } while (condition);
         // { body }  (bare block - isSimpleBlock=true)
 
         // Handle bare blocks (simple blocks) differently - they execute once, not loop
@@ -6355,62 +6520,137 @@ public class BytecodeCompiler implements Visitor {
             return;
         }
 
-        // Step 1: Execute initialization
+        // Step 1: Execute initialization (for C-style loops only)
         if (node.initialization != null) {
             node.initialization.accept(this);
         }
 
-        // Step 2: Loop start
+        // Step 2: Push loop info onto stack for last/next/redo
         int loopStartPc = bytecode.size();
+        // do-while is NOT a true loop (can't use last/next/redo); while/for are true loops
+        LoopInfo loopInfo = new LoopInfo(node.labelName, loopStartPc, !node.isDoWhile);
+        loopStack.push(loopInfo);
 
-        // Step 3: Check condition
-        int condReg = allocateRegister();
-        if (node.condition != null) {
-            node.condition.accept(this);
-            condReg = lastResultReg;
-        } else {
-            // No condition means infinite loop - load true
-            emit(Opcodes.LOAD_INT);
+        int loopEndJumpPc = -1;
+
+        if (node.isDoWhile) {
+            // do-while loop: body executes at least once, condition checked at end
+            // Step 3: Execute body (redo jumps here)
+            if (node.body != null) {
+                node.body.accept(this);
+            }
+
+            // Step 4: Continue point (next jumps here)
+            loopInfo.continuePc = bytecode.size();
+
+            // Step 5: Execute continue block if present
+            if (node.continueBlock != null) {
+                node.continueBlock.accept(this);
+            }
+
+            // Step 6: Execute increment (for C-style for loops)
+            if (node.increment != null) {
+                node.increment.accept(this);
+            }
+
+            // Step 7: Check condition
+            int condReg = allocateRegister();
+            if (node.condition != null) {
+                // Evaluate condition in SCALAR context (need boolean result)
+                int savedContext = currentCallContext;
+                currentCallContext = RuntimeContextType.SCALAR;
+                node.condition.accept(this);
+                currentCallContext = savedContext;
+                condReg = lastResultReg;
+            } else {
+                // No condition means infinite loop - load true
+                emit(Opcodes.LOAD_INT);
+                emitReg(condReg);
+                emitInt(1);
+            }
+
+            // Step 8: If condition is true, jump back to start
+            emit(Opcodes.GOTO_IF_TRUE);
             emitReg(condReg);
-            emitInt(1);
+            emitInt(loopStartPc);
+
+        } else {
+            // while/for loop: condition checked before body
+            // Step 3: Check condition (redo jumps here)
+            int condReg = allocateRegister();
+            if (node.condition != null) {
+                // Evaluate condition in SCALAR context (need boolean result)
+                int savedContext = currentCallContext;
+                currentCallContext = RuntimeContextType.SCALAR;
+                node.condition.accept(this);
+                currentCallContext = savedContext;
+                condReg = lastResultReg;
+            } else {
+                // No condition means infinite loop - load true
+                emit(Opcodes.LOAD_INT);
+                emitReg(condReg);
+                emitInt(1);
+            }
+
+            // Step 4: If condition is false, jump to end
+            emit(Opcodes.GOTO_IF_FALSE);
+            emitReg(condReg);
+            loopEndJumpPc = bytecode.size();
+            emitInt(0);  // Placeholder for jump target (will be patched)
+
+            // Step 5: Execute body
+            if (node.body != null) {
+                node.body.accept(this);
+            }
+
+            // Step 6: Continue point (next jumps here)
+            loopInfo.continuePc = bytecode.size();
+
+            // Step 7: Execute continue block if present
+            if (node.continueBlock != null) {
+                node.continueBlock.accept(this);
+            }
+
+            // Step 8: Execute increment (for C-style for loops)
+            if (node.increment != null) {
+                node.increment.accept(this);
+            }
+
+            // Step 9: Jump back to loop start
+            emit(Opcodes.GOTO);
+            emitInt(loopStartPc);
         }
 
-        // Step 4: If condition is false, jump to end
-        emit(Opcodes.GOTO_IF_FALSE);
-        emitReg(condReg);
-        int loopEndJumpPc = bytecode.size();
-        emitInt(0);  // Placeholder for jump target (will be patched)
-
-        // Step 5: Execute body
-        if (node.body != null) {
-            node.body.accept(this);
-        }
-
-        // Step 6: Execute continue block if present
-        if (node.continueBlock != null) {
-            node.continueBlock.accept(this);
-        }
-
-        // Step 7: Execute increment
-        if (node.increment != null) {
-            node.increment.accept(this);
-        }
-
-        // Step 8: Jump back to loop start
-        emit(Opcodes.GOTO);
-        emitInt(loopStartPc);
-
-        // Step 9: Loop end - patch the forward jump
+        // Step 10: Loop end - patch the forward jump (last jumps here)
         int loopEndPc = bytecode.size();
-        patchJump(loopEndJumpPc, loopEndPc);
+        if (loopEndJumpPc != -1) {
+            patchJump(loopEndJumpPc, loopEndPc);
+        }
+
+        // Step 11: Patch all last/next/redo jumps
+        for (int pc : loopInfo.breakPcs) {
+            patchJump(pc, loopEndPc);
+        }
+        for (int pc : loopInfo.nextPcs) {
+            patchJump(pc, loopInfo.continuePc);
+        }
+        for (int pc : loopInfo.redoPcs) {
+            patchJump(pc, loopStartPc);
+        }
+
+        // Step 12: Pop loop info
+        loopStack.pop();
 
         lastResultReg = -1;  // For loop returns empty
     }
 
     @Override
     public void visit(IfNode node) {
-        // Compile condition
+        // Compile condition in SCALAR context (need boolean value)
+        int savedContext = currentCallContext;
+        currentCallContext = RuntimeContextType.SCALAR;
         node.condition.accept(this);
+        currentCallContext = savedContext;
         int condReg = lastResultReg;
 
         // Mark position for forward jump to else/end
@@ -6473,9 +6713,12 @@ public class BytecodeCompiler implements Visitor {
         //   rd = false_expr
         //   end_label:
 
-        // Compile condition
+        // Compile condition in scalar context (need boolean value)
+        int savedContext = currentCallContext;
+        currentCallContext = RuntimeContextType.SCALAR;
         node.condition.accept(this);
         int condReg = lastResultReg;
+        currentCallContext = savedContext;
 
         // Allocate result register
         int rd = allocateRegister();
