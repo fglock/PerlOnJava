@@ -528,6 +528,153 @@ public class InterpretedCode extends RuntimeCode {
                     rs = bytecode[pc++];
                     sb.append("BITWISE_NOT_STRING r").append(rd).append(" = ~.r").append(rs).append("\n");
                     break;
+                case Opcodes.STAT:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    int statCtx = bytecode[pc++];
+                    sb.append("STAT r").append(rd).append(" = stat(r").append(rs).append(", ctx=").append(statCtx).append(")\n");
+                    break;
+                case Opcodes.LSTAT:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    int lstatCtx = bytecode[pc++];
+                    sb.append("LSTAT r").append(rd).append(" = lstat(r").append(rs).append(", ctx=").append(lstatCtx).append(")\n");
+                    break;
+                case Opcodes.FILETEST_R:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("FILETEST_R r").append(rd).append(" = -r r").append(rs).append("\n");
+                    break;
+                case Opcodes.FILETEST_W:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("FILETEST_W r").append(rd).append(" = -w r").append(rs).append("\n");
+                    break;
+                case Opcodes.FILETEST_X:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("FILETEST_X r").append(rd).append(" = -x r").append(rs).append("\n");
+                    break;
+                case Opcodes.FILETEST_O:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("FILETEST_O r").append(rd).append(" = -o r").append(rs).append("\n");
+                    break;
+                case Opcodes.FILETEST_R_REAL:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("FILETEST_R_REAL r").append(rd).append(" = -R r").append(rs).append("\n");
+                    break;
+                case Opcodes.FILETEST_W_REAL:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("FILETEST_W_REAL r").append(rd).append(" = -W r").append(rs).append("\n");
+                    break;
+                case Opcodes.FILETEST_X_REAL:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("FILETEST_X_REAL r").append(rd).append(" = -X r").append(rs).append("\n");
+                    break;
+                case Opcodes.FILETEST_O_REAL:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("FILETEST_O_REAL r").append(rd).append(" = -O r").append(rs).append("\n");
+                    break;
+                case Opcodes.FILETEST_E:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("FILETEST_E r").append(rd).append(" = -e r").append(rs).append("\n");
+                    break;
+                case Opcodes.FILETEST_Z:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("FILETEST_Z r").append(rd).append(" = -z r").append(rs).append("\n");
+                    break;
+                case Opcodes.FILETEST_S:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("FILETEST_S r").append(rd).append(" = -s r").append(rs).append("\n");
+                    break;
+                case Opcodes.FILETEST_F:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("FILETEST_F r").append(rd).append(" = -f r").append(rs).append("\n");
+                    break;
+                case Opcodes.FILETEST_D:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("FILETEST_D r").append(rd).append(" = -d r").append(rs).append("\n");
+                    break;
+                case Opcodes.FILETEST_L:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("FILETEST_L r").append(rd).append(" = -l r").append(rs).append("\n");
+                    break;
+                case Opcodes.FILETEST_P:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("FILETEST_P r").append(rd).append(" = -p r").append(rs).append("\n");
+                    break;
+                case Opcodes.FILETEST_S_UPPER:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("FILETEST_S_UPPER r").append(rd).append(" = -S r").append(rs).append("\n");
+                    break;
+                case Opcodes.FILETEST_B:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("FILETEST_B r").append(rd).append(" = -b r").append(rs).append("\n");
+                    break;
+                case Opcodes.FILETEST_C:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("FILETEST_C r").append(rd).append(" = -c r").append(rs).append("\n");
+                    break;
+                case Opcodes.FILETEST_T:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("FILETEST_T r").append(rd).append(" = -t r").append(rs).append("\n");
+                    break;
+                case Opcodes.FILETEST_U:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("FILETEST_U r").append(rd).append(" = -u r").append(rs).append("\n");
+                    break;
+                case Opcodes.FILETEST_G:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("FILETEST_G r").append(rd).append(" = -g r").append(rs).append("\n");
+                    break;
+                case Opcodes.FILETEST_K:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("FILETEST_K r").append(rd).append(" = -k r").append(rs).append("\n");
+                    break;
+                case Opcodes.FILETEST_T_UPPER:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("FILETEST_T_UPPER r").append(rd).append(" = -T r").append(rs).append("\n");
+                    break;
+                case Opcodes.FILETEST_B_UPPER:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("FILETEST_B_UPPER r").append(rd).append(" = -B r").append(rs).append("\n");
+                    break;
+                case Opcodes.FILETEST_M:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("FILETEST_M r").append(rd).append(" = -M r").append(rs).append("\n");
+                    break;
+                case Opcodes.FILETEST_A:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("FILETEST_A r").append(rd).append(" = -A r").append(rs).append("\n");
+                    break;
+                case Opcodes.FILETEST_C_UPPER:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("FILETEST_C_UPPER r").append(rd).append(" = -C r").append(rs).append("\n");
+                    break;
                 case Opcodes.PUSH_LOCAL_VARIABLE:
                     rs = bytecode[pc++];
                     sb.append("PUSH_LOCAL_VARIABLE r").append(rs).append("\n");
