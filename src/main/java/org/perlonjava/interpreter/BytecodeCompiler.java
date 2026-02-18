@@ -6533,7 +6533,11 @@ public class BytecodeCompiler implements Visitor {
             // Step 7: Check condition
             int condReg = allocateRegister();
             if (node.condition != null) {
+                // Evaluate condition in SCALAR context (need boolean result)
+                int savedContext = currentCallContext;
+                currentCallContext = RuntimeContextType.SCALAR;
                 node.condition.accept(this);
+                currentCallContext = savedContext;
                 condReg = lastResultReg;
             } else {
                 // No condition means infinite loop - load true
@@ -6552,7 +6556,11 @@ public class BytecodeCompiler implements Visitor {
             // Step 3: Check condition (redo jumps here)
             int condReg = allocateRegister();
             if (node.condition != null) {
+                // Evaluate condition in SCALAR context (need boolean result)
+                int savedContext = currentCallContext;
+                currentCallContext = RuntimeContextType.SCALAR;
                 node.condition.accept(this);
+                currentCallContext = savedContext;
                 condReg = lastResultReg;
             } else {
                 // No condition means infinite loop - load true
@@ -6615,8 +6623,11 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(IfNode node) {
-        // Compile condition
+        // Compile condition in SCALAR context (need boolean value)
+        int savedContext = currentCallContext;
+        currentCallContext = RuntimeContextType.SCALAR;
         node.condition.accept(this);
+        currentCallContext = savedContext;
         int condReg = lastResultReg;
 
         // Mark position for forward jump to else/end
