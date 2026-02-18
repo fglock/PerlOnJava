@@ -218,6 +218,18 @@ public class InterpretedCode extends RuntimeCode {
                     sb.append("GOTO ").append(readInt(bytecode, pc)).append("\n");
                     pc += 2;
                     break;
+                case Opcodes.LAST:
+                    sb.append("LAST ").append(readInt(bytecode, pc)).append("\n");
+                    pc += 2;
+                    break;
+                case Opcodes.NEXT:
+                    sb.append("NEXT ").append(readInt(bytecode, pc)).append("\n");
+                    pc += 2;
+                    break;
+                case Opcodes.REDO:
+                    sb.append("REDO ").append(readInt(bytecode, pc)).append("\n");
+                    pc += 2;
+                    break;
                 case Opcodes.GOTO_IF_FALSE:
                     int condReg = bytecode[pc++];
                     int target = readInt(bytecode, pc);
