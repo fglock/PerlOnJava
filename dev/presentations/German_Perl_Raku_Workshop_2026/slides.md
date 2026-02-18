@@ -81,11 +81,10 @@ Note:
 <div>
 
 ### Cloud
-- **Single JAR** runs on Linux, macOS, Windows
-- JNA loads platform-specific features dynamically
-- Debian packages (`make deb`)
-- Docker containers
-- Kubernetes
+- **Single JAR** packages complete apps (like PAR) (future)
+- Runs on Linux, macOS, Windows
+- JNA for platform-specific features
+- Docker, Kubernetes, Debian packages
 - Android (future)
 
 </div>
@@ -102,6 +101,7 @@ Note:
 Note:
 - Enterprise: Use Perl in Java-heavy environments
 - Cloud: Modern deployment platforms
+- JAR files can package complete Perl applications (similar to Perl PAR files)
 - Performance: Average runtime around Perl 5 speed, with higher startup time
 
 ---
@@ -213,17 +213,22 @@ Note:
 Perl Source → Compiler → Perl Bytecode → Bytecode Interpreter
 ```
 
-**PerlOnJava (dual approach):**
+**PerlOnJava (dual backend approach):**
 ```
-Perl Source → Compiler → JVM Bytecode → JVM Execution
-                      ↘ Custom Bytecode → Bytecode Interpreter
+Perl Source → Compiler → JVM Bytecode → JVM Execution (JVM backend)
+                      ↘ Custom Bytecode → Bytecode Interpreter (Interpreter backend)
 ```
 
+**Two backends:**
+- **JVM backend**: Generates native JVM bytecode using ASM library
+- **Interpreter backend**: Custom bytecode format, more flexible
+
 Note:
+- Backend = code generation target
 - Perl 5 compiles to internal bytecode, then interprets it
 - PerlOnJava can generate either JVM bytecode or custom bytecode
-- JVM bytecode: optimized by JVM JIT compiler
-- Custom bytecode: more flexible, no size limits
+- JVM backend: optimized by JVM JIT compiler, faster
+- Interpreter backend: more flexible, no size limits, handles complex control flow
 - Both approaches use bytecode interpreters at some level
 
 ---
@@ -861,6 +866,10 @@ Note:
 - Optimizing eval STRING compilation
 - 260,000+ tests passing
 
+**Future Plans:**
+- Replace regex engine with one more compatible with Perl
+- Add a Perl-like single-step debugger
+
 Note:
 - Production-ready now
 - Active development continues
@@ -957,6 +966,24 @@ Note:
 - Issues: github.com/fglock/PerlOnJava/issues
 
 **Thank you!**
+
+---
+
+## Acknowledgments
+
+**Special thanks to:**
+
+- **Larry Wall** - for creating Perl and its philosophy
+- **Perl test writers** - for their comprehensive test suite that made this project possible
+  - Without formal specification, these tests define Perl's behavior
+  - 260,000+ tests are the foundation of PerlOnJava's compatibility
+- **Perl community** - for decades of innovation and support
+- **Prior Perl-on-JVM pioneers** - JPL, perljvm, Perlito5
+
+Note:
+- Test-driven development only works with excellent tests
+- Perl's test suite is remarkably comprehensive
+- This project stands on the shoulders of giants
 
 Note:
 - Open for questions
