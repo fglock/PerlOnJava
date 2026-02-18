@@ -96,6 +96,16 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.LAST:
+                    case Opcodes.NEXT:
+                    case Opcodes.REDO: {
+                        // Loop control: jump to target PC
+                        // Format: opcode, target (absolute PC as int)
+                        int target = readInt(bytecode, pc);
+                        pc = target;
+                        break;
+                    }
+
                     case Opcodes.GOTO_IF_FALSE: {
                         // Conditional jump: if (!rs) pc = offset
                         int condReg = bytecode[pc++];
