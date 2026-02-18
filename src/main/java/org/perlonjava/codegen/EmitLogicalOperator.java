@@ -311,15 +311,10 @@ public class EmitLogicalOperator {
                 rewritten = true;
             }
 
-            // For RUNTIME context, preserve it; otherwise use SCALAR for boolean evaluation
-            int operandContext = emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME
-                    ? RuntimeContextType.RUNTIME
-                    : RuntimeContextType.SCALAR;
-
             resultRef = emitterVisitor.ctx.javaClassInfo.acquireSpillRefOrAllocate(emitterVisitor.ctx.symbolTable);
 
-            // Evaluate LHS and store it.
-            node.left.accept(emitterVisitor.with(operandContext));
+            // Evaluate LHS in SCALAR context (for boolean test) and store it.
+            node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
             emitterVisitor.ctx.javaClassInfo.storeSpillRef(mv, resultRef);
 
             // Boolean test on the stored LHS.
@@ -327,8 +322,12 @@ public class EmitLogicalOperator {
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", getBoolean, "()Z", false);
             mv.visitJumpInsn(compareOpcode, endLabel);
 
-            // LHS didn't short-circuit: evaluate RHS, overwrite result.
-            node.right.accept(emitterVisitor.with(operandContext));
+            // LHS didn't short-circuit: evaluate RHS in current context (may be RUNTIME at sub exit).
+            // For RUNTIME context, preserve it; otherwise use SCALAR for boolean evaluation.
+            int rhsContext = emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME
+                    ? RuntimeContextType.RUNTIME
+                    : RuntimeContextType.SCALAR;
+            node.right.accept(emitterVisitor.with(rhsContext));
             emitterVisitor.ctx.javaClassInfo.storeSpillRef(mv, resultRef);
 
             // Return whichever side won the short-circuit.
