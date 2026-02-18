@@ -218,6 +218,18 @@ public class InterpretedCode extends RuntimeCode {
                     sb.append("GOTO ").append(readInt(bytecode, pc)).append("\n");
                     pc += 2;
                     break;
+                case Opcodes.LAST:
+                    sb.append("LAST ").append(readInt(bytecode, pc)).append("\n");
+                    pc += 2;
+                    break;
+                case Opcodes.NEXT:
+                    sb.append("NEXT ").append(readInt(bytecode, pc)).append("\n");
+                    pc += 2;
+                    break;
+                case Opcodes.REDO:
+                    sb.append("REDO ").append(readInt(bytecode, pc)).append("\n");
+                    pc += 2;
+                    break;
                 case Opcodes.GOTO_IF_FALSE:
                     int condReg = bytecode[pc++];
                     int target = readInt(bytecode, pc);
@@ -702,6 +714,13 @@ public class InterpretedCode extends RuntimeCode {
                     int regReg = bytecode[pc++];
                     int matchCtx = bytecode[pc++];
                     sb.append("MATCH_REGEX r").append(rd).append(" = r").append(strReg).append(" =~ r").append(regReg).append(" (ctx=").append(matchCtx).append(")\n");
+                    break;
+                case Opcodes.MATCH_REGEX_NOT:
+                    rd = bytecode[pc++];
+                    strReg = bytecode[pc++];
+                    regReg = bytecode[pc++];
+                    matchCtx = bytecode[pc++];
+                    sb.append("MATCH_REGEX_NOT r").append(rd).append(" = r").append(strReg).append(" !~ r").append(regReg).append(" (ctx=").append(matchCtx).append(")\n");
                     break;
                 case Opcodes.CHOMP:
                     rd = bytecode[pc++];
