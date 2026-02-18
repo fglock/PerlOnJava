@@ -16,6 +16,9 @@ import org.perlonjava.operators.*;
  */
 public class BytecodeInterpreter {
 
+    // Debug flag for regex compilation (set at class load time)
+    private static final boolean DEBUG_REGEX = System.getenv("DEBUG_REGEX") != null;
+
     /**
      * Execute interpreted bytecode.
      *
@@ -2330,6 +2333,13 @@ public class BytecodeInterpreter {
                 int flagsReg = bytecode[pc++];
                 RuntimeScalar pattern = (RuntimeScalar) registers[patternReg];
                 RuntimeScalar flags = (RuntimeScalar) registers[flagsReg];
+
+                // Debug logging
+                if (DEBUG_REGEX) {
+                    System.err.println("BytecodeInterpreter.QUOTE_REGEX: pattern=" + pattern.toString() +
+                                       " flags=" + flags.toString());
+                }
+
                 registers[rd] = org.perlonjava.regex.RuntimeRegex.getQuotedRegex(pattern, flags);
                 return pc;
             }

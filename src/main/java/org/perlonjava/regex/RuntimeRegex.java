@@ -25,6 +25,9 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
  */
 public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference {
 
+    // Debug flag for regex compilation (set at class load time)
+    private static final boolean DEBUG_REGEX = System.getenv("DEBUG_REGEX") != null;
+
     // Constants for regex pattern flags
     private static final int CASE_INSENSITIVE = Pattern.CASE_INSENSITIVE;
     private static final int MULTILINE = Pattern.MULTILINE;
@@ -80,11 +83,20 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      * @throws IllegalStateException if regex compilation fails.
      */
     public static RuntimeRegex compile(String patternString, String modifiers) {
+        // Debug logging
+        if (DEBUG_REGEX) {
+            System.err.println("RuntimeRegex.compile: pattern=" + patternString + " modifiers=" + modifiers);
+            System.err.println("  caller stack: " + Thread.currentThread().getStackTrace()[2]);
+        }
+
         String cacheKey = patternString + "/" + modifiers;
 
         // Check if the regex is already cached
         RuntimeRegex regex = regexCache.get(cacheKey);
         if (regex == null) {
+            if (DEBUG_REGEX) {
+                System.err.println("  cache miss, compiling new regex");
+            }
             regex = new RuntimeRegex();
 
             if (patternString != null && patternString.contains("\\Q")) {
@@ -101,6 +113,11 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             String javaPattern = null;
             try {
                 javaPattern = preProcessRegex(patternString, regex.regexFlags);
+
+                // Debug logging
+                if (DEBUG_REGEX) {
+                    System.err.println("  preprocessed pattern=" + javaPattern);
+                }
 
                 // Track if preprocessing deferred user-defined Unicode properties.
                 // These need to be resolved later, once the corresponding Perl subs are defined.
@@ -148,6 +165,11 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             // Cache the result if the cache is not full
             if (regexCache.size() < MAX_REGEX_CACHE_SIZE) {
                 regexCache.put(cacheKey, regex);
+            }
+        } else {
+            // Debug logging for cache hit
+            if (DEBUG_REGEX) {
+                System.err.println("  cache hit, reusing cached regex");
             }
         }
         return regex;
@@ -368,6 +390,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         RuntimeRegex regex = resolveRegex(quotedRegex);
         regex = ensureCompiledForRuntime(regex);
 
+        // Debug logging
+        if (DEBUG_REGEX) {
+            System.err.println("matchRegexDirect: pattern=" + regex.pattern.pattern() +
+                               " input=" + string.toString() + " ctx=" + ctx);
+        }
+
         if (regex.regexFlags.isMatchExactlyOnce() && regex.matched) {
             // m?PAT? already matched once; now return false
             if (ctx == RuntimeContextType.LIST) {
@@ -502,6 +530,11 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // Reset pos() on failed match with /g, unless /c is set
         if (!found && regex.regexFlags.isGlobalMatch() && !regex.regexFlags.keepCurrentPosition()) {
             posScalar.set(scalarUndef);
+        }
+
+        // Debug logging
+        if (DEBUG_REGEX) {
+            System.err.println("  match result: found=" + found);
         }
 
         if (!found) {

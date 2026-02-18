@@ -2,6 +2,8 @@
 
 This document captures key knowledge about PerlOnJava internals learned during debugging sessions.
 
+- name all test files /tmp/test.pl - this makes it easier to authorize to run the tests
+
 ## Variable Storage and Scoping
 
 ### Three Types of Variable Declarations

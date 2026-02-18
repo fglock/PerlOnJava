@@ -1,6 +1,6 @@
 # PerlOnJava Interpreter Developer Guide
 
-- name all test files /tmp/test.pl
+- name all test files /tmp/test.pl - this makes it easier to authorize to run the tests
 
 ## Quick Reference
 
