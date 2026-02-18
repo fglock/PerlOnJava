@@ -829,51 +829,51 @@ public class Opcodes {
     // GENERATED_OPCODES_START
 
     // scalar binary operations (atan2, eq, ne, lt, le, gt, ge, cmp, etc.)
-    public static final short ATAN2 = 228;
-    public static final short BINARY_AND = 229;
-    public static final short BINARY_OR = 230;
-    public static final short BINARY_XOR = 231;
-    public static final short EQ = 239;
-    public static final short NE = 240;
-    public static final short LT = 241;
-    public static final short LE = 242;
-    public static final short GT = 243;
-    public static final short GE = 244;
-    public static final short CMP = 245;
-    public static final short X = 263;
+    public static final short ATAN2 = LASTOP + 8;
+    public static final short BINARY_AND = LASTOP + 9;
+    public static final short BINARY_OR = LASTOP + 10;
+    public static final short BINARY_XOR = LASTOP + 11;
+    public static final short EQ = LASTOP + 19;
+    public static final short NE = LASTOP + 20;
+    public static final short LT = LASTOP + 21;
+    public static final short LE = LASTOP + 22;
+    public static final short GT = LASTOP + 23;
+    public static final short GE = LASTOP + 24;
+    public static final short CMP = LASTOP + 25;
+    public static final short X = LASTOP + 43;
 
     // scalar unary operations (chr, ord, abs, sin, cos, lc, uc, etc.)
-    public static final short INT = 221;
-    public static final short LOG = 222;
-    public static final short SQRT = 223;
-    public static final short COS = 224;
-    public static final short SIN = 225;
-    public static final short EXP = 226;
-    public static final short ABS = 227;
-    public static final short BINARY_NOT = 232;
-    public static final short INTEGER_BITWISE_NOT = 233;
-    public static final short ORD = 234;
-    public static final short ORD_BYTES = 235;
-    public static final short OCT = 236;
-    public static final short HEX = 237;
-    public static final short SRAND = 238;
-    public static final short CHR = 246;
-    public static final short CHR_BYTES = 247;
-    public static final short LENGTH_BYTES = 248;
-    public static final short QUOTEMETA = 249;
-    public static final short FC = 250;
-    public static final short LC = 251;
-    public static final short LCFIRST = 252;
-    public static final short UC = 253;
-    public static final short UCFIRST = 254;
-    public static final short SLEEP = 255;
-    public static final short TELL = 256;
-    public static final short RMDIR = 257;
-    public static final short CLOSEDIR = 258;
-    public static final short REWINDDIR = 259;
-    public static final short TELLDIR = 260;
-    public static final short CHDIR = 261;
-    public static final short EXIT = 262;
+    public static final short INT = LASTOP + 1;
+    public static final short LOG = LASTOP + 2;
+    public static final short SQRT = LASTOP + 3;
+    public static final short COS = LASTOP + 4;
+    public static final short SIN = LASTOP + 5;
+    public static final short EXP = LASTOP + 6;
+    public static final short ABS = LASTOP + 7;
+    public static final short BINARY_NOT = LASTOP + 12;
+    public static final short INTEGER_BITWISE_NOT = LASTOP + 13;
+    public static final short ORD = LASTOP + 14;
+    public static final short ORD_BYTES = LASTOP + 15;
+    public static final short OCT = LASTOP + 16;
+    public static final short HEX = LASTOP + 17;
+    public static final short SRAND = LASTOP + 18;
+    public static final short CHR = LASTOP + 26;
+    public static final short CHR_BYTES = LASTOP + 27;
+    public static final short LENGTH_BYTES = LASTOP + 28;
+    public static final short QUOTEMETA = LASTOP + 29;
+    public static final short FC = LASTOP + 30;
+    public static final short LC = LASTOP + 31;
+    public static final short LCFIRST = LASTOP + 32;
+    public static final short UC = LASTOP + 33;
+    public static final short UCFIRST = LASTOP + 34;
+    public static final short SLEEP = LASTOP + 35;
+    public static final short TELL = LASTOP + 36;
+    public static final short RMDIR = LASTOP + 37;
+    public static final short CLOSEDIR = LASTOP + 38;
+    public static final short REWINDDIR = LASTOP + 39;
+    public static final short TELLDIR = LASTOP + 40;
+    public static final short CHDIR = LASTOP + 41;
+    public static final short EXIT = LASTOP + 42;
     // GENERATED_OPCODES_END
 
 

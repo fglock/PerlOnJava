@@ -485,8 +485,9 @@ sub update_opcodes_file {
         push @content, "\n    // $desc\n";
 
         for my $op (@{$operators_by_sig->{$sig_type}}) {
-            push @content, sprintf("    public static final short %s = %d;\n",
-                $op->{opcode_name}, $op->{opcode_num});
+            my $offset = $op->{opcode_num} - $existing_opcodes{__LASTOP__};
+            push @content, sprintf("    public static final short %s = LASTOP + %d;\n",
+                $op->{opcode_name}, $offset);
         }
     }
 
