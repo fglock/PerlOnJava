@@ -5855,6 +5855,152 @@ public class BytecodeCompiler implements Visitor {
             emitReg(2);  // Register 2 contains the calling context
 
             lastResultReg = rd;
+        // GENERATED_OPERATORS_START
+        } else if (op.equals("chr")) {
+            // chr($x) - convert codepoint to character
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(this);
+                } else {
+                    throwCompilerException("chr requires an argument");
+                }
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+            int rd = allocateRegister();
+            emit(Opcodes.CHR);
+            emitReg(rd);
+            emitReg(argReg);
+            lastResultReg = rd;
+        } else if (op.equals("ord")) {
+            // ord($x) - get codepoint of character
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(this);
+                } else {
+                    throwCompilerException("ord requires an argument");
+                }
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+            int rd = allocateRegister();
+            emit(Opcodes.ORD);
+            emitReg(rd);
+            emitReg(argReg);
+            lastResultReg = rd;
+        } else if (op.equals("hex")) {
+            // hex($x) - convert hex string to number
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(this);
+                } else {
+                    throwCompilerException("hex requires an argument");
+                }
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+            int rd = allocateRegister();
+            emit(Opcodes.HEX);
+            emitReg(rd);
+            emitReg(argReg);
+            lastResultReg = rd;
+        } else if (op.equals("oct")) {
+            // oct($x) - convert octal string to number
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(this);
+                } else {
+                    throwCompilerException("oct requires an argument");
+                }
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+            int rd = allocateRegister();
+            emit(Opcodes.OCT);
+            emitReg(rd);
+            emitReg(argReg);
+            lastResultReg = rd;
+        } else if (op.equals("abs")) {
+            // abs($x) - absolute value
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(this);
+                } else {
+                    throwCompilerException("abs requires an argument");
+                }
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+            int rd = allocateRegister();
+            emit(Opcodes.ABS);
+            emitReg(rd);
+            emitReg(argReg);
+            lastResultReg = rd;
+        } else if (op.equals("int")) {
+            // int($x) - truncate to integer
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(this);
+                } else {
+                    throwCompilerException("int requires an argument");
+                }
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+            int rd = allocateRegister();
+            emit(Opcodes.INT);
+            emitReg(rd);
+            emitReg(argReg);
+            lastResultReg = rd;
+        } else if (op.equals("uc")) {
+            // uc($x) - uppercase
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(this);
+                } else {
+                    throwCompilerException("uc requires an argument");
+                }
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+            int rd = allocateRegister();
+            emit(Opcodes.UC);
+            emitReg(rd);
+            emitReg(argReg);
+            lastResultReg = rd;
+        } else if (op.equals("lc")) {
+            // lc($x) - lowercase
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (!list.elements.isEmpty()) {
+                    list.elements.get(0).accept(this);
+                } else {
+                    throwCompilerException("lc requires an argument");
+                }
+            } else {
+                node.operand.accept(this);
+            }
+            int argReg = lastResultReg;
+            int rd = allocateRegister();
+            emit(Opcodes.LC);
+            emitReg(rd);
+            emitReg(argReg);
+            lastResultReg = rd;
+        // GENERATED_OPERATORS_END
         } else {
             throwCompilerException("Unsupported operator: " + op);
         }
