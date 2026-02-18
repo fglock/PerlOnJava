@@ -3728,6 +3728,20 @@ public class BytecodeCompiler implements Visitor {
                     }
                     return;
                 }
+
+                // Handle my \\$x - reference to a declared reference (double backslash)
+                if (sigil.equals("\\")) {
+                    boolean isDeclaredReference = node.annotations != null &&
+                            Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"));
+
+                    if (isDeclaredReference) {
+                        // This is my \\$x which means: create a declared reference and then take a reference to it
+                        // The operand is \$x, so we recursively compile it
+                        sigilOp.accept(this);
+                        // The result is now in lastResultReg
+                        return;
+                    }
+                }
             } else if (node.operand instanceof ListNode) {
                 // my ($x, $y, @rest) - list of variable declarations
                 ListNode listNode = (ListNode) node.operand;
@@ -3737,6 +3751,9 @@ public class BytecodeCompiler implements Visitor {
                 boolean isDeclaredReference = node.annotations != null &&
                         Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"));
 
+                // Track if we found any backslash operators inside the list (my (\($x, $y)))
+                boolean foundBackslashInList = false;
+
                 for (Node element : listNode.elements) {
                     if (element instanceof OperatorNode) {
                         OperatorNode sigilOp = (OperatorNode) element;
@@ -3744,6 +3761,36 @@ public class BytecodeCompiler implements Visitor {
 
                         // Handle backslash operator (reference constructor): my (\$x) or my (\($x, $y))
                         if (sigil.equals("\\")) {
+                            // Check if it's a double backslash first: my (\\$x)
+                            if (sigilOp.operand instanceof OperatorNode innerBackslash &&
+                                       innerBackslash.operator.equals("\\")) {
+                                // Double backslash: my (\\$x)
+                                // This creates a reference to a reference
+                                // We handle this completely here and add the final result to varRegs
+                                // Don't set foundBackslashInList since we're creating references ourselves
+
+                                // Recursively compile the inner part
+                                // Create a temporary my node for the inner backslash
+                                OperatorNode innerMy = new OperatorNode("my", innerBackslash, node.getIndex());
+                                if (node.annotations != null && Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"))) {
+                                    innerMy.setAnnotation("isDeclaredReference", true);
+                                }
+                                innerMy.accept(this);
+
+                                // The inner result is in lastResultReg, now create a reference to it
+                                if (currentCallContext != RuntimeContextType.VOID && lastResultReg != -1) {
+                                    int refReg = allocateRegister();
+                                    emit(Opcodes.CREATE_REF);
+                                    emitReg(refReg);
+                                    emitReg(lastResultReg);
+                                    varRegs.add(refReg);
+                                }
+                                continue;
+                            }
+
+                            // Single backslash - mark that we need to create references later
+                            foundBackslashInList = true;
+
                             // Check if it's a nested list: my (\($d, $e))
                             if (sigilOp.operand instanceof ListNode nestedList) {
                                 // Process each element in the nested list as a declared reference
@@ -3863,7 +3910,7 @@ public class BytecodeCompiler implements Visitor {
                 // Return a list of the declared variables (or their references if isDeclaredReference)
                 int resultReg = allocateRegister();
 
-                if (isDeclaredReference && currentCallContext != RuntimeContextType.VOID) {
+                if ((isDeclaredReference || foundBackslashInList) && currentCallContext != RuntimeContextType.VOID) {
                     // Create references to all variables first
                     List<Integer> refRegs = new ArrayList<>();
                     for (int varReg : varRegs) {

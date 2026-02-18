@@ -1707,10 +1707,19 @@ public class BytecodeInterpreter {
 
                     case Opcodes.CREATE_REF: {
                         // Create reference: rd = rs.createReference()
+                        // For multi-element lists, create references to each element
                         int rd = bytecode[pc++];
                         int rs = bytecode[pc++];
                         RuntimeBase value = registers[rs];
-                        registers[rd] = value.createReference();
+
+                        // Special handling for RuntimeList
+                        if (value instanceof RuntimeList list && list.elements.size() != 1) {
+                            // Multi-element or empty list: create list of references
+                            registers[rd] = list.createListReference();
+                        } else {
+                            // Single value or single-element list: create single reference
+                            registers[rd] = value.createReference();
+                        }
                         break;
                     }
 
@@ -2310,7 +2319,15 @@ public class BytecodeInterpreter {
                 int rd = bytecode[pc++];
                 int rs = bytecode[pc++];
                 RuntimeBase value = registers[rs];
-                registers[rd] = value.createReference();
+
+                // Special handling for RuntimeList
+                if (value instanceof RuntimeList list && list.elements.size() != 1) {
+                    // Multi-element or empty list: create list of references
+                    registers[rd] = list.createListReference();
+                } else {
+                    // Single value or single-element list: create single reference
+                    registers[rd] = value.createReference();
+                }
                 return pc;
             }
 
