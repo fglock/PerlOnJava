@@ -1,0 +1,257 @@
+Reading existing opcodes...
+  Found 221 existing opcodes
+
+Parsing OperatorHandler.java...
+  Skipping rand (RAND) - already exists as opcode 91
+  Skipping length (LENGTH) - already exists as opcode 30
+  Skipping rindex (RINDEX) - already exists as opcode 173
+  Skipping index (INDEX) - already exists as opcode 172
+  Skipping require (REQUIRE) - already exists as opcode 170
+  Skipping isa (ISA) - already exists as opcode 105
+  Skipping bless (BLESS) - already exists as opcode 104
+  Skipping ref (REF) - already exists as opcode 103
+  Skipping join (JOIN) - already exists as opcode 88
+  Skipping prototype (PROTOTYPE) - already exists as opcode 158
+
+Parsed operators by signature:
+  scalar_binary       : 12 operators
+  scalar_unary        : 32 operators
+
+Generating ScalarBinaryOpcodeHandler with 12 operators...
+  Generated: src/main/java/org/perlonjava/interpreter/ScalarBinaryOpcodeHandler.java
+Generating ScalarUnaryOpcodeHandler with 32 operators...
+  Generated: src/main/java/org/perlonjava/interpreter/ScalarUnaryOpcodeHandler.java
+
+======================================================================
+UPDATE INSTRUCTIONS
+======================================================================
+
+1. ADD TO Opcodes.java (at marker: // GENERATED_OPCODES_START):
+
+    // scalar binary operations (atan2, eq, ne, lt, le, gt, ge, cmp, etc.)
+    public static final short ATAN2 = 228;
+    public static final short BINARY_AND = 229;
+    public static final short BINARY_OR = 230;
+    public static final short BINARY_XOR = 231;
+    public static final short EQ = 239;
+    public static final short NE = 240;
+    public static final short LT = 241;
+    public static final short LE = 242;
+    public static final short GT = 243;
+    public static final short GE = 244;
+    public static final short CMP = 245;
+    public static final short X = 264;
+
+    // scalar unary operations (chr, ord, abs, sin, cos, lc, uc, etc.)
+    public static final short INT = 221;
+    public static final short LOG = 222;
+    public static final short SQRT = 223;
+    public static final short COS = 224;
+    public static final short SIN = 225;
+    public static final short EXP = 226;
+    public static final short ABS = 227;
+    public static final short BINARY_NOT = 232;
+    public static final short INTEGER_BITWISE_NOT = 233;
+    public static final short ORD = 234;
+    public static final short ORD_BYTES = 235;
+    public static final short OCT = 236;
+    public static final short HEX = 237;
+    public static final short SRAND = 238;
+    public static final short CHR = 246;
+    public static final short CHR_BYTES = 247;
+    public static final short LENGTH_BYTES = 248;
+    public static final short QUOTEMETA = 249;
+    public static final short FC = 250;
+    public static final short LC = 251;
+    public static final short LCFIRST = 252;
+    public static final short UC = 253;
+    public static final short UCFIRST = 254;
+    public static final short SLEEP = 255;
+    public static final short TELL = 256;
+    public static final short GETC = 257;
+    public static final short RMDIR = 258;
+    public static final short CLOSEDIR = 259;
+    public static final short REWINDDIR = 260;
+    public static final short TELLDIR = 261;
+    public static final short CHDIR = 262;
+    public static final short EXIT = 263;
+
+2. ADD TO BytecodeInterpreter.java (at marker: // GENERATED_HANDLERS_START):
+
+                    // scalar_binary
+                    case Opcodes.ATAN2:
+                    case Opcodes.BINARY_AND:
+                    case Opcodes.BINARY_OR:
+                    case Opcodes.BINARY_XOR:
+                    case Opcodes.EQ:
+                    case Opcodes.NE:
+                    case Opcodes.LT:
+                    case Opcodes.LE:
+                    case Opcodes.GT:
+                    case Opcodes.GE:
+                    case Opcodes.CMP:
+                    case Opcodes.X:
+                        pc = ScalarBinaryOpcodeHandler.execute(opcode, bytecode, pc, registers);
+                        break;
+
+                    // scalar_unary
+                    case Opcodes.INT:
+                    case Opcodes.LOG:
+                    case Opcodes.SQRT:
+                    case Opcodes.COS:
+                    case Opcodes.SIN:
+                    case Opcodes.EXP:
+                    case Opcodes.ABS:
+                    case Opcodes.BINARY_NOT:
+                    case Opcodes.INTEGER_BITWISE_NOT:
+                    case Opcodes.ORD:
+                    case Opcodes.ORD_BYTES:
+                    case Opcodes.OCT:
+                    case Opcodes.HEX:
+                    case Opcodes.SRAND:
+                    case Opcodes.CHR:
+                    case Opcodes.CHR_BYTES:
+                    case Opcodes.LENGTH_BYTES:
+                    case Opcodes.QUOTEMETA:
+                    case Opcodes.FC:
+                    case Opcodes.LC:
+                    case Opcodes.LCFIRST:
+                    case Opcodes.UC:
+                    case Opcodes.UCFIRST:
+                    case Opcodes.SLEEP:
+                    case Opcodes.TELL:
+                    case Opcodes.GETC:
+                    case Opcodes.RMDIR:
+                    case Opcodes.CLOSEDIR:
+                    case Opcodes.REWINDDIR:
+                    case Opcodes.TELLDIR:
+                    case Opcodes.CHDIR:
+                    case Opcodes.EXIT:
+                        pc = ScalarUnaryOpcodeHandler.execute(opcode, bytecode, pc, registers);
+                        break;
+
+3. ADD TO InterpretedCode.java disassemble() (at marker: // GENERATED_DISASM_START):
+
+                // scalar_binary
+                case Opcodes.ATAN2:
+                case Opcodes.BINARY_AND:
+                case Opcodes.BINARY_OR:
+                case Opcodes.BINARY_XOR:
+                case Opcodes.EQ:
+                case Opcodes.NE:
+                case Opcodes.LT:
+                case Opcodes.LE:
+                case Opcodes.GT:
+                case Opcodes.GE:
+                case Opcodes.CMP:
+                case Opcodes.X:
+                    pc = ScalarBinaryOpcodeHandler.disassemble(opcode, bytecode, pc, sb);
+                    break;
+
+                // scalar_unary
+                case Opcodes.INT:
+                case Opcodes.LOG:
+                case Opcodes.SQRT:
+                case Opcodes.COS:
+                case Opcodes.SIN:
+                case Opcodes.EXP:
+                case Opcodes.ABS:
+                case Opcodes.BINARY_NOT:
+                case Opcodes.INTEGER_BITWISE_NOT:
+                case Opcodes.ORD:
+                case Opcodes.ORD_BYTES:
+                case Opcodes.OCT:
+                case Opcodes.HEX:
+                case Opcodes.SRAND:
+                case Opcodes.CHR:
+                case Opcodes.CHR_BYTES:
+                case Opcodes.LENGTH_BYTES:
+                case Opcodes.QUOTEMETA:
+                case Opcodes.FC:
+                case Opcodes.LC:
+                case Opcodes.LCFIRST:
+                case Opcodes.UC:
+                case Opcodes.UCFIRST:
+                case Opcodes.SLEEP:
+                case Opcodes.TELL:
+                case Opcodes.GETC:
+                case Opcodes.RMDIR:
+                case Opcodes.CLOSEDIR:
+                case Opcodes.REWINDDIR:
+                case Opcodes.TELLDIR:
+                case Opcodes.CHDIR:
+                case Opcodes.EXIT:
+                    pc = ScalarUnaryOpcodeHandler.disassemble(opcode, bytecode, pc, sb);
+                    break;
+
+4. ADD TO BytecodeCompiler.java visit(OperatorNode) (at marker: // GENERATED_OPERATORS_START):
+
+Add cases for each operator following the pattern:
+} else if (op.equals("chr")) {
+    // chr($x) - convert codepoint to character
+    if (node.operand instanceof ListNode) {
+        ListNode list = (ListNode) node.operand;
+        if (!list.elements.isEmpty()) {
+            list.elements.get(0).accept(this);
+        } else {
+            throwCompilerException("chr requires an argument");
+        }
+    } else {
+        node.operand.accept(this);
+    }
+    int argReg = lastResultReg;
+    int rd = allocateRegister();
+    emit(Opcodes.CHR);
+    emitReg(rd);
+    emitReg(argReg);
+    lastResultReg = rd;
+}
+
+
+Next opcode available: 265
+
+Operators to add in BytecodeCompiler:
+  - atan2
+  - binary&
+  - binary|
+  - binary^
+  - eq
+  - ne
+  - lt
+  - le
+  - gt
+  - ge
+  - cmp
+  - x
+  - int
+  - log
+  - sqrt
+  - cos
+  - sin
+  - exp
+  - abs
+  - binary~
+  - integerBitwiseNot
+  - ord
+  - ordBytes
+  - oct
+  - hex
+  - srand
+  - chr
+  - chrBytes
+  - lengthBytes
+  - quotemeta
+  - fc
+  - lc
+  - lcfirst
+  - uc
+  - ucfirst
+  - sleep
+  - tell
+  - getc
+  - rmdir
+  - closedir
+  - rewinddir
+  - telldir
+  - chdir
+  - exit
