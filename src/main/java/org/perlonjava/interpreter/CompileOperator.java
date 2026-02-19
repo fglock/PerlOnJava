@@ -1730,8 +1730,8 @@ public class CompileOperator {
 
             bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("matchRegex")) {
-            // m/pattern/flags - create a regex and return it (for use with =~)
-            // operand: ListNode containing pattern string and flags string
+            // m/pattern/flags - create a regex and optionally match against a string
+            // operand: ListNode containing pattern, flags, and optionally string (from =~ binding)
             if (node.operand == null || !(node.operand instanceof ListNode)) {
                 bytecodeCompiler.throwCompilerException("matchRegex requires pattern and flags");
             }
@@ -1750,13 +1750,31 @@ public class CompileOperator {
             int flagsReg = bytecodeCompiler.lastResultReg;
 
             // Create quoted regex using QUOTE_REGEX opcode
-            int rd = bytecodeCompiler.allocateRegister();
+            int regexReg = bytecodeCompiler.allocateRegister();
             bytecodeCompiler.emit(Opcodes.QUOTE_REGEX);
-            bytecodeCompiler.emitReg(rd);
+            bytecodeCompiler.emitReg(regexReg);
             bytecodeCompiler.emitReg(patternReg);
             bytecodeCompiler.emitReg(flagsReg);
 
-            bytecodeCompiler.lastResultReg = rd;
+            // Check if a string was provided (from =~ binding)
+            if (args.elements.size() > 2) {
+                // String provided - perform the match
+                args.elements.get(2).accept(bytecodeCompiler);
+                int stringReg = bytecodeCompiler.lastResultReg;
+
+                // Call MATCH_REGEX to perform the match
+                int rd = bytecodeCompiler.allocateRegister();
+                bytecodeCompiler.emit(Opcodes.MATCH_REGEX);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(stringReg);
+                bytecodeCompiler.emitReg(regexReg);
+                bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
+
+                bytecodeCompiler.lastResultReg = rd;
+            } else {
+                // No string provided - just return the regex object
+                bytecodeCompiler.lastResultReg = regexReg;
+            }
         } else if (op.equals("replaceRegex")) {
             // s/pattern/replacement/flags - regex substitution
             // operand: ListNode containing [pattern, replacement, flags] or [pattern, replacement, flags, string]
