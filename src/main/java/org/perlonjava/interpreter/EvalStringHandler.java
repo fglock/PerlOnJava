@@ -59,9 +59,23 @@ public class EvalStringHandler {
             List<LexerToken> tokens = lexer.tokenize();
 
             // Create minimal EmitterContext for parsing
+            // IMPORTANT: Inherit strict/feature/warning flags from parent scope
+            // This matches Perl's eval STRING semantics where eval inherits lexical pragmas
             CompilerOptions opts = new CompilerOptions();
             opts.fileName = sourceName + " (eval)";
             ScopedSymbolTable symbolTable = new ScopedSymbolTable();
+
+            // Inherit lexical pragma flags from parent if available
+            if (currentCode != null) {
+                // Replace default values with parent's flags
+                symbolTable.strictOptionsStack.pop();
+                symbolTable.strictOptionsStack.push(currentCode.strictOptions);
+                symbolTable.featureFlagsStack.pop();
+                symbolTable.featureFlagsStack.push(currentCode.featureFlags);
+                symbolTable.warningFlagsStack.pop();
+                symbolTable.warningFlagsStack.push((java.util.BitSet) currentCode.warningFlags.clone());
+            }
+
             ErrorMessageUtil errorUtil = new ErrorMessageUtil(sourceName, tokens);
             EmitterContext ctx = new EmitterContext(
                 new JavaClassInfo(),
