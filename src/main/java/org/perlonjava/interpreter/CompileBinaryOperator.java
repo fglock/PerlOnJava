@@ -37,6 +37,54 @@ public class CompileBinaryOperator {
             return;
         }
 
+        // Handle sprintf early (special handling for list of arguments)
+        if (node.operator.equals("sprintf")) {
+            // sprintf $format, @args
+            // left = format string
+            // right = ListNode of arguments
+
+            // Compile the format string (left operand)
+            node.left.accept(bytecodeCompiler);
+            int formatReg = bytecodeCompiler.lastResultReg;
+
+            // Compile the arguments (right operand) into a list
+            int argsListReg = bytecodeCompiler.allocateRegister();
+            if (node.right instanceof ListNode) {
+                ListNode argsList = (ListNode) node.right;
+                // Compile each argument
+                java.util.List<Integer> argRegs = new java.util.ArrayList<>();
+                for (Node arg : argsList.elements) {
+                    arg.accept(bytecodeCompiler);
+                    argRegs.add(bytecodeCompiler.lastResultReg);
+                }
+                // Create list with arguments: CREATE_LIST rd count [regs...]
+                bytecodeCompiler.emit(Opcodes.CREATE_LIST);
+                bytecodeCompiler.emitReg(argsListReg);
+                bytecodeCompiler.emit(argRegs.size());  // emit count
+                for (int argReg : argRegs) {
+                    bytecodeCompiler.emitReg(argReg);
+                }
+            } else {
+                // Single argument - wrap in list
+                node.right.accept(bytecodeCompiler);
+                int argReg = bytecodeCompiler.lastResultReg;
+                bytecodeCompiler.emit(Opcodes.CREATE_LIST);
+                bytecodeCompiler.emitReg(argsListReg);
+                bytecodeCompiler.emit(1);  // emit count = 1
+                bytecodeCompiler.emitReg(argReg);
+            }
+
+            // Call sprintf
+            int rd = bytecodeCompiler.allocateRegister();
+            bytecodeCompiler.emit(Opcodes.SPRINTF);
+            bytecodeCompiler.emitReg(rd);
+            bytecodeCompiler.emitReg(formatReg);
+            bytecodeCompiler.emitReg(argsListReg);
+
+            bytecodeCompiler.lastResultReg = rd;
+            return;
+        }
+
         // Handle compound assignment operators (+=, -=, *=, /=, %=, .=, &=, |=, ^=, &.=, |.=, ^.=, binary&=, binary|=, binary^=, x=, **=, <<=, >>=, &&=, ||=)
         if (node.operator.equals("+=") || node.operator.equals("-=") ||
                 node.operator.equals("*=") || node.operator.equals("/=") ||

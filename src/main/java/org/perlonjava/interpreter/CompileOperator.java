@@ -1773,6 +1773,43 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(2);  // Register 2 contains the calling context
 
             bytecodeCompiler.lastResultReg = rd;
+        } else if (op.equals("sprintf")) {
+            // sprintf($format, @args) - SprintfOperator.sprintf
+            if (node.operand instanceof ListNode) {
+                ListNode list = (ListNode) node.operand;
+                if (list.elements.isEmpty()) {
+                    bytecodeCompiler.throwCompilerException("sprintf requires a format argument");
+                }
+
+                // First argument is the format string
+                list.elements.get(0).accept(bytecodeCompiler);
+                int formatReg = bytecodeCompiler.lastResultReg;
+
+                // Compile remaining arguments and collect their registers
+                java.util.List<Integer> argRegs = new java.util.ArrayList<>();
+                for (int i = 1; i < list.elements.size(); i++) {
+                    list.elements.get(i).accept(bytecodeCompiler);
+                    argRegs.add(bytecodeCompiler.lastResultReg);
+                }
+
+                // Create a RuntimeList with the arguments
+                int listReg = bytecodeCompiler.allocateRegister();
+                bytecodeCompiler.emit(Opcodes.CREATE_LIST);
+                bytecodeCompiler.emitReg(listReg);
+                for (int argReg : argRegs) {
+                    bytecodeCompiler.emitReg(argReg);
+                }
+
+                // Call sprintf with format and arg list
+                int rd = bytecodeCompiler.allocateRegister();
+                bytecodeCompiler.emit(Opcodes.SPRINTF);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(formatReg);
+                bytecodeCompiler.emitReg(listReg);
+                bytecodeCompiler.lastResultReg = rd;
+            } else {
+                bytecodeCompiler.throwCompilerException("sprintf requires arguments");
+            }
             // GENERATED_OPERATORS_START
         } else if (op.equals("int")) {
             // int($x) - MathOperators.integer
