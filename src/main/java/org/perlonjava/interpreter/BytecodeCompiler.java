@@ -3800,13 +3800,30 @@ public class BytecodeCompiler implements Visitor {
                                         "$@%".contains(nestedVarNode.operator)) {
                                         // Get the variable name
                                         if (nestedVarNode.operand instanceof IdentifierNode idNode) {
-                                            // For declared refs, always use scalar sigil
+                                            // For declared refs, variable is always scalar holding a ref
                                             String varName = "$" + idNode.name;
 
-                                            // Declare and initialize the variable
+                                            // Declare the variable
                                             int reg = addVariable(varName, op);
-                                            emit(Opcodes.LOAD_UNDEF);
-                                            emitReg(reg);
+
+                                            // Initialize based on original sigil
+                                            String originalSigil = nestedVarNode.operator;
+                                            switch (originalSigil) {
+                                                case "$" -> {
+                                                    emit(Opcodes.LOAD_UNDEF);
+                                                    emitReg(reg);
+                                                }
+                                                case "@" -> {
+                                                    // Create an array ref
+                                                    emit(Opcodes.NEW_ARRAY);
+                                                    emitReg(reg);
+                                                }
+                                                case "%" -> {
+                                                    // Create a hash ref
+                                                    emit(Opcodes.NEW_HASH);
+                                                    emitReg(reg);
+                                                }
+                                            }
 
                                             varRegs.add(reg);
                                         }
@@ -3814,15 +3831,32 @@ public class BytecodeCompiler implements Visitor {
                                 }
                             } else if (sigilOp.operand instanceof OperatorNode varNode &&
                                        "$@%".contains(varNode.operator)) {
-                                // Single variable: my (\$x) or state (\$x)
+                                // Single variable: my (\$x) or state (\$x) or my (\@x) or my (\%x)
                                 if (varNode.operand instanceof IdentifierNode idNode) {
-                                    // For declared refs, always use scalar sigil
+                                    // For declared refs, variable is always scalar holding a ref
                                     String varName = "$" + idNode.name;
 
-                                    // Declare and initialize the variable
+                                    // Declare the variable
                                     int reg = addVariable(varName, op);
-                                    emit(Opcodes.LOAD_UNDEF);
-                                    emitReg(reg);
+
+                                    // Initialize based on original sigil
+                                    String originalSigil = varNode.operator;
+                                    switch (originalSigil) {
+                                        case "$" -> {
+                                            emit(Opcodes.LOAD_UNDEF);
+                                            emitReg(reg);
+                                        }
+                                        case "@" -> {
+                                            // Create an array ref
+                                            emit(Opcodes.NEW_ARRAY);
+                                            emitReg(reg);
+                                        }
+                                        case "%" -> {
+                                            // Create a hash ref
+                                            emit(Opcodes.NEW_HASH);
+                                            emitReg(reg);
+                                        }
+                                    }
 
                                     varRegs.add(reg);
                                 }
@@ -4081,7 +4115,7 @@ public class BytecodeCompiler implements Visitor {
                                     if (nestedElement instanceof OperatorNode nestedVarNode &&
                                         "$@%".contains(nestedVarNode.operator)) {
                                         if (nestedVarNode.operand instanceof IdentifierNode idNode) {
-                                            // For declared refs, always use scalar sigil
+                                            // For declared refs, variable is always scalar holding a ref
                                             String varName = "$" + idNode.name;
 
                                             // Declare and load the package variable
@@ -4091,9 +4125,26 @@ public class BytecodeCompiler implements Visitor {
                                                 getCurrentPackage()
                                             );
                                             int nameIdx = addToStringPool(globalVarName);
-                                            emit(Opcodes.LOAD_GLOBAL_SCALAR);
-                                            emitReg(reg);
-                                            emit(nameIdx);
+
+                                            // Load based on original sigil
+                                            String originalSigil = nestedVarNode.operator;
+                                            switch (originalSigil) {
+                                                case "$" -> {
+                                                    emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                                                    emitReg(reg);
+                                                    emit(nameIdx);
+                                                }
+                                                case "@" -> {
+                                                    emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                                                    emitReg(reg);
+                                                    emit(nameIdx);
+                                                }
+                                                case "%" -> {
+                                                    emit(Opcodes.LOAD_GLOBAL_HASH);
+                                                    emitReg(reg);
+                                                    emit(nameIdx);
+                                                }
+                                            }
 
                                             varRegs.add(reg);
                                         }
@@ -4101,9 +4152,9 @@ public class BytecodeCompiler implements Visitor {
                                 }
                             } else if (sigilOp.operand instanceof OperatorNode varNode &&
                                        "$@%".contains(varNode.operator)) {
-                                // Single variable: our (\$x)
+                                // Single variable: our (\$x) or our (\@x) or our (\%x)
                                 if (varNode.operand instanceof IdentifierNode idNode) {
-                                    // For declared refs, always use scalar sigil
+                                    // For declared refs, variable is always scalar holding a ref
                                     String varName = "$" + idNode.name;
 
                                     // Declare and load the package variable
@@ -4113,9 +4164,26 @@ public class BytecodeCompiler implements Visitor {
                                         getCurrentPackage()
                                     );
                                     int nameIdx = addToStringPool(globalVarName);
-                                    emit(Opcodes.LOAD_GLOBAL_SCALAR);
-                                    emitReg(reg);
-                                    emit(nameIdx);
+
+                                    // Load based on original sigil
+                                    String originalSigil = varNode.operator;
+                                    switch (originalSigil) {
+                                        case "$" -> {
+                                            emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                                            emitReg(reg);
+                                            emit(nameIdx);
+                                        }
+                                        case "@" -> {
+                                            emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                                            emitReg(reg);
+                                            emit(nameIdx);
+                                        }
+                                        case "%" -> {
+                                            emit(Opcodes.LOAD_GLOBAL_HASH);
+                                            emitReg(reg);
+                                            emit(nameIdx);
+                                        }
+                                    }
 
                                     varRegs.add(reg);
                                 }
