@@ -2300,6 +2300,29 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.LOAD_SYMBOLIC_SCALAR: {
+                        // Load via symbolic reference: rd = GlobalVariable.getGlobalVariable(nameReg.toString()).get()
+                        // Format: LOAD_SYMBOLIC_SCALAR rd nameReg
+                        int rd = bytecode[pc++];
+                        int nameReg = bytecode[pc++];
+
+                        // Get the variable name from the name register
+                        RuntimeScalar nameScalar = (RuntimeScalar) registers[nameReg];
+                        String varName = nameScalar.toString();
+
+                        // Normalize the variable name to include package prefix if needed
+                        // This is important for ${label:var} cases where "colon" becomes "main::colon"
+                        String normalizedName = org.perlonjava.runtime.NameNormalizer.normalizeVariableName(
+                            varName,
+                            "main"  // Use main package as default for symbolic references
+                        );
+
+                        // Get the global variable and load its value
+                        RuntimeScalar globalVar = GlobalVariable.getGlobalVariable(normalizedName);
+                        registers[rd] = globalVar;
+                        break;
+                    }
+
                     // GENERATED_HANDLERS_END
 
                     default:
