@@ -4249,17 +4249,60 @@ public class BytecodeCompiler implements Visitor {
                     return;
                 }
 
-                // Handle local \\$x - reference to a declared reference (double backslash)
+                // Handle local \$x or local \\$x - backslash operator
                 if (sigil.equals("\\")) {
                     boolean isDeclaredReference = node.annotations != null &&
                             Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"));
 
                     if (isDeclaredReference) {
-                        // This is local \\$x which means: create a declared reference and then take a reference to it
-                        // The operand is \$x, so we recursively compile it
-                        sigilOp.accept(this);
-                        // The result is now in lastResultReg
-                        return;
+                        // Check if operand is a variable operator ($, @, %)
+                        if (sigilOp.operand instanceof OperatorNode innerOp &&
+                            "$@%".contains(innerOp.operator) &&
+                            innerOp.operand instanceof IdentifierNode idNode) {
+
+                            // For declared refs, always use scalar sigil
+                            String varName = "$" + idNode.name;
+
+                            // Check if it's a lexical variable
+                            if (hasVariable(varName)) {
+                                throwCompilerException("Can't localize lexical variable " + varName);
+                                return;
+                            }
+
+                            // Localize global variable
+                            String packageName = getCurrentPackage();
+                            String globalVarName = packageName + "::" + idNode.name;
+                            int nameIdx = addToStringPool(globalVarName);
+
+                            int rd = allocateRegister();
+                            emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
+                            emitReg(rd);
+                            emit(nameIdx);
+
+                            // Create first reference
+                            int refReg1 = allocateRegister();
+                            emit(Opcodes.CREATE_REF);
+                            emitReg(refReg1);
+                            emitReg(rd);
+
+                            // Check if the backslash operator itself has isDeclaredReference annotation
+                            // which indicates this is \\$x (double backslash)
+                            boolean backslashIsDeclaredRef = sigilOp.annotations != null &&
+                                    Boolean.TRUE.equals(sigilOp.annotations.get("isDeclaredReference"));
+
+                            if (backslashIsDeclaredRef) {
+                                // Double backslash: create second reference
+                                int refReg2 = allocateRegister();
+                                emit(Opcodes.CREATE_REF);
+                                emitReg(refReg2);
+                                emitReg(refReg1);
+                                lastResultReg = refReg2;
+                            } else {
+                                // Single backslash: just one reference
+                                lastResultReg = refReg1;
+                            }
+                            return;
+                        }
                     }
                 }
             } else if (node.operand instanceof ListNode) {
@@ -4281,14 +4324,61 @@ public class BytecodeCompiler implements Visitor {
 
                         // Handle backslash operator: local (\$x) or local (\($x, $y))
                         if (sigil.equals("\\")) {
+                            // Check if backslash itself has isDeclaredReference (indicates \\$ in source)
+                            boolean backslashIsDeclaredRef = sigilOp.annotations != null &&
+                                    Boolean.TRUE.equals(sigilOp.annotations.get("isDeclaredReference"));
+
+                            if (backslashIsDeclaredRef) {
+                                // Double backslash: local (\\$x)
+                                // Localize, create ref, create ref to ref
+                                if (sigilOp.operand instanceof OperatorNode varNode &&
+                                    "$@%".contains(varNode.operator) &&
+                                    varNode.operand instanceof IdentifierNode idNode) {
+
+                                    String varName = "$" + idNode.name;
+
+                                    // Check if it's a lexical variable
+                                    if (hasVariable(varName)) {
+                                        throwCompilerException("Can't localize lexical variable " + varName);
+                                    }
+
+                                    // Localize global variable
+                                    String packageName = getCurrentPackage();
+                                    String globalVarName = packageName + "::" + idNode.name;
+                                    int nameIdx = addToStringPool(globalVarName);
+
+                                    int rd = allocateRegister();
+                                    emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
+                                    emitReg(rd);
+                                    emit(nameIdx);
+
+                                    // Create first reference
+                                    int refReg1 = allocateRegister();
+                                    emit(Opcodes.CREATE_REF);
+                                    emitReg(refReg1);
+                                    emitReg(rd);
+
+                                    // Create second reference
+                                    int refReg2 = allocateRegister();
+                                    emit(Opcodes.CREATE_REF);
+                                    emitReg(refReg2);
+                                    emitReg(refReg1);
+
+                                    varRegs.add(refReg2);
+                                }
+                                continue;
+                            }
+
+                            // Single backslash
                             foundBackslashInList = true;
 
                             // Check if it's a nested list
                             if (sigilOp.operand instanceof ListNode nestedList) {
                                 for (Node nestedElement : nestedList.elements) {
                                     if (nestedElement instanceof OperatorNode nestedVarNode &&
-                                        nestedVarNode.operator.equals("$") &&
+                                        "$@%".contains(nestedVarNode.operator) &&
                                         nestedVarNode.operand instanceof IdentifierNode idNode) {
+                                        // For declared refs, always use scalar sigil
                                         String varName = "$" + idNode.name;
 
                                         // Check if it's a lexical variable
@@ -4310,9 +4400,10 @@ public class BytecodeCompiler implements Visitor {
                                     }
                                 }
                             } else if (sigilOp.operand instanceof OperatorNode varNode &&
-                                       varNode.operator.equals("$") &&
+                                       "$@%".contains(varNode.operator) &&
                                        varNode.operand instanceof IdentifierNode idNode) {
-                                // Single variable: local (\$x)
+                                // Single variable: local (\$x), local (\@x), local (\%x)
+                                // For declared refs, always use scalar sigil
                                 String varName = "$" + idNode.name;
 
                                 // Check if it's a lexical variable
