@@ -1999,6 +1999,47 @@ public class BytecodeCompiler implements Visitor {
             }
         }
 
+        // Handle ${block} = value and $$var = value (symbolic references)
+        // We need to evaluate the LHS FIRST to get the variable name,
+        // then evaluate the RHS, to ensure the RHS doesn't clobber the LHS registers
+        if (node.left instanceof OperatorNode leftOp && leftOp.operator.equals("$")) {
+            if (leftOp.operand instanceof BlockNode) {
+                // ${block} = value
+                BlockNode block = (BlockNode) leftOp.operand;
+                block.accept(this);
+                int nameReg = lastResultReg;
+
+                // Now compile the RHS
+                node.right.accept(this);
+                int valueReg = lastResultReg;
+
+                // Use STORE_SYMBOLIC_SCALAR to store via symbolic reference
+                emit(Opcodes.STORE_SYMBOLIC_SCALAR);
+                emitReg(nameReg);
+                emitReg(valueReg);
+
+                lastResultReg = valueReg;
+                return;
+            } else if (leftOp.operand instanceof OperatorNode) {
+                // $$var = value (scalar dereference assignment)
+                // Evaluate the inner expression to get the variable name
+                leftOp.operand.accept(this);
+                int nameReg = lastResultReg;
+
+                // Now compile the RHS
+                node.right.accept(this);
+                int valueReg = lastResultReg;
+
+                // Use STORE_SYMBOLIC_SCALAR to store via symbolic reference
+                emit(Opcodes.STORE_SYMBOLIC_SCALAR);
+                emitReg(nameReg);
+                emitReg(valueReg);
+
+                lastResultReg = valueReg;
+                return;
+            }
+        }
+
         // Regular assignment: $x = value (no optimization)
         // Compile RHS first
         node.right.accept(this);
@@ -4802,10 +4843,9 @@ public class BytecodeCompiler implements Visitor {
                 IdentifierNode idNode = (IdentifierNode) node.operand;
                 String subName = idNode.name;
 
-                // Add package prefix if not present
-                if (!subName.contains("::")) {
-                    subName = "main::" + subName;
-                }
+                // Use NameNormalizer to properly handle package prefixes
+                // This will add the current package if no package is specified
+                subName = NameNormalizer.normalizeVariableName(subName, getCurrentPackage());
 
                 // Allocate register for code reference
                 int rd = allocateRegister();
@@ -5215,8 +5255,53 @@ public class BytecodeCompiler implements Visitor {
             }
         } else if (op.equals("return")) {
             // return $expr;
+            // Also handles 'goto &NAME' tail calls (parsed as 'return (coderef(@_))')
+
+            // Check if this is a 'goto &NAME' or 'goto EXPR' tail call
+            // Pattern: return with ListNode containing single BinaryOperatorNode("(")
+            // where left is OperatorNode("&") and right is @_
+            if (node.operand instanceof ListNode list && list.elements.size() == 1) {
+                Node firstElement = list.elements.getFirst();
+                if (firstElement instanceof BinaryOperatorNode callNode && callNode.operator.equals("(")) {
+                    Node callTarget = callNode.left;
+
+                    // Handle &sub syntax (goto &foo)
+                    if (callTarget instanceof OperatorNode opNode && opNode.operator.equals("&")) {
+                        // This is a tail call: goto &sub
+                        // Evaluate the code reference in scalar context
+                        int savedContext = currentCallContext;
+                        currentCallContext = RuntimeContextType.SCALAR;
+                        callTarget.accept(this);
+                        int codeRefReg = lastResultReg;
+
+                        // Evaluate the arguments in list context (usually @_)
+                        currentCallContext = RuntimeContextType.LIST;
+                        callNode.right.accept(this);
+                        int argsReg = lastResultReg;
+                        currentCallContext = savedContext;
+
+                        // Allocate register for call result
+                        int rd = allocateRegister();
+
+                        // Emit CALL_SUB to invoke the code reference with proper context
+                        emit(Opcodes.CALL_SUB);
+                        emitReg(rd);  // Result register
+                        emitReg(codeRefReg); // Code reference register
+                        emitReg(argsReg); // Arguments register
+                        emit(savedContext); // Use saved calling context for the tail call
+
+                        // Then return the result
+                        emitWithToken(Opcodes.RETURN, node.getIndex());
+                        emitReg(rd);
+
+                        lastResultReg = -1;
+                        return;
+                    }
+                }
+            }
+
             if (node.operand != null) {
-                // Evaluate return expression
+                // Regular return with expression
                 node.operand.accept(this);
                 int exprReg = lastResultReg;
 
