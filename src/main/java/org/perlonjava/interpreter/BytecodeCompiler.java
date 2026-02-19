@@ -267,6 +267,123 @@ public class BytecodeCompiler implements Visitor {
     }
 
     /**
+     * Helper: Check if a variable is a built-in special length-one variable.
+     * Single-character non-letter variables like $_, $0, $!, $; are always allowed under strict.
+     * Mirrors logic from EmitVariable.java.
+     */
+    private static boolean isBuiltinSpecialLengthOneVar(String sigil, String name) {
+        if (!"$".equals(sigil) || name == null || name.length() != 1) {
+            return false;
+        }
+        char c = name.charAt(0);
+        // In Perl, many single-character non-identifier variables (punctuation/digits)
+        // are built-in special vars and are exempt from strict 'vars'.
+        return !Character.isLetter(c);
+    }
+
+    /**
+     * Helper: Check if a variable is a built-in special scalar variable.
+     * Variables like ${^GLOBAL_PHASE}, $ARGV, $ENV are always allowed under strict.
+     * Mirrors logic from EmitVariable.java.
+     */
+    private static boolean isBuiltinSpecialScalarVar(String sigil, String name) {
+        if (!"$".equals(sigil) || name == null || name.isEmpty()) {
+            return false;
+        }
+        // ${^FOO} variables are encoded as a leading ASCII control character.
+        // (e.g. ${^GLOBAL_PHASE} -> "\aLOBAL_PHASE"). These are built-in and strict-safe.
+        if (name.charAt(0) < 32) {
+            return true;
+        }
+        return name.equals("ARGV")
+                || name.equals("ARGVOUT")
+                || name.equals("ENV")
+                || name.equals("INC")
+                || name.equals("SIG")
+                || name.equals("STDIN")
+                || name.equals("STDOUT")
+                || name.equals("STDERR");
+    }
+
+    /**
+     * Helper: Check if a variable is a built-in special container variable.
+     * Variables like %ENV, @ARGV, @INC are always allowed under strict.
+     * Mirrors logic from EmitVariable.java.
+     */
+    private static boolean isBuiltinSpecialContainerVar(String sigil, String name) {
+        if (name == null) {
+            return false;
+        }
+        if ("%".equals(sigil)) {
+            return name.equals("SIG")
+                    || name.equals("ENV")
+                    || name.equals("INC")
+                    || name.equals("+")
+                    || name.equals("-");
+        }
+        if ("@".equals(sigil)) {
+            return name.equals("ARGV")
+                    || name.equals("INC")
+                    || name.equals("_")
+                    || name.equals("F");
+        }
+        return false;
+    }
+
+    /**
+     * Helper: Check if strict vars should block access to this global variable.
+     * Returns true if the variable should be BLOCKED (not allowed).
+     * Mirrors the createIfNotExists logic from EmitVariable.java lines 362-371.
+     *
+     * @param varName The variable name with sigil (e.g., "$A", "@array")
+     * @return true if access should be blocked under strict vars
+     */
+    private boolean shouldBlockGlobalUnderStrictVars(String varName) {
+        // Only check if strict vars is enabled
+        if (emitterContext == null || emitterContext.symbolTable == null) {
+            return false;  // No context, allow access
+        }
+
+        boolean strictEnabled = emitterContext.symbolTable.isStrictOptionEnabled(org.perlonjava.perlmodule.Strict.HINT_STRICT_VARS);
+        if (!strictEnabled) {
+            return false;  // Strict vars not enabled, allow access
+        }
+
+        // Extract sigil and bare name
+        String sigil = varName.substring(0, 1);
+        String bareVarName = varName.substring(1);
+
+        // Allow qualified names (contain ::)
+        if (bareVarName.contains("::")) {
+            return false;
+        }
+
+        // Allow regex capture variables ($1, $2, etc.)
+        if (org.perlonjava.runtime.ScalarUtils.isInteger(bareVarName)) {
+            return false;
+        }
+
+        // Allow special sort variables $a and $b
+        if (sigil.equals("$") && (bareVarName.equals("a") || bareVarName.equals("b"))) {
+            return false;
+        }
+
+        // Allow built-in special variables
+        if (isBuiltinSpecialLengthOneVar(sigil, bareVarName)) {
+            return false;
+        }
+        if (isBuiltinSpecialScalarVar(sigil, bareVarName)) {
+            return false;
+        }
+        if (isBuiltinSpecialContainerVar(sigil, bareVarName)) {
+            return false;
+        }
+
+        // BLOCK: Unqualified variable under strict vars
+        return true;
+    }
+
+    /**
      * Throw a compiler exception with proper error formatting.
      * Uses PerlCompilerException which formats with line numbers and code context.
      *
@@ -441,6 +558,16 @@ public class BytecodeCompiler implements Visitor {
             variableRegistry.putAll(scope);
         }
 
+        // Extract strict/feature/warning flags for eval STRING inheritance
+        int strictOptions = 0;
+        int featureFlags = 0;
+        BitSet warningFlags = new BitSet();
+        if (emitterContext != null && emitterContext.symbolTable != null) {
+            strictOptions = emitterContext.symbolTable.strictOptionsStack.peek();
+            featureFlags = emitterContext.symbolTable.featureFlagsStack.peek();
+            warningFlags = (BitSet) emitterContext.symbolTable.warningFlagsStack.peek().clone();
+        }
+
         // Build InterpretedCode
         return new InterpretedCode(
             toShortArray(),
@@ -452,7 +579,10 @@ public class BytecodeCompiler implements Visitor {
             sourceLine,
             pcToTokenIndex,  // Pass token index map for error reporting
             variableRegistry,  // Variable registry for eval STRING
-            errorUtil  // Pass error util for line number lookup
+            errorUtil,  // Pass error util for line number lookup
+            strictOptions,  // Strict flags for eval STRING inheritance
+            featureFlags,  // Feature flags for eval STRING inheritance
+            warningFlags  // Warning flags for eval STRING inheritance
         );
     }
 
@@ -745,6 +875,11 @@ public class BytecodeCompiler implements Visitor {
                 }
 
                 // Global variable
+                // Check strict vars before accessing
+                if (shouldBlockGlobalUnderStrictVars(varName)) {
+                    throwCompilerException("Global symbol \"" + varName + "\" requires explicit package name");
+                }
+
                 // Strip sigil and normalize name (e.g., "$x" → "main::x")
                 String bareVarName = varName.substring(1);  // Remove sigil
                 String normalizedName = NameNormalizer.normalizeVariableName(bareVarName, getCurrentPackage());
@@ -1179,6 +1314,12 @@ public class BytecodeCompiler implements Visitor {
         if (isGlobal) {
             OperatorNode leftOp = (OperatorNode) node.left;
             String varName = "$" + ((IdentifierNode) leftOp.operand).name;
+
+            // Check strict vars before compound assignment
+            if (shouldBlockGlobalUnderStrictVars(varName)) {
+                throwCompilerException("Global symbol \"" + varName + "\" requires explicit package name");
+            }
+
             String normalizedName = NameNormalizer.normalizeVariableName(varName, getCurrentPackage());
             int nameIdx = addToStringPool(normalizedName);
             emit(Opcodes.STORE_GLOBAL_SCALAR);
@@ -2087,6 +2228,11 @@ public class BytecodeCompiler implements Visitor {
                     lastResultReg = targetReg;
                 } else {
                     // Global variable
+                    // Check strict vars before assignment
+                    if (shouldBlockGlobalUnderStrictVars(varName)) {
+                        throwCompilerException("Global symbol \"" + varName + "\" requires explicit package name");
+                    }
+
                     // Strip sigil and normalize name (e.g., "$x" → "main::x")
                     String bareVarName = varName.substring(1);  // Remove sigil
                     String normalizedName = NameNormalizer.normalizeVariableName(bareVarName, getCurrentPackage());
@@ -2278,6 +2424,12 @@ public class BytecodeCompiler implements Visitor {
                 lastResultReg = targetReg;
             } else {
                 // Global variable (varName has no sigil here)
+                // Check strict vars - add sigil for checking
+                String varNameWithSigil = "$" + varName;
+                if (shouldBlockGlobalUnderStrictVars(varNameWithSigil)) {
+                    throwCompilerException("Global symbol \"" + varNameWithSigil + "\" requires explicit package name");
+                }
+
                 String normalizedName = NameNormalizer.normalizeVariableName(varName, getCurrentPackage());
                 int nameIdx = addToStringPool(normalizedName);
                 emit(Opcodes.STORE_GLOBAL_SCALAR);
@@ -2683,6 +2835,11 @@ public class BytecodeCompiler implements Visitor {
                                 }
                             } else {
                                 // Normalize global variable name (remove sigil, add package)
+                                // Check strict vars before list assignment
+                                if (shouldBlockGlobalUnderStrictVars(varName)) {
+                                    throwCompilerException("Global symbol \"" + varName + "\" requires explicit package name");
+                                }
+
                                 String bareVarName = varName.substring(1);  // Remove "$"
                                 String normalizedName = NameNormalizer.normalizeVariableName(bareVarName, getCurrentPackage());
                                 int nameIdx = addToStringPool(normalizedName);
@@ -8132,7 +8289,22 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(CompilerFlagNode node) {
-        // Compiler flags affect parsing, not runtime - no-op
+        // Process compiler flags - they modify the symbolTable's pragma stacks
+        // This is critical for handling `use strict`, `no strict`, etc. during compilation
+        if (emitterContext != null && emitterContext.symbolTable != null) {
+            ScopedSymbolTable symbolTable = emitterContext.symbolTable;
+
+            // Pop and push new flags - this updates the current scope's pragmas
+            symbolTable.warningFlagsStack.pop();
+            symbolTable.warningFlagsStack.push((java.util.BitSet) node.getWarningFlags().clone());
+
+            symbolTable.featureFlagsStack.pop();
+            symbolTable.featureFlagsStack.push(node.getFeatureFlags());
+
+            symbolTable.strictOptionsStack.pop();
+            symbolTable.strictOptionsStack.push(node.getStrictOptions());
+        }
+
         lastResultReg = -1;
     }
 
