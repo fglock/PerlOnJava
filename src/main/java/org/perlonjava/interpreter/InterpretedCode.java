@@ -1,6 +1,7 @@
 package org.perlonjava.interpreter;
 
 import org.perlonjava.runtime.*;
+import java.util.BitSet;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -27,6 +28,11 @@ public class InterpretedCode extends RuntimeCode {
     public final RuntimeBase[] capturedVars; // Closure support (captured from outer scope)
     public final Map<String, Integer> variableRegistry; // Variable name → register index (for eval STRING)
 
+    // Lexical pragma state (for eval STRING to inherit)
+    public final int strictOptions;        // Strict flags at compile time
+    public final int featureFlags;         // Feature flags at compile time
+    public final BitSet warningFlags;      // Warning flags at compile time
+
     // Debug information (optional)
     public final String sourceName;        // Source file name (for stack traces)
     public final int sourceLine;           // Source line number
@@ -46,13 +52,17 @@ public class InterpretedCode extends RuntimeCode {
      * @param pcToTokenIndex Map from bytecode PC to AST tokenIndex for error reporting
      * @param variableRegistry Variable name → register index mapping (for eval STRING)
      * @param errorUtil     Error message utility for line number lookup
+     * @param strictOptions Strict flags at compile time (for eval STRING inheritance)
+     * @param featureFlags  Feature flags at compile time (for eval STRING inheritance)
+     * @param warningFlags  Warning flags at compile time (for eval STRING inheritance)
      */
     public InterpretedCode(short[] bytecode, Object[] constants, String[] stringPool,
                           int maxRegisters, RuntimeBase[] capturedVars,
                           String sourceName, int sourceLine,
                           TreeMap<Integer, Integer> pcToTokenIndex,
                           Map<String, Integer> variableRegistry,
-                          ErrorMessageUtil errorUtil) {
+                          ErrorMessageUtil errorUtil,
+                          int strictOptions, int featureFlags, BitSet warningFlags) {
         super(null, new java.util.ArrayList<>()); // Call RuntimeCode constructor with null prototype, empty attributes
         this.bytecode = bytecode;
         this.constants = constants;
@@ -64,6 +74,9 @@ public class InterpretedCode extends RuntimeCode {
         this.pcToTokenIndex = pcToTokenIndex;
         this.variableRegistry = variableRegistry;
         this.errorUtil = errorUtil;
+        this.strictOptions = strictOptions;
+        this.featureFlags = featureFlags;
+        this.warningFlags = warningFlags;
     }
 
     // Legacy constructor for backward compatibility
@@ -74,7 +87,7 @@ public class InterpretedCode extends RuntimeCode {
         this(bytecode, constants, stringPool, maxRegisters, capturedVars,
              sourceName, sourceLine,
              pcToTokenIndex instanceof TreeMap ? (TreeMap<Integer, Integer>)pcToTokenIndex : new TreeMap<>(pcToTokenIndex),
-             null, null);
+             null, null, 0, 0, new BitSet());
     }
 
     // Legacy constructor with variableRegistry but no errorUtil
@@ -86,7 +99,7 @@ public class InterpretedCode extends RuntimeCode {
         this(bytecode, constants, stringPool, maxRegisters, capturedVars,
              sourceName, sourceLine,
              pcToTokenIndex instanceof TreeMap ? (TreeMap<Integer, Integer>)pcToTokenIndex : new TreeMap<>(pcToTokenIndex),
-             variableRegistry, null);
+             variableRegistry, null, 0, 0, new BitSet());
     }
 
     /**
@@ -146,7 +159,10 @@ public class InterpretedCode extends RuntimeCode {
             this.sourceLine,
             this.pcToTokenIndex,  // Preserve token index map
             this.variableRegistry,  // Preserve variable registry
-            this.errorUtil  // Preserve error util
+            this.errorUtil,  // Preserve error util
+            this.strictOptions,  // Preserve strict flags
+            this.featureFlags,  // Preserve feature flags
+            this.warningFlags  // Preserve warning flags
         );
     }
 
@@ -687,6 +703,11 @@ public class InterpretedCode extends RuntimeCode {
                     rs = bytecode[pc++];
                     sb.append("FILETEST_C_UPPER r").append(rd).append(" = -C r").append(rs).append("\n");
                     break;
+                case Opcodes.FILETEST_LASTHANDLE:
+                    rd = bytecode[pc++];
+                    int opStrIdx = bytecode[pc++];
+                    sb.append("FILETEST_LASTHANDLE r").append(rd).append(" = ").append(stringPool[opStrIdx]).append(" _\n");
+                    break;
                 case Opcodes.PUSH_LOCAL_VARIABLE:
                     rs = bytecode[pc++];
                     sb.append("PUSH_LOCAL_VARIABLE r").append(rs).append("\n");
@@ -1114,6 +1135,48 @@ public class InterpretedCode extends RuntimeCode {
                     rd = bytecode[pc++];
                     rs = bytecode[pc++];
                     sb.append("MODULUS_ASSIGN r").append(rd).append(" %= r").append(rs).append("\n");
+                    break;
+                case Opcodes.REPEAT_ASSIGN:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("REPEAT_ASSIGN r").append(rd).append(" x= r").append(rs).append("\n");
+                    break;
+                case Opcodes.POW_ASSIGN:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("POW_ASSIGN r").append(rd).append(" **= r").append(rs).append("\n");
+                    break;
+                case Opcodes.LEFT_SHIFT_ASSIGN:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("LEFT_SHIFT_ASSIGN r").append(rd).append(" <<= r").append(rs).append("\n");
+                    break;
+                case Opcodes.RIGHT_SHIFT_ASSIGN:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("RIGHT_SHIFT_ASSIGN r").append(rd).append(" >>= r").append(rs).append("\n");
+                    break;
+                case Opcodes.LOGICAL_AND_ASSIGN:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("LOGICAL_AND_ASSIGN r").append(rd).append(" &&= r").append(rs).append("\n");
+                    break;
+                case Opcodes.LOGICAL_OR_ASSIGN:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("LOGICAL_OR_ASSIGN r").append(rd).append(" ||= r").append(rs).append("\n");
+                    break;
+                case Opcodes.LEFT_SHIFT:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    rs2 = bytecode[pc++];
+                    sb.append("LEFT_SHIFT r").append(rd).append(" = r").append(rs1).append(" << r").append(rs2).append("\n");
+                    break;
+                case Opcodes.RIGHT_SHIFT:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    rs2 = bytecode[pc++];
+                    sb.append("RIGHT_SHIFT r").append(rd).append(" = r").append(rs1).append(" >> r").append(rs2).append("\n");
                     break;
                 case Opcodes.LIST_TO_SCALAR:
                     rd = bytecode[pc++];

@@ -1003,6 +1003,28 @@ public class SlowOpcodeHandler {
         return pc;
     }
 
+    /**
+     * FILETEST_LASTHANDLE: rd = FileTestOperator.fileTestLastHandle(operator)
+     * Format: [FILETEST_LASTHANDLE] [rd] [operator_string_idx]
+     * Effect: Applies file test operator to cached filehandle from last stat/lstat
+     */
+    public static int executeFiletestLastHandle(
+            short[] bytecode,
+            int pc,
+            RuntimeBase[] registers,
+            InterpretedCode code) {
+
+        int rd = bytecode[pc++];
+        int operatorStrIndex = bytecode[pc++];
+
+        String operator = code.stringPool[operatorStrIndex];
+
+        // Call FileTestOperator.fileTestLastHandle() which uses cached handle
+        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTestLastHandle(operator);
+
+        return pc;
+    }
+
     private SlowOpcodeHandler() {
         // Utility class - no instantiation
     }

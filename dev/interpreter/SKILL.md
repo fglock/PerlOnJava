@@ -15,6 +15,12 @@
 - Compiler still used for main code, only eval STRING uses interpreter
 - Example: `JPERL_EVAL_USE_INTERPRETER=1 ./jperl test.pl`
 
+**JPERL_EVAL_VERBOSE=1** - Enable verbose eval error reporting
+- By default, eval failures are silent (errors only stored in $@)
+- With verbose mode, eval compilation errors print to stderr
+- Useful for debugging interpreter eval issues
+- Example: `JPERL_EVAL_USE_INTERPRETER=1 JPERL_EVAL_VERBOSE=1 ./jperl test.pl`
+
 **--interpreter** - Forces the interpreter EVERYWHERE
 - All code (main and eval) runs in interpreter mode
 - Used for full interpreter testing and development
@@ -198,14 +204,14 @@ perl dev/tools/generate_opcode_handlers.pl
 
 ## Adding New Operators
 
-### 1. Decide: Fast Opcode or SLOW_OP?
+### 1. Decide: Fast Opcode or slow opcode?
 
 **Use Fast Opcode when:**
 - Operation is used frequently (>1% of execution)
 - Simple 1-3 operand format
 - Performance-critical (loops, arithmetic)
 
-**Use SLOW_OP when:**
+**Use slow opcode when:**
 - Operation is rarely used (<1% of execution)
 - Complex argument handling
 - System calls, I/O operations
