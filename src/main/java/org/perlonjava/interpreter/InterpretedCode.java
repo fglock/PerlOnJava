@@ -703,6 +703,11 @@ public class InterpretedCode extends RuntimeCode {
                     rs = bytecode[pc++];
                     sb.append("FILETEST_C_UPPER r").append(rd).append(" = -C r").append(rs).append("\n");
                     break;
+                case Opcodes.FILETEST_LASTHANDLE:
+                    rd = bytecode[pc++];
+                    int opStrIdx = bytecode[pc++];
+                    sb.append("FILETEST_LASTHANDLE r").append(rd).append(" = ").append(stringPool[opStrIdx]).append(" _\n");
+                    break;
                 case Opcodes.PUSH_LOCAL_VARIABLE:
                     rs = bytecode[pc++];
                     sb.append("PUSH_LOCAL_VARIABLE r").append(rs).append("\n");

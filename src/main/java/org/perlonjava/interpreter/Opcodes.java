@@ -921,6 +921,10 @@ public class Opcodes {
      * Format: LOAD_SYMBOLIC_SCALAR rd nameReg */
     public static final short LOAD_SYMBOLIC_SCALAR = LASTOP + 45;
 
+    /** File test on cached handle '_': rd = FileTestOperator.fileTestLastHandle(operator)
+     * Format: FILETEST_LASTHANDLE rd operator_string_idx */
+    public static final short FILETEST_LASTHANDLE = LASTOP + 46;
+
     // GENERATED_OPCODES_END
 
 
