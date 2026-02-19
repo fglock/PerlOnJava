@@ -2763,6 +2763,7 @@ public class BytecodeCompiler implements Visitor {
      * - Reserved registers (0-2)
      * - All variables in all scopes
      * - Captured variables (closures)
+     * - Registers protected by enterScope() (baseRegisterForStatement)
      *
      * NOTE: This assumes that by the end of a statement, all intermediate values
      * have either been stored in variables or used/discarded. Any value that needs
@@ -2770,7 +2771,12 @@ public class BytecodeCompiler implements Visitor {
      */
     private void recycleTemporaryRegisters() {
         // Find highest variable register and reset nextRegister to one past it
-        baseRegisterForStatement = getHighestVariableRegister() + 1;
+        int highestVarReg = getHighestVariableRegister() + 1;
+
+        // CRITICAL: Never lower baseRegisterForStatement below what enterScope() set.
+        // This protects registers like foreach iterators that must survive across loop iterations.
+        // Use Math.max to preserve the higher value set by enterScope()
+        baseRegisterForStatement = Math.max(baseRegisterForStatement, highestVarReg);
         nextRegister = baseRegisterForStatement;
 
         // DO NOT reset lastResultReg - BlockNode needs it to return the last statement's result
@@ -3275,10 +3281,8 @@ public class BytecodeCompiler implements Visitor {
         emitReg(iterReg);
         emitReg(listReg);
 
-        // Step 3: Enter new scope for loop variable
-        enterScope();
-
-        // Step 4: Declare loop variable in the new scope
+        // Step 3: Allocate loop variable register BEFORE entering scope
+        // This ensures both iterReg and varReg are protected from recycling
         int varReg = -1;
         if (node.variable != null && node.variable instanceof OperatorNode) {
             OperatorNode varOp = (OperatorNode) node.variable;
@@ -3286,7 +3290,8 @@ public class BytecodeCompiler implements Visitor {
                 OperatorNode sigilOp = (OperatorNode) varOp.operand;
                 if (sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode) {
                     String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
-                    varReg = addVariable(varName, "my");
+                    // Don't add to scope yet - just allocate register
+                    varReg = allocateRegister();
                 }
             }
         }
@@ -3296,12 +3301,31 @@ public class BytecodeCompiler implements Visitor {
             varReg = allocateRegister();
         }
 
-        // Step 5: Push loop info onto stack for last/next/redo
+        // Step 4: Enter new scope for loop variable
+        // Now baseRegisterForStatement will be set past both iterReg and varReg,
+        // protecting them from being recycled by recycleTemporaryRegisters()
+        enterScope();
+
+        // Step 5: If we have a named loop variable, add it to the scope now
+        if (node.variable != null && node.variable instanceof OperatorNode) {
+            OperatorNode varOp = (OperatorNode) node.variable;
+            if (varOp.operator.equals("my") && varOp.operand instanceof OperatorNode) {
+                OperatorNode sigilOp = (OperatorNode) varOp.operand;
+                if (sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode) {
+                    String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
+                    // Add to scope and track for variableRegistry
+                    variableScopes.peek().put(varName, varReg);
+                    allDeclaredVariables.put(varName, varReg);
+                }
+            }
+        }
+
+        // Step 6: Push loop info onto stack for last/next/redo
         int loopStartPc = bytecode.size();
         LoopInfo loopInfo = new LoopInfo(node.labelName, loopStartPc, true); // true = foreach is a true loop
         loopStack.push(loopInfo);
 
-        // Step 6: Loop start - combined check/next/exit (superinstruction)
+        // Step 7: Loop start - combined check/next/exit (superinstruction)
         // Emit FOREACH_NEXT_OR_EXIT superinstruction
         // This combines: hasNext check, next() call, and conditional jump
         // Format: FOREACH_NEXT_OR_EXIT varReg, iterReg, exitTarget (absolute address)
@@ -3311,23 +3335,23 @@ public class BytecodeCompiler implements Visitor {
         int loopEndJumpPc = bytecode.size();
         emitInt(0);             // placeholder for exit target (absolute, will be patched)
 
-        // Step 7: Execute body (redo jumps here)
+        // Step 8: Execute body (redo jumps here)
         if (node.body != null) {
             node.body.accept(this);
         }
 
-        // Step 8: Continue point (next jumps here)
+        // Step 9: Continue point (next jumps here)
         loopInfo.continuePc = bytecode.size();
 
-        // Step 9: Jump back to loop start
+        // Step 10: Jump back to loop start
         emit(Opcodes.GOTO);
         emitInt(loopStartPc);
 
-        // Step 10: Loop end - patch the forward jump (last jumps here)
+        // Step 11: Loop end - patch the forward jump (last jumps here)
         int loopEndPc = bytecode.size();
         patchJump(loopEndJumpPc, loopEndPc);
 
-        // Step 11: Patch all last/next/redo jumps
+        // Step 12: Patch all last/next/redo jumps
         for (int pc : loopInfo.breakPcs) {
             patchJump(pc, loopEndPc);
         }
@@ -3338,7 +3362,7 @@ public class BytecodeCompiler implements Visitor {
             patchJump(pc, loopStartPc);
         }
 
-        // Step 12: Pop loop info and exit scope
+        // Step 13: Pop loop info and exit scope
         loopStack.pop();
         exitScope();
 
