@@ -308,40 +308,11 @@ public class BytecodeInterpreter {
                         break;
                     }
 
-                    case Opcodes.CREATE_CLOSURE: {
+                    case Opcodes.CREATE_CLOSURE:
                         // Create closure with captured variables
                         // Format: CREATE_CLOSURE rd template_idx num_captures reg1 reg2 ...
-                        int rd = bytecode[pc++];
-                        int templateIdx = bytecode[pc++];
-                        int numCaptures = bytecode[pc++];
-
-                        // Get the template InterpretedCode from constants
-                        InterpretedCode template = (InterpretedCode) code.constants[templateIdx];
-
-                        // Capture the current register values
-                        RuntimeBase[] capturedVars = new RuntimeBase[numCaptures];
-                        for (int i = 0; i < numCaptures; i++) {
-                            int captureReg = bytecode[pc++];
-                            capturedVars[i] = registers[captureReg];
-                        }
-
-                        // Create a new InterpretedCode with the captured variables
-                        InterpretedCode closureCode = new InterpretedCode(
-                            template.bytecode,
-                            template.constants,
-                            template.stringPool,
-                            template.maxRegisters,
-                            capturedVars,  // The captured variables!
-                            template.sourceName,
-                            template.sourceLine,
-                            template.pcToTokenIndex,
-                            template.variableRegistry  // Preserve variable registry
-                        );
-
-                        // Wrap in RuntimeScalar
-                        registers[rd] = new RuntimeScalar((RuntimeCode) closureCode);
+                        pc = OpcodeHandlerExtended.executeCreateClosure(bytecode, pc, registers, code);
                         break;
-                    }
 
                     case Opcodes.SET_SCALAR: {
                         // Set scalar value: registers[rd] = registers[rs]
@@ -551,49 +522,23 @@ public class BytecodeInterpreter {
                     // ITERATOR OPERATIONS - For efficient foreach loops
                     // =================================================================
 
-                    case Opcodes.ITERATOR_CREATE: {
+                    case Opcodes.ITERATOR_CREATE:
                         // Create iterator: rd = rs.iterator()
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-
-                        RuntimeBase iterable = registers[rs];
-                        java.util.Iterator<RuntimeScalar> iterator = iterable.iterator();
-
-                        // Store iterator as a constant (we need to preserve the Iterator object)
-                        // Wrap in RuntimeScalar for storage
-                        registers[rd] = new RuntimeScalar(iterator);
+                        // Format: ITERATOR_CREATE rd rs
+                        pc = OpcodeHandlerExtended.executeIteratorCreate(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.ITERATOR_HAS_NEXT: {
+                    case Opcodes.ITERATOR_HAS_NEXT:
                         // Check iterator: rd = iterator.hasNext()
-                        int rd = bytecode[pc++];
-                        int iterReg = bytecode[pc++];
-
-                        RuntimeScalar iterScalar = (RuntimeScalar) registers[iterReg];
-                        @SuppressWarnings("unchecked")
-                        java.util.Iterator<RuntimeScalar> iterator =
-                            (java.util.Iterator<RuntimeScalar>) iterScalar.value;
-
-                        boolean hasNext = iterator.hasNext();
-                        registers[rd] = hasNext ? RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarFalse;
+                        // Format: ITERATOR_HAS_NEXT rd iterReg
+                        pc = OpcodeHandlerExtended.executeIteratorHasNext(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.ITERATOR_NEXT: {
+                    case Opcodes.ITERATOR_NEXT:
                         // Get next element: rd = iterator.next()
-                        int rd = bytecode[pc++];
-                        int iterReg = bytecode[pc++];
-
-                        RuntimeScalar iterScalar = (RuntimeScalar) registers[iterReg];
-                        @SuppressWarnings("unchecked")
-                        java.util.Iterator<RuntimeScalar> iterator =
-                            (java.util.Iterator<RuntimeScalar>) iterScalar.value;
-
-                        RuntimeScalar next = iterator.next();
-                        registers[rd] = next;
+                        // Format: ITERATOR_NEXT rd iterReg
+                        pc = OpcodeHandlerExtended.executeIteratorNext(bytecode, pc, registers);
                         break;
-                    }
 
                     case Opcodes.FOREACH_NEXT_OR_EXIT: {
                         // Superinstruction for foreach loops
@@ -626,139 +571,65 @@ public class BytecodeInterpreter {
                     // COMPOUND ASSIGNMENT OPERATORS (with overload support)
                     // =================================================================
 
-                    case Opcodes.SUBTRACT_ASSIGN: {
-                        // Compound assignment: rd = rd -= rs (checks for (-= overload first)
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-
-                        RuntimeBase val1 = registers[rd];
-                        RuntimeBase val2 = registers[rs];
-                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
-                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
-
-                        registers[rd] = MathOperators.subtractAssign(s1, s2);
+                    case Opcodes.SUBTRACT_ASSIGN:
+                        // Compound assignment: rd -= rs
+                        // Format: SUBTRACT_ASSIGN rd rs
+                        pc = OpcodeHandlerExtended.executeSubtractAssign(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.MULTIPLY_ASSIGN: {
-                        // Compound assignment: rd = rd *= rs (checks for (*= overload first)
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-
-                        RuntimeBase val1 = registers[rd];
-                        RuntimeBase val2 = registers[rs];
-                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
-                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
-
-                        registers[rd] = MathOperators.multiplyAssign(s1, s2);
+                    case Opcodes.MULTIPLY_ASSIGN:
+                        // Compound assignment: rd *= rs
+                        // Format: MULTIPLY_ASSIGN rd rs
+                        pc = OpcodeHandlerExtended.executeMultiplyAssign(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.DIVIDE_ASSIGN: {
-                        // Compound assignment: rd = rd /= rs (checks for (/= overload first)
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-
-                        RuntimeBase val1 = registers[rd];
-                        RuntimeBase val2 = registers[rs];
-                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
-                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
-
-                        registers[rd] = MathOperators.divideAssign(s1, s2);
+                    case Opcodes.DIVIDE_ASSIGN:
+                        // Compound assignment: rd /= rs
+                        // Format: DIVIDE_ASSIGN rd rs
+                        pc = OpcodeHandlerExtended.executeDivideAssign(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.MODULUS_ASSIGN: {
-                        // Compound assignment: rd = rd %= rs (checks for (%= overload first)
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-
-                        RuntimeBase val1 = registers[rd];
-                        RuntimeBase val2 = registers[rs];
-                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
-                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
-
-                        registers[rd] = MathOperators.modulusAssign(s1, s2);
+                    case Opcodes.MODULUS_ASSIGN:
+                        // Compound assignment: rd %= rs
+                        // Format: MODULUS_ASSIGN rd rs
+                        pc = OpcodeHandlerExtended.executeModulusAssign(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.REPEAT_ASSIGN: {
+                    case Opcodes.REPEAT_ASSIGN:
                         // Compound assignment: rd x= rs
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        RuntimeBase result = Operator.repeat(
-                            registers[rd],
-                            (RuntimeScalar) registers[rs],
-                            1  // scalar context
-                        );
-                        ((RuntimeScalar) registers[rd]).set((RuntimeScalar) result);
+                        // Format: REPEAT_ASSIGN rd rs
+                        pc = OpcodeHandlerExtended.executeRepeatAssign(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.POW_ASSIGN: {
+                    case Opcodes.POW_ASSIGN:
                         // Compound assignment: rd **= rs
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        RuntimeBase val1 = registers[rd];
-                        RuntimeBase val2 = registers[rs];
-                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
-                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
-                        RuntimeScalar result = MathOperators.pow(s1, s2);
-                        ((RuntimeScalar) registers[rd]).set(result);
+                        // Format: POW_ASSIGN rd rs
+                        pc = OpcodeHandlerExtended.executePowAssign(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.LEFT_SHIFT_ASSIGN: {
+                    case Opcodes.LEFT_SHIFT_ASSIGN:
                         // Compound assignment: rd <<= rs
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        RuntimeScalar s1 = (RuntimeScalar) registers[rd];
-                        RuntimeScalar s2 = (RuntimeScalar) registers[rs];
-                        RuntimeScalar result = BitwiseOperators.shiftLeft(s1, s2);
-                        s1.set(result);
+                        // Format: LEFT_SHIFT_ASSIGN rd rs
+                        pc = OpcodeHandlerExtended.executeLeftShiftAssign(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.RIGHT_SHIFT_ASSIGN: {
+                    case Opcodes.RIGHT_SHIFT_ASSIGN:
                         // Compound assignment: rd >>= rs
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        RuntimeScalar s1 = (RuntimeScalar) registers[rd];
-                        RuntimeScalar s2 = (RuntimeScalar) registers[rs];
-                        RuntimeScalar result = BitwiseOperators.shiftRight(s1, s2);
-                        s1.set(result);
+                        // Format: RIGHT_SHIFT_ASSIGN rd rs
+                        pc = OpcodeHandlerExtended.executeRightShiftAssign(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.LOGICAL_AND_ASSIGN: {
-                        // Compound assignment: rd &&= rs (short-circuit: only evaluate rs if rd is true)
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        RuntimeScalar s1 = ((RuntimeBase) registers[rd]).scalar();
-                        if (!s1.getBoolean()) {
-                            // Left side is false, result is left side (no assignment needed)
-                            break;
-                        }
-                        // Left side is true, assign right side
-                        RuntimeScalar s2 = ((RuntimeBase) registers[rs]).scalar();
-                        ((RuntimeScalar) registers[rd]).set(s2);
+                    case Opcodes.LOGICAL_AND_ASSIGN:
+                        // Compound assignment: rd &&= rs (short-circuit)
+                        // Format: LOGICAL_AND_ASSIGN rd rs
+                        pc = OpcodeHandlerExtended.executeLogicalAndAssign(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.LOGICAL_OR_ASSIGN: {
-                        // Compound assignment: rd ||= rs (short-circuit: only evaluate rs if rd is false)
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        RuntimeScalar s1 = ((RuntimeBase) registers[rd]).scalar();
-                        if (s1.getBoolean()) {
-                            // Left side is true, result is left side (no assignment needed)
-                            break;
-                        }
-                        // Left side is false, assign right side
-                        RuntimeScalar s2 = ((RuntimeBase) registers[rs]).scalar();
-                        ((RuntimeScalar) registers[rd]).set(s2);
+                    case Opcodes.LOGICAL_OR_ASSIGN:
+                        // Compound assignment: rd ||= rs (short-circuit)
+                        // Format: LOGICAL_OR_ASSIGN rd rs
+                        pc = OpcodeHandlerExtended.executeLogicalOrAssign(bytecode, pc, registers);
                         break;
-                    }
 
                     // =================================================================
                     // SHIFT OPERATIONS
@@ -1122,77 +993,17 @@ public class BytecodeInterpreter {
                     // MISCELLANEOUS
                     // =================================================================
 
-                    case Opcodes.PRINT: {
+                    case Opcodes.PRINT:
                         // Print to filehandle
-                        // Format: [PRINT] [rs_content] [rs_filehandle]
-                        int contentReg = bytecode[pc++];
-                        int filehandleReg = bytecode[pc++];
-
-                        Object val = registers[contentReg];
-
-                        // Filehandle should be scalar - convert if needed
-                        RuntimeBase fhBase = registers[filehandleReg];
-                        RuntimeScalar fh = (fhBase instanceof RuntimeScalar)
-                            ? (RuntimeScalar) fhBase
-                            : fhBase.scalar();
-
-                        RuntimeList list;
-                        if (val instanceof RuntimeList) {
-                            list = (RuntimeList) val;
-                        } else if (val instanceof RuntimeArray) {
-                            // Convert RuntimeArray to RuntimeList
-                            list = new RuntimeList();
-                            for (RuntimeScalar elem : (RuntimeArray) val) {
-                                list.add(elem);
-                            }
-                        } else if (val instanceof RuntimeScalar) {
-                            // Convert scalar to single-element list
-                            list = new RuntimeList();
-                            list.add((RuntimeScalar) val);
-                        } else {
-                            list = new RuntimeList();
-                        }
-
-                        // Call IOOperator.print()
-                        org.perlonjava.operators.IOOperator.print(list, fh);
+                        // Format: PRINT contentReg filehandleReg
+                        pc = OpcodeHandlerExtended.executePrint(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.SAY: {
+                    case Opcodes.SAY:
                         // Say to filehandle
-                        // Format: [SAY] [rs_content] [rs_filehandle]
-                        int contentReg = bytecode[pc++];
-                        int filehandleReg = bytecode[pc++];
-
-                        Object val = registers[contentReg];
-
-                        // Filehandle should be scalar - convert if needed
-                        RuntimeBase fhBase = registers[filehandleReg];
-                        RuntimeScalar fh = (fhBase instanceof RuntimeScalar)
-                            ? (RuntimeScalar) fhBase
-                            : fhBase.scalar();
-
-                        RuntimeList list;
-                        if (val instanceof RuntimeList) {
-                            list = (RuntimeList) val;
-                        } else if (val instanceof RuntimeArray) {
-                            // Convert RuntimeArray to RuntimeList
-                            list = new RuntimeList();
-                            for (RuntimeScalar elem : (RuntimeArray) val) {
-                                list.add(elem);
-                            }
-                        } else if (val instanceof RuntimeScalar) {
-                            // Convert scalar to single-element list
-                            list = new RuntimeList();
-                            list.add((RuntimeScalar) val);
-                        } else {
-                            list = new RuntimeList();
-                        }
-
-                        // Call IOOperator.say()
-                        org.perlonjava.operators.IOOperator.say(list, fh);
+                        // Format: SAY contentReg filehandleReg
+                        pc = OpcodeHandlerExtended.executeSay(bytecode, pc, registers);
                         break;
-                    }
 
                     // =================================================================
                     // SUPERINSTRUCTIONS - Eliminate MOVE overhead
@@ -1233,387 +1044,135 @@ public class BytecodeInterpreter {
                         break;
                     }
 
-                    case Opcodes.STRING_CONCAT_ASSIGN: {
-                        // String concatenation and assign: rd .= rs (modifies rd in place)
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        RuntimeScalar result = StringOperators.stringConcat(
-                            (RuntimeScalar) registers[rd],
-                            (RuntimeScalar) registers[rs]
-                        );
-                        ((RuntimeScalar) registers[rd]).set(result);
+                    case Opcodes.STRING_CONCAT_ASSIGN:
+                        // String concatenation and assign: rd .= rs
+                        // Format: STRING_CONCAT_ASSIGN rd rs
+                        pc = OpcodeHandlerExtended.executeStringConcatAssign(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.BITWISE_AND_ASSIGN: {
-                        // Bitwise AND assignment: rd &= rs (modifies rd in place)
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        RuntimeScalar result = org.perlonjava.operators.BitwiseOperators.bitwiseAndBinary(
-                            (RuntimeScalar) registers[rd],
-                            (RuntimeScalar) registers[rs]
-                        );
-                        ((RuntimeScalar) registers[rd]).set(result);
+                    case Opcodes.BITWISE_AND_ASSIGN:
+                        // Bitwise AND assignment: rd &= rs
+                        // Format: BITWISE_AND_ASSIGN rd rs
+                        pc = OpcodeHandlerExtended.executeBitwiseAndAssign(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.BITWISE_OR_ASSIGN: {
-                        // Bitwise OR assignment: rd |= rs (modifies rd in place)
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        RuntimeScalar result = org.perlonjava.operators.BitwiseOperators.bitwiseOrBinary(
-                            (RuntimeScalar) registers[rd],
-                            (RuntimeScalar) registers[rs]
-                        );
-                        ((RuntimeScalar) registers[rd]).set(result);
+                    case Opcodes.BITWISE_OR_ASSIGN:
+                        // Bitwise OR assignment: rd |= rs
+                        // Format: BITWISE_OR_ASSIGN rd rs
+                        pc = OpcodeHandlerExtended.executeBitwiseOrAssign(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.BITWISE_XOR_ASSIGN: {
-                        // Bitwise XOR assignment: rd ^= rs (modifies rd in place)
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        RuntimeScalar result = org.perlonjava.operators.BitwiseOperators.bitwiseXorBinary(
-                            (RuntimeScalar) registers[rd],
-                            (RuntimeScalar) registers[rs]
-                        );
-                        ((RuntimeScalar) registers[rd]).set(result);
+                    case Opcodes.BITWISE_XOR_ASSIGN:
+                        // Bitwise XOR assignment: rd ^= rs
+                        // Format: BITWISE_XOR_ASSIGN rd rs
+                        pc = OpcodeHandlerExtended.executeBitwiseXorAssign(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.STRING_BITWISE_AND_ASSIGN: {
-                        // String bitwise AND assignment: rd &.= rs (modifies rd in place)
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        RuntimeScalar result = org.perlonjava.operators.BitwiseOperators.bitwiseAndDot(
-                            (RuntimeScalar) registers[rd],
-                            (RuntimeScalar) registers[rs]
-                        );
-                        ((RuntimeScalar) registers[rd]).set(result);
+                    case Opcodes.STRING_BITWISE_AND_ASSIGN:
+                        // String bitwise AND assignment: rd &.= rs
+                        // Format: STRING_BITWISE_AND_ASSIGN rd rs
+                        pc = OpcodeHandlerExtended.executeStringBitwiseAndAssign(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.STRING_BITWISE_OR_ASSIGN: {
-                        // String bitwise OR assignment: rd |.= rs (modifies rd in place)
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        RuntimeScalar result = org.perlonjava.operators.BitwiseOperators.bitwiseOrDot(
-                            (RuntimeScalar) registers[rd],
-                            (RuntimeScalar) registers[rs]
-                        );
-                        ((RuntimeScalar) registers[rd]).set(result);
+                    case Opcodes.STRING_BITWISE_OR_ASSIGN:
+                        // String bitwise OR assignment: rd |.= rs
+                        // Format: STRING_BITWISE_OR_ASSIGN rd rs
+                        pc = OpcodeHandlerExtended.executeStringBitwiseOrAssign(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.STRING_BITWISE_XOR_ASSIGN: {
-                        // String bitwise XOR assignment: rd ^.= rs (modifies rd in place)
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        RuntimeScalar result = org.perlonjava.operators.BitwiseOperators.bitwiseXorDot(
-                            (RuntimeScalar) registers[rd],
-                            (RuntimeScalar) registers[rs]
-                        );
-                        ((RuntimeScalar) registers[rd]).set(result);
+                    case Opcodes.STRING_BITWISE_XOR_ASSIGN:
+                        // String bitwise XOR assignment: rd ^.= rs
+                        // Format: STRING_BITWISE_XOR_ASSIGN rd rs
+                        pc = OpcodeHandlerExtended.executeStringBitwiseXorAssign(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.BITWISE_AND_BINARY: {
+                    case Opcodes.BITWISE_AND_BINARY:
                         // Numeric bitwise AND: rd = rs1 binary& rs2
-                        int rd = bytecode[pc++];
-                        int rs1 = bytecode[pc++];
-                        int rs2 = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.BitwiseOperators.bitwiseAndBinary(
-                            (RuntimeScalar) registers[rs1],
-                            (RuntimeScalar) registers[rs2]
-                        );
+                        // Format: BITWISE_AND_BINARY rd rs1 rs2
+                        pc = OpcodeHandlerExtended.executeBitwiseAndBinary(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.BITWISE_OR_BINARY: {
+                    case Opcodes.BITWISE_OR_BINARY:
                         // Numeric bitwise OR: rd = rs1 binary| rs2
-                        int rd = bytecode[pc++];
-                        int rs1 = bytecode[pc++];
-                        int rs2 = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.BitwiseOperators.bitwiseOrBinary(
-                            (RuntimeScalar) registers[rs1],
-                            (RuntimeScalar) registers[rs2]
-                        );
+                        // Format: BITWISE_OR_BINARY rd rs1 rs2
+                        pc = OpcodeHandlerExtended.executeBitwiseOrBinary(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.BITWISE_XOR_BINARY: {
+                    case Opcodes.BITWISE_XOR_BINARY:
                         // Numeric bitwise XOR: rd = rs1 binary^ rs2
-                        int rd = bytecode[pc++];
-                        int rs1 = bytecode[pc++];
-                        int rs2 = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.BitwiseOperators.bitwiseXorBinary(
-                            (RuntimeScalar) registers[rs1],
-                            (RuntimeScalar) registers[rs2]
-                        );
+                        // Format: BITWISE_XOR_BINARY rd rs1 rs2
+                        pc = OpcodeHandlerExtended.executeBitwiseXorBinary(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.STRING_BITWISE_AND: {
+                    case Opcodes.STRING_BITWISE_AND:
                         // String bitwise AND: rd = rs1 &. rs2
-                        int rd = bytecode[pc++];
-                        int rs1 = bytecode[pc++];
-                        int rs2 = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.BitwiseOperators.bitwiseAndDot(
-                            (RuntimeScalar) registers[rs1],
-                            (RuntimeScalar) registers[rs2]
-                        );
+                        // Format: STRING_BITWISE_AND rd rs1 rs2
+                        pc = OpcodeHandlerExtended.executeStringBitwiseAnd(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.STRING_BITWISE_OR: {
+                    case Opcodes.STRING_BITWISE_OR:
                         // String bitwise OR: rd = rs1 |. rs2
-                        int rd = bytecode[pc++];
-                        int rs1 = bytecode[pc++];
-                        int rs2 = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.BitwiseOperators.bitwiseOrDot(
-                            (RuntimeScalar) registers[rs1],
-                            (RuntimeScalar) registers[rs2]
-                        );
+                        // Format: STRING_BITWISE_OR rd rs1 rs2
+                        pc = OpcodeHandlerExtended.executeStringBitwiseOr(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.STRING_BITWISE_XOR: {
+                    case Opcodes.STRING_BITWISE_XOR:
                         // String bitwise XOR: rd = rs1 ^. rs2
-                        int rd = bytecode[pc++];
-                        int rs1 = bytecode[pc++];
-                        int rs2 = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.BitwiseOperators.bitwiseXorDot(
-                            (RuntimeScalar) registers[rs1],
-                            (RuntimeScalar) registers[rs2]
-                        );
+                        // Format: STRING_BITWISE_XOR rd rs1 rs2
+                        pc = OpcodeHandlerExtended.executeStringBitwiseXor(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.BITWISE_NOT_BINARY: {
+                    case Opcodes.BITWISE_NOT_BINARY:
                         // Numeric bitwise NOT: rd = binary~ rs
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.BitwiseOperators.bitwiseNotBinary(
-                            (RuntimeScalar) registers[rs]
-                        );
+                        // Format: BITWISE_NOT_BINARY rd rs
+                        pc = OpcodeHandlerExtended.executeBitwiseNotBinary(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.BITWISE_NOT_STRING: {
+                    case Opcodes.BITWISE_NOT_STRING:
                         // String bitwise NOT: rd = ~. rs
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.BitwiseOperators.bitwiseNotDot(
-                            (RuntimeScalar) registers[rs]
-                        );
+                        // Format: BITWISE_NOT_STRING rd rs
+                        pc = OpcodeHandlerExtended.executeBitwiseNotString(bytecode, pc, registers);
                         break;
-                    }
 
                     // File test and stat operations
-                    case Opcodes.STAT: {
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        int ctx = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.Stat.stat((RuntimeScalar) registers[rs], ctx);
+                    case Opcodes.STAT:
+                        pc = OpcodeHandlerExtended.executeStat(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.LSTAT: {
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        int ctx = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.Stat.lstat((RuntimeScalar) registers[rs], ctx);
+                    case Opcodes.LSTAT:
+                        pc = OpcodeHandlerExtended.executeLstat(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.FILETEST_R: {
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-r", (RuntimeScalar) registers[rs]);
+                    // File test operations (opcodes 190-216) - delegated to handler
+                    case Opcodes.FILETEST_R:
+                    case Opcodes.FILETEST_W:
+                    case Opcodes.FILETEST_X:
+                    case Opcodes.FILETEST_O:
+                    case Opcodes.FILETEST_R_REAL:
+                    case Opcodes.FILETEST_W_REAL:
+                    case Opcodes.FILETEST_X_REAL:
+                    case Opcodes.FILETEST_O_REAL:
+                    case Opcodes.FILETEST_E:
+                    case Opcodes.FILETEST_Z:
+                    case Opcodes.FILETEST_S:
+                    case Opcodes.FILETEST_F:
+                    case Opcodes.FILETEST_D:
+                    case Opcodes.FILETEST_L:
+                    case Opcodes.FILETEST_P:
+                    case Opcodes.FILETEST_S_UPPER:
+                    case Opcodes.FILETEST_B:
+                    case Opcodes.FILETEST_C:
+                    case Opcodes.FILETEST_T:
+                    case Opcodes.FILETEST_U:
+                    case Opcodes.FILETEST_G:
+                    case Opcodes.FILETEST_K:
+                    case Opcodes.FILETEST_T_UPPER:
+                    case Opcodes.FILETEST_B_UPPER:
+                    case Opcodes.FILETEST_M:
+                    case Opcodes.FILETEST_A:
+                    case Opcodes.FILETEST_C_UPPER:
+                        pc = OpcodeHandlerFileTest.executeFileTest(bytecode, pc, registers, opcode);
                         break;
-                    }
-
-                    case Opcodes.FILETEST_W: {
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-w", (RuntimeScalar) registers[rs]);
-                        break;
-                    }
-
-                    case Opcodes.FILETEST_X: {
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-x", (RuntimeScalar) registers[rs]);
-                        break;
-                    }
-
-                    case Opcodes.FILETEST_O: {
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-o", (RuntimeScalar) registers[rs]);
-                        break;
-                    }
-
-                    case Opcodes.FILETEST_R_REAL: {
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-R", (RuntimeScalar) registers[rs]);
-                        break;
-                    }
-
-                    case Opcodes.FILETEST_W_REAL: {
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-W", (RuntimeScalar) registers[rs]);
-                        break;
-                    }
-
-                    case Opcodes.FILETEST_X_REAL: {
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-X", (RuntimeScalar) registers[rs]);
-                        break;
-                    }
-
-                    case Opcodes.FILETEST_O_REAL: {
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-O", (RuntimeScalar) registers[rs]);
-                        break;
-                    }
-
-                    case Opcodes.FILETEST_E: {
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-e", (RuntimeScalar) registers[rs]);
-                        break;
-                    }
-
-                    case Opcodes.FILETEST_Z: {
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-z", (RuntimeScalar) registers[rs]);
-                        break;
-                    }
-
-                    case Opcodes.FILETEST_S: {
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-s", (RuntimeScalar) registers[rs]);
-                        break;
-                    }
-
-                    case Opcodes.FILETEST_F: {
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-f", (RuntimeScalar) registers[rs]);
-                        break;
-                    }
-
-                    case Opcodes.FILETEST_D: {
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-d", (RuntimeScalar) registers[rs]);
-                        break;
-                    }
-
-                    case Opcodes.FILETEST_L: {
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-l", (RuntimeScalar) registers[rs]);
-                        break;
-                    }
-
-                    case Opcodes.FILETEST_P: {
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-p", (RuntimeScalar) registers[rs]);
-                        break;
-                    }
-
-                    case Opcodes.FILETEST_S_UPPER: {
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-S", (RuntimeScalar) registers[rs]);
-                        break;
-                    }
-
-                    case Opcodes.FILETEST_B: {
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-b", (RuntimeScalar) registers[rs]);
-                        break;
-                    }
-
-                    case Opcodes.FILETEST_C: {
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-c", (RuntimeScalar) registers[rs]);
-                        break;
-                    }
-
-                    case Opcodes.FILETEST_T: {
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-t", (RuntimeScalar) registers[rs]);
-                        break;
-                    }
-
-                    case Opcodes.FILETEST_U: {
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-u", (RuntimeScalar) registers[rs]);
-                        break;
-                    }
-
-                    case Opcodes.FILETEST_G: {
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-g", (RuntimeScalar) registers[rs]);
-                        break;
-                    }
-
-                    case Opcodes.FILETEST_K: {
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-k", (RuntimeScalar) registers[rs]);
-                        break;
-                    }
-
-                    case Opcodes.FILETEST_T_UPPER: {
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-T", (RuntimeScalar) registers[rs]);
-                        break;
-                    }
-
-                    case Opcodes.FILETEST_B_UPPER: {
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-B", (RuntimeScalar) registers[rs]);
-                        break;
-                    }
-
-                    case Opcodes.FILETEST_M: {
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-M", (RuntimeScalar) registers[rs]);
-                        break;
-                    }
-
-                    case Opcodes.FILETEST_A: {
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-A", (RuntimeScalar) registers[rs]);
-                        break;
-                    }
-
-                    case Opcodes.FILETEST_C_UPPER: {
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.FileTestOperator.fileTest("-C", (RuntimeScalar) registers[rs]);
-                        break;
-                    }
 
                     case Opcodes.PUSH_LOCAL_VARIABLE: {
                         // Push variable to local stack: DynamicVariableManager.pushLocalVariable(rs)
@@ -1630,150 +1189,89 @@ public class BytecodeInterpreter {
                         break;
                     }
 
-                    case Opcodes.OPEN: {
+                    case Opcodes.OPEN:
                         // Open file: rd = IOOperator.open(ctx, args...)
-                        int rd = bytecode[pc++];
-                        int ctx = bytecode[pc++];
-                        int argsReg = bytecode[pc++];
-                        RuntimeArray argsArray = (RuntimeArray) registers[argsReg];
-                        RuntimeBase[] argsVarargs = argsArray.elements.toArray(new RuntimeBase[0]);
-                        registers[rd] = org.perlonjava.operators.IOOperator.open(ctx, argsVarargs);
+                        // Format: OPEN rd ctx argsReg
+                        pc = OpcodeHandlerExtended.executeOpen(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.READLINE: {
-                        // Read line from filehandle: rd = Readline.readline(fh_ref, ctx)
-                        int rd = bytecode[pc++];
-                        int fhReg = bytecode[pc++];
-                        int ctx = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.Readline.readline(
-                            (RuntimeScalar) registers[fhReg], ctx
-                        );
+                    case Opcodes.READLINE:
+                        // Read line from filehandle
+                        // Format: READLINE rd fhReg ctx
+                        pc = OpcodeHandlerExtended.executeReadline(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.MATCH_REGEX: {
-                        // Match regex: rd = RuntimeRegex.matchRegex(quotedRegex, string, ctx)
-                        int rd = bytecode[pc++];
-                        int stringReg = bytecode[pc++];
-                        int regexReg = bytecode[pc++];
-                        int ctx = bytecode[pc++];
-                        registers[rd] = org.perlonjava.regex.RuntimeRegex.matchRegex(
-                            (RuntimeScalar) registers[regexReg],  // quotedRegex first
-                            (RuntimeScalar) registers[stringReg], // string second
-                            ctx
-                        );
+                    case Opcodes.MATCH_REGEX:
+                        // Match regex
+                        // Format: MATCH_REGEX rd stringReg regexReg ctx
+                        pc = OpcodeHandlerExtended.executeMatchRegex(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.MATCH_REGEX_NOT: {
-                        // Negated regex match: rd = !RuntimeRegex.matchRegex(quotedRegex, string, ctx)
-                        int rd = bytecode[pc++];
-                        int stringReg = bytecode[pc++];
-                        int regexReg = bytecode[pc++];
-                        int ctx = bytecode[pc++];
-                        RuntimeBase matchResult = org.perlonjava.regex.RuntimeRegex.matchRegex(
-                            (RuntimeScalar) registers[regexReg],  // quotedRegex first
-                            (RuntimeScalar) registers[stringReg], // string second
-                            ctx
-                        );
-                        // Negate the boolean result
-                        registers[rd] = new RuntimeScalar(matchResult.scalar().getBoolean() ? 0 : 1);
+                    case Opcodes.MATCH_REGEX_NOT:
+                        // Negated regex match
+                        // Format: MATCH_REGEX_NOT rd stringReg regexReg ctx
+                        pc = OpcodeHandlerExtended.executeMatchRegexNot(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.CHOMP: {
+                    case Opcodes.CHOMP:
                         // Chomp: rd = rs.chomp()
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        registers[rd] = registers[rs].chomp();
+                        // Format: CHOMP rd rs
+                        pc = OpcodeHandlerExtended.executeChomp(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.WANTARRAY: {
-                        // Get wantarray context: rd = Operator.wantarray(wantarrayReg)
-                        int rd = bytecode[pc++];
-                        int wantarrayReg = bytecode[pc++];
-                        int ctx = ((RuntimeScalar) registers[wantarrayReg]).getInt();
-                        registers[rd] = org.perlonjava.operators.Operator.wantarray(ctx);
+                    case Opcodes.WANTARRAY:
+                        // Get wantarray context
+                        // Format: WANTARRAY rd wantarrayReg
+                        pc = OpcodeHandlerExtended.executeWantarray(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.REQUIRE: {
-                        // Require module or version: rd = ModuleOperators.require(rs)
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.ModuleOperators.require((RuntimeScalar) registers[rs]);
+                    case Opcodes.REQUIRE:
+                        // Require module or version
+                        // Format: REQUIRE rd rs
+                        pc = OpcodeHandlerExtended.executeRequire(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.POS: {
-                        // Get regex position: rd = rs.pos()
-                        int rd = bytecode[pc++];
-                        int rs = bytecode[pc++];
-                        registers[rd] = ((RuntimeScalar) registers[rs]).pos();
+                    case Opcodes.POS:
+                        // Get regex position
+                        // Format: POS rd rs
+                        pc = OpcodeHandlerExtended.executePos(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.INDEX: {
-                        // Find substring position: rd = StringOperators.index(str, substr, pos)
-                        int rd = bytecode[pc++];
-                        int strReg = bytecode[pc++];
-                        int substrReg = bytecode[pc++];
-                        int posReg = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.StringOperators.index(
-                            (RuntimeScalar) registers[strReg],
-                            (RuntimeScalar) registers[substrReg],
-                            (RuntimeScalar) registers[posReg]
-                        );
+                    case Opcodes.INDEX:
+                        // Find substring position
+                        // Format: INDEX rd strReg substrReg posReg
+                        pc = OpcodeHandlerExtended.executeIndex(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.RINDEX: {
-                        // Find substring position from end: rd = StringOperators.rindex(str, substr, pos)
-                        int rd = bytecode[pc++];
-                        int strReg = bytecode[pc++];
-                        int substrReg = bytecode[pc++];
-                        int posReg = bytecode[pc++];
-                        registers[rd] = org.perlonjava.operators.StringOperators.rindex(
-                            (RuntimeScalar) registers[strReg],
-                            (RuntimeScalar) registers[substrReg],
-                            (RuntimeScalar) registers[posReg]
-                        );
+                    case Opcodes.RINDEX:
+                        // Find substring position from end
+                        // Format: RINDEX rd strReg substrReg posReg
+                        pc = OpcodeHandlerExtended.executeRindex(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.PRE_AUTOINCREMENT: {
+                    case Opcodes.PRE_AUTOINCREMENT:
                         // Pre-increment: ++rd
-                        int rd = bytecode[pc++];
-                        ((RuntimeScalar) registers[rd]).preAutoIncrement();
+                        // Format: PRE_AUTOINCREMENT rd
+                        pc = OpcodeHandlerExtended.executePreAutoIncrement(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.POST_AUTOINCREMENT: {
+                    case Opcodes.POST_AUTOINCREMENT:
                         // Post-increment: rd = rs++
-                        // The postAutoIncrement() method increments the variable and returns the OLD value
-                        int rd = bytecode[pc++];  // Destination register for old value
-                        int rs = bytecode[pc++];  // Source variable register
-                        registers[rd] = ((RuntimeScalar) registers[rs]).postAutoIncrement();
+                        // Format: POST_AUTOINCREMENT rd rs
+                        pc = OpcodeHandlerExtended.executePostAutoIncrement(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.PRE_AUTODECREMENT: {
+                    case Opcodes.PRE_AUTODECREMENT:
                         // Pre-decrement: --rd
-                        int rd = bytecode[pc++];
-                        ((RuntimeScalar) registers[rd]).preAutoDecrement();
+                        // Format: PRE_AUTODECREMENT rd
+                        pc = OpcodeHandlerExtended.executePreAutoDecrement(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.POST_AUTODECREMENT: {
+                    case Opcodes.POST_AUTODECREMENT:
                         // Post-decrement: rd = rs--
-                        // The postAutoDecrement() method decrements the variable and returns the OLD value
-                        int rd = bytecode[pc++];  // Destination register for old value
-                        int rs = bytecode[pc++];  // Source variable register
-                        registers[rd] = ((RuntimeScalar) registers[rs]).postAutoDecrement();
+                        // Format: POST_AUTODECREMENT rd rs
+                        pc = OpcodeHandlerExtended.executePostAutoDecrement(bytecode, pc, registers);
                         break;
-                    }
 
                     // =================================================================
                     // ERROR HANDLING
@@ -2343,60 +1841,29 @@ public class BytecodeInterpreter {
                         break;
                     }
 
-                    case Opcodes.SPRINTF: {
+                    case Opcodes.SPRINTF:
                         // sprintf($format, @args): rd = SprintfOperator.sprintf(formatReg, argsListReg)
                         // Format: SPRINTF rd formatReg argsListReg
-                        int rd = bytecode[pc++];
-                        int formatReg = bytecode[pc++];
-                        int argsListReg = bytecode[pc++];
-
-                        RuntimeScalar format = (RuntimeScalar) registers[formatReg];
-                        RuntimeList argsList = (RuntimeList) registers[argsListReg];
-
-                        registers[rd] = org.perlonjava.operators.SprintfOperator.sprintf(format, argsList);
+                        pc = OpcodeHandlerExtended.executeSprintf(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.CHOP: {
+                    case Opcodes.CHOP:
                         // chop($x): rd = StringOperators.chopScalar(scalarReg)
                         // Format: CHOP rd scalarReg
-                        int rd = bytecode[pc++];
-                        int scalarReg = bytecode[pc++];
-
-                        RuntimeScalar scalar = (RuntimeScalar) registers[scalarReg];
-                        registers[rd] = org.perlonjava.operators.StringOperators.chopScalar(scalar);
+                        pc = OpcodeHandlerExtended.executeChop(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.GET_REPLACEMENT_REGEX: {
+                    case Opcodes.GET_REPLACEMENT_REGEX:
                         // Get replacement regex: rd = RuntimeRegex.getReplacementRegex(pattern, replacement, flags)
                         // Format: GET_REPLACEMENT_REGEX rd pattern_reg replacement_reg flags_reg
-                        int rd = bytecode[pc++];
-                        int patternReg = bytecode[pc++];
-                        int replacementReg = bytecode[pc++];
-                        int flagsReg = bytecode[pc++];
-
-                        RuntimeScalar pattern = (RuntimeScalar) registers[patternReg];
-                        RuntimeScalar replacement = (RuntimeScalar) registers[replacementReg];
-                        RuntimeScalar flags = (RuntimeScalar) registers[flagsReg];
-
-                        registers[rd] = org.perlonjava.regex.RuntimeRegex.getReplacementRegex(pattern, replacement, flags);
+                        pc = OpcodeHandlerExtended.executeGetReplacementRegex(bytecode, pc, registers);
                         break;
-                    }
 
-                    case Opcodes.SUBSTR_VAR: {
+                    case Opcodes.SUBSTR_VAR:
                         // substr with variable args: rd = Operator.substr(ctx, args...)
                         // Format: SUBSTR_VAR rd argsListReg ctx
-                        int rd = bytecode[pc++];
-                        int argsListReg = bytecode[pc++];
-                        int ctx = bytecode[pc++];
-
-                        RuntimeList argsList = (RuntimeList) registers[argsListReg];
-                        RuntimeBase[] substrArgs = argsList.elements.toArray(new RuntimeBase[0]);
-
-                        registers[rd] = org.perlonjava.operators.Operator.substr(ctx, substrArgs);
+                        pc = OpcodeHandlerExtended.executeSubstrVar(bytecode, pc, registers);
                         break;
-                    }
 
                     // GENERATED_HANDLERS_END
 
