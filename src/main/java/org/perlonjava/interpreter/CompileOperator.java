@@ -1496,8 +1496,14 @@ public class CompileOperator {
                 bytecodeCompiler.throwCompilerException("keys requires a hash argument");
             }
 
-            // Compile the hash operand
-            node.operand.accept(bytecodeCompiler);
+            // Compile the hash operand in LIST context (to avoid scalar conversion)
+            int savedContext = bytecodeCompiler.currentCallContext;
+            bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
+            try {
+                node.operand.accept(bytecodeCompiler);
+            } finally {
+                bytecodeCompiler.currentCallContext = savedContext;
+            }
             int hashReg = bytecodeCompiler.lastResultReg;
 
             // Emit HASH_KEYS
@@ -1506,7 +1512,18 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(hashReg);
 
-            bytecodeCompiler.lastResultReg = rd;
+            // keys() returns a list in list context, scalar count in scalar context
+            // The RuntimeHash.keys() method returns a RuntimeList
+            // In scalar context, convert to scalar (count)
+            if (savedContext == RuntimeContextType.SCALAR) {
+                int scalarReg = bytecodeCompiler.allocateRegister();
+                bytecodeCompiler.emit(Opcodes.ARRAY_SIZE);
+                bytecodeCompiler.emitReg(scalarReg);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.lastResultReg = scalarReg;
+            } else {
+                bytecodeCompiler.lastResultReg = rd;
+            }
         } else if (op.equals("values")) {
             // values %hash
             // operand: hash variable (OperatorNode("%" ...) or other expression)
@@ -1514,8 +1531,14 @@ public class CompileOperator {
                 bytecodeCompiler.throwCompilerException("values requires a hash argument");
             }
 
-            // Compile the hash operand
-            node.operand.accept(bytecodeCompiler);
+            // Compile the hash operand in LIST context (to avoid scalar conversion)
+            int savedContext = bytecodeCompiler.currentCallContext;
+            bytecodeCompiler.currentCallContext = RuntimeContextType.LIST;
+            try {
+                node.operand.accept(bytecodeCompiler);
+            } finally {
+                bytecodeCompiler.currentCallContext = savedContext;
+            }
             int hashReg = bytecodeCompiler.lastResultReg;
 
             // Emit HASH_VALUES
@@ -1524,7 +1547,18 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(hashReg);
 
-            bytecodeCompiler.lastResultReg = rd;
+            // values() returns a list in list context, scalar count in scalar context
+            // The RuntimeHash.values() method returns a RuntimeList
+            // In scalar context, convert to scalar (count)
+            if (savedContext == RuntimeContextType.SCALAR) {
+                int scalarReg = bytecodeCompiler.allocateRegister();
+                bytecodeCompiler.emit(Opcodes.ARRAY_SIZE);
+                bytecodeCompiler.emitReg(scalarReg);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.lastResultReg = scalarReg;
+            } else {
+                bytecodeCompiler.lastResultReg = rd;
+            }
         } else if (op.equals("$#")) {
             // $#array - get last index of array (size - 1)
             // operand: array variable (OperatorNode("@" ...) or IdentifierNode)
