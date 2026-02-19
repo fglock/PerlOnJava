@@ -2606,23 +2606,32 @@ public class BytecodeCompiler implements Visitor {
             if (node.operand instanceof IdentifierNode) {
                 String varName = "%" + ((IdentifierNode) node.operand).name;
 
-                // Check if it's a lexical hash
+                // Get the hash register
+                int hashReg;
                 if (hasVariable(varName)) {
                     // Lexical hash - use existing register
-                    lastResultReg = getVariableRegister(varName);
-                    return;
+                    hashReg = getVariableRegister(varName);
+                } else {
+                    // Global hash - load it
+                    hashReg = allocateRegister();
+                    String globalHashName = NameNormalizer.normalizeVariableName(((IdentifierNode) node.operand).name, getCurrentPackage());
+                    int nameIdx = addToStringPool(globalHashName);
+
+                    emit(Opcodes.LOAD_GLOBAL_HASH);
+                    emitReg(hashReg);
+                    emit(nameIdx);
                 }
 
-                // Global hash - load it
-                int rd = allocateRegister();
-                String globalHashName = NameNormalizer.normalizeVariableName(((IdentifierNode) node.operand).name, getCurrentPackage());
-                int nameIdx = addToStringPool(globalHashName);
-
-                emit(Opcodes.LOAD_GLOBAL_HASH);
-                emitReg(rd);
-                emit(nameIdx);
-
-                lastResultReg = rd;
+                // Check if we're in scalar context - if so, return hash as scalar (bucket info)
+                if (currentCallContext == RuntimeContextType.SCALAR) {
+                    int rd = allocateRegister();
+                    emit(Opcodes.ARRAY_SIZE);  // Works for hashes too - calls .scalar()
+                    emitReg(rd);
+                    emitReg(hashReg);
+                    lastResultReg = rd;
+                } else {
+                    lastResultReg = hashReg;
+                }
             } else {
                 throwCompilerException("Unsupported % operand: " + node.operand.getClass().getSimpleName());
             }
