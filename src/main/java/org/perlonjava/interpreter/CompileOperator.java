@@ -1757,6 +1757,103 @@ public class CompileOperator {
             bytecodeCompiler.emitReg(flagsReg);
 
             bytecodeCompiler.lastResultReg = rd;
+        } else if (op.equals("replaceRegex")) {
+            // s/pattern/replacement/flags - regex substitution
+            // operand: ListNode containing [pattern, replacement, flags] or [pattern, replacement, flags, string]
+            if (node.operand == null || !(node.operand instanceof ListNode)) {
+                bytecodeCompiler.throwCompilerException("replaceRegex requires pattern, replacement, and flags");
+            }
+
+            ListNode args = (ListNode) node.operand;
+            if (args.elements.size() < 3) {
+                bytecodeCompiler.throwCompilerException("replaceRegex requires pattern, replacement, and flags");
+            }
+
+            // Compile pattern
+            args.elements.get(0).accept(bytecodeCompiler);
+            int patternReg = bytecodeCompiler.lastResultReg;
+
+            // Compile replacement
+            args.elements.get(1).accept(bytecodeCompiler);
+            int replacementReg = bytecodeCompiler.lastResultReg;
+
+            // Compile flags
+            args.elements.get(2).accept(bytecodeCompiler);
+            int flagsReg = bytecodeCompiler.lastResultReg;
+
+            // Create replacement regex using GET_REPLACEMENT_REGEX opcode
+            int regexReg = bytecodeCompiler.allocateRegister();
+            bytecodeCompiler.emit(Opcodes.GET_REPLACEMENT_REGEX);
+            bytecodeCompiler.emitReg(regexReg);
+            bytecodeCompiler.emitReg(patternReg);
+            bytecodeCompiler.emitReg(replacementReg);
+            bytecodeCompiler.emitReg(flagsReg);
+
+            // Get the string to operate on (element 3 if provided, else $_)
+            int stringReg;
+            if (args.elements.size() > 3) {
+                // String provided in operand list (from =~ binding)
+                args.elements.get(3).accept(bytecodeCompiler);
+                stringReg = bytecodeCompiler.lastResultReg;
+            } else {
+                // Use $_ as default
+                String varName = "$_";
+                if (bytecodeCompiler.hasVariable(varName)) {
+                    stringReg = bytecodeCompiler.getVariableRegister(varName);
+                } else {
+                    stringReg = bytecodeCompiler.allocateRegister();
+                    int nameIdx = bytecodeCompiler.addToStringPool("main::_");
+                    bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                    bytecodeCompiler.emitReg(stringReg);
+                    bytecodeCompiler.emit(nameIdx);
+                }
+            }
+
+            // Apply the regex match (which handles replacement)
+            int rd = bytecodeCompiler.allocateRegister();
+            bytecodeCompiler.emit(Opcodes.MATCH_REGEX);
+            bytecodeCompiler.emitReg(rd);
+            bytecodeCompiler.emitReg(stringReg);
+            bytecodeCompiler.emitReg(regexReg);
+            bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
+
+            bytecodeCompiler.lastResultReg = rd;
+        } else if (op.equals("substr")) {
+            // substr($string, $offset, $length, $replacement)
+            // operand is a ListNode with 2-4 elements
+            if (node.operand == null || !(node.operand instanceof ListNode)) {
+                bytecodeCompiler.throwCompilerException("substr requires arguments");
+            }
+
+            ListNode args = (ListNode) node.operand;
+            if (args.elements.size() < 2) {
+                bytecodeCompiler.throwCompilerException("substr requires at least 2 arguments");
+            }
+
+            // Compile arguments
+            java.util.List<Integer> argRegs = new java.util.ArrayList<>();
+            for (Node arg : args.elements) {
+                arg.accept(bytecodeCompiler);
+                argRegs.add(bytecodeCompiler.lastResultReg);
+            }
+
+            // Create list with arguments: CREATE_LIST rd count [regs...]
+            int argsListReg = bytecodeCompiler.allocateRegister();
+            bytecodeCompiler.emit(Opcodes.CREATE_LIST);
+            bytecodeCompiler.emitReg(argsListReg);
+            bytecodeCompiler.emit(argRegs.size());  // emit count
+            for (int argReg : argRegs) {
+                bytecodeCompiler.emitReg(argReg);
+            }
+
+            // Call SUBSTR_VAR opcode
+            int rd = bytecodeCompiler.allocateRegister();
+            bytecodeCompiler.emit(Opcodes.SUBSTR_VAR);
+            bytecodeCompiler.emitReg(rd);
+            bytecodeCompiler.emitReg(argsListReg);
+            bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
+
+            bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("chomp")) {
             // chomp($x) or chomp - remove trailing newlines
             if (node.operand == null) {
