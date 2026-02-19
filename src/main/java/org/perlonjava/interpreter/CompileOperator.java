@@ -1524,6 +1524,34 @@ public class CompileOperator {
             } else {
                 bytecodeCompiler.lastResultReg = rd;
             }
+        } else if (op.equals("chop")) {
+            // chop $x - remove last character, modifies argument in place
+            // operand: ListNode containing scalar variable reference
+            if (node.operand == null) {
+                bytecodeCompiler.throwCompilerException("chop requires an argument");
+            }
+
+            // Extract the actual operand from ListNode if needed
+            Node actualOperand = node.operand;
+            if (actualOperand instanceof ListNode) {
+                ListNode list = (ListNode) actualOperand;
+                if (list.elements.isEmpty()) {
+                    bytecodeCompiler.throwCompilerException("chop requires an argument");
+                }
+                actualOperand = list.elements.get(0);
+            }
+
+            // Compile the operand (should be an lvalue)
+            actualOperand.accept(bytecodeCompiler);
+            int scalarReg = bytecodeCompiler.lastResultReg;
+
+            // Call chopScalar and store result back
+            int rd = bytecodeCompiler.allocateRegister();
+            bytecodeCompiler.emit(Opcodes.CHOP);
+            bytecodeCompiler.emitReg(rd);
+            bytecodeCompiler.emitReg(scalarReg);
+
+            bytecodeCompiler.lastResultReg = rd;
         } else if (op.equals("values")) {
             // values %hash
             // operand: hash variable (OperatorNode("%" ...) or other expression)

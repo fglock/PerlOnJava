@@ -720,6 +720,11 @@ public class InterpretedCode extends RuntimeCode {
                     int argsListReg = bytecode[pc++];
                     sb.append("SPRINTF r").append(rd).append(" = sprintf(r").append(formatReg).append(", r").append(argsListReg).append(")\n");
                     break;
+                case Opcodes.CHOP:
+                    rd = bytecode[pc++];
+                    int scalarReg = bytecode[pc++];
+                    sb.append("CHOP r").append(rd).append(" = chop(r").append(scalarReg).append(")\n");
+                    break;
                 case Opcodes.PUSH_LOCAL_VARIABLE:
                     rs = bytecode[pc++];
                     sb.append("PUSH_LOCAL_VARIABLE r").append(rs).append("\n");
