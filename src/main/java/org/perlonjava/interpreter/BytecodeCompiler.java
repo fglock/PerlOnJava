@@ -331,6 +331,26 @@ public class BytecodeCompiler implements Visitor {
     }
 
     /**
+     * Helper: Check if a non-ASCII length-1 scalar is allowed under 'no utf8'.
+     * Under 'no utf8', Latin-1 characters (0x80-0xFF) in single-char variable names
+     * are treated as special and exempt from strict vars checking.
+     * Mirrors logic from EmitVariable.java lines 82-88.
+     *
+     * @param sigil The variable sigil
+     * @param name The bare variable name (without sigil)
+     * @return true if this is a non-ASCII length-1 scalar allowed under 'no utf8'
+     */
+    private boolean isNonAsciiLengthOneScalarAllowedUnderNoUtf8(String sigil, String name) {
+        if (!"$".equals(sigil) || name == null || name.length() != 1) {
+            return false;
+        }
+        char c = name.charAt(0);
+        // Allow if character > 127 (Latin-1) and 'use utf8' is NOT enabled
+        return c > 127 && emitterContext != null && emitterContext.symbolTable != null
+                && !emitterContext.symbolTable.isStrictOptionEnabled(org.perlonjava.perlmodule.Strict.HINT_UTF8);
+    }
+
+    /**
      * Helper: Check if strict vars should block access to this global variable.
      * Returns true if the variable should be BLOCKED (not allowed).
      * Mirrors the createIfNotExists logic from EmitVariable.java lines 362-371.
@@ -376,6 +396,12 @@ public class BytecodeCompiler implements Visitor {
             return false;
         }
         if (isBuiltinSpecialContainerVar(sigil, bareVarName)) {
+            return false;
+        }
+
+        // Allow non-ASCII length-1 scalars under 'no utf8'
+        // e.g., $ª, $µ, $º under 'no utf8' are treated as special variables
+        if (isNonAsciiLengthOneScalarAllowedUnderNoUtf8(sigil, bareVarName)) {
             return false;
         }
 
