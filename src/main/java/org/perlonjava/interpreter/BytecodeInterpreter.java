@@ -2337,6 +2337,20 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.SPRINTF: {
+                        // sprintf($format, @args): rd = SprintfOperator.sprintf(formatReg, argsListReg)
+                        // Format: SPRINTF rd formatReg argsListReg
+                        int rd = bytecode[pc++];
+                        int formatReg = bytecode[pc++];
+                        int argsListReg = bytecode[pc++];
+
+                        RuntimeScalar format = (RuntimeScalar) registers[formatReg];
+                        RuntimeList argsList = (RuntimeList) registers[argsListReg];
+
+                        registers[rd] = org.perlonjava.operators.SprintfOperator.sprintf(format, argsList);
+                        break;
+                    }
+
                     // GENERATED_HANDLERS_END
 
                     default:

@@ -714,6 +714,12 @@ public class InterpretedCode extends RuntimeCode {
                     int keyReg = bytecode[pc++];
                     sb.append("GLOB_SLOT_GET r").append(rd).append(" = r").append(globReg2).append("{r").append(keyReg).append("}\n");
                     break;
+                case Opcodes.SPRINTF:
+                    rd = bytecode[pc++];
+                    int formatReg = bytecode[pc++];
+                    int argsListReg = bytecode[pc++];
+                    sb.append("SPRINTF r").append(rd).append(" = sprintf(r").append(formatReg).append(", r").append(argsListReg).append(")\n");
+                    break;
                 case Opcodes.PUSH_LOCAL_VARIABLE:
                     rs = bytecode[pc++];
                     sb.append("PUSH_LOCAL_VARIABLE r").append(rs).append("\n");
