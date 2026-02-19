@@ -1231,6 +1231,21 @@ public class InterpretedCode extends RuntimeCode {
                 case Opcodes.EXIT:
                     pc = ScalarUnaryOpcodeHandler.disassemble(opcode, bytecode, pc, sb);
                     break;
+
+                case Opcodes.TR_TRANSLITERATE:
+                    rd = bytecode[pc++];
+                    int searchReg = bytecode[pc++];
+                    int replaceReg = bytecode[pc++];
+                    int modifiersReg = bytecode[pc++];
+                    int targetReg = bytecode[pc++];
+                    int context = readInt(bytecode, pc);
+                    pc += 2;  // Skip the 2 shorts that make up the int
+                    sb.append("TR_TRANSLITERATE r").append(rd).append(" = tr(r")
+                      .append(searchReg).append(", r").append(replaceReg).append(", r")
+                      .append(modifiersReg).append(") on r").append(targetReg)
+                      .append(" ctx=").append(context).append("\n");
+                    break;
+
                 // GENERATED_DISASM_END
 
                 default:
