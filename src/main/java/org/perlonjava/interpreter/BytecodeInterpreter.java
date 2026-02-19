@@ -2323,6 +2323,13 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.FILETEST_LASTHANDLE: {
+                        // File test on cached handle '_': rd = FileTestOperator.fileTestLastHandle(operator)
+                        // Format: FILETEST_LASTHANDLE rd operator_string_idx
+                        pc = SlowOpcodeHandler.executeFiletestLastHandle(bytecode, pc, registers, code);
+                        break;
+                    }
+
                     // GENERATED_HANDLERS_END
 
                     default:

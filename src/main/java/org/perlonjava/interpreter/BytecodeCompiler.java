@@ -5700,16 +5700,35 @@ public class BytecodeCompiler implements Visitor {
             }
         } else if (op.startsWith("-") && op.length() == 2) {
             // File test operators: -r, -w, -x, etc.
-            int savedContext = currentCallContext;
-            currentCallContext = RuntimeContextType.SCALAR;
-            try {
-                node.operand.accept(this);
-                int operandReg = lastResultReg;
 
+            // Check if operand is the special filehandle "_"
+            boolean isUnderscoreOperand = (node.operand instanceof IdentifierNode)
+                    && ((IdentifierNode) node.operand).name.equals("_");
+
+            if (isUnderscoreOperand) {
+                // Special case: -r _ uses cached file handle
+                // Call FileTestOperator.fileTestLastHandle(String)
                 int rd = allocateRegister();
+                int operatorStrIndex = addToStringPool(op);
 
-                // Map operator to opcode
-                char testChar = op.charAt(1);
+                // Emit FILETEST_LASTHANDLE opcode
+                emit(Opcodes.FILETEST_LASTHANDLE);
+                emitReg(rd);
+                emit(operatorStrIndex);
+
+                lastResultReg = rd;
+            } else {
+                // Normal case: evaluate operand and test it
+                int savedContext = currentCallContext;
+                currentCallContext = RuntimeContextType.SCALAR;
+                try {
+                    node.operand.accept(this);
+                    int operandReg = lastResultReg;
+
+                    int rd = allocateRegister();
+
+                    // Map operator to opcode
+                    char testChar = op.charAt(1);
                 short opcode;
                 switch (testChar) {
                     case 'r': opcode = Opcodes.FILETEST_R; break;
@@ -5751,6 +5770,7 @@ public class BytecodeCompiler implements Visitor {
                 lastResultReg = rd;
             } finally {
                 currentCallContext = savedContext;
+            }
             }
         } else if (op.equals("die")) {
             // die $message;

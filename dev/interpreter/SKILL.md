@@ -204,14 +204,14 @@ perl dev/tools/generate_opcode_handlers.pl
 
 ## Adding New Operators
 
-### 1. Decide: Fast Opcode or SLOW_OP?
+### 1. Decide: Fast Opcode or slow opcode?
 
 **Use Fast Opcode when:**
 - Operation is used frequently (>1% of execution)
 - Simple 1-3 operand format
 - Performance-critical (loops, arithmetic)
 
-**Use SLOW_OP when:**
+**Use slow opcode when:**
 - Operation is rarely used (<1% of execution)
 - Complex argument handling
 - System calls, I/O operations
