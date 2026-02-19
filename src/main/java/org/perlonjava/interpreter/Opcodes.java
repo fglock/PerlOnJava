@@ -917,6 +917,10 @@ public class Opcodes {
      * Format: STORE_SYMBOLIC_SCALAR nameReg valueReg */
     public static final short STORE_SYMBOLIC_SCALAR = LASTOP + 44;
 
+    /** Load via symbolic reference: rd = GlobalVariable.getGlobalVariable(nameReg.toString()).get()
+     * Format: LOAD_SYMBOLIC_SCALAR rd nameReg */
+    public static final short LOAD_SYMBOLIC_SCALAR = LASTOP + 45;
+
     // GENERATED_OPCODES_END
 
 

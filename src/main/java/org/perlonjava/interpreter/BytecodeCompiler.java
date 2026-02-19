@@ -579,6 +579,13 @@ public class BytecodeCompiler implements Visitor {
     @Override
     public void visit(BlockNode node) {
         // Blocks create a new lexical scope
+        // But if the block needs to return a value (not VOID context),
+        // allocate a result register BEFORE entering the scope so it's valid after
+        int outerResultReg = -1;
+        if (currentCallContext != RuntimeContextType.VOID) {
+            outerResultReg = allocateRegister();
+        }
+
         enterScope();
 
         // Visit each statement in the block
@@ -612,8 +619,18 @@ public class BytecodeCompiler implements Visitor {
             recycleTemporaryRegisters();
         }
 
+        // Save the last statement's result to the outer register BEFORE exiting scope
+        if (outerResultReg >= 0 && lastResultReg >= 0) {
+            emit(Opcodes.MOVE);
+            emitReg(outerResultReg);
+            emitReg(lastResultReg);
+        }
+
         // Exit scope restores register state
         exitScope();
+
+        // Set lastResultReg to the outer register (or -1 if VOID context)
+        lastResultReg = outerResultReg;
     }
 
     @Override
@@ -4662,17 +4679,17 @@ public class BytecodeCompiler implements Visitor {
                     lastResultReg = rd;
                 }
             } else if (node.operand instanceof BlockNode) {
-                // Block dereference: ${\0} or ${expr}
-                // Execute the block and dereference the result
+                // Symbolic reference via block: ${label:expr} or ${expr}
+                // Execute the block to get a variable name string, then load that variable
                 BlockNode block = (BlockNode) node.operand;
 
                 // Compile the block
                 block.accept(this);
                 int blockResultReg = lastResultReg;
 
-                // Dereference the result
+                // Load via symbolic reference
                 int rd = allocateRegister();
-                emitWithToken(Opcodes.DEREF, node.getIndex());
+                emitWithToken(Opcodes.LOAD_SYMBOLIC_SCALAR, node.getIndex());
                 emitReg(rd);
                 emitReg(blockResultReg);
 
