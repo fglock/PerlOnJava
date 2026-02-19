@@ -912,6 +912,11 @@ public class Opcodes {
     public static final short TELLDIR = LASTOP + 41;
     public static final short CHDIR = LASTOP + 42;
     public static final short EXIT = LASTOP + 43;
+
+    /** Store via symbolic reference: GlobalVariable.getGlobalVariable(nameReg.toString()).set(valueReg)
+     * Format: STORE_SYMBOLIC_SCALAR nameReg valueReg */
+    public static final short STORE_SYMBOLIC_SCALAR = LASTOP + 44;
+
     // GENERATED_OPCODES_END
 
 
