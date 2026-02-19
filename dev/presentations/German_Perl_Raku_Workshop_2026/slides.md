@@ -989,7 +989,7 @@ Note:
 ## Current Status
 
 **Recently Completed (v5.42.3):**
--  Interpreter backend production-ready
+-  JVM Compiler backend production-ready
 -  Full Perl class features
 -  System V IPC, socket operations
 
