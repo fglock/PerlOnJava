@@ -2351,6 +2351,17 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.CHOP: {
+                        // chop($x): rd = StringOperators.chopScalar(scalarReg)
+                        // Format: CHOP rd scalarReg
+                        int rd = bytecode[pc++];
+                        int scalarReg = bytecode[pc++];
+
+                        RuntimeScalar scalar = (RuntimeScalar) registers[scalarReg];
+                        registers[rd] = org.perlonjava.operators.StringOperators.chopScalar(scalar);
+                        break;
+                    }
+
                     // GENERATED_HANDLERS_END
 
                     default:
