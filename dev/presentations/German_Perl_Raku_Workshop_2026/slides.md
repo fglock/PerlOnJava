@@ -476,6 +476,71 @@ Note:
 
 ---
 
+## JVM Tiered Compilation
+
+**HotSpot JVM progressively optimizes hot code through 5 tiers:**
+
+**Tier 0: Interpreter** - Initial execution
+- Bytecode interpretation, no compilation
+- Collects profiling data (method calls, branch frequencies)
+
+**Tier 1-3: C1 Compiler** (Client compiler, fast compilation)
+- Tier 1: Simple C1 compilation, no profiling
+- Tier 2: Limited C1 with invocation counters
+- Tier 3: Full C1 with profiling for C2
+
+**Tier 4: C2 Compiler** (Server compiler, max optimization)
+- Aggressive inlining, escape analysis, loop optimizations
+- Uses profiling data from Tier 3
+- Peak performance, but slow to compile
+
+**Strategy:** Keep critical paths small (≤ 35 bytecodes) for aggressive inlining
+
+Note:
+- Default in Java 8+: `-XX:+TieredCompilation`
+- Hot methods progress: Tier 0 → Tier 3 → Tier 4
+- Inlining thresholds: `-XX:MaxInlineSize=35`, `-XX:FreqInlineSize=325`
+- This is why we split methods into fast/slow paths
+
+---
+
+## Optimization Example: RuntimeScalar.getInt()
+
+**Hot path (≤ 35 bytecodes):**
+```java
+// Inlineable fast path for getInt()
+public int getInt() {
+    if (type == INTEGER) {
+        return (int) this.value;  // ~2ns
+    }
+    return getIntLarge();  // Call slow path
+}
+```
+
+**Cold/Slow path (> 35 bytecodes):**
+```java
+// Slow path for getInt()
+private int getIntLarge() {
+    return switch (type) {
+        case DOUBLE -> (int) ((double) value);
+        case STRING -> NumberParser.parseNumber(this).getInt();
+        case TIED_SCALAR -> this.tiedFetch().getInt();
+        case DUALVAR -> ((DualVar) value).numericValue().getInt();
+        default -> Overload.numify(this).getInt();
+    };
+}
+```
+
+**Result:** Common case (INTEGER) is inlined, rare cases don't bloat hot path
+
+Note:
+- 90%+ of getInt() calls are on INTEGER type
+- Fast path: 2-3ns (fully inlined)
+- Slow path: 50-500ns (method call + switch + conversion)
+- This pattern used throughout: getDouble(), toString(), getBoolean()
+
+---
+
 ## Custom Bytecode Backend: Compact and Flexible
 
 **Performance example (loop increment, 100M iterations):**
@@ -738,6 +803,36 @@ Note:
 - Context tracking propagated through operations
 - Auto-vivification implemented consistently
 - Proper truthiness, string/number coercion
+
+---
+
+## RuntimeScalar Internals
+
+**Three key fields:**
+
+1. **`int blessId`** (inherited from `RuntimeBase`)
+   - `0` = unblessed scalar
+   - `> 0` = blessed object (normal class)
+   - `< 0` = blessed object with overloads (enables fast overload check)
+
+2. **`int type`** (from `RuntimeScalarType`)
+   - Simple types: `INTEGER`, `DOUBLE`, `STRING`, `UNDEF`, `BOOLEAN`
+   - Special types: `VSTRING`, `BYTE_STRING`, `TIED_SCALAR`, `DUALVAR`
+   - Reference types (high bit set): `CODE`, `ARRAYREFERENCE`, `HASHREFERENCE`, `REFERENCE`, `REGEX`, `GLOBREFERENCE`
+
+3. **`Object value`**
+   - Stores the actual data (Integer, Double, String, RuntimeArray, RuntimeHash, etc.)
+   - Type field determines how to interpret the value
+
+**Overload optimization:**
+- Negative `blessId` → class has overloads → check `OverloadContext`
+- Positive `blessId` → no overloads → skip expensive lookup (~10-20ns saved per operation)
+
+Note:
+- Dynamic typing: type can change at runtime
+- Reference bit (0x8000) distinguishes references from simple values
+- Overload detection happens at bless time, cached in blessId sign
+- All operations check blessId for overloaded operator dispatch
 
 ---
 
