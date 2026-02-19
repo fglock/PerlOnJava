@@ -277,29 +277,67 @@ Note:
 
 ## Parser: Building the AST
 
-**Architecture:** Recursive descent parser + sub-language parsers
+**Three-layer parsing architecture:**
 
-**Main parser:**
-- Recognizes regular keywords and statements
-- Handles precedence and operator resolution
-- Simple recursive descent approach
+1. **Recursive descent parser** (`StatementParser`, `ParseBlock`)
+   - Handles control structures (if, while, for, foreach)
+   - Package/class declarations, use/require statements
+   - Subroutine definitions, special blocks (BEGIN, END)
 
-**Sub-language parsers** (context-specific):
-- Prototypes: `sub foo ($$@) { ... }`
-- map/grep blocks: `map { ... } @list`
-- Regular expressions: `m/pattern/flags`
-- String interpolations: `"value: $x\n"`
-- Heredocs: `<<'EOF' ... EOF`
+2. **Precedence climbing parser** (`Parser.parseExpression`)
+   - Operator precedence and associativity
+   - Binary operators (arithmetic, logical, comparison)
+   - Special cases: ternary operator (?:), method calls (->)
+   - Subscripts, dereferencing
 
-**AST Node Types:**
-- `BlockNode`, `BinaryOperatorNode`, `ListNode`
-- `OperatorNode`, `MethodCallNode`
+3. **Operator-specific parsers** (20+ specialized parsers)
+   - `StringParser` - String interpolation, heredocs
+   - `PackParser`/`UnpackParser` - Binary templates
+   - `SprintfFormatParser` - Format strings
+   - `NumberParser` - Numeric literals (hex, octal, binary)
+   - `IdentifierParser`, `SignatureParser`, `FieldParser`
 
 Note:
-- Main parser delegates to specialized sub-parsers
-- Each sub-language has its own syntax rules
-- Context determines which parser to invoke
-- Enables proper handling of Perl's complex syntax
+- Precedence climbing: efficient operator precedence handling
+- Recursive descent: handles statements and control structures
+- 20+ specialized parsers for different operators and syntax
+- Modular design: easy to add new operators and syntax
+- Produces AST with nodes like `BlockNode`, `BinaryOperatorNode`, `ListNode`
+
+---
+
+## Special Blocks: BEGIN, END, INIT, CHECK
+
+**BEGIN blocks execute at compile time:**
+
+```perl
+my @data;
+BEGIN {
+    @data = qw(a b c);  # Runs during compilation
+    say "Compiling...";  # Prints immediately
+}
+say @data;  # Uses data set by BEGIN
+```
+
+**Execution mechanism:**
+1. Parser encounters `BEGIN { ... }`
+2. Wraps block as anonymous subroutine
+3. **Executes immediately** during parsing
+4. Captures lexical variables from outer scope
+5. Can modify compilation environment
+
+**Other special blocks:**
+- **END** - Runs at program exit (saved for later)
+- **INIT** - Runs after compilation, before runtime
+- **CHECK** - Runs after compilation (reverse order)
+- **UNITCHECK** - Runs after each compilation unit
+
+Note:
+- BEGIN is unique: executes during parsing
+- Enables compile-time code generation
+- Used by `use` statements (use = BEGIN + require + import)
+- Can access and modify lexical variables from outer scope
+- Sets `${^GLOBAL_PHASE}` to "START" during execution
 
 ---
 
@@ -319,11 +357,11 @@ Note:
 - Heart of the compiler
 - Symbol table maps variable names to indices
 - Large Perl subroutines can exceed 65KB
-- Solution: fallback to interpreter mode
+- Solution: fallback to custom bytecode backend
 
 ---
 
-## Compiler Mode: JVM Bytecode
+## JVM Bytecode Backend
 
 **Perl:** `my $x = 10; say $x`
 
@@ -353,7 +391,7 @@ Note:
 
 ---
 
-## Interpreter Mode: Custom Bytecode
+## Custom Bytecode Backend
 
 **Perl:** `my $x = 10; say $x`
 
@@ -384,7 +422,7 @@ Note:
 
 # Section 3: Dual Execution Model
 
-## Compiler vs Interpreter
+## JVM Bytecode vs Custom Bytecode
 
 Note:
 - Key innovation in PerlOnJava
@@ -393,7 +431,7 @@ Note:
 
 ---
 
-## Why Two Execution Modes?
+## Why Two Bytecode Backends?
 
 **The Problem:**
 - JVM 65KB method limit
@@ -406,8 +444,8 @@ Note:
 - Ruby (CRuby): interpreter + optional JIT (MJIT/YJIT)
 
 **The Solution:**
-1. **Compiler Mode** (default): AST → JVM bytecode
-2. **Interpreter Mode** (fallback): AST → Custom bytecode
+1. **JVM Bytecode Backend** (default): AST → JVM bytecode
+2. **Custom Bytecode Backend** (fallback): AST → Custom bytecode
 
 Note:
 - Both solve different problems
@@ -416,11 +454,11 @@ Note:
 
 ---
 
-## Compiler Mode: The Fast Path
+## JVM Bytecode Backend: The Fast Path
 
 **Performance example (loop increment with lexical variable, 100M iterations):**
 - Perl 5: 1.53s baseline
-- PerlOnJava Compiler: 0.86s (1.78x faster)
+- PerlOnJava JVM Backend: 0.86s (1.78x faster)
 
 **Advantages:**
 - Maximum performance after JIT warmup
@@ -438,11 +476,11 @@ Note:
 
 ---
 
-## Interpreter Mode: The Flexible Path
+## Custom Bytecode Backend: Compact and Flexible
 
 **Performance example (loop increment, 100M iterations):**
 - Perl 5: 1.53s baseline
-- PerlOnJava Interpreter mode: 1.80s (0.85x, 15% slower)
+- PerlOnJava Custom Backend: 1.80s (0.85x, 15% slower)
 
 **Advantages:**
 - No method size limits
@@ -522,10 +560,10 @@ Note:
 | Perl 5 | 1.25s | baseline |
 | PerlOnJava | 6.00s | 4.80x slower |
 
-**Note:** PerlOnJava automatically uses interpreter mode for eval STRING
+**Note:** PerlOnJava automatically uses custom bytecode backend for eval STRING
 
 Note:
-- Interpreter mode used automatically for dynamic eval
+- Custom bytecode backend used automatically for dynamic eval
 - Each iteration evals a different string
 - Compilation overhead dominates runtime
 - Still functional for typical eval usage patterns
@@ -943,7 +981,7 @@ Note:
 ## Conclusion
 
 -  **Production-ready** Perl compiler for JVM
--  **Competitive performance** with Perl 5 (1.78x faster in compiler mode, 0.85x in interpreter mode)
+-  **Competitive performance** with Perl 5 (1.78x faster with JVM bytecode backend, 0.85x with custom bytecode backend)
 -  **260,000+ tests** passing
 -  **Full ecosystem integration** (JDBC, JSR-223)
 -  **Active development** with clear roadmap
@@ -952,8 +990,8 @@ Note:
 
 Note:
 - Comprehensive Perl 5 compatibility
-- Compiler mode: 1.78x faster on loop benchmarks
-- Interpreter mode: 19x faster eval compilation
+- JVM bytecode backend: 1.78x faster on loop benchmarks
+- Custom bytecode backend: 19x faster eval compilation
 - Modern deployment options
 - Active, sustained development
 
