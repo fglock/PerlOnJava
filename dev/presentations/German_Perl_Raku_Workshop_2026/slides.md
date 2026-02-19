@@ -862,6 +862,47 @@ Note:
 
 ---
 
+## Typeglobs: Emulation Strategy
+
+**Perl typeglobs:** Single symbol with multiple "slots" (Gv)
+```perl
+*foo = *bar;           # Alias all slots
+$foo{CODE}             # Access CODE slot
+```
+
+**PerlOnJava solution:**
+
+1. **No materialized globs** - RuntimeGlob is just a name holder
+2. **Separate global maps** for each slot type:
+   - `globalVariables` → SCALAR slot
+   - `globalArrays` → ARRAY slot
+   - `globalHashes` → HASH slot
+   - `globalCodeRefs` → CODE slot
+   - `globalIORefs` → IO slot
+   - `globalFormatRefs` → FORMAT slot
+
+3. **Glob assignment creates aliases** by sharing map entries:
+   ```java
+   // *foo = *bar creates aliases
+   globalArrays.put("foo", globalArrays.get("bar"));  // Same object
+   globalHashes.put("foo", globalHashes.get("bar"));  // Same object
+   ```
+
+4. **Slot access** via `RuntimeGlob.getGlobSlot()`:
+   ```perl
+   *foo{CODE}  →  GlobalVariable.getGlobalCodeRef("foo")
+   ```
+
+**Result:** Perl glob semantics without JVM Gv structures
+
+Note:
+- Aliasing works by sharing references in maps, not copying
+- globalGlobs tracks which names had glob assignments (for CORE::GLOBAL overrides)
+- Lazy initialization: slots created on first access
+- Memory efficient: only allocated slots consume memory
+
+---
+
 ## XSLoader: C vs Java
 
 **Perl 5 XSLoader:**
