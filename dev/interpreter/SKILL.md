@@ -15,6 +15,12 @@
 - Compiler still used for main code, only eval STRING uses interpreter
 - Example: `JPERL_EVAL_USE_INTERPRETER=1 ./jperl test.pl`
 
+**JPERL_EVAL_VERBOSE=1** - Enable verbose eval error reporting
+- By default, eval failures are silent (errors only stored in $@)
+- With verbose mode, eval compilation errors print to stderr
+- Useful for debugging interpreter eval issues
+- Example: `JPERL_EVAL_USE_INTERPRETER=1 JPERL_EVAL_VERBOSE=1 ./jperl test.pl`
+
 **--interpreter** - Forces the interpreter EVERYWHERE
 - All code (main and eval) runs in interpreter mode
 - Used for full interpreter testing and development
