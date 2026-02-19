@@ -59,9 +59,23 @@ public class EvalStringHandler {
             List<LexerToken> tokens = lexer.tokenize();
 
             // Create minimal EmitterContext for parsing
+            // IMPORTANT: Inherit strict/feature/warning flags from parent scope
+            // This matches Perl's eval STRING semantics where eval inherits lexical pragmas
             CompilerOptions opts = new CompilerOptions();
             opts.fileName = sourceName + " (eval)";
             ScopedSymbolTable symbolTable = new ScopedSymbolTable();
+
+            // Inherit lexical pragma flags from parent if available
+            if (currentCode != null) {
+                // Replace default values with parent's flags
+                symbolTable.strictOptionsStack.pop();
+                symbolTable.strictOptionsStack.push(currentCode.strictOptions);
+                symbolTable.featureFlagsStack.pop();
+                symbolTable.featureFlagsStack.push(currentCode.featureFlags);
+                symbolTable.warningFlagsStack.pop();
+                symbolTable.warningFlagsStack.push((java.util.BitSet) currentCode.warningFlags.clone());
+            }
+
             ErrorMessageUtil errorUtil = new ErrorMessageUtil(sourceName, tokens);
             EmitterContext ctx = new EmitterContext(
                 new JavaClassInfo(),
@@ -84,6 +98,7 @@ public class EvalStringHandler {
             Map<String, Integer> adjustedRegistry = null;
 
             if (currentCode != null && currentCode.variableRegistry != null && registers != null) {
+
                 // Sort parent variables by register index for consistent ordering
                 List<Map.Entry<String, Integer>> sortedVars = new ArrayList<>(
                     currentCode.variableRegistry.entrySet()
@@ -111,7 +126,27 @@ public class EvalStringHandler {
                     }
 
                     if (parentRegIndex < registers.length) {
-                        capturedList.add(registers[parentRegIndex]);
+                        RuntimeBase value = registers[parentRegIndex];
+
+                        // Skip non-Perl values (like Iterator objects from for loops)
+                        // Only capture actual Perl variables: Scalar, Array, Hash, Code
+                        if (value == null) {
+                            // Null is fine - capture it
+                        } else if (value instanceof RuntimeScalar) {
+                            // Check if the scalar contains an Iterator (used by for loops)
+                            RuntimeScalar scalar = (RuntimeScalar) value;
+                            if (scalar.value instanceof java.util.Iterator) {
+                                // Skip - this is a for loop iterator, not a user variable
+                                continue;
+                            }
+                        } else if (!(value instanceof RuntimeArray ||
+                                     value instanceof RuntimeHash ||
+                                     value instanceof RuntimeCode)) {
+                            // Skip this register - it contains an internal object
+                            continue;
+                        }
+
+                        capturedList.add(value);
                         // Map to new register index starting at 3
                         adjustedRegistry.put(varName, 3 + captureIndex);
                         captureIndex++;
@@ -128,6 +163,15 @@ public class EvalStringHandler {
                 adjustedRegistry  // Pass adjusted registry for variable capture
             );
             InterpretedCode evalCode = compiler.compile(ast, ctx);  // Pass ctx for context propagation
+
+            // Step 4.5: Store source lines in debugger symbol table if $^P flags are set
+            // This implements Perl's eval source retention feature for debugging
+            // Generate eval filename and store lines in @{"_<(eval N)"}
+            int debugFlags = GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("P")).getInt();
+            if (debugFlags != 0) {
+                String evalFilename = RuntimeCode.getNextEvalFilename();
+                RuntimeCode.storeSourceLines(perlCode, evalFilename, ast, tokens);
+            }
 
             // Step 5: Attach captured variables to eval'd code
             if (capturedVars.length > 0) {
@@ -198,6 +242,13 @@ public class EvalStringHandler {
                 sourceLine
             );
             InterpretedCode evalCode = compiler.compile(ast, ctx);  // Pass ctx for context propagation
+
+            // Store source lines in debugger symbol table if $^P flags are set
+            int debugFlags = GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("P")).getInt();
+            if (debugFlags != 0) {
+                String evalFilename = RuntimeCode.getNextEvalFilename();
+                RuntimeCode.storeSourceLines(perlCode, evalFilename, ast, tokens);
+            }
 
             // Attach captured variables
             evalCode = evalCode.withCapturedVars(capturedVars);
