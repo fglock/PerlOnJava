@@ -909,6 +909,40 @@ public class CompileAssignment {
                     bytecodeCompiler.emitReg(valueReg);
 
                     bytecodeCompiler.lastResultReg = valueReg;
+                } else if (leftOp.operator.equals("@") && leftOp.operand instanceof OperatorNode) {
+                    // Array dereference assignment: @$r = ...
+                    // The operand should be a scalar variable containing an array reference
+                    OperatorNode derefOp = (OperatorNode) leftOp.operand;
+
+                    if (derefOp.operator.equals("$")) {
+                        // Compile the scalar to get the array reference
+                        derefOp.accept(bytecodeCompiler);
+                        int scalarRefReg = bytecodeCompiler.lastResultReg;
+
+                        // Dereference to get the actual array
+                        int arrayReg = bytecodeCompiler.allocateRegister();
+                        bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
+                        bytecodeCompiler.emitReg(arrayReg);
+                        bytecodeCompiler.emitReg(scalarRefReg);
+
+                        // Assign the value to the dereferenced array
+                        bytecodeCompiler.emit(Opcodes.ARRAY_SET_FROM_LIST);
+                        bytecodeCompiler.emitReg(arrayReg);
+                        bytecodeCompiler.emitReg(valueReg);
+
+                        // In scalar context, return array size; in list context, return the array
+                        if (savedContext == RuntimeContextType.SCALAR) {
+                            int sizeReg = bytecodeCompiler.allocateRegister();
+                            bytecodeCompiler.emit(Opcodes.ARRAY_SIZE);
+                            bytecodeCompiler.emitReg(sizeReg);
+                            bytecodeCompiler.emitReg(arrayReg);
+                            bytecodeCompiler.lastResultReg = sizeReg;
+                        } else {
+                            bytecodeCompiler.lastResultReg = arrayReg;
+                        }
+                    } else {
+                        bytecodeCompiler.throwCompilerException("Assignment to unsupported array dereference");
+                    }
                 } else {
                     bytecodeCompiler.throwCompilerException("Assignment to unsupported operator: " + leftOp.operator);
                 }

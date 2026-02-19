@@ -533,6 +533,51 @@ public class CompileBinaryOperator {
             return;
         }
 
+        // Handle =~ and !~ binding with regex operators
+        // When we have: $string =~ s/pattern/replacement/flags
+        // The right side is: OperatorNode(replaceRegex, ListNode[pattern, replacement, flags])
+        // We need to add $string to the operand list and compile the operator
+        if ((node.operator.equals("=~") || node.operator.equals("!~"))
+                && node.right instanceof OperatorNode) {
+            OperatorNode rightOp = (OperatorNode) node.right;
+            if (rightOp.operand instanceof ListNode
+                    && !rightOp.operator.equals("quoteRegex")) {
+                // Check if it's a regex operator (replaceRegex, matchRegex, tr, transliterate)
+                if (rightOp.operator.equals("replaceRegex")
+                        || rightOp.operator.equals("matchRegex")
+                        || rightOp.operator.equals("tr")
+                        || rightOp.operator.equals("transliterate")) {
+
+                    // Create a copy of the operand list and add the left side (string)
+                    ListNode originalList = (ListNode) rightOp.operand;
+                    ListNode boundList = new ListNode(new java.util.ArrayList<>(originalList.elements), originalList.tokenIndex);
+                    boundList.elements.add(node.left);
+
+                    // Create a new OperatorNode with the modified operand list
+                    OperatorNode boundOp = new OperatorNode(rightOp.operator, boundList, rightOp.tokenIndex);
+
+                    // For !~, we need to negate the result
+                    if (node.operator.equals("!~")) {
+                        // Compile the bound operator
+                        boundOp.accept(bytecodeCompiler);
+                        int matchReg = bytecodeCompiler.lastResultReg;
+
+                        // Negate the result
+                        int rd = bytecodeCompiler.allocateRegister();
+                        bytecodeCompiler.emit(Opcodes.NOT);
+                        bytecodeCompiler.emitReg(rd);
+                        bytecodeCompiler.emitReg(matchReg);
+                        bytecodeCompiler.lastResultReg = rd;
+                    } else {
+                        // For =~, just compile the bound operator
+                        boundOp.accept(bytecodeCompiler);
+                    }
+
+                    return;
+                }
+            }
+        }
+
         // Compile left and right operands (for non-short-circuit operators)
         node.left.accept(bytecodeCompiler);
         int rs1 = bytecodeCompiler.lastResultReg;

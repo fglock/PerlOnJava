@@ -2075,7 +2075,13 @@ public class BytecodeInterpreter {
                         RuntimeList list = listBase.getList();
                         RuntimeScalar closure = (RuntimeScalar) registers[closureReg];
                         RuntimeList result = org.perlonjava.operators.ListOperators.grep(list, closure, ctx);
-                        registers[rd] = result;
+
+                        // In scalar context, return the count of elements
+                        if (ctx == RuntimeContextType.SCALAR) {
+                            registers[rd] = new RuntimeScalar(result.elements.size());
+                        } else {
+                            registers[rd] = result;
+                        }
                         break;
                     }
 
@@ -2359,6 +2365,36 @@ public class BytecodeInterpreter {
 
                         RuntimeScalar scalar = (RuntimeScalar) registers[scalarReg];
                         registers[rd] = org.perlonjava.operators.StringOperators.chopScalar(scalar);
+                        break;
+                    }
+
+                    case Opcodes.GET_REPLACEMENT_REGEX: {
+                        // Get replacement regex: rd = RuntimeRegex.getReplacementRegex(pattern, replacement, flags)
+                        // Format: GET_REPLACEMENT_REGEX rd pattern_reg replacement_reg flags_reg
+                        int rd = bytecode[pc++];
+                        int patternReg = bytecode[pc++];
+                        int replacementReg = bytecode[pc++];
+                        int flagsReg = bytecode[pc++];
+
+                        RuntimeScalar pattern = (RuntimeScalar) registers[patternReg];
+                        RuntimeScalar replacement = (RuntimeScalar) registers[replacementReg];
+                        RuntimeScalar flags = (RuntimeScalar) registers[flagsReg];
+
+                        registers[rd] = org.perlonjava.regex.RuntimeRegex.getReplacementRegex(pattern, replacement, flags);
+                        break;
+                    }
+
+                    case Opcodes.SUBSTR_VAR: {
+                        // substr with variable args: rd = Operator.substr(ctx, args...)
+                        // Format: SUBSTR_VAR rd argsListReg ctx
+                        int rd = bytecode[pc++];
+                        int argsListReg = bytecode[pc++];
+                        int ctx = bytecode[pc++];
+
+                        RuntimeList argsList = (RuntimeList) registers[argsListReg];
+                        RuntimeBase[] substrArgs = argsList.elements.toArray(new RuntimeBase[0]);
+
+                        registers[rd] = org.perlonjava.operators.Operator.substr(ctx, substrArgs);
                         break;
                     }
 
