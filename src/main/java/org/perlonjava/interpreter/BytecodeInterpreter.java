@@ -2330,6 +2330,13 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.GLOB_SLOT_GET: {
+                        // Glob slot access: rd = glob.hashDerefGetNonStrict(key, "main")
+                        // Format: GLOB_SLOT_GET rd globReg keyReg
+                        pc = SlowOpcodeHandler.executeGlobSlotGet(bytecode, pc, registers);
+                        break;
+                    }
+
                     // GENERATED_HANDLERS_END
 
                     default:

@@ -1449,25 +1449,42 @@ public class BytecodeCompiler implements Visitor {
                 keyReg = lastResultReg;
             }
 
-            // The base might be either:
-            // 1. A RuntimeHash (from %hash which was a hash variable)
-            // 2. A RuntimeScalar containing a hashref (from $hash{outer})
-            // We need to handle both cases. Dereference if needed.
+            // Check if this is a glob slot access: *X{key}
+            // In this case, node.left is an OperatorNode with operator "*"
+            boolean isGlobSlotAccess = (node.left instanceof OperatorNode) &&
+                                       ((OperatorNode) node.left).operator.equals("*");
 
-            // For now, let's assume it's a scalar with hashref and dereference it first
-            int hashReg = allocateRegister();
-            emit(Opcodes.DEREF_HASH);
-            emitReg(hashReg);
-            emitReg(baseReg);
+            if (isGlobSlotAccess) {
+                // For glob slot access, call hashDerefGetNonStrict directly
+                // This uses RuntimeGlob's override which accesses the slot without dereferencing
+                int rd = allocateRegister();
+                emit(Opcodes.GLOB_SLOT_GET);
+                emitReg(rd);
+                emitReg(baseReg);
+                emitReg(keyReg);
 
-            // Now get the element
-            int rd = allocateRegister();
-            emit(Opcodes.HASH_GET);
-            emitReg(rd);
-            emitReg(hashReg);
-            emitReg(keyReg);
+                lastResultReg = rd;
+            } else {
+                // Normal hash access: dereference first, then get element
+                // The base might be either:
+                // 1. A RuntimeHash (from %hash which was a hash variable)
+                // 2. A RuntimeScalar containing a hashref (from $hash{outer})
+                // We need to handle both cases. Dereference if needed.
 
-            lastResultReg = rd;
+                int hashReg = allocateRegister();
+                emit(Opcodes.DEREF_HASH);
+                emitReg(hashReg);
+                emitReg(baseReg);
+
+                // Now get the element
+                int rd = allocateRegister();
+                emit(Opcodes.HASH_GET);
+                emitReg(rd);
+                emitReg(hashReg);
+                emitReg(keyReg);
+
+                lastResultReg = rd;
+            }
         } else {
             throwCompilerException("Multi-element hash access not yet implemented");
         }

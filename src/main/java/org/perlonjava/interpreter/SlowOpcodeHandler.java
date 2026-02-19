@@ -1025,6 +1025,34 @@ public class SlowOpcodeHandler {
         return pc;
     }
 
+    /**
+     * GLOB_SLOT_GET: rd = glob.hashDerefGetNonStrict(key, "main")
+     * Format: [GLOB_SLOT_GET] [rd] [globReg] [keyReg]
+     * Effect: Access glob slot (like *X{HASH}) using RuntimeGlob's override
+     * This ensures proper glob slot access without incorrectly dereferencing the glob as a hash
+     */
+    public static int executeGlobSlotGet(
+            short[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+
+        int rd = bytecode[pc++];
+        int globReg = bytecode[pc++];
+        int keyReg = bytecode[pc++];
+
+        RuntimeBase globBase = registers[globReg];
+        RuntimeScalar key = (RuntimeScalar) registers[keyReg];
+
+        // Convert to scalar if needed
+        RuntimeScalar glob = globBase.scalar();
+
+        // Call hashDerefGetNonStrict which for RuntimeGlob accesses the slot directly
+        // without dereferencing the glob as a hash
+        registers[rd] = glob.hashDerefGetNonStrict(key, "main");
+
+        return pc;
+    }
+
     private SlowOpcodeHandler() {
         // Utility class - no instantiation
     }

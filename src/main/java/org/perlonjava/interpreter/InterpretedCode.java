@@ -708,6 +708,12 @@ public class InterpretedCode extends RuntimeCode {
                     int opStrIdx = bytecode[pc++];
                     sb.append("FILETEST_LASTHANDLE r").append(rd).append(" = ").append(stringPool[opStrIdx]).append(" _\n");
                     break;
+                case Opcodes.GLOB_SLOT_GET:
+                    rd = bytecode[pc++];
+                    int globReg2 = bytecode[pc++];
+                    int keyReg = bytecode[pc++];
+                    sb.append("GLOB_SLOT_GET r").append(rd).append(" = r").append(globReg2).append("{r").append(keyReg).append("}\n");
+                    break;
                 case Opcodes.PUSH_LOCAL_VARIABLE:
                     rs = bytecode[pc++];
                     sb.append("PUSH_LOCAL_VARIABLE r").append(rs).append("\n");
