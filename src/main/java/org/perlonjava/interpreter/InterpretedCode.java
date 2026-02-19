@@ -1115,6 +1115,48 @@ public class InterpretedCode extends RuntimeCode {
                     rs = bytecode[pc++];
                     sb.append("MODULUS_ASSIGN r").append(rd).append(" %= r").append(rs).append("\n");
                     break;
+                case Opcodes.REPEAT_ASSIGN:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("REPEAT_ASSIGN r").append(rd).append(" x= r").append(rs).append("\n");
+                    break;
+                case Opcodes.POW_ASSIGN:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("POW_ASSIGN r").append(rd).append(" **= r").append(rs).append("\n");
+                    break;
+                case Opcodes.LEFT_SHIFT_ASSIGN:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("LEFT_SHIFT_ASSIGN r").append(rd).append(" <<= r").append(rs).append("\n");
+                    break;
+                case Opcodes.RIGHT_SHIFT_ASSIGN:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("RIGHT_SHIFT_ASSIGN r").append(rd).append(" >>= r").append(rs).append("\n");
+                    break;
+                case Opcodes.LOGICAL_AND_ASSIGN:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("LOGICAL_AND_ASSIGN r").append(rd).append(" &&= r").append(rs).append("\n");
+                    break;
+                case Opcodes.LOGICAL_OR_ASSIGN:
+                    rd = bytecode[pc++];
+                    rs = bytecode[pc++];
+                    sb.append("LOGICAL_OR_ASSIGN r").append(rd).append(" ||= r").append(rs).append("\n");
+                    break;
+                case Opcodes.LEFT_SHIFT:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    rs2 = bytecode[pc++];
+                    sb.append("LEFT_SHIFT r").append(rd).append(" = r").append(rs1).append(" << r").append(rs2).append("\n");
+                    break;
+                case Opcodes.RIGHT_SHIFT:
+                    rd = bytecode[pc++];
+                    rs1 = bytecode[pc++];
+                    rs2 = bytecode[pc++];
+                    sb.append("RIGHT_SHIFT r").append(rd).append(" = r").append(rs1).append(" >> r").append(rs2).append("\n");
+                    break;
                 case Opcodes.LIST_TO_SCALAR:
                     rd = bytecode[pc++];
                     rs = bytecode[pc++];

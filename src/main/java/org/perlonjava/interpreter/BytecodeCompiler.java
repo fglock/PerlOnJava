@@ -1142,6 +1142,12 @@ public class BytecodeCompiler implements Visitor {
             case "&.=" -> emit(Opcodes.STRING_BITWISE_AND_ASSIGN);      // String bitwise AND
             case "|.=" -> emit(Opcodes.STRING_BITWISE_OR_ASSIGN);       // String bitwise OR
             case "^.=" -> emit(Opcodes.STRING_BITWISE_XOR_ASSIGN);      // String bitwise XOR
+            case "x=" -> emit(Opcodes.REPEAT_ASSIGN);                   // String repetition
+            case "**=" -> emit(Opcodes.POW_ASSIGN);                     // Exponentiation
+            case "<<=" -> emit(Opcodes.LEFT_SHIFT_ASSIGN);              // Left shift
+            case ">>=" -> emit(Opcodes.RIGHT_SHIFT_ASSIGN);             // Right shift
+            case "&&=" -> emit(Opcodes.LOGICAL_AND_ASSIGN);             // Logical AND
+            case "||=" -> emit(Opcodes.LOGICAL_OR_ASSIGN);              // Logical OR
             default -> {
                 throwCompilerException("Unknown compound assignment operator: " + op);
                 currentCallContext = savedContext;
@@ -3125,6 +3131,20 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(rs1);
                 emitReg(rs2);
             }
+            case "<<" -> {
+                // Left shift: rs1 << rs2
+                emit(Opcodes.LEFT_SHIFT);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
+            case ">>" -> {
+                // Right shift: rs1 >> rs2
+                emit(Opcodes.RIGHT_SHIFT);
+                emitReg(rd);
+                emitReg(rs1);
+                emitReg(rs2);
+            }
             default -> throwCompilerException("Unsupported operator: " + operator, tokenIndex);
         }
 
@@ -3165,12 +3185,15 @@ public class BytecodeCompiler implements Visitor {
             return;
         }
 
-        // Handle compound assignment operators (+=, -=, *=, /=, %=, .=, &=, |=, ^=, &.=, |.=, ^.=, binary&=, binary|=, binary^=)
+        // Handle compound assignment operators (+=, -=, *=, /=, %=, .=, &=, |=, ^=, &.=, |.=, ^.=, binary&=, binary|=, binary^=, x=, **=, <<=, >>=, &&=, ||=)
         if (node.operator.equals("+=") || node.operator.equals("-=") ||
             node.operator.equals("*=") || node.operator.equals("/=") ||
             node.operator.equals("%=") || node.operator.equals(".=") ||
             node.operator.equals("&=") || node.operator.equals("|=") || node.operator.equals("^=") ||
             node.operator.equals("&.=") || node.operator.equals("|.=") || node.operator.equals("^.=") ||
+            node.operator.equals("x=") || node.operator.equals("**=") ||
+            node.operator.equals("<<=") || node.operator.equals(">>=") ||
+            node.operator.equals("&&=") || node.operator.equals("||=") ||
             node.operator.startsWith("binary")) {  // Handle binary&=, binary|=, binary^=
             handleCompoundAssignment(node);
             return;

@@ -682,6 +682,110 @@ public class BytecodeInterpreter {
                         break;
                     }
 
+                    case Opcodes.REPEAT_ASSIGN: {
+                        // Compound assignment: rd x= rs
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        RuntimeBase result = Operator.repeat(
+                            registers[rd],
+                            (RuntimeScalar) registers[rs],
+                            1  // scalar context
+                        );
+                        ((RuntimeScalar) registers[rd]).set((RuntimeScalar) result);
+                        break;
+                    }
+
+                    case Opcodes.POW_ASSIGN: {
+                        // Compound assignment: rd **= rs
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        RuntimeBase val1 = registers[rd];
+                        RuntimeBase val2 = registers[rs];
+                        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+                        RuntimeScalar result = MathOperators.pow(s1, s2);
+                        ((RuntimeScalar) registers[rd]).set(result);
+                        break;
+                    }
+
+                    case Opcodes.LEFT_SHIFT_ASSIGN: {
+                        // Compound assignment: rd <<= rs
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        RuntimeScalar s1 = (RuntimeScalar) registers[rd];
+                        RuntimeScalar s2 = (RuntimeScalar) registers[rs];
+                        RuntimeScalar result = BitwiseOperators.shiftLeft(s1, s2);
+                        s1.set(result);
+                        break;
+                    }
+
+                    case Opcodes.RIGHT_SHIFT_ASSIGN: {
+                        // Compound assignment: rd >>= rs
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        RuntimeScalar s1 = (RuntimeScalar) registers[rd];
+                        RuntimeScalar s2 = (RuntimeScalar) registers[rs];
+                        RuntimeScalar result = BitwiseOperators.shiftRight(s1, s2);
+                        s1.set(result);
+                        break;
+                    }
+
+                    case Opcodes.LOGICAL_AND_ASSIGN: {
+                        // Compound assignment: rd &&= rs (short-circuit: only evaluate rs if rd is true)
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        RuntimeScalar s1 = ((RuntimeBase) registers[rd]).scalar();
+                        if (!s1.getBoolean()) {
+                            // Left side is false, result is left side (no assignment needed)
+                            break;
+                        }
+                        // Left side is true, assign right side
+                        RuntimeScalar s2 = ((RuntimeBase) registers[rs]).scalar();
+                        ((RuntimeScalar) registers[rd]).set(s2);
+                        break;
+                    }
+
+                    case Opcodes.LOGICAL_OR_ASSIGN: {
+                        // Compound assignment: rd ||= rs (short-circuit: only evaluate rs if rd is false)
+                        int rd = bytecode[pc++];
+                        int rs = bytecode[pc++];
+                        RuntimeScalar s1 = ((RuntimeBase) registers[rd]).scalar();
+                        if (s1.getBoolean()) {
+                            // Left side is true, result is left side (no assignment needed)
+                            break;
+                        }
+                        // Left side is false, assign right side
+                        RuntimeScalar s2 = ((RuntimeBase) registers[rs]).scalar();
+                        ((RuntimeScalar) registers[rd]).set(s2);
+                        break;
+                    }
+
+                    // =================================================================
+                    // SHIFT OPERATIONS
+                    // =================================================================
+
+                    case Opcodes.LEFT_SHIFT: {
+                        // Left shift: rd = rs1 << rs2
+                        int rd = bytecode[pc++];
+                        int rs1 = bytecode[pc++];
+                        int rs2 = bytecode[pc++];
+                        RuntimeScalar s1 = (RuntimeScalar) registers[rs1];
+                        RuntimeScalar s2 = (RuntimeScalar) registers[rs2];
+                        registers[rd] = BitwiseOperators.shiftLeft(s1, s2);
+                        break;
+                    }
+
+                    case Opcodes.RIGHT_SHIFT: {
+                        // Right shift: rd = rs1 >> rs2
+                        int rd = bytecode[pc++];
+                        int rs1 = bytecode[pc++];
+                        int rs2 = bytecode[pc++];
+                        RuntimeScalar s1 = (RuntimeScalar) registers[rs1];
+                        RuntimeScalar s2 = (RuntimeScalar) registers[rs2];
+                        registers[rd] = BitwiseOperators.shiftRight(s1, s2);
+                        break;
+                    }
+
                     // =================================================================
                     // ARRAY OPERATIONS
                     // =================================================================
@@ -2748,6 +2852,94 @@ public class BytecodeInterpreter {
                 RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
                 RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
                 registers[rd] = MathOperators.modulusAssign(s1, s2);
+                return pc;
+            }
+
+            case Opcodes.REPEAT_ASSIGN: {
+                int rd = bytecode[pc++];
+                int rs = bytecode[pc++];
+                RuntimeBase result = Operator.repeat(
+                    registers[rd],
+                    (RuntimeScalar) registers[rs],
+                    1  // scalar context
+                );
+                ((RuntimeScalar) registers[rd]).set((RuntimeScalar) result);
+                return pc;
+            }
+
+            case Opcodes.POW_ASSIGN: {
+                int rd = bytecode[pc++];
+                int rs = bytecode[pc++];
+                RuntimeBase val1 = registers[rd];
+                RuntimeBase val2 = registers[rs];
+                RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+                RuntimeScalar result = MathOperators.pow(s1, s2);
+                ((RuntimeScalar) registers[rd]).set(result);
+                return pc;
+            }
+
+            case Opcodes.LEFT_SHIFT_ASSIGN: {
+                int rd = bytecode[pc++];
+                int rs = bytecode[pc++];
+                RuntimeScalar s1 = (RuntimeScalar) registers[rd];
+                RuntimeScalar s2 = (RuntimeScalar) registers[rs];
+                RuntimeScalar result = BitwiseOperators.shiftLeft(s1, s2);
+                s1.set(result);
+                return pc;
+            }
+
+            case Opcodes.RIGHT_SHIFT_ASSIGN: {
+                int rd = bytecode[pc++];
+                int rs = bytecode[pc++];
+                RuntimeScalar s1 = (RuntimeScalar) registers[rd];
+                RuntimeScalar s2 = (RuntimeScalar) registers[rs];
+                RuntimeScalar result = BitwiseOperators.shiftRight(s1, s2);
+                s1.set(result);
+                return pc;
+            }
+
+            case Opcodes.LOGICAL_AND_ASSIGN: {
+                int rd = bytecode[pc++];
+                int rs = bytecode[pc++];
+                RuntimeScalar s1 = ((RuntimeBase) registers[rd]).scalar();
+                if (!s1.getBoolean()) {
+                    return pc;
+                }
+                RuntimeScalar s2 = ((RuntimeBase) registers[rs]).scalar();
+                ((RuntimeScalar) registers[rd]).set(s2);
+                return pc;
+            }
+
+            case Opcodes.LOGICAL_OR_ASSIGN: {
+                int rd = bytecode[pc++];
+                int rs = bytecode[pc++];
+                RuntimeScalar s1 = ((RuntimeBase) registers[rd]).scalar();
+                if (s1.getBoolean()) {
+                    return pc;
+                }
+                RuntimeScalar s2 = ((RuntimeBase) registers[rs]).scalar();
+                ((RuntimeScalar) registers[rd]).set(s2);
+                return pc;
+            }
+
+            case Opcodes.LEFT_SHIFT: {
+                int rd = bytecode[pc++];
+                int rs1 = bytecode[pc++];
+                int rs2 = bytecode[pc++];
+                RuntimeScalar s1 = (RuntimeScalar) registers[rs1];
+                RuntimeScalar s2 = (RuntimeScalar) registers[rs2];
+                registers[rd] = BitwiseOperators.shiftLeft(s1, s2);
+                return pc;
+            }
+
+            case Opcodes.RIGHT_SHIFT: {
+                int rd = bytecode[pc++];
+                int rs1 = bytecode[pc++];
+                int rs2 = bytecode[pc++];
+                RuntimeScalar s1 = (RuntimeScalar) registers[rs1];
+                RuntimeScalar s2 = (RuntimeScalar) registers[rs2];
+                registers[rd] = BitwiseOperators.shiftRight(s1, s2);
                 return pc;
             }
 
